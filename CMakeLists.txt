@@ -1,8 +1,6 @@
 project                     (cian)
 cmake_minimum_required      (VERSION 2.8)
 
-option                      (optimize       "Build mfa with optimization"          ON)
-option                      (debug          "Build mfa with debugging on"          OFF)
 option                      (bgq            "Build on BG/Q"                        OFF)
 option                      (diy_thread     "Enable diy threading"                 OFF)
 
@@ -10,22 +8,23 @@ if                          (bgq)
     add_definitions         (-DBGQ)
 endif                       (bgq)
 
-# Debugging
-if                          (debug)
-    if                      (optimize)
-            set             (cxx_flags      ${CMAKE_CXX_FLAGS_RELWITHDEBINFO})
-    else                    (optimize)
-            set             (cxx_flags      ${CMAKE_CXX_FLAGS_DEBUG})
-    endif                   (optimize)
-    add_definitions         (-DDEBUG)
-else                        (debug)
-    if                      (optimize)
-            set             (cxx_flags      ${CMAKE_CXX_FLAGS_RELEASE})
-    else                    (optimize)
-            set             (cxx_flags      ${CMAKE_CXX_FLAGS})
-    endif                   (optimize)
-endif                       (debug)
-add_definitions             (${cxx_flags})
+# DEPRECATED
+# # Debugging
+# if                          (debug)
+#     if                      (optimize)
+#             set             (cxx_flags      ${CMAKE_CXX_FLAGS_RELWITHDEBINFO})
+#     else                    (optimize)
+#             set             (cxx_flags      ${CMAKE_CXX_FLAGS_DEBUG})
+#     endif                   (optimize)
+#     add_definitions         (-DDEBUG)
+# else                        (debug)
+#     if                      (optimize)
+#             set             (cxx_flags      ${CMAKE_CXX_FLAGS_RELEASE})
+#     else                    (optimize)
+#             set             (cxx_flags      ${CMAKE_CXX_FLAGS})
+#     endif                   (optimize)
+# endif                       (debug)
+# add_definitions             (${cxx_flags})
 
 # OSX flags
 if                          (${CMAKE_SYSTEM_NAME} MATCHES "Darwin")

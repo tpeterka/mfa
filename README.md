@@ -1,74 +1,70 @@
-# Diy2-draw
+# MFA
 
-Diy2-draw demonstrates how to develop a webGL renderer to draw geometry contained in a diy2 output file. This particular example draws the ouput of [tess2](https://github.com/diatomic/tess2), a Delaunay and Voronoi tessellation library based on [diy2](https://github.com/diatomic/diy2).
+Multivariate Functional Approximation (MFA) is a data model based on NURBS high-dimensional tensor products to model scientific data sets.
 
 The key features are:
 
-- C++, DIY, MPI server using a node.js addon reads the data
-- two versions of client-server connection
-    - separate client and server connected by websockets
-    - combined client and server in a standalone app using node webkit (nwjs)
-- Javascript / webGL rendering on the client (using three.js rendering library instead of webGL directly)
+- **Data reduction.**  The MFA is defined by a much smaller set of control data than original raw
+data. Moreover, each data dimension is fitted with a different set of control data, so that the
+compressibility matches the information content of each attribute. For example, if pressure
+varies rapidly, but temperature is relatively constant, then for the same error bound there can
+be fewer control points for temperature than for pressure.
 
-The steps to build and run the example are below.
+- **Extreme scalability.**  The space savings of the MFA comes at a computational cost, and a
+  high-dimensional MFA was not possible earlier because data were small and flops were
+  expensive.  But this research is driven by extreme-scale computing that is now limited by
+  data movement. We will minimize the cost of encoding the MFA by using approximate and
+  adaptive methods that are parallelized over processes, threads, and vector units. We will
+  control locality over all levels of a deep memory/storage hierarchy through the careful
+  mapping of the local support inherent in the MFA to the data movement characteristics of DOE
+  extreme-scale machines.
 
-# Install dependencies:
+- **Scientific applications.**  The MFA is designed to interface with N-body, structured,
+unstructured, and adaptively-refined in situ computations and post hoc data. Many analysis and
+visualization operations are possible directly from the MFA without ever resampling discrete
+data again. For example, an MFA is invariant to linear and affine transformations, meaning that
+visual analytic techniques that change the frame of reference---such as vortex detection---can
+be applied to the MFA instead of the raw data.
 
-- [node.js](https://nodejs.org/)
-- [nwjs](https://github.com/nwjs/nw.js/)
-- [three.js](http://threejs.org/) (for 3d rendering, a library wrapping webGL) Version 71 is bundled in the ```3rdparty``` directory.
-- [dat.gui](https://code.google.com/p/dat-gui/) (for GUI controls) Version 0.5 is bundled in the ```3rdparty``` directory.
-- [ws](https://github.com/websockets/ws) (websocket for node.js, needed for client-server communication, not needed for standalone nwjs)
-    - ```cd src; npm install ws``` (npm is included with node.js)
-- nan
-    - ```cd src; npm install nan```
-- bindings
-    - ```cd src; npm install bindings```
-- node-gyp
-    - ```cd src; npm install -g node-gyp```
-- nw-gyp
-    - ```cd src; npm install -g nw-gyp```
-- diy2 and tess2 (for this particular tessellation example)
-    - [diy2](https://github.com/diatomic/diy2)
-    - [tess2](https://github.com/diatomic/tess2)
+- **Functional meaning.**  Functions uncover hidden meaning. The underlying physics is governed by
+equations, but raw discrete data mask the underlying behavior just as a table of numbers hides
+the trends visible in a plot of a simple equation y = f(x).  A functional form enhances
+understanding of the behavior because derivatives, trends, integrals, correlations, and
+simplifications have analytical solutions.
 
-# To create a node.js addon:
+# Licensing
 
-See [Node.js addon instructions](https://github.com/nodejs/node-addon-examples)
+MFA is [public domain](./COPYING) software.
 
-- Add or edit existing package.json file
-- Add or edit existing binding.gyp file
-- Add or edit a .cc or .cxx file for the node addon C/C++ server code
-- Add or edit one or more.js files for the javascript client code
-- Add or edit index.html file
+# Installation
 
-# To build the executable:
+Build dependencies
 
-One can either build a node.js server and a client to run in a browser, or a single standalone nwjs application. The former requires running a server and connecting to it from a client in a browser, while the latter is just one command to launch an app that looks and feels like a browser. The client-server node method can be used to distribute to others so that all the dependencies above are not needed locally. The nwjs standalone method is good for development and testing, but requires locally installing all the dependencies.
+- [diy2](https://github.com/diatomic/diy2)
+- [eigen](http://eigen.tuxfamily.org)
+- [MPI](http://www.mpich.org)
 
-```cd src```
+Build mfa
 
-Edit the path names in binding.gyp to your own. Then,
+```
+git clone https://bitbucket.org/tpeterka1/mfa
 
-- (client-server web application) To build a node program
-    - ```CC=mpicc CXX=mpicxx node-gyp rebuild```
-- (standalone application) To build an nwjs (node webkit) program (requires different compile command (nw-gyp) and the current version of nwjs needs to be specified because it cannot be found automatically
-    - ```CC=mpicc CXX=mpicxx nw-gyp rebuild --target=0.12.2```
-- The above commands are in ```make/make-node``` and ```make/make-nwjs```.
+cmake .. \
+-DCMAKE_CXX_COMPILER=mpicxx \
+-DCMAKE_C_COMPILER=mpicc \
+-DCMAKE_INSTALL_PREFIX=/path/to/mfa/install \
+-DDIY_INCLUDE_DIRS=/path/to/diy2/include \
+-DEIGEN_INCLUDE_DIRS=/path/to/eigen-3.2.5 \
 
-# To run the program:
+make
+make install
+```
+# Run example
+(currently only serial)
 
-Generate a test input file named ```del.out``` by running the script in tess2/examples/tess/TESS_TEST. Move del.out to the src directory of diy2-draw.
+```
+cd path/to/mfa/install/examples/simple
+./1d
+```
 
-```cd src```
-
-- (client-server web application)
-    - in index.html, comment out nwjs-client.js and comment in node-client.js
-    - server: ```node server.js```
-    - client: In a browser, open index.html
-- (standalone application)
-    - in index.html, comment out node-client.js and comment in nwjs-client.js
-    - On mac: ```nwjs .```
-    - On linux: ```nw .```
-
-Note: On mac, nwjs is my alias for the nwjs application. For example, on a mac the full path is probably ```/Applications/nwjs.app/Contents/MacOS/nwjs```.
+The output file, `approx.out` contains the output mfa data model.
