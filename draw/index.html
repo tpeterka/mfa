@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+
+<html>
+
+  <head>
+
+    <meta http-equiv="Content-Type" content="text/html; charset=ISO-8859-1">
+
+    <title>diy-draw</title>
+
+    <style>
+      body { margin: 0; }
+      canvas { width: 100%; height: 100% }
+    </style>
+
+  </head>
+
+  <body>
+
+    <!-- 3rd party dependencies -->
+    <script src="3rdparty/three.js/three.min.js"></script>
+    <script src="3rdparty/three.js/TrackballControls.js"></script>
+    <script src="3rdparty/three.js/Detector.js"></script>
+    <script src="3rdparty/three.js/stats.min.js"></script>
+    <script src="3rdparty/dat.gui/dat.gui.min.js"></script>
+
+    <!-- geometry variables -->
+    <script type="text/javascript">
+      var raw_pts        = [];
+      var ctrl_pts       = [];
+      var approx_pts     = [];
+      var bbs            = [];
+    </script>
+
+    <!-- rendering variables -->
+    <script type="text/javascript">
+      var white_paper       = false;
+    </script>
+
+    <!-- renderer -->
+    <script src="draw.js"></script>
+
+    <!-- gui controls -->
+    <script src="gui.js"></script>
+
+    <!-- client to receive geometry: turn on one or the other of the following lines -->
+    <!-- depending on whether using client-server websockets (ws-client.js) -->
+    <!-- or standalone app (nw-client.js) -->
+    <!-- <script src="node-client.js"></script> -->
+    <script src="nwjs-client.js"></script>
+
+    <input type="file" id="theFile" style="display:none">
+
+  </body>
+
+</html>

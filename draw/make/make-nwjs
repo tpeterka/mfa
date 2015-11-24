@@ -1,0 +1,8 @@
+#!/bin/bash
+
+CC=mpicc \
+CXX=mpicxx \
+nw-gyp \
+rebuild \
+--target=0.12.2
+
