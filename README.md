@@ -10,14 +10,13 @@ compressibility matches the information content of each attribute. For example, 
 varies rapidly, but temperature is relatively constant, then for the same error bound there can
 be fewer control points for temperature than for pressure.
 
-- **Extreme scalability.**  The space savings of the MFA comes at a computational cost, and a
-  high-dimensional MFA was not possible earlier because data were small and flops were
-  expensive.  But this research is driven by extreme-scale computing that is now limited by
-  data movement. We will minimize the cost of encoding the MFA by using approximate and
-  adaptive methods that are parallelized over processes, threads, and vector units. We will
-  control locality over all levels of a deep memory/storage hierarchy through the careful
-  mapping of the local support inherent in the MFA to the data movement characteristics of DOE
-  extreme-scale machines.
+- **Extreme scalability.** The space savings of the MFA comes at a computational cost, and a
+high-dimensional MFA was not possible earlier because data were small and flops were expensive.
+But this research is driven by extreme-scale computing that is now limited by data movement. We
+will minimize the cost of encoding the MFA by using approximate and adaptive methods that are
+parallelized over processes, threads, and vector units. We will control locality over all
+levels of a deep memory/storage hierarchy through the careful mapping of the local support
+inherent in the MFA to the data movement characteristics of DOE extreme-scale machines.
 
 - **Scientific applications.**  The MFA is designed to interface with N-body, structured,
 unstructured, and adaptively-refined in situ computations and post hoc data. Many analysis and
@@ -67,4 +66,4 @@ cd path/to/mfa/install/examples/simple
 ./1d
 ```
 
-The output file, `approx.out` contains the output mfa data model.
+The output file, `approx.out`, contains the output mfa data model.

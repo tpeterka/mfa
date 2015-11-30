@@ -3,7 +3,6 @@
     {
       "target_name": "draw",
       "sources": [ "draw.cc" ],
-      "cflags_cc": [ "-fexceptions" ],
       "include_dirs": [
         "<!(node -e \"require('nan')\")",
         "/Users/tpeterka/software/mfa/install/include",

@@ -2,6 +2,7 @@
 
 CC=mpicc \
 CXX=mpicxx \
+CXXFLAGS='-fexceptions -DBUILD_GYP' \
 nw-gyp \
 rebuild \
 --target=0.12.2

@@ -60,12 +60,13 @@ int main(int argc, char** argv)
     DomainArgs d_args;
 
     // constant function
-    // d_args.p = p;
+    // d_args.p = 3;
     // d_args.npts  = 20;
     // d_args.min_x = 0.0;
-    // d_args.max_x = nin_pts - 1.0;
+    // d_args.max_x = d_args.npts - 1.0;
     // d_args.y_scale = 1.0;
-    // master.foreach<Block>(&Block::generate_constant_data, &d_args);
+    // master.foreach(&Block::generate_constant_data, &d_args);
+    // nctrl_pts = 10;
 
     // circle function
     // d_args.p = 3;
@@ -74,6 +75,7 @@ int main(int argc, char** argv)
     // d_args.max_x = M_PI / 2.0;
     // d_args.y_scale = 1.0;
     // master.foreach(&Block::generate_circle_data, &d_args);
+    // nctrl_pts = 10;
 
     // sine function
     // d_args.p = 3;
@@ -85,19 +87,19 @@ int main(int argc, char** argv)
     // nctrl_pts = 10;
 
     // sinc function
-    d_args.p = 3;
-    d_args.npts  = 1000;
-    d_args.min_x = -4.0 * M_PI;
-    d_args.max_x = 4.0 * M_PI;
-    d_args.y_scale = 10.0;
-    master.foreach(&Block::generate_sinc_data, &d_args);
-    nctrl_pts = 70;
+    // d_args.p = 3;
+    // d_args.npts  = 1000;
+    // d_args.min_x = -4.0 * M_PI;
+    // d_args.max_x = 4.0 * M_PI;
+    // d_args.y_scale = 10.0;
+    // master.foreach(&Block::generate_sinc_data, &d_args);
+    // nctrl_pts = 70;
 
     // read file
-    // d_args.p = 3;
-    // d_args.npts  = 704;
-    // master.foreach(&Block::read_file_data, &d_args);
-    // nctrl_pts = 140;
+    d_args.p = 3;
+    d_args.npts  = 704;
+    master.foreach(&Block::read_file_data, &d_args);
+    nctrl_pts = 140;
 
     // encode
     master.foreach(&Block::approx_block, &nctrl_pts);

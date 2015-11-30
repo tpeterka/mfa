@@ -2,6 +2,7 @@
 
 CC=mpicc \
 CXX=mpicxx \
+CXXFLAGS='-fexceptions -DBUILD_GYP' \
 node-gyp \
 rebuild
 

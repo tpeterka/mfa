@@ -23,23 +23,20 @@ using namespace Eigen;
 // algorithm 4.1, Piegl & Tiller (P&T) p.124
 // this version recomputes basis functions rather than taking them as an input
 // this version also assumes weights = 1; no division by weight is done
-void CurvePt1d(int            p,             // polynomial degree
-               vector<Pt2d>&  ctrl_pts,      // control points
-               vector<float>& knots,         // knots
-               float          param,         // parameter value of desired point
-               Pt2d&          out_pt)        // (output) point
+void CurvePt1d(int                  p,             // polynomial degree
+               vector<Pt <float> >& ctrl_pts,      // control points
+               vector<float>&       knots,         // knots
+               float                param,         // parameter value of desired point
+               Pt<float>&           out_pt)        // (output) point
 {
     int n      = (int)ctrl_pts.size() - 1;   // number of control point spans
     int span   = FindSpan(p, n, knots, param);
     MatrixXf N = MatrixXf::Zero(1, n + 1);   // basis coefficients
     BasisFuns(p, knots, param, span, N, 0, n, 0);
-    out_pt.x = 0.0;
-    out_pt.y = 0.0;
+    out_pt = Pt<float>(0.0, 0.0);
     for (int j = 0; j <= p; j++)
-    {
-        out_pt.x += N(0, j + span - p) * ctrl_pts[span - p + j].x;
-        out_pt.y += N(0, j + span - p) * ctrl_pts[span - p + j].y;
-    }
+        out_pt += N(0, j + span - p) * ctrl_pts[span - p + j];
+
     // debug
     // cerr << "n " << n << " param " << param << " span " << span << " out_pt " << out_pt << endl;
     // cerr << " N " << N << endl;
@@ -51,29 +48,28 @@ void CurvePt1d(int            p,             // polynomial degree
 // recomputes basis functions rather than taking them as an input
 // this version also assumes weights = 1; no division by weight is done
 // assumes all vectors have been correctly resized by the caller
-void MaxErr1d(int            p,              // polynomial degree
-              vector<Pt1d>&  domain,         // domain of input data points
-              vector<float>& range,          // range of input data points, same length as domain
-              vector<Pt2d>&  ctrl_pts,       // control points
-              vector<float>& knots,          // knots
-              vector<Pt2d>&  approx,         // points on approximated curve
-                                             // (same number as input points, for rendering only)
-              vector<float>& errs,           // (output) error at each input point
-              float&         max_err)        // (output) maximum error
+void MaxErr1d(int                  p,         // polynomial degree
+              int                  dim,       // point dimensionality
+              vector<Pt <float> >& domain,    // domain of input data points
+              vector<Pt <float> >& ctrl_pts,  // control points
+              vector<float>&       knots,     // knots
+              vector<Pt <float> >& approx,    // points on approximated curve
+                                              // (same number as input points, for rendering only)
+              vector<float>&       errs,      // (output) error at each input point
+              float&               max_err)   // (output) maximum error
 {
     // curve parameters for input points
-    vector<float> params(domain.size());     // curve parameters for input data points
-    Params1d(domain, range, params);
+    vector<float> params(domain.size());      // curve parameters for input data points
+    Params1d(domain, params);
 
     // errors and max error
     max_err = 0;
     for (size_t i = 0; i < domain.size(); i++)
     {
-        Pt2d cpt;                            // point on curve at parameter of input point
+        Pt<float> cpt(dim);                   // point on curve at parameter of input point
         CurvePt1d(p, ctrl_pts, knots, params[i], cpt);
         approx[i] = cpt;
-        Pt2d ipt(domain[i].x, range[i]);     // input point
-        errs[i] = Pt2d::dist(cpt, ipt);
+        errs[i] = Pt<float>::dist(cpt, domain[i]);
         if (i == 0 || errs[i] > max_err)
             max_err = errs[i];
 
@@ -90,30 +86,31 @@ void MaxErr1d(int            p,              // polynomial degree
 // recomputes basis functions rather than taking them as an input
 // this version also assumes weights = 1; no division by weight is done
 // assumes all vectors have been correctly resized by the caller
-void MaxNormErr1d(int            p,          // polynomial degree
-                  vector<Pt1d>&  domain,     // domain of input data points
-                  vector<float>& range,      // range of input data points, same length as domain
-                  vector<Pt2d>&  ctrl_pts,   // control points
-                  vector<float>& knots,      // knots
-                  int            max_niter,  // max num iterations to search for nearest curve pt
-                  float          err_bound,  // desired error bound (stop searching if less)
-                  int            search_rad, // number of parameter steps to search path on either
-                                             // side of parameter value of input point
-                  vector<Pt2d>&  approx,     // points on approximated curve
-                                             // (same number as input points, for rendering only)
-                  vector<float>& errs,       // (output) error at each input point
-                  float&         max_err)    // (output) maximum error from any input point to curve
+void MaxNormErr1d(int                  p,          // polynomial degree
+                  int                  dim,        // point dimensionality
+                  vector<Pt <float> >& domain,     // domain of input data points
+                  vector<Pt <float> >& ctrl_pts,   // control points
+                  vector<float>&       knots,      // knots
+                  int                  max_niter,  // max num iterations to search for
+                                                   // nearest curve pt
+                  float                err_bound,  // desired error bound (stop searching if less)
+                  int                  search_rad, // number of parameter steps to search path on
+                                                   // either side of parameter value of input point
+                  vector<Pt <float> >& approx,     // points on approximated curve (same number as
+                                                   // input points, for rendering only)
+                  vector<float>&       errs,       // (output) error at each input point
+                  float&               max_err)    // (output) max error from any input pt to curve
 {
     // curve parameters for input points
-    vector<float> params(domain.size());     // curve parameters for input data points
-    Params1d(domain, range, params);
+    vector<float> params(domain.size());           // curve parameters for input data points
+    Params1d(domain, params);
 
     // fit approximated curve (for debugging and rendering only)
     for (size_t i = 0; i < domain.size(); i++)
     {
-        Pt2d cpt;                            // point on curve at parameter of input point
+        Pt<float> cpt(dim);                        // point on curve at parameter of input point
         CurvePt1d(p, ctrl_pts, knots, params[i], cpt);
-        approx[i] = cpt;
+        approx[i] = cpt;                     // TODO: does assigment work?
         // debug
         // cerr <<  "param " << params[i] << " curve point " << approx[i] << endl;
     }
@@ -122,11 +119,9 @@ void MaxNormErr1d(int            p,          // polynomial degree
     max_err = 0;
     for (size_t i = 0; i < domain.size(); i++)
     {
-        Pt2d ipt(domain[i].x, range[i]);     // input point
-
         // find nearest curve point
-        Pt2d cpt;                            // point on curve at parameter of input point
-        float ul, uh, um;                    // low, high, middle  parameter values
+        Pt<float> cpt(dim);                   // point on curve at parameter of input point
+        float ul, uh, um;                     // low, high, middle  parameter values
 
         // range of parameter values to search
         if (i < search_rad)
@@ -154,13 +149,13 @@ void MaxNormErr1d(int            p,          // polynomial degree
         for (j = 0; j < max_niter; j++)
         {
             CurvePt1d(p, ctrl_pts, knots, ul, cpt);
-            el = Pt2d::dist(cpt, ipt);      // distance to C(ul)
+            el = Pt<float>::dist(cpt, domain[i]);      // distance to C(ul)
             // cerr << "low " << cpt << " el " << el;         // debug
             CurvePt1d(p, ctrl_pts, knots, um, cpt);
-            em = Pt2d::dist(cpt, ipt);      // distance to C(um)
+            em = Pt<float>::dist(cpt, domain[i]);      // distance to C(um)
             // cerr << " mid " << cpt << " em " << em;        // debug
             CurvePt1d(p, ctrl_pts, knots, uh, cpt);
-            eh = Pt2d::dist(cpt, ipt);     // distance to C(uh)
+            eh = Pt<float>::dist(cpt, domain[i]);     // distance to C(uh)
             // cerr << " hi " << cpt << " eh " << eh << endl; // debug
 
             if (el < eh && el < em)          // el is the best error

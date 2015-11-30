@@ -107,13 +107,12 @@ void BasisFuns(int            p,             // polynomial degree
 }
 
 // computes R (residual) vector of P&T eq. 9.63 and 9.67, p. 411-412
-void Residual2d(int            p,            // polynomial degree
-                vector<Pt1d>&  domain,       // domain of input data points
-                vector<float>& range,        // range of input data points, same length as domain
-                vector<float>& knots,        // knots
-                vector<float>& params,       // parameters of input points
-                MatrixXf&      N,            // matrix of basis function coefficients
-                MatrixXf&      R)            // (output) residual matrix allocated by caller
+void Residual2d(int                   p,     // polynomial degree
+                vector<Pt <float> >&  domain,// domain of input data points
+                vector<float>&        knots, // knots
+                vector<float>&        params,// parameters of input points
+                MatrixXf&             N,     // matrix of basis function coefficients
+                MatrixXf&             R)     // (output) residual matrix allocated by caller
 {
     int n      = N.cols() + 1;               // number of control point spans
     int m      = N.rows() + 1;               // number of input data point spans
@@ -129,8 +128,8 @@ void Residual2d(int            p,            // polynomial degree
         // debug
         // cerr << "Nk:\n" << Nk << endl;
 
-        Rk(k - 1, 0) = domain[k].x - Nk(0, 0) * domain[0].x - Nk(0, n) * domain[m].x;
-        Rk(k - 1, 1) = range[k]    - Nk(0, 0) * range[0]    - Nk(0, n) * range[m];
+        Rk(k - 1, 0) = domain[k][0] - Nk(0, 0) * domain[0][0] - Nk(0, n) * domain[m][0];
+        Rk(k - 1, 1) = domain[k][1] - Nk(0, 0) * domain[0][1] - Nk(0, n) * domain[m][1];
     }
 
     // debug
@@ -148,10 +147,8 @@ void Residual2d(int            p,            // polynomial degree
 // interpolate (1D) points to approximately uniform spacing
 // TODO: normalize domain and range to similar scales
 // new_domain and new_range are resized by Prep1d according to how many new points need to be added
-void Prep1d(vector<Pt1d>&  domain,           // domain of input data points
-            vector<float>& range,            // range of input data points, same length as domain
-            vector<Pt1d>&  new_domain,       // domain of input data points
-            vector<float>& new_range)        // range of input data points, same length as domain
+void Prep1d(vector<Pt <float> >&  domain,    // domain of input data points
+            vector<Pt <float> >&  new_domain)// new domain with interpolated data points
 {
     vector<float> dists(domain.size() - 1);  // chord lengths of input data point spans
     float min_dist;                          // min and max distance
@@ -160,9 +157,7 @@ void Prep1d(vector<Pt1d>&  domain,           // domain of input data points
     for (size_t i = 0; i < domain.size() - 1; i++)
     {
         // TODO: normalize domain and range so they have similar scales
-        Pt2d p1(domain[i    ].x, range[i    ]);
-        Pt2d p2(domain[i + 1].x, range[i + 1]);
-        dists[i] = Pt2d::dist(p1, p2);
+        dists[i] = Pt<float>::dist(domain[i], domain[i + 1]);
         if (i == 0)
             min_dist = dists[i];
         if (dists[i] < min_dist)
@@ -181,29 +176,24 @@ void Prep1d(vector<Pt1d>&  domain,           // domain of input data points
     for (size_t i = 0; i < domain.size() - 1; i++)
     {
         new_domain.push_back(domain[i]);
-        new_range.push_back(range[i]);
         int nextra_pts = dists[i] / min_dist - 1;     // number of extra points to insert
         for (int j = 0; j < nextra_pts; j++)
         {
             float fd = (j + 1) * min_dist / dists[i]; // fraction of distance to add
-            Pt1d p(domain[i].x + fd * (domain[i + 1].x - domain[i].x));
+            Pt<float> p(domain[i] + fd * (domain[i + 1] - domain[i]));
             new_domain.push_back(p);
-            float r = range[i] + fd * (range[i + 1] - range[i]);
-            new_range.push_back(r);
         }
     }
     // copy last point
     new_domain.push_back(domain[domain.size() - 1]);
-    new_range.push_back(range[range.size() - 1]);
 }
 
 // precompute curve parameters for input data points using the chord-length method
 // 1D version of algorithm 9.3, P&T, p. 377
 // assumes params were allocated by caller
 // TODO: investigate other schemes (domain only, normalized domain and range, etc.)
-void Params1d(vector<Pt1d>&  domain,         // domain of input data points
-              vector<float>& range,          // range of input data points, same length as domain
-              vector<float>& params)         // (output) curve parameters
+void Params1d(vector<Pt <float> >&  domain,  // domain of input data points
+              vector<float>&        params)  // (output) curve parameters
 {
     int nparams    = domain.size();          // number of parameters = number of input points
     float tot_dist = 0.0;                    // total chord length
@@ -213,9 +203,7 @@ void Params1d(vector<Pt1d>&  domain,         // domain of input data points
     for (size_t i = 0; i < nparams - 1; i++)
     {
         // TODO: normalize domain and range so they have similar scales
-        Pt2d p1(domain[i    ].x, range[i    ]);
-        Pt2d p2(domain[i + 1].x, range[i + 1]);
-        dists[i] = Pt2d::dist(p1, p2);
+        dists[i] = Pt<float>::dist(domain[i], domain[i + 1]);
         // fprintf(stderr, "dists[%lu] = %.3f\n", i, dists[i]);
         tot_dist += dists[i];
     }
@@ -230,47 +218,41 @@ void Params1d(vector<Pt1d>&  domain,         // domain of input data points
 // approximate a NURBS curve for a given input 1D data set
 // weights are all 1 for now
 // 1D version of algorithm 9.7, Piegl & Tiller (P&T) p. 422
-void Approx1d(int            p,              // polynomial degree
-              int            nctrl_pts,      // desired number of control points
-              vector<Pt1d>&  domain,         // domain of input data points
-              vector<float>& range,          // range of input data points, same length as domain
-              vector<Pt2d>&  ctrl_pts,       // (output) control points
-              vector<float>& knots)          // (output) knots
+void Approx1d(int                   p,        // polynomial degree
+              int                   nctrl_pts,// desired number of control points
+              int                   dim,      // point dimensionality
+              vector<Pt <float> >&  domain,   // domain of input data points
+              vector<Pt <float> >&  ctrl_pts, // (output) control points
+              vector<float>&        knots)    // (output) knots
 {
-    if (domain.size() != range.size())
-    {
-        cerr << "Error: Approx1d() domain and range are different size" << endl;
-        exit(1);
-    }
     if (nctrl_pts <= p)
     {
-        cerr << "Error: Approx1d() number of control points must be at least equal to p + 1" << endl;
+        fprintf(stderr, "Error: Approx1d() number of control points must be at least p + 1\n");
         exit(1);
     }
 
     // preprocess domain and range
-    vector<Pt1d> new_domain;
-    vector<float> new_range;
-    Prep1d(domain, range, new_domain, new_range);
+    vector<Pt <float> > new_domain;
+    Prep1d(domain, new_domain);
+
     // copy back TODO: decide whether want to change original data or not
-    domain.resize(new_domain.size());
-    range.resize(new_range.size());
+    domain.resize(new_domain.size(), Pt<float>(dim));
     for (size_t i = 0; i < domain.size(); i++)
-    {
-        domain[i].x = new_domain[i].x;
-        range[i]    = new_range[i];
-    }
+        domain[i] = new_domain[i];           // asssigment automatically resizes
 
     int n      = nctrl_pts - 1;              // number of control point spans
     int m      = domain.size() - 1;          // number of input data point spans
     int nknots = n + p + 2;                  // number of knots
 
     knots.resize(nknots);
-    ctrl_pts.resize(nctrl_pts);
+    ctrl_pts.resize(nctrl_pts, Pt<float>(dim));
+    // TODO: unsure why this is needed but prevents invalid write otherwise
+    for (size_t i = 0; i < ctrl_pts.size(); i++)
+        ctrl_pts[i].resize(dim);
 
     // precompute curve parameters for input points
-    vector<float> params(domain.size());     // curve parameters for input data points
-    Params1d(domain, range, params);         // based on both domain and range
+    vector<float> params(domain.size());
+    Params1d(domain, params);
 
     // debug
     // cerr << "params: ";
@@ -359,7 +341,7 @@ void Approx1d(int            p,              // polynomial degree
 
     // compute R
     MatrixXf R(n - 1, 2);                     // NB, eigen frees dynamic memory when leaving scope
-    Residual2d(p, domain, range, knots, params, N, R);
+    Residual2d(p, domain, knots, params, N, R);
 
     // debug
     // cerr << "R = \n" << R << endl;
@@ -375,16 +357,15 @@ void Approx1d(int            p,              // polynomial degree
     // cerr << "P = \n" << P << endl;
 
     // init first and last control points
-    ctrl_pts[0].x = domain[0].x;
-    ctrl_pts[0].y = range[0];
-    ctrl_pts[n].x = domain[m].x;
-    ctrl_pts[n].y = range[m];
+    // TODO: does copying work?
+    ctrl_pts[0] = domain[0];
+    ctrl_pts[n] = domain[m];
 
     // copy rest of control points
     // TODO: use a common representation for P and ctrl_pts to avoid copying
     for (int i = 0; i < n - 1; i++)
     {
-        ctrl_pts[i + 1].x = P(i, 0);
-        ctrl_pts[i + 1].y = P(i, 1);
+        ctrl_pts[i + 1][0] = P(i, 0);
+        ctrl_pts[i + 1][1] = P(i, 1);
     }
 }
