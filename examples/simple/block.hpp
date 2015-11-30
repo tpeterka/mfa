@@ -106,13 +106,12 @@ struct Block
             dim = 2;
             DomainArgs* a = (DomainArgs*)args;
             p = a->p;
-            domain.resize(a->npts, Pt<float>(dim));
+            domain.resize(a->npts);
             float dx = (a->max_x - a->min_x) / (a->npts - 1);
 
             // the simplest constant function
             for (int i = 0; i < a->npts; i++)
             {
-                // TODO: unsure why this is needed but prevents invalid write otherwise
                 domain[i].resize(dim);
                 domain[i][0] = a->min_x + i * dx;
                 domain[i][1] = a->y_scale;
@@ -132,13 +131,12 @@ struct Block
             dim = 2;
             DomainArgs* a = (DomainArgs*)args;
             p = a->p;
-            domain.resize(a->npts, Pt<float>(dim));
+            domain.resize(a->npts);
             float dx = (a->max_x - a->min_x) / (a->npts - 1);
 
             // a circle function
             for (int i = 0; i < a->npts; i++)
             {
-                // TODO: unsure why this is needed but prevents invalid write otherwise
                 domain[i].resize(dim);
                 domain[i][0] = cos(a->min_x + i * dx);
                 domain[i][1] = a->y_scale * sin(a->min_x + i * dx);
@@ -159,13 +157,12 @@ struct Block
             dim = 2;
             DomainArgs* a = (DomainArgs*)args;
             p = a->p;
-            domain.resize(a->npts, Pt<float>(dim));
+            domain.resize(a->npts);
             float dx = (a->max_x - a->min_x) / (a->npts - 1);
 
             // a sine function
             for (int i = 0; i < a->npts; i++)
             {
-                // TODO: unsure why this is needed but prevents invalid write otherwise
                 domain[i].resize(dim);
                 domain[i][0] = a->min_x + i * dx;
                 domain[i][1] = a->y_scale * sin(domain[i][0]);
@@ -186,13 +183,12 @@ struct Block
             dim = 2;
             DomainArgs* a = (DomainArgs*)args;
             p = a->p;
-            domain.resize(a->npts, Pt<float>(dim));
+            domain.resize(a->npts);
             float dx = (a->max_x - a->min_x) / (a->npts - 1);
 
             // sine(x)/x function
             for (int i = 0; i < a->npts; i++)
             {
-                // TODO: unsure why this is needed but prevents invalid write otherwise
                 domain[i].resize(dim);
                 domain[i][0] = a->min_x + i * dx;
                 if (domain[i][0] == 0.0)
@@ -217,10 +213,10 @@ struct Block
             dim = 2;
             DomainArgs* a = (DomainArgs*)args;
             p = a->p;
-            domain.resize(2 * a->npts, Pt<float>(dim)); // double resolution
+
+            domain.resize(2 * a->npts); // double resolution
             vector<float> vel(3 * a->npts);
 
-            // TODO: unsure why this is needed but prevents invalid write otherwise
             for (size_t i = 0; i < domain.size(); i++)
                 domain[i].resize(dim);
 

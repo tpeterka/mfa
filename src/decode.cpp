@@ -33,7 +33,7 @@ void CurvePt1d(int                  p,             // polynomial degree
     int span   = FindSpan(p, n, knots, param);
     MatrixXf N = MatrixXf::Zero(1, n + 1);   // basis coefficients
     BasisFuns(p, knots, param, span, N, 0, n, 0);
-    out_pt = Pt<float>(0.0, 0.0);
+    out_pt.set(0.0, 0.0);
     for (int j = 0; j <= p; j++)
         out_pt += N(0, j + span - p) * ctrl_pts[span - p + j];
 
@@ -66,10 +66,8 @@ void MaxErr1d(int                  p,         // polynomial degree
     max_err = 0;
     for (size_t i = 0; i < domain.size(); i++)
     {
-        Pt<float> cpt(dim);                   // point on curve at parameter of input point
-        CurvePt1d(p, ctrl_pts, knots, params[i], cpt);
-        approx[i] = cpt;
-        errs[i] = Pt<float>::dist(cpt, domain[i]);
+        CurvePt1d(p, ctrl_pts, knots, params[i], approx[i]);
+        errs[i] = Pt<float>::dist(approx[i], domain[i]);
         if (i == 0 || errs[i] > max_err)
             max_err = errs[i];
 
@@ -107,13 +105,7 @@ void MaxNormErr1d(int                  p,          // polynomial degree
 
     // fit approximated curve (for debugging and rendering only)
     for (size_t i = 0; i < domain.size(); i++)
-    {
-        Pt<float> cpt(dim);                        // point on curve at parameter of input point
-        CurvePt1d(p, ctrl_pts, knots, params[i], cpt);
-        approx[i] = cpt;                     // TODO: does assigment work?
-        // debug
-        // cerr <<  "param " << params[i] << " curve point " << approx[i] << endl;
-    }
+        CurvePt1d(p, ctrl_pts, knots, params[i], approx[i]);
 
     // errors and max error
     max_err = 0;

@@ -14,127 +14,91 @@
 
 using namespace std;
 
-// DEPRECATED
-// struct Pt1d
-// {
-//     Pt1d() {}
-//     Pt1d(float x_) : x(x_) {}
-
-//     float x;
-
-//     float operator[](int i)
-//         {
-//             if (i == 0)
-//                 return x;
-//             else
-//             {
-//                 cerr << "Pt1d out of bounds index" << endl;
-//                 exit(1);
-//             }
-//         }
-// };
-
-// struct Pt2d
-// {
-//     Pt2d() {}
-//     Pt2d(float x_, float y_) : x(x_), y(y_) {}
-
-//     float x, y;
-
-//     float operator[](int i)
-//         {
-//             if (i == 0)
-//                 return x;
-//             else if (i == 1)
-//                 return y;
-//             else
-//             {
-//                 cerr << "Pt2d out of bounds index" << endl;
-//                 exit(1);
-//             }
-//         }
-
-//     friend
-//     ostream&
-//     operator<< (ostream &out, Pt2d& p)
-//         {
-//             out << "(" << p.x << ", " << p.y << ")";
-//             return out;
-//         }
-
-//     static
-//     float dist(Pt2d p1, Pt2d p2)
-//         {
-//             return sqrt((p1.x - p2.x) * (p1.x - p2.x) + (p1.y - p2.y) * (p1.y - p2.y));
-//         }
-
-// };
-
-// struct Pt3d
-// {
-//     float x, y, z;
-// };
-
-// struct Pt4d
-// {
-//     float x, y, z, t;
-// };
-
 // TODO switch to eigen or other matrix library?
 
 template<typename T>
 struct Pt : public vector<T>
 {
-    // Pt() {};
-    Pt(T x)
+    Pt()         : vector<T>() {}
+    Pt(size_t n) : vector<T>(n) {}
+
+    Pt<T>&
+    set(T x)
         {
-            this->push_back(x);
+            this->resize(1);
+            (*this)[0] = x;
+            return *this;
         }
-    Pt(T x, T y)
+
+    Pt<T>&
+    set(T x, T y)
         {
-            this->push_back(x);
-            this->push_back(y);
+            this->resize(2);
+            (*this)[0] = x;
+            (*this)[1] = y;
+            return *this;
         }
-    Pt(T x, T y, T z)
+
+    Pt<T>&
+    set(T x, T y, T z)
         {
-            this->push_back(x);
-            this->push_back(y);
-            this->push_back(z);
+            this->resize(3);
+            (*this)[0] = x;
+            (*this)[1] = y;
+            (*this)[2] = z;
+            return *this;
         }
-    Pt(T x, T y, T z, T t)
+
+    Pt<T>&
+    set(T x, T y, T z, T t)
         {
-            this->push_back(x);
-            this->push_back(y);
-            this->push_back(z);
-            this->push_back(t);
+            this->resize(4);
+            (*this)[0] = x;
+            (*this)[1] = y;
+            (*this)[2] = z;
+            (*this)[3] = t;
+            return *this;
         }
-    Pt(T x, T y, T z, T t, T u)
+
+    Pt<T>&
+    sett(T x, T y, T z, T t, T u)
         {
-            this->push_back(x);
-            this->push_back(y);
-            this->push_back(z);
-            this->push_back(t);
-            this->push_back(u);
+            this->resize(5);
+            (*this)[0] = x;
+            (*this)[1] = y;
+            (*this)[2] = z;
+            (*this)[3] = t;
+            (*this)[4] = u;
+            return *this;
         }
-    Pt(T x, T y, T z, T t, T u, T v)
+
+    Pt<T>&
+    set(T x, T y, T z, T t, T u, T v)
         {
-            this->push_back(x);
-            this->push_back(y);
-            this->push_back(z);
-            this->push_back(t);
-            this->push_back(u);
-            this->push_back(v);
+            this->resize(6);
+            (*this)[0] = x;
+            (*this)[1] = y;
+            (*this)[2] = z;
+            (*this)[3] = t;
+            (*this)[4] = u;
+            (*this)[5] = v;
+            return *this;
         }
-    Pt(T x, T y, T z, T t, T u, T v, T w)
+
+    Pt<T>&
+    set(T x, T y, T z, T t, T u, T v, T w)
         {
-            this->push_back(x);
-            this->push_back(y);
-            this->push_back(z);
-            this->push_back(t);
-            this->push_back(u);
-            this->push_back(v);
-            this->push_back(w);
+            this->resize(7);
+            (*this)[0] = x;
+            (*this)[1] = y;
+            (*this)[2] = z;
+            (*this)[3] = t;
+            (*this)[4] = u;
+            (*this)[5] = v;
+            (*this)[6] = w;
+            return *this;
         }
+
     // Euclidean distance ||p1, p2||
     static
     float dist(Pt p1, Pt p2)
@@ -144,6 +108,7 @@ struct Pt : public vector<T>
                 sum_sq += (p1[i] - p2[i]) * (p1[i] - p2[i]);
             return sqrt(sum_sq);
         }
+
     // print p
     friend
     ostream&
@@ -159,6 +124,7 @@ struct Pt : public vector<T>
             out << ")";
             return out;
         }
+
     // DEPRECATED
     // component-wise vector assignment p1 = p2
     // should not be necessary, defaults to vector stl vector assignment
@@ -169,6 +135,7 @@ struct Pt : public vector<T>
     //         return *this;
     //     }
     // component-wise vector addition p1 + p2
+
     Pt<T>&
     operator+=(const Pt& rhs)
         {
@@ -183,6 +150,7 @@ struct Pt : public vector<T>
             lhs += rhs;
             return lhs;
         }
+
     // component-wise vector subtraction p1 - p2
     Pt<T>&
     operator-=(const Pt& rhs)
@@ -198,6 +166,7 @@ struct Pt : public vector<T>
             lhs -= rhs;
             return lhs;
         }
+
     // component-wise scalar multiplication p * f
     Pt<T>&
     operator*=(const int rhs)

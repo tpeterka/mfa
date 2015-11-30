@@ -87,19 +87,19 @@ int main(int argc, char** argv)
     // nctrl_pts = 10;
 
     // sinc function
-    // d_args.p = 3;
-    // d_args.npts  = 1000;
-    // d_args.min_x = -4.0 * M_PI;
-    // d_args.max_x = 4.0 * M_PI;
-    // d_args.y_scale = 10.0;
-    // master.foreach(&Block::generate_sinc_data, &d_args);
-    // nctrl_pts = 70;
+    d_args.p = 3;
+    d_args.npts  = 1000;
+    d_args.min_x = -4.0 * M_PI;
+    d_args.max_x = 4.0 * M_PI;
+    d_args.y_scale = 10.0;
+    master.foreach(&Block::generate_sinc_data, &d_args);
+    nctrl_pts = 70;
 
     // read file
-    d_args.p = 3;
-    d_args.npts  = 704;
-    master.foreach(&Block::read_file_data, &d_args);
-    nctrl_pts = 140;
+    // d_args.p = 3;
+    // d_args.npts  = 704;
+    // master.foreach(&Block::read_file_data, &d_args);
+    // nctrl_pts = 140;
 
     // encode
     master.foreach(&Block::approx_block, &nctrl_pts);

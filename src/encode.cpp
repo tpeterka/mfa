@@ -236,7 +236,7 @@ void Approx1d(int                   p,        // polynomial degree
     Prep1d(domain, new_domain);
 
     // copy back TODO: decide whether want to change original data or not
-    domain.resize(new_domain.size(), Pt<float>(dim));
+    domain.resize(new_domain.size());
     for (size_t i = 0; i < domain.size(); i++)
         domain[i] = new_domain[i];           // asssigment automatically resizes
 
@@ -245,8 +245,7 @@ void Approx1d(int                   p,        // polynomial degree
     int nknots = n + p + 2;                  // number of knots
 
     knots.resize(nknots);
-    ctrl_pts.resize(nctrl_pts, Pt<float>(dim));
-    // TODO: unsure why this is needed but prevents invalid write otherwise
+    ctrl_pts.resize(nctrl_pts);
     for (size_t i = 0; i < ctrl_pts.size(); i++)
         ctrl_pts[i].resize(dim);
 
@@ -357,7 +356,6 @@ void Approx1d(int                   p,        // polynomial degree
     // cerr << "P = \n" << P << endl;
 
     // init first and last control points
-    // TODO: does copying work?
     ctrl_pts[0] = domain[0];
     ctrl_pts[n] = domain[m];
 
