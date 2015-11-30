@@ -7,9 +7,7 @@
 // tpeterka@mcs.anl.gov
 //--------------------------------------------------------------
 
-#include <mfa/types.hpp>
-#include <mfa/encode.hpp>
-#include <mfa/decode.hpp>
+#include <mfa/mfa.h>
 
 #include <vector>
 #include <iostream>

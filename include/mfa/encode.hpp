@@ -9,7 +9,7 @@
 #ifndef _ENCODE_HPP
 #define _ENCODE_HPP
 
-#include <mfa/types.hpp>
+#include <mfa/pt.hpp>
 #include <Eigen/Dense>
 #include <vector>
 

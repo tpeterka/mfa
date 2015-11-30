@@ -9,6 +9,9 @@
 #ifndef _DECODE_HPP
 #define _DECODE_HPP
 
+#include <mfa/pt.hpp>
+#include <vector>
+
 void MaxErr1d(int                  p,        // polynomial degree
               int                  dim,      // point dimensionality
               vector<Pt <float> >& domain,   // domain of input data points

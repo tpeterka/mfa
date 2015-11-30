@@ -1,12 +1,12 @@
 //--------------------------------------------------------------
-// type definitions
+// generic n-dimensional point
 //
 // Tom Peterka
 // Argonne National Laboratory
 // tpeterka@mcs.anl.gov
 //--------------------------------------------------------------
-#ifndef _TYPES_HPP
-#define _TYPES_HPP
+#ifndef _PT_HPP
+#define _PT_HPP
 
 #include <iostream>
 #include <cmath>
