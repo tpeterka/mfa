@@ -17,7 +17,7 @@
 
 #include <nan.h>
 
-#include "mfa/types.hpp"
+#include "mfa/mfa.h"
 #include "../examples/simple/block.hpp"
 
 #include <diy/master.hpp>
@@ -43,27 +43,22 @@ void PrepRenderingData(vector<vec3d>& raw_pts,
 
     for (int i = 0; i < nblocks; i++)          // blocks
     {
-        fprintf(stderr, "1: nblocks = %d\n", nblocks);
         vec3d p;
         // raw points
         for (size_t j = 0; j < master.block<Block>(i)->domain.size(); j++)
         {
-            fprintf(stderr, "2: domain size = %d\n", master.block<Block>(i)->domain.size());
             p.x = master.block<Block>(i)->domain[j][0];
-            p.y = master.block<Block>(i)->domain_dim >= 2 ?
-                master.block<Block>(i)->domain[j][1] : master.block<Block>(i)->range[j];
-            p.z = master.block<Block>(i)->domain_dim >= 2 ?
-                master.block<Block>(i)->range[j] : 0.0;
+            p.y = master.block<Block>(i)->domain[j][1];
+            p.z = master.block<Block>(i)->dim > 2 ?
+                master.block<Block>(i)->domain[j][2] : 0.0;
             raw_pts.push_back(p);
-            fprintf(stderr, "%.3f %.3f %.3f\n", p.x, p.y, p.z);
         }
         // control points
         for (size_t j = 0; j < master.block<Block>(i)->ctrl_pts.size(); j++)
         {
-            fprintf(stderr, "3:\n");
             p.x = master.block<Block>(i)->ctrl_pts[j][0];
             p.y = master.block<Block>(i)->ctrl_pts[j][1];
-            p.z = master.block<Block>(i)->domain_dim >= 2 ?
+            p.z = master.block<Block>(i)->dim > 2 ?
                 master.block<Block>(i)->ctrl_pts[j][2] : 0.0;
             ctrl_pts.push_back(p);
         }
@@ -72,23 +67,21 @@ void PrepRenderingData(vector<vec3d>& raw_pts,
         {
             p.x = master.block<Block>(i)->approx[j][0];
             p.y = master.block<Block>(i)->approx[j][1];
-            p.z = master.block<Block>(i)->domain_dim >= 2 ?
+            p.z = master.block<Block>(i)->dim > 2 ?
                 master.block<Block>(i)->approx[j][2] : 0.0;
             approx_pts.push_back(p);
         }
         // block mins
         p.x = master.block<Block>(i)->domain_mins[0];
-        p.y = master.block<Block>(i)->domain_dim >= 2 ?
-            master.block<Block>(i)->domain_mins[1] : master.block<Block>(i)->range_min;
-        p.z = master.block<Block>(i)->domain_dim >= 2 ?
-            master.block<Block>(i)->range_min : 0.0;
+        p.y = master.block<Block>(i)->domain_mins[1];
+        p.z = master.block<Block>(i)->dim > 2 ?
+            master.block<Block>(i)->domain_mins[2] : 0.0;
         mins.push_back(p);
         // block maxs
         p.x = master.block<Block>(i)->domain_maxs[0];
-        p.y = master.block<Block>(i)->domain_dim >= 2 ?
-            master.block<Block>(i)->domain_maxs[1] : master.block<Block>(i)->range_max;
-        p.z = master.block<Block>(i)->domain_dim >= 2 ?
-            master.block<Block>(i)->range_max : 0.0;
+        p.y = master.block<Block>(i)->domain_maxs[1];
+        p.z = master.block<Block>(i)->dim > 2 ?
+            master.block<Block>(i)->domain_maxs[2] : 0.0;
         maxs.push_back(p);
     }
 }

@@ -12,6 +12,8 @@
 #include <cmath>
 #include <vector>
 
+#include <diy/serialization.hpp>
+
 using namespace std;
 
 // TODO switch to eigen or other matrix library?
@@ -19,9 +21,14 @@ using namespace std;
 template<typename T>
 struct Pt : public vector<T>
 {
-    Pt()         : vector<T>() {}
-    Pt(size_t n) : vector<T>(n) {}
+    // constructors
+    Pt()                                        : vector<T>() {}
+    Pt(size_t n, const T& val = T())            : vector<T>(n, val) {}
+    template <class InputIterator>
+    Pt(InputIterator first, InputIterator last) : vector<T>(first, last) {}
+    Pt(const vector<T>& x)                      : vector<T>(x) {}
 
+    // initialize
     Pt<T>&
     set(T x)
         {
@@ -125,17 +132,7 @@ struct Pt : public vector<T>
             return out;
         }
 
-    // DEPRECATED
-    // component-wise vector assignment p1 = p2
-    // should not be necessary, defaults to vector stl vector assignment
-    // Pt<T>&
-    // operator=(const Pt& rhs)
-    //     {
-    //         this->assign(rhs.begin(), rhs.end());
-    //         return *this;
-    //     }
     // component-wise vector addition p1 + p2
-
     Pt<T>&
     operator+=(const Pt& rhs)
         {
@@ -232,5 +229,28 @@ struct Pt : public vector<T>
             return lhs;
         }
 };
+
+namespace diy
+{
+    template<typename T>
+    struct Serialization< Pt<T> > : public diy::Serialization< vector<T> >
+    {
+        static
+        void save(diy::BinaryBuffer& bb, const Pt<T>& x)
+            {
+                // TODO: why do I not need to specify Serialization<vector<T>> when saving
+                // but I do need to loading?
+                diy::save(bb, static_cast< vector<T> >(x));
+                // diy::Serialization< vector <T> >::save(bb, static_cast< vector<T> >(x));
+            }
+        static
+        void load(diy::BinaryBuffer& bb, Pt<T>& x)
+            {
+                // TODO: why doesn't the following static_cast compile?
+                // diy::Serialization< vector<T> >::load(bb, static_cast< vector<T> >(x));
+                diy::Serialization< vector<T> >::load(bb, x);
+            }
+    };
+}
 
 #endif

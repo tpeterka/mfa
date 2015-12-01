@@ -58,46 +58,46 @@ int main(int argc, char** argv)
     DomainArgs d_args;
 
     // constant function
-    // d_args.p = 3;
-    // d_args.npts  = 20;
-    // d_args.min_x = 0.0;
-    // d_args.max_x = d_args.npts - 1.0;
+    // d_args.p       = 3;
+    // d_args.npts    = 20;
+    // d_args.min_x   = 0.0;
+    // d_args.max_x   = d_args.npts - 1.0;
     // d_args.y_scale = 1.0;
+    // nctrl_pts      = 10;
     // master.foreach(&Block::generate_constant_data, &d_args);
-    // nctrl_pts = 10;
 
     // circle function
-    // d_args.p = 3;
-    // d_args.npts  = 100;
-    // d_args.min_x = 0.0;
-    // d_args.max_x = M_PI / 2.0;
+    // d_args.p       = 3;
+    // d_args.npts    = 100;
+    // d_args.min_x   = 0.0;
+    // d_args.max_x   = M_PI / 2.0;
     // d_args.y_scale = 1.0;
+    // nctrl_pts      = 10;
     // master.foreach(&Block::generate_circle_data, &d_args);
-    // nctrl_pts = 10;
 
     // sine function
-    // d_args.p = 3;
-    // d_args.npts  = 100;
-    // d_args.min_x = 0.0;
-    // d_args.max_x = 2 * M_PI;
+    // d_args.p       = 3;
+    // d_args.npts    = 100;
+    // d_args.min_x   = 0.0;
+    // d_args.max_x   = 2 * M_PI;
     // d_args.y_scale = 1.0;
+    // nctrl_pts      = 10;
     // master.foreach(&Block::generate_sine_data, &d_args);
-    // nctrl_pts = 10;
 
     // sinc function
-    d_args.p = 3;
-    d_args.npts  = 1000;
-    d_args.min_x = -4.0 * M_PI;
-    d_args.max_x = 4.0 * M_PI;
+    d_args.p       = 3;
+    d_args.npts    = 1000;
+    d_args.min_x   = -4.0 * M_PI;
+    d_args.max_x   = 4.0 * M_PI;
     d_args.y_scale = 10.0;
+    nctrl_pts      = 70;
     master.foreach(&Block::generate_sinc_data, &d_args);
-    nctrl_pts = 70;
 
     // read file
-    // d_args.p = 3;
+    // d_args.p     = 3;
     // d_args.npts  = 704;
+    // nctrl_pts    = 140;
     // master.foreach(&Block::read_file_data, &d_args);
-    // nctrl_pts = 140;
 
     // encode
     master.foreach(&Block::approx_block, &nctrl_pts);
@@ -115,6 +115,15 @@ int main(int argc, char** argv)
     // save the results in diy format
     diy::io::write_blocks("approx.out", world, master);
 
-    // cleanup
-    // master.foreach(&Block::reset_block);
+    // debug: read the file back
+    // int read_nblocks;                                       // number of blocks read
+    // diy::Master               read_master(world,
+    //                                       -1,
+    //                                       -1,
+    //                                       &Block::create,
+    //                                       &Block::destroy);
+    // diy::ContiguousAssigner   read_assigner(world.size(), -1);
+    // diy::io::read_blocks("approx.out", world, read_assigner, read_master, &Block::load);
+    // read_nblocks = master.size();
+    // fprintf(stderr, "%d blocks read\n", read_nblocks);
 }

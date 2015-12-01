@@ -47,19 +47,22 @@ struct Block
         domain_maxs(Pt<float>(2))
         {
         }
-    static void* create()
+    static
+    void* create()
         {
             return new Block;
         }
-    static void  destroy(void* b)
+    static
+    void destroy(void* b)
         {
             delete static_cast<Block*>(b);
         }
-    static void  save(const void* b_, diy::BinaryBuffer& bb)
+    static
+    void save(const void* b_, diy::BinaryBuffer& bb)
         {
             Block* b = (Block*)b_;
-            diy::save(bb, b->domain);
             diy::save(bb, b->dim);
+            diy::save(bb, b->domain);
             diy::save(bb, b->domain_mins);
             diy::save(bb, b->domain_maxs);
             diy::save(bb, b->p);
@@ -69,33 +72,19 @@ struct Block
             diy::save(bb, b->errs);
             diy::save(bb, b->max_err);
         }
-    static void  load(void* b_, diy::BinaryBuffer& bb)
+    static
+    void load(void* b_, diy::BinaryBuffer& bb)
         {
             Block* b = (Block*)b_;
 
-            // domain requires a custom load because it is an n-d vector
-            size_t s;
-            diy::load(bb, s);
-            b->domain.resize(s, Pt<float>(b->dim));
-            diy::load(bb, &(b->domain[0]), s);
-
             diy::load(bb, b->dim);
+            diy::load(bb, b->domain);
             diy::load(bb, b->domain_mins);
             diy::load(bb, b->domain_maxs);
             diy::load(bb, b->p);
-
-            // ctrl_pts requires a custom load because it is an n-d vector
-            diy::load(bb, s);
-            b->ctrl_pts.resize(s, Pt<float>(b->dim));
-            diy::load(bb, &(b->ctrl_pts[0]), s);
-
+            diy::load(bb, b->ctrl_pts);
             diy::load(bb, b->knots);
-
-            // approx requires a custom load because it is an n-d vector
-            diy::load(bb, s);
-            b->approx.resize(s, Pt<float>(b->dim));
-            diy::load(bb, &(b->approx[0]), s);
-
+            diy::load(bb, b->approx);
             diy::load(bb, b->errs);
             diy::load(bb, b->max_err);
         }
@@ -268,8 +257,6 @@ struct Block
             // debug
             fprintf(stderr, "domain [%.3f %.3f] range [%.3f %.3f]\n",
                     domain_mins[0], domain_maxs[0], domain_mins[1], domain_maxs[1]);
-            // for (size_t i = 0; i < domain.size(); i++)
-            //     fprintf(stderr, "%d: (%.3f %.3f)\n", i, domain[i].x, range[i]);
         }
 
     void approx_block(const diy::Master::ProxyWithLink& cp, void* args)
@@ -305,22 +292,17 @@ struct Block
 
     void print_block(const diy::Master::ProxyWithLink& cp, void*)
         {
-            cerr << ctrl_pts.size() << " control points:" << endl;
+            fprintf(stderr, "%lu control points\n", ctrl_pts.size());
             for (size_t i = 0; i < ctrl_pts.size(); i++)
                 cerr << ctrl_pts[i] << " ";
-            cerr << endl;
+            fprintf(stderr, "\n");
 
-            cerr << knots.size() << " knots:" << endl;
+            fprintf(stderr, "%lu knotss\n", knots.size());
             for (size_t i = 0; i < knots.size(); i++)
-                cerr << knots[i] << " ";
-            cerr << endl;
+                fprintf(stderr, "%.3lf ", knots[i]);
+            fprintf(stderr, "\n");
 
-            // cerr << errs.size() << " errors at input points:" << endl;
-            // for (size_t i = 0; i < errs.size(); i++)
-            //     cerr << errs[i] << " ";
-            // cerr << endl;
-
-            cerr << "max_err = " << max_err << endl;
+            fprintf(stderr, "max_err = %.6lf\n",max_err);
         }
 
     void reset_block(const diy::Master::ProxyWithLink& cp, void*)
