@@ -65,7 +65,7 @@ void MaxErr1d(int       p,                   // polynomial degree
 
     // eigen frees following temp vectors when leaving scope
     VectorXf dpt(domain.cols());             // original data point
-    VectorXf apt(domain.cols());             // approximated point
+    VectorXf cpt(ctrl_pts.cols());           // approximated curve point
     VectorXf d(domain.cols());               // apt - dpt
     for (size_t i = 0; i < domain.rows(); i++)
     {
@@ -73,13 +73,10 @@ void MaxErr1d(int       p,                   // polynomial degree
         // not straightforward to pass a row to a function expecting a vector
         // because matrix ordering is column order by default
         // not sure whether what is the best combo of usability and performance
-        VectorXf cpt(ctrl_pts.cols());
         CurvePt1d(p, ctrl_pts, knots, params(i), cpt);
         approx.row(i) = cpt;
-        // eigen frees following temp vectors when leaving scope
         dpt = domain.row(i);
-        apt = approx.row(i);
-        d = apt - dpt;
+        d = cpt - dpt;
         errs(i) = d.norm();                  // Euclidean distance
         if (i == 0 || errs(i) > max_err)
             max_err = errs(i);
