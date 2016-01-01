@@ -45,43 +45,43 @@ void PrepRenderingData(vector<vec3d>& raw_pts,
     {
         vec3d p;
         // raw points
-        for (size_t j = 0; j < master.block<Block>(i)->domain.size(); j++)
+        for (size_t j = 0; j < master.block<Block>(i)->domain.rows(); j++)
         {
-            p.x = master.block<Block>(i)->domain[j][0];
-            p.y = master.block<Block>(i)->domain[j][1];
-            p.z = master.block<Block>(i)->dim > 2 ?
-                master.block<Block>(i)->domain[j][2] : 0.0;
+            p.x = master.block<Block>(i)->domain(j, 0);
+            p.y = master.block<Block>(i)->domain(j, 1);
+            p.z = master.block<Block>(i)->domain.cols() > 2 ?
+                master.block<Block>(i)->domain(j, 2) : 0.0;
             raw_pts.push_back(p);
         }
         // control points
-        for (size_t j = 0; j < master.block<Block>(i)->ctrl_pts.size(); j++)
+        for (size_t j = 0; j < master.block<Block>(i)->ctrl_pts.rows(); j++)
         {
-            p.x = master.block<Block>(i)->ctrl_pts[j][0];
-            p.y = master.block<Block>(i)->ctrl_pts[j][1];
-            p.z = master.block<Block>(i)->dim > 2 ?
-                master.block<Block>(i)->ctrl_pts[j][2] : 0.0;
+            p.x = master.block<Block>(i)->ctrl_pts(j, 0);
+            p.y = master.block<Block>(i)->ctrl_pts(j, 1);
+            p.z = master.block<Block>(i)->ctrl_pts.cols() > 2 ?
+                master.block<Block>(i)->ctrl_pts(j, 2) : 0.0;
             ctrl_pts.push_back(p);
         }
         // approximated points
-        for (size_t j = 0; j < master.block<Block>(i)->approx.size(); j++)
+        for (size_t j = 0; j < master.block<Block>(i)->approx.rows(); j++)
         {
-            p.x = master.block<Block>(i)->approx[j][0];
-            p.y = master.block<Block>(i)->approx[j][1];
-            p.z = master.block<Block>(i)->dim > 2 ?
-                master.block<Block>(i)->approx[j][2] : 0.0;
+            p.x = master.block<Block>(i)->approx(j, 0);
+            p.y = master.block<Block>(i)->approx(j, 1);
+            p.z = master.block<Block>(i)->approx.cols() > 2 ?
+                master.block<Block>(i)->approx(j, 2) : 0.0;
             approx_pts.push_back(p);
         }
         // block mins
-        p.x = master.block<Block>(i)->domain_mins[0];
-        p.y = master.block<Block>(i)->domain_mins[1];
-        p.z = master.block<Block>(i)->dim > 2 ?
-            master.block<Block>(i)->domain_mins[2] : 0.0;
+        p.x = master.block<Block>(i)->domain_mins(0);
+        p.y = master.block<Block>(i)->domain_mins(1);
+        p.z = master.block<Block>(i)->domain_mins.size() > 2 ?
+            master.block<Block>(i)->domain_mins(2) : 0.0;
         mins.push_back(p);
         // block maxs
-        p.x = master.block<Block>(i)->domain_maxs[0];
-        p.y = master.block<Block>(i)->domain_maxs[1];
-        p.z = master.block<Block>(i)->dim > 2 ?
-            master.block<Block>(i)->domain_maxs[2] : 0.0;
+        p.x = master.block<Block>(i)->domain_maxs(0);
+        p.y = master.block<Block>(i)->domain_maxs(1);
+        p.z = master.block<Block>(i)->domain_maxs.size() > 2 ?
+            master.block<Block>(i)->domain_maxs(2) : 0.0;
         maxs.push_back(p);
     }
 }

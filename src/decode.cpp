@@ -7,35 +7,33 @@
 // tpeterka@mcs.anl.gov
 //--------------------------------------------------------------
 
-#include <mfa/pt.hpp>
 #include <mfa/encode.hpp>
 #include <mfa/decode.hpp>
 
-// eigen objects
 #include <Eigen/Dense>
 
 #include <vector>
+#include <iostream>
 
 using namespace std;
-using namespace Eigen;
 
 // compute a point from a 1d NURBS curve at a given parameter value
 // algorithm 4.1, Piegl & Tiller (P&T) p.124
 // this version recomputes basis functions rather than taking them as an input
 // this version also assumes weights = 1; no division by weight is done
-void CurvePt1d(int                  p,             // polynomial degree
-               vector<Pt <float> >& ctrl_pts,      // control points
-               vector<float>&       knots,         // knots
-               float                param,         // parameter value of desired point
-               Pt<float>&           out_pt)        // (output) point
+void CurvePt1d(int       p,                  // polynomial degree
+               MatrixXf& ctrl_pts,           // control points
+               VectorXf& knots,              // knots
+               float     param,              // parameter value of desired point
+               VectorXf& out_pt)             // (output) point
 {
-    int n      = (int)ctrl_pts.size() - 1;   // number of control point spans
+    int n      = (int)ctrl_pts.rows() - 1;   // number of control point spans
     int span   = FindSpan(p, n, knots, param);
     MatrixXf N = MatrixXf::Zero(1, n + 1);   // basis coefficients
     BasisFuns(p, knots, param, span, N, 0, n, 0);
-    out_pt.set(0.0, 0.0);
+    out_pt = VectorXf::Zero(ctrl_pts.cols()); // initializes and resizes
     for (int j = 0; j <= p; j++)
-        out_pt += N(0, j + span - p) * ctrl_pts[span - p + j];
+        out_pt += N(0, j + span - p) * ctrl_pts.row(span - p + j);
 
     // debug
     // cerr << "n " << n << " param " << param << " span " << span << " out_pt " << out_pt << endl;
@@ -48,32 +46,43 @@ void CurvePt1d(int                  p,             // polynomial degree
 // recomputes basis functions rather than taking them as an input
 // this version also assumes weights = 1; no division by weight is done
 // assumes all vectors have been correctly resized by the caller
-void MaxErr1d(int                  p,         // polynomial degree
-              int                  dim,       // point dimensionality
-              vector<Pt <float> >& domain,    // domain of input data points
-              vector<Pt <float> >& ctrl_pts,  // control points
-              vector<float>&       knots,     // knots
-              vector<Pt <float> >& approx,    // points on approximated curve
-                                              // (same number as input points, for rendering only)
-              vector<float>&       errs,      // (output) error at each input point
-              float&               max_err)   // (output) maximum error
+void MaxErr1d(int       p,                   // polynomial degree
+              MatrixXf& domain,              // domain of input data points
+              MatrixXf& ctrl_pts,            // control points
+              VectorXf& knots,               // knots
+              MatrixXf& approx,              // points on approximated curve
+                                             // (same number as input points, for rendering only)
+              VectorXf& errs,                // error at each input point
+              float&    max_err)             // maximum error
 {
     // curve parameters for input points
-    vector<float> params(domain.size());      // curve parameters for input data points
+    VectorXf params(domain.rows());          // curve parameters for input data points
+                                             // eigen frees VectorX when leaving scope
     Params1d(domain, params);
 
     // errors and max error
     max_err = 0;
-    for (size_t i = 0; i < domain.size(); i++)
-    {
-        CurvePt1d(p, ctrl_pts, knots, params[i], approx[i]);
-        errs[i] = Pt<float>::dist(approx[i], domain[i]);
-        if (i == 0 || errs[i] > max_err)
-            max_err = errs[i];
 
-        // debug
-        // cerr << "input point " << ipt << " param " << params[i] <<
-        //     " curve point " << cpt << endl;
+    // eigen frees following temp vectors when leaving scope
+    VectorXf dpt(domain.cols());             // original data point
+    VectorXf apt(domain.cols());             // approximated point
+    VectorXf d(domain.cols());               // apt - dpt
+    for (size_t i = 0; i < domain.rows(); i++)
+    {
+        // TODO: eliminate the folowing copy from cpt to approx.row(i)
+        // not straightforward to pass a row to a function expecting a vector
+        // because matrix ordering is column order by default
+        // not sure whether what is the best combo of usability and performance
+        VectorXf cpt(ctrl_pts.cols());
+        CurvePt1d(p, ctrl_pts, knots, params(i), cpt);
+        approx.row(i) = cpt;
+        // eigen frees following temp vectors when leaving scope
+        dpt = domain.row(i);
+        apt = approx.row(i);
+        d = apt - dpt;
+        errs(i) = d.norm();                  // Euclidean distance
+        if (i == 0 || errs(i) > max_err)
+            max_err = errs(i);
    }
 }
 
@@ -84,52 +93,65 @@ void MaxErr1d(int                  p,         // polynomial degree
 // recomputes basis functions rather than taking them as an input
 // this version also assumes weights = 1; no division by weight is done
 // assumes all vectors have been correctly resized by the caller
-void MaxNormErr1d(int                  p,          // polynomial degree
-                  int                  dim,        // point dimensionality
-                  vector<Pt <float> >& domain,     // domain of input data points
-                  vector<Pt <float> >& ctrl_pts,   // control points
-                  vector<float>&       knots,      // knots
-                  int                  max_niter,  // max num iterations to search for
-                                                   // nearest curve pt
-                  float                err_bound,  // desired error bound (stop searching if less)
-                  int                  search_rad, // number of parameter steps to search path on
-                                                   // either side of parameter value of input point
-                  vector<Pt <float> >& approx,     // points on approximated curve (same number as
-                                                   // input points, for rendering only)
-                  vector<float>&       errs,       // (output) error at each input point
-                  float&               max_err)    // (output) max error from any input pt to curve
+void MaxNormErr1d(int       p,               // polynomial degree
+                  MatrixXf& domain,          // domain of input data points
+                  MatrixXf& ctrl_pts,        // control points
+                  VectorXf& knots,           // knots
+                  int       max_niter,       // max num iterations to search for
+                                             // nearest curve pt
+                  float     err_bound,       // desired error bound (stop searching if less)
+                  int       search_rad,      // number of parameter steps to search path on
+                                             // either side of parameter value of input point
+                  MatrixXf& approx,          // points on approximated curve (same number as
+                                             // input points, for rendering only)
+                  VectorXf& errs,            // (output) error at each input point
+                  float&    max_err)         // (output) max error from any input pt to curve
 {
     // curve parameters for input points
-    vector<float> params(domain.size());           // curve parameters for input data points
+    VectorXf params(domain.rows());          // curve parameters for input data points
     Params1d(domain, params);
 
+    // eigen frees following temp vectors when leaving scope
+    VectorXf dpt(domain.cols());             // original data point
+    VectorXf cpt(domain.cols());             // point on curve at parameter of input point
+    VectorXf d(domain.cols());               // cpt - dpt
+
     // fit approximated curve (for debugging and rendering only)
-    for (size_t i = 0; i < domain.size(); i++)
-        CurvePt1d(p, ctrl_pts, knots, params[i], approx[i]);
+    for (size_t i = 0; i < domain.rows(); i++)
+    {
+        // TODO: eliminate the following copy from cpt to approx.row(i)
+        // not straightforward to pass a row to a function expecting a vector
+        // because matrix ordering is column order by default
+        // not sure whether what is the best combo of usability and performance
+        CurvePt1d(p, ctrl_pts, knots, params(i), cpt);
+        approx.row(i) = cpt;
+    }
+    // debug
+    // cerr << "approx:\n" << approx << endl;
 
     // errors and max error
     max_err = 0;
-    for (size_t i = 0; i < domain.size(); i++)
+
+    for (size_t i = 0; i < domain.rows(); i++)
     {
         // find nearest curve point
-        Pt<float> cpt(dim);                   // point on curve at parameter of input point
-        float ul, uh, um;                     // low, high, middle  parameter values
+        float ul, uh, um;                    // low, high, middle  parameter values
 
         // range of parameter values to search
         if (i < search_rad)
         {
-            ul = params[0];
-            uh = params[i + search_rad];
+            ul = params(0);
+            uh = params(i + search_rad);
         }
-        else if (i > domain.size() - 1 - search_rad)
+        else if (i > domain.rows() - 1 - search_rad)
         {
-            uh = params[domain.size() - 1];
-            ul = params[i < search_rad];
+            uh = params(domain.rows() - 1);
+            ul = params(i - search_rad);
         }
         else
         {
-            ul = params[i - search_rad];
-            uh = params[i + search_rad];
+            ul = params(i - search_rad);
+            uh = params(i + search_rad);
         }
         um = (ul + uh) / 2.0;
 
@@ -141,33 +163,38 @@ void MaxNormErr1d(int                  p,          // polynomial degree
         for (j = 0; j < max_niter; j++)
         {
             CurvePt1d(p, ctrl_pts, knots, ul, cpt);
-            el = Pt<float>::dist(cpt, domain[i]);      // distance to C(ul)
+            // eigen frees following temp vectors when leaving scope
+            dpt = domain.row(i);             // original data point
+            d = cpt - dpt;                   // eigen frees VectorX when leaving scope
+            el = d.norm();                   // Euclidean distance to C(ul)
             // cerr << "low " << cpt << " el " << el;         // debug
             CurvePt1d(p, ctrl_pts, knots, um, cpt);
-            em = Pt<float>::dist(cpt, domain[i]);      // distance to C(um)
+            d = cpt - dpt;
+            em = d.norm();                   // Euclidean distance to C(um)
             // cerr << " mid " << cpt << " em " << em;        // debug
             CurvePt1d(p, ctrl_pts, knots, uh, cpt);
-            eh = Pt<float>::dist(cpt, domain[i]);     // distance to C(uh)
+            d = cpt - dpt;
+            eh = d.norm();                   // Euclidean distance to C(uh)
             // cerr << " hi " << cpt << " eh " << eh << endl; // debug
 
             if (el < eh && el < em)          // el is the best error
             {                                // shift the search interval to [uh, um]
                 if (el <= err_bound)
                 {
-                    errs[i] = el;
-                    // cerr << "el ";           // debug
+                    errs(i) = el;
+                    // cerr << "el ";        // debug
                     break;
                 }
                 uh = um;
                 um = (ul + uh) / 2.0;
             }
 
-            else if (eh < el && eh < em)          // eh is the best error
+            else if (eh < el && eh < em)     // eh is the best error
             {                                // shift the search interval to [um, uh]
                 if (eh <= err_bound)
                 {
-                    errs[i] = eh;
-                    // cerr << "eh ";           // debug
+                    errs(i) = eh;
+                    // cerr << "eh ";        // debug
                     break;
                 }
                 ul = um;
@@ -178,31 +205,27 @@ void MaxNormErr1d(int                  p,          // polynomial degree
             {                                // narrower search interval and centered on um
                 if (em <= err_bound)
                 {
-                    errs[i] = em;
-                    // cerr << "em ";           // debug
+                    errs(i) = em;
+                    // cerr << "em ";        // debug
                     break;
                 }
                 ul = (ul + um) / 2.0;
                 uh = (uh + um) / 2.0;
             }
         }
-        if (j == max_niter)                   // max number of iterations was reached
-        {                                     // pick minimum of el, eh, em
+        if (j == max_niter)                  // max number of iterations was reached
+        {                                    // pick minimum of el, eh, em
             if (el < eh && el < em)
-                errs[i] = el;
+                errs(i) = el;
             else if (eh < el && eh < em)
-                errs[i] = eh;
+                errs(i) = eh;
             else
-                errs[i] = em;
-            // cerr << "max iter ";             // debug
+                errs(i) = em;
+            // cerr << "max iter ";          // debug
         }
 
         // max error
-        if (i == 0 || errs[i] > max_err)
-            max_err = errs[i];
-
-        // debug
-        // cerr << "i " << i << "input point " << ipt << " param " << params[i] <<
-        //     " err " << errs[i] << endl;
+        if (i == 0 || errs(i) > max_err)
+            max_err = errs(i);
    }
 }

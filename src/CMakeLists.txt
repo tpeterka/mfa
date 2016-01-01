@@ -2,7 +2,7 @@
 
 set			(MFA_SOURCES encode.cpp decode.cpp)
 
-add_library		(mfa ${MFA_SOURCES})
+add_library		(mfa STATIC ${MFA_SOURCES})
 target_link_libraries	(mfa ${libraries})
 
 install                 (TARGETS mfa

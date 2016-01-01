@@ -124,6 +124,7 @@ int main(int argc, char** argv)
     //                                       &Block::destroy);
     // diy::ContiguousAssigner   read_assigner(world.size(), -1);
     // diy::io::read_blocks("approx.out", world, read_assigner, read_master, &Block::load);
-    // read_nblocks = master.size();
+    // read_nblocks = read_master.size();
     // fprintf(stderr, "%d blocks read\n", read_nblocks);
+    // read_master.foreach(&Block::print_block);
 }
