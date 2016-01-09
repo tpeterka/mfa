@@ -57,72 +57,44 @@ int main(int argc, char** argv)
 
     DomainArgs d_args;
 
-    // constant functions to that match 1 dim of n-d test
-    d_args.p       = 2;
-    d_args.npts    = 4;
-    d_args.min_x   = 0.0;
-    d_args.max_x   = d_args.npts - 1.0;
-    d_args.y_scale = 1.0;
-    nctrl_pts      = 3;
-    master.foreach(&Block::generate_constant_data, &d_args);
-
     // constant function
-    // d_args.p       = 3;
-    // d_args.npts    = 20;
-    // d_args.min_x   = 0.0;
-    // d_args.max_x   = d_args.npts - 1.0;
-    // d_args.y_scale = 1.0;
-    // nctrl_pts      = 10;
-    // master.foreach(&Block::generate_constant_data, &d_args);
-
-    // circle function
-    // d_args.p       = 3;
-    // d_args.npts    = 100;
-    // d_args.min_x   = 0.0;
-    // d_args.max_x   = M_PI / 2.0;
-    // d_args.y_scale = 1.0;
-    // nctrl_pts      = 10;
-    // master.foreach(&Block::generate_circle_data, &d_args);
-
-    // sine function
-    // d_args.p       = 3;
-    // d_args.npts    = 100;
-    // d_args.min_x   = 0.0;
-    // d_args.max_x   = 2 * M_PI;
-    // d_args.y_scale = 1.0;
-    // nctrl_pts      = 10;
-    // master.foreach(&Block::generate_sine_data, &d_args);
-
-    // sinc function
-    // d_args.p       = 3;
-    // d_args.npts    = 1000;
-    // d_args.min_x   = -4.0 * M_PI;
-    // d_args.max_x   = 4.0 * M_PI;
-    // d_args.y_scale = 10.0;
-    // nctrl_pts      = 70;
-    // master.foreach(&Block::generate_sinc_data, &d_args);
-
-    // read file
-    // d_args.p     = 3;
-    // d_args.npts  = 704;
-    // nctrl_pts    = 140;
-    // master.foreach(&Block::read_file_data, &d_args);
+    d_args.pt_dim       = 4;
+    d_args.dom_dim      = 3;
+    d_args.p[0]         = 2;
+    d_args.p[1]         = 2;
+    d_args.p[2]         = 2;
+    d_args.ndom_pts[0]  = 4;
+    d_args.ndom_pts[1]  = 4;
+    d_args.ndom_pts[2]  = 4;
+    d_args.nctrl_pts[0] = 3;
+    d_args.nctrl_pts[1] = 3;
+    d_args.nctrl_pts[2] = 3;
+    d_args.min[0]       = 0.0;
+    d_args.min[1]       = 0.0;
+    d_args.min[2]       = 0.0;
+    d_args.min[3]       = 0.0;
+    d_args.max[0]       = d_args.ndom_pts[0] - 1;
+    d_args.max[1]       = d_args.ndom_pts[1] - 1;
+    d_args.max[2]       = d_args.ndom_pts[2] - 1;
+    d_args.max[3]       = 1.0;
+    d_args.s            = 1.0;
+    master.foreach(&Block::generate_constant_data, &d_args);
 
     // encode
     master.foreach(&Block::approx_block, &nctrl_pts);
 
     // compute error
-    ErrArgs e_args;
-    e_args.max_niter  = 10;                  // max number of search iterations
-    e_args.err_bound  = 0.001;               // desrired error bound
-    e_args.search_rad = 4;                   // search range is +/- this many input parameters
-    master.foreach(&Block::max_error, &e_args);
+    // ErrArgs e_args;
+    // e_args.max_niter  = 10;                  // max number of search iterations
+    // e_args.err_bound  = 0.001;               // desrired error bound
+    // e_args.search_rad = 4;                   // search range is +/- this many input parameters
+    // master.foreach(&Block::max_error, &e_args);
 
     // print results
-    master.foreach(&Block::print_block);
+    // master.foreach(&Block::print_block);
 
     // save the results in diy format
-    diy::io::write_blocks("approx.out", world, master);
+    // diy::io::write_blocks("approx.out", world, master);
 
     // debug: read the file back
     // int read_nblocks;                                       // number of blocks read

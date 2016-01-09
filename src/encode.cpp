@@ -47,16 +47,17 @@ using namespace std;
 int FindSpan(int       p,                    // polynomial degree
              int       n,                    // number of control point spans
              VectorXf& knots,                // knots
-             float     u)                    // parameter value
+             float     u,                    // parameter value
+             int       ko)                   // optional starting knot to search (default = 0)
 {
-    if (u == knots(n + 1))
+    if (u == knots(ko + n + 1))
         return n;
 
     // binary search
     int low = p;
     int high = n + 1;
     int mid = (low + high) / 2;
-    while (u < knots(mid) || u >= knots(mid + 1))
+    while (u < knots(ko + mid) || u >= knots(ko + mid + 1))
     {
         if (u < knots(mid))
             high = mid;
@@ -64,7 +65,7 @@ int FindSpan(int       p,                    // polynomial degree
             low = mid;
         mid = (low + high) / 2;
     }
-    return mid;
+    return ko + mid;
 }
 
 // computes p + 1 nonvanishing basis function values [N_{span - p}, N_{span}]
@@ -166,8 +167,8 @@ void Residual(int       p,                   // polynomial degree
     }
 }
 
-// preprocess domain and range
-// interpolate (1D) points to approximately uniform spacing
+// preprocess domain
+// interpolate points on a curve to approximately uniform spacing
 // TODO: normalize domain and range to similar scales
 // new_domain and new_range are resized by Prep1d according to how many new points need to be added
 void Prep1d(MatrixXf& domain,                // domain of input data points
@@ -244,7 +245,7 @@ void Params1d(MatrixXf& domain,             // domain of input data points
     VectorXf d;                              // eigen frees VextorX when leaving scope
     for (size_t i = 0; i < nparams - 1; i++)
     {
-        // TODO: normalize domain and range so they have similar scales
+        // TODO: normalize domain so that dimensions they have similar scales
         d = domain.row(i) - domain.row(i + 1);
         dists[i] = d.norm();                 // Euclidean distance (l-2 norm)
         // fprintf(stderr, "dists[%lu] = %.3f\n", i, dists[i]);
@@ -256,6 +257,91 @@ void Params1d(MatrixXf& domain,             // domain of input data points
     params(nparams - 1) = 1.0;               // last parameter is known
     for (size_t i = 0; i < nparams - 2; i++)
         params(i + 1) = params(i) + dists[i] / tot_dist;
+}
+
+// precompute curve parameters for input data points using the chord-length method
+// n-d version of algorithm 9.3, P&T, p. 377
+// params are computed along curves and averaged over all curves at same data point index i,j,k,...
+// ie, resulting params for a data point i,j,k,... are same for all curves
+// and params are only stored once for each dimension in row-major order (1st dim changes fastest)
+// total number of params is the sum of ndom_pts over the dimensions, much less than the total
+// number of data points (which would be the product)
+// assumes params were allocated by caller
+// TODO: investigate other schemes (domain only, normalized domain and range, etc.)
+void Params(VectorXi& ndom_pts, // number of input data points in each dim
+            MatrixXf& domain,   // input data points in each dim (1st dim changes fastest)
+            VectorXf& params)   // (output) curve parameters in each dim (1st dim changes fastest)
+{
+    float tot_dist;                    // total chord length
+    VectorXf dists(ndom_pts.maxCoeff() - 1);  // chord lengths of data point spans for any dim
+    params = VectorXf::Zero(params.size());
+    VectorXf d;                        // current chord length
+
+    // following are counters for slicing domain and params into curves in different dimensions
+    size_t po = 0;                     // starting offset for parameters in current dim
+    size_t co = 0;                     // starting offset for curves in domain in current dim
+    size_t ps = 1;                     // stride for domain points in curves in current dim
+    size_t cs = 1;                     // stride for 'co' in current dim, when it does skip
+                                       // 'co' iterates as follows in the current dim:
+                                       // it is contiguous 'ps' times and then strides by 'cs'
+
+    for (size_t k = 0; k < ndom_pts.size(); k++)         // for all domain dimensions
+    {
+        co = 0;
+        cs *= ndom_pts(k);
+        int coo = 0;                                     // co at start of contiguous sequence
+        size_t ncurves = domain.rows() / ndom_pts(k);    // number of curves in this dimension
+        size_t nzero_length_curves;                      // num curves with zero length
+        for (size_t j = 0; j < ncurves; j++)             // for all the curves in this dimension
+        {
+            tot_dist = 0.0;
+
+            // debug
+            // fprintf(stderr, "k %d j %d po %d co %d ps %d cs %d\n", k, j, po, co, ps, cs);
+
+            // chord lengths
+            for (size_t i = 0; i < ndom_pts(k) - 1; i++) // for all spans in this curve
+            {
+                // TODO: normalize domain so that dimensions they have similar scales
+
+                // debug
+                // fprintf(stderr, "  i %d co + i * ps = %d co + (i + 1) * ps = %d\n",
+                //         i, co + i * ps, co + (i + 1) * ps);
+
+                d = domain.row(co + i * ps) - domain.row(co + (i + 1) * ps);
+                dists(i) = d.norm();                     // Euclidean distance (l-2 norm)
+                // fprintf(stderr, "dists[%lu] = %.3f\n", i, dists[i]);
+                tot_dist += dists(i);
+            }
+
+            // accumulate (sum) parameters from this curve into the params for this dim.
+            if (tot_dist > 0.0)                          // skip zero length curves
+            {
+                params(po)                   = 0.0;      // first parameter is known
+                params(po + ndom_pts(k) - 1) = 1.0;      // last parameter is known
+                for (size_t i = 0; i < ndom_pts(k) - 2; i++)
+                    params(po + i + 1) += (params(po + i) + dists(i) / tot_dist);
+            }
+            else
+                nzero_length_curves++;
+
+            if ((j + 1) % ps)
+                co++;
+            else
+            {
+                co = coo + cs;
+                coo = co;
+            }
+        }                                                // curves in this dimension
+
+        // average the params for this dimension by dividing by the number of curves that
+        // contributed to the sum (skipped zero length curves)
+        for (size_t i = 0; i < ndom_pts(k) - 2; i++)
+            params(po + i + 1) /= (ncurves - nzero_length_curves);
+
+        po += ndom_pts(k);
+        ps *= ndom_pts(k);
+    }                                                    // domain dimensions
 }
 
 // compute knots
@@ -303,7 +389,108 @@ void Knots1d(int       p,                    // polynomial degree
     }
 }
 
-// approximate a NURBS curve for a given input 1D data set
+// compute knots
+// n-d version of eqs. 9.68, 9.69, P&T
+// eg, for p = 3 and nctrl_pts = 7, n = nctrl_pts - 1 = 6 and nknots = n + p + 2 = 11
+// let knots = {0, 0, 0, 0, 0.25, 0.5, 0.75, 1, 1, 1, 1}
+// there are p + 1 external knots at each end: {0, 0, 0, 0} and {1, 1, 1, 1}
+// there are n - p internal knots: {0.25, 0.5, 0.75}
+// there are n - p + 1 internal knot spans [0,0.25), [0.25, 0.5), [0.5, 0.75), [0.75, 1)
+// resulting knots are same for all curves and stored once for each dimension in
+// row-major order (1st dim changes fastest)
+// total number of knots is the sum of number of knots over the dimensions,
+// much less than the product
+// assumes knots were allocated by caller
+void Knots(VectorXi& p,               // polynomial degree in each domain dim
+           VectorXi& n,               // number of control point spans in each domain dim
+           VectorXi& m,               // number of data point spans in each domain dim
+           VectorXf& params,          // curve parameters in each dim (1st dim changes fastest)
+           VectorXf& knots)           // (output) knots in each dim (1st dim changes fastest)
+{
+    // following are counters for slicing domain and params into curves in different dimensions
+    size_t po = 0;                                // starting offset for params in current dim
+    size_t ko = 0;                                // starting offset for knots in current dim
+
+    for (size_t k = 0; k < p.size(); k++)         // for all domain dimensions
+    {
+        int nknots = n(k) + p(k) + 2;             // number of knots in current dim
+
+        // in P&T, d is the ratio of number of input points (r+1) to internal knot spans (n-p+1)
+        // float d = (float)(r + 1) / (n - p + 1);         // eq. 9.68, r is P&T's m
+        // but I prefer d to be the ratio of input spans r to internal knot spans (n-p+1)
+        float d = (float)m(k) / (n(k) - p(k) + 1);
+
+        // compute n - p internal knots
+        for (int j = 1; j <= n(k) - p(k); j++)    // eq. 9.69
+        {
+            int   i = j * d;                      // integer part of j steps of d
+            float a = j * d - i;                  // fractional part of j steps of d, P&T's alpha
+
+            // debug
+            // cerr << "d " << d << " j " << j << " i " << i << " a " << a << endl;
+
+            // when using P&T's eq. 9.68, compute knots using the following
+            // knots(p + j) = (1.0 - a) * params(i - 1) + a * params(i);
+
+            // when using my version of d, use the following
+            knots(ko + p(k) + j) = (1.0 - a) * params(po + i) + a * params(po + i + 1);
+        }
+
+        // set external knots
+        for (int i = 0; i < p(k) + 1; i++)
+        {
+            knots(ko + i) = 0.0;
+            knots(ko + nknots - 1 - i) = 1.0;
+        }
+
+        po += m(k) + 1;
+        ko += nknots;
+    }
+}
+
+// Checks quantities needed for approximation
+void Quants(VectorXi& p,                // polynomial degree in each dimension
+            VectorXi& ndom_pts,         // number of input data points in each dim
+            VectorXi& nctrl_pts,        // desired number of control points in each dim
+            VectorXi& n,                // (output) number of control point spans in each dim
+            VectorXi& m,                // (output) number of input data point spans in each dim
+            int&      tot_nparams,      // (output) total number params in all dims
+            int&      tot_nknots)       // (output) total number of knots in all dims
+{
+    if (p.size() != ndom_pts.size())
+    {
+        fprintf(stderr, "Error: Approx() size of p must equal size of ndom_pts\n");
+        exit(1);
+    }
+    for (size_t i = 0; i < p.size(); i++)
+    {
+        if (nctrl_pts(i) <= p(i))
+        {
+            fprintf(stderr, "Error: Approx() number of control points must be at least p + 1\n");
+            exit(1);
+        }
+        if (nctrl_pts(i) > ndom_pts(i))
+        {
+            fprintf(stderr, "Error: Approx() number of control points in dimension %ld "
+                    "cannot be greater than number of input data points in dimension %ld\n", i, i);
+            exit(1);
+        }
+    }
+
+    n.resize(p.size());
+    m.resize(p.size());
+    tot_nparams = 0;
+    tot_nknots  = 0;
+    for (size_t i = 0; i < p.size(); i++)
+    {
+        n(i)        =  nctrl_pts(i) - 1;
+        m(i)        =  ndom_pts(i)  - 1;
+        tot_nparams += ndom_pts(i);
+        tot_nknots  += (n(i) + p(i) + 2);
+    }
+}
+
+// approximate a NURBS curve for a given input data set
 // weights are all 1 for now
 // 1D version of algorithm 9.7, Piegl & Tiller (P&T) p. 422
 void Approx1d(int       p,                   // polynomial degree
@@ -315,6 +502,12 @@ void Approx1d(int       p,                   // polynomial degree
     if (nctrl_pts <= p)
     {
         fprintf(stderr, "Error: Approx1d() number of control points must be at least p + 1\n");
+        exit(1);
+    }
+    if (nctrl_pts > domain.rows())
+    {
+        fprintf(stderr, "Error: Approx1d() number of control points cannot be greater "
+                "than number of input data points\n");
         exit(1);
     }
 
@@ -334,13 +527,13 @@ void Approx1d(int       p,                   // polynomial degree
     Params1d(new_domain, params);
 
     // debug
-    // cerr << "params:\n" << params << endl;
+    cerr << "params:\n" << params << endl;
 
     // compute knots
     Knots1d(p, n, m, params, knots);
 
     // debug
-    // cerr << "knots:\n" << knots << endl;
+    cerr << "knots:\n" << knots << endl;
 
     // compute the matrix N, eq. 9.66 in P&T
     // N is a matrix of (m - 1) x (n - 1) scalars that are the basis function coefficients
@@ -361,7 +554,7 @@ void Approx1d(int       p,                   // polynomial degree
     }
 
     // debug
-    // cerr << "N:\n" << N << endl;
+    cerr << "N:\n" << N << endl;
 
     // compute the product Nt x N
     // TODO: NtN is going to be very sparse when it is large: switch to sparse representation
@@ -370,7 +563,7 @@ void Approx1d(int       p,                   // polynomial degree
     NtN = N.transpose() * N;
 
     // debug
-    // cerr << "NtN:\n" << NtN << endl;
+    cerr << "NtN:\n" << NtN << endl;
 
     // compute R
     MatrixXf R(n - 1, 2);                     // eigen frees MatrixX when leaving scope
@@ -404,4 +597,90 @@ void Approx1d(int       p,                   // polynomial degree
     for (int i = 0; i < n - 1; i++)
         ctrl_pts.row(i + 1) = P.row(i);
     ctrl_pts.row(n) = new_domain.row(m);
+}
+
+// approximate a NURBS hypervolume of arbitrary dimension for a given input data set
+// weights are all 1 for now
+// n-d version of algorithm 9.7, Piegl & Tiller (P&T) p. 422
+void Approx(VectorXi& p,                   // polynomial degree in each dimension
+            VectorXi& ndom_pts,            // number of input data points in each dim
+            VectorXi& nctrl_pts,           // desired number of control points in each dim
+            MatrixXf& domain,              // input data points (1st dim changes fastest)
+            MatrixXf& ctrl_pts,            // (output) control points (1st dim changes fastest)
+            VectorXf& knots)               // (output) knots (1st dim changes fastest)
+{
+    // debug
+    cerr << "domain:\n" << domain << endl;
+
+    // TODO: preprocessing n-d domain requires some thought; skipping for now
+    // preprocess domain and range
+    // MatrixXf new_domain;                       // eigen frees MatrixX when leaving scope
+    // Prep(domain, new_domain);
+
+    // debug
+    // cerr << "new_domain:\n" << new_domain << endl;
+
+    // check and assign main quantities
+    VectorXi n;                 // number of control point spans in each domain dim
+    VectorXi m;                 // number of input data point spans in each domain dim
+    int      tot_nparams;       // total number of params = sum of ndom_pts over all dimensions
+                                // not the total number of data points, which would be the product
+    int      tot_nknots;        // total number of knots = sum of number of knots over all dims
+    Quants(p, ndom_pts, nctrl_pts, n, m, tot_nparams, tot_nknots);
+
+    // precompute curve parameters for input points
+    VectorXf params(tot_nparams);
+    Params(ndom_pts, domain, params);
+
+    // debug
+    cerr << "params:\n" << params << endl;
+
+    // compute knots
+    knots.resize(tot_nknots);
+    Knots(p, n, m, params, knots);
+
+    // debug
+    cerr << "knots:\n" << knots << endl;
+
+    // following are counters for slicing domain and params into curves in different dimensions
+    size_t po = 0;                                // starting offset for params in current dim
+    size_t ko = 0;                                // starting offset for knots in current dim
+
+    for (size_t k = 0; k < ndom_pts.size(); k++)  // for all domain dimensions
+    {
+        int nknots = n(k) + p(k) + 2;             // number of knots in current dim
+
+        // compute the matrix N, eq. 9.66 in P&T
+        // N is a matrix of (m - 1) x (n - 1) scalars that are the basis function coefficients
+        //  _                                _
+        // |  N_1(u[1])   ... N_{n-1}(u[1])   |
+        // |     ...      ...      ...        |
+        // |  N_1(u[m-1]) ... N_{n-1}(u[m-1]) |
+        //  -                                -
+        // TODO: N is going to be very sparse when it is large: switch to sparse representation
+        // N has semibandwidth < p  nonzero entries across diagonal
+        MatrixXf N = MatrixXf::Zero(m(k) - 1, n(k) - 1); // coefficients matrix
+        // eigen frees MatrixX when leaving scope
+        for (int i = 1; i < m(k); i++)            // the rows of N
+        {
+            int span = FindSpan(p(k), n(k), knots, params(po + i), ko);
+            assert(span - ko <= n(k));                 // sanity
+            BasisFuns(p(k), knots, params(po + i), span, N, 1, n(k) - 1, i - 1);
+        }
+
+        // debug
+        cerr << "k " << k << " N:\n" << N << endl;
+
+        // compute the product Nt x N
+        // TODO: NtN is going to be very sparse when it is large: switch to sparse representation
+        // NtN has semibandwidth < p + 1 nonzero entries across diagonal
+        MatrixXf NtN(n(k) - 1, n(k) - 1);         // eigen frees MatrixX when leaving scope
+        NtN = N.transpose() * N;
+
+        // debug
+        cerr << "k " << k << " NtN:\n" << NtN << endl;
+
+        po += ndom_pts(k);
+        ko += nknots;
+    }                                             // domain dimensions
 }

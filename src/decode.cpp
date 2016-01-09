@@ -138,7 +138,10 @@ void MaxNormErr1d(int       p,               // polynomial degree
         if (i < search_rad)
         {
             ul = params(0);
-            uh = params(i + search_rad);
+            if (i + search_rad < params.size())
+                uh = params(i + search_rad);
+            else
+                uh = params(params.size() - 1);
         }
         else if (i > domain.rows() - 1 - search_rad)
         {
@@ -148,7 +151,10 @@ void MaxNormErr1d(int       p,               // polynomial degree
         else
         {
             ul = params(i - search_rad);
-            uh = params(i + search_rad);
+            if (i + search_rad < params.size())
+                uh = params(i + search_rad);
+            else
+                uh = params(params.size() - 1);
         }
         um = (ul + uh) / 2.0;
 
