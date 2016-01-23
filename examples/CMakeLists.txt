@@ -1,2 +1,2 @@
-add_subdirectory              (simple)
-add_subdirectory              (n-d)
+add_subdirectory              (1d)
+add_subdirectory              (nd)

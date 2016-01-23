@@ -81,7 +81,8 @@ void BasisFuns(int       p,                  // polynomial degree
                MatrixXf& N,                  // matrix of (output) basis function values
                int       start_n,            // starting basis function N_{start_n} to compute
                int       end_n,              // ending basis function N_{end_n} to compute
-               int       row)                // starting row index in N of result
+               int       row,                // starting row index in N of result
+               int       ko)                   // optional starting knot to search (default = 0)
 {
     // init
     vector<float> scratch(p + 1);            // scratchpad, same as N in P&T p. 70
@@ -113,7 +114,7 @@ void BasisFuns(int       p,                  // polynomial degree
     // copy scratch to N
     for (int j = 0; j < p + 1; j++)
     {
-        int n_i = span - p + j;              // index of basis function N_{n_i}
+        int n_i = span - ko - p + j;              // index of basis function N_{n_i}
         if (n_i >= start_n && n_i <= end_n)
         {
             int col = n_i - start_n;         // column in N where to write result
@@ -126,13 +127,18 @@ void BasisFuns(int       p,                  // polynomial degree
     }
 }
 
-// computes R (residual) vector of P&T eq. 9.63 and 9.67, p. 411-412
+// computes R (residual) vector of P&T eq. 9.63 and 9.67, p. 411-412 for a curve
 void Residual(int       p,                   // polynomial degree
               MatrixXf& domain,              // domain of input data points
               VectorXf& knots,               // knots
               VectorXf& params,              // parameters of input points
               MatrixXf& N,                   // matrix of basis function coefficients
-              MatrixXf& R)                   // (output) residual matrix allocated by caller
+              MatrixXf& R,                   // (output) residual matrix allocated by caller
+              int ko = 0,                    // optional index of starting knot (default = 0)
+              int po = 0,                    // optional index of starting parameter (default = 0)
+              int co = 0,                    // optional index of starting domain pt
+                                             // in current curve (default = 0)
+              int cs = 1)                    // optional stride of domain pts in current curve
 {
     int n      = N.cols() + 1;               // number of control point spans
     int m      = N.rows() + 1;               // number of input data point spans
@@ -140,20 +146,27 @@ void Residual(int       p,                   // polynomial degree
     // compute the matrix Rk for eq. 9.63 of P&T, p. 411
     MatrixXf Rk(m - 1, domain.cols());       // eigen frees MatrixX when leaving scope
     MatrixXf Nk;                             // basis coefficients for Rk[i]
+
+    // debug
+    // cerr << "Residual domain:\n" << domain << endl;
+
     for (int k = 1; k < m; k++)
     {
-        int span = FindSpan(p, n, knots, params(k));
+        int span = FindSpan(p, n, knots, params(po + k), ko);
         Nk = MatrixXf::Zero(1, n + 1);      // basis coefficients for Rk[i]
-        BasisFuns(p, knots, params(k), span, Nk, 0, n, 0);
+        BasisFuns(p, knots, params(po + k), span, Nk, 0, n, 0, ko);
 
         // debug
         // cerr << "Nk:\n" << Nk << endl;
 
-        // DEPECATED, replaced with one line below
-        // for (int j = 0; j < Rk.cols(); j++)
-        //     Rk(k - 1, j) = domain(k, j) - Nk(0, 0) * domain(0, j) - Nk(0, n) * domain(m, j);
+        // debug
+        // cerr << "[" << domain.row(co + k * cs) << "] ["
+        //      << domain.row(co) << "] ["
+        //      << domain.row(co + m * cs) << "]" << endl;
 
-        Rk.row(k - 1) = domain.row(k) - Nk(0, 0) * domain.row(0) - Nk(0, n) * domain.row(m);
+        Rk.row(k - 1) =
+            domain.row(co + k * cs) - Nk(0, 0) * domain.row(co) -
+            Nk(0, n) * domain.row(co + m * cs);
     }
 
     // debug
@@ -163,7 +176,11 @@ void Residual(int       p,                   // polynomial degree
     for (int i = 1; i < n; i++)
     {
         for (int j = 0; j < Rk.cols(); j++)
+        {
+            // debug
+            // fprintf(stderr, "3: i %d j %d R.rows %d Rk.rows %d\n", i, j, R.rows(), Rk.rows());
             R(i - 1, j) = (N.col(i - 1).array() * Rk.col(j).array()).sum();
+        }
     }
 }
 
@@ -230,6 +247,42 @@ void Prep1d(MatrixXf& domain,                // domain of input data points
     new_domain.row(n++) = domain.row(domain.rows() - 1);
 }
 
+// compute offset and stride for domain input points on one curve in n-d domain
+// TODO: not an efficient way to do this because 2 levels of loops need to be executed
+// each time an offset and strid are needed (n^2), and typically the caller is already doing
+// 2 levels of loops
+void OfstStride(VectorXi& nin_pts,      // number of input data points in each dim
+                int       cur_dim,      // current dimension (0 to ndims - 1)
+                int       cur_curve,    // current curve (0 to ncurves in this dim - 1)
+                size_t&   co,           // (output) starting offset for curve pts in current dim
+                size_t&   cs)           // (output) stride for curve points in current dim
+
+{
+    size_t ss = 1;                      // stride for 'co' in current dim, when it does skip
+                                        // 'co' iterates as follows in the current dim:
+                                        // it is contiguous 'cs' times and then strides by 'ss'
+    cs = 1;
+    for (size_t k = 0; k <= cur_dim; k++)               // dimensions
+    {
+        co = 0;
+        ss *= nin_pts(k);
+        int coo = 0;                                     // co at start of contiguous sequence
+        for (size_t j = 0; j < cur_curve; j++)           // curves in this dimension
+        {
+            if ((j + 1) % cs)
+                co++;
+            else
+            {
+                co = coo + ss;
+                coo = co;
+            }
+        }                                                // curves in this dimension
+
+        if (k < cur_dim)                                 // not the last iteration
+            cs *= nin_pts(k);
+    }                                                    // dimensions
+}
+
 // precompute curve parameters for input data points using the chord-length method
 // 1D version of algorithm 9.3, P&T, p. 377
 // assumes params were allocated by caller
@@ -280,24 +333,24 @@ void Params(VectorXi& ndom_pts, // number of input data points in each dim
     // following are counters for slicing domain and params into curves in different dimensions
     size_t po = 0;                     // starting offset for parameters in current dim
     size_t co = 0;                     // starting offset for curves in domain in current dim
-    size_t ps = 1;                     // stride for domain points in curves in current dim
-    size_t cs = 1;                     // stride for 'co' in current dim, when it does skip
+    size_t cs = 1;                     // stride for domain points in curves in current dim
+    size_t ss = 1;                     // stride for 'co' in current dim, when it does skip
                                        // 'co' iterates as follows in the current dim:
-                                       // it is contiguous 'ps' times and then strides by 'cs'
+                                       // it is contiguous 'cs' times and then strides by 'ss'
 
     for (size_t k = 0; k < ndom_pts.size(); k++)         // for all domain dimensions
     {
         co = 0;
-        cs *= ndom_pts(k);
+        ss *= ndom_pts(k);
         int coo = 0;                                     // co at start of contiguous sequence
         size_t ncurves = domain.rows() / ndom_pts(k);    // number of curves in this dimension
-        size_t nzero_length_curves;                      // num curves with zero length
+        size_t nzero_length_curves = 0;                  // num curves with zero length
         for (size_t j = 0; j < ncurves; j++)             // for all the curves in this dimension
         {
             tot_dist = 0.0;
 
             // debug
-            // fprintf(stderr, "k %d j %d po %d co %d ps %d cs %d\n", k, j, po, co, ps, cs);
+            // fprintf(stderr, "1: k %d j %d po %d co %d cs %d ss %d\n", k, j, po, co, cs, ss);
 
             // chord lengths
             for (size_t i = 0; i < ndom_pts(k) - 1; i++) // for all spans in this curve
@@ -305,10 +358,10 @@ void Params(VectorXi& ndom_pts, // number of input data points in each dim
                 // TODO: normalize domain so that dimensions they have similar scales
 
                 // debug
-                // fprintf(stderr, "  i %d co + i * ps = %d co + (i + 1) * ps = %d\n",
-                //         i, co + i * ps, co + (i + 1) * ps);
+                // fprintf(stderr, "  i %d co + i * cs = %d co + (i + 1) * cs = %d\n",
+                //         i, co + i * cs, co + (i + 1) * cs);
 
-                d = domain.row(co + i * ps) - domain.row(co + (i + 1) * ps);
+                d = domain.row(co + i * cs) - domain.row(co + (i + 1) * cs);
                 dists(i) = d.norm();                     // Euclidean distance (l-2 norm)
                 // fprintf(stderr, "dists[%lu] = %.3f\n", i, dists[i]);
                 tot_dist += dists(i);
@@ -319,17 +372,26 @@ void Params(VectorXi& ndom_pts, // number of input data points in each dim
             {
                 params(po)                   = 0.0;      // first parameter is known
                 params(po + ndom_pts(k) - 1) = 1.0;      // last parameter is known
+                float prev_param             = 0.0;      // param value at previous iteration below
                 for (size_t i = 0; i < ndom_pts(k) - 2; i++)
-                    params(po + i + 1) += (params(po + i) + dists(i) / tot_dist);
+                {
+                    float dfrac = dists(i) / tot_dist;
+                    params(po + i + 1) += prev_param + dfrac;
+                    // debug
+                    // fprintf(stderr, "k %ld j %ld i %ld po %ld "
+                    //         "param %.3f = prev_param %.3f + dfrac %.3f\n",
+                    //         k, j, i, po, prev_param + dfrac, prev_param, dfrac);
+                    prev_param += dfrac;
+                }
             }
             else
                 nzero_length_curves++;
 
-            if ((j + 1) % ps)
+            if ((j + 1) % cs)
                 co++;
             else
             {
-                co = coo + cs;
+                co = coo + ss;
                 coo = co;
             }
         }                                                // curves in this dimension
@@ -340,7 +402,7 @@ void Params(VectorXi& ndom_pts, // number of input data points in each dim
             params(po + i + 1) /= (ncurves - nzero_length_curves);
 
         po += ndom_pts(k);
-        ps *= ndom_pts(k);
+        cs *= ndom_pts(k);
     }                                                    // domain dimensions
 }
 
@@ -455,7 +517,8 @@ void Quants(VectorXi& p,                // polynomial degree in each dimension
             VectorXi& n,                // (output) number of control point spans in each dim
             VectorXi& m,                // (output) number of input data point spans in each dim
             int&      tot_nparams,      // (output) total number params in all dims
-            int&      tot_nknots)       // (output) total number of knots in all dims
+            int&      tot_nknots,       // (output) total number of knots in all dims
+            int&      tot_nctrl)        // (output) total number of control points in all dims
 {
     if (p.size() != ndom_pts.size())
     {
@@ -481,12 +544,14 @@ void Quants(VectorXi& p,                // polynomial degree in each dimension
     m.resize(p.size());
     tot_nparams = 0;
     tot_nknots  = 0;
+    tot_nctrl   = 1;
     for (size_t i = 0; i < p.size(); i++)
     {
         n(i)        =  nctrl_pts(i) - 1;
         m(i)        =  ndom_pts(i)  - 1;
         tot_nparams += ndom_pts(i);
         tot_nknots  += (n(i) + p(i) + 2);
+        tot_nctrl   *= nctrl_pts(i);
     }
 }
 
@@ -566,11 +631,11 @@ void Approx1d(int       p,                   // polynomial degree
     cerr << "NtN:\n" << NtN << endl;
 
     // compute R
-    MatrixXf R(n - 1, 2);                     // eigen frees MatrixX when leaving scope
+    MatrixXf R(n - 1, domain.cols());         // eigen frees MatrixX when leaving scope
     Residual(p, new_domain, knots, params, N, R);
 
     // debug
-    // cerr << "R:\n" << R << endl;
+    cerr << "R:\n" << R << endl;
 
     // N can be freed at this point
     N.resize(0, 0);
@@ -579,7 +644,7 @@ void Approx1d(int       p,                   // polynomial degree
     // NtN is positive definite -> do not need pivoting
     // P are the unknown interior control points
     // TODO: use a common representation for P and ctrl_pts to avoid copying
-    MatrixXf P(n - 1, 2);                     // eigen frees MatrixX when leaving scope
+    MatrixXf P(n - 1, domain.cols());         // eigen frees MatrixX when leaving scope
     P = NtN.ldlt().solve(R);
 
     // debug
@@ -626,7 +691,9 @@ void Approx(VectorXi& p,                   // polynomial degree in each dimensio
     int      tot_nparams;       // total number of params = sum of ndom_pts over all dimensions
                                 // not the total number of data points, which would be the product
     int      tot_nknots;        // total number of knots = sum of number of knots over all dims
-    Quants(p, ndom_pts, nctrl_pts, n, m, tot_nparams, tot_nknots);
+    int      tot_nctrl;         // total number of control points
+    int      ndims = ndom_pts.size();        // number of domain dimensions
+    Quants(p, ndom_pts, nctrl_pts, n, m, tot_nparams, tot_nknots, tot_nctrl);
 
     // precompute curve parameters for input points
     VectorXf params(tot_nparams);
@@ -645,8 +712,28 @@ void Approx(VectorXi& p,                   // polynomial degree in each dimensio
     // following are counters for slicing domain and params into curves in different dimensions
     size_t po = 0;                                // starting offset for params in current dim
     size_t ko = 0;                                // starting offset for knots in current dim
+    size_t co;                                    // starting offset for curve in current dim
+    size_t cs;                                    // stride for domain points in curve in cur. dim
+    size_t to;                                    // starting offset for ctrl pts curve in cur. dim
+    size_t ts;                                    // stride for ctrl points in curve in cur. dim
 
-    for (size_t k = 0; k < ndom_pts.size(); k++)  // for all domain dimensions
+    // control points
+    ctrl_pts.resize(tot_nctrl, domain.cols());
+
+    // 2 buffers of temporary control points
+    // double buffer needed to write output curves of current dim without changing its input pts
+    // temporary control points need to begin with size as many as the input domain points
+    // except for the first dimension, which can be the correct number of control points
+    // because the input domain points are converted to control points one dimension at a time
+    // TODO: need to find a more space-efficient way
+    size_t tot_ntemp_ctrl = 1;
+    for (size_t k = 0; k < ndims; k++)
+        tot_ntemp_ctrl *= (k == 0 ? nctrl_pts(k) : ndom_pts(k));
+    MatrixXf temp_ctrl0(tot_ntemp_ctrl, domain.cols());
+    MatrixXf temp_ctrl1(tot_ntemp_ctrl, domain.cols());
+    VectorXi ntemp_ctrl = ndom_pts;               // current num of temp control pts in each dim
+
+    for (size_t k = 0; k < ndims; k++)            // for all domain dimensions
     {
         int nknots = n(k) + p(k) + 2;             // number of knots in current dim
 
@@ -664,12 +751,15 @@ void Approx(VectorXi& p,                   // polynomial degree in each dimensio
         for (int i = 1; i < m(k); i++)            // the rows of N
         {
             int span = FindSpan(p(k), n(k), knots, params(po + i), ko);
-            assert(span - ko <= n(k));                 // sanity
-            BasisFuns(p(k), knots, params(po + i), span, N, 1, n(k) - 1, i - 1);
+            // debug
+            // fprintf(stderr, "p(k) %d n(k) %d span %d params(po + i) %.3f\n",
+            //         p(k), n(k), span, params(po + i));
+            assert(span - ko <= n(k));            // sanity
+            BasisFuns(p(k), knots, params(po + i), span, N, 1, n(k) - 1, i - 1, ko);
         }
 
         // debug
-        cerr << "k " << k << " N:\n" << N << endl;
+        // cerr << "k " << k << " N:\n" << N << endl;
 
         // compute the product Nt x N
         // TODO: NtN is going to be very sparse when it is large: switch to sparse representation
@@ -678,9 +768,164 @@ void Approx(VectorXi& p,                   // polynomial degree in each dimensio
         NtN = N.transpose() * N;
 
         // debug
-        cerr << "k " << k << " NtN:\n" << NtN << endl;
+        // cerr << "k " << k << " NtN:\n" << NtN << endl;
+
+        // R is the residual matrix needed for solving NtN * P = R
+        MatrixXf R(n(k) - 1, domain.cols());               // eigen frees MatrixX when leaving scope
+
+        // P are the unknown interior control points and the solution to NtN * P = R
+        // NtN is positive definite -> do not need pivoting
+        // TODO: use a common representation for P and ctrl_pts to avoid copying
+        MatrixXf P(n(k) - 1, domain.cols());               // eigen frees MatrixX when leaving scope
+
+        // number of curves in this dimension
+        size_t ncurves;
+        ncurves = 1;
+        for (int i = 0; i < ndims; i++)
+        {
+            if (i < k)
+                ncurves *= nctrl_pts(i);
+            else if (i > k)
+                ncurves *= ndom_pts(i);
+            // NB: current dimension contributes no curves, hence no i == k case
+        }
+        // debug
+        // cerr << "k: " << k << " ncurves: " << ncurves << endl;
+        // cerr << "ndom_pts:\n" << ndom_pts << endl;
+        // cerr << "ntemp_ctrl:\n" << ntemp_ctrl << endl;
+        // if (k > 0 && k % 2 == 1) // input to odd dims is temp_ctrl0
+        //     cerr << "temp_ctrl0:\n" << temp_ctrl0 << endl;
+        // if (k > 0 && k % 2 == 0) // input to even dims is temp_ctrl1
+        //     cerr << "temp_ctrl1:\n" << temp_ctrl1 << endl;
+
+        for (size_t j = 0; j < ncurves; j++)             // for all the curves in this dimension
+        {
+            OfstStride(ntemp_ctrl, k, j, co, cs);        // curve pts starting offset and stride
+            OfstStride(nctrl_pts, k, j, to, ts);         // curve pts starting offset and stride
+
+            // debug
+            // fprintf(stderr, "2: k %ld j %ld ko %ld po %ld co %ld cs %ld\n",
+            //         k, j, ko, po, co, cs);
+
+            // compute R
+            // first dimension reads from domain
+            // subsequent dims alternate reading temp_ctrl0 and temp_ctrl1
+            // even dim reads temp_ctrl1, odd dim reads temp_ctrl0; opposite of writing order
+            // because what was written in the previous dimension is read in the current one
+            if (k == 0)
+                Residual(p(k), domain, knots, params, N, R, ko, po, co, cs);
+            else if (k % 2)
+                Residual(p(k), temp_ctrl0, knots, params, N, R, ko, po, co, cs);
+            else
+                Residual(p(k), temp_ctrl1, knots, params, N, R, ko, po, co, cs);
+
+            // debug
+            // cerr << "k " << k <<  " j " << j << " R:\n" << R << endl;
+
+            // solve for P
+            P = NtN.ldlt().solve(R);
+
+            // debug
+            // cerr << "k " << k <<  " j " << j << " P:\n" << P << endl;
+
+            // append points from P to temporoary control points
+            // init first and last control points and copy rest from solution P
+            // TODO: any way to avoid this copy?
+            // last dimension gets copied to final control points
+            // previous dimensions get copied to alternating double buffers
+
+            // first dim copied from domain to temp_ctrl0
+            if (k == 0)
+            {
+                // debug
+                // fprintf(stderr, "t[%ld] = d[%ld]\n", to, co);
+                temp_ctrl0.row(to) = domain.row(co);
+                for (int i = 1; i < n(k); i++)
+                {
+                    // debug
+                    // fprintf(stderr, "t[%ld] = p[%d]\n", to + i * ts, i - 1);
+                    temp_ctrl0.row(to + i * ts) = P.row(i - 1);
+                }
+                // debug
+                // fprintf(stderr, "t[%ld] = d[%ld]\n", to + n(k) * ts, co + ndom_pts(k) - 1);
+                temp_ctrl0.row(to + n(k) * ts) = domain.row(co + ndom_pts(k) - 1);
+            }
+            // even numbered dims (but not the last one) copied from temp_ctrl1 to temp_ctrl0
+            else if (k % 2 == 0 && k < ndims - 1)
+            {
+                // debug
+                // fprintf(stderr, "t[%ld] = d[%ld]\n", to, co);
+                temp_ctrl0.row(to) = temp_ctrl1.row(co);
+                for (int i = 1; i < n(k); i++)
+                {
+                    // debug
+                    // fprintf(stderr, "t[%ld] = p[%d]\n", to + i * ts, i - 1);
+                    temp_ctrl0.row(to + i * ts) = P.row(i - 1);
+                }
+                // debug
+                // fprintf(stderr, "t[%ld] = d[%ld]\n", to + n(k) * ts, co + nctrl_pts(k) * cs);
+                temp_ctrl0.row(to + n(k) * ts) = temp_ctrl1.row(co + nctrl_pts(k) * cs);
+            }
+            // odd numbered dims (but not the last one) copied from temp_ctrl0 to temp_ctrl1
+            else if (k % 2 == 1 && k < ndims - 1)
+            {
+                // debug
+                // fprintf(stderr, "t[%ld] = d[%ld]\n", to, co);
+                temp_ctrl1.row(to) = temp_ctrl0.row(co);
+                for (int i = 1; i < n(k); i++)
+                {
+                    // debug
+                    // fprintf(stderr, "t[%ld] = p[%d]\n", to + i * ts, i - 1);
+                    temp_ctrl1.row(to + i * ts) = P.row(i - 1);
+                }
+                // debug
+                // fprintf(stderr, "t[%ld] = d[%ld]\n", to + n(k) * ts, co + nctrl_pts(k) * cs);
+                temp_ctrl1.row(to + n(k) * ts) = temp_ctrl0.row(co + nctrl_pts(k) * cs);
+            }
+            // final dim if even is copied from temp_ctrl1 to ctrl_pts
+            else if (k == ndims - 1 && k % 2 == 0)
+            {
+                // debug
+                // fprintf(stderr, "t[%ld] = d[%ld]\n", to, co);
+                ctrl_pts.row(to) = temp_ctrl1.row(co);
+                for (int i = 1; i < n(k); i++)
+                {
+                    // debug
+                    // fprintf(stderr, "t[%ld] = p[%d]\n", to + i * ts, i - 1);
+                    ctrl_pts.row(to + i * ts) = P.row(i - 1);
+                }
+                // debug
+                // fprintf(stderr, "t[%ld] = d[%ld]\n", to + n(k) * ts, co + nctrl_pts(k) * cs);
+                ctrl_pts.row(to + n(k) * ts) = temp_ctrl1.row(co + nctrl_pts(k) * cs);
+            }
+            // final dim if odd is copied from temp_ctrl0 to ctrl_pts
+            else if (k == ndims - 1 && k % 2 == 1)
+            {
+                // debug
+                // fprintf(stderr, "t[%ld] = d[%ld]\n", to, co);
+                ctrl_pts.row(to) = temp_ctrl0.row(co);
+                for (int i = 1; i < n(k); i++)
+                {
+                    // debug
+                    // fprintf(stderr, "t[%ld] = p[%d]\n", to + i * ts, i - 1);
+                    temp_ctrl1.row(to + i * ts) = P.row(i - 1);
+                }
+                // debug
+                // fprintf(stderr, "t[%ld] = d[%ld]\n", to + n(k) * ts, co + nctrl_pts(k) * cs);
+                ctrl_pts.row(to + n(k) * ts) = temp_ctrl0.row(co + nctrl_pts(k) * cs);
+            }
+        }                                                  // cuves in this dimension
 
         po += ndom_pts(k);
         ko += nknots;
-    }                                             // domain dimensions
+        ntemp_ctrl(k) = nctrl_pts(k);
+
+        // free R, NtN, and P
+        R.resize(0, 0);
+        NtN.resize(0, 0);
+        P.resize(0, 0);
+    }                                                      // domain dimensions
+
+    // debug
+    cerr << "ctrl_pts:\n" << ctrl_pts << endl;
 }
