@@ -1,5 +1,5 @@
 //--------------------------------------------------------------
-// a simple example of encoding / decoding some curve data
+// a simple example of encoding / decoding some higher dimensional data
 // using a diy block model to manage the data
 //
 // Tom Peterka
@@ -90,8 +90,11 @@ int main(int argc, char** argv)
     // e_args.search_rad = 4;                   // search range is +/- this many input parameters
     // master.foreach(&Block::max_error, &e_args);
 
+    // compute max error (not max norm error yet, that is TODO)
+    master.foreach(&Block::max_error);
+
     // print results
-    // master.foreach(&Block::print_block);
+    master.foreach(&Block::print_block);
 
     // save the results in diy format
     // diy::io::write_blocks("approx.out", world, master);

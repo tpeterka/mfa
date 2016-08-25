@@ -8,24 +8,6 @@ if                          (bgq)
     add_definitions         (-DBGQ)
 endif                       (bgq)
 
-# DEPRECATED
-# # Debugging
-# if                          (debug)
-#     if                      (optimize)
-#             set             (cxx_flags      ${CMAKE_CXX_FLAGS_RELWITHDEBINFO})
-#     else                    (optimize)
-#             set             (cxx_flags      ${CMAKE_CXX_FLAGS_DEBUG})
-#     endif                   (optimize)
-#     add_definitions         (-DDEBUG)
-# else                        (debug)
-#     if                      (optimize)
-#             set             (cxx_flags      ${CMAKE_CXX_FLAGS_RELEASE})
-#     else                    (optimize)
-#             set             (cxx_flags      ${CMAKE_CXX_FLAGS})
-#     endif                   (optimize)
-# endif                       (debug)
-# add_definitions             (${cxx_flags})
-
 # OSX flags
 if                          (${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
     add_definitions	    (-DMAC_OSX)

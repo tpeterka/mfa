@@ -40,6 +40,89 @@ void CurvePt1d(int       p,                  // polynomial degree
     // cerr << " N " << N << endl;
 }
 
+// compute a point from a NURBS n-d volume at a given parameter value
+// algorithm 4.3, Piegl & Tiller (P&T) p.134
+// this version recomputes basis functions rather than taking them as an input
+// this version also assumes weights = 1; no division by weight is done
+//
+// There are two types of dimensionality:
+// 1. The dimensionality of the NURBS tensor product (p.size())
+// (1D = NURBS curve, 2D = surface, 3D = volumem 4D = hypervolume, etc.)
+// 2. The dimensionality of individual control points (ctrl_pts.cols())
+// p.size() should be <= ctrl_pts.cols()
+void VolPt(VectorXi& p,                  // polynomial degree in each dimension
+           MatrixXf& ctrl_pts,           // control points (1st dim changes fastest)
+           VectorXi& nctrl_pts,          // number of control points in each dim
+           VectorXf& knots,              // knots (1st dim changes fastest)
+           VectorXf& param,              // parameter value of desired point in each dim.
+           VectorXf& out_pt)             // (output) point
+{
+    // debug
+    // cerr << "param:\n" << param << endl;
+
+    // check dimensionality for sanity
+    assert(p.size() <= ctrl_pts.cols());
+
+    out_pt = VectorXf::Zero(ctrl_pts.cols());// initializes and resizes
+    vector <MatrixXf> N(p.size());           // basis functions in each dim.
+    vector<VectorXf>  temp(p.size());        // temporary point in each dim.
+    vector<int>       span(p.size());        // span in each dim.
+    vector<int>       n(p.size());           // number of control point spans in each dim
+    vector<int>       iter(p.size());        // iteration number in each dim.
+    int               tot_iters = 1;         // tot. num. iterations in flattened n-d nested loops
+    vector<size_t>    ko(p.size(), 0);       // starting offset for knots in current dim
+    vector<size_t>    co(p.size(), 0);       // starting offset for control points in current dim
+    vector<size_t>    cs(p.size(), 1);       // stride for next co in each dim
+    VectorXf          ctrl_pt(ctrl_pts.cols()); // one control point
+
+    for (size_t i = 0; i < p.size(); i++)    // for all dims
+    {
+        temp[i]    = VectorXf::Zero(ctrl_pts.cols());
+        iter[i]    = 0;
+        tot_iters  *= (p(i) + 1);
+        n[i]       = (int)nctrl_pts(i) - 1;
+        cs[i]      *= nctrl_pts(i);
+        span[i]    = FindSpan(p(i), n[i], knots, param(i), ko[i]);
+        N[i]       = MatrixXf::Zero(1, n[i] + 1);
+        BasisFuns(p(i), knots, param(i), span[i], N[i], 0, n[i], 0, ko[i]);
+        if (i < p.size() - 1)
+        {
+            ko[i + 1] = ko[i] + n[i] + p(i) + 2; // n[i]+p(i)+2 =  number of knots in current dim.
+            co[i + 1] = cs[i];
+        }
+    }
+
+    for (int i = 0; i < tot_iters; i++)      // 1-d flattening all n-d nested loop computations
+    {
+        // always compute the point in the first dimension
+        ctrl_pt = ctrl_pts.row(co[0] + span[0] - p(0) + iter[0]);
+        temp[0] += (N[0])(0, iter[0] + span[0] - p(0)) * ctrl_pt;
+        iter[0]++;
+
+        // for all dimensions except last, check if span is finished
+        for (size_t k = 0; k < p.size() - 1; k++)
+        {
+            if (iter[k] - 1 == p(k))
+            {
+                // compute point in next higher dimension
+                temp[k + 1] += N[k + 1](0, iter[k + 1] + span[k + 1] - ko[k + 1] - p(k + 1)) *
+                    temp[k];
+
+                // reset the computation for the current dimension
+                temp[k]    = VectorXf::Zero(ctrl_pts.cols());
+                iter[k]    = 0;
+                co[k]      += cs[k];
+                iter[k + 1]++;
+            }
+        }
+    }
+
+    out_pt = temp[p.size() - 1];
+
+    // debug
+    // cerr << "out_pt:\n" << out_pt << endl;
+}
+
 // max distance from a set of input points to a 1d NURBS curve
 // P&T eq. 9.77, p. 424
 // this version recomputes parameter values of input points and
@@ -72,8 +155,83 @@ void MaxErr1d(int       p,                   // polynomial degree
         // TODO: eliminate the folowing copy from cpt to approx.row(i)
         // not straightforward to pass a row to a function expecting a vector
         // because matrix ordering is column order by default
-        // not sure whether what is the best combo of usability and performance
+        // not sure what is the best combo of usability and performance
         CurvePt1d(p, ctrl_pts, knots, params(i), cpt);
+        approx.row(i) = cpt;
+        dpt = domain.row(i);
+        d = cpt - dpt;
+        errs(i) = d.norm();                  // Euclidean distance
+        if (i == 0 || errs(i) > max_err)
+            max_err = errs(i);
+   }
+}
+
+// max distance from a set of input points to an n-d NURBS volume
+// P&T eq. 9.77, p. 424
+// this version recomputes parameter values of input points and
+// recomputes basis functions rather than taking them as an input
+// this version also assumes weights = 1; no division by weight is done
+// assumes all vectors have been correctly resized by the caller
+void MaxErr(VectorXi& p,                   // polynomial degree
+            VectorXi& ndom_pts,            // number of input data points in each dim
+            MatrixXf& domain,              // domain of input data points (1st dim. changes fastest)
+            MatrixXf& ctrl_pts,            // control points (1st dim. changes fastest)
+            VectorXi& nctrl_pts,           // number of control points in each dim
+            VectorXf& knots,               // knots (1st dim. changes fastest)
+            MatrixXf& approx,              // pts in approximated volume (1st dim. changes fastest)
+                                           // (same number as input points, for rendering only)
+            VectorXf& errs,                // error at each input point
+            float&    max_err)             // maximum error
+{
+    // curve parameters for input points
+    // linearized so that 1st dim changes fastest
+    // i.e., x params followed by y params followed by z, ...
+    // total number of params is the sum of the dimensions of domain points, not the product
+    VectorXf params(ndom_pts.sum());          // curve parameters for input data points
+    Params(ndom_pts, domain, params);
+
+    vector<size_t> iter(p.size(), 0);        // parameter index (iteration count) in current dim.
+    vector<size_t> ofst(p.size(), 0);        // start of current dim in linearized params
+
+    for (size_t i = 0; i < p.size() - 1; i++)
+        ofst[i + 1] = ofst[i] + ndom_pts(i);
+
+    // errors and max error
+    max_err = 0;
+
+    // eigen frees following temp vectors when leaving scope
+    VectorXf dpt(domain.cols());             // original data point
+    VectorXf cpt(ctrl_pts.cols());           // approximated point
+    VectorXf d(domain.cols());               // apt - dpt
+    VectorXf param(p.size());                // parameters for one point
+    for (size_t i = 0; i < domain.rows(); i++)
+    {
+        // debug
+        // cerr << "input point:\n" << domain.row(i) << endl;
+
+        // extract parameter vector for one input point from the linearized vector of all params
+        for (size_t j = 0; j < p.size(); j++)
+            param(j) = params(iter[j] + ofst[j]);
+
+        // compute approximated point for this parameter vector
+        VolPt(p, ctrl_pts, nctrl_pts, knots, param, cpt);
+
+        // update the indices in the linearized vector of all params for next input point
+        for (size_t j = 0; j < p.size(); j++)
+        {
+            if (iter[j] < ndom_pts(j) - 1)
+            {
+                iter[j]++;
+                break;
+            }
+            else
+                iter[j] = 0;
+        }
+
+        // TODO: eliminate the folowing copy from cpt to approx.row(i)
+        // not straightforward to pass a row to a function expecting a vector
+        // because matrix ordering is column order by default
+        // not sure what is the best combo of usability and performance
         approx.row(i) = cpt;
         dpt = domain.row(i);
         d = cpt - dpt;
@@ -119,7 +277,7 @@ void MaxNormErr1d(int       p,               // polynomial degree
         // TODO: eliminate the following copy from cpt to approx.row(i)
         // not straightforward to pass a row to a function expecting a vector
         // because matrix ordering is column order by default
-        // not sure whether what is the best combo of usability and performance
+        // not sure what is the best combo of usability and performance
         CurvePt1d(p, ctrl_pts, knots, params(i), cpt);
         approx.row(i) = cpt;
     }

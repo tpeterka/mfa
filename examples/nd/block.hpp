@@ -186,6 +186,16 @@ struct Block
     //                      max_err);
     //     }
 
+    void max_error(const diy::Master::ProxyWithLink& cp, void* args)
+        {
+            ErrArgs* a = (ErrArgs*)args;
+            approx.resize(domain.rows(), domain.cols());
+            errs.resize(domain.rows());
+
+            // plain max for now (max norm error is TODO)
+            MaxErr(p, ndom_pts, domain, ctrl_pts, nctrl_pts, knots, approx, errs, max_err);
+        }
+
     void print_block(const diy::Master::ProxyWithLink& cp, void*)
         {
             cerr << ctrl_pts.rows() << " control points\n" << ctrl_pts << endl;
@@ -194,14 +204,14 @@ struct Block
         }
 
     VectorXi ndom_pts;                       // number of domain points in each dimension
-    MatrixXf domain;                         // input data
+    MatrixXf domain;                         // input data (1st dim changes fastest)
     VectorXf domain_mins;                    // local domain minimum corner
     VectorXf domain_maxs;                    // local domain maximum corner
-    VectorXi p;                              // degree
+    VectorXi p;                              // degree in each dimension
     VectorXi nctrl_pts;                      // number of control points in each dimension
-    MatrixXf ctrl_pts;                       // NURBS control points
-    VectorXf knots;                          // NURBS knots
-    MatrixXf approx;                         // points on approximated curve
+    MatrixXf ctrl_pts;                       // NURBS control points (1st dim changes fastest)
+    VectorXf knots;                          // NURBS knots (1st dim changes fastest)
+    MatrixXf approx;                         // points in approximated volume
                                              // (same number as input points, for rendering only)
     VectorXf errs;                           // distance from each input point to curve
     float    max_err;                        // maximum distance from input points to curve

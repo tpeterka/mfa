@@ -51,7 +51,7 @@ int FindSpan(int       p,                    // polynomial degree
              int       ko)                   // optional starting knot to search (default = 0)
 {
     if (u == knots(ko + n + 1))
-        return n;
+        return ko + n;
 
     // binary search
     int low = p;
@@ -59,12 +59,13 @@ int FindSpan(int       p,                    // polynomial degree
     int mid = (low + high) / 2;
     while (u < knots(ko + mid) || u >= knots(ko + mid + 1))
     {
-        if (u < knots(mid))
+        if (u < knots(ko + mid))
             high = mid;
         else
             low = mid;
         mid = (low + high) / 2;
     }
+
     return ko + mid;
 }
 
@@ -75,14 +76,14 @@ int FindSpan(int       p,                    // polynomial degree
 // algorithm 2.2 of P&T, p. 70
 // assumes N has been allocated by caller
 void BasisFuns(int       p,                  // polynomial degree
-               VectorXf& knots,              // knots
+               VectorXf& knots,              // knots (1st dim changes fastest)
                float     u,                  // parameter value
                int       span,               // index of span in the knots vector containing u
                MatrixXf& N,                  // matrix of (output) basis function values
                int       start_n,            // starting basis function N_{start_n} to compute
                int       end_n,              // ending basis function N_{end_n} to compute
                int       row,                // starting row index in N of result
-               int       ko)                   // optional starting knot to search (default = 0)
+               int       ko)                 // optional starting knot to search (default = 0)
 {
     // init
     vector<float> scratch(p + 1);            // scratchpad, same as N in P&T p. 70
@@ -771,6 +772,12 @@ void CtrlCurve(VectorXi& p,          // polynomial degree in each dimension
 // approximate a NURBS hypervolume of arbitrary dimension for a given input data set
 // weights are all 1 for now
 // n-d version of algorithm 9.7, Piegl & Tiller (P&T) p. 422
+//
+// There are two types of dimensionality:
+// 1. The dimensionality of the NURBS tensor product (p.size())
+// (1D = NURBS curve, 2D = surface, 3D = volumem 4D = hypervolume, etc.)
+// 2. The dimensionality of individual domain and control points (domain.cols())
+// p.size() should be <= domain.cols()
 void Approx(VectorXi& p,                   // polynomial degree in each dimension
             VectorXi& ndom_pts,            // number of input data points in each dim
             VectorXi& nctrl_pts,           // desired number of control points in each dim
@@ -778,6 +785,9 @@ void Approx(VectorXi& p,                   // polynomial degree in each dimensio
             MatrixXf& ctrl_pts,            // (output) control points (1st dim changes fastest)
             VectorXf& knots)               // (output) knots (1st dim changes fastest)
 {
+    // check dimensionality for sanity
+    assert(p.size() <= domain.cols());
+
     // debug
     cerr << "domain:\n" << domain << endl;
 

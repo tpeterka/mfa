@@ -23,6 +23,17 @@ void MaxErr1d(int       p,                   // polynomial degree
               VectorXf& errs,                // error at each input point
               float&    max_err);            // maximum error
 
+void MaxErr(VectorXi& p,                     // polynomial degree
+            VectorXi& ndom_pts,              // number of input data points in each dim
+            MatrixXf& domain,                // domain of input data pts (1st dim. changes fastest)
+            MatrixXf& ctrl_pts,              // control points (1st dim. changes fastest)
+            VectorXi& nctrl_pts,             // number of control points in each dim
+            VectorXf& knots,                 // knots (1st dim. changes fastest)
+            MatrixXf& approx,                // pts in approx. volume (1st dim. changes fastest)
+                                             // (same number as input points, for rendering only)
+            VectorXf& errs,                  // error at each input point
+            float&    max_err);              // maximum error
+
 void MaxNormErr1d(int       p,               // polynomial degree
                   MatrixXf& domain,          // domain of input data points
                   MatrixXf& ctrl_pts,        // control points
