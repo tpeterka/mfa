@@ -102,6 +102,7 @@ struct Block
             diy::load(bb, b->errs);
             diy::load(bb, b->max_err);
         }
+    // f(x,y,z) = 1
     void generate_constant_data(const diy::Master::ProxyWithLink& cp, void* args)
         {
             DomainArgs* a = (DomainArgs*)args;
@@ -156,51 +157,116 @@ struct Block
                 domain_maxs(i) = a->max[i];
             }
         }
+    // f(x,y,z,t) = sqrt(x^2 + y^2 + z^2 + t^2)
+    void generate_magnitude_data(const diy::Master::ProxyWithLink& cp, void* args)
+        {
+            DomainArgs* a = (DomainArgs*)args;
+            int tot_ndom_pts = 1;
+            p.resize(a->dom_dim);
+            ndom_pts.resize(a->dom_dim);
+            nctrl_pts.resize(a->dom_dim);
+            domain_mins.resize(a->pt_dim);
+            domain_maxs.resize(a->pt_dim);
+            for (int i = 0; i < a->dom_dim; i++)
+            {
+                p(i)         =  a->p[i];
+                ndom_pts(i)  =  a->ndom_pts[i];
+                nctrl_pts(i) =  a->nctrl_pts[i];
+                tot_ndom_pts *= ndom_pts(i);
+            }
+            domain.resize(tot_ndom_pts, a->pt_dim);
+
+            // assign values to the domain (geometry)
+            int cs = 1;                  // stride of a coordinate in this dim
+            for (int i = 0; i < a->dom_dim; i++) // all dimensions in the domain
+            {
+                float d = (a->max[i] - a->min[i]) / (ndom_pts(i) - 1);
+                int k = 0;
+                int co = 0;                  // j index of start of a new coordinate value
+                for (int j = 0; j < tot_ndom_pts; j++)
+                {
+                    if (a->min[i] + k * d > a->max[i])
+                        k = 0;
+                    domain(j, i) = a->min[i] + k * d;
+                    if (j + 1 - co >= cs)
+                    {
+                        k++;
+                        co = j + 1;
+                    }
+                }
+                cs *= ndom_pts(i);
+            }
+
+            // assign values to the range (physics attributes)
+            for (int i = a->dom_dim; i < a->pt_dim; i++)
+            {
+                // magnitude function
+                for (int j = 0; j < tot_ndom_pts; j++)
+                {
+                    VectorXf one_pt = domain.block(j, 0, 1, a->dom_dim).row(0);
+                    domain(j, i) = one_pt.norm();
+                }
+            }
+
+            // extents
+            for (int i = 0; i < a->pt_dim; i++)
+            {
+                domain_mins(i) = a->min[i];
+                domain_maxs(i) = a->max[i];
+            }
+        }
 
     void approx_block(const diy::Master::ProxyWithLink& cp, void* args)
         {
-            Approx(p, ndom_pts, nctrl_pts, domain, ctrl_pts, knots);
+            // compute MFA from domain points
+            Encode(p, ndom_pts, nctrl_pts, domain, ctrl_pts, knots);
         }
 
-    // void max_error(const diy::Master::ProxyWithLink& cp, void* args)
-    //     {
-    //         ErrArgs* a = (ErrArgs*)args;
-    //         approx.resize(domain.rows(), domain.cols());
-    //         errs.resize(domain.rows());
-
-    //         // use one or the other of the following
-
-    //         // plain max
-    //         // MaxErr1d(p, domain, range, ctrl_pts, knots, approx, errs, max_err);
-
-    //         // max norm, should be better than MaxErr1d but more expensive
-    //         MaxNormErr1d(p,
-    //                      domain,
-    //                      ctrl_pts,
-    //                      knots,
-    //                      a->max_niter,
-    //                      a->err_bound,
-    //                      a->search_rad,
-    //                      approx,
-    //                      errs,
-    //                      max_err);
-    //     }
-
-    void max_error(const diy::Master::ProxyWithLink& cp, void* args)
+    // max error for the magnitude data set
+    void mag_max_error(const diy::Master::ProxyWithLink& cp, void* args)
         {
             ErrArgs* a = (ErrArgs*)args;
             approx.resize(domain.rows(), domain.cols());
             errs.resize(domain.rows());
 
-            // plain max for now (max norm error is TODO)
-            MaxErr(p, ndom_pts, domain, ctrl_pts, nctrl_pts, knots, approx, errs, max_err);
+            // Compute domain points from MFA
+            Decode(p, ndom_pts, domain, ctrl_pts, nctrl_pts, knots, approx);
+
+            // max error
+            for (size_t i = 0; i < approx.rows(); i++)
+            {
+                VectorXf approx_pos = approx.block(i, 0, 1, p.size()).row(0);
+                // approx_mag  = what the magnitude of the position should be (ground truth)
+                float approx_mag = approx_pos.norm();
+                // approx_val = the approximated value of the MFA
+                float approx_val = approx(i, p.size());
+                float err = fabs(approx_mag - approx_val);
+                if (i == 0 || err > max_err)
+                    max_err = err;
+            }
+
+            // normalize max error by size of input data (domain and range)
+            float min = domain.minCoeff();
+            float max = domain.maxCoeff();
+            float range = max - min;
+
+            // debug
+            fprintf(stderr, "range = %.1f\n", range);
+            fprintf(stderr, "raw max_error = %e\n", max_err);
+
+            max_err /= range;
         }
 
     void print_block(const diy::Master::ProxyWithLink& cp, void*)
         {
             cerr << ctrl_pts.rows() << " control points\n" << ctrl_pts << endl;
             cerr << knots.size() << " knots\n" << knots << endl;
-            fprintf(stderr, "max_err = %.6lf\n", max_err);
+            fprintf(stderr, "max_err = %e\n", max_err);
+            fprintf(stderr, "# input points = %ld\n", domain.rows());
+            fprintf(stderr, "# output ctrl pts = %ld # output knots = %ld\n",
+                    ctrl_pts.rows(), knots.size());
+            fprintf(stderr, "compression ratio = %.1f\n",
+                    (float)(domain.rows()) / (ctrl_pts.rows() + knots.size() / ctrl_pts.cols()));
         }
 
     VectorXi ndom_pts;                       // number of domain points in each dimension

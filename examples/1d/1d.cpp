@@ -58,22 +58,22 @@ int main(int argc, char** argv)
     DomainArgs d_args;
 
     // constant functions to that match 1 dim of n-d test
-    d_args.p       = 2;
-    d_args.npts    = 4;
-    d_args.min_x   = 0.0;
-    d_args.max_x   = d_args.npts - 1.0;
-    d_args.y_scale = 1.0;
-    nctrl_pts      = 3;
-    master.foreach(&Block::generate_constant_data, &d_args);
-
-    // constant function
-    // d_args.p       = 3;
-    // d_args.npts    = 20;
+    // d_args.p       = 2;
+    // d_args.npts    = 4;
     // d_args.min_x   = 0.0;
     // d_args.max_x   = d_args.npts - 1.0;
     // d_args.y_scale = 1.0;
-    // nctrl_pts      = 10;
+    // nctrl_pts      = 3;
     // master.foreach(&Block::generate_constant_data, &d_args);
+
+    // constant function
+    d_args.p       = 3;
+    d_args.npts    = 20;
+    d_args.min_x   = 0.0;
+    d_args.max_x   = d_args.npts - 1.0;
+    d_args.y_scale = 1.0;
+    nctrl_pts      = 10;
+    master.foreach(&Block::generate_constant_data, &d_args);
 
     // circle function
     // d_args.p       = 3;

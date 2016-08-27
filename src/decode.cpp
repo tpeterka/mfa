@@ -166,22 +166,19 @@ void MaxErr1d(int       p,                   // polynomial degree
    }
 }
 
-// max distance from a set of input points to an n-d NURBS volume
+// computes approximated points from a given set of domain points and an n-d NURBS volume
 // P&T eq. 9.77, p. 424
 // this version recomputes parameter values of input points and
 // recomputes basis functions rather than taking them as an input
 // this version also assumes weights = 1; no division by weight is done
 // assumes all vectors have been correctly resized by the caller
-void MaxErr(VectorXi& p,                   // polynomial degree
+void Decode(VectorXi& p,                   // polynomial degree
             VectorXi& ndom_pts,            // number of input data points in each dim
             MatrixXf& domain,              // domain of input data points (1st dim. changes fastest)
             MatrixXf& ctrl_pts,            // control points (1st dim. changes fastest)
             VectorXi& nctrl_pts,           // number of control points in each dim
             VectorXf& knots,               // knots (1st dim. changes fastest)
-            MatrixXf& approx,              // pts in approximated volume (1st dim. changes fastest)
-                                           // (same number as input points, for rendering only)
-            VectorXf& errs,                // error at each input point
-            float&    max_err)             // maximum error
+            MatrixXf& approx)              // pts in approximated volume (1st dim. changes fastest)
 {
     // curve parameters for input points
     // linearized so that 1st dim changes fastest
@@ -195,9 +192,6 @@ void MaxErr(VectorXi& p,                   // polynomial degree
 
     for (size_t i = 0; i < p.size() - 1; i++)
         ofst[i + 1] = ofst[i] + ndom_pts(i);
-
-    // errors and max error
-    max_err = 0;
 
     // eigen frees following temp vectors when leaving scope
     VectorXf dpt(domain.cols());             // original data point
@@ -228,17 +222,13 @@ void MaxErr(VectorXi& p,                   // polynomial degree
                 iter[j] = 0;
         }
 
-        // TODO: eliminate the folowing copy from cpt to approx.row(i)
-        // not straightforward to pass a row to a function expecting a vector
-        // because matrix ordering is column order by default
-        // not sure what is the best combo of usability and performance
         approx.row(i) = cpt;
-        dpt = domain.row(i);
-        d = cpt - dpt;
-        errs(i) = d.norm();                  // Euclidean distance
-        if (i == 0 || errs(i) > max_err)
-            max_err = errs(i);
-   }
+
+        // print progress
+        if (i > 0 && i % (domain.rows() / 100) == 0)
+            fprintf(stderr, "\r%.0f %% decoded", (float)i / (float)(domain.rows()) * 100);
+    }
+    fprintf(stderr, "\r100 %% decoded\n");
 }
 
 // max norm distance from a set of input points to a 1d NURBS curve

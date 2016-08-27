@@ -25,7 +25,7 @@ void Approx1d(int       p,                   // polynomial degree
               MatrixXf& ctrl_pts,            // (output) control points
               VectorXf& knots);              // (output) knots
 
-void Approx(VectorXi& p,                     // polynomial degree in each dimension
+void Encode(VectorXi& p,                     // polynomial degree in each dimension
             VectorXi& ndom_pts,              // number of input data points in each dim
             VectorXi& nctrl_pts,             // desired number of control points in each dim
             MatrixXf& domain,                // input data points (1st dim changes fastest)

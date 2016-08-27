@@ -57,41 +57,64 @@ int main(int argc, char** argv)
 
     DomainArgs d_args;
 
-    // constant function
-    d_args.pt_dim       = 4;
-    d_args.dom_dim      = 3;
-    d_args.p[0]         = 2;
-    d_args.p[1]         = 2;
-    d_args.p[2]         = 2;
-    d_args.ndom_pts[0]  = 4;
-    d_args.ndom_pts[1]  = 4;
-    d_args.ndom_pts[2]  = 4;
-    d_args.nctrl_pts[0] = 3;
-    d_args.nctrl_pts[1] = 3;
-    d_args.nctrl_pts[2] = 3;
+    // constant function f(x,y,z) = 1
+    // d_args.pt_dim       = 4;
+    // d_args.dom_dim      = 3;
+    // d_args.p[0]         = 2;
+    // d_args.p[1]         = 2;
+    // d_args.p[2]         = 2;
+    // d_args.ndom_pts[0]  = 4;
+    // d_args.ndom_pts[1]  = 4;
+    // d_args.ndom_pts[2]  = 4;
+    // d_args.nctrl_pts[0] = 3;
+    // d_args.nctrl_pts[1] = 3;
+    // d_args.nctrl_pts[2] = 3;
+    // d_args.min[0]       = 0.0;
+    // d_args.min[1]       = 0.0;
+    // d_args.min[2]       = 0.0;
+    // d_args.min[3]       = 0.0;
+    // d_args.max[0]       = d_args.ndom_pts[0] - 1;
+    // d_args.max[1]       = d_args.ndom_pts[1] - 1;
+    // d_args.max[2]       = d_args.ndom_pts[2] - 1;
+    // d_args.max[3]       = 1.0;
+    // d_args.s            = 1.0;
+    // master.foreach(&Block::generate_constant_data, &d_args);
+
+    // magnitude function f(x,y,z,t) = ||(x,y,z,t)||
+    d_args.pt_dim       = 5;
+    d_args.dom_dim      = 4;
+    d_args.p[0]         = 1;
+    d_args.p[1]         = 1;
+    d_args.p[2]         = 1;
+    d_args.p[3]         = 1;
+    d_args.ndom_pts[0]  = 40;
+    d_args.ndom_pts[1]  = 40;
+    d_args.ndom_pts[2]  = 40;
+    d_args.ndom_pts[3]  = 40;
+    d_args.nctrl_pts[0] = 20;
+    d_args.nctrl_pts[1] = 20;
+    d_args.nctrl_pts[2] = 20;
+    d_args.nctrl_pts[3] = 20;
     d_args.min[0]       = 0.0;
     d_args.min[1]       = 0.0;
     d_args.min[2]       = 0.0;
     d_args.min[3]       = 0.0;
+    d_args.min[4]       = 0.0;
     d_args.max[0]       = d_args.ndom_pts[0] - 1;
     d_args.max[1]       = d_args.ndom_pts[1] - 1;
     d_args.max[2]       = d_args.ndom_pts[2] - 1;
-    d_args.max[3]       = 1.0;
-    d_args.s            = 1.0;
-    master.foreach(&Block::generate_constant_data, &d_args);
+    d_args.max[3]       = d_args.ndom_pts[3] - 1;
+    master.foreach(&Block::generate_magnitude_data, &d_args);
+
+    fprintf(stderr, "Encoding...\n");
 
     // encode
     master.foreach(&Block::approx_block, &nctrl_pts);
 
-    // compute error
-    // ErrArgs e_args;
-    // e_args.max_niter  = 10;                  // max number of search iterations
-    // e_args.err_bound  = 0.001;               // desrired error bound
-    // e_args.search_rad = 4;                   // search range is +/- this many input parameters
-    // master.foreach(&Block::max_error, &e_args);
+    fprintf(stderr, "Encoding done. Decoding and computing max. error...\n");
 
-    // compute max error (not max norm error yet, that is TODO)
-    master.foreach(&Block::max_error);
+    // compute max error
+    master.foreach(&Block::mag_max_error);
 
     // print results
     master.foreach(&Block::print_block);

@@ -719,7 +719,7 @@ void CopyCtrl(MatrixXf& P,          // solved points for current dimension and c
         {
             // debug
             // fprintf(stderr, "t[%ld] = p[%d]\n", to + i * cs, i - 1);
-            temp_ctrl1.row(to + i * cs) = P.row(i - 1);
+            ctrl_pts.row(to + i * cs) = P.row(i - 1);
         }
         // debug
         // fprintf(stderr, "t[%ld] = d[%ld]\n", to + n(k) * cs, co + nctrl_pts * cs);
@@ -773,12 +773,14 @@ void CtrlCurve(VectorXi& p,          // polynomial degree in each dimension
 // weights are all 1 for now
 // n-d version of algorithm 9.7, Piegl & Tiller (P&T) p. 422
 //
+// the outputs, ctrl_pts and knots, are resized by this function;  caller need not resize them
+//
 // There are two types of dimensionality:
 // 1. The dimensionality of the NURBS tensor product (p.size())
 // (1D = NURBS curve, 2D = surface, 3D = volumem 4D = hypervolume, etc.)
 // 2. The dimensionality of individual domain and control points (domain.cols())
 // p.size() should be <= domain.cols()
-void Approx(VectorXi& p,                   // polynomial degree in each dimension
+void Encode(VectorXi& p,                   // polynomial degree in each dimension
             VectorXi& ndom_pts,            // number of input data points in each dim
             VectorXi& nctrl_pts,           // desired number of control points in each dim
             MatrixXf& domain,              // input data points (1st dim changes fastest)
@@ -789,7 +791,7 @@ void Approx(VectorXi& p,                   // polynomial degree in each dimensio
     assert(p.size() <= domain.cols());
 
     // debug
-    cerr << "domain:\n" << domain << endl;
+    // cerr << "domain:\n" << domain << endl;
 
     // TODO: preprocessing n-d domain requires some thought; skipping for now
     // preprocess domain and range
@@ -814,14 +816,14 @@ void Approx(VectorXi& p,                   // polynomial degree in each dimensio
     Params(ndom_pts, domain, params);
 
     // debug
-    cerr << "params:\n" << params << endl;
+    // cerr << "params:\n" << params << endl;
 
     // compute knots
     knots.resize(tot_nknots);
     Knots(p, n, m, params, knots);
 
     // debug
-    cerr << "knots:\n" << knots << endl;
+    // cerr << "knots:\n" << knots << endl;
 
     // following are counters for slicing domain and params into curves in different dimensions
     size_t po = 0;                                // starting offset for params in current dim
@@ -840,8 +842,8 @@ void Approx(VectorXi& p,                   // polynomial degree in each dimensio
     size_t tot_ntemp_ctrl = 1;
     for (size_t k = 0; k < ndims; k++)
         tot_ntemp_ctrl *= (k == 0 ? nctrl_pts(k) : ndom_pts(k));
-    MatrixXf temp_ctrl0(tot_ntemp_ctrl, domain.cols());
-    MatrixXf temp_ctrl1(tot_ntemp_ctrl, domain.cols());
+    MatrixXf temp_ctrl0 = MatrixXf::Zero(tot_ntemp_ctrl, domain.cols());
+    MatrixXf temp_ctrl1 = MatrixXf::Zero(tot_ntemp_ctrl, domain.cols());
 
     VectorXi ntemp_ctrl = ndom_pts;               // current num of temp control pts in each dim
 
@@ -917,6 +919,7 @@ void Approx(VectorXi& p,                   // polynomial degree in each dimensio
 
             CtrlCurve(p, params, knots, N, NtN, R, P, domain, ndom_pts, n, k,
                       po, ko, co, cs, to, temp_ctrl0, temp_ctrl1, ctrl_pts);
+
             // adjust offsets for the next curve
             if ((j + 1) % cs)
                 co++;
@@ -934,6 +937,14 @@ void Approx(VectorXi& p,                   // polynomial degree in each dimensio
             }
         }                                                  // cuves in this dimension
 
+        // debug
+        // if (k % 2 == 0 && k < ndims - 1)
+        //     cerr << "temp_ctrl0:\n" << temp_ctrl0 << endl;
+        // else if (k % 2 && k < ndims - 1)
+        //     cerr << "temp_ctrl1:\n" << temp_ctrl1 << endl;
+        // else
+        //     cerr << "ctrl_pts:\n" << ctrl_pts << endl;
+
         // adjust offsets and strides for next dimension
         po += ndom_pts(k);
         int nknots = n(k) + p(k) + 2;                     // number of knots in current dim
@@ -945,8 +956,14 @@ void Approx(VectorXi& p,                   // polynomial degree in each dimensio
         R.resize(0, 0);
         NtN.resize(0, 0);
         P.resize(0, 0);
+
+        // print progress
+        fprintf(stderr, "\rdimension %ld of %d encoded", k + 1, ndims);
+
     }                                                      // domain dimensions
 
+    fprintf(stderr,"\n");
+
     // debug
-    cerr << "ctrl_pts:\n" << ctrl_pts << endl;
+    // cerr << "ctrl_pts:\n" << ctrl_pts << endl;
 }
