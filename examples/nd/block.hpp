@@ -78,7 +78,7 @@ struct Block
             diy::save(bb, b->domain_mins);
             diy::save(bb, b->domain_maxs);
             diy::save(bb, b->p);
-            diy::save(bb, b->ctrl_pts);
+            diy::save(bb, b->nctrl_pts);
             diy::save(bb, b->ctrl_pts);
             diy::save(bb, b->knots);
             diy::save(bb, b->approx);
@@ -316,6 +316,24 @@ namespace diy
             }
         static
         void load(diy::BinaryBuffer& bb, VectorXf& v)
+            {
+                Index size;
+                diy::load(bb, size);
+                v.resize(size);
+                diy::load(bb, v.data(), size);
+            }
+    };
+    template<>
+    struct Serialization<VectorXi>
+    {
+        static
+        void save(diy::BinaryBuffer& bb, const VectorXi& v)
+            {
+                diy::save(bb, v.size());
+                diy::save(bb, v.data(), v.size());
+            }
+        static
+        void load(diy::BinaryBuffer& bb, VectorXi& v)
             {
                 Index size;
                 diy::load(bb, size);

@@ -120,7 +120,7 @@ int main(int argc, char** argv)
     master.foreach(&Block::print_block);
 
     // save the results in diy format
-    // diy::io::write_blocks("approx.out", world, master);
+    diy::io::write_blocks("approx.out", world, master);
 
     // debug: read the file back
     // int read_nblocks;                                       // number of blocks read
