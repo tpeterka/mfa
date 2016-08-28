@@ -241,10 +241,6 @@ struct Block
 
     void approx_block(const diy::Master::ProxyWithLink& cp, void* args)
         {
-            // DEPRECATED 1-d version
-            // int nctrl_pts = *(int*)args;
-            // Approx1d(p, nctrl_pts, domain, ctrl_pts, knots);
-
             VectorXi ps(1);                  // p as a vector of one element
             ps(0) = p;
             VectorXi nc(1);                  // ctrl_pts as a vector of one element

@@ -18,13 +18,6 @@ typedef Eigen::VectorXi VectorXi;
 
 using namespace std;
 
-// DEPRECATED
-// void Approx1d(int       p,                   // polynomial degree
-//               int       nctrl_pts,           // desired number of control points
-//               MatrixXf& domain,              // domain of input data points
-//               MatrixXf& ctrl_pts,            // (output) control points
-//               VectorXf& knots);              // (output) knots
-
 void Encode(VectorXi& p,                     // polynomial degree in each dimension
             VectorXi& ndom_pts,              // number of input data points in each dim
             VectorXi& nctrl_pts,             // desired number of control points in each dim
@@ -47,10 +40,6 @@ void BasisFuns(int       p,                  // polynomial degree
                int       end_n,              // ending basis function N_{end_n} to compute
                int       row,                // starting row index in N of result
                int       ko = 0);            // optional index of starting knot (default = 0)
-
-// DEPRECATED
-// void Params1d(MatrixXf&  domain,             // domain of input data points
-//               VectorXf&  params);            // (output) curve parameters
 
 void Params(VectorXi& ndom_pts,   // number of input data points in each dim
             MatrixXf& domain,     // input data points in each dim (1st dim changes fastest)

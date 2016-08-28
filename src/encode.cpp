@@ -186,6 +186,8 @@ void Residual(int       p,                   // polynomial degree
 }
 
 // DEPRECATED
+// TODO: remove eventually once a more general n-d solution is found or is not needed anymore
+//
 // // preprocess domain
 // // interpolate points on a curve to approximately uniform spacing
 // // TODO: normalize domain and range to similar scales
@@ -247,35 +249,6 @@ void Residual(int       p,                   // polynomial degree
 //     }
 //     // copy last point
 //     new_domain.row(n++) = domain.row(domain.rows() - 1);
-// }
-
-// // precompute curve parameters for input data points using the chord-length method
-// // 1D version of algorithm 9.3, P&T, p. 377
-// // assumes params were allocated by caller
-// // TODO: investigate other schemes (domain only, normalized domain and range, etc.)
-// void Params1d(MatrixXf& domain,             // domain of input data points
-//               VectorXf& params)             // (output) curve parameters
-// {
-//     int nparams    = domain.rows();          // number of parameters = number of input points
-//     float tot_dist = 0.0;                    // total chord length
-//     vector<float> dists(domain.rows() - 1);  // chord lengths of input data point spans
-
-//     // chord lengths
-//     VectorXf d;                              // eigen frees VextorX when leaving scope
-//     for (size_t i = 0; i < nparams - 1; i++)
-//     {
-//         // TODO: normalize domain so that dimensions they have similar scales
-//         d = domain.row(i) - domain.row(i + 1);
-//         dists[i] = d.norm();                 // Euclidean distance (l-2 norm)
-//         // fprintf(stderr, "dists[%lu] = %.3f\n", i, dists[i]);
-//         tot_dist += dists[i];
-//     }
-
-//     // parameters
-//     params(0)           = 0.0;               // first parameter is known
-//     params(nparams - 1) = 1.0;               // last parameter is known
-//     for (size_t i = 0; i < nparams - 2; i++)
-//         params(i + 1) = params(i) + dists[i] / tot_dist;
 // }
 
 // precompute curve parameters for input data points using the chord-length method
@@ -367,52 +340,6 @@ void Params(VectorXi& ndom_pts, // number of input data points in each dim
         cs *= ndom_pts(k);
     }                                                    // domain dimensions
 }
-
-// DEPRECATED
-// // compute knots
-// // 1D version of eqs. 9.68, 9.69, P&T
-// // eg, for p = 3 and nctrl_pts = 7, n = nctrl_pts - 1 = 6 and nknots = n + p + 2 = 11
-// // let knots = {0, 0, 0, 0, 0.25, 0.5, 0.75, 1, 1, 1, 1}
-// // there are p + 1 external knots at each end: {0, 0, 0, 0} and {1, 1, 1, 1}
-// // there are n - p internal knots: {0.25, 0.5, 0.75}
-// // there are n - p + 1 internal knot spans [0,0.25), [0.25, 0.5), [0.5, 0.75), [0.75, 1)
-// void Knots1d(int       p,                    // polynomial degree
-//              int       n,                    // number of control point spans (control points - 1)
-//              int       m,                    // number of data point spans (data points - 1)
-//              VectorXf& params,               // curve parameters
-//              VectorXf& knots)                // (output) knots
-// {
-//     int nknots = n + p + 2;                  // number of knots
-//     knots.resize(nknots);
-
-//     // in P&T, d is the ratio of number of input points (r+1) to internal knot spans (n-p+1)
-//     // float d = (float)(r + 1) / (n - p + 1);         // eq. 9.68, r is P&T's m
-//     // but I prefer d to be the ratio of input spans r to internal knot spans (n-p+1)
-//     float d = (float)m / (n - p + 1);
-
-//     // compute n - p internal knots
-//     for (int j = 1; j <= n - p; j++)          // eq. 9.69
-//     {
-//         int   i = j * d;                      // integer part of j steps of d
-//         float a = j * d - i;                  // fractional part of j steps of d, P&T's alpha
-
-//         // debug
-//         // cerr << "d " << d << " j " << j << " i " << i << " a " << a << endl;
-
-//         // when using P&T's eq. 9.68, compute knots using the following
-//         // knots(p + j) = (1.0 - a) * params(i - 1) + a * params(i);
-
-//         // when using my version of d, use the following
-//         knots(p + j) = (1.0 - a) * params(i) + a * params(i + 1);
-//     }
-
-//     // set external knots
-//     for (int i = 0; i < p + 1; i++)
-//     {
-//         knots(i) = 0.0;
-//         knots(nknots - 1 - i) = 1.0;
-//     }
-// }
 
 // compute knots
 // n-d version of eqs. 9.68, 9.69, P&T
@@ -517,122 +444,6 @@ void Quants(VectorXi& p,                // polynomial degree in each dimension
         tot_nctrl   *= nctrl_pts(i);
     }
 }
-
-// DEPRECATED
-// // approximate a NURBS curve for a given input data set
-// // weights are all 1 for now
-// // 1D version of algorithm 9.7, Piegl & Tiller (P&T) p. 422
-// void Approx1d(int       p,                   // polynomial degree
-//               int       nctrl_pts,           // desired number of control points
-//               MatrixXf& domain,              // domain of input data points
-//               MatrixXf& ctrl_pts,            // (output) control points
-//               VectorXf& knots)               // (output) knots
-// {
-//     if (nctrl_pts <= p)
-//     {
-//         fprintf(stderr, "Error: Approx1d() number of control points must be at least p + 1\n");
-//         exit(1);
-//     }
-//     if (nctrl_pts > domain.rows())
-//     {
-//         fprintf(stderr, "Error: Approx1d() number of control points cannot be greater "
-//                 "than number of input data points\n");
-//         exit(1);
-//     }
-
-//     // preprocess domain and range
-//     // turn off to compare with result of n-d Encode(), which doesn't preprocess the domain
-//     // preprocessing was sort of a hack anyway, linear interpolation, need a better solution
-//     MatrixXf new_domain;                     // eigen frees MatrixX when leaving scope
-//     Prep1d(domain, new_domain);
-
-//     // in lieu of preprocessing, copy domain to new domain
-//     // eventually this entire function will be deprecated
-//     // MatrixXf new_domain = domain;
-
-//     // debug
-//     // cerr << "new_domain:\n" << new_domain << endl;
-
-//     // main quantities
-//     int n      = nctrl_pts - 1;              // number of control point spans
-//     int m      = new_domain.rows() - 1;      // number of input data point spans
-
-//     // precompute curve parameters for input points
-//     VectorXf params(new_domain.rows());
-//     Params1d(new_domain, params);
-
-//     // debug
-//     cerr << "params:\n" << params << endl;
-
-//     // compute knots
-//     Knots1d(p, n, m, params, knots);
-
-//     // debug
-//     cerr << "knots:\n" << knots << endl;
-
-//     // compute the matrix N, eq. 9.66 in P&T
-//     // N is a matrix of (m - 1) x (n - 1) scalars that are the basis function coefficients
-//     //  _                                _
-//     // |  N_1(u[1])   ... N_{n-1}(u[1])   |
-//     // |     ...      ...      ...        |
-//     // |  N_1(u[m-1]) ... N_{n-1}(u[m-1]) |
-//     //  -                                -
-//     // TODO: N is going to be very sparse when it is large: switch to sparse representation
-//     // N has semibandwidth < p  nonzero entries across diagonal
-//     MatrixXf N = MatrixXf::Zero(m - 1, n - 1); // coefficients matrix
-//                                                // eigen frees MatrixX when leaving scope
-//     for (int i = 1; i < m; i++)                // the rows of N
-//     {
-//         int span = FindSpan(p, n, knots, params(i));
-//         assert(span <= n);                     // sanity
-//         BasisFuns(p, knots, params(i), span, N, 1, n - 1, i - 1);
-//     }
-
-//     // debug
-//     cerr << "N:\n" << N << endl;
-
-//     // compute the product Nt x N
-//     // TODO: NtN is going to be very sparse when it is large: switch to sparse representation
-//     // NtN has semibandwidth < p + 1 nonzero entries across diagonal
-//     MatrixXf NtN(n - 1, n - 1);               // eigen frees MatrixX when leaving scope
-//     NtN = N.transpose() * N;
-
-//     // debug
-//     cerr << "NtN:\n" << NtN << endl;
-
-//     // compute R
-//     MatrixXf R(n - 1, domain.cols());         // eigen frees MatrixX when leaving scope
-//     Residual(p, new_domain, knots, params, N, R);
-
-//     // debug
-//     cerr << "R:\n" << R << endl;
-
-//     // N can be freed at this point
-//     N.resize(0, 0);
-
-//     // solve NtN * P = R
-//     // NtN is positive definite -> do not need pivoting
-//     // P are the unknown interior control points
-//     // TODO: use a common representation for P and ctrl_pts to avoid copying
-//     MatrixXf P(n - 1, domain.cols());         // eigen frees MatrixX when leaving scope
-//     P = NtN.ldlt().solve(R);
-
-//     // debug
-//     // cerr << "P:\n" << P << endl;
-
-//     // R and NtN can be freed at this point
-//     R.resize(0, 0);
-//     NtN.resize(0, 0);
-
-//     // control points
-//     // init first and last control points and copy rest from solution P
-//     // TODO: any way to avoid this copy?
-//     ctrl_pts.resize(nctrl_pts, domain.cols());
-//     ctrl_pts.row(0) = new_domain.row(0);
-//     for (int i = 0; i < n - 1; i++)
-//         ctrl_pts.row(i + 1) = P.row(i);
-//     ctrl_pts.row(n) = new_domain.row(m);
-// }
 
 // append points from P to temporary control points
 // init first and last control points and copy rest from solution P

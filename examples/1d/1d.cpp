@@ -57,23 +57,14 @@ int main(int argc, char** argv)
 
     DomainArgs d_args;
 
-    // constant functions to that match 1 dim of n-d test
-    // d_args.p       = 2;
-    // d_args.npts    = 4;
+    // constant function
+    // d_args.p       = 3;
+    // d_args.npts    = 20;
     // d_args.min_x   = 0.0;
     // d_args.max_x   = d_args.npts - 1.0;
     // d_args.y_scale = 1.0;
-    // nctrl_pts      = 3;
+    // nctrl_pts      = 10;
     // master.foreach(&Block::generate_constant_data, &d_args);
-
-    // constant function
-    d_args.p       = 3;
-    d_args.npts    = 20;
-    d_args.min_x   = 0.0;
-    d_args.max_x   = d_args.npts - 1.0;
-    d_args.y_scale = 1.0;
-    nctrl_pts      = 10;
-    master.foreach(&Block::generate_constant_data, &d_args);
 
     // circle function
     // d_args.p       = 3;
@@ -94,13 +85,13 @@ int main(int argc, char** argv)
     // master.foreach(&Block::generate_sine_data, &d_args);
 
     // sinc function
-    // d_args.p       = 3;
-    // d_args.npts    = 1000;
-    // d_args.min_x   = -4.0 * M_PI;
-    // d_args.max_x   = 4.0 * M_PI;
-    // d_args.y_scale = 10.0;
-    // nctrl_pts      = 70;
-    // master.foreach(&Block::generate_sinc_data, &d_args);
+    d_args.p       = 3;
+    d_args.npts    = 1000;
+    d_args.min_x   = -4.0 * M_PI;
+    d_args.max_x   = 4.0 * M_PI;
+    d_args.y_scale = 10.0;
+    nctrl_pts      = 70;
+    master.foreach(&Block::generate_sinc_data, &d_args);
 
     // read file
     // d_args.p     = 3;

@@ -14,6 +14,7 @@
 typedef Eigen::MatrixXf MatrixXf;
 typedef Eigen::VectorXf VectorXf;
 
+// DEPRECATE eventually, only for 1d
 void MaxErr1d(int       p,                   // polynomial degree
               MatrixXf& domain,              // domain of input data points
               MatrixXf& ctrl_pts,            // control points
@@ -31,6 +32,7 @@ void Decode(VectorXi& p,                     // polynomial degree
             VectorXf& knots,                 // knots (1st dim. changes fastest)
             MatrixXf& approx);               // pts in approx. volume (1st dim. changes fastest)
 
+// DEPRECATE eventually, only for 1d
 void MaxNormErr1d(int       p,               // polynomial degree
                   MatrixXf& domain,          // domain of input data points
                   MatrixXf& ctrl_pts,        // control points
