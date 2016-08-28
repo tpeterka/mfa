@@ -17,28 +17,29 @@
 
 using namespace std;
 
-// compute a point from a 1d NURBS curve at a given parameter value
-// algorithm 4.1, Piegl & Tiller (P&T) p.124
-// this version recomputes basis functions rather than taking them as an input
-// this version also assumes weights = 1; no division by weight is done
-void CurvePt1d(int       p,                  // polynomial degree
-               MatrixXf& ctrl_pts,           // control points
-               VectorXf& knots,              // knots
-               float     param,              // parameter value of desired point
-               VectorXf& out_pt)             // (output) point
-{
-    int n      = (int)ctrl_pts.rows() - 1;   // number of control point spans
-    int span   = FindSpan(p, n, knots, param);
-    MatrixXf N = MatrixXf::Zero(1, n + 1);   // basis coefficients
-    BasisFuns(p, knots, param, span, N, 0, n, 0);
-    out_pt = VectorXf::Zero(ctrl_pts.cols()); // initializes and resizes
-    for (int j = 0; j <= p; j++)
-        out_pt += N(0, j + span - p) * ctrl_pts.row(span - p + j);
+// DEPRECATED
+// // compute a point from a 1d NURBS curve at a given parameter value
+// // algorithm 4.1, Piegl & Tiller (P&T) p.124
+// // this version recomputes basis functions rather than taking them as an input
+// // this version also assumes weights = 1; no division by weight is done
+// void CurvePt1d(int       p,                  // polynomial degree
+//                MatrixXf& ctrl_pts,           // control points
+//                VectorXf& knots,              // knots
+//                float     param,              // parameter value of desired point
+//                VectorXf& out_pt)             // (output) point
+// {
+//     int n      = (int)ctrl_pts.rows() - 1;   // number of control point spans
+//     int span   = FindSpan(p, n, knots, param);
+//     MatrixXf N = MatrixXf::Zero(1, n + 1);   // basis coefficients
+//     BasisFuns(p, knots, param, span, N, 0, n, 0);
+//     out_pt = VectorXf::Zero(ctrl_pts.cols()); // initializes and resizes
+//     for (int j = 0; j <= p; j++)
+//         out_pt += N(0, j + span - p) * ctrl_pts.row(span - p + j);
 
-    // debug
-    // cerr << "n " << n << " param " << param << " span " << span << " out_pt " << out_pt << endl;
-    // cerr << " N " << N << endl;
-}
+//     // debug
+//     // cerr << "n " << n << " param " << param << " span " << span << " out_pt " << out_pt << endl;
+//     // cerr << " N " << N << endl;
+// }
 
 // compute a point from a NURBS n-d volume at a given parameter value
 // algorithm 4.3, Piegl & Tiller (P&T) p.134
@@ -123,6 +124,9 @@ void VolPt(VectorXi& p,                  // polynomial degree in each dimension
     // cerr << "out_pt:\n" << out_pt << endl;
 }
 
+// DEPRECATED
+// but keeping around until a better n-d method is devised
+//
 // max distance from a set of input points to a 1d NURBS curve
 // P&T eq. 9.77, p. 424
 // this version recomputes parameter values of input points and
@@ -141,7 +145,11 @@ void MaxErr1d(int       p,                   // polynomial degree
     // curve parameters for input points
     VectorXf params(domain.rows());          // curve parameters for input data points
                                              // eigen frees VectorX when leaving scope
-    Params1d(domain, params);
+    VectorXi ndom_pts(1);                    // number of domain points as a vector of one component
+    ndom_pts(0) = domain.rows();
+    // DEPRECATED
+    // Params1d(domain, params);
+    Params(ndom_pts, domain, params);
 
     // errors and max error
     max_err = 0;
@@ -150,13 +158,23 @@ void MaxErr1d(int       p,                   // polynomial degree
     VectorXf dpt(domain.cols());             // original data point
     VectorXf cpt(ctrl_pts.cols());           // approximated curve point
     VectorXf d(domain.cols());               // apt - dpt
+    VectorXi p_vec(1);                       // p as a vector of one component
+    p_vec(0) = p;
+    VectorXi nctrl_pts(1);                   // number of control pts as a vector of one component
+    nctrl_pts(0) = ctrl_pts.rows();
+    VectorXf param_vec(1);                   // param value as a vector of one component
     for (size_t i = 0; i < domain.rows(); i++)
     {
         // TODO: eliminate the folowing copy from cpt to approx.row(i)
         // not straightforward to pass a row to a function expecting a vector
         // because matrix ordering is column order by default
         // not sure what is the best combo of usability and performance
-        CurvePt1d(p, ctrl_pts, knots, params(i), cpt);
+
+        // DEPRECATED
+        // CurvePt1d(p, ctrl_pts, knots, params(i), cpt);
+
+        param_vec(0) = params(i);
+        VolPt(p_vec, ctrl_pts, nctrl_pts, knots, param_vec, cpt);
         approx.row(i) = cpt;
         dpt = domain.row(i);
         d = cpt - dpt;
@@ -231,6 +249,9 @@ void Decode(VectorXi& p,                   // polynomial degree
     fprintf(stderr, "\r100 %% decoded\n");
 }
 
+// DEPRECATED
+// TODO: keeping around until a better n-d method is devised
+//
 // max norm distance from a set of input points to a 1d NURBS curve
 // P&T eq. 9.78, p. 424
 // usually a smaller and more accurate measure of max error than MaxError
@@ -254,12 +275,21 @@ void MaxNormErr1d(int       p,               // polynomial degree
 {
     // curve parameters for input points
     VectorXf params(domain.rows());          // curve parameters for input data points
-    Params1d(domain, params);
+    VectorXi ndom_pts(1);
+    ndom_pts(0) = domain.rows();
+    // DEPRECATED
+    // Params1d(domain, params);
+    Params(ndom_pts, domain, params);
 
     // eigen frees following temp vectors when leaving scope
     VectorXf dpt(domain.cols());             // original data point
     VectorXf cpt(domain.cols());             // point on curve at parameter of input point
     VectorXf d(domain.cols());               // cpt - dpt
+    VectorXi p_vec(1);                       // p as a vector of one component
+    p_vec(0) = p;
+    VectorXi nctrl_pts(1);                   // number of control pts as a vector of one component
+    nctrl_pts(0) = ctrl_pts.rows();
+    VectorXf param_vec(1);                   // param value as a vector of one component
 
     // fit approximated curve (for debugging and rendering only)
     for (size_t i = 0; i < domain.rows(); i++)
@@ -268,7 +298,12 @@ void MaxNormErr1d(int       p,               // polynomial degree
         // not straightforward to pass a row to a function expecting a vector
         // because matrix ordering is column order by default
         // not sure what is the best combo of usability and performance
-        CurvePt1d(p, ctrl_pts, knots, params(i), cpt);
+
+        // DEPRECATED
+        // CurvePt1d(p, ctrl_pts, knots, params(i), cpt);
+
+        param_vec(0) = params(i);
+        VolPt(p_vec, ctrl_pts, nctrl_pts, knots, param_vec, cpt);
         approx.row(i) = cpt;
     }
     // debug
@@ -313,17 +348,34 @@ void MaxNormErr1d(int       p,               // polynomial degree
         float el, eh, em;                    // low, high, mid errs; dists to C(ul), C(uh), C(um)
         for (j = 0; j < max_niter; j++)
         {
-            CurvePt1d(p, ctrl_pts, knots, ul, cpt);
+            // DEPRECATED
+            // CurvePt1d(p, ctrl_pts, knots, ul, cpt);
+
+            param_vec(0) = ul;
+            VolPt(p_vec, ctrl_pts, nctrl_pts, knots, param_vec, cpt);
+
             // eigen frees following temp vectors when leaving scope
             dpt = domain.row(i);             // original data point
             d = cpt - dpt;                   // eigen frees VectorX when leaving scope
             el = d.norm();                   // Euclidean distance to C(ul)
             // cerr << "low " << cpt << " el " << el;         // debug
-            CurvePt1d(p, ctrl_pts, knots, um, cpt);
+
+            // DEPRECATED
+            // CurvePt1d(p, ctrl_pts, knots, um, cpt);
+
+            param_vec(0) = um;
+            VolPt(p_vec, ctrl_pts, nctrl_pts, knots, param_vec, cpt);
+
             d = cpt - dpt;
             em = d.norm();                   // Euclidean distance to C(um)
             // cerr << " mid " << cpt << " em " << em;        // debug
-            CurvePt1d(p, ctrl_pts, knots, uh, cpt);
+
+            // DEPRECATED
+            // CurvePt1d(p, ctrl_pts, knots, uh, cpt);
+
+            param_vec(0) = uh;
+            VolPt(p_vec, ctrl_pts, nctrl_pts, knots, param_vec, cpt);
+
             d = cpt - dpt;
             eh = d.norm();                   // Euclidean distance to C(uh)
             // cerr << " hi " << cpt << " eh " << eh << endl; // debug

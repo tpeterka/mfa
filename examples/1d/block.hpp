@@ -242,16 +242,16 @@ struct Block
     void approx_block(const diy::Master::ProxyWithLink& cp, void* args)
         {
             // DEPRECATED 1-d version
-            int nctrl_pts = *(int*)args;
-            Approx1d(p, nctrl_pts, domain, ctrl_pts, knots);
+            // int nctrl_pts = *(int*)args;
+            // Approx1d(p, nctrl_pts, domain, ctrl_pts, knots);
 
-            // VectorXi ps(1);                  // p as a vector of one element
-            // ps(0) = p;
-            // VectorXi nc(1);                  // ctrl_pts as a vector of one element
-            // nc(0) = *(int*)args;
-            // VectorXi nd(1);                  // number of domain points as a vector or one element
-            // nd(0) = domain.rows();
-            // Encode(ps, nd, nc, domain, ctrl_pts, knots);
+            VectorXi ps(1);                  // p as a vector of one element
+            ps(0) = p;
+            VectorXi nc(1);                  // ctrl_pts as a vector of one element
+            nc(0) = *(int*)args;
+            VectorXi nd(1);                  // number of domain points as a vector or one element
+            nd(0) = domain.rows();
+            Encode(ps, nd, nc, domain, ctrl_pts, knots);
         }
 
     void max_error(const diy::Master::ProxyWithLink& cp, void* args)
