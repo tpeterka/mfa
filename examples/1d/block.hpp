@@ -278,7 +278,12 @@ struct Block
         {
             cerr << ctrl_pts.rows() << " control points\n" << ctrl_pts << endl;
             cerr << knots.size() << " knots\n" << knots << endl;
-            fprintf(stderr, "max_err = %.6lf\n", max_err);
+            fprintf(stderr, "max_err = %e\n", max_err);
+            fprintf(stderr, "# input points = %ld\n", domain.rows());
+            fprintf(stderr, "# output ctrl pts = %ld # output knots = %ld\n",
+                    ctrl_pts.rows(), knots.size());
+            fprintf(stderr, "compression ratio = %.1f\n",
+                    (float)(domain.rows()) / (ctrl_pts.rows() + knots.size() / ctrl_pts.cols()));
         }
 
     // memory is freed when block goes out of scope, but in case the data in the block needs
