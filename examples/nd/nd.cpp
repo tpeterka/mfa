@@ -57,7 +57,7 @@ int main(int argc, char** argv)
 
     DomainArgs d_args;
 
-    // constant function f(x,y,z) = 1
+    // 3d constant function f(x,y,z) = 1
     // d_args.pt_dim       = 4;
     // d_args.dom_dim      = 3;
     // d_args.p[0]         = 2;
@@ -80,31 +80,84 @@ int main(int argc, char** argv)
     // d_args.s            = 1.0;
     // master.foreach(&Block::generate_constant_data, &d_args);
 
-    // magnitude function f(x,y,z,t) = ||(x,y,z,t)||
-    d_args.pt_dim       = 5;
-    d_args.dom_dim      = 4;
+    // 1d magnitude function f(x) = ||x||
+    // d_args.pt_dim       = 2;
+    // d_args.dom_dim      = 1;
+    // d_args.p[0]         = 1;
+    // d_args.ndom_pts[0]  = 40;
+    // d_args.nctrl_pts[0] = 20;
+    // d_args.min[0]       = 0.0;
+    // d_args.max[0]       = d_args.ndom_pts[0] - 1;
+    // master.foreach(&Block::generate_magnitude_data, &d_args);
+
+    // 2d magnitude function f(x,y) = ||(x,y)||
+    d_args.pt_dim       = 3;
+    d_args.dom_dim      = 2;
     d_args.p[0]         = 1;
     d_args.p[1]         = 1;
-    d_args.p[2]         = 1;
-    d_args.p[3]         = 1;
-    d_args.ndom_pts[0]  = 40;
-    d_args.ndom_pts[1]  = 40;
-    d_args.ndom_pts[2]  = 40;
-    d_args.ndom_pts[3]  = 40;
-    d_args.nctrl_pts[0] = 20;
-    d_args.nctrl_pts[1] = 20;
-    d_args.nctrl_pts[2] = 20;
-    d_args.nctrl_pts[3] = 20;
+
+    // full size
+    // d_args.ndom_pts[0]  = 40;
+    // d_args.ndom_pts[1]  = 40;
+    // d_args.nctrl_pts[0] = 20;
+    // d_args.nctrl_pts[1] = 20;
+
+    // small size for debugging
+    d_args.ndom_pts[0]  = 10;
+    d_args.ndom_pts[1]  = 10;
+    d_args.nctrl_pts[0] = 3;
+    d_args.nctrl_pts[1] = 3;
+
     d_args.min[0]       = 0.0;
     d_args.min[1]       = 0.0;
-    d_args.min[2]       = 0.0;
-    d_args.min[3]       = 0.0;
-    d_args.min[4]       = 0.0;
     d_args.max[0]       = d_args.ndom_pts[0] - 1;
     d_args.max[1]       = d_args.ndom_pts[1] - 1;
-    d_args.max[2]       = d_args.ndom_pts[2] - 1;
-    d_args.max[3]       = d_args.ndom_pts[3] - 1;
     master.foreach(&Block::generate_magnitude_data, &d_args);
+
+    // 3d magnitude function f(x,y,z) = ||(x,y,z)||
+    // d_args.pt_dim       = 4;
+    // d_args.dom_dim      = 3;
+    // d_args.p[0]         = 1;
+    // d_args.p[1]         = 1;
+    // d_args.p[2]         = 1;
+    // d_args.ndom_pts[0]  = 40;
+    // d_args.ndom_pts[1]  = 40;
+    // d_args.ndom_pts[2]  = 40;
+    // d_args.nctrl_pts[0] = 20;
+    // d_args.nctrl_pts[1] = 20;
+    // d_args.nctrl_pts[2] = 20;
+    // d_args.min[0]       = 0.0;
+    // d_args.min[1]       = 0.0;
+    // d_args.min[2]       = 0.0;
+    // d_args.max[0]       = d_args.ndom_pts[0] - 1;
+    // d_args.max[1]       = d_args.ndom_pts[1] - 1;
+    // d_args.max[2]       = d_args.ndom_pts[2] - 1;
+    // master.foreach(&Block::generate_magnitude_data, &d_args);
+
+    // 4d magnitude function f(x,y,z,t) = ||(x,y,z,t)||
+    // d_args.pt_dim       = 5;
+    // d_args.dom_dim      = 4;
+    // d_args.p[0]         = 1;
+    // d_args.p[1]         = 1;
+    // d_args.p[2]         = 1;
+    // d_args.p[3]         = 1;
+    // d_args.ndom_pts[0]  = 40;
+    // d_args.ndom_pts[1]  = 40;
+    // d_args.ndom_pts[2]  = 40;
+    // d_args.ndom_pts[3]  = 40;
+    // d_args.nctrl_pts[0] = 20;
+    // d_args.nctrl_pts[1] = 20;
+    // d_args.nctrl_pts[2] = 20;
+    // d_args.nctrl_pts[3] = 20;
+    // d_args.min[0]       = 0.0;
+    // d_args.min[1]       = 0.0;
+    // d_args.min[2]       = 0.0;
+    // d_args.min[3]       = 0.0;
+    // d_args.max[0]       = d_args.ndom_pts[0] - 1;
+    // d_args.max[1]       = d_args.ndom_pts[1] - 1;
+    // d_args.max[2]       = d_args.ndom_pts[2] - 1;
+    // d_args.max[3]       = d_args.ndom_pts[3] - 1;
+    // master.foreach(&Block::generate_magnitude_data, &d_args);
 
     fprintf(stderr, "Encoding...\n");
 

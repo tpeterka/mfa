@@ -102,7 +102,7 @@ struct Block
             diy::load(bb, b->errs);
             diy::load(bb, b->max_err);
         }
-    // f(x,y,z) = 1
+    // f(x,y,z,...) = 1
     void generate_constant_data(const diy::Master::ProxyWithLink& cp, void* args)
         {
             DomainArgs* a = (DomainArgs*)args;
@@ -157,7 +157,7 @@ struct Block
                 domain_maxs(i) = a->max[i];
             }
         }
-    // f(x,y,z,t) = sqrt(x^2 + y^2 + z^2 + t^2)
+    // f(x,y,z,...) = sqrt(x^2 + y^2 + z^2 + ...^2)
     void generate_magnitude_data(const diy::Master::ProxyWithLink& cp, void* args)
         {
             DomainArgs* a = (DomainArgs*)args;
@@ -261,6 +261,7 @@ struct Block
         {
             cerr << ctrl_pts.rows() << " control points\n" << ctrl_pts << endl;
             cerr << knots.size() << " knots\n" << knots << endl;
+            // cerr << approx.rows() << " approximated points\n" << approx << endl;
             fprintf(stderr, "max_err = %e\n", max_err);
             fprintf(stderr, "# input points = %ld\n", domain.rows());
             fprintf(stderr, "# output ctrl pts = %ld # output knots = %ld\n",

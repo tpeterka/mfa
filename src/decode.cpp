@@ -213,7 +213,7 @@ void Decode(VectorXi& p,                   // polynomial degree
         approx.row(i) = cpt;
 
         // print progress
-        if (i > 0 && i % (domain.rows() / 100) == 0)
+        if (i > 0 && domain.rows() >= 100 && i % (domain.rows() / 100) == 0)
             fprintf(stderr, "\r%.0f %% decoded", (float)i / (float)(domain.rows()) * 100);
     }
     fprintf(stderr, "\r100 %% decoded\n");

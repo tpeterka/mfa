@@ -68,10 +68,12 @@ struct Block
         {
             Block* b = (Block*)b_;
 
+            diy::save(bb, b->ndom_pts);
             diy::save(bb, b->domain);
             diy::save(bb, b->domain_mins);
             diy::save(bb, b->domain_maxs);
             diy::save(bb, b->p);
+            diy::save(bb, b->nctrl_pts);
             diy::save(bb, b->ctrl_pts);
             diy::save(bb, b->knots);
             diy::save(bb, b->approx);
@@ -83,10 +85,12 @@ struct Block
         {
             Block* b = (Block*)b_;
 
+            diy::load(bb, b->ndom_pts);
             diy::load(bb, b->domain);
             diy::load(bb, b->domain_mins);
             diy::load(bb, b->domain_maxs);
             diy::load(bb, b->p);
+            diy::load(bb, b->nctrl_pts);
             diy::load(bb, b->ctrl_pts);
             diy::load(bb, b->knots);
             diy::load(bb, b->approx);
@@ -98,6 +102,8 @@ struct Block
             DomainArgs* a = (DomainArgs*)args;
             p = a->p;
             domain.resize(a->npts, domain_mins.size());
+            ndom_pts.resize(1);
+            ndom_pts(0) = domain.rows();
             float dx = (a->max_x - a->min_x) / (a->npts - 1);
 
             // the simplest constant function
@@ -119,6 +125,8 @@ struct Block
             DomainArgs* a = (DomainArgs*)args;
             p = a->p;
             domain.resize(a->npts, domain_mins.size());
+            ndom_pts.resize(1);
+            ndom_pts(0) = domain.rows();
             float dx = (a->max_x - a->min_x) / (a->npts - 1);
 
             // a circle function
@@ -141,6 +149,8 @@ struct Block
             DomainArgs* a = (DomainArgs*)args;
             p = a->p;
             domain.resize(a->npts, domain_mins.size());
+            ndom_pts.resize(1);
+            ndom_pts(0) = domain.rows();
             float dx = (a->max_x - a->min_x) / (a->npts - 1);
 
             // a sine function
@@ -163,6 +173,8 @@ struct Block
             DomainArgs* a = (DomainArgs*)args;
             p = a->p;
             domain.resize(a->npts, domain_mins.size());
+            ndom_pts.resize(1);
+            ndom_pts(0) = domain.rows();
             float dx = (a->max_x - a->min_x) / (a->npts - 1);
 
             // sine(x)/x function
@@ -190,6 +202,8 @@ struct Block
             p = a->p;
 
             domain.resize(2 * a->npts, domain_mins.size()); // double resolution
+            ndom_pts.resize(1);
+            ndom_pts(0) = domain.rows();
             vector<float> vel(3 * a->npts);
 
             // open hard-coded file name, seek to hard-coded start of desired section
@@ -243,11 +257,9 @@ struct Block
         {
             VectorXi ps(1);                  // p as a vector of one element
             ps(0) = p;
-            VectorXi nc(1);                  // ctrl_pts as a vector of one element
-            nc(0) = *(int*)args;
-            VectorXi nd(1);                  // number of domain points as a vector or one element
-            nd(0) = domain.rows();
-            Encode(ps, nd, nc, domain, ctrl_pts, knots);
+            nctrl_pts.resize(1);
+            nctrl_pts(0) = *(int*)args;
+            Encode(ps, ndom_pts, nctrl_pts, domain, ctrl_pts, knots);
         }
 
     void max_error(const diy::Master::ProxyWithLink& cp, void* args)
@@ -297,16 +309,18 @@ struct Block
             errs.resize(0);
         }
 
-    MatrixXf domain;                         // input data
-    VectorXf domain_mins;                    // local domain minimum corner
-    VectorXf domain_maxs;                    // local domain maximum corner
-    int      p;                              // degree
-    MatrixXf ctrl_pts;                       // NURBS control points
-    VectorXf knots;                          // NURBS knots
-    MatrixXf approx;                         // points on approximated curve
-                                             // (same number as input points, for rendering only)
-    VectorXf errs;                           // distance from each input point to curve
-    float    max_err;                        // maximum distance from input points to curve
+    VectorXi ndom_pts;                 // num domain pts in each dim, needed for nd renderer
+    MatrixXf domain;                   // input data
+    VectorXf domain_mins;              // local domain minimum corner
+    VectorXf domain_maxs;              // local domain maximum corner
+    int      p;                        // degree
+    VectorXi nctrl_pts;                // num control pts in each dim, needed for nd renderer
+    MatrixXf ctrl_pts;                 // NURBS control points
+    VectorXf knots;                    // NURBS knots
+    MatrixXf approx;                   // points on approximated curve
+                                       // (same number as input points, for rendering only)
+    VectorXf errs;                     // distance from each input point to curve
+    float    max_err;                  // maximum distance from input points to curve
 };
 
 namespace diy
@@ -342,6 +356,24 @@ namespace diy
             }
         static
         void load(diy::BinaryBuffer& bb, VectorXf& v)
+            {
+                Index size;
+                diy::load(bb, size);
+                v.resize(size);
+                diy::load(bb, v.data(), size);
+            }
+    };
+    template<>
+    struct Serialization<VectorXi>
+    {
+        static
+        void save(diy::BinaryBuffer& bb, const VectorXi& v)
+            {
+                diy::save(bb, v.size());
+                diy::save(bb, v.data(), v.size());
+            }
+        static
+        void load(diy::BinaryBuffer& bb, VectorXi& v)
             {
                 Index size;
                 diy::load(bb, size);

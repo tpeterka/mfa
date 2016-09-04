@@ -18,7 +18,7 @@
 #include <nan.h>
 
 #include "mfa/mfa.h"
-#include "../examples/simple/block.hpp"
+#include "../examples/nd/block.hpp"
 
 #include <diy/master.hpp>
 #include <diy/io/block.hpp>
@@ -31,7 +31,9 @@ struct vec3d {
 };
 
 // package rendering data
-void PrepRenderingData(vector<vec3d>& raw_pts,
+void PrepRenderingData(vector<int>&   nraw_pts,
+                       vector<vec3d>& raw_pts,
+                       vector<int>&   nctrl_pts,
                        vector<vec3d>& ctrl_pts,
                        vector<vec3d>& approx_pts,
                        vector<vec3d>& mins,
@@ -44,6 +46,10 @@ void PrepRenderingData(vector<vec3d>& raw_pts,
     for (int i = 0; i < nblocks; i++)          // blocks
     {
         vec3d p;
+
+        // number of raw points
+        for (size_t j = 0; j < master.block<Block>(i)->ndom_pts.size(); j++)
+            nraw_pts.push_back(master.block<Block>(i)->ndom_pts(j));
         // raw points
         for (size_t j = 0; j < master.block<Block>(i)->domain.rows(); j++)
         {
@@ -53,6 +59,9 @@ void PrepRenderingData(vector<vec3d>& raw_pts,
                 master.block<Block>(i)->domain(j, 2) : 0.0;
             raw_pts.push_back(p);
         }
+        // number of control points
+        for (size_t j = 0; j < master.block<Block>(i)->nctrl_pts.size(); j++)
+            nctrl_pts.push_back(master.block<Block>(i)->nctrl_pts(j));
         // control points
         for (size_t j = 0; j < master.block<Block>(i)->ctrl_pts.rows(); j++)
         {
@@ -93,7 +102,9 @@ NAN_METHOD(Main)
 
     float domain_min[3], domain_max[3];                     // global domain extents
     float range_min[3], range_max[3];                       // global range extents
+    vector<int>   nraw_pts;                                 // number of input points in each dim.
     vector<vec3d> raw_pts;                                  // input raw data points
+    vector<int>   nctrl_pts;                                // number of control pts in each dim.
     vector<vec3d> ctrl_pts;                                 // control points
     vector<vec3d> approx_pts;                               // aproximated data points
     vector<vec3d> mins;                                     // block mins
@@ -102,9 +113,10 @@ NAN_METHOD(Main)
     NanScope();
 
     // parse args
-    if (args.Length() < 5)                                  // do not count the command name
+    if (args.Length() < 7)                                  // do not count the command name
     {
-        fprintf(stderr, "Usage: draw(<filename>, <raw_pts>, <ctrl_pts>, <approx_pts>, <bbs>\n");
+        fprintf(stderr, "Usage: draw(<filename>, <nraw_pts> <raw_pts>, <nctrl_pts>, "
+                "<ctrl_pts>, <approx_pts>, <bbs>\n");
         NanReturnUndefined();
     }
 
@@ -126,7 +138,9 @@ NAN_METHOD(Main)
     fprintf(stderr, "%d blocks read from file %s\n", nblocks, infile.c_str());
 
     // package rendering data
-    PrepRenderingData(raw_pts,
+    PrepRenderingData(nraw_pts,
+                      raw_pts,
+                      nctrl_pts,
                       ctrl_pts,
                       approx_pts,
                       mins,
@@ -135,17 +149,23 @@ NAN_METHOD(Main)
                       master);
 
     // copy rendering data to output javascript arrays
-    Handle<Array> js_raw_pts        = Handle<Array>::Cast(args[1]);
-    Handle<Array> js_ctrl_pts       = Handle<Array>::Cast(args[2]);
-    Handle<Array> js_approx_pts     = Handle<Array>::Cast(args[3]);
-    Handle<Array> js_bbs            = Handle<Array>::Cast(args[4]);
+    Handle<Array> js_nraw_pts       = Handle<Array>::Cast(args[1]);
+    Handle<Array> js_raw_pts        = Handle<Array>::Cast(args[2]);
+    Handle<Array> js_nctrl_pts      = Handle<Array>::Cast(args[3]);
+    Handle<Array> js_ctrl_pts       = Handle<Array>::Cast(args[4]);
+    Handle<Array> js_approx_pts     = Handle<Array>::Cast(args[5]);
+    Handle<Array> js_bbs            = Handle<Array>::Cast(args[6]);
 
+    for (size_t i = 0; i < nraw_pts.size(); i++)
+        js_nraw_pts->Set(i, NanNew(nraw_pts[i]));
     for (size_t i = 0; i < raw_pts.size(); i++)
     {
         js_raw_pts->Set(i * 3    , NanNew(raw_pts[i].x));
         js_raw_pts->Set(i * 3 + 1, NanNew(raw_pts[i].y));
         js_raw_pts->Set(i * 3 + 2, NanNew(raw_pts[i].z));
     }
+    for (size_t i = 0; i < nctrl_pts.size(); i++)
+        js_nctrl_pts->Set(i, NanNew(nctrl_pts[i]));
     for (size_t i = 0; i < ctrl_pts.size(); i++)
     {
         js_ctrl_pts->Set(i * 3    , NanNew(ctrl_pts[i].x));

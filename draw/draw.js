@@ -121,22 +121,64 @@ function create_bb_geometry()
 //
 function create_raw_geometry()
 {
-    // create points
-    points = new THREE.Geometry();
-    for (i = 0; i < raw_pts.length / 3; i++)
+    // 1-d path
+    if (nraw_pts.length < 2)
+        nraw_pts[1] = 1;
+
+    // x-direction curves
+    n = 0;                                   // index into points
+    for (j = 0; j < nraw_pts[1]; j++)
     {
-        point = new THREE.Vector3(raw_pts[3 * i], raw_pts[3 * i + 1], raw_pts[3 * i + 2]);
-        points.vertices.push(point);
+        // create points
+        points = new THREE.Geometry();
+        for (i = 0; i < nraw_pts[0]; i++)
+        {
+            point = new THREE.Vector3(raw_pts[3 * n],
+                                      raw_pts[3 * n + 1],
+                                      raw_pts[3 * n + 2]);
+            points.vertices.push(point);
+            n++;
+        }
+
+        // create the lines and add to the scene
+        curve_material = new THREE.LineBasicMaterial({ color: 'white', linewidth: 2 });
+        lines = new THREE.Line(points, curve_material)
+        curve = new THREE.Object3D();
+        curve.add(lines)
+        curve.material = curve_material;
+        curve.name = 'raw_curve';
+        scene.add(curve);
     }
 
-    // create the lines and add to the scene
-    var curve_material = new THREE.LineBasicMaterial({ color: 'white', linewidth: 2 });
-    lines = new THREE.Line(points, curve_material)
-    curve = new THREE.Object3D();
-    curve.add(lines)
-    curve.material = curve_material;
-    curve.name = 'raw_curve';
-    scene.add(curve);
+    // y-direction curves
+    if (nraw_pts.length >= 2)
+    {
+        no = 0;                              // starting offset of curve point
+        for (j = 0; j < nraw_pts[0]; j++)
+        {
+            // create points
+            points = new THREE.Geometry();
+            n = no;
+            for (i = 0; i < nraw_pts[1]; i++)
+            {
+                point = new THREE.Vector3(raw_pts[3 * n    ],
+                                          raw_pts[3 * n + 1],
+                                          raw_pts[3 * n + 2]);
+                points.vertices.push(point);
+                n = n + nraw_pts[0];
+            }
+            no++;
+
+            // create the lines and add to the scene
+            curve_material = new THREE.LineBasicMaterial({ color: 'white', linewidth: 2 });
+            lines = new THREE.Line(points, curve_material)
+            curve = new THREE.Object3D();
+            curve.add(lines)
+            curve.material = curve_material;
+            curve.name = 'raw_curve';
+            scene.add(curve);
+        }
+    }
 }
 
 //
@@ -149,35 +191,84 @@ function create_ctrl_geometry()
         size: sph_rad
     });
 
-    // create the individual points
-    points = new THREE.Geometry();
-    for (i = 0; i < ctrl_pts.length / 3; i++)
-    {
-        point = new THREE.Vector3(ctrl_pts[3 * i], ctrl_pts[3 * i + 1], ctrl_pts[3 * i + 2]);
-        points.vertices.push(point);
-    }
 
-    // create the particle system and add to the scene
+    // 1-d path
+    if (nctrl_pts.length < 2)
+        nctrl_pts[1] = 1;
+
+    // point cloud
+    n = 0;                                   // index into points
+    for (j = 0; j < nctrl_pts[1]; j++)
+    {
+        // create points
+        points = new THREE.Geometry();
+        for (i = 0; i < nctrl_pts[0]; i++)
+        {
+            point = new THREE.Vector3(ctrl_pts[3 * n],
+                                      ctrl_pts[3 * n + 1],
+                                      ctrl_pts[3 * n + 2]);
+            points.vertices.push(point);
+            n++;
+        }
+    }
     pointSet = new THREE.PointCloud(points, point_material);
     pointSet.name = 'ctrl_pts';
     scene.add(pointSet);
 
-    // recreate the individual points (I have not found a way to use the same geometry twice)
-    points = new THREE.Geometry();
-    for (i = 0; i < ctrl_pts.length / 3; i++)
+    // x-direction curves
+    n = 0;                                   // index into points
+    for (j = 0; j < nctrl_pts[1]; j++)
     {
-        point = new THREE.Vector3(ctrl_pts[3 * i], ctrl_pts[3 * i + 1], ctrl_pts[3 * i + 2]);
-        points.vertices.push(point);
+        // create points
+        points = new THREE.Geometry();
+        for (i = 0; i < nctrl_pts[0]; i++)
+        {
+            point = new THREE.Vector3(ctrl_pts[3 * n],
+                                      ctrl_pts[3 * n + 1],
+                                      ctrl_pts[3 * n + 2]);
+            points.vertices.push(point);
+            n++;
+        }
+
+        // create the lines and add to the scene
+        curve_material = new THREE.LineBasicMaterial({ color: 'yellow', linewidth: 2 });
+        lines = new THREE.Line(points, curve_material)
+        curve = new THREE.Object3D();
+        curve.add(lines)
+        curve.material = curve_material;
+        curve.name = 'ctrl_curve';
+        scene.add(curve);
     }
 
-    // create the lines and add to the scene
-    var curve_material = new THREE.LineBasicMaterial({ color: 'yellow', linewidth: 2 });
-    lines = new THREE.Line(points, curve_material);
-    curve = new THREE.Object3D();
-    curve.add(lines)
-    curve.material = curve_material;
-    curve.name = 'ctrl_curve';
-    scene.add(curve);
+    // y-direction curves
+    if (nctrl_pts.length >= 2)
+    {
+        no = 0;                              // starting offset of curve point
+        for (j = 0; j < nctrl_pts[0]; j++)
+        {
+            // create points
+            points = new THREE.Geometry();
+            n = no;
+            for (i = 0; i < nctrl_pts[1]; i++)
+            {
+                point = new THREE.Vector3(ctrl_pts[3 * n    ],
+                                          ctrl_pts[3 * n + 1],
+                                          ctrl_pts[3 * n + 2]);
+                points.vertices.push(point);
+                n = n + nctrl_pts[0];
+            }
+            no++;
+
+            // create the lines and add to the scene
+            curve_material = new THREE.LineBasicMaterial({ color: 'yellow', linewidth: 2 });
+            lines = new THREE.Line(points, curve_material)
+            curve = new THREE.Object3D();
+            curve.add(lines)
+            curve.material = curve_material;
+            curve.name = 'ctrl_curve';
+            scene.add(curve);
+        }
+    }
 }
 
 //
@@ -185,22 +276,64 @@ function create_ctrl_geometry()
 //
 function create_approx_geometry()
 {
-    // create points
-    points = new THREE.Geometry();
-    for (i = 0; i < approx_pts.length / 3; i++)
+    // 1-d path
+    if (nraw_pts.length < 2)
+        nraw_pts[1] = 1;
+
+    // x-direction curves
+    n = 0;                                   // index into points
+    for (j = 0; j < nraw_pts[1]; j++)
     {
-        point = new THREE.Vector3(approx_pts[3 * i], approx_pts[3 * i + 1], approx_pts[3 * i + 2]);
-        points.vertices.push(point);
+        // create points
+        points = new THREE.Geometry();
+        for (i = 0; i < nraw_pts[0]; i++)
+        {
+            point = new THREE.Vector3(approx_pts[3 * n],
+                                      approx_pts[3 * n + 1],
+                                      approx_pts[3 * n + 2]);
+            points.vertices.push(point);
+            n++;
+        }
+
+        // create the lines and add to the scene
+        curve_material = new THREE.LineBasicMaterial({ color: 'cyan', linewidth: 2 });
+        lines = new THREE.Line(points, curve_material)
+        curve = new THREE.Object3D();
+        curve.add(lines)
+        curve.material = curve_material;
+        curve.name = 'approx_curve';
+        scene.add(curve);
     }
 
-    // create the lines and add to the scene
-    var curve_material = new THREE.LineBasicMaterial({ color: 'cyan', linewidth: 2 });
-    lines = new THREE.Line(points, curve_material);
-    curve = new THREE.Object3D();
-    curve.add(lines)
-    curve.material = curve_material;
-    curve.name = 'approx_curve';
-    scene.add(curve);
+    // y-direction curves
+    if (nraw_pts.length >= 2)
+    {
+        no = 0;                              // starting offset of curve point
+        for (j = 0; j < nraw_pts[0]; j++)
+        {
+            // create points
+            points = new THREE.Geometry();
+            n = no;
+            for (i = 0; i < nraw_pts[1]; i++)
+            {
+                point = new THREE.Vector3(approx_pts[3 * n    ],
+                                          approx_pts[3 * n + 1],
+                                          approx_pts[3 * n + 2]);
+                points.vertices.push(point);
+                n = n + nraw_pts[0];
+            }
+            no++;
+
+            // create the lines and add to the scene
+            curve_material = new THREE.LineBasicMaterial({ color: 'cyan', linewidth: 2 });
+            lines = new THREE.Line(points, curve_material)
+            curve = new THREE.Object3D();
+            curve.add(lines)
+            curve.material = curve_material;
+            curve.name = 'approx_curve';
+            scene.add(curve);
+        }
+    }
 }
 
 //

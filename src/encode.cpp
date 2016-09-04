@@ -510,8 +510,8 @@ void CopyCtrl(MatrixXf& P,          // solved points for current dimension and c
             temp_ctrl0.row(to + i * cs) = P.row(i - 1);
         }
         // debug
-        // fprintf(stderr, "t[%ld] = d[%ld]\n", to + n(k) * cs, co + nctrl_pts * cs);
-        temp_ctrl0.row(to + n(k) * cs) = temp_ctrl1.row(co + nctrl_pts * cs);
+        // fprintf(stderr, "t[%ld] = d[%ld]\n", to + n(k) * cs, co + (ndom_pts(k) - 1) * cs);
+        temp_ctrl0.row(to + n(k) * cs) = temp_ctrl1.row(co + (ndom_pts(k) - 1) * cs);
     }
     // odd numbered dims (but not the last one) copied from temp_ctrl0 to temp_ctrl1
     else if (k % 2 == 1 && k < ndims - 1)
@@ -526,8 +526,8 @@ void CopyCtrl(MatrixXf& P,          // solved points for current dimension and c
             temp_ctrl1.row(to + i * cs) = P.row(i - 1);
         }
         // debug
-        // fprintf(stderr, "t[%ld] = d[%ld]\n", to + n(k) * cs, co + nctrl_pts * cs);
-        temp_ctrl1.row(to + n(k) * cs) = temp_ctrl0.row(co + nctrl_pts * cs);
+        // fprintf(stderr, "t[%ld] = d[%ld]\n", to + n(k) * cs, co + (ndom_pts(k) - 1) * cs);
+        temp_ctrl1.row(to + n(k) * cs) = temp_ctrl0.row(co + (ndom_pts(k) - 1) * cs);
     }
     // final dim if even is copied from temp_ctrl1 to ctrl_pts
     else if (k == ndims - 1 && k % 2 == 0)
@@ -542,14 +542,14 @@ void CopyCtrl(MatrixXf& P,          // solved points for current dimension and c
             ctrl_pts.row(to + i * cs) = P.row(i - 1);
         }
         // debug
-        // fprintf(stderr, "t[%ld] = d[%ld]\n", to + n(k) * cs, co + nctrl_pts * cs);
-        ctrl_pts.row(to + n(k) * cs) = temp_ctrl1.row(co + nctrl_pts * cs);
+        // fprintf(stderr, "t[%ld] = d[%ld]\n", to + n(k) * cs, co + (ndom_pts(k) - 1) * cs);
+        ctrl_pts.row(to + n(k) * cs) = temp_ctrl1.row(co + (ndom_pts(k) - 1) * cs);
     }
     // final dim if odd is copied from temp_ctrl0 to ctrl_pts
     else if (k == ndims - 1 && k % 2 == 1)
     {
         // debug
-        // fprintf(stderr, "t[%ld] = d[%ld]\n", to, co);
+        // fprintf(stderr, "t_start[%ld] = d[%ld]\n", to, co);
         ctrl_pts.row(to) = temp_ctrl0.row(co);
         for (int i = 1; i < n(k); i++)
         {
@@ -558,8 +558,8 @@ void CopyCtrl(MatrixXf& P,          // solved points for current dimension and c
             ctrl_pts.row(to + i * cs) = P.row(i - 1);
         }
         // debug
-        // fprintf(stderr, "t[%ld] = d[%ld]\n", to + n(k) * cs, co + nctrl_pts * cs);
-        ctrl_pts.row(to + n(k) * cs) = temp_ctrl0.row(co + nctrl_pts * cs);
+        // fprintf(stderr, "t_end[%ld] = d[%ld]\n", to + n(k) * cs, co + (ndom_pts(k) - 1) * cs);
+        ctrl_pts.row(to + n(k) * cs) = temp_ctrl0.row(co + (ndom_pts(k) - 1) * cs);
     }
 }
 
@@ -590,8 +590,7 @@ void CtrlCurve(VectorXi& p,          // polynomial degree in each dimension
     // even dim reads temp_ctrl1, odd dim reads temp_ctrl0; opposite of writing order
     // because what was written in the previous dimension is read in the current one
     if (k == 0)
-        Residual(
-            p(k), domain, knots, params, N, R, ko, po, co, cs);
+        Residual(p(k), domain, knots, params, N, R, ko, po, co, cs);
     else if (k % 2)
         Residual(p(k), temp_ctrl0, knots, params, N, R, ko, po, co, cs);
     else
@@ -603,6 +602,20 @@ void CtrlCurve(VectorXi& p,          // polynomial degree in each dimension
     // append points from P to control points
     // TODO: any way to avoid this?
     CopyCtrl(P, domain, ndom_pts, n, k, co, cs, to, temp_ctrl0, temp_ctrl1, ctrl_pts);
+
+    // debug
+    // int ndims = ndom_pts.size();
+    // cerr << "k " << k << " P:\n" << P << endl;
+    // if (ndims == 1)
+    //     cerr << "ctrl_pts:\n" << ctrl_pts << endl;
+    // else if (k == 0)
+    //     cerr << "temp_ctrl0:\n" << temp_ctrl0 << endl;
+    // else if (k % 2 == 0 && k < ndims - 1)
+    //     cerr << "temp_ctrl0:\n" << temp_ctrl0 << endl;
+    // else if (k % 2 == 1 && k < ndims - 1)
+    //     cerr << "temp_ctrl1:\n" << temp_ctrl1 << endl;
+    // else if (k == ndims - 1)
+    //     cerr << "ctrl_pts:\n" << ctrl_pts << endl;
 }
 
 // approximate a NURBS hypervolume of arbitrary dimension for a given input data set
