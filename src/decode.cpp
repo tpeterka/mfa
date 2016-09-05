@@ -48,8 +48,9 @@ void VolPt(VectorXi& p,                  // polynomial degree in each dimension
     vector<int>       iter(p.size());        // iteration number in each dim.
     int               tot_iters = 1;         // tot. num. iterations in flattened n-d nested loops
     vector<size_t>    ko(p.size(), 0);       // starting offset for knots in current dim
-    vector<size_t>    co(p.size(), 0);       // starting offset for control points in current dim
-    vector<size_t>    cs(p.size(), 1);       // stride for next co in each dim
+    vector<size_t>    co(p.size());          // starting offset for control points in each dim
+    vector<size_t>    ct(p.size());          // relative coordinates of ctrl pt of current iteration
+    vector<size_t>    cs(p.size());          // stride for next co in each dim
     VectorXf          ctrl_pt(ctrl_pts.cols()); // one control point
 
     for (size_t i = 0; i < p.size(); i++)    // for all dims
@@ -58,21 +59,62 @@ void VolPt(VectorXi& p,                  // polynomial degree in each dimension
         iter[i]    = 0;
         tot_iters  *= (p(i) + 1);
         n[i]       = (int)nctrl_pts(i) - 1;
-        cs[i]      *= nctrl_pts(i);
         span[i]    = FindSpan(p(i), n[i], knots, param(i), ko[i]);
         N[i]       = MatrixXf::Zero(1, n[i] + 1);
         BasisFuns(p(i), knots, param(i), span[i], N[i], 0, n[i], 0, ko[i]);
-        if (i < p.size() - 1)
+        if (i == 0)
         {
-            ko[i + 1] = ko[i] + n[i] + p(i) + 2; // n[i]+p(i)+2 =  number of knots in current dim.
-            co[i + 1] = cs[i];
+            cs[i] = 1;
+            // DEPRECATED
+            // co[i] = span[i] - p(i) - ko[i];
         }
+        else
+        {
+            cs[i] = cs[i - 1] * nctrl_pts(i);
+            // DEPRECATED
+            // co[i] = (span[i] - p(i) - ko[i]) * cs[i];
+        }
+        co[i] = span[i] - p(i) - ko[i];
+        if (i < p.size() - 1)
+            ko[i + 1] = ko[i] + n[i] + p(i) + 2; // n[i]+p(i)+2 =  number of knots in current dim.
+
+        // debug
+        // fprintf(stderr, "i=%d co[i]=%d span[i]=%d p(i)=%d ko[i]=%d cs[i]=%d\n",
+        //         i, co[i], span[i], p(i), ko[i], cs[i]);
     }
+
+    // DEPRECATED
+    // int co_cur = co[0];                      // control points starting offset in current dim
 
     for (int i = 0; i < tot_iters; i++)      // 1-d flattening all n-d nested loop computations
     {
+        // compute coordinates of first control point of curve corresponding to this iteration
+        // these are relative to start of the box of control points located at co
+        int div = tot_iters;
+        int i_temp = i;
+        for (int j = p.size() - 1; j >= 0; j--)
+        {
+            div    /= (p(j) + 1);
+            ct[j]  = i_temp / div;
+            i_temp -= (ct[j] * div);
+        }
+        // debug
+        // fprintf(stderr, "co=[%d %d %d]\n", co[0], co[1], co[2]);
+
+        // control point linear order index
+        int ctrl_idx = 0;
+        int fac = 1;
+        for (int j = 0; j < p.size(); j++)
+        {
+            ctrl_idx += (co[j] + ct[j]) * fac;
+            fac *= nctrl_pts(j);
+        }
+
+        // debug
+        // fprintf(stderr, "ctrl_pts.row(%d)\n", ctrl_idx);
+
         // always compute the point in the first dimension
-        ctrl_pt = ctrl_pts.row(co[0] + span[0] - p(0) + iter[0]);
+        ctrl_pt = ctrl_pts.row(ctrl_idx);
         temp[0] += (N[0])(0, iter[0] + span[0] - p(0)) * ctrl_pt;
         iter[0]++;
 
@@ -88,7 +130,21 @@ void VolPt(VectorXi& p,                  // polynomial degree in each dimension
                 // reset the computation for the current dimension
                 temp[k]    = VectorXf::Zero(ctrl_pts.cols());
                 iter[k]    = 0;
-                co[k]      += cs[k];
+
+                // DEPRECATED
+                // if (iter[k + 1] == 0)
+                // {
+                //     co_cur = co[k] + cs[k + 1];
+                //     // fprintf(stderr, "a: k=%d co_cur=%d co[k]=%d cs[k+1]=%d\n",
+                //     //         k, co_cur, co[k], cs[k + 1]);
+                // }
+                // else
+                // {
+                //     co_cur += cs[k + 1];
+                // // fprintf(stderr, "b: k=%d co_cur=%d cs[k+1]=%d\n",
+                // //         k, co_cur, cs[k + 1]);
+                // }
+
                 iter[k + 1]++;
             }
         }
