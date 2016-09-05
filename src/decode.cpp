@@ -63,17 +63,9 @@ void VolPt(VectorXi& p,                  // polynomial degree in each dimension
         N[i]       = MatrixXf::Zero(1, n[i] + 1);
         BasisFuns(p(i), knots, param(i), span[i], N[i], 0, n[i], 0, ko[i]);
         if (i == 0)
-        {
             cs[i] = 1;
-            // DEPRECATED
-            // co[i] = span[i] - p(i) - ko[i];
-        }
         else
-        {
             cs[i] = cs[i - 1] * nctrl_pts(i);
-            // DEPRECATED
-            // co[i] = (span[i] - p(i) - ko[i]) * cs[i];
-        }
         co[i] = span[i] - p(i) - ko[i];
         if (i < p.size() - 1)
             ko[i + 1] = ko[i] + n[i] + p(i) + 2; // n[i]+p(i)+2 =  number of knots in current dim.
@@ -82,9 +74,6 @@ void VolPt(VectorXi& p,                  // polynomial degree in each dimension
         // fprintf(stderr, "i=%d co[i]=%d span[i]=%d p(i)=%d ko[i]=%d cs[i]=%d\n",
         //         i, co[i], span[i], p(i), ko[i], cs[i]);
     }
-
-    // DEPRECATED
-    // int co_cur = co[0];                      // control points starting offset in current dim
 
     for (int i = 0; i < tot_iters; i++)      // 1-d flattening all n-d nested loop computations
     {
@@ -130,21 +119,6 @@ void VolPt(VectorXi& p,                  // polynomial degree in each dimension
                 // reset the computation for the current dimension
                 temp[k]    = VectorXf::Zero(ctrl_pts.cols());
                 iter[k]    = 0;
-
-                // DEPRECATED
-                // if (iter[k + 1] == 0)
-                // {
-                //     co_cur = co[k] + cs[k + 1];
-                //     // fprintf(stderr, "a: k=%d co_cur=%d co[k]=%d cs[k+1]=%d\n",
-                //     //         k, co_cur, co[k], cs[k + 1]);
-                // }
-                // else
-                // {
-                //     co_cur += cs[k + 1];
-                // // fprintf(stderr, "b: k=%d co_cur=%d cs[k+1]=%d\n",
-                // //         k, co_cur, cs[k + 1]);
-                // }
-
                 iter[k + 1]++;
             }
         }
