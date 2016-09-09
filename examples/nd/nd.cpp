@@ -115,10 +115,16 @@ int main(int argc, char** argv)
     d_args.dom_dim      = 2;
     d_args.p[0]         = 1;
     d_args.p[1]         = 1;
-    d_args.ndom_pts[0]  = 40;
-    d_args.ndom_pts[1]  = 40;
-    d_args.nctrl_pts[0] = 10;
-    d_args.nctrl_pts[1] = 10;
+    // d_args.ndom_pts[0]  = 40;
+    // d_args.ndom_pts[1]  = 40;
+    // d_args.nctrl_pts[0] = 10;
+    // d_args.nctrl_pts[1] = 10;
+
+    d_args.ndom_pts[0]  = 10;
+    d_args.ndom_pts[1]  = 10;
+    d_args.nctrl_pts[0] = 4;
+    d_args.nctrl_pts[1] = 4;
+
     d_args.min[0]       = 0.0;
     d_args.min[1]       = 0.0;
     d_args.max[0]       = d_args.ndom_pts[0] - 1;
