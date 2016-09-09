@@ -412,19 +412,20 @@ void Quants(VectorXi& p,                // polynomial degree in each dimension
 {
     if (p.size() != ndom_pts.size())
     {
-        fprintf(stderr, "Error: Approx() size of p must equal size of ndom_pts\n");
+        fprintf(stderr, "Error: Encode() size of p must equal size of ndom_pts\n");
         exit(1);
     }
     for (size_t i = 0; i < p.size(); i++)
     {
         if (nctrl_pts(i) <= p(i))
         {
-            fprintf(stderr, "Error: Approx() number of control points must be at least p + 1\n");
+            fprintf(stderr, "Error: Encode() number of control points in dimension %ld"
+                    "must be at least p + 1 for dimension %ld\n", i, i);
             exit(1);
         }
         if (nctrl_pts(i) > ndom_pts(i))
         {
-            fprintf(stderr, "Error: Approx() number of control points in dimension %ld "
+            fprintf(stderr, "Error: Encode() number of control points in dimension %ld "
                     "cannot be greater than number of input data points in dimension %ld\n", i, i);
             exit(1);
         }

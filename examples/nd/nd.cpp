@@ -57,6 +57,26 @@ int main(int argc, char** argv)
 
     DomainArgs d_args;
 
+    // 1d sinc function
+    // d_args.pt_dim       = 2;
+    // d_args.dom_dim      = 1;
+    // d_args.p[0]         = 3;
+    // d_args.ndom_pts[0]  = 1000;
+    // d_args.nctrl_pts[0] = 70;
+    // d_args.min[0]       = -4.0 * M_PI;
+    // d_args.max[0]       = 4.0 * M_PI;
+    // d_args.min[1]       = -10.0;
+    // d_args.max[1]       = 10.0;
+    // master.foreach(&Block::generate_sinc_data, &d_args);
+
+    // 1d read file
+    // d_args.pt_dim       = 2;
+    // d_args.dom_dim      = 1;
+    // d_args.p[0]         = 3;
+    // d_args.ndom_pts[0]  = 704;
+    // d_args.nctrl_pts[0] = 140;
+    // master.foreach(&Block::read_file_data, &d_args);
+
     // 3d constant function f(x,y,z) = 1
     // d_args.pt_dim       = 4;
     // d_args.dom_dim      = 3;
@@ -85,66 +105,46 @@ int main(int argc, char** argv)
     // d_args.dom_dim      = 1;
     // d_args.p[0]         = 1;
     // d_args.ndom_pts[0]  = 40;
-    // d_args.nctrl_pts[0] = 20;
+    // d_args.nctrl_pts[0] = 10;
     // d_args.min[0]       = 0.0;
     // d_args.max[0]       = d_args.ndom_pts[0] - 1;
     // master.foreach(&Block::generate_magnitude_data, &d_args);
-#if 0
+
     // 2d magnitude function f(x,y) = ||(x,y)||
     d_args.pt_dim       = 3;
     d_args.dom_dim      = 2;
     d_args.p[0]         = 1;
     d_args.p[1]         = 1;
-
-    // full size
-    // d_args.ndom_pts[0]  = 40;
-    // d_args.ndom_pts[1]  = 40;
-    // d_args.nctrl_pts[0] = 20;
-    // d_args.nctrl_pts[1] = 20;
-
-    // small size for debugging
-    d_args.ndom_pts[0]  = 5;
-    d_args.ndom_pts[1]  = 5;
-    d_args.nctrl_pts[0] = 3;
-    d_args.nctrl_pts[1] = 3;
-
+    d_args.ndom_pts[0]  = 40;
+    d_args.ndom_pts[1]  = 40;
+    d_args.nctrl_pts[0] = 10;
+    d_args.nctrl_pts[1] = 10;
     d_args.min[0]       = 0.0;
     d_args.min[1]       = 0.0;
     d_args.max[0]       = d_args.ndom_pts[0] - 1;
     d_args.max[1]       = d_args.ndom_pts[1] - 1;
     master.foreach(&Block::generate_magnitude_data, &d_args);
-#else
-    // 3d magnitude function f(x,y,z) = ||(x,y,z)||
-    d_args.pt_dim       = 4;
-    d_args.dom_dim      = 3;
-    d_args.p[0]         = 1;
-    d_args.p[1]         = 1;
-    d_args.p[2]         = 1;
 
-    // full size
+    // 3d magnitude function f(x,y,z) = ||(x,y,z)||
+    // d_args.pt_dim       = 4;
+    // d_args.dom_dim      = 3;
+    // d_args.p[0]         = 1;
+    // d_args.p[1]         = 1;
+    // d_args.p[2]         = 1;
     // d_args.ndom_pts[0]  = 40;
     // d_args.ndom_pts[1]  = 40;
     // d_args.ndom_pts[2]  = 40;
-    // d_args.nctrl_pts[0] = 20;
-    // d_args.nctrl_pts[1] = 20;
-    // d_args.nctrl_pts[2] = 20;
+    // d_args.nctrl_pts[0] = 10;
+    // d_args.nctrl_pts[1] = 10;
+    // d_args.nctrl_pts[2] = 10;
+    // d_args.min[0]       = 0.0;
+    // d_args.min[1]       = 0.0;
+    // d_args.min[2]       = 0.0;
+    // d_args.max[0]       = d_args.ndom_pts[0] - 1;
+    // d_args.max[1]       = d_args.ndom_pts[1] - 1;
+    // d_args.max[2]       = d_args.ndom_pts[2] - 1;
+    // master.foreach(&Block::generate_magnitude_data, &d_args);
 
-    // small size for debugging
-    d_args.ndom_pts[0]  = 5;
-    d_args.ndom_pts[1]  = 5;
-    d_args.ndom_pts[2]  = 5;
-    d_args.nctrl_pts[0] = 3;
-    d_args.nctrl_pts[1] = 3;
-    d_args.nctrl_pts[2] = 3;
-
-    d_args.min[0]       = 0.0;
-    d_args.min[1]       = 0.0;
-    d_args.min[2]       = 0.0;
-    d_args.max[0]       = d_args.ndom_pts[0] - 1;
-    d_args.max[1]       = d_args.ndom_pts[1] - 1;
-    d_args.max[2]       = d_args.ndom_pts[2] - 1;
-    master.foreach(&Block::generate_magnitude_data, &d_args);
-#endif
     // 4d magnitude function f(x,y,z,t) = ||(x,y,z,t)||
     // d_args.pt_dim       = 5;
     // d_args.dom_dim      = 4;
@@ -156,10 +156,10 @@ int main(int argc, char** argv)
     // d_args.ndom_pts[1]  = 40;
     // d_args.ndom_pts[2]  = 40;
     // d_args.ndom_pts[3]  = 40;
-    // d_args.nctrl_pts[0] = 20;
-    // d_args.nctrl_pts[1] = 20;
-    // d_args.nctrl_pts[2] = 20;
-    // d_args.nctrl_pts[3] = 20;
+    // d_args.nctrl_pts[0] = 10;
+    // d_args.nctrl_pts[1] = 10;
+    // d_args.nctrl_pts[2] = 10;
+    // d_args.nctrl_pts[3] = 10;
     // d_args.min[0]       = 0.0;
     // d_args.min[1]       = 0.0;
     // d_args.min[2]       = 0.0;
@@ -178,7 +178,17 @@ int main(int argc, char** argv)
     fprintf(stderr, "Encoding done. Decoding and computing max. error...\n");
 
     // compute max error
+#if 0
+    // for 1d curves only
+    ErrArgs e_args;
+    e_args.max_niter  = 10;                  // max number of search iterations
+    e_args.err_bound  = 0.001;               // desrired error bound
+    e_args.search_rad = 4;                   // search range is +/- this many input parameters
+    master.foreach(&Block::max_error_1d, &e_args);
+#else
+    // for nd magnitude function only
     master.foreach(&Block::mag_max_error);
+#endif
 
     // print results
     master.foreach(&Block::print_block);

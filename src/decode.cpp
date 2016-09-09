@@ -35,7 +35,7 @@ void VolPt(VectorXi& p,                  // polynomial degree in each dimension
            VectorXf& out_pt)             // (output) point
 {
     // debug
-    // cerr << "param:\n" << param << endl;
+    // cerr << "\n\nparam:\n" << param << endl;
 
     // check dimensionality for sanity
     assert(p.size() <= ctrl_pts.cols());
@@ -71,6 +71,7 @@ void VolPt(VectorXi& p,                  // polynomial degree in each dimension
             ko[i + 1] = ko[i] + n[i] + p(i) + 2; // n[i]+p(i)+2 =  number of knots in current dim.
 
         // debug
+        // cerr << "N[" << i << "] = " << N[i] << endl;
         // fprintf(stderr, "i=%d co[i]=%d span[i]=%d p(i)=%d ko[i]=%d cs[i]=%d\n",
         //         i, co[i], span[i], p(i), ko[i], cs[i]);
     }
@@ -87,8 +88,6 @@ void VolPt(VectorXi& p,                  // polynomial degree in each dimension
             ct[j]  = i_temp / div;
             i_temp -= (ct[j] * div);
         }
-        // debug
-        // fprintf(stderr, "co=[%d %d %d]\n", co[0], co[1], co[2]);
 
         // control point linear order index
         int ctrl_idx = 0;
@@ -99,12 +98,14 @@ void VolPt(VectorXi& p,                  // polynomial degree in each dimension
             fac *= nctrl_pts(j);
         }
 
-        // debug
-        // fprintf(stderr, "ctrl_pts.row(%d)\n", ctrl_idx);
-
         // always compute the point in the first dimension
         ctrl_pt = ctrl_pts.row(ctrl_idx);
         temp[0] += (N[0])(0, iter[0] + span[0] - p(0)) * ctrl_pt;
+
+        // debug
+        // fprintf(stderr, "1: temp[0] += N[0, %d] * ctrl_pt\n", iter[0] + span[0] - p(0));
+        // cerr << "ctrl_pt=\n" << ctrl_pt << endl;
+        // cerr << "1: i=" << i << " iter[0]=" << iter[0] << " temp[0]=\n" << temp[0] << endl;
         iter[0]++;
 
         // for all dimensions except last, check if span is finished
@@ -113,8 +114,15 @@ void VolPt(VectorXi& p,                  // polynomial degree in each dimension
             if (iter[k] - 1 == p(k))
             {
                 // compute point in next higher dimension
-                temp[k + 1] += N[k + 1](0, iter[k + 1] + span[k + 1] - ko[k + 1] - p(k + 1)) *
+                temp[k + 1] += (N[k + 1])(0, iter[k + 1] + span[k + 1] - ko[k + 1] - p(k + 1)) *
                     temp[k];
+
+                // debug
+                // fprintf(stderr, "2: temp[%d] += N[%d, %d] * temp[%d]\n",
+                //         k + 1, k + 1, iter[k + 1] + span[k + 1] - ko[k + 1] - p(k + 1), k);
+                // fprintf(stderr, "3: temp[%d] = 0\n", k);
+                // cerr << "2: i=" << i << " k=" << k << " iter[k+1]=" << iter[k+1] <<
+                //     " temp[k+1]=\n" << temp[k+1] << endl;
 
                 // reset the computation for the current dimension
                 temp[k]    = VectorXf::Zero(ctrl_pts.cols());
@@ -127,6 +135,7 @@ void VolPt(VectorXi& p,                  // polynomial degree in each dimension
     out_pt = temp[p.size() - 1];
 
     // debug
+    // fprintf(stderr, "out_pt = temp[%d]\n", p.size() - 1);
     // cerr << "out_pt:\n" << out_pt << endl;
 }
 
