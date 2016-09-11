@@ -121,6 +121,8 @@ function create_bb_geometry()
 //
 function create_raw_geometry()
 {
+    raw = new THREE.Object3D();              // curves connecting raw data
+
     // 1-d path
     if (nraw_pts.length < 2)
         nraw_pts[1] = 1;
@@ -146,8 +148,7 @@ function create_raw_geometry()
         curve = new THREE.Object3D();
         curve.add(lines)
         curve.material = curve_material;
-        curve.name = 'raw_curve';
-        scene.add(curve);
+        raw.add(curve);
     }
 
     // y-direction curves
@@ -175,10 +176,11 @@ function create_raw_geometry()
             curve = new THREE.Object3D();
             curve.add(lines)
             curve.material = curve_material;
-            curve.name = 'raw_curve';
-            scene.add(curve);
+            raw.add(curve);
         }
     }
+    raw.name = 'raw_curves';
+    scene.add(raw);
 }
 
 //
@@ -186,22 +188,21 @@ function create_raw_geometry()
 //
 function create_ctrl_geometry()
 {
-    var point_material = new THREE.PointCloudMaterial({
-        color: 'yellow',
-        size: sph_rad
-    });
-
-
     // 1-d path
     if (nctrl_pts.length < 2)
         nctrl_pts[1] = 1;
 
     // point cloud
+    var point_material = new THREE.PointCloudMaterial({
+        color: 'yellow',
+        size: sph_rad
+    });
+    points = new THREE.Geometry();
+
     n = 0;                                   // index into points
     for (j = 0; j < nctrl_pts[1]; j++)
     {
         // create points
-        points = new THREE.Geometry();
         for (i = 0; i < nctrl_pts[0]; i++)
         {
             point = new THREE.Vector3(ctrl_pts[3 * n],
@@ -214,6 +215,9 @@ function create_ctrl_geometry()
     pointSet = new THREE.PointCloud(points, point_material);
     pointSet.name = 'ctrl_pts';
     scene.add(pointSet);
+
+    // curves
+    ctrl = new THREE.Object3D();             // curves connecting control points
 
     // x-direction curves
     n = 0;                                   // index into points
@@ -236,8 +240,7 @@ function create_ctrl_geometry()
         curve = new THREE.Object3D();
         curve.add(lines)
         curve.material = curve_material;
-        curve.name = 'ctrl_curve';
-        scene.add(curve);
+        ctrl.add(curve);
     }
 
     // y-direction curves
@@ -265,10 +268,11 @@ function create_ctrl_geometry()
             curve = new THREE.Object3D();
             curve.add(lines)
             curve.material = curve_material;
-            curve.name = 'ctrl_curve';
-            scene.add(curve);
+            ctrl.add(curve);
         }
     }
+    ctrl.name = 'ctrl_curves';
+    scene.add(ctrl);
 }
 
 //
@@ -276,6 +280,8 @@ function create_ctrl_geometry()
 //
 function create_approx_geometry()
 {
+    approx = new THREE.Object3D();           // curves connecting approximated points
+
     // 1-d path
     if (nraw_pts.length < 2)
         nraw_pts[1] = 1;
@@ -301,8 +307,7 @@ function create_approx_geometry()
         curve = new THREE.Object3D();
         curve.add(lines)
         curve.material = curve_material;
-        curve.name = 'approx_curve';
-        scene.add(curve);
+        approx.add(curve);
     }
 
     // y-direction curves
@@ -330,10 +335,11 @@ function create_approx_geometry()
             curve = new THREE.Object3D();
             curve.add(lines)
             curve.material = curve_material;
-            curve.name = 'approx_curve';
-            scene.add(curve);
+            approx.add(curve);
         }
     }
+    approx.name = 'approx_curves';
+    scene.add(approx);
 }
 
 //

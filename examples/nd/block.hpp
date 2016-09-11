@@ -214,6 +214,9 @@ struct Block
                 domain_mins(i) = a->min[i];
                 domain_maxs(i) = a->max[i];
             }
+            domain_mins(a->pt_dim - 1) = 0.0;
+            domain_maxs(a->pt_dim - 1) = domain(tot_ndom_pts - 1, a->pt_dim - 1);
+            cerr << "domain_maxs:\n" << domain_maxs << endl;
         }
 
     // y = sine(x)/x
@@ -397,7 +400,7 @@ struct Block
         {
             cerr << ctrl_pts.rows() << " control points\n" << ctrl_pts << endl;
             cerr << knots.size() << " knots\n" << knots << endl;
-            cerr << approx.rows() << " approximated points\n" << approx << endl;
+            // cerr << approx.rows() << " approximated points\n" << approx << endl;
             fprintf(stderr, "max_err = %e\n", max_err);
             fprintf(stderr, "# input points = %ld\n", domain.rows());
             fprintf(stderr, "# output ctrl pts = %ld # output knots = %ld\n",

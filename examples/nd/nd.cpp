@@ -113,8 +113,8 @@ int main(int argc, char** argv)
     // 2d magnitude function f(x,y) = ||(x,y)||
     d_args.pt_dim       = 3;
     d_args.dom_dim      = 2;
-    d_args.p[0]         = 1;
-    d_args.p[1]         = 1;
+    d_args.p[0]         = 3;
+    d_args.p[1]         = 3;
     // d_args.ndom_pts[0]  = 40;
     // d_args.ndom_pts[1]  = 40;
     // d_args.nctrl_pts[0] = 10;
@@ -122,8 +122,8 @@ int main(int argc, char** argv)
 
     d_args.ndom_pts[0]  = 10;
     d_args.ndom_pts[1]  = 10;
-    d_args.nctrl_pts[0] = 4;
-    d_args.nctrl_pts[1] = 4;
+    d_args.nctrl_pts[0] = 5;
+    d_args.nctrl_pts[1] = 5;
 
     d_args.min[0]       = 0.0;
     d_args.min[1]       = 0.0;

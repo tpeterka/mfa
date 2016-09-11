@@ -24,19 +24,19 @@ window.onload = function() {
     f2.add(text, 'RawData').onChange(function(value) {
         // var object = scene.getObjectByName('raw_pts');
         // object.visible = value;
-        var object = scene.getObjectByName('raw_curve');
+        var object = scene.getObjectByName('raw_curves');
         object.visible = value;
     });
 
     f2.add(text, 'ControlData').onChange(function(value) {
         var object = scene.getObjectByName('ctrl_pts');
         object.visible = value;
-        var object = scene.getObjectByName('ctrl_curve');
+        var object = scene.getObjectByName('ctrl_curves');
         object.visible = value;
     });
 
     f2.add(text, 'ApproxData').onChange(function(value) {
-        var object = scene.getObjectByName('approx_curve');
+        var object = scene.getObjectByName('approx_curves');
         object.visible = value;
     });
 
@@ -54,13 +54,13 @@ window.onload = function() {
             renderer.setClearColor('white', 1);
             // var object = scene.getObjectByName('raw_pts');
             // object.material.color.set('black');
-            var object = scene.getObjectByName('raw_curve');
+            var object = scene.getObjectByName('raw_curves');
             object.material.color.set('black');
             var object = scene.getObjectByName('ctrl_pts');
             object.material.color.set('red');
-            var object = scene.getObjectByName('ctrl_curve');
+            var object = scene.getObjectByName('ctrl_curves');
             object.material.color.set('red');
-            var object = scene.getObjectByName('approx_curve');
+            var object = scene.getObjectByName('approx_curves');
             object.material.color.set('green');
         }
         else
@@ -68,13 +68,13 @@ window.onload = function() {
             renderer.setClearColor('black', 1);
             // var object = scene.getObjectByName('raw_pts');
             // object.material.color.set('white');
-            var object = scene.getObjectByName('raw_curve');
+            var object = scene.getObjectByName('raw_curves');
             object.material.color.set('white');
             var object = scene.getObjectByName('ctrl_pts');
             object.material.color.set('yellow');
-            var object = scene.getObjectByName('ctrl_curve');
+            var object = scene.getObjectByName('ctrl_curves');
             object.material.color.set('yellow');
-            var object = scene.getObjectByName('approx_curve');
+            var object = scene.getObjectByName('approx_curves');
             object.material.color.set('cyan');
         }
 

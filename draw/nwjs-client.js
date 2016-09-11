@@ -11,5 +11,4 @@ addon.draw("../install/examples/nd/approx.out",
            ctrl_pts,
            approx_pts,
            bbs);
-
 draw();
