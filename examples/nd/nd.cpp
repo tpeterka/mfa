@@ -111,25 +111,25 @@ int main(int argc, char** argv)
     // master.foreach(&Block::generate_magnitude_data, &d_args);
 
     // 2d magnitude function f(x,y) = ||(x,y)||
-    d_args.pt_dim       = 3;
-    d_args.dom_dim      = 2;
-    d_args.p[0]         = 3;
-    d_args.p[1]         = 3;
-    // d_args.ndom_pts[0]  = 40;
-    // d_args.ndom_pts[1]  = 40;
-    // d_args.nctrl_pts[0] = 10;
-    // d_args.nctrl_pts[1] = 10;
+    // d_args.pt_dim       = 3;
+    // d_args.dom_dim      = 2;
+    // d_args.p[0]         = 3;
+    // d_args.p[1]         = 3;
+    // // d_args.ndom_pts[0]  = 40;
+    // // d_args.ndom_pts[1]  = 40;
+    // // d_args.nctrl_pts[0] = 10;
+    // // d_args.nctrl_pts[1] = 10;
 
-    d_args.ndom_pts[0]  = 10;
-    d_args.ndom_pts[1]  = 10;
-    d_args.nctrl_pts[0] = 5;
-    d_args.nctrl_pts[1] = 5;
+    // d_args.ndom_pts[0]  = 5;
+    // d_args.ndom_pts[1]  = 5;
+    // d_args.nctrl_pts[0] = 4;
+    // d_args.nctrl_pts[1] = 4;
 
-    d_args.min[0]       = 0.0;
-    d_args.min[1]       = 0.0;
-    d_args.max[0]       = d_args.ndom_pts[0] - 1;
-    d_args.max[1]       = d_args.ndom_pts[1] - 1;
-    master.foreach(&Block::generate_magnitude_data, &d_args);
+    // d_args.min[0]       = 1.0;
+    // d_args.min[1]       = 1.0;
+    // d_args.max[0]       = d_args.min[0] + d_args.ndom_pts[0] - 1;
+    // d_args.max[1]       = d_args.min[1] + d_args.ndom_pts[1] - 1;
+    // master.foreach(&Block::generate_magnitude_data, &d_args);
 
     // 3d magnitude function f(x,y,z) = ||(x,y,z)||
     // d_args.pt_dim       = 4;
@@ -175,6 +175,22 @@ int main(int argc, char** argv)
     // d_args.max[2]       = d_args.ndom_pts[2] - 1;
     // d_args.max[3]       = d_args.ndom_pts[3] - 1;
     // master.foreach(&Block::generate_magnitude_data, &d_args);
+
+    // 2d sphere function f(x,y) = sqrt(r^2 - x^2 - y^2)
+    d_args.pt_dim       = 3;
+    d_args.dom_dim      = 2;
+    d_args.p[0]         = 3;
+    d_args.p[1]         = 3;
+    d_args.ndom_pts[0]  = 5;
+    d_args.ndom_pts[1]  = 5;
+    d_args.nctrl_pts[0] = 4;
+    d_args.nctrl_pts[1] = 4;
+    d_args.s            = 8.0;               // radius, must make sense for min,max range of domain
+    d_args.min[0]       = 1.0;
+    d_args.min[1]       = 1.0;
+    d_args.max[0]       = d_args.min[0] + d_args.ndom_pts[0] - 1;
+    d_args.max[1]       = d_args.min[1] + d_args.ndom_pts[1] - 1;
+    master.foreach(&Block::generate_sphere_data, &d_args);
 
     fprintf(stderr, "Encoding...\n");
 

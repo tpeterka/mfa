@@ -600,6 +600,9 @@ void CtrlCurve(VectorXi& p,          // polynomial degree in each dimension
     // solve for P
     P = NtN.ldlt().solve(R);
 
+    // debug
+    // cerr << "P:\n" << P << endl;
+
     // append points from P to control points
     // TODO: any way to avoid this?
     CopyCtrl(P, domain, ndom_pts, n, k, co, cs, to, temp_ctrl0, temp_ctrl1, ctrl_pts);

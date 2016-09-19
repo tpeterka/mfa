@@ -214,9 +214,77 @@ struct Block
                 domain_mins(i) = a->min[i];
                 domain_maxs(i) = a->max[i];
             }
-            domain_mins(a->pt_dim - 1) = 0.0;
+            domain_mins(a->pt_dim - 1) = domain(0               , a->pt_dim - 1);
             domain_maxs(a->pt_dim - 1) = domain(tot_ndom_pts - 1, a->pt_dim - 1);
-            cerr << "domain_maxs:\n" << domain_maxs << endl;
+            // cerr << "domain_maxs:\n" << domain_maxs << endl;
+        }
+
+    // f(x,y,z,...) = sqrt(r^2 - x^2 - y^2 - z^2 - ...^2)
+    void generate_sphere_data(const diy::Master::ProxyWithLink& cp, void* args)
+        {
+            DomainArgs* a = (DomainArgs*)args;
+            int tot_ndom_pts = 1;
+            p.resize(a->dom_dim);
+            ndom_pts.resize(a->dom_dim);
+            nctrl_pts.resize(a->dom_dim);
+            domain_mins.resize(a->pt_dim);
+            domain_maxs.resize(a->pt_dim);
+            for (int i = 0; i < a->dom_dim; i++)
+            {
+                p(i)         =  a->p[i];
+                ndom_pts(i)  =  a->ndom_pts[i];
+                nctrl_pts(i) =  a->nctrl_pts[i];
+                tot_ndom_pts *= ndom_pts(i);
+            }
+            domain.resize(tot_ndom_pts, a->pt_dim);
+
+            // assign values to the domain (geometry)
+            int cs = 1;                  // stride of a coordinate in this dim
+            for (int i = 0; i < a->dom_dim; i++) // all dimensions in the domain
+            {
+                float d = (a->max[i] - a->min[i]) / (ndom_pts(i) - 1);
+                int k = 0;
+                int co = 0;                  // j index of start of a new coordinate value
+                for (int j = 0; j < tot_ndom_pts; j++)
+                {
+                    if (a->min[i] + k * d > a->max[i])
+                        k = 0;
+                    domain(j, i) = a->min[i] + k * d;
+                    if (j + 1 - co >= cs)
+                    {
+                        k++;
+                        co = j + 1;
+                    }
+                }
+                cs *= ndom_pts(i);
+            }
+
+            // assign values to the range (physics attributes)
+            for (int i = a->dom_dim; i < a->pt_dim; i++)
+            {
+                // sphere function
+                for (int j = 0; j < tot_ndom_pts; j++)
+                {
+                    VectorXf one_pt = domain.block(j, 0, 1, a->dom_dim).row(0);
+                    float r = a->s;           // shere radius
+                    if (r * r - one_pt.squaredNorm() < 0)
+                    {
+                        fprintf(stderr, "Error: radius is not large enough for domain points\n");
+                        exit(0);
+                    }
+                    domain(j, i) = sqrt(r * r - one_pt.squaredNorm());
+                }
+            }
+
+            // extents
+            for (int i = 0; i < a->pt_dim; i++)
+            {
+                domain_mins(i) = a->min[i];
+                domain_maxs(i) = a->max[i];
+            }
+            domain_mins(a->pt_dim - 1) = domain(0               , a->pt_dim - 1);
+            domain_maxs(a->pt_dim - 1) = domain(tot_ndom_pts - 1, a->pt_dim - 1);
+            // cerr << "domain_maxs:\n" << domain_maxs << endl;
         }
 
     // y = sine(x)/x
@@ -327,7 +395,7 @@ struct Block
             domain_maxs(0) = domain_maxs(1) - domain_mins(1);
 
             // debug
-            cerr << "domain extent:\n min\n" << domain_mins << "\nmax\n" << domain_maxs << endl;
+            // cerr << "domain extent:\n min\n" << domain_mins << "\nmax\n" << domain_maxs << endl;
         }
 
     void approx_block(const diy::Master::ProxyWithLink& cp, void* args)
