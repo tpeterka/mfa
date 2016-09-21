@@ -17,6 +17,102 @@
 
 using namespace std;
 
+// compute a point from a NURBS curve at a given parameter value
+// algorithm 4.1, Piegl & Tiller (P&T) p.124
+// this version recomputes basis functions rather than taking them as an input
+// this version also assumes weights = 1; no division by weight is done
+void CurvePt(int       p,                      // polynomial degree
+             MatrixXf& ctrl_pts,               // control points
+             VectorXf& knots,                  // knots
+             float     param,                  // parameter value of desired point
+             VectorXf& out_pt)                 // (output) point
+{
+    int n      = (int)ctrl_pts.rows() - 1;     // number of control point spans
+    int span   = FindSpan(p, n, knots, param);
+    MatrixXf N = MatrixXf::Zero(1, n + 1);     // basis coefficients
+    BasisFuns(p, knots, param, span, N, 0, n, 0);
+    out_pt = VectorXf::Zero(ctrl_pts.cols());  // initializes and resizes
+
+    for (int j = 0; j <= p; j++)
+        out_pt += N(0, j + span - p) * ctrl_pts.row(span - p + j);
+
+    // debug
+    // cerr << "n " << n << " param " << param << " span " << span << " out_pt " << out_pt << endl;
+    // cerr << " N " << N << endl;
+}
+
+// decode one curve in one dimension (e.g., y direction) from a set of previously computed
+// control curves in the prior dimension (e.g., x direction)
+// new curve in current dimension (e.g., y) is normal to curves in prior dimension (e.g., x) and
+// is located in the prior dimension (e.g., x) at parameter value prev_param
+//
+// assumes the caller resized the output out_pts to the correct size, which is number of original
+// domain points in the current dimension (e.g., y)
+void DecodeCurve(VectorXi& p,          // polynomial degree in each dimension
+                 size_t    cur_dim,    // current dimension
+                 MatrixXf& domain,     // input data points (1st dim changes fastest)
+                 MatrixXf& ctrl_pts,   // all control points (1st dim changes fastest)
+                 VectorXf& knots,      // knots (1st dim changes fastest)
+                 VectorXf& params,     // curve parameters for input points (1st dim changes fastest)
+                 float     pre_param,  // parameter value in prior dimension of the pts in the curve
+                 VectorXi& ndom_pts,   // number of input domain points in each dimension
+                 VectorXi& nctrl_pts,  // number of control point spans in each dimension
+                 size_t    ko,         // starting offset for knots in current dim
+                 size_t    cur_cs,     // stride for control points in current dim
+                 size_t    pre_cs,     // stride for control points in prior dim
+                 MatrixXf& out_pts)    // output approximated pts for the curve
+{
+    if (cur_dim == 0 || cur_dim >= p.size())
+    {
+        fprintf(stderr, "Error in DecodeCurve(): cur_dim out of range (must be 1 <= cur_dim <= %ld\n",
+                p.size() - 1);
+        exit(0);
+    }
+
+    // get one set of knots in the prior dimension
+    size_t nknots = nctrl_pts(cur_dim - 1) + p(cur_dim - 1) + 1;
+    VectorXf pre_knots(nknots);
+    for (size_t i = 0; i < nknots; i++)
+        pre_knots(i) = knots(ko + i);
+
+    // debug
+    // cerr << "pre_knots:\n" << pre_knots << endl;
+
+    // control points for one curve in prior dimension
+    MatrixXf pre_ctrl_pts(nctrl_pts(cur_dim - 1), domain.cols());
+    size_t n = 0;                            // index of current control point
+
+    // for the desired approximated points in the current dim, same number as domain points
+    for (size_t j = 0; j < ndom_pts(cur_dim); j++)
+    {
+        // get one curve of control points in the prior dim
+        for (size_t i = 0; i < nctrl_pts(cur_dim - 1); i++)
+        {
+            pre_ctrl_pts.row(i) = ctrl_pts.row(n);
+            n += pre_cs;
+        }
+        n += (cur_cs - nctrl_pts(cur_dim - 1));
+
+        // debug
+        // cerr << "pre_ctrl_pts:\n" << pre_ctrl_pts << endl;
+
+        // get the approximated point
+        VectorXf out_pt(domain.cols());
+        CurvePt(p(cur_dim - 1),
+                pre_ctrl_pts,
+                pre_knots,
+                pre_param,
+                out_pt);
+        out_pts.row(j) = out_pt;
+
+        // debug
+        // cerr << "out_pt: " << out_pt << endl;
+    }
+
+    // debug
+    // cerr << "out_pts:\n " << out_pts << endl;
+}
+
 // compute a point from a NURBS n-d volume at a given parameter value
 // algorithm 4.3, Piegl & Tiller (P&T) p.134
 // this version recomputes basis functions rather than taking them as an input

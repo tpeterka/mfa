@@ -32,6 +32,20 @@ void Decode(VectorXi& p,                     // polynomial degree
             VectorXf& knots,                 // knots (1st dim. changes fastest)
             MatrixXf& approx);               // pts in approx. volume (1st dim. changes fastest)
 
+void DecodeCurve(VectorXi& p,          // polynomial degree in each dimension
+                 size_t    cur_dim,    // current dimension
+                 MatrixXf& domain,     // input data points (1st dim changes fastest)
+                 MatrixXf& ctrl_pts,   // all control points (1st dim changes fastest)
+                 VectorXf& knots,      // knots (1st dim changes fastest)
+                 VectorXf& params,     // curve parameters for input points (1st dim changes fastest)
+                 float     pre_param,  // parameter value in prior dimension of the pts in the curve
+                 VectorXi& ndom_pts,   // number of input domain points in each dimension
+                 VectorXi& nctrl_pts,  // number of control point spans in each dimension
+                 size_t    ko,         // starting offset for knots in current dim
+                 size_t    cur_cs,     // stride for control points in current dim
+                 size_t    pre_cs,     // stride for control points in prior dim
+                 MatrixXf& out_pts);   // output approximated pts for the curve
+
 // DEPRECATE eventually, only for 1d
 void MaxNormErr1d(int       p,               // polynomial degree
                   MatrixXf& domain,          // domain of input data points

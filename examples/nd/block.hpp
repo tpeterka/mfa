@@ -440,6 +440,7 @@ struct Block
             Decode(p, ndom_pts, domain, ctrl_pts, nctrl_pts, knots, approx);
 
             // max error
+            VectorXf max_err_pos(p.size());
             for (size_t i = 0; i < approx.rows(); i++)
             {
                 VectorXf approx_pos = approx.block(i, 0, 1, p.size()).row(0);
@@ -447,9 +448,12 @@ struct Block
                 float approx_mag = approx_pos.norm();
                 // approx_val = the approximated value of the MFA
                 float approx_val = approx(i, p.size());
-                float err = fabs(approx_mag - approx_val);
-                if (i == 0 || err > max_err)
+                float err = approx_mag - approx_val;
+                if (i == 0 || fabs(err) > fabs(max_err))
+                {
                     max_err = err;
+                    max_err_pos = approx_pos;
+                }
             }
 
             // normalize max error by size of input data (domain and range)
@@ -458,8 +462,9 @@ struct Block
             float range = max - min;
 
             // debug
-            fprintf(stderr, "range = %.1f\n", range);
-            fprintf(stderr, "raw max_error = %e\n", max_err);
+            fprintf(stderr, "data range = %.1f\n", range);
+            fprintf(stderr, "raw max_error = %e (re. sign, error = truth - approx)\n", max_err);
+            cerr << "position of max error =\n" << max_err_pos << endl;
 
             max_err /= range;
         }
@@ -469,7 +474,7 @@ struct Block
             cerr << ctrl_pts.rows() << " control points\n" << ctrl_pts << endl;
             cerr << knots.size() << " knots\n" << knots << endl;
             // cerr << approx.rows() << " approximated points\n" << approx << endl;
-            fprintf(stderr, "max_err = %e\n", max_err);
+            fprintf(stderr, "| normalized max_err | = %e\n", fabs(max_err));
             fprintf(stderr, "# input points = %ld\n", domain.rows());
             fprintf(stderr, "# output ctrl pts = %ld # output knots = %ld\n",
                     ctrl_pts.rows(), knots.size());
