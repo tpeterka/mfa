@@ -474,7 +474,7 @@ struct Block
             cerr << ctrl_pts.rows() << " control points\n" << ctrl_pts << endl;
             cerr << knots.size() << " knots\n" << knots << endl;
             // cerr << approx.rows() << " approximated points\n" << approx << endl;
-            fprintf(stderr, "| normalized max_err | = %e\n", fabs(max_err));
+            fprintf(stderr, "|normalized max_err| = %e\n", fabs(max_err));
             fprintf(stderr, "# input points = %ld\n", domain.rows());
             fprintf(stderr, "# output ctrl pts = %ld # output knots = %ld\n",
                     ctrl_pts.rows(), knots.size());

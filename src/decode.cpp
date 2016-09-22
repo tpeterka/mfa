@@ -48,6 +48,10 @@ void CurvePt(int       p,                      // polynomial degree
 //
 // assumes the caller resized the output out_pts to the correct size, which is number of original
 // domain points in the current dimension (e.g., y)
+//
+// currently not used but can be useful for getting a cross-section curve from a surface
+// would need to be expanded to get a curve from a higher dimensional space, currently gets 1D curve
+// from 2D surface
 void DecodeCurve(VectorXi& p,          // polynomial degree in each dimension
                  size_t    cur_dim,    // current dimension
                  MatrixXf& domain,     // input data points (1st dim changes fastest)
@@ -122,7 +126,7 @@ void DecodeCurve(VectorXi& p,          // polynomial degree in each dimension
 // 1. The dimensionality of the NURBS tensor product (p.size())
 // (1D = NURBS curve, 2D = surface, 3D = volumem 4D = hypervolume, etc.)
 // 2. The dimensionality of individual control points (ctrl_pts.cols())
-// p.size() should be <= ctrl_pts.cols()
+// p.size() should be < ctrl_pts.cols()
 void VolPt(VectorXi& p,                  // polynomial degree in each dimension
            MatrixXf& ctrl_pts,           // control points (1st dim changes fastest)
            VectorXi& nctrl_pts,          // number of control points in each dim
@@ -134,7 +138,7 @@ void VolPt(VectorXi& p,                  // polynomial degree in each dimension
     // cerr << "\n\nparam:\n" << param << endl;
 
     // check dimensionality for sanity
-    assert(p.size() <= ctrl_pts.cols());
+    assert(p.size() < ctrl_pts.cols());
 
     out_pt = VectorXf::Zero(ctrl_pts.cols());// initializes and resizes
     vector <MatrixXf> N(p.size());           // basis functions in each dim.

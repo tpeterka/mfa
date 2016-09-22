@@ -343,6 +343,12 @@ void Params(VectorXi& ndom_pts, // number of input data points in each dim
 }
 
 // interpolate parameters to get parameter value for a target coordinate
+//
+// TODO: experiment whether this is more accurate than calling Params with a 1-d space of domain pts:
+// min, target, and max
+//
+// This function currently not used, but can be useful for intersecting an MFA with an
+// axis-aligned plane, which will require the parameter value corresponding to the plane coordinate
 float InterpolateParams(VectorXf& params,   // parameters for input pts (1st dim changes fastest)
                         MatrixXf& domain,   // input data points (1st dim changes fastest)
                         VectorXi& ndom_pts, // number of input domain points in each dimension
@@ -622,7 +628,6 @@ void CopyCtrl(MatrixXf& P,          // solved points for current dimension and c
 }
 
 // solves for one curve of control points
-// TODO: some arguments not used because needed only for failed experiment below; clean up later
 void CtrlCurve(VectorXi& p,          // polynomial degree in each dimension
                VectorXf& params,     // curve parameters for input points (1st dim changes fastest)
                VectorXf& knots,      // knots (1st dim changes fastest)
@@ -632,7 +637,6 @@ void CtrlCurve(VectorXi& p,          // polynomial degree in each dimension
                MatrixXf& P,          // solved points for current dimension and curve
                MatrixXf& domain,     // input data points (1st dim changes fastest)
                VectorXi& ndom_pts,   // number of input domain points in each dimension
-               VectorXi& nctrl_pts,  // final number of control points in each dim
                VectorXi& n,          // number of control point spans in each dimension
                size_t    k,          // current dimension
                vector<size_t> pos,   // starting offsets for params in all dims
@@ -640,7 +644,6 @@ void CtrlCurve(VectorXi& p,          // polynomial degree in each dimension
                size_t    co,         // starting ofst for reading domain pts
                size_t    cs,         // stride for reading domain points
                size_t    to,         // starting ofst for writing control pts
-               vector<size_t> dss,   // strides for reading domain pts in all dims
                MatrixXf& temp_ctrl0, // first temporary control points buffer
                MatrixXf& temp_ctrl1, // second temporary control points buffer
                MatrixXf& ctrl_pts)   // final ctrl pts after last dim done (1st dim changes fastest)
@@ -653,72 +656,9 @@ void CtrlCurve(VectorXi& p,          // polynomial degree in each dimension
     if (k == 0)
         Residual(p(k), domain, knots, params, N, R, kos[k], pos[k], co, cs);
     else if (k % 2)
-    {
-        // debug
-        // cerr << "temp_ctrl0:\n" << temp_ctrl0 << endl;
-        // fprintf(stderr, "po=%ld co=%ld cs=%ld to=%ld\n", pos[k], co, cs, to);
-
-#if 0
-        // Following is an unsuccessful attempt to improve accuracy by replacing
-        // the inputs for encoding the next dimension, instead of using the control points
-        // from the previous dimension as inputs to the next (a la Piegl & Tiller),
-        // inputting cross sections of original input data instead.
-        // The error was ~10X higher in a small 2d magnitude function example dataset
-        // The following code should be deprecated, but for now it might still be useful
-        // for more similar experiments to try to improve accuracy.
-
-        // coordinate for curve in prior dimension
-        float pre_coord = temp_ctrl0(to, k - 1);
-
-        // interpolated parameter value for curve coordinate in prior dimension
-        float pre_param;
-        pre_param = InterpolateParams(params,
-                                      domain,
-                                      ndom_pts,
-                                      k - 1,
-                                      pos[k - 1],
-                                      dss[k - 1],
-                                      pre_coord);
-
-        // debug
-        // fprintf(stderr, "pre_coord=%.3f pre_param=%.3f\n", pre_coord, pre_param);
-
-        MatrixXf curve_approx_pts(ndom_pts(k), domain.cols());
-        DecodeCurve(p,
-                    k,
-                    domain,
-                    temp_ctrl0,
-                    knots,
-                    params,
-                    pre_param,
-                    ndom_pts,
-                    nctrl_pts,
-                    kos[k],
-                    cs,
-                    cs / nctrl_pts(k),
-                    curve_approx_pts);
-
-        // debug
-        // cerr << "curve_approx_pts:\n " << curve_approx_pts << endl;
-
-        // optional: replace temp_ctrl0 with curve of approximated domain points
-        for (size_t i = 0; i < curve_approx_pts.rows(); i++)
-            temp_ctrl0.block(co + i * cs, 0, 1, temp_ctrl0.cols()) =
-                curve_approx_pts.block(i, 0, 1, curve_approx_pts.cols());
-        // debug
-        // cerr << "temp_ctrl0 after replacement with curve_approx_pts:\n" << temp_ctrl0 << endl;
-
-#endif
-
         Residual(p(k), temp_ctrl0, knots, params, N, R, kos[k], pos[k], co, cs);
-    }
     else
-    {
-        // TODO copy above case to here, remember to replace temp_ctrl0 with temp_ctrl1
-
-        // TODO: replace temp_ctrl1 with curve of approximated domain points
         Residual(p(k), temp_ctrl1, knots, params, N, R, kos[k], pos[k], co, cs);
-    }
 
     // solve for P
     P = NtN.ldlt().solve(R);
@@ -755,7 +695,7 @@ void CtrlCurve(VectorXi& p,          // polynomial degree in each dimension
 // 1. The dimensionality of the NURBS tensor product (p.size())
 // (1D = NURBS curve, 2D = surface, 3D = volumem 4D = hypervolume, etc.)
 // 2. The dimensionality of individual domain and control points (domain.cols())
-// p.size() should be <= domain.cols()
+// p.size() should be < domain.cols()
 void Encode(VectorXi& p,                   // polynomial degree in each dimension
             VectorXi& ndom_pts,            // number of input data points in each dim
             VectorXi& nctrl_pts,           // desired number of control points in each dim
@@ -764,7 +704,7 @@ void Encode(VectorXi& p,                   // polynomial degree in each dimensio
             VectorXf& knots)               // (output) knots (1st dim changes fastest)
 {
     // check dimensionality for sanity
-    assert(p.size() <= domain.cols());
+    assert(p.size() < domain.cols());
 
     // debug
     // cerr << "domain:\n" << domain << endl;
@@ -890,11 +830,8 @@ void Encode(VectorXi& p,                   // polynomial degree in each dimensio
         size_t coo = 0, too = 0;                  // co and to at start of contiguous sequence
         for (size_t j = 0; j < ncurves; j++)      // for all the curves in this dimension
         {
-            // debug
-            // fprintf(stderr, "2: k %ld j %ld co %ld cs %ld to %ld\n", k, j, co, cs, to);
-
-            CtrlCurve(p, params, knots, N, NtN, R, P, domain, ndom_pts, nctrl_pts, n, k,
-                      pos, kos, co, cs, to, dss, temp_ctrl0, temp_ctrl1, ctrl_pts);
+            CtrlCurve(p, params, knots, N, NtN, R, P, domain, ndom_pts, n, k, pos, kos,
+                      co, cs, to, temp_ctrl0, temp_ctrl1, ctrl_pts);
 
             // adjust offsets for the next curve
             if ((j + 1) % cs)
