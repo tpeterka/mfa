@@ -288,7 +288,6 @@ struct Block
         }
 
     // y = sine(x)/x
-    // TODO: only for 1d so far
     void generate_sinc_data(const diy::Master::ProxyWithLink& cp, void* args)
         {
             DomainArgs* a = (DomainArgs*)args;
@@ -306,31 +305,86 @@ struct Block
                 tot_ndom_pts *= ndom_pts(i);
             }
             domain.resize(tot_ndom_pts, a->pt_dim);
+            s = a->s;
 
-            // rest is hard-coded for 1d
-            float dx = (a->max[0] - a->min[0]) / (a->ndom_pts[0] - 1);
-
-            // sine(x)/x function
-            for (int i = 0; i < a->ndom_pts[0]; i++)
+            // assign values to the domain (geometry)
+            int cs = 1;                           // stride of a coordinate in this dim
+            for (int i = 0; i < a->dom_dim; i++)  // all dimensions in the domain
             {
-                domain(i, 0) = a->min[0] + i * dx;
-                if (domain(i, 0) == 0.0)
-                    domain(i, 1) = a->max[1];
-                else
-                    domain(i, 1) = a->max[1] * sin(domain(i, 0)) / domain(i, 0);
+                float d = (a->max[i] - a->min[i]) / (ndom_pts(i) - 1);
+                int k = 0;
+                int co = 0;                       // j index of start of a new coordinate value
+                for (int j = 0; j < tot_ndom_pts; j++)
+                {
+                    if (a->min[i] + k * d > a->max[i])
+                        k = 0;
+                    domain(j, i) = a->min[i] + k * d;
+                    if (j + 1 - co >= cs)
+                    {
+                        k++;
+                        co = j + 1;
+                    }
+                }
+                cs *= ndom_pts(i);
+            }
+
+            float min, max;                       // extents of range
+
+            // assign values to the range (physics attributes)
+            // f(x,y,z,...) = sine(x)/x * sine(y)/y * sine(z)/z * ...
+            for (int j = 0; j < tot_ndom_pts; j++)
+            {
+                float res = 1.0;                  // product of the sinc functions
+                for (int i = 0; i < a->dom_dim; i++)
+                    res *= (sin(domain(j, i)) / domain(j, i));
+                res *= a->s;
+
+                for (int i = a->dom_dim; i < a->pt_dim; i++)
+                    domain(j, i) = res;
+
+                if (j == 0 || res > max)
+                    max = res;
+                if (j == 0 || res < min)
+                    min = res;
             }
 
             // extents
-            domain_mins(0) = a->min[0];
-            domain_mins(1) = a->min[1];
-            domain_maxs(0) = a->max[0];
-            domain_maxs(1) = a->max[1];
+            for (int i = 0; i < a->dom_dim; i++)
+            {
+                domain_mins(i) = a->min[i];
+                domain_maxs(i) = a->max[i];
+            }
+            domain_mins(a->pt_dim - 1) = min;
+            domain_maxs(a->pt_dim - 1) = max;
+
+            cerr << "domain_mins:\n" << domain_mins << endl;
+            cerr << "domain_maxs:\n" << domain_maxs << endl;
+
+            // DEPRECATED
+            // // rest is hard-coded for 1d
+            // float dx = (a->max[0] - a->min[0]) / (a->ndom_pts[0] - 1);
+
+            // // sine(x)/x function
+            // for (int i = 0; i < a->ndom_pts[0]; i++)
+            // {
+            //     domain(i, 0) = a->min[0] + i * dx;
+            //     if (domain(i, 0) == 0.0)
+            //         domain(i, 1) = a->max[1];
+            //     else
+            //         domain(i, 1) = a->max[1] * sin(domain(i, 0)) / domain(i, 0);
+            // }
+
+            // // extents
+            // domain_mins(0) = a->min[0];
+            // domain_mins(1) = a->min[1];
+            // domain_maxs(0) = a->max[0];
+            // domain_maxs(1) = a->max[1];
         }
 
     // read the flame dataset and take one slice out of the middle of it
     // doubling the resolution because the file I have is a 1/2-resolution downsampled version
     // TODO: only for 1d so far
-    void read_file_data(const diy::Master::ProxyWithLink& cp, void* args)
+    void read_1d_file_data(const diy::Master::ProxyWithLink& cp, void* args)
         {
             DomainArgs* a = (DomainArgs*)args;
             int tot_ndom_pts = 1;
@@ -352,6 +406,10 @@ struct Block
             vector<float> vel(3 * a->ndom_pts[0]);
 
             // open hard-coded file name, seek to hard-coded start of desired section
+            // open hard-coded file name, seek to hard-coded start of desired section
+            // file is 704 * 540 * 550 * 3 floats (vx,vy,vz)
+            // which is 1/2 the x resolution the simulation
+            // the "small" in the file name means it was downsampled by factor of 2 in x
             FILE *fd = fopen("/Users/tpeterka/datasets/flame/6_small.xyz", "r");
             assert(fd);
             fseek(fd, (704 * 540 * 275 + 704 * 270) * 12, SEEK_SET);
@@ -393,6 +451,77 @@ struct Block
             // extents
             domain_mins(0) = 0.0;
             domain_maxs(0) = domain_maxs(1) - domain_mins(1);
+
+            // debug
+            cerr << "domain extent:\n min\n" << domain_mins << "\nmax\n" << domain_maxs << endl;
+        }
+
+    // read the flame dataset and take one plane out of the middle of it
+    // TODO: only for 2d so far
+    void read_2d_file_data(const diy::Master::ProxyWithLink& cp, void* args)
+        {
+            DomainArgs* a = (DomainArgs*)args;
+            int tot_ndom_pts = 1;
+            p.resize(a->dom_dim);
+            ndom_pts.resize(a->dom_dim);
+            nctrl_pts.resize(a->dom_dim);
+            domain_mins.resize(a->pt_dim);
+            domain_maxs.resize(a->pt_dim);
+            for (int i = 0; i < a->dom_dim; i++)
+            {
+                p(i)         =  a->p[i];
+                ndom_pts(i)  =  a->ndom_pts[i];
+                nctrl_pts(i) =  a->nctrl_pts[i];
+                tot_ndom_pts *= ndom_pts(i);
+            }
+            domain.resize(tot_ndom_pts, a->pt_dim);
+
+            // rest is hard-coded for 2d
+            vector<float> vel(3 * a->ndom_pts[0] * a->ndom_pts[1]);
+
+            // open hard-coded file name, seek to hard-coded start of desired section
+            // which is an x-y plane in the middle of the z range
+            // file is 704 * 540 * 550 * 3 floats (vx,vy,vz)
+            FILE *fd = fopen("/Users/tpeterka/datasets/flame/6_small.xyz", "r");
+            assert(fd);
+            // middle plane in z, offset = full x,y range * 1/2 z range
+            fseek(fd, (704 * 540 * 275) * 12, SEEK_SET);
+
+            // read all three components of velocity and compute magnitude
+            fread(&vel[0], sizeof(float), a->ndom_pts[0] * a->ndom_pts[1] * 3, fd);
+            for (size_t i = 0; i < vel.size() / 3; i++)
+            {
+                domain(i, 2) = sqrt(vel[3 * i    ] * vel[3 * i    ] +
+                                    vel[3 * i + 1] * vel[3 * i + 1] +
+                                    vel[3 * i + 2] * vel[3 * i + 2]);
+                // fprintf(stderr, "vel [%.3f %.3f %.3f] mag %.3f\n",
+                //         vel[3 * i], vel[3 * i + 1], vel[3 * i + 2], range[i]);
+            }
+
+            // find extent of range
+            for (size_t i = 0; i < domain.rows(); i++)
+            {
+                if (i == 0 || domain(i, 2) < domain_mins(2))
+                    domain_mins(2) = domain(i, 2);
+                if (i == 0 || domain(i, 2) > domain_maxs(2))
+                    domain_maxs(2) = domain(i, 2);
+            }
+
+            // set domain values (just equal to i, j; ie, dx, dy = 1, 1)
+            int n = 0;
+            for (size_t j = 0; j < ndom_pts(1); j++)
+                for (size_t i = 0; i < ndom_pts(0); i++)
+                {
+                    domain(n, 0) = i;
+                    domain(n, 1) = j;
+                    n++;
+                }
+
+            // extents
+            domain_mins(0) = 0.0;
+            domain_mins(1) = 0.0;
+            domain_maxs(0) = domain(tot_ndom_pts - 1, 0);
+            domain_maxs(1) = domain(tot_ndom_pts - 1, 1);
 
             // debug
             // cerr << "domain extent:\n min\n" << domain_mins << "\nmax\n" << domain_maxs << endl;
@@ -444,11 +573,56 @@ struct Block
             for (size_t i = 0; i < approx.rows(); i++)
             {
                 VectorXf approx_pos = approx.block(i, 0, 1, p.size()).row(0);
-                // approx_mag  = what the magnitude of the position should be (ground truth)
-                float approx_mag = approx_pos.norm();
+                // true_val  = what the magnitude of the position should be (ground truth)
+                float true_val = approx_pos.norm();
                 // approx_val = the approximated value of the MFA
                 float approx_val = approx(i, p.size());
-                float err = approx_mag - approx_val;
+                float err = true_val - approx_val;
+                if (i == 0 || fabs(err) > fabs(max_err))
+                {
+                    max_err = err;
+                    max_err_pos = approx_pos;
+                }
+            }
+
+            // normalize max error by size of input data (domain and range)
+            float min = domain.minCoeff();
+            float max = domain.maxCoeff();
+            float range = max - min;
+
+            // debug
+            fprintf(stderr, "data range = %.1f\n", range);
+            fprintf(stderr, "raw max_error = %e (re. sign, error = truth - approx)\n", max_err);
+            cerr << "position of max error =\n" << max_err_pos << endl;
+
+            max_err /= range;
+        }
+
+    // max error for the nd sinc data set
+    void sinc_max_error(const diy::Master::ProxyWithLink& cp, void* args)
+        {
+            ErrArgs* a = (ErrArgs*)args;
+            approx.resize(domain.rows(), domain.cols());
+            errs.resize(domain.rows());
+
+            // Compute domain points from MFA
+            Decode(p, ndom_pts, domain, ctrl_pts, nctrl_pts, knots, approx);
+
+            // max error
+            VectorXf max_err_pos(p.size());
+            for (size_t i = 0; i < approx.rows(); i++)
+            {
+                VectorXf approx_pos = approx.block(i, 0, 1, p.size()).row(0);
+
+                // truth  = what the value at the position should be
+                float true_val = 1.0;
+                for (int i = 0; i < p.cols(); i++)
+                    true_val *= (sin(approx_pos(i)) / approx_pos(i));
+                true_val *= s;
+
+                // approx = the approximated value of the MFA
+                float approx_val = approx(i, p.size());
+                float err = true_val - approx_val;
                 if (i == 0 || fabs(err) > fabs(max_err))
                 {
                     max_err = err;
@@ -494,6 +668,8 @@ struct Block
                                              // (same number as input points, for rendering only)
     VectorXf errs;                           // distance from each input point to curve
     float    max_err;                        // maximum distance from input points to curve
+
+    float s;                                 // scaling factor on range values (for error checking)
 };
 
 namespace diy

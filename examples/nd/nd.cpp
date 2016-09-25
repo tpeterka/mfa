@@ -65,8 +65,44 @@ int main(int argc, char** argv)
     // d_args.nctrl_pts[0] = 70;
     // d_args.min[0]       = -4.0 * M_PI;
     // d_args.max[0]       = 4.0 * M_PI;
-    // d_args.min[1]       = -10.0;
-    // d_args.max[1]       = 10.0;
+    // d_args.s            = 10.0;           // scaling factor on range
+    // master.foreach(&Block::generate_sinc_data, &d_args);
+
+    // 2d sinc function f(x,y) = sinc(x)sinc(y)
+    // d_args.pt_dim       = 3;
+    // d_args.dom_dim      = 2;
+    // d_args.p[0]         = 4;
+    // d_args.p[1]         = 4;
+    // d_args.ndom_pts[0]  = 50;
+    // d_args.ndom_pts[1]  = 50;
+    // d_args.nctrl_pts[0] = 30;
+    // d_args.nctrl_pts[1] = 30;
+    // d_args.min[0]       = -4.0 * M_PI;
+    // d_args.min[1]       = -4.0 * M_PI;
+    // d_args.max[0]       = 4.0 * M_PI;
+    // d_args.max[1]       = 4.0 * M_PI;
+    // d_args.s            = 20.0;              // scaling factor on range
+    // master.foreach(&Block::generate_sinc_data, &d_args);
+
+    // 3d sinc function f(x,y,z) = sinc(x)sinc(y)sinc(z)
+    // d_args.pt_dim       = 4;
+    // d_args.dom_dim      = 3;
+    // d_args.p[0]         = 4;
+    // d_args.p[1]         = 4;
+    // d_args.p[2]         = 4;
+    // d_args.ndom_pts[0]  = 50;
+    // d_args.ndom_pts[1]  = 50;
+    // d_args.ndom_pts[2]  = 50;
+    // d_args.nctrl_pts[0] = 30;
+    // d_args.nctrl_pts[1] = 30;
+    // d_args.nctrl_pts[2] = 30;
+    // d_args.min[0]       = -4.0 * M_PI;
+    // d_args.min[1]       = -4.0 * M_PI;
+    // d_args.min[2]       = -4.0 * M_PI;
+    // d_args.max[0]       = 4.0 * M_PI;
+    // d_args.max[1]       = 4.0 * M_PI;
+    // d_args.max[2]       = 4.0 * M_PI;
+    // d_args.s            = 20.0;              // scaling factor on range
     // master.foreach(&Block::generate_sinc_data, &d_args);
 
     // 1d read file
@@ -75,7 +111,18 @@ int main(int argc, char** argv)
     // d_args.p[0]         = 3;
     // d_args.ndom_pts[0]  = 704;
     // d_args.nctrl_pts[0] = 140;
-    // master.foreach(&Block::read_file_data, &d_args);
+    // master.foreach(&Block::read_1d_file_data, &d_args);
+
+    // 2d read file
+    d_args.pt_dim       = 3;
+    d_args.dom_dim      = 2;
+    d_args.p[0]         = 4;
+    d_args.p[1]         = 4;
+    d_args.ndom_pts[0]  = 704;
+    d_args.ndom_pts[1]  = 540;
+    d_args.nctrl_pts[0] = 140;
+    d_args.nctrl_pts[1] = 108;
+    master.foreach(&Block::read_2d_file_data, &d_args);
 
     // 3d constant function f(x,y,z) = 1
     // d_args.pt_dim       = 4;
@@ -111,25 +158,26 @@ int main(int argc, char** argv)
     // master.foreach(&Block::generate_magnitude_data, &d_args);
 
     // 2d magnitude function f(x,y) = ||(x,y)||
-    d_args.pt_dim       = 3;
-    d_args.dom_dim      = 2;
-    d_args.p[0]         = 3;
-    d_args.p[1]         = 3;
-    // d_args.ndom_pts[0]  = 40;
-    // d_args.ndom_pts[1]  = 40;
-    // d_args.nctrl_pts[0] = 10;
-    // d_args.nctrl_pts[1] = 10;
-
-    d_args.ndom_pts[0]  = 5;
-    d_args.ndom_pts[1]  = 5;
-    d_args.nctrl_pts[0] = 4;
-    d_args.nctrl_pts[1] = 4;
-
-    d_args.min[0]       = 1.0;
-    d_args.min[1]       = 1.0;
-    d_args.max[0]       = d_args.min[0] + d_args.ndom_pts[0] - 1;
-    d_args.max[1]       = d_args.min[1] + d_args.ndom_pts[1] - 1;
-    master.foreach(&Block::generate_magnitude_data, &d_args);
+//     d_args.pt_dim       = 3;
+//     d_args.dom_dim      = 2;
+//     d_args.p[0]         = 3;
+//     d_args.p[1]         = 3;
+// #if 0                                        // full size
+//     d_args.ndom_pts[0]  = 40;
+//     d_args.ndom_pts[1]  = 40;
+//     d_args.nctrl_pts[0] = 10;
+//     d_args.nctrl_pts[1] = 10;
+// #else                                        // small size
+//     d_args.ndom_pts[0]  = 5;
+//     d_args.ndom_pts[1]  = 5;
+//     d_args.nctrl_pts[0] = 4;
+//     d_args.nctrl_pts[1] = 4;
+// #endif
+//     d_args.min[0]       = 1.0;
+//     d_args.min[1]       = 1.0;
+//     d_args.max[0]       = d_args.min[0] + d_args.ndom_pts[0] - 1;
+//     d_args.max[1]       = d_args.min[1] + d_args.ndom_pts[1] - 1;
+//     master.foreach(&Block::generate_magnitude_data, &d_args);
 
     // 3d magnitude function f(x,y,z) = ||(x,y,z)||
     // d_args.pt_dim       = 4;
@@ -210,6 +258,9 @@ int main(int argc, char** argv)
 #else
     // for nd magnitude function only
     master.foreach(&Block::mag_max_error);
+
+    // for nd sinc function only
+    // master.foreach(&Block::sinc_max_error);
 #endif
 
     // print results

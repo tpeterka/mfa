@@ -1,8 +1,4 @@
-// TODO:
-// - open file through dialog box, deal with file on client and server (send from client to server?)
-// - stats don't appear in browser version, just a white box, and expanding the rendering part of
-
-PT_SIZE_FACTOR = .01;             // used to compute point size
+PT_SIZE_FACTOR = .005;             // used to compute point size
 
 var center = [], size, sph_rad;
 var scene, camera, renderer, controls, stats, light;
@@ -431,7 +427,7 @@ function init_render()
     scene = new THREE.Scene();
 
     // camera with light attached
-    camera = new THREE.PerspectiveCamera(fov, window.innerWidth/window.innerHeight, 0.1, 1000);
+    camera = new THREE.PerspectiveCamera(fov, window.innerWidth/window.innerHeight, 0.01, 10000);
     camera.position.set(center[0], center[1], center[2] + dz);
     light = new THREE.PointLight( 0xffffff, 1.0, 100 );
     camera.add(light);

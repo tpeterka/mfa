@@ -406,11 +406,17 @@ float InterpolateParams(VectorXf& params,   // parameters for input pts (1st dim
 
 // compute knots
 // n-d version of eqs. 9.68, 9.69, P&T
-// eg, for p = 3 and nctrl_pts = 7, n = nctrl_pts - 1 = 6 and nknots = n + p + 2 = 11
+//
+// the set of knots (called U in P&T) is the set of breakpoints in the parameter space between
+// different basis functions. These are the breaks in the piecewise B-spline approximation
+//
+// nknots = n + p + 2
+// eg, for p = 3 and nctrl_pts = 7, n = nctrl_pts - 1 = 6, nknots = 11
 // let knots = {0, 0, 0, 0, 0.25, 0.5, 0.75, 1, 1, 1, 1}
 // there are p + 1 external knots at each end: {0, 0, 0, 0} and {1, 1, 1, 1}
 // there are n - p internal knots: {0.25, 0.5, 0.75}
 // there are n - p + 1 internal knot spans [0,0.25), [0.25, 0.5), [0.5, 0.75), [0.75, 1)
+//
 // resulting knots are same for all curves and stored once for each dimension in
 // row-major order (1st dim changes fastest)
 // total number of knots is the sum of number of knots over the dimensions,
@@ -707,7 +713,7 @@ void Encode(VectorXi& p,                   // polynomial degree in each dimensio
     assert(p.size() < domain.cols());
 
     // debug
-    // cerr << "domain:\n" << domain << endl;
+    cerr << "domain:\n" << domain << endl;
 
     // check and assign main quantities
     VectorXi n;                 // number of control point spans in each domain dim
