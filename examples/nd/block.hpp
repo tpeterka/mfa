@@ -6,7 +6,7 @@
 // tpeterka@mcs.anl.gov
 //--------------------------------------------------------------
 
-#include <mfa/mfa.h>
+#include <mfa/mfa.hpp>
 
 #include <diy/master.hpp>
 #include <diy/reduce-operations.hpp>
@@ -82,8 +82,6 @@ struct Block
             diy::save(bb, b->ctrl_pts);
             diy::save(bb, b->knots);
             diy::save(bb, b->approx);
-            diy::save(bb, b->errs);
-            diy::save(bb, b->max_err);
         }
     static
     void load(void* b_, diy::BinaryBuffer& bb)
@@ -99,8 +97,6 @@ struct Block
             diy::load(bb, b->ctrl_pts);
             diy::load(bb, b->knots);
             diy::load(bb, b->approx);
-            diy::load(bb, b->errs);
-            diy::load(bb, b->max_err);
         }
     // f(x,y,z,...) = 1
     void generate_constant_data(const diy::Master::ProxyWithLink& cp, void* args)
@@ -527,47 +523,47 @@ struct Block
             // cerr << "domain extent:\n min\n" << domain_mins << "\nmax\n" << domain_maxs << endl;
         }
 
-    void approx_block(const diy::Master::ProxyWithLink& cp, void* args)
+    void encode_block(const diy::Master::ProxyWithLink& cp, void*)
         {
-            // compute MFA from domain points
-            Encode(p, ndom_pts, nctrl_pts, domain, ctrl_pts, knots);
+            mfa = new mfa::MFA(p, ndom_pts, nctrl_pts, domain, ctrl_pts, knots);
+            mfa->Encode();
         }
 
-    // max error for 1d curves only
-    void max_error_1d(const diy::Master::ProxyWithLink& cp, void* args)
+    void decode_block(const diy::Master::ProxyWithLink& cp, void*)
         {
-            ErrArgs* a = (ErrArgs*)args;
             approx.resize(domain.rows(), domain.cols());
-            errs.resize(domain.rows());
-
-            // use one or the other of the following
-
-            // plain max
-            // MaxErr1d(p, domain, range, ctrl_pts, knots, approx, errs, max_err);
-
-            // max norm, should be better than MaxErr1d but more expensive
-            MaxNormErr1d(p(0),
-                         domain,
-                         ctrl_pts,
-                         knots,
-                         a->max_niter,
-                         a->err_bound,
-                         a->search_rad,
-                         approx,
-                         errs,
-                         max_err);
+            mfa->Decode(approx);
         }
+
+    // DEPRECATED
+    // // max error for 1d curves only
+    // void max_error_1d(const diy::Master::ProxyWithLink& cp, void* args)
+    //     {
+    //         ErrArgs* a = (ErrArgs*)args;
+    //         approx.resize(domain.rows(), domain.cols());
+    //         errs.resize(domain.rows());
+
+    //         // use one or the other of the following
+
+    //         // plain max
+    //         // MaxErr1d(p, domain, range, ctrl_pts, knots, approx, errs, max_err);
+
+    //         // max norm, should be better than MaxErr1d but more expensive
+    //         MaxNormErr1d(p(0),
+    //                      domain,
+    //                      ctrl_pts,
+    //                      knots,
+    //                      a->max_niter,
+    //                      a->err_bound,
+    //                      a->search_rad,
+    //                      approx,
+    //                      errs,
+    //                      max_err);
+    //     }
 
     // max error for the nd magnitude data set
-    void mag_max_error(const diy::Master::ProxyWithLink& cp, void* args)
+    void mag_max_error(const diy::Master::ProxyWithLink& cp, void*)
         {
-            ErrArgs* a = (ErrArgs*)args;
-            approx.resize(domain.rows(), domain.cols());
-            errs.resize(domain.rows());
-
-            // Compute domain points from MFA
-            Decode(p, ndom_pts, domain, ctrl_pts, nctrl_pts, knots, approx);
-
             // max error
             VectorXf max_err_pos(p.size());
             for (size_t i = 0; i < approx.rows(); i++)
@@ -599,15 +595,8 @@ struct Block
         }
 
     // max error for the nd sinc data set
-    void sinc_max_error(const diy::Master::ProxyWithLink& cp, void* args)
+    void sinc_max_error(const diy::Master::ProxyWithLink& cp, void*)
         {
-            ErrArgs* a = (ErrArgs*)args;
-            approx.resize(domain.rows(), domain.cols());
-            errs.resize(domain.rows());
-
-            // Compute domain points from MFA
-            Decode(p, ndom_pts, domain, ctrl_pts, nctrl_pts, knots, approx);
-
             // max error
             VectorXf max_err_pos(p.size());
             for (size_t i = 0; i < approx.rows(); i++)
@@ -670,6 +659,7 @@ struct Block
     float    max_err;                        // maximum distance from input points to curve
 
     float s;                                 // scaling factor on range values (for error checking)
+    mfa::MFA *mfa;                           // MFA object
 };
 
 namespace diy

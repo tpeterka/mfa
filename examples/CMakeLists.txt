@@ -1,2 +1,4 @@
-add_subdirectory              (1d)
+# DEPRECATED
+# add_subdirectory              (1d)
+
 add_subdirectory              (nd)

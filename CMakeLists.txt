@@ -1,4 +1,4 @@
-project                     (cian)
+project                     (mfa)
 cmake_minimum_required      (VERSION 2.8)
 
 option                      (bgq            "Build on BG/Q"                        OFF)

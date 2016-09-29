@@ -1,5 +1,5 @@
 //--------------------------------------------------------------
-// nurbs decoding algorithms
+// decoder object
 // ref: [P&T] Piegl & Tiller, The NURBS Book, 1995
 //
 // Tom Peterka
@@ -7,7 +7,7 @@
 // tpeterka@mcs.anl.gov
 //--------------------------------------------------------------
 
-#include <mfa/encode.hpp>
+#include <mfa/mfa.hpp>
 #include <mfa/decode.hpp>
 
 #include <Eigen/Dense>
@@ -17,24 +17,109 @@
 
 using namespace std;
 
+mfa::
+Decoder::
+Decoder(MFA& mfa_) :
+    mfa(mfa_),
+    p(mfa_.p),
+    ndom_pts(mfa_.ndom_pts),
+    nctrl_pts(mfa_.nctrl_pts),
+    domain(mfa_.domain),
+    params(mfa_.params),
+    ctrl_pts(mfa_.ctrl_pts),
+    knots(mfa_.knots),
+    po(mfa_.po),
+    ko(mfa_.ko),
+    co(mfa_.co)
+{
+    // ensure that encoding was already done
+    if (!p.size()         ||
+        !ndom_pts.size()  ||
+        !nctrl_pts.size() ||
+        !domain.size()    ||
+        !params.size()    ||
+        !ctrl_pts.size()  ||
+        !knots.size())
+    {
+        fprintf(stderr, "Decoder() error: Attempting to decode before encoding.\n");
+        exit(0);
+    }
+}
+
+// computes approximated points from a given set of domain points and an n-d NURBS volume
+// P&T eq. 9.77, p. 424
+// this version recomputes parameter values of input points and
+// recomputes basis functions rather than taking them as an input
+// this version also assumes weights = 1; no division by weight is done
+// assumes all vectors have been correctly resized by the caller
+void
+mfa::
+Decoder::
+Decode(MatrixXf& approx)                 // pts in approximated volume (1st dim. changes fastest)
+{
+    vector<size_t> iter(p.size(), 0);    // parameter index (iteration count) in current dim.
+    vector<size_t> ofst(p.size(), 0);    // start of current dim in linearized params
+
+    for (size_t i = 0; i < p.size() - 1; i++)
+        ofst[i + 1] = ofst[i] + ndom_pts(i);
+
+    // eigen frees following temp vectors when leaving scope
+    VectorXf dpt(domain.cols());         // original data point
+    VectorXf cpt(ctrl_pts.cols());       // approximated point
+    VectorXf d(domain.cols());           // apt - dpt
+    VectorXf param(p.size());            // parameters for one point
+    for (size_t i = 0; i < domain.rows(); i++)
+    {
+        // debug
+        // cerr << "input point:\n" << domain.row(i) << endl;
+
+        // extract parameter vector for one input point from the linearized vector of all params
+        for (size_t j = 0; j < p.size(); j++)
+            param(j) = params(iter[j] + ofst[j]);
+
+        // compute approximated point for this parameter vector
+        VolPt(param, cpt);
+
+        // update the indices in the linearized vector of all params for next input point
+        for (size_t j = 0; j < p.size(); j++)
+        {
+            if (iter[j] < ndom_pts(j) - 1)
+            {
+                iter[j]++;
+                break;
+            }
+            else
+                iter[j] = 0;
+        }
+
+        approx.row(i) = cpt;
+
+        // print progress
+        if (i > 0 && domain.rows() >= 100 && i % (domain.rows() / 100) == 0)
+            fprintf(stderr, "\r%.0f %% decoded", (float)i / (float)(domain.rows()) * 100);
+    }
+    fprintf(stderr, "\r100 %% decoded\n");
+}
+
 // compute a point from a NURBS curve at a given parameter value
 // algorithm 4.1, Piegl & Tiller (P&T) p.124
 // this version recomputes basis functions rather than taking them as an input
 // this version also assumes weights = 1; no division by weight is done
-void CurvePt(int       p,                      // polynomial degree
-             MatrixXf& ctrl_pts,               // control points
-             VectorXf& knots,                  // knots
-             float     param,                  // parameter value of desired point
-             VectorXf& out_pt)                 // (output) point
+void
+mfa::
+Decoder::
+CurvePt(int       cur_dim,                     // current dimension
+        float     param,                       // parameter value of desired point
+        VectorXf& out_pt)                      // (output) point
 {
     int n      = (int)ctrl_pts.rows() - 1;     // number of control point spans
-    int span   = FindSpan(p, n, knots, param);
+    int span   = mfa.FindSpan(cur_dim, param);
     MatrixXf N = MatrixXf::Zero(1, n + 1);     // basis coefficients
-    BasisFuns(p, knots, param, span, N, 0, n, 0);
+    mfa.BasisFuns(cur_dim, param, span, N, 0, n, 0);
     out_pt = VectorXf::Zero(ctrl_pts.cols());  // initializes and resizes
 
-    for (int j = 0; j <= p; j++)
-        out_pt += N(0, j + span - p) * ctrl_pts.row(span - p + j);
+    for (int j = 0; j <= p(cur_dim); j++)
+        out_pt += N(0, j + span - p(cur_dim)) * ctrl_pts.row(span - p(cur_dim) + j);
 
     // debug
     // cerr << "n " << n << " param " << param << " span " << span << " out_pt " << out_pt << endl;
@@ -52,23 +137,20 @@ void CurvePt(int       p,                      // polynomial degree
 // currently not used but can be useful for getting a cross-section curve from a surface
 // would need to be expanded to get a curve from a higher dimensional space, currently gets 1D curve
 // from 2D surface
-void DecodeCurve(VectorXi& p,          // polynomial degree in each dimension
-                 size_t    cur_dim,    // current dimension
-                 MatrixXf& domain,     // input data points (1st dim changes fastest)
-                 MatrixXf& ctrl_pts,   // all control points (1st dim changes fastest)
-                 VectorXf& knots,      // knots (1st dim changes fastest)
-                 VectorXf& params,     // curve parameters for input points (1st dim changes fastest)
-                 float     pre_param,  // parameter value in prior dimension of the pts in the curve
-                 VectorXi& ndom_pts,   // number of input domain points in each dimension
-                 VectorXi& nctrl_pts,  // number of control point spans in each dimension
-                 size_t    ko,         // starting offset for knots in current dim
-                 size_t    cur_cs,     // stride for control points in current dim
-                 size_t    pre_cs,     // stride for control points in prior dim
-                 MatrixXf& out_pts)    // output approximated pts for the curve
+void
+mfa::
+Decoder::
+DecodeCurve(size_t    cur_dim,    // current dimension
+            float     pre_param,  // parameter value in prior dimension of the pts in the curve
+            size_t    ko,         // starting offset for knots in current dim
+            size_t    cur_cs,     // stride for control points in current dim
+            size_t    pre_cs,     // stride for control points in prior dim
+            MatrixXf& out_pts)    // output approximated pts for the curve
 {
     if (cur_dim == 0 || cur_dim >= p.size())
     {
-        fprintf(stderr, "Error in DecodeCurve(): cur_dim out of range (must be 1 <= cur_dim <= %ld\n",
+        fprintf(stderr, "Error in DecodeCurve(): "
+                "cur_dim out of range (must be 1 <= cur_dim <= %ld\n",
                 p.size() - 1);
         exit(0);
     }
@@ -102,11 +184,7 @@ void DecodeCurve(VectorXi& p,          // polynomial degree in each dimension
 
         // get the approximated point
         VectorXf out_pt(domain.cols());
-        CurvePt(p(cur_dim - 1),
-                pre_ctrl_pts,
-                pre_knots,
-                pre_param,
-                out_pt);
+        CurvePt(cur_dim - 1, pre_param, out_pt);
         out_pts.row(j) = out_pt;
 
         // debug
@@ -127,12 +205,11 @@ void DecodeCurve(VectorXi& p,          // polynomial degree in each dimension
 // (1D = NURBS curve, 2D = surface, 3D = volumem 4D = hypervolume, etc.)
 // 2. The dimensionality of individual control points (ctrl_pts.cols())
 // p.size() should be < ctrl_pts.cols()
-void VolPt(VectorXi& p,                  // polynomial degree in each dimension
-           MatrixXf& ctrl_pts,           // control points (1st dim changes fastest)
-           VectorXi& nctrl_pts,          // number of control points in each dim
-           VectorXf& knots,              // knots (1st dim changes fastest)
-           VectorXf& param,              // parameter value of desired point in each dim.
-           VectorXf& out_pt)             // (output) point
+void
+mfa::
+Decoder::
+VolPt(VectorXf& param,                       // parameter value in each dim. of desired point
+      VectorXf& out_pt)                      // (output) point
 {
     // debug
     // cerr << "\n\nparam:\n" << param << endl;
@@ -159,9 +236,9 @@ void VolPt(VectorXi& p,                  // polynomial degree in each dimension
         iter[i]    = 0;
         tot_iters  *= (p(i) + 1);
         n[i]       = (int)nctrl_pts(i) - 1;
-        span[i]    = FindSpan(p(i), n[i], knots, param(i), ko[i]);
+        span[i]    = mfa.FindSpan(i, param(i), ko[i]);
         N[i]       = MatrixXf::Zero(1, n[i] + 1);
-        BasisFuns(p(i), knots, param(i), span[i], N[i], 0, n[i], 0, ko[i]);
+        mfa.BasisFuns(i, param(i), span[i], N[i], 0, n[i], 0, ko[i]);
         if (i == 0)
             cs[i] = 1;
         else
@@ -240,6 +317,7 @@ void VolPt(VectorXi& p,                  // polynomial degree in each dimension
 }
 
 // DEPRECATED
+#if 0
 // but keeping around until a better n-d method is devised
 //
 // max distance from a set of input points to a 1d NURBS curve
@@ -291,71 +369,6 @@ void MaxErr1d(int       p,                   // polynomial degree
         if (i == 0 || errs(i) > max_err)
             max_err = errs(i);
    }
-}
-
-// computes approximated points from a given set of domain points and an n-d NURBS volume
-// P&T eq. 9.77, p. 424
-// this version recomputes parameter values of input points and
-// recomputes basis functions rather than taking them as an input
-// this version also assumes weights = 1; no division by weight is done
-// assumes all vectors have been correctly resized by the caller
-void Decode(VectorXi& p,                   // polynomial degree
-            VectorXi& ndom_pts,            // number of input data points in each dim
-            MatrixXf& domain,              // domain of input data points (1st dim. changes fastest)
-            MatrixXf& ctrl_pts,            // control points (1st dim. changes fastest)
-            VectorXi& nctrl_pts,           // number of control points in each dim
-            VectorXf& knots,               // knots (1st dim. changes fastest)
-            MatrixXf& approx)              // pts in approximated volume (1st dim. changes fastest)
-{
-    // curve parameters for input points
-    // linearized so that 1st dim changes fastest
-    // i.e., x params followed by y params followed by z, ...
-    // total number of params is the sum of the dimensions of domain points, not the product
-    VectorXf params(ndom_pts.sum());          // curve parameters for input data points
-    Params(ndom_pts, domain, params);
-
-    vector<size_t> iter(p.size(), 0);        // parameter index (iteration count) in current dim.
-    vector<size_t> ofst(p.size(), 0);        // start of current dim in linearized params
-
-    for (size_t i = 0; i < p.size() - 1; i++)
-        ofst[i + 1] = ofst[i] + ndom_pts(i);
-
-    // eigen frees following temp vectors when leaving scope
-    VectorXf dpt(domain.cols());             // original data point
-    VectorXf cpt(ctrl_pts.cols());           // approximated point
-    VectorXf d(domain.cols());               // apt - dpt
-    VectorXf param(p.size());                // parameters for one point
-    for (size_t i = 0; i < domain.rows(); i++)
-    {
-        // debug
-        // cerr << "input point:\n" << domain.row(i) << endl;
-
-        // extract parameter vector for one input point from the linearized vector of all params
-        for (size_t j = 0; j < p.size(); j++)
-            param(j) = params(iter[j] + ofst[j]);
-
-        // compute approximated point for this parameter vector
-        VolPt(p, ctrl_pts, nctrl_pts, knots, param, cpt);
-
-        // update the indices in the linearized vector of all params for next input point
-        for (size_t j = 0; j < p.size(); j++)
-        {
-            if (iter[j] < ndom_pts(j) - 1)
-            {
-                iter[j]++;
-                break;
-            }
-            else
-                iter[j] = 0;
-        }
-
-        approx.row(i) = cpt;
-
-        // print progress
-        if (i > 0 && domain.rows() >= 100 && i % (domain.rows() / 100) == 0)
-            fprintf(stderr, "\r%.0f %% decoded", (float)i / (float)(domain.rows()) * 100);
-    }
-    fprintf(stderr, "\r100 %% decoded\n");
 }
 
 // DEPRECATED
@@ -522,3 +535,4 @@ void MaxNormErr1d(int       p,               // polynomial degree
             max_err = errs(i);
    }
 }
+#endif

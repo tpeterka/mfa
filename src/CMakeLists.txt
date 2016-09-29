@@ -1,6 +1,6 @@
 # Buld mfa library
 
-set			(MFA_SOURCES encode.cpp decode.cpp)
+set			(MFA_SOURCES mfa.cpp encode.cpp decode.cpp)
 
 # add_library		(mfa STATIC ${MFA_SOURCES})
 add_library		(mfa ${MFA_SOURCES})

@@ -1,3 +1,5 @@
+// DEPRECATED
+
 //--------------------------------------------------------------
 // a simple example of encoding / decoding some curve data
 // using a diy block model to manage the data

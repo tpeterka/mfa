@@ -7,7 +7,7 @@
 // tpeterka@mcs.anl.gov
 //--------------------------------------------------------------
 
-#include <mfa/mfa.h>
+#include <mfa/mfa.hpp>
 
 #include <vector>
 #include <iostream>
@@ -150,7 +150,7 @@ int main(int argc, char** argv)
     // 1d magnitude function f(x) = ||x||
     // d_args.pt_dim       = 2;
     // d_args.dom_dim      = 1;
-    // d_args.p[0]         = 1;
+    // d_args.p[0]         = 3;
     // d_args.ndom_pts[0]  = 40;
     // d_args.nctrl_pts[0] = 10;
     // d_args.min[0]       = 0.0;
@@ -162,7 +162,7 @@ int main(int argc, char** argv)
 //     d_args.dom_dim      = 2;
 //     d_args.p[0]         = 3;
 //     d_args.p[1]         = 3;
-// #if 0                                        // full size
+// #if 1                                        // full size
 //     d_args.ndom_pts[0]  = 40;
 //     d_args.ndom_pts[1]  = 40;
 //     d_args.nctrl_pts[0] = 10;
@@ -241,11 +241,10 @@ int main(int argc, char** argv)
     // master.foreach(&Block::generate_sphere_data, &d_args);
 
     fprintf(stderr, "Encoding...\n");
-
-    // encode
-    master.foreach(&Block::approx_block, &nctrl_pts);
+    master.foreach(&Block::encode_block);
 
     fprintf(stderr, "Encoding done. Decoding and computing max. error...\n");
+    master.foreach(&Block::decode_block);
 
     // compute max error
 #if 0
