@@ -54,6 +54,7 @@ Encode()
     int      tot_nknots;        // total number of knots = sum of number of knots over all dims
     int      tot_nctrl;         // total number of control points
     int      ndims = ndom_pts.size();        // number of domain dimensions
+
     Quants(n, m, tot_nparams, tot_nknots, tot_nctrl);
 
     // following are counters for slicing domain and params into curves in different dimensions
@@ -523,6 +524,8 @@ CtrlCurve(MatrixXf& N,          // basis functions for current dimension
 
     // debug
     // cerr << "P:\n" << P << endl;
+    // Eigen::FullPivLU<MatrixXf> lu_decomp(NtN);
+    // cerr << "Rank of NtN = " << lu_decomp.rank() << endl;
 
     // append points from P to control points
     // TODO: any way to avoid this?
@@ -541,4 +544,35 @@ CtrlCurve(MatrixXf& N,          // basis functions for current dimension
     //     cerr << "temp_ctrl1:\n" << temp_ctrl1 << endl;
     // else if (k == ndims - 1)
     //     cerr << "ctrl_pts:\n" << ctrl_pts << endl;
+}
+
+// signed normal distance from a point to the domain
+// uses finite differences (first order linear) method to compute gradient and normal vector
+float
+mfa::
+Encoder::
+NormalDistance(VectorXf& pt,                  // point whose distance from domain is desired
+               int       cell_idx)            // index of min. corner of cell in the domain
+                                              // that will be used to compute partial derivatives
+{
+    // normal vector = [df/dx, df/dy, df/dz, ..., -1]
+    // -1 is the last coordinate of the domain points, ie, the range value
+    VectorXf normal(domain.cols());
+    int      stride = 1;                     // stride in domain for current dimension
+    int      last   = domain.cols() - 1;     // last coordinate of a domain pt, ie, the range value
+    for (int i = 0; i < p.size(); i++)       // for all domain dimensions
+    {
+        int next_idx = cell_idx + stride;
+        normal(i) = (domain(next_idx, last) - domain(cell_idx, last)) /
+            (domain(next_idx, i) - domain(cell_idx, i));
+        stride *= ndom_pts(i);
+    }
+    normal(last) = -1;
+
+    // unit normal
+    normal /= normal.norm();
+
+    // project distance from (pt - domain(cell_idx)) to unit normal
+    VectorXf dom_pt = domain.row(cell_idx);
+    return normal.dot(pt - dom_pt);
 }

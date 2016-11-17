@@ -118,6 +118,7 @@ function create_bb_geometry()
 function create_raw_geometry()
 {
     raw = new THREE.Object3D();              // curves connecting raw data
+    curve_material = new THREE.LineBasicMaterial({ color: 'white', linewidth: 2 });
 
     // 1-d path
     if (nraw_pts.length < 2)
@@ -139,12 +140,8 @@ function create_raw_geometry()
         }
 
         // create the lines and add to the scene
-        curve_material = new THREE.LineBasicMaterial({ color: 'white', linewidth: 2 });
-        lines = new THREE.Line(points, curve_material)
-        curve = new THREE.Object3D();
-        curve.add(lines)
-        curve.material = curve_material;
-        raw.add(curve);
+        curve = new THREE.Line(points, curve_material)
+        raw.add(curve)
     }
 
     // y-direction curves
@@ -167,14 +164,11 @@ function create_raw_geometry()
             no++;
 
             // create the lines and add to the scene
-            curve_material = new THREE.LineBasicMaterial({ color: 'white', linewidth: 2 });
-            lines = new THREE.Line(points, curve_material)
-            curve = new THREE.Object3D();
-            curve.add(lines)
-            curve.material = curve_material;
-            raw.add(curve);
+            curve = new THREE.Line(points, curve_material)
+            raw.add(curve)
         }
     }
+    raw.material = curve_material;
     raw.name = 'raw_curves';
     scene.add(raw);
 }
@@ -214,6 +208,7 @@ function create_ctrl_geometry()
 
     // curves
     ctrl = new THREE.Object3D();             // curves connecting control points
+    curve_material = new THREE.LineBasicMaterial({ color: 'yellow', linewidth: 2 });
 
     // x-direction curves
     n = 0;                                   // index into points
@@ -231,11 +226,7 @@ function create_ctrl_geometry()
         }
 
         // create the lines and add to the scene
-        curve_material = new THREE.LineBasicMaterial({ color: 'yellow', linewidth: 2 });
-        lines = new THREE.Line(points, curve_material)
-        curve = new THREE.Object3D();
-        curve.add(lines)
-        curve.material = curve_material;
+        curve = new THREE.Line(points, curve_material)
         ctrl.add(curve);
     }
 
@@ -259,14 +250,11 @@ function create_ctrl_geometry()
             no++;
 
             // create the lines and add to the scene
-            curve_material = new THREE.LineBasicMaterial({ color: 'yellow', linewidth: 2 });
-            lines = new THREE.Line(points, curve_material)
-            curve = new THREE.Object3D();
-            curve.add(lines)
-            curve.material = curve_material;
+            curve = new THREE.Line(points, curve_material)
             ctrl.add(curve);
         }
     }
+    ctrl.material = curve_material;
     ctrl.name = 'ctrl_curves';
     scene.add(ctrl);
 }
@@ -277,6 +265,7 @@ function create_ctrl_geometry()
 function create_approx_geometry()
 {
     approx = new THREE.Object3D();           // curves connecting approximated points
+    curve_material = new THREE.LineBasicMaterial({ color: 'cyan', linewidth: 2 });
 
     // 1-d path
     if (nraw_pts.length < 2)
@@ -298,12 +287,8 @@ function create_approx_geometry()
         }
 
         // create the lines and add to the scene
-        curve_material = new THREE.LineBasicMaterial({ color: 'cyan', linewidth: 2 });
-        lines = new THREE.Line(points, curve_material)
-        curve = new THREE.Object3D();
-        curve.add(lines)
-        curve.material = curve_material;
-        approx.add(curve);
+        curve = new THREE.Line(points, curve_material)
+        approx.add(curve)
     }
 
     // y-direction curves
@@ -326,14 +311,11 @@ function create_approx_geometry()
             no++;
 
             // create the lines and add to the scene
-            curve_material = new THREE.LineBasicMaterial({ color: 'cyan', linewidth: 2 });
-            lines = new THREE.Line(points, curve_material)
-            curve = new THREE.Object3D();
-            curve.add(lines)
-            curve.material = curve_material;
+            curve = new THREE.Line(points, curve_material)
             approx.add(curve);
         }
     }
+    approx.material = curve_material;
     approx.name = 'approx_curves';
     scene.add(approx);
 }

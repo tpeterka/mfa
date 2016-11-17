@@ -305,6 +305,7 @@ struct Block
 
             // assign values to the domain (geometry)
             int cs = 1;                           // stride of a coordinate in this dim
+            float eps = 1.0e-6;                   // floating point roundoff error
             for (int i = 0; i < a->dom_dim; i++)  // all dimensions in the domain
             {
                 float d = (a->max[i] - a->min[i]) / (ndom_pts(i) - 1);
@@ -312,7 +313,7 @@ struct Block
                 int co = 0;                       // j index of start of a new coordinate value
                 for (int j = 0; j < tot_ndom_pts; j++)
                 {
-                    if (a->min[i] + k * d > a->max[i])
+                    if (a->min[i] + k * d > a->max[i] + eps)
                         k = 0;
                     domain(j, i) = a->min[i] + k * d;
                     if (j + 1 - co >= cs)
@@ -332,7 +333,10 @@ struct Block
             {
                 float res = 1.0;                  // product of the sinc functions
                 for (int i = 0; i < a->dom_dim; i++)
-                    res *= (sin(domain(j, i)) / domain(j, i));
+                {
+                    if (domain(j, i) != 0.0)
+                        res *= (sin(domain(j, i)) / domain(j, i));
+                }
                 res *= a->s;
 
                 for (int i = a->dom_dim; i < a->pt_dim; i++)
@@ -634,8 +638,8 @@ struct Block
 
     void print_block(const diy::Master::ProxyWithLink& cp, void*)
         {
-            cerr << ctrl_pts.rows() << " control points\n" << ctrl_pts << endl;
-            cerr << knots.size() << " knots\n" << knots << endl;
+            // cerr << ctrl_pts.rows() << " control points\n" << ctrl_pts << endl;
+            // cerr << knots.size() << " knots\n" << knots << endl;
             // cerr << approx.rows() << " approximated points\n" << approx << endl;
             fprintf(stderr, "|normalized max_err| = %e\n", fabs(max_err));
             fprintf(stderr, "# input points = %ld\n", domain.rows());

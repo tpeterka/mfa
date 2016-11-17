@@ -78,6 +78,10 @@ namespace mfa
                       MatrixXf& temp_ctrl0, // first temporary control points buffer
                       MatrixXf& temp_ctrl1); // second temporary control points buffer
 
+        float NormalDistance(VectorXf& pt,  // point whose distance from domain is desired
+                       int       cell_idx); // index of min. corner of cell in the domain
+                                            // that will be used to compute partial derivatives
+
         MFA mfa;                       // the mfa object
         // following are references the the data in the mfa object
         VectorXi& p;                   // polynomial degree in each dimension

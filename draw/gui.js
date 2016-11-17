@@ -52,22 +52,24 @@ window.onload = function() {
         if (white_paper)
         {
             renderer.setClearColor('white', 1);
-            // var object = scene.getObjectByName('raw_pts');
-            // object.material.color.set('black');
+
             var object = scene.getObjectByName('raw_curves');
-            object.material.color.set('black');
+            object.material.color.set('blue');
+            object.material.linewidth = 3;
             var object = scene.getObjectByName('ctrl_pts');
-            object.material.color.set('red');
+            object.material.color.set('gray');
+            object.material.size *= 2;
+            object.material.linewidth = 3;
             var object = scene.getObjectByName('ctrl_curves');
-            object.material.color.set('red');
+            object.material.color.set('gray');
             var object = scene.getObjectByName('approx_curves');
-            object.material.color.set('green');
+            object.material.color.set('red');
+            object.material.linewidth = 3;
         }
         else
         {
             renderer.setClearColor('black', 1);
-            // var object = scene.getObjectByName('raw_pts');
-            // object.material.color.set('white');
+
             var object = scene.getObjectByName('raw_curves');
             object.material.color.set('white');
             var object = scene.getObjectByName('ctrl_pts');

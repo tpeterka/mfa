@@ -58,25 +58,50 @@ int main(int argc, char** argv)
     DomainArgs d_args;
 
     // 1d sinc function
-    // d_args.pt_dim       = 2;
-    // d_args.dom_dim      = 1;
-    // d_args.p[0]         = 3;
-    // d_args.ndom_pts[0]  = 1000;
-    // d_args.nctrl_pts[0] = 70;
-    // d_args.min[0]       = -4.0 * M_PI;
-    // d_args.max[0]       = 4.0 * M_PI;
-    // d_args.s            = 10.0;           // scaling factor on range
-    // master.foreach(&Block::generate_sinc_data, &d_args);
+    d_args.pt_dim       = 2;
+    d_args.dom_dim      = 1;
+    d_args.p[0]         = 4;
+    d_args.ndom_pts[0]  = 400;
+    d_args.nctrl_pts[0] = 50;
+    d_args.min[0]       = -4.0 * M_PI;
+    d_args.max[0]       = 4.0 * M_PI;
+    d_args.s            = 10.0;           // scaling factor on range
+    master.foreach(&Block::generate_sinc_data, &d_args);
+
+    // test of 2 overlapping sinc functions
+    // 101 total domain points (100 spans) split into 2 parts with p+1 overlapping points
+//     int ghost = 5;
+// #if 1
+//     d_args.pt_dim       = 2;
+//     d_args.dom_dim      = 1;
+//     d_args.p[0]         = 3;
+//     d_args.ndom_pts[0]  = 51 + ghost;
+//     d_args.nctrl_pts[0] = 15;
+//     d_args.min[0]       = -2.0 * M_PI;
+//     d_args.max[0]       = (float)(ghost - 1) * 4.0/100 * M_PI;
+//     d_args.s            = 5.0;             // scaling factor on range
+//     master.foreach(&Block::generate_sinc_data, &d_args);
+// #else
+//     d_args.pt_dim       = 2;
+//     d_args.dom_dim      = 1;
+//     d_args.p[0]         = 3;
+//     d_args.ndom_pts[0]  = 51 + ghost;
+//     d_args.nctrl_pts[0] = 15;
+//     d_args.min[0]       = -(float)(ghost - 1) * 4.0/100 * M_PI;
+//     d_args.max[0]       = 2.0 * M_PI;
+//     d_args.s            = 5.0;              // scaling factor on range
+//     master.foreach(&Block::generate_sinc_data, &d_args);
+// #endif
 
     // 2d sinc function f(x,y) = sinc(x)sinc(y)
     // d_args.pt_dim       = 3;
     // d_args.dom_dim      = 2;
     // d_args.p[0]         = 4;
     // d_args.p[1]         = 4;
-    // d_args.ndom_pts[0]  = 50;
-    // d_args.ndom_pts[1]  = 50;
-    // d_args.nctrl_pts[0] = 30;
-    // d_args.nctrl_pts[1] = 30;
+    // d_args.ndom_pts[0]  = 100;
+    // d_args.ndom_pts[1]  = 100;
+    // d_args.nctrl_pts[0] = 20;
+    // d_args.nctrl_pts[1] = 20;
     // d_args.min[0]       = -4.0 * M_PI;
     // d_args.min[1]       = -4.0 * M_PI;
     // d_args.max[0]       = 4.0 * M_PI;
@@ -114,15 +139,15 @@ int main(int argc, char** argv)
     // master.foreach(&Block::read_1d_file_data, &d_args);
 
     // 2d read file
-    d_args.pt_dim       = 3;
-    d_args.dom_dim      = 2;
-    d_args.p[0]         = 4;
-    d_args.p[1]         = 4;
-    d_args.ndom_pts[0]  = 704;
-    d_args.ndom_pts[1]  = 540;
-    d_args.nctrl_pts[0] = 140;
-    d_args.nctrl_pts[1] = 108;
-    master.foreach(&Block::read_2d_file_data, &d_args);
+    // d_args.pt_dim       = 3;
+    // d_args.dom_dim      = 2;
+    // d_args.p[0]         = 4;
+    // d_args.p[1]         = 4;
+    // d_args.ndom_pts[0]  = 704;
+    // d_args.ndom_pts[1]  = 540;
+    // d_args.nctrl_pts[0] = 140;
+    // d_args.nctrl_pts[1] = 108;
+    // master.foreach(&Block::read_2d_file_data, &d_args);
 
     // 3d constant function f(x,y,z) = 1
     // d_args.pt_dim       = 4;
@@ -150,8 +175,8 @@ int main(int argc, char** argv)
     // 1d magnitude function f(x) = ||x||
     // d_args.pt_dim       = 2;
     // d_args.dom_dim      = 1;
-    // d_args.p[0]         = 3;
-    // d_args.ndom_pts[0]  = 40;
+    // d_args.p[0]         = 4;
+    // d_args.ndom_pts[0]  = 50;
     // d_args.nctrl_pts[0] = 10;
     // d_args.min[0]       = 0.0;
     // d_args.max[0]       = d_args.ndom_pts[0] - 1;
@@ -160,18 +185,18 @@ int main(int argc, char** argv)
     // 2d magnitude function f(x,y) = ||(x,y)||
 //     d_args.pt_dim       = 3;
 //     d_args.dom_dim      = 2;
-//     d_args.p[0]         = 3;
-//     d_args.p[1]         = 3;
+//     d_args.p[0]         = 4;
+//     d_args.p[1]         = 4;
 // #if 1                                        // full size
-//     d_args.ndom_pts[0]  = 40;
-//     d_args.ndom_pts[1]  = 40;
+//     d_args.ndom_pts[0]  = 50;
+//     d_args.ndom_pts[1]  = 50;
 //     d_args.nctrl_pts[0] = 10;
 //     d_args.nctrl_pts[1] = 10;
 // #else                                        // small size
-//     d_args.ndom_pts[0]  = 5;
-//     d_args.ndom_pts[1]  = 5;
-//     d_args.nctrl_pts[0] = 4;
-//     d_args.nctrl_pts[1] = 4;
+//     d_args.ndom_pts[0]  = 10;
+//     d_args.ndom_pts[1]  = 10;
+//     d_args.nctrl_pts[0] = 5;
+//     d_args.nctrl_pts[1] = 5;
 // #endif
 //     d_args.min[0]       = 1.0;
 //     d_args.min[1]       = 1.0;
@@ -182,12 +207,12 @@ int main(int argc, char** argv)
     // 3d magnitude function f(x,y,z) = ||(x,y,z)||
     // d_args.pt_dim       = 4;
     // d_args.dom_dim      = 3;
-    // d_args.p[0]         = 1;
-    // d_args.p[1]         = 1;
-    // d_args.p[2]         = 1;
-    // d_args.ndom_pts[0]  = 40;
-    // d_args.ndom_pts[1]  = 40;
-    // d_args.ndom_pts[2]  = 40;
+    // d_args.p[0]         = 4;
+    // d_args.p[1]         = 4;
+    // d_args.p[2]         = 4;
+    // d_args.ndom_pts[0]  = 50;
+    // d_args.ndom_pts[1]  = 50;
+    // d_args.ndom_pts[2]  = 50;
     // d_args.nctrl_pts[0] = 10;
     // d_args.nctrl_pts[1] = 10;
     // d_args.nctrl_pts[2] = 10;
@@ -202,14 +227,14 @@ int main(int argc, char** argv)
     // 4d magnitude function f(x,y,z,t) = ||(x,y,z,t)||
     // d_args.pt_dim       = 5;
     // d_args.dom_dim      = 4;
-    // d_args.p[0]         = 1;
-    // d_args.p[1]         = 1;
-    // d_args.p[2]         = 1;
-    // d_args.p[3]         = 1;
-    // d_args.ndom_pts[0]  = 40;
-    // d_args.ndom_pts[1]  = 40;
-    // d_args.ndom_pts[2]  = 40;
-    // d_args.ndom_pts[3]  = 40;
+    // d_args.p[0]         = 4;
+    // d_args.p[1]         = 4;
+    // d_args.p[2]         = 4;
+    // d_args.p[3]         = 4;
+    // d_args.ndom_pts[0]  = 50;
+    // d_args.ndom_pts[1]  = 50;
+    // d_args.ndom_pts[2]  = 50;
+    // d_args.ndom_pts[3]  = 50;
     // d_args.nctrl_pts[0] = 10;
     // d_args.nctrl_pts[1] = 10;
     // d_args.nctrl_pts[2] = 10;
@@ -222,6 +247,36 @@ int main(int argc, char** argv)
     // d_args.max[1]       = d_args.ndom_pts[1] - 1;
     // d_args.max[2]       = d_args.ndom_pts[2] - 1;
     // d_args.max[3]       = d_args.ndom_pts[3] - 1;
+    // master.foreach(&Block::generate_magnitude_data, &d_args);
+
+    // 5d magnitude function f(x,y,z,t) = ||(x,y,z,t)||
+    // d_args.pt_dim       = 6;
+    // d_args.dom_dim      = 5;
+    // d_args.p[0]         = 4;
+    // d_args.p[1]         = 4;
+    // d_args.p[2]         = 4;
+    // d_args.p[3]         = 4;
+    // d_args.p[4]         = 4;
+    // d_args.ndom_pts[0]  = 50;
+    // d_args.ndom_pts[1]  = 50;
+    // d_args.ndom_pts[2]  = 50;
+    // d_args.ndom_pts[3]  = 50;
+    // d_args.ndom_pts[4]  = 50;
+    // d_args.nctrl_pts[0] = 10;
+    // d_args.nctrl_pts[1] = 10;
+    // d_args.nctrl_pts[2] = 10;
+    // d_args.nctrl_pts[3] = 10;
+    // d_args.nctrl_pts[4] = 10;
+    // d_args.min[0]       = 0.0;
+    // d_args.min[1]       = 0.0;
+    // d_args.min[2]       = 0.0;
+    // d_args.min[3]       = 0.0;
+    // d_args.min[4]       = 0.0;
+    // d_args.max[0]       = d_args.ndom_pts[0] - 1;
+    // d_args.max[1]       = d_args.ndom_pts[1] - 1;
+    // d_args.max[2]       = d_args.ndom_pts[2] - 1;
+    // d_args.max[3]       = d_args.ndom_pts[3] - 1;
+    // d_args.max[4]       = d_args.ndom_pts[4] - 1;
     // master.foreach(&Block::generate_magnitude_data, &d_args);
 
     // 2d sphere function f(x,y) = sqrt(r^2 - x^2 - y^2)
@@ -241,10 +296,14 @@ int main(int argc, char** argv)
     // master.foreach(&Block::generate_sphere_data, &d_args);
 
     fprintf(stderr, "Encoding...\n");
+    double encode_time = MPI_Wtime();
     master.foreach(&Block::encode_block);
+    encode_time = MPI_Wtime() - encode_time;
 
     fprintf(stderr, "Encoding done. Decoding and computing max. error...\n");
+    double decode_time = MPI_Wtime();
     master.foreach(&Block::decode_block);
+    decode_time = MPI_Wtime() - decode_time;
 
     // compute max error
 #if 0
@@ -256,14 +315,16 @@ int main(int argc, char** argv)
     master.foreach(&Block::max_error_1d, &e_args);
 #else
     // for nd magnitude function only
-    master.foreach(&Block::mag_max_error);
+    // master.foreach(&Block::mag_max_error);
 
     // for nd sinc function only
-    // master.foreach(&Block::sinc_max_error);
+    master.foreach(&Block::sinc_max_error);
 #endif
 
     // print results
     master.foreach(&Block::print_block);
+    fprintf(stderr, "encoding time = %.3lf s.\n", encode_time);
+    fprintf(stderr, "decoding time = %.3lf s.\n", decode_time);
 
     // save the results in diy format
     diy::io::write_blocks("approx.out", world, master);
