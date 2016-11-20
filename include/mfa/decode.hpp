@@ -42,7 +42,7 @@ namespace mfa
                          size_t    pre_cs,     // stride for control points in prior dim
                          MatrixXf& out_pts);   // output approximated pts for the curve
 
-        MFA mfa;                       // the mfa object
+        MFA& mfa;                      // the mfa object
         // following are references the the data in the mfa object
         VectorXi& p;                   // polynomial degree in each dimension
         VectorXi& ndom_pts;            // number of input data points in each dim

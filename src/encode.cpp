@@ -551,20 +551,58 @@ CtrlCurve(MatrixXf& N,          // basis functions for current dimension
 float
 mfa::
 Encoder::
-NormalDistance(VectorXf& pt,                  // point whose distance from domain is desired
-               int       cell_idx)            // index of min. corner of cell in the domain
-                                              // that will be used to compute partial derivatives
+NormalDistance(VectorXf& pt,          // point whose distance from domain is desired
+               int       idx)         // index of min. corner of cell in the domain
+                                      // that will be used to compute partial derivatives
+                                      // (linear) search for correct cell will start at this index
 {
     // normal vector = [df/dx, df/dy, df/dz, ..., -1]
     // -1 is the last coordinate of the domain points, ie, the range value
     VectorXf normal(domain.cols());
-    int      stride = 1;                     // stride in domain for current dimension
-    int      last   = domain.cols() - 1;     // last coordinate of a domain pt, ie, the range value
+    int      stride  = 1;                    // stride in domain for current dimension
+    int      min_idx = 0;                    // index corresponding to min edge in current dim.
+    int      max_idx = 1;                    // index corresponding to max edge in current dim.
+    int      last    = domain.cols() - 1;    // last coordinate of a domain pt, ie, the range value
+
+    // convert linear idx to multidim. i,j,k... indices in each domain dimension
+    VectorXi ijk(p.size());
+    mfa.idx2ijk(idx, ijk);
+
     for (int i = 0; i < p.size(); i++)       // for all domain dimensions
     {
-        int next_idx = cell_idx + stride;
-        normal(i) = (domain(next_idx, last) - domain(cell_idx, last)) /
-            (domain(next_idx, i) - domain(cell_idx, i));
+        // at least 2 points needed in each dimension
+        // TODO: do something degenerate if not, but probably will never get to this point
+        // because there will be insufficient points to encode in the first place
+        assert(ndom_pts(i) >= 2);
+
+        // adjust idx until pt is in the cell
+        while (domain(idx, i) - pt(i) > mfa.eps && ijk(i) >= 0)
+        {
+            idx -= stride;
+            ijk(i)--;
+        }
+        while (ijk(i) + 1 < ndom_pts(i) && pt(i) - domain(idx + stride, i) > mfa.eps)
+        {
+            idx += stride;
+            ijk(i)++;
+        }
+
+        // set two vertices of the cell
+        int i0, i1;
+        if (ijk(i) + 1 < ndom_pts(i))
+        {
+            i0 = idx;
+            i1 = idx + stride;
+        }
+        else
+        {
+            i0 = idx - stride;
+            i1 = idx;
+        }
+        // debug
+        assert(domain(i0, i) <= pt(i) && pt(i) <= domain(i1, i));
+
+        normal(i) = (domain(i1, last) - domain(i0, last)) / (domain(i1, i) - domain(i0, i));
         stride *= ndom_pts(i);
     }
     normal(last) = -1;
@@ -572,7 +610,16 @@ NormalDistance(VectorXf& pt,                  // point whose distance from domai
     // unit normal
     normal /= normal.norm();
 
-    // project distance from (pt - domain(cell_idx)) to unit normal
-    VectorXf dom_pt = domain.row(cell_idx);
+    // project distance from (pt - domain(idx)) to unit normal
+    VectorXf dom_pt = domain.row(idx);
+
+    // debug
+    // fprintf(stderr, "idx=%d\n", idx);
+    // cerr << "unit normal\n" << normal << endl;
+    // cerr << "point\n" << pt << endl;
+    // cerr << "domain point:\n" << dom_pt << endl;
+    // cerr << "pt - dom_pt:\n" << pt - dom_pt << endl;
+    // fprintf(stderr, "projection = %e\n\n", normal.dot(pt - dom_pt));
+
     return normal.dot(pt - dom_pt);
 }

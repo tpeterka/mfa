@@ -28,10 +28,18 @@ namespace mfa
             VectorXi& nctrl_pts_,     // desired number of control points in each dim
             MatrixXf& domain_,        // input data points (1st dim changes fastest)
             MatrixXf& ctrl_pts_,      // (output) control points (1st dim changes fastest)
-            VectorXf& knots_);        // (output) knots (1st dim changes fastest)
+            VectorXf& knots_,         // (output) knots (1st dim changes fastest)
+            float     eps_ = 1.0e-6); // minimum difference considered significant
+
         ~MFA() {}
+
         void Encode();
-        void Decode(MatrixXf& approx);
+
+        void Decode(MatrixXf& approx); // decoded points
+
+        float Error(VectorXf& pt,    // point some distance away from domain points
+                    int       idx);  // index of point in domain near to the point
+                                     // search for cell containing the point starts at this index
 
     private:
 
@@ -56,6 +64,10 @@ namespace mfa
                                 size_t    po,      // starting offset for params in cur. dim.
                                 size_t    ds,      // stride for domain pts in cuve in cur. dim.
                                 float     coord);  // target coordinate
+
+        void idx2ijk(int       idx,       // linear index
+                     VectorXi& ijk);      // i,j,k,... indices in all dimensions
+
         friend class Encoder;
         friend class Decoder;
 
@@ -74,6 +86,7 @@ namespace mfa
         int tot_nparams;       // total number of params = sum of ndom_pts over all dims
                                // not the total number of data pts, which would be the prod.
         int tot_nknots;        // total nmbr of knots = sum of nmbr of knots over all dims
+        float eps;             // minimum difference considered significant
     };
 }
 

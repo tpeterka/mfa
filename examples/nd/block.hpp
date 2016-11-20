@@ -143,7 +143,7 @@ struct Block
             {
                 // the simplest constant function
                 for (int j = 0; j < tot_ndom_pts; j++)
-                    domain(j, i) = a->s;
+                    domain(j, i) = 1.0;
             }
 
             // extents
@@ -153,6 +153,117 @@ struct Block
                 domain_maxs(i) = a->max[i];
             }
         }
+
+    // f(x,y,z,...) = x
+    void generate_ramp_data(const diy::Master::ProxyWithLink& cp, void* args)
+        {
+            DomainArgs* a = (DomainArgs*)args;
+            int tot_ndom_pts = 1;
+            p.resize(a->dom_dim);
+            ndom_pts.resize(a->dom_dim);
+            nctrl_pts.resize(a->dom_dim);
+            domain_mins.resize(a->pt_dim);
+            domain_maxs.resize(a->pt_dim);
+            for (int i = 0; i < a->dom_dim; i++)
+            {
+                p(i)         =  a->p[i];
+                ndom_pts(i)  =  a->ndom_pts[i];
+                nctrl_pts(i) =  a->nctrl_pts[i];
+                tot_ndom_pts *= ndom_pts(i);
+            }
+            domain.resize(tot_ndom_pts, a->pt_dim);
+
+            // assign values to the domain (geometry)
+            int cs = 1;                  // stride of a coordinate in this dim
+            for (int i = 0; i < a->dom_dim; i++) // all dimensions in the domain
+            {
+                float d = (a->max[i] - a->min[i]) / (ndom_pts(i) - 1);
+                int k = 0;
+                int co = 0;                  // j index of start of a new coordinate value
+                for (int j = 0; j < tot_ndom_pts; j++)
+                {
+                    if (a->min[i] + k * d > a->max[i])
+                        k = 0;
+                    domain(j, i) = a->min[i] + k * d;
+                    if (j + 1 - co >= cs)
+                    {
+                        k++;
+                        co = j + 1;
+                    }
+                }
+                cs *= ndom_pts(i);
+            }
+
+            // assign values to the range (physics attributes)
+            for (int i = a->dom_dim; i < a->pt_dim; i++)
+            {
+                for (int j = 0; j < tot_ndom_pts; j++)
+                    domain(j, i) = domain(j, 0);
+            }
+
+            // extents
+            for (int i = 0; i < a->pt_dim; i++)
+            {
+                domain_mins(i) = a->min[i];
+                domain_maxs(i) = a->max[i];
+            }
+        }
+
+    // f(x,y,z,...) = x^2
+    void generate_quadratic_data(const diy::Master::ProxyWithLink& cp, void* args)
+        {
+            DomainArgs* a = (DomainArgs*)args;
+            int tot_ndom_pts = 1;
+            p.resize(a->dom_dim);
+            ndom_pts.resize(a->dom_dim);
+            nctrl_pts.resize(a->dom_dim);
+            domain_mins.resize(a->pt_dim);
+            domain_maxs.resize(a->pt_dim);
+            for (int i = 0; i < a->dom_dim; i++)
+            {
+                p(i)         =  a->p[i];
+                ndom_pts(i)  =  a->ndom_pts[i];
+                nctrl_pts(i) =  a->nctrl_pts[i];
+                tot_ndom_pts *= ndom_pts(i);
+            }
+            domain.resize(tot_ndom_pts, a->pt_dim);
+
+            // assign values to the domain (geometry)
+            int cs = 1;                  // stride of a coordinate in this dim
+            for (int i = 0; i < a->dom_dim; i++) // all dimensions in the domain
+            {
+                float d = (a->max[i] - a->min[i]) / (ndom_pts(i) - 1);
+                int k = 0;
+                int co = 0;                  // j index of start of a new coordinate value
+                for (int j = 0; j < tot_ndom_pts; j++)
+                {
+                    if (a->min[i] + k * d > a->max[i])
+                        k = 0;
+                    domain(j, i) = a->min[i] + k * d;
+                    if (j + 1 - co >= cs)
+                    {
+                        k++;
+                        co = j + 1;
+                    }
+                }
+                cs *= ndom_pts(i);
+            }
+
+            // assign values to the range (physics attributes)
+            for (int i = a->dom_dim; i < a->pt_dim; i++)
+            {
+                for (int j = 0; j < tot_ndom_pts; j++)
+                    domain(j, i) = domain(j, 0) * domain(j, 0);
+            }
+
+            // extents
+            for (int i = 0; i < a->pt_dim; i++)
+            {
+                domain_mins(i) = a->min[i];
+                domain_maxs(i) = a->max[i];
+            }
+        }
+
     // f(x,y,z,...) = sqrt(x^2 + y^2 + z^2 + ...^2)
     void generate_magnitude_data(const diy::Master::ProxyWithLink& cp, void* args)
         {
@@ -565,6 +676,7 @@ struct Block
     //                      max_err);
     //     }
 
+    // DEPRECATED, remove when no longer needed
     // max error for the nd magnitude data set
     void mag_max_error(const diy::Master::ProxyWithLink& cp, void*)
         {
@@ -598,6 +710,7 @@ struct Block
             max_err /= range;
         }
 
+    // DEPRECATED, remove when no longer needed
     // max error for the nd sinc data set
     void sinc_max_error(const diy::Master::ProxyWithLink& cp, void*)
         {
@@ -636,8 +749,73 @@ struct Block
             max_err /= range;
         }
 
+    // DEPRECATED, remove when no longer needed
+    // max error for the nd quadratic data set
+    void quad_max_error(const diy::Master::ProxyWithLink& cp, void*)
+        {
+            // max error
+            VectorXf max_err_pos(p.size());
+            for (size_t i = 0; i < approx.rows(); i++)
+            {
+                VectorXf approx_pos = approx.block(i, 0, 1, p.size()).row(0);
+                // true_val  = what the magnitude of the position should be (ground truth)
+                float true_val = approx_pos(0) * approx_pos(0);
+                // approx_val = the approximated value of the MFA
+                float approx_val = approx(i, p.size());
+                float err = true_val - approx_val;
+                if (i == 0 || fabs(err) > fabs(max_err))
+                {
+                    max_err = err;
+                    max_err_pos = approx_pos;
+                }
+            }
+
+            // normalize max error by size of input data (domain and range)
+            float min = domain.minCoeff();
+            float max = domain.maxCoeff();
+            float range = max - min;
+
+            // debug
+            fprintf(stderr, "data range = %.1f\n", range);
+            fprintf(stderr, "raw max_error = %e (re. sign, error = truth - approx)\n", max_err);
+            cerr << "position of max error =\n" << max_err_pos << endl;
+
+            max_err /= range;
+        }
+
+        void max_error(const diy::Master::ProxyWithLink& cp, void*)
+        {
+            // test normal distance computation
+            VectorXf max_err_pos(p.size());
+            for (size_t i = 0; i < approx.rows(); i++)
+            {
+                VectorXf approx_pos = approx.block(i, 0, 1, p.size()).row(0);
+                VectorXf approx_pt = approx.row(i);
+                float err = mfa->Error(approx_pt, i);
+
+                if (i == 0 || fabs(err) > fabs(max_err))
+                {
+                    max_err = err;
+                    max_err_pos = approx_pos;
+                }
+            }
+
+            // normalize max error by size of input data (domain and range)
+            float min = domain.minCoeff();
+            float max = domain.maxCoeff();
+            float range = max - min;
+
+            // debug
+            fprintf(stderr, "data range = %.1f\n", range);
+            fprintf(stderr, "raw max_error = %e (re. sign, error = truth - approx)\n", max_err);
+            cerr << "position of max error =\n" << max_err_pos << endl;
+
+            max_err /= range;
+        }
+
     void print_block(const diy::Master::ProxyWithLink& cp, void*)
         {
+            // cerr << "domain\n" << domain << endl;
             // cerr << ctrl_pts.rows() << " control points\n" << ctrl_pts << endl;
             // cerr << knots.size() << " knots\n" << knots << endl;
             // cerr << approx.rows() << " approximated points\n" << approx << endl;

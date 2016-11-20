@@ -45,13 +45,15 @@ MFA(VectorXi& p_,             // polynomial degree in each dimension
     VectorXi& nctrl_pts_,     // desired number of control points in each dim
     MatrixXf& domain_,        // input data points (1st dim changes fastest)
     MatrixXf& ctrl_pts_,      // (output) control points (1st dim changes fastest)
-    VectorXf& knots_) :       // (output) knots (1st dim changes fastest)
+    VectorXf& knots_,         // (output) knots (1st dim changes fastest)
+    float     eps_) :         // minimum difference considered significant
     p(p_),
     ndom_pts(ndom_pts_),
     nctrl_pts(nctrl_pts_),
     domain(domain_),
     ctrl_pts(ctrl_pts_),
-    knots(knots_)
+    knots(knots_),
+    eps(eps_)
 {
     // check dimensionality for sanity
     assert(p.size() < domain.cols());
@@ -117,6 +119,18 @@ Decode(MatrixXf& approx)
 {
     mfa::Decoder decoder(*this);
     decoder.Decode(approx);
+}
+
+// error (distance in normal direction) from a point to the domain points
+float
+mfa::
+MFA::
+Error(VectorXf& pt,               // point some distance away from domain points
+      int       idx)              // index of point in domain near to the point
+                                  // search for cell containing the point starting at this index
+{
+    mfa::Encoder encoder(*this);
+    return encoder.NormalDistance(pt, idx);
 }
 
 // binary search to find the span in the knots vector containing a given parameter value
@@ -429,4 +443,37 @@ InterpolateParams(int       cur_dim,  // curent dimension
 
     // TODO: iterate and get the param to match the target coord even closer
     // resulting coord when the param is used is within about 10^-3
+}
+
+// convert linear domain point index into (i,k,k,...) multidimensional index
+// number of dimensions is the domain dimensionality
+// (not domain * range dimensionality, ie, p.size(), not domain_point.cols())
+void
+mfa::
+MFA::
+idx2ijk(int       idx,                       // linear cell indx
+        VectorXi& ijk)                       // i,j,k,... indices in all dimensions
+{
+    if (p.size() == 1)
+    {
+        ijk(0) = idx;
+        return;
+    }
+
+    for (int i = 0; i < p.size(); i++)
+    {
+        if (i < p.size() - 1)
+            ijk(i) = (idx % ds[i + 1]) / ds[i];
+        else
+            ijk(i) = idx / ds[i];
+    }
+
+    // debug: check the answer
+    // int check_idx = 0;
+    // for (int i = 0; i < p.size(); i++)
+    //     check_idx += ijk(i) * ds[i];
+    // assert(idx == check_idx);
+
+    // debug
+    // cerr << "idx=" << idx << "ijk\n" << ijk << endl;
 }
