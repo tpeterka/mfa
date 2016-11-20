@@ -57,30 +57,4 @@ namespace mfa
     };
 }
 
-
-// DEPRECATE eventually, only for 1d
-void MaxErr1d(int       p,                   // polynomial degree
-              MatrixXf& domain,              // domain of input data points
-              MatrixXf& ctrl_pts,            // control points
-              VectorXf& knots,               // knots
-              MatrixXf& approx,              // points on approximated curve
-                                             // (same number as input points, for rendering only)
-              VectorXf& errs,                // error at each input point
-              float&    max_err);            // maximum error
-
-// DEPRECATE eventually, only for 1d
-void MaxNormErr1d(int       p,               // polynomial degree
-                  MatrixXf& domain,          // domain of input data points
-                  MatrixXf& ctrl_pts,        // control points
-                  VectorXf& knots,           // knots
-                  int       max_niter,       // max num iterations to search for
-                                             // nearest curve pt
-                  float     err_bound,       // desired error bound (stop searching if less)
-                  int       search_rad,      // number of parameter steps to search path on
-                                             // either side of parameter value of input point
-                  MatrixXf& approx,          // points on approximated curve (same number as
-                                             // input points, for rendering only)
-                  VectorXf& errs,            // (output) error at each input point
-                  float&    max_err);        // (output) max error from any input pt to curve
-
 #endif
