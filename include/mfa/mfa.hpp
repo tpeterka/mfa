@@ -60,6 +60,9 @@ namespace mfa
 
         void Knots();
 
+        void InsertKnots(VectorXi& nnew_knots,     // number of new knots in each dim
+                         VectorXf& new_knots);     // new knots (1st dim changes fastest)
+
         float InterpolateParams(int       cur_dim, // curent dimension
                                 size_t    po,      // starting offset for params in cur. dim.
                                 size_t    ds,      // stride for domain pts in cuve in cur. dim.

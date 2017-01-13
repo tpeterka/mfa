@@ -99,9 +99,10 @@ struct Block
             diy::load(bb, b->approx);
         }
     // f(x,y,z,...) = 1
-    void generate_constant_data(const diy::Master::ProxyWithLink& cp, void* args)
+    void generate_constant_data(const diy::Master::ProxyWithLink& cp,
+                                DomainArgs&                       args)
         {
-            DomainArgs* a = (DomainArgs*)args;
+            DomainArgs* a = &args;
             int tot_ndom_pts = 1;
             p.resize(a->dom_dim);
             ndom_pts.resize(a->dom_dim);
@@ -155,9 +156,10 @@ struct Block
         }
 
     // f(x,y,z,...) = x
-    void generate_ramp_data(const diy::Master::ProxyWithLink& cp, void* args)
+    void generate_ramp_data(const diy::Master::ProxyWithLink& cp,
+                            DomainArgs&                       args)
         {
-            DomainArgs* a = (DomainArgs*)args;
+            DomainArgs* a = &args;
             int tot_ndom_pts = 1;
             p.resize(a->dom_dim);
             ndom_pts.resize(a->dom_dim);
@@ -210,9 +212,10 @@ struct Block
         }
 
     // f(x,y,z,...) = x^2
-    void generate_quadratic_data(const diy::Master::ProxyWithLink& cp, void* args)
+    void generate_quadratic_data(const diy::Master::ProxyWithLink& cp,
+                                 DomainArgs&                       args)
         {
-            DomainArgs* a = (DomainArgs*)args;
+            DomainArgs* a = &args;
             int tot_ndom_pts = 1;
             p.resize(a->dom_dim);
             ndom_pts.resize(a->dom_dim);
@@ -265,9 +268,10 @@ struct Block
         }
 
     // f(x,y,z,...) = sqrt(x^2 + y^2 + z^2 + ...^2)
-    void generate_magnitude_data(const diy::Master::ProxyWithLink& cp, void* args)
+    void generate_magnitude_data(const diy::Master::ProxyWithLink& cp,
+                                 DomainArgs&                       args)
         {
-            DomainArgs* a = (DomainArgs*)args;
+            DomainArgs* a = &args;
             int tot_ndom_pts = 1;
             p.resize(a->dom_dim);
             ndom_pts.resize(a->dom_dim);
@@ -327,9 +331,10 @@ struct Block
         }
 
     // f(x,y,z,...) = sqrt(r^2 - x^2 - y^2 - z^2 - ...^2)
-    void generate_sphere_data(const diy::Master::ProxyWithLink& cp, void* args)
+    void generate_sphere_data(const diy::Master::ProxyWithLink& cp,
+                              DomainArgs&                       args)
         {
-            DomainArgs* a = (DomainArgs*)args;
+            DomainArgs* a = &args;
             int tot_ndom_pts = 1;
             p.resize(a->dom_dim);
             ndom_pts.resize(a->dom_dim);
@@ -395,9 +400,10 @@ struct Block
         }
 
     // y = sine(x)/x
-    void generate_sinc_data(const diy::Master::ProxyWithLink& cp, void* args)
+    void generate_sinc_data(const diy::Master::ProxyWithLink& cp,
+                            DomainArgs&                       args)
         {
-            DomainArgs* a = (DomainArgs*)args;
+            DomainArgs* a = &args;
             int tot_ndom_pts = 1;
             p.resize(a->dom_dim);
             ndom_pts.resize(a->dom_dim);
@@ -495,9 +501,10 @@ struct Block
     // read the flame dataset and take one slice out of the middle of it
     // doubling the resolution because the file I have is a 1/2-resolution downsampled version
     // TODO: only for 1d so far
-    void read_1d_file_data(const diy::Master::ProxyWithLink& cp, void* args)
+    void read_1d_file_data(const diy::Master::ProxyWithLink& cp,
+                           DomainArgs&                       args)
         {
-            DomainArgs* a = (DomainArgs*)args;
+            DomainArgs* a = &args;
             int tot_ndom_pts = 1;
             p.resize(a->dom_dim);
             ndom_pts.resize(a->dom_dim);
@@ -569,9 +576,10 @@ struct Block
 
     // read the flame dataset and take one plane out of the middle of it
     // TODO: only for 2d so far
-    void read_2d_file_data(const diy::Master::ProxyWithLink& cp, void* args)
+    void read_2d_file_data(const diy::Master::ProxyWithLink& cp,
+                           DomainArgs&                       args)
         {
-            DomainArgs* a = (DomainArgs*)args;
+            DomainArgs* a = &args;
             int tot_ndom_pts = 1;
             p.resize(a->dom_dim);
             ndom_pts.resize(a->dom_dim);
@@ -638,13 +646,13 @@ struct Block
             // cerr << "domain extent:\n min\n" << domain_mins << "\nmax\n" << domain_maxs << endl;
         }
 
-    void encode_block(const diy::Master::ProxyWithLink& cp, void*)
+    void encode_block(const diy::Master::ProxyWithLink& cp)
         {
             mfa = new mfa::MFA(p, ndom_pts, nctrl_pts, domain, ctrl_pts, knots);
             mfa->Encode();
         }
 
-    void decode_block(const diy::Master::ProxyWithLink& cp, void*)
+    void decode_block(const diy::Master::ProxyWithLink& cp)
         {
             approx.resize(domain.rows(), domain.cols());
             mfa->Decode(approx);
@@ -678,7 +686,7 @@ struct Block
 
     // DEPRECATED, remove when no longer needed
     // max error for the nd magnitude data set
-    void mag_max_error(const diy::Master::ProxyWithLink& cp, void*)
+    void mag_max_error(const diy::Master::ProxyWithLink& cp)
         {
             // max error
             VectorXf max_err_pos(p.size());
@@ -712,7 +720,7 @@ struct Block
 
     // DEPRECATED, remove when no longer needed
     // max error for the nd sinc data set
-    void sinc_max_error(const diy::Master::ProxyWithLink& cp, void*)
+    void sinc_max_error(const diy::Master::ProxyWithLink& cp)
         {
             // max error
             VectorXf max_err_pos(p.size());
@@ -751,7 +759,7 @@ struct Block
 
     // DEPRECATED, remove when no longer needed
     // max error for the nd quadratic data set
-    void quad_max_error(const diy::Master::ProxyWithLink& cp, void*)
+    void quad_max_error(const diy::Master::ProxyWithLink& cp)
         {
             // max error
             VectorXf max_err_pos(p.size());
@@ -783,7 +791,7 @@ struct Block
             max_err /= range;
         }
 
-        void max_error(const diy::Master::ProxyWithLink& cp, void*)
+        void max_error(const diy::Master::ProxyWithLink& cp)
         {
             // test normal distance computation
             VectorXf max_err_pos(p.size());
@@ -813,7 +821,7 @@ struct Block
             max_err /= range;
         }
 
-    void print_block(const diy::Master::ProxyWithLink& cp, void*)
+    void print_block(const diy::Master::ProxyWithLink& cp)
         {
             // cerr << "domain\n" << domain << endl;
             // cerr << ctrl_pts.rows() << " control points\n" << ctrl_pts << endl;

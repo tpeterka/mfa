@@ -8,9 +8,13 @@ if                          (bgq)
     add_definitions         (-DBGQ)
 endif                       (bgq)
 
+# C++11
+set                         (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
+
 # OSX flags
 if                          (${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
-    add_definitions	    (-DMAC_OSX)
+  add_definitions	    (-DMAC_OSX)
+  set                       (CMAKE_MACOSX_RPATH on)
 endif                       (${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
 
  # MPI

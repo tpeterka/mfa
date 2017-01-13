@@ -382,6 +382,19 @@ Knots()
     }
 }
 
+// inserts a set of knots into the original knot set
+//
+// orioginal, inserted, and resulting new knots are same for all curves and
+// stored once for each dimension in row-major order (1st dim changes fastest)
+void
+mfa::
+MFA::
+InsertKnots(VectorXi& nnew_knots,     // number of new knots in each dim
+            VectorXf& new_knots)      // new knots (1st dim changes fastest)
+{
+    // TODO
+}
+
 // interpolate parameters to get parameter value for a target coordinate
 //
 // TODO: experiment whether this is more accurate than calling Params

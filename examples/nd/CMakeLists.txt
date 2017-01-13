@@ -1,7 +1,10 @@
-add_executable              (nd      nd.cpp          )
-target_link_libraries       (nd      mfa ${libraries})
+add_executable              (fixed    fixed.cpp          )
+target_link_libraries       (fixed    mfa ${libraries})
 
-install(TARGETS nd
+add_executable              (adaptive adaptive.cpp    )
+target_link_libraries       (adaptive mfa ${libraries})
+
+install(TARGETS fixed adaptive
         DESTINATION ${CMAKE_INSTALL_PREFIX}/examples/nd/
         PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE
         GROUP_READ GROUP_WRITE GROUP_EXECUTE
