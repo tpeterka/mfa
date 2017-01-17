@@ -2,7 +2,6 @@
 
 set			(MFA_SOURCES mfa.cpp encode.cpp decode.cpp)
 
-# add_library		(mfa STATIC ${MFA_SOURCES})
 add_library		(mfa ${MFA_SOURCES})
 target_link_libraries	(mfa ${libraries})
 

@@ -111,6 +111,19 @@ Encode()
     encoder.Encode();
 }
 
+// re-encode with insertion of new knots into existing knots
+void
+mfa::
+MFA::
+Encode(VectorXi& nnew_knots,     // number of new knots in each dim
+       VectorXf& new_knots)      // new knots (1st dim changes fastest)
+{
+    InsertKnots(nnew_knots, new_knots);
+
+    mfa::Encoder encoder(*this);
+    encoder.Encode();
+}
+
 // encode
 void
 mfa::
@@ -382,7 +395,8 @@ Knots()
     }
 }
 
-// inserts a set of knots into the original knot set
+// inserts a set of knots (in all dimensions) into the original knot set
+// also increases the numbers of control points (in all dimensions) that will result
 //
 // orioginal, inserted, and resulting new knots are same for all curves and
 // stored once for each dimension in row-major order (1st dim changes fastest)
@@ -392,7 +406,9 @@ MFA::
 InsertKnots(VectorXi& nnew_knots,     // number of new knots in each dim
             VectorXf& new_knots)      // new knots (1st dim changes fastest)
 {
-    // TODO
+    // TODO: insert knots
+
+    // TODO: increase nctrl_pts
 }
 
 // interpolate parameters to get parameter value for a target coordinate

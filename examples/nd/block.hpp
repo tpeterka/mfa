@@ -47,7 +47,7 @@ struct ErrArgs
     int   max_niter;                         // max num iterations to search for nearest curve pt
     float err_bound;                         // desired error bound (stop searching if less)
     int   search_rad;                        // number of parameter steps to search path on either
-                                             // side of parameter value of input point
+    // side of parameter value of input point
 };
 
 // block
@@ -652,6 +652,14 @@ struct Block
             mfa->Encode();
         }
 
+    // re-encode a block with new knots to be inserted
+    void reencode_block(const diy::Master::ProxyWithLink& cp,
+                        VectorXi nnew_knots,
+                        VectorXf new_knots)
+        {
+            mfa->Encode(nnew_knots, new_knots);
+        }
+
     void decode_block(const diy::Master::ProxyWithLink& cp)
         {
             approx.resize(domain.rows(), domain.cols());
@@ -791,9 +799,10 @@ struct Block
             max_err /= range;
         }
 
-        void max_error(const diy::Master::ProxyWithLink& cp)
+    // compute maximum error in the block
+    void max_error(const diy::Master::ProxyWithLink& cp)
         {
-            // test normal distance computation
+            // normal distance computation
             VectorXf max_err_pos(p.size());
             for (size_t i = 0; i < approx.rows(); i++)
             {
@@ -821,6 +830,60 @@ struct Block
             max_err /= range;
         }
 
+    // compute knot locations where error threshold is exceeded
+    void knot_locs(const diy::Master::ProxyWithLink& cp,
+                   VectorXi                          nnew_knots,
+                   VectorXf                          new_knots,
+                   float                             err_limit)
+        {
+            // data range for error normalization
+            float min   = domain.minCoeff();
+            float max   = domain.maxCoeff();
+            float range = max - min;
+
+            // i,j,k domain coordinates for following iteration over approximated points
+            VectorXi ijk = VectorXi::Zero(ndom_pts.size()); // TODO: domain size, not pt size?
+
+            // i,j,k coordinates of knots to add in each dimension
+            vector < set <int> > new_knot_indices(ndom_pts.size());
+
+            // normal distance computation
+            for (size_t i = 0; i < approx.rows(); i++)
+            {
+                // debug
+                cerr << "ijk:\n" << ijk << endl;
+
+                VectorXf approx_pos = approx.block(i, 0, 1, p.size()).row(0);
+                VectorXf approx_pt  = approx.row(i);
+                float    err        = mfa->Error(approx_pt, i) / range;
+
+                if (fabs(err) > err_limit)
+                {
+                    // add the knot ijk indices
+                    for (size_t j = 0; j < ijk.size(); j++)
+                        new_knot_indices[j].insert(ijk(j));
+                }
+
+                // increment ijk indices
+                for (size_t j = 0; j < ijk.size(); j++)
+                {
+                    ijk(j) = (ijk(j) + 1) % ndom_pts(j);
+                    if (ijk(j))
+                        break;
+                }
+            }
+
+            // convert knot indices to knot values in new_knots, set quantities of nnew_knots
+            for (size_t j = 0; j < ijk.size(); j++)
+            {
+                nnew_knots(j) = new_knot_indices[j].size();
+                for (set<int>::iterator it = new_knot_indices[j].begin();
+                     it != new_knot_indices[j].end(); it++)
+                {
+                }
+            }
+        }
+
     void print_block(const diy::Master::ProxyWithLink& cp)
         {
             // cerr << "domain\n" << domain << endl;
@@ -844,7 +907,7 @@ struct Block
     MatrixXf ctrl_pts;                       // NURBS control points (1st dim changes fastest)
     VectorXf knots;                          // NURBS knots (1st dim changes fastest)
     MatrixXf approx;                         // points in approximated volume
-                                             // (same number as input points, for rendering only)
+    // (same number as input points, for rendering only)
     VectorXf errs;                           // distance from each input point to curve
     float    max_err;                        // maximum distance from input points to curve
 

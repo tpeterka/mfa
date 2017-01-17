@@ -35,6 +35,9 @@ namespace mfa
 
         void Encode();
 
+        void Encode(VectorXi& nnew_knots,    // number of new knots in each dim
+                    VectorXf& new_knots);    // new knots (1st dim changes fastest)
+
         void Decode(MatrixXf& approx); // decoded points
 
         float Error(VectorXf& pt,    // point some distance away from domain points
