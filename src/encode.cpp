@@ -575,17 +575,37 @@ NormalDistance(VectorXf& pt,          // point whose distance from domain is des
         // because there will be insufficient points to encode in the first place
         assert(ndom_pts(i) >= 2);
 
+        // debug
+        // fprintf(stderr, "idx=%d ijk(%d)=%d\n", idx, i, ijk(i));
+
         // adjust idx until pt is in the cell
-        while (domain(idx, i) - pt(i) > mfa.eps && ijk(i) >= 0)
+        while (ijk(i) >= 0 && domain(idx, i) - pt(i) > mfa.eps)
         {
-            idx -= stride;
-            ijk(i)--;
+            if (ijk(i) - 1 >= 0)
+            {
+                idx -= stride;
+                ijk(i)--;
+            }
+            else
+                break;
+            // debug
+            // fprintf(stderr, "idx=%d ijk(%d)=%d\n", idx, i, ijk(i));
         }
         while (ijk(i) + 1 < ndom_pts(i) && pt(i) - domain(idx + stride, i) > mfa.eps)
         {
-            idx += stride;
-            ijk(i)++;
+            if (ijk(i) + 1 < ndom_pts(i))
+            {
+                idx += stride;
+                ijk(i)++;
+            }
+            else
+                break;
+            // debug
+            // fprintf(stderr, "idx=%d ijk(%d)=%d\n", idx, i, ijk(i));
         }
+
+        // debug
+        // fprintf(stderr, "1: ijk(%d)=%d idx=%d\n", i, ijk(i), idx);
 
         // set two vertices of the cell
         int i0, i1;
@@ -599,8 +619,20 @@ NormalDistance(VectorXf& pt,          // point whose distance from domain is des
             i0 = idx - stride;
             i1 = idx;
         }
+
         // debug
-        assert(domain(i0, i) <= pt(i) && pt(i) <= domain(i1, i));
+        // fprintf(stderr, "2: i=%d i0=%d i1=%d\n", i, i0, i1);
+
+        // debug
+        float eps = 1.0e-5;                  // floating point roundoff error
+        if (!(domain(i0, i) - eps < pt(i) && pt(i) < domain(i1, i) + eps))
+        {
+            fprintf(stderr, "i=%d i0=%d i1=%d\n", i, i0, i1);
+            cerr << "domain(i0):\n" << domain(i0) <<
+                "\npt(i):\n" << pt(i) <<
+                "\ndomain(i1):\n" << domain(i1) << endl;
+        }
+        assert(domain(i0, i) - eps < pt(i) && pt(i) < domain(i1, i) + eps);
 
         normal(i) = (domain(i1, last) - domain(i0, last)) / (domain(i1, i) - domain(i0, i));
         stride *= ndom_pts(i);

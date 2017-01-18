@@ -422,7 +422,7 @@ struct Block
 
             // assign values to the domain (geometry)
             int cs = 1;                           // stride of a coordinate in this dim
-            float eps = 1.0e-6;                   // floating point roundoff error
+            float eps = 1.0e-5;                   // floating point roundoff error
             for (int i = 0; i < a->dom_dim; i++)  // all dimensions in the domain
             {
                 float d = (a->max[i] - a->min[i]) / (ndom_pts(i) - 1);
@@ -844,14 +844,14 @@ struct Block
             // i,j,k domain coordinates for following iteration over approximated points
             VectorXi ijk = VectorXi::Zero(ndom_pts.size()); // TODO: domain size, not pt size?
 
-            // i,j,k coordinates of knots to add in each dimension
+            // // i,j,k coordinates of knots to add in each dimension
             vector < set <int> > new_knot_indices(ndom_pts.size());
 
             // normal distance computation
             for (size_t i = 0; i < approx.rows(); i++)
             {
                 // debug
-                cerr << "ijk:\n" << ijk << endl;
+                // cerr << "ijk:\n" << ijk << endl;
 
                 VectorXf approx_pos = approx.block(i, 0, 1, p.size()).row(0);
                 VectorXf approx_pt  = approx.row(i);
@@ -874,12 +874,20 @@ struct Block
             }
 
             // convert knot indices to knot values in new_knots, set quantities of nnew_knots
+            nnew_knots.resize(ndom_pts.size());
             for (size_t j = 0; j < ijk.size(); j++)
             {
                 nnew_knots(j) = new_knot_indices[j].size();
+
+                // debug
+                fprintf(stderr, "nnew_knots(%lu)=%d\n", j, nnew_knots(j));
+
                 for (set<int>::iterator it = new_knot_indices[j].begin();
                      it != new_knot_indices[j].end(); it++)
                 {
+                    // debug
+                    fprintf(stderr, "ijk=%i\n", *it);
+                    // TODO: compute new knot value
                 }
             }
         }
