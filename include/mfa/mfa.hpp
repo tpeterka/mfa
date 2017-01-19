@@ -35,14 +35,19 @@ namespace mfa
 
         void Encode();
 
-        void Encode(VectorXi& nnew_knots,    // number of new knots in each dim
-                    VectorXf& new_knots);    // new knots (1st dim changes fastest)
+        void Encode(float err_limit);  // maximjum allowable normalized error
 
         void Decode(MatrixXf& approx); // decoded points
 
         float Error(VectorXf& pt,    // point some distance away from domain points
                     int       idx);  // index of point in domain near to the point
                                      // search for cell containing the point starts at this index
+
+        // TODO: remove approx parameter below (decode points one at a time)
+        void FindExtraKnots(VectorXi& nnew_knots,     // number of new knots in each dim
+                            VectorXf& new_knots,      // new knots (1st dim changes fastest)
+                            float     err_limit,
+                            MatrixXf& approx);        // pts in approximated volume (1st dim. changes fastest)
 
     private:
 

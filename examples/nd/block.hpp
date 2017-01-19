@@ -654,10 +654,9 @@ struct Block
 
     // re-encode a block with new knots to be inserted
     void reencode_block(const diy::Master::ProxyWithLink& cp,
-                        VectorXi nnew_knots,
-                        VectorXf new_knots)
+                        float                             err_limit)
         {
-            mfa->Encode(nnew_knots, new_knots);
+            mfa->Encode(err_limit);
         }
 
     void decode_block(const diy::Master::ProxyWithLink& cp)
@@ -830,72 +829,20 @@ struct Block
             max_err /= range;
         }
 
+    // DEPRECATED
     // compute knot locations where error threshold is exceeded
-    void knot_locs(const diy::Master::ProxyWithLink& cp,
-                   VectorXi                          nnew_knots,
-                   VectorXf                          new_knots,
-                   float                             err_limit)
-        {
-            // data range for error normalization
-            float min   = domain.minCoeff();
-            float max   = domain.maxCoeff();
-            float range = max - min;
-
-            // i,j,k domain coordinates for following iteration over approximated points
-            VectorXi ijk = VectorXi::Zero(ndom_pts.size()); // TODO: domain size, not pt size?
-
-            // // i,j,k coordinates of knots to add in each dimension
-            vector < set <int> > new_knot_indices(ndom_pts.size());
-
-            // normal distance computation
-            for (size_t i = 0; i < approx.rows(); i++)
-            {
-                // debug
-                // cerr << "ijk:\n" << ijk << endl;
-
-                VectorXf approx_pos = approx.block(i, 0, 1, p.size()).row(0);
-                VectorXf approx_pt  = approx.row(i);
-                float    err        = mfa->Error(approx_pt, i) / range;
-
-                if (fabs(err) > err_limit)
-                {
-                    // add the knot ijk indices
-                    for (size_t j = 0; j < ijk.size(); j++)
-                        new_knot_indices[j].insert(ijk(j));
-                }
-
-                // increment ijk indices
-                for (size_t j = 0; j < ijk.size(); j++)
-                {
-                    ijk(j) = (ijk(j) + 1) % ndom_pts(j);
-                    if (ijk(j))
-                        break;
-                }
-            }
-
-            // convert knot indices to knot values in new_knots, set quantities of nnew_knots
-            nnew_knots.resize(ndom_pts.size());
-            for (size_t j = 0; j < ijk.size(); j++)
-            {
-                nnew_knots(j) = new_knot_indices[j].size();
-
-                // debug
-                fprintf(stderr, "nnew_knots(%lu)=%d\n", j, nnew_knots(j));
-
-                for (set<int>::iterator it = new_knot_indices[j].begin();
-                     it != new_knot_indices[j].end(); it++)
-                {
-                    // debug
-                    fprintf(stderr, "ijk=%i\n", *it);
-                    // TODO: compute new knot value
-                }
-            }
-        }
+    // void knot_locs(const diy::Master::ProxyWithLink& cp,
+    //                VectorXi&                         nnew_knots,
+    //                VectorXf&                         new_knots,
+    //                float                             err_limit)
+    //     {
+    //         mfa->FindExtraKnots(nnew_knots, new_knots, err_limit, approx);
+    //     }
 
     void print_block(const diy::Master::ProxyWithLink& cp)
         {
             // cerr << "domain\n" << domain << endl;
-            // cerr << ctrl_pts.rows() << " control points\n" << ctrl_pts << endl;
+            cerr << ctrl_pts.rows() << " control points\n" << ctrl_pts << endl;
             // cerr << knots.size() << " knots\n" << knots << endl;
             // cerr << approx.rows() << " approximated points\n" << approx << endl;
             fprintf(stderr, "|normalized max_err| = %e\n", fabs(max_err));
@@ -915,7 +862,7 @@ struct Block
     MatrixXf ctrl_pts;                       // NURBS control points (1st dim changes fastest)
     VectorXf knots;                          // NURBS knots (1st dim changes fastest)
     MatrixXf approx;                         // points in approximated volume
-    // (same number as input points, for rendering only)
+                                             // (same number as input points, for rendering only)
     VectorXf errs;                           // distance from each input point to curve
     float    max_err;                        // maximum distance from input points to curve
 

@@ -14,6 +14,7 @@
 
 #include <vector>
 #include <iostream>
+#include <set>
 
 using namespace std;
 
@@ -81,7 +82,7 @@ MFA(VectorXi& p_,             // polynomial degree in each dimension
     Knots();
 
     // debug
-    // cerr << "knots:\n" << knots << endl;
+    cerr << "knots:\n" << knots << endl;
 
     // offsets and strides for knots, params, and control points in different dimensions
     // TODO: co for control points currently not used because control points are stored explicitly
@@ -115,9 +116,17 @@ Encode()
 void
 mfa::
 MFA::
-Encode(VectorXi& nnew_knots,     // number of new knots in each dim
-       VectorXf& new_knots)      // new knots (1st dim changes fastest)
+Encode(float err_limit)                      // maximum allowable normalized error
 {
+    VectorXi nnew_knots;                     // number of new knots in each dim
+    VectorXf new_knots;                      // new knots (1st dim changes fastest)
+
+    // TODO: remove bulk decoding and decode points as needed one at a time instead
+    MatrixXf approx;                         // decoded points
+    approx.resize(domain.rows(), domain.cols());
+    Decode(approx);
+
+    FindExtraKnots(nnew_knots, new_knots, err_limit, approx);
     InsertKnots(nnew_knots, new_knots);
 
     mfa::Encoder encoder(*this);
@@ -203,11 +212,19 @@ BasisFuns(int       cur_dim,            // current dimension
     vector<float> left(p(cur_dim) + 1);               // temporary recurrence results
     vector<float> right(p(cur_dim) + 1);
 
+    // debug
+    // fprintf(stderr, "param=%.3f span=%d\n", u, span);
+
     // fill N
     for (int j = 1; j <= p(cur_dim); j++)
     {
         left[j]  = u - knots(span + 1 - j);
         right[j] = knots(span + j) - u;
+
+        // debug
+        // fprintf(stderr, "min: knot[%d]=%.3f max: knot[%d]=%.3f\n",
+        //         span + 1 - j, knots(span + 1 - j), span + j, knots(span + j));
+
         float saved = 0.0;
         for (int r = 0; r < j; r++)
         {
@@ -395,10 +412,94 @@ Knots()
     }
 }
 
+// computes additional knot locations where error threshold is exceeded
+//
+// original, inserted, and resulting new knots are same for all curves and
+// stored once for each dimension in row-major order (1st dim changes fastest)
+//
+// TODO: remove approx parameter below and call Decode for each point instead
+void
+mfa::
+MFA::
+FindExtraKnots(VectorXi& nnew_knots,     // number of new knots in each dim
+               VectorXf& new_knots,      // new knots (1st dim changes fastest)
+               float     err_limit,
+               MatrixXf& approx)         // pts in approximated volume (1st dim. changes fastest)
+{
+    // data range for error normalization
+    float min   = domain.minCoeff();
+    float max   = domain.maxCoeff();
+    float range = max - min;
+
+    // i,j,k domain coordinates for following iteration over approximated points
+    VectorXi ijk = VectorXi::Zero(ndom_pts.size()); // TODO: domain size, not pt size?
+
+    // // i,j,k coordinates of knots to add in each dimension
+    vector < set <int> > new_knot_indices(ndom_pts.size());
+
+    // normal distance computation
+    for (size_t i = 0; i < approx.rows(); i++)
+    {
+        // debug
+        // cerr << "ijk:\n" << ijk << endl;
+
+        VectorXf approx_pos = approx.block(i, 0, 1, p.size()).row(0);
+        VectorXf approx_pt  = approx.row(i);
+        float    err        = Error(approx_pt, i) / range;
+
+        if (fabs(err) > err_limit)
+        {
+            // add the knot ijk indices
+            for (size_t j = 0; j < ijk.size(); j++)
+                new_knot_indices[j].insert(ijk(j));
+        }
+
+        // increment ijk indices
+        for (size_t j = 0; j < ijk.size(); j++)
+        {
+            ijk(j) = (ijk(j) + 1) % ndom_pts(j);
+            if (ijk(j))
+                break;
+        }
+    }
+
+    // compute sizes and resize nnew_knots and new_knots
+    int tot_nnew_knots = 0;                 // total number of new knots added
+    for (size_t j = 0; j < ijk.size(); j++) // for each domain dim j
+        tot_nnew_knots += new_knot_indices[j].size();
+    nnew_knots.resize(ndom_pts.size());
+    new_knots.resize(tot_nnew_knots);
+
+    // convert knot indices to knot values in new_knots, set quantities of nnew_knots
+    size_t n  = 0;                   // linear counter in new_knots
+    size_t p0 = 0;                   // start of current dim in params
+    for (size_t j = 0; j < ijk.size(); j++) // for each domain dim j
+    {
+        nnew_knots(j) = new_knot_indices[j].size();
+
+        // debug
+        fprintf(stderr, "nnew_knots(%lu)=%d\n", j, nnew_knots(j));
+
+        for (set<int>::iterator it = new_knot_indices[j].begin();
+             it != new_knot_indices[j].end(); it++)
+        {
+            // debug
+            fprintf(stderr, "ijk=%i\n", *it);
+
+            new_knots[n++] = params[p0 + *it];
+        }
+        p0 += ndom_pts(j);
+    }
+
+    // debug
+    cerr << "nnew_knots:\n" << nnew_knots << endl;
+    cerr << "new_knots:\n" << new_knots << endl;
+}
+
 // inserts a set of knots (in all dimensions) into the original knot set
 // also increases the numbers of control points (in all dimensions) that will result
 //
-// orioginal, inserted, and resulting new knots are same for all curves and
+// original, inserted, and resulting new knots are same for all curves and
 // stored once for each dimension in row-major order (1st dim changes fastest)
 void
 mfa::
@@ -406,9 +507,55 @@ MFA::
 InsertKnots(VectorXi& nnew_knots,     // number of new knots in each dim
             VectorXf& new_knots)      // new knots (1st dim changes fastest)
 {
-    // TODO: insert knots
+    // total number of new knots
+    int tot_nnew_knots = 0;                 // total number of new knots added
+    for (size_t i = 0; i < nnew_knots.size(); i++) // for each domain dim j
+        tot_nnew_knots += nnew_knots(i);
 
-    // TODO: increase nctrl_pts
+    VectorXf temp_knots(knots.size() + tot_nnew_knots);
+
+    size_t ntemp = 0;                              // current number of temp_knots
+    size_t n = 0;                                  // counter into knots
+    size_t m = 0;                                  // counter into new_knots
+
+    // copy knots to temp_knots, inserting new_knots along the way
+    for (size_t k = 0; k < nnew_knots.size(); k++) // for each domain dimension i
+    {
+        int old_nknots = nctrl_pts(k) + p(k) + 1;  // old number of knots in current dim
+
+        // TODO: in the following, ensure knots are not duplicated (to within epsilon difference?)
+
+        // walk the old knots and insert new ones
+        int j = 0;
+        while (j < old_nknots)
+        {
+            if (m < tot_nnew_knots && new_knots(m) < knots(n))
+            {
+                // debug
+                // fprintf(stderr, "ntemp+1=%d m+1=%d\n", ntemp + 1, m + 1);
+                temp_knots(ntemp++) = new_knots(m++);
+            }
+            else
+            {
+                temp_knots(ntemp++) = knots(n++);
+                j++;
+            }
+        }
+    }
+
+    // copy temp_knots back to knots
+    knots.resize(temp_knots.size());
+    knots = temp_knots;
+
+    // debug
+    cerr << "knots after insertion:\n" << knots << endl;
+    cerr << "old nctrl_pts:\n" << nctrl_pts << endl;
+
+    // increase number of control points
+    nctrl_pts += nnew_knots;
+
+    // debug
+    cerr << "new nctrl_pts:\n" << nctrl_pts << endl;
 }
 
 // interpolate parameters to get parameter value for a target coordinate
