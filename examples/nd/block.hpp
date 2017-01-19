@@ -842,7 +842,7 @@ struct Block
     void print_block(const diy::Master::ProxyWithLink& cp)
         {
             // cerr << "domain\n" << domain << endl;
-            cerr << ctrl_pts.rows() << " control points\n" << ctrl_pts << endl;
+            // cerr << ctrl_pts.rows() << " control points\n" << ctrl_pts << endl;
             // cerr << knots.size() << " knots\n" << knots << endl;
             // cerr << approx.rows() << " approximated points\n" << approx << endl;
             fprintf(stderr, "|normalized max_err| = %e\n", fabs(max_err));

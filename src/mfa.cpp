@@ -82,7 +82,7 @@ MFA(VectorXi& p_,             // polynomial degree in each dimension
     Knots();
 
     // debug
-    cerr << "knots:\n" << knots << endl;
+    // cerr << "knots:\n" << knots << endl;
 
     // offsets and strides for knots, params, and control points in different dimensions
     // TODO: co for control points currently not used because control points are stored explicitly
@@ -478,13 +478,13 @@ FindExtraKnots(VectorXi& nnew_knots,     // number of new knots in each dim
         nnew_knots(j) = new_knot_indices[j].size();
 
         // debug
-        fprintf(stderr, "nnew_knots(%lu)=%d\n", j, nnew_knots(j));
+        // fprintf(stderr, "nnew_knots(%lu)=%d\n", j, nnew_knots(j));
 
         for (set<int>::iterator it = new_knot_indices[j].begin();
              it != new_knot_indices[j].end(); it++)
         {
             // debug
-            fprintf(stderr, "ijk=%i\n", *it);
+            // fprintf(stderr, "ijk=%i\n", *it);
 
             new_knots[n++] = params[p0 + *it];
         }
@@ -513,49 +513,60 @@ InsertKnots(VectorXi& nnew_knots,     // number of new knots in each dim
         tot_nnew_knots += nnew_knots(i);
 
     VectorXf temp_knots(knots.size() + tot_nnew_knots);
+    VectorXi nold_knots = VectorXi::Zero(nnew_knots.size());
 
-    size_t ntemp = 0;                              // current number of temp_knots
-    size_t n = 0;                                  // counter into knots
-    size_t m = 0;                                  // counter into new_knots
+    size_t ntemp = 0;                             // current number of temp_knots
+    size_t n     = 0;                             // counter into knots
+    size_t m     = 0;                             // counter into new_knots
+    size_t nk    = 0;                             // current number of old knots copied in cur. dim
+    size_t mk    = 0;                             // current number of new knots copied in cur. dim
 
     // copy knots to temp_knots, inserting new_knots along the way
     for (size_t k = 0; k < nnew_knots.size(); k++) // for each domain dimension i
     {
-        int old_nknots = nctrl_pts(k) + p(k) + 1;  // old number of knots in current dim
+        nold_knots(k) = nctrl_pts(k) + p(k) + 1;  // old number of knots in current dim
 
         // TODO: in the following, ensure knots are not duplicated (to within epsilon difference?)
 
         // walk the old knots and insert new ones
-        int j = 0;
-        while (j < old_nknots)
+        nk = 0;
+        while (nk < nold_knots(k))
         {
-            if (m < tot_nnew_knots && new_knots(m) < knots(n))
+            if (mk < nnew_knots(k) && new_knots(m) < knots(n))
             {
                 // debug
                 // fprintf(stderr, "ntemp+1=%d m+1=%d\n", ntemp + 1, m + 1);
                 temp_knots(ntemp++) = new_knots(m++);
+                mk++;
             }
             else
             {
                 temp_knots(ntemp++) = knots(n++);
-                j++;
+                nk++;
             }
         }
+
+        mk = 0;
     }
+
+    // debug
+    cerr << "nknots before insertion:\n" << nold_knots << endl;
+    cerr << "knots before insertion:\n" << knots << endl;
+    cerr << "nctrl_pts before insertion:\n" << nctrl_pts << endl;
 
     // copy temp_knots back to knots
     knots.resize(temp_knots.size());
     knots = temp_knots;
 
     // debug
+    cerr << "nnew_knots:\n" << nnew_knots << endl;
     cerr << "knots after insertion:\n" << knots << endl;
-    cerr << "old nctrl_pts:\n" << nctrl_pts << endl;
 
     // increase number of control points
     nctrl_pts += nnew_knots;
 
     // debug
-    cerr << "new nctrl_pts:\n" << nctrl_pts << endl;
+    cerr << "nctrl_pts after insertion:\n" << nctrl_pts << endl;
 }
 
 // interpolate parameters to get parameter value for a target coordinate
