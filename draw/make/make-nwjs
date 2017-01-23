@@ -2,7 +2,8 @@
 
 CC=mpicc \
 CXX=mpicxx \
-CXXFLAGS='-fexceptions -DBUILD_GYP' \
+CXXFLAGS='-fexceptions -DBUILD_GYP -std=c++11 -stdlib=libc++ -mmacosx-version-min=10.9' \
+LDFLAGS='-mmacosx-version-min=10.9' \
 nw-gyp \
 rebuild \
 --target=0.12.2
