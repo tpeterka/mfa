@@ -543,7 +543,7 @@ struct Block
                 //         vel[3 * i], vel[3 * i + 1], vel[3 * i + 2], range[i]);
             }
             // add an interpolated velocity magnitude between each two velocity magnitudes
-            for (size_t i = 0; i < domain.rows() - 1; i++)
+            for (size_t i = 0; i < (size_t)domain.rows() - 1; i++)
             {
                 if (i % 2)
                     domain(i, 1) = (domain(i - 1, 1) + domain(i + 1, 1)) / 2.0;
@@ -553,7 +553,7 @@ struct Block
             // find extent of range
             domain_mins(1) = domain(0, 1);
             domain_maxs(1) = domain(0, 1);
-            for (size_t i = 1; i < domain.rows(); i++)
+            for (size_t i = 1; i < (size_t)domain.rows(); i++)
             {
                 if (domain(i, 1) < domain_mins(1))
                     domain_mins(1) = domain(i, 1);
@@ -563,7 +563,7 @@ struct Block
 
             // scale domain to same size as range, from 0 to range_max
             float dx = (domain_maxs(1) - domain_mins(1)) / (domain.rows() - 1);
-            for (size_t i = 1; i < domain.rows(); i++)
+            for (size_t i = 1; i < (size_t)domain.rows(); i++)
                 domain(i, 0) = i * dx;
 
             // extents
@@ -618,7 +618,7 @@ struct Block
             }
 
             // find extent of range
-            for (size_t i = 0; i < domain.rows(); i++)
+            for (size_t i = 0; i < (size_t)domain.rows(); i++)
             {
                 if (i == 0 || domain(i, 2) < domain_mins(2))
                     domain_mins(2) = domain(i, 2);
@@ -628,8 +628,8 @@ struct Block
 
             // set domain values (just equal to i, j; ie, dx, dy = 1, 1)
             int n = 0;
-            for (size_t j = 0; j < ndom_pts(1); j++)
-                for (size_t i = 0; i < ndom_pts(0); i++)
+            for (size_t j = 0; j < (size_t)(ndom_pts(1)); j++)
+                for (size_t i = 0; i < (size_t)(ndom_pts(0)); i++)
                 {
                     domain(n, 0) = i;
                     domain(n, 1) = j;
@@ -691,119 +691,12 @@ struct Block
     //                      max_err);
     //     }
 
-    // DEPRECATED, remove when no longer needed
-    // max error for the nd magnitude data set
-    void mag_max_error(const diy::Master::ProxyWithLink& cp)
-        {
-            // max error
-            VectorXf max_err_pos(p.size());
-            for (size_t i = 0; i < approx.rows(); i++)
-            {
-                VectorXf approx_pos = approx.block(i, 0, 1, p.size()).row(0);
-                // true_val  = what the magnitude of the position should be (ground truth)
-                float true_val = approx_pos.norm();
-                // approx_val = the approximated value of the MFA
-                float approx_val = approx(i, p.size());
-                float err = true_val - approx_val;
-                if (i == 0 || fabs(err) > fabs(max_err))
-                {
-                    max_err = err;
-                    max_err_pos = approx_pos;
-                }
-            }
-
-            // normalize max error by size of input data (domain and range)
-            float min = domain.minCoeff();
-            float max = domain.maxCoeff();
-            float range = max - min;
-
-            // debug
-            fprintf(stderr, "data range = %.1f\n", range);
-            fprintf(stderr, "raw max_error = %e (re. sign, error = truth - approx)\n", max_err);
-            cerr << "position of max error =\n" << max_err_pos << endl;
-
-            max_err /= range;
-        }
-
-    // DEPRECATED, remove when no longer needed
-    // max error for the nd sinc data set
-    void sinc_max_error(const diy::Master::ProxyWithLink& cp)
-        {
-            // max error
-            VectorXf max_err_pos(p.size());
-            for (size_t i = 0; i < approx.rows(); i++)
-            {
-                VectorXf approx_pos = approx.block(i, 0, 1, p.size()).row(0);
-
-                // truth  = what the value at the position should be
-                float true_val = 1.0;
-                for (int i = 0; i < p.cols(); i++)
-                    true_val *= (sin(approx_pos(i)) / approx_pos(i));
-                true_val *= s;
-
-                // approx = the approximated value of the MFA
-                float approx_val = approx(i, p.size());
-                float err = true_val - approx_val;
-                if (i == 0 || fabs(err) > fabs(max_err))
-                {
-                    max_err = err;
-                    max_err_pos = approx_pos;
-                }
-            }
-
-            // normalize max error by size of input data (domain and range)
-            float min = domain.minCoeff();
-            float max = domain.maxCoeff();
-            float range = max - min;
-
-            // debug
-            fprintf(stderr, "data range = %.1f\n", range);
-            fprintf(stderr, "raw max_error = %e (re. sign, error = truth - approx)\n", max_err);
-            cerr << "position of max error =\n" << max_err_pos << endl;
-
-            max_err /= range;
-        }
-
-    // DEPRECATED, remove when no longer needed
-    // max error for the nd quadratic data set
-    void quad_max_error(const diy::Master::ProxyWithLink& cp)
-        {
-            // max error
-            VectorXf max_err_pos(p.size());
-            for (size_t i = 0; i < approx.rows(); i++)
-            {
-                VectorXf approx_pos = approx.block(i, 0, 1, p.size()).row(0);
-                // true_val  = what the magnitude of the position should be (ground truth)
-                float true_val = approx_pos(0) * approx_pos(0);
-                // approx_val = the approximated value of the MFA
-                float approx_val = approx(i, p.size());
-                float err = true_val - approx_val;
-                if (i == 0 || fabs(err) > fabs(max_err))
-                {
-                    max_err = err;
-                    max_err_pos = approx_pos;
-                }
-            }
-
-            // normalize max error by size of input data (domain and range)
-            float min = domain.minCoeff();
-            float max = domain.maxCoeff();
-            float range = max - min;
-
-            // debug
-            fprintf(stderr, "data range = %.1f\n", range);
-            fprintf(stderr, "raw max_error = %e (re. sign, error = truth - approx)\n", max_err);
-            cerr << "position of max error =\n" << max_err_pos << endl;
-
-            max_err /= range;
-        }
-
     // compute maximum error in the block
     void max_error(const diy::Master::ProxyWithLink& cp)
         {
             // normal distance computation
             VectorXf max_err_pos(p.size());
-            for (size_t i = 0; i < approx.rows(); i++)
+            for (size_t i = 0; i < (size_t)approx.rows(); i++)
             {
                 VectorXf approx_pos = approx.block(i, 0, 1, p.size()).row(0);
                 VectorXf approx_pt = approx.row(i);
@@ -828,16 +721,6 @@ struct Block
 
             max_err /= range;
         }
-
-    // DEPRECATED
-    // compute knot locations where error threshold is exceeded
-    // void knot_locs(const diy::Master::ProxyWithLink& cp,
-    //                VectorXi&                         nnew_knots,
-    //                VectorXf&                         new_knots,
-    //                float                             err_limit)
-    //     {
-    //         mfa->FindExtraKnots(nnew_knots, new_knots, err_limit, approx);
-    //     }
 
     void print_block(const diy::Master::ProxyWithLink& cp)
         {

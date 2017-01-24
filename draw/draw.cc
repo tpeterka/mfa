@@ -41,17 +41,15 @@ void PrepRenderingData(vector<int>&   nraw_pts,
                        int            nblocks,
                        diy::Master&   master)
 {
-    int n;
-
     for (int i = 0; i < nblocks; i++)          // blocks
     {
         vec3d p;
 
         // number of raw points
-        for (size_t j = 0; j < master.block<Block>(i)->ndom_pts.size(); j++)
+        for (size_t j = 0; j < (size_t)(master.block<Block>(i)->ndom_pts.size()); j++)
             nraw_pts.push_back(master.block<Block>(i)->ndom_pts(j));
         // raw points
-        for (size_t j = 0; j < master.block<Block>(i)->domain.rows(); j++)
+        for (size_t j = 0; j < (size_t)(master.block<Block>(i)->domain.rows()); j++)
         {
             p.x = master.block<Block>(i)->domain(j, 0);
             p.y = master.block<Block>(i)->domain(j, 1);
@@ -60,10 +58,10 @@ void PrepRenderingData(vector<int>&   nraw_pts,
             raw_pts.push_back(p);
         }
         // number of control points
-        for (size_t j = 0; j < master.block<Block>(i)->nctrl_pts.size(); j++)
+        for (size_t j = 0; j < (size_t)(master.block<Block>(i)->nctrl_pts.size()); j++)
             nctrl_pts.push_back(master.block<Block>(i)->nctrl_pts(j));
         // control points
-        for (size_t j = 0; j < master.block<Block>(i)->ctrl_pts.rows(); j++)
+        for (size_t j = 0; j < (size_t)(master.block<Block>(i)->ctrl_pts.rows()); j++)
         {
             p.x = master.block<Block>(i)->ctrl_pts(j, 0);
             p.y = master.block<Block>(i)->ctrl_pts(j, 1);
@@ -72,7 +70,7 @@ void PrepRenderingData(vector<int>&   nraw_pts,
             ctrl_pts.push_back(p);
         }
         // approximated points
-        for (size_t j = 0; j < master.block<Block>(i)->approx.rows(); j++)
+        for (size_t j = 0; j < (size_t)(master.block<Block>(i)->approx.rows()); j++)
         {
             p.x = master.block<Block>(i)->approx(j, 0);
             p.y = master.block<Block>(i)->approx(j, 1);
@@ -100,8 +98,6 @@ NAN_METHOD(Main)
 {
     static bool first_time = true;
 
-    float domain_min[3], domain_max[3];                     // global domain extents
-    float range_min[3], range_max[3];                       // global range extents
     vector<int>   nraw_pts;                                 // number of input points in each dim.
     vector<vec3d> raw_pts;                                  // input raw data points
     vector<int>   nctrl_pts;                                // number of control pts in each dim.

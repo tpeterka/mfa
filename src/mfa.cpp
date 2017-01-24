@@ -492,8 +492,8 @@ FindExtraKnots(VectorXi& nnew_knots,     // number of new knots in each dim
     }
 
     // debug
-    cerr << "nnew_knots:\n" << nnew_knots << endl;
-    cerr << "new_knots:\n" << new_knots << endl;
+    // cerr << "nnew_knots:\n" << nnew_knots << endl;
+    // cerr << "new_knots:\n" << new_knots << endl;
 }
 
 // inserts a set of knots (in all dimensions) into the original knot set
@@ -550,23 +550,23 @@ InsertKnots(VectorXi& nnew_knots,     // number of new knots in each dim
     }
 
     // debug
-    cerr << "nknots before insertion:\n" << nold_knots << endl;
-    cerr << "knots before insertion:\n" << knots << endl;
-    cerr << "nctrl_pts before insertion:\n" << nctrl_pts << endl;
+    // cerr << "nknots before insertion:\n" << nold_knots << endl;
+    // cerr << "knots before insertion:\n" << knots << endl;
+    // cerr << "nctrl_pts before insertion:\n" << nctrl_pts << endl;
 
     // copy temp_knots back to knots
     knots.resize(temp_knots.size());
     knots = temp_knots;
 
     // debug
-    cerr << "nnew_knots:\n" << nnew_knots << endl;
-    cerr << "knots after insertion:\n" << knots << endl;
+    // cerr << "nnew_knots:\n" << nnew_knots << endl;
+    // cerr << "knots after insertion:\n" << knots << endl;
 
     // increase number of control points
     nctrl_pts += nnew_knots;
 
     // debug
-    cerr << "nctrl_pts after insertion:\n" << nctrl_pts << endl;
+    // cerr << "nctrl_pts after insertion:\n" << nctrl_pts << endl;
 }
 
 // interpolate parameters to get parameter value for a target coordinate
