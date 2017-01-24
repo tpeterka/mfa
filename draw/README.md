@@ -1,13 +1,12 @@
-# Diy2-draw
+# draw
 
-Diy2-draw demonstrates how to develop a webGL renderer to draw geometry contained in a diy2 output file. This particular example draws the ouput of [tess2](https://github.com/diatomic/tess2), a Delaunay and Voronoi tessellation library based on [diy2](https://github.com/diatomic/diy2).
+Draw is a webGL renderer to draw geometry contained in a diy2 output
+file produced by MFA
 
 The key features are:
 
 - C++, DIY, MPI server using a node.js addon reads the data
-- two versions of client-server connection
-    - separate client and server connected by websockets
-    - combined client and server in a standalone app using node webkit (nwjs)
+- Combined client and server in a standalone app using node webkit (nwjs)
 - Javascript / webGL rendering on the client (using three.js rendering library instead of webGL directly)
 
 The steps to build and run the example are below.
@@ -18,19 +17,12 @@ The steps to build and run the example are below.
 - [nwjs](https://github.com/nwjs/nw.js/)
 - [three.js](http://threejs.org/) (for 3d rendering, a library wrapping webGL) Version 71 is bundled in the ```3rdparty``` directory.
 - [dat.gui](https://code.google.com/p/dat-gui/) (for GUI controls) Version 0.5 is bundled in the ```3rdparty``` directory.
-- [ws](https://github.com/websockets/ws) (websocket for node.js, needed for client-server communication, not needed for standalone nwjs)
-    - ```cd src; npm install ws``` (npm is included with node.js)
 - nan
-    - ```cd src; npm install nan```
+    - ```cd draw; npm install nan```
 - bindings
-    - ```cd src; npm install bindings```
-- node-gyp
-    - ```cd src; npm install -g node-gyp```
+    - ```cd draw; npm install bindings```
 - nw-gyp
-    - ```cd src; npm install -g nw-gyp```
-- diy2 and tess2 (for this particular tessellation example)
-    - [diy2](https://github.com/diatomic/diy2)
-    - [tess2](https://github.com/diatomic/tess2)
+    - ```cd draw; npm install -g nw-gyp```
 
 # To create a node.js addon:
 
@@ -44,31 +36,48 @@ See [Node.js addon instructions](https://github.com/nodejs/node-addon-examples)
 
 # To build the executable:
 
-One can either build a node.js server and a client to run in a browser, or a single standalone nwjs application. The former requires running a server and connecting to it from a client in a browser, while the latter is just one command to launch an app that looks and feels like a browser. The client-server node method can be used to distribute to others so that all the dependencies above are not needed locally. The nwjs standalone method is good for development and testing, but requires locally installing all the dependencies.
+This is a standalone nwjs application, which is an app that looks and feels like a browser.
 
-```cd src```
+```cd draw```
 
 Edit the path names in binding.gyp to your own. Then,
 
-- (client-server web application) To build a node program
-    - ```CC=mpicc CXX=mpicxx node-gyp rebuild```
-- (standalone application) To build an nwjs (node webkit) program (requires different compile command (nw-gyp) and the current version of nwjs needs to be specified because it cannot be found automatically
-    - ```CC=mpicc CXX=mpicxx nw-gyp rebuild --target=0.12.2```
-- The above commands are in ```make/make-node``` and ```make/make-nwjs```.
+- To build an nwjs (node webkit) program requires compiling with
+  nw-gyp and also needs to know the current version of nwjs. A few
+  other C++11 flags are needed as follows
+```
+CC=mpicc \
+CXX=mpicxx \
+CXXFLAGS='-fexceptions -DBUILD_GYP -std=c++11 -stdlib=libc++ -mmacosx-version-min=10.9' \
+LDFLAGS='-mmacosx-version-min=10.9' \
+nw-gyp \
+rebuild \
+--target=0.19.5     # version number of nw.js (not node)
+```
+- The above command is in ```make/make-nwjs```.
 
 # To run the program:
 
-Generate a test input file named ```del.out``` by running the script in tess2/examples/tess/TESS_TEST. Move del.out to the src directory of diy2-draw.
+Generate a test input file named ```approx.out``` by running one of
+the MFA examples. The file path in nwjs-client.js is hard-coded to
+mfa/install/examples/nd/approx.out. If that is not correct, edit the
+path in nwjs-client.js
 
-```cd src```
-
-- (client-server web application)
-    - in index.html, comment out nwjs-client.js and comment in node-client.js
-    - server: ```node server.js```
-    - client: In a browser, open index.html
-- (standalone application)
-    - in index.html, comment out node-client.js and comment in nwjs-client.js
-    - On mac: ```nwjs .```
-    - On linux: ```nw .```
+- ```cd draw```
+- On mac: ```nwjs .```
+- On linux: ```nw .```
 
 Note: On mac, nwjs is my alias for the nwjs application. For example, on a mac the full path is probably ```/Applications/nwjs.app/Contents/MacOS/nwjs```.
+
+# Transitioning from Nan v1 to Nan v2
+
+There are significant API changes from nan v1 to nan v2. Currently
+node.js requires nan v2. To update nan and other utils to latest version of node and nan:
+
+- ```npm install upgrade-utils -g```
+- ```upgrade-utils```
+- see upgrade-log.html for description of what will be updated
+  automatically
+- ```upgrade-utils --update```
+- ```npm install nan@latest --save```
+- rebuild ```make/make-nwjs```

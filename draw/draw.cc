@@ -110,19 +110,19 @@ NAN_METHOD(Main)
     vector<vec3d> mins;                                     // block mins
     vector<vec3d> maxs;                                     // block maxs
 
-    NanScope();
+    Nan::HandleScope scope;
 
-    // parse args
-    if (args.Length() < 7)                                  // do not count the command name
+    // parse info
+    if (info.Length() < 7)                                  // do not count the command name
     {
         fprintf(stderr, "Usage: draw(<filename>, <nraw_pts> <raw_pts>, <nctrl_pts>, "
                 "<ctrl_pts>, <approx_pts>, <bbs>\n");
-        NanReturnUndefined();
+        return;
     }
 
     // init diy and read the file
     int nblocks;                                            // total number of blocks
-    string infile(*NanAsciiString(args[0]));                // input file name
+    string infile(*Nan::Utf8String(info[0]));                // input file name
     diy::mpi::environment* env;
     if (first_time)
         env = new diy::mpi::environment(0, 0);
@@ -149,52 +149,53 @@ NAN_METHOD(Main)
                       master);
 
     // copy rendering data to output javascript arrays
-    Handle<Array> js_nraw_pts       = Handle<Array>::Cast(args[1]);
-    Handle<Array> js_raw_pts        = Handle<Array>::Cast(args[2]);
-    Handle<Array> js_nctrl_pts      = Handle<Array>::Cast(args[3]);
-    Handle<Array> js_ctrl_pts       = Handle<Array>::Cast(args[4]);
-    Handle<Array> js_approx_pts     = Handle<Array>::Cast(args[5]);
-    Handle<Array> js_bbs            = Handle<Array>::Cast(args[6]);
+    Handle<Array> js_nraw_pts       = Handle<Array>::Cast(info[1]);
+    Handle<Array> js_raw_pts        = Handle<Array>::Cast(info[2]);
+    Handle<Array> js_nctrl_pts      = Handle<Array>::Cast(info[3]);
+    Handle<Array> js_ctrl_pts       = Handle<Array>::Cast(info[4]);
+    Handle<Array> js_approx_pts     = Handle<Array>::Cast(info[5]);
+    Handle<Array> js_bbs            = Handle<Array>::Cast(info[6]);
 
-    for (size_t i = 0; i < nraw_pts.size(); i++)
-        js_nraw_pts->Set(i, NanNew(nraw_pts[i]));
+  for (size_t i = 0; i < nraw_pts.size(); i++)
+        js_nraw_pts->Set(i, Nan::New(nraw_pts[i]));
     for (size_t i = 0; i < raw_pts.size(); i++)
     {
-        js_raw_pts->Set(i * 3    , NanNew(raw_pts[i].x));
-        js_raw_pts->Set(i * 3 + 1, NanNew(raw_pts[i].y));
-        js_raw_pts->Set(i * 3 + 2, NanNew(raw_pts[i].z));
+        js_raw_pts->Set(i * 3    , Nan::New(raw_pts[i].x));
+        js_raw_pts->Set(i * 3 + 1, Nan::New(raw_pts[i].y));
+        js_raw_pts->Set(i * 3 + 2, Nan::New(raw_pts[i].z));
     }
     for (size_t i = 0; i < nctrl_pts.size(); i++)
-        js_nctrl_pts->Set(i, NanNew(nctrl_pts[i]));
+        js_nctrl_pts->Set(i, Nan::New(nctrl_pts[i]));
     for (size_t i = 0; i < ctrl_pts.size(); i++)
     {
-        js_ctrl_pts->Set(i * 3    , NanNew(ctrl_pts[i].x));
-        js_ctrl_pts->Set(i * 3 + 1, NanNew(ctrl_pts[i].y));
-        js_ctrl_pts->Set(i * 3 + 2, NanNew(ctrl_pts[i].z));
+        js_ctrl_pts->Set(i * 3    , Nan::New(ctrl_pts[i].x));
+        js_ctrl_pts->Set(i * 3 + 1, Nan::New(ctrl_pts[i].y));
+        js_ctrl_pts->Set(i * 3 + 2, Nan::New(ctrl_pts[i].z));
     }
     for (size_t i = 0; i < approx_pts.size(); i++)
     {
-        js_approx_pts->Set(i * 3    , NanNew(approx_pts[i].x));
-        js_approx_pts->Set(i * 3 + 1, NanNew(approx_pts[i].y));
-        js_approx_pts->Set(i * 3 + 2, NanNew(approx_pts[i].z));
+        js_approx_pts->Set(i * 3    , Nan::New(approx_pts[i].x));
+        js_approx_pts->Set(i * 3 + 1, Nan::New(approx_pts[i].y));
+        js_approx_pts->Set(i * 3 + 2, Nan::New(approx_pts[i].z));
     }
     for (size_t i = 0; i < mins.size(); i++)
     {
-        js_bbs->Set(i * 6    , NanNew(mins[i].x));
-        js_bbs->Set(i * 6 + 1, NanNew(mins[i].y));
-        js_bbs->Set(i * 6 + 2, NanNew(mins[i].z));
-        js_bbs->Set(i * 6 + 3, NanNew(maxs[i].x));
-        js_bbs->Set(i * 6 + 4, NanNew(maxs[i].y));
-        js_bbs->Set(i * 6 + 5, NanNew(maxs[i].z));
+        js_bbs->Set(i * 6    , Nan::New(mins[i].x));
+        js_bbs->Set(i * 6 + 1, Nan::New(mins[i].y));
+        js_bbs->Set(i * 6 + 2, Nan::New(mins[i].z));
+        js_bbs->Set(i * 6 + 3, Nan::New(maxs[i].x));
+        js_bbs->Set(i * 6 + 4, Nan::New(maxs[i].y));
+        js_bbs->Set(i * 6 + 5, Nan::New(maxs[i].z));
     }
 
     first_time = false;
-    NanReturnValue(0);
+    info.GetReturnValue().Set(0);
 }
 
 void Init(Handle<Object> exports)
 {
-    exports->Set(NanNew("draw"), NanNew<FunctionTemplate>(Main)->GetFunction());
+    exports->Set(Nan::New("draw").ToLocalChecked(),
+                 Nan::New<FunctionTemplate>(Main)->GetFunction());
 }
 
 NODE_MODULE(draw, Init)
