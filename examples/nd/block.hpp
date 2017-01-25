@@ -476,26 +476,6 @@ struct Block
 
             cerr << "domain_mins:\n" << domain_mins << endl;
             cerr << "domain_maxs:\n" << domain_maxs << endl;
-
-            // DEPRECATED
-            // // rest is hard-coded for 1d
-            // float dx = (a->max[0] - a->min[0]) / (a->ndom_pts[0] - 1);
-
-            // // sine(x)/x function
-            // for (int i = 0; i < a->ndom_pts[0]; i++)
-            // {
-            //     domain(i, 0) = a->min[0] + i * dx;
-            //     if (domain(i, 0) == 0.0)
-            //         domain(i, 1) = a->max[1];
-            //     else
-            //         domain(i, 1) = a->max[1] * sin(domain(i, 0)) / domain(i, 0);
-            // }
-
-            // // extents
-            // domain_mins(0) = a->min[0];
-            // domain_mins(1) = a->min[1];
-            // domain_maxs(0) = a->max[0];
-            // domain_maxs(1) = a->max[1];
         }
 
     // read the flame dataset and take one slice out of the middle of it
@@ -664,32 +644,6 @@ struct Block
             approx.resize(domain.rows(), domain.cols());
             mfa->Decode(approx);
         }
-
-    // DEPRECATED
-    // // max error for 1d curves only
-    // void max_error_1d(const diy::Master::ProxyWithLink& cp, void* args)
-    //     {
-    //         ErrArgs* a = (ErrArgs*)args;
-    //         approx.resize(domain.rows(), domain.cols());
-    //         errs.resize(domain.rows());
-
-    //         // use one or the other of the following
-
-    //         // plain max
-    //         // MaxErr1d(p, domain, range, ctrl_pts, knots, approx, errs, max_err);
-
-    //         // max norm, should be better than MaxErr1d but more expensive
-    //         MaxNormErr1d(p(0),
-    //                      domain,
-    //                      ctrl_pts,
-    //                      knots,
-    //                      a->max_niter,
-    //                      a->err_bound,
-    //                      a->search_rad,
-    //                      approx,
-    //                      errs,
-    //                      max_err);
-    //     }
 
     // compute maximum error in the block
     void max_error(const diy::Master::ProxyWithLink& cp)
