@@ -15,6 +15,7 @@
 #include <vector>
 
 typedef Eigen::MatrixXf MatrixXf;
+typedef Eigen::MatrixXi MatrixXi;
 typedef Eigen::VectorXf VectorXf;
 typedef Eigen::VectorXi VectorXi;
 
@@ -31,10 +32,15 @@ namespace mfa
         void Encode();
 
         // TODO: move to private once tested, call from Encode instead of by the user
-        float NormalDistance(VectorXf& pt,  // point whose distance from domain is desired
-                       int       cell_idx); // index of min. corner of cell in the domain
-                                            // that will be used to compute partial derivatives
-    private:
+        float NormalDistance(VectorXf& pt,        // point whose distance from domain is desired
+                             int       cell_idx); // index of min. corner of cell in the domain
+                                                  // that will be used to compute partial derivatives
+         void Gradient(int       idx,             // index of min. corner of cell in the domain
+                       VectorXf& grad);           // output gradient
+         void ErrorGradient(int       idx,        // index of min. corner of cell in the domain
+                            VectorXf& grad);      // output gradient
+
+   private:
 
         void Residual(int       cur_dim,  // current dimension
                       MatrixXf& N,        // matrix of basis function coefficients

@@ -26,14 +26,14 @@ namespace mfa
         ~Decoder() {}
         void Decode(MatrixXf& approx);         // (output) points (1st dim changes fastest)
 
+        void VolPt(VectorXf& param,            // parameter value in each dim. of desired point
+                   VectorXf& out_pt);          // (output) point
+
     private:
 
         void CurvePt(int       cur_dim,        // current dimension
                      float     param,          // parameter value of desired point
                      VectorXf& out_pt);        // (output) point
-
-        void VolPt(VectorXf& param,            // parameter value in each dim. of desired point
-                   VectorXf& out_pt);          // (output) point
 
         void DecodeCurve(size_t    cur_dim,    // current dimension
                          float     pre_param,  // param value in prior dim of the pts in the curve

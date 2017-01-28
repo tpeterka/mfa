@@ -9,6 +9,7 @@
 
 #include <mfa/mfa.hpp>
 #include <mfa/encode.hpp>
+#include <mfa/decode.hpp>
 #include <iostream>
 
 mfa::
@@ -547,7 +548,9 @@ CtrlCurve(MatrixXf& N,          // basis functions for current dimension
 }
 
 // signed normal distance from a point to the domain
-// uses finite differences (first order linear) method to compute gradient and normal vector
+// uses 2-point finite differences (first order linear) method to compute gradient and normal vector
+// approximates gradient from 2 points diagonally opposite each other in all
+// domain dimensions (not from 2 points in each dimension)
 float
 mfa::
 Encoder::
@@ -654,4 +657,139 @@ NormalDistance(VectorXf& pt,          // point whose distance from domain is des
     // fprintf(stderr, "projection = %e\n\n", normal.dot(pt - dom_pt));
 
     return normal.dot(pt - dom_pt);
+}
+
+// compute the gradient of a grid cell
+// uses 2-point finite differences (first order linear) and
+// approximates gradient from 2 points diagonally opposite each other in all
+// domain dimensions (not from 2 points in each dimension)
+void
+mfa::
+Encoder::
+Gradient(int       idx,               // index of min. corner of cell in the domain
+         VectorXf& grad)              // output gradient
+{
+    // normal vector = [df/dx, df/dy, df/dz, ... ]
+    grad.resize(domain.cols());
+    int      stride  = 1;                    // stride in domain for current dimension
+    int      last    = domain.cols() - 1;    // last coordinate of a domain pt, ie, the range value
+
+    // convert linear idx to multidim. i,j,k... indices in each domain dimension
+    VectorXi ijk(p.size());
+    mfa.idx2ijk(idx, ijk);
+
+    for (int i = 0; i < p.size(); i++)       // for all domain dimensions
+    {
+        // at least 2 points needed in each dimension
+        // TODO: do something degenerate if not, but probably will never get to this point
+        // because there will be insufficient points to encode in the first place
+        assert(ndom_pts(i) >= 2);
+
+        // debug
+        // fprintf(stderr, "idx=%d ijk(%d)=%d\n", idx, i, ijk(i));
+
+        // set two vertices of the cell
+        int i0, i1;
+        if (ijk(i) + 1 < ndom_pts(i))
+        {
+            i0 = idx;
+            i1 = idx + stride;
+        }
+        else
+        {
+            i0 = idx - stride;
+            i1 = idx;
+        }
+
+        // debug
+        // fprintf(stderr, "2: i=%d i0=%d i1=%d\n", i, i0, i1);
+
+        grad(i) = (domain(i1, last) - domain(i0, last)) / (domain(i1, i) - domain(i0, i));
+        stride *= ndom_pts(i);
+    }
+
+    // debug
+    // fprintf(stderr, "idx=%d\n", idx);
+    // cerr << "gradient\n" << grad << endl;
+}
+
+// compute the gradient of the error of a grid cell
+// uses 2-point finite differences (first order linear) and
+// approximates gradient from 2 points diagonally opposite each other in all
+// domain dimensions (not from 2 points in each dimension)
+void
+mfa::
+Encoder::
+ErrorGradient(int       idx,               // index of min. corner of cell in the domain
+              VectorXf& grad)              // output gradient
+{
+    // normal vector = [df/dx, df/dy, df/dz, ... ]
+    grad.resize(domain.cols());
+    int      stride  = 1;                    // stride in domain for current dimension
+    int      last    = domain.cols() - 1;    // last coordinate of a domain pt, ie, the range value
+
+    // convert linear idx to multidim. i,j,k... indices in each domain dimension
+    VectorXi ijk(p.size());
+    mfa.idx2ijk(idx, ijk);
+
+    // compute i0 and i1 1d and ijk0 and ijk1 nd indices for two points in the cell in each dim.
+    // even though the caller provided the minimum corner index as idx, it's
+    // possible that idx is at the max end of the domain in some dimension
+    // in this case we set i1 <- idx and i0 to be one less
+    int i0, i1;                             // 1-d indices of min, max corner points
+    VectorXi ijk0(p.size());                // n-d ijk index of min corner
+    VectorXi ijk1(p.size());                // n-d ijk index of max corner
+    for (int i = 0; i < p.size(); i++)      // for all domain dimensions
+    {
+        // at least 2 points needed in each dimension
+        // TODO: do something degenerate if not, but probably will never get to this point
+        // because there will be insufficient points to encode in the first place
+        assert(ndom_pts(i) >= 2);
+
+        // set two vertices of the cell
+        if (ijk(i) + 1 < ndom_pts(i))
+        {
+            i0      = idx;
+            i1      = idx + stride;
+            ijk0(i) = ijk(i);
+            ijk1(i) = ijk(i) + 1;
+        }
+        else
+        {
+            i0      = idx - stride;
+            i1      = idx;
+            ijk0(i) = ijk(i) - 1;
+            ijk1(i) = ijk(i);
+        }
+    }
+
+    // compute parameters for the vertices of the cell
+    VectorXf param0(p.size());
+    VectorXf param1(p.size());
+    for (int i = 0; i < p.size(); i++)
+    {
+        param0(i) = ijk0(i) + po[i];
+        param1(i) = ijk1(i) + po[i];
+    }
+
+    // approximated values for min, max corners
+    VectorXf cpt0(ctrl_pts.cols());          // approximated point
+    VectorXf cpt1(ctrl_pts.cols());          // approximated point
+    mfa::Decoder decoder(mfa);
+    decoder.VolPt(param0, cpt0);
+    decoder.VolPt(param1, cpt1);
+    
+    // compute the gradient of the absolute value of the error
+    // NB, the error is not normalized by the range of the data
+    for (int i = 0; i < p.size(); i++)
+    {
+        float e0, e1;                       // fabs(error) at min, max corner
+        e0 = fabs(cpt0(last) - domain(i0, last));
+        e1 = fabs(cpt1(last) - domain(i1, last));
+        grad(i) = (e1 - e0) / (domain(i1, i) - domain(i0, i));
+    }
+
+    // debug
+    // fprintf(stderr, "idx=%d\n", idx);
+    // cerr << "gradient\n" << grad << endl;
 }

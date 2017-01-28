@@ -35,9 +35,9 @@ namespace mfa
 
         void Encode();
 
-        void Encode(float err_limit);  // maximjum allowable normalized error
+        void Encode(float err_limit);  // maximum allowable normalized error
 
-        void Decode(MatrixXf& approx); // decoded points
+        void Decode(MatrixXf& approx); // decode points
 
         float Error(VectorXf& pt,    // point some distance away from domain points
                     int       idx);  // index of point in domain near to the point
