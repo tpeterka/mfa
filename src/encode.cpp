@@ -164,6 +164,9 @@ Encode()
         size_t coo = 0, too = 0;                  // co and to at start of contiguous sequence
         for (size_t j = 0; j < ncurves; j++)      // for all the curves in this dimension
         {
+            // debug
+            // fprintf(stderr, "j=%ld curve\n", j);
+
             CtrlCurve(N, NtN, R, P, n, k, pos, kos, co, cs, to, temp_ctrl0, temp_ctrl1);
 
             // adjust offsets for the next curve
@@ -209,6 +212,16 @@ Encode()
 
     // debug
     // cerr << "ctrl_pts:\n" << ctrl_pts << endl;
+
+    // debug: print gradient of value and gradient of error
+    VectorXf grad(p.size());    // NB gradient is has domain dims size (not domain + range)
+    VectorXf err_grad(p.size());
+    for (size_t i = 0; i < domain.rows(); i++)
+    {
+        Gradient(i, grad);
+        ErrorGradient(i, err_grad);
+        cerr << "pt: " << domain.row(i) << "\ngrad:\n" << grad << "\nerror_grad:\n" << err_grad << "\n" << endl;
+    }
 }
 
 // computes R (residual) vector of P&T eq. 9.63 and 9.67, p. 411-412 for a curve from the
@@ -523,6 +536,13 @@ CtrlCurve(MatrixXf& N,          // basis functions for current dimension
     // solve for P
     P = NtN.ldlt().solve(R);
 
+    // debug: print solution error
+    // MatrixXf Rhat(R.rows(), R.cols());
+    // Rhat = NtN * P;
+    // MatrixXf Rerr(R.rows(), R.cols());
+    // Rerr = R - Rhat;
+    // cerr << "Rerr:\n" << Rerr << endl;
+
     // debug
     // cerr << "P:\n" << P << endl;
     // Eigen::FullPivLU<MatrixXf> lu_decomp(NtN);
@@ -669,8 +689,8 @@ Encoder::
 Gradient(int       idx,               // index of min. corner of cell in the domain
          VectorXf& grad)              // output gradient
 {
-    // normal vector = [df/dx, df/dy, df/dz, ... ]
-    grad.resize(domain.cols());
+    // gradient vector = [df/dx, df/dy, df/dz, ... ]
+    grad.resize(p.size());
     int      stride  = 1;                    // stride in domain for current dimension
     int      last    = domain.cols() - 1;    // last coordinate of a domain pt, ie, the range value
 
@@ -723,8 +743,8 @@ Encoder::
 ErrorGradient(int       idx,               // index of min. corner of cell in the domain
               VectorXf& grad)              // output gradient
 {
-    // normal vector = [df/dx, df/dy, df/dz, ... ]
-    grad.resize(domain.cols());
+    VectorXf normal(domain.cols());         // normal vector
+    grad.resize(p.size());
     int      stride  = 1;                    // stride in domain for current dimension
     int      last    = domain.cols() - 1;    // last coordinate of a domain pt, ie, the range value
 
@@ -761,16 +781,30 @@ ErrorGradient(int       idx,               // index of min. corner of cell in th
             ijk0(i) = ijk(i) - 1;
             ijk1(i) = ijk(i);
         }
+
+        // debug
+        fprintf(stderr, "i=%d i0=%d i1=%d\n", i, i0, i1);
+    
+        // compute the normal to the domain at i0 and i1
+        normal(i) = (domain(i1, last) - domain(i0, last)) / (domain(i1, i) - domain(i0, i));
+
+        stride *= ndom_pts(i);
     }
+
+    normal(last) = -1;
+    normal /= normal.norm();
 
     // compute parameters for the vertices of the cell
     VectorXf param0(p.size());
     VectorXf param1(p.size());
     for (int i = 0; i < p.size(); i++)
     {
-        param0(i) = ijk0(i) + po[i];
-        param1(i) = ijk1(i) + po[i];
+        param0(i) = params(ijk0(i) + po[i]);
+        param1(i) = params(ijk1(i) + po[i]);
     }
+
+    // debug
+//     cerr << "param0:\n" << param0 << "\nparam1:\n" << param1 << endl;
 
     // approximated values for min, max corners
     VectorXf cpt0(ctrl_pts.cols());          // approximated point
@@ -778,18 +812,22 @@ ErrorGradient(int       idx,               // index of min. corner of cell in th
     mfa::Decoder decoder(mfa);
     decoder.VolPt(param0, cpt0);
     decoder.VolPt(param1, cpt1);
-    
-    // compute the gradient of the absolute value of the error
+ 
+     // debug
+//     cerr << "cpt0:\n" << cpt0 << "\ncpt1:\n" << cpt1 << endl;
+   
+    // absolute value of the error (as projected onto gradient)
     // NB, the error is not normalized by the range of the data
-    for (int i = 0; i < p.size(); i++)
-    {
-        float e0, e1;                       // fabs(error) at min, max corner
-        e0 = fabs(cpt0(last) - domain(i0, last));
-        e1 = fabs(cpt1(last) - domain(i1, last));
-        grad(i) = (e1 - e0) / (domain(i1, i) - domain(i0, i));
-    }
+    VectorXf d0 = domain.row(i0);
+    VectorXf d1 = domain.row(i1);
+    float e0 = fabs(normal.dot(cpt0 - d0));
+    float e1 = fabs(normal.dot(cpt1 - d1));
 
+    // gradient of the error
+    for (int i = 0; i < p.size(); i++)
+        grad(i) = (e1 - e0) / (domain(i1, i) - domain(i0, i));
+    
     // debug
-    // fprintf(stderr, "idx=%d\n", idx);
-    // cerr << "gradient\n" << grad << endl;
+    fprintf(stderr, "e0=%.3e e1=%.3e\n", e0, e1);
+    cerr << "d0:\n" << d0 << "\nd1:\n" << d1 << "\ncpt0:\n" << cpt0 << "\ncpt1:\n" << cpt1 << endl;
 }
