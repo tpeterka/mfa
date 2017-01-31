@@ -34,12 +34,7 @@ namespace mfa
         // TODO: move to private once tested, call from Encode instead of by the user
         float NormalDistance(VectorXf& pt,        // point whose distance from domain is desired
                              int       cell_idx); // index of min. corner of cell in the domain
-                                                  // that will be used to compute partial derivatives
-         void Gradient(int       idx,             // index of min. corner of cell in the domain
-                       VectorXf& grad);           // output gradient
-         void ErrorGradient(int       idx,        // index of min. corner of cell in the domain
-                            VectorXf& grad);      // output gradient
-
+                                                  // used to compute partial derivatives
    private:
 
         void Residual(int       cur_dim,  // current dimension
@@ -87,6 +82,13 @@ namespace mfa
                       size_t    to,         // starting offset for writing control points
                       MatrixXf& temp_ctrl0, // first temporary control points buffer
                       MatrixXf& temp_ctrl1); // second temporary control points buffer
+
+        // DEPRECATED
+        void Gradient(int       idx,             // index of min. corner of cell in the domain
+                      VectorXf& grad);           // output gradient
+
+        void ErrorGradient(int       idx,        // index of min. corner of cell in the domain
+                           VectorXf& grad);      // output gradient
 
         MFA& mfa;                       // the mfa object
         // following are references the the data in the mfa object

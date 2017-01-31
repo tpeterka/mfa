@@ -6,7 +6,6 @@
 // Argonne National Laboratory
 // tpeterka@mcs.anl.gov
 //--------------------------------------------------------------
-
 #include <mfa/encode.hpp>
 #include <mfa/decode.hpp>
 
@@ -38,7 +37,6 @@ using namespace std;
 // (N and NtN matrices, used for solving for control points, are very sparse)
 //
 // ------------------
-
 mfa::
 MFA::
 MFA(VectorXi& p_,             // polynomial degree in each dimension
@@ -632,7 +630,7 @@ InterpolateParams(int       cur_dim,  // curent dimension
     // resulting coord when the param is used is within about 10^-3
 }
 
-// convert linear domain point index into (i,k,k,...) multidimensional index
+// convert linear domain point index into (i,j,k,...) multidimensional index
 // number of dimensions is the domain dimensionality
 // (not domain * range dimensionality, ie, p.size(), not domain_point.cols())
 void
@@ -664,3 +662,22 @@ idx2ijk(int       idx,                       // linear cell indx
     // debug
     // cerr << "idx=" << idx << "ijk\n" << ijk << endl;
 }
+
+// convert (i,j,k,...) multidimensional index into linear index into domain
+// number of dimension is the domain dimensionality (p.size()), not
+// domain + range dimensionality (domain_points.size())
+void
+mfa::
+MFA::
+ijk2idx(VectorXi& ijk,                      // i,j,k,... indices to all dimensions
+        int&      idx)                      // (output) linear index
+{
+    idx           = 0;
+    size_t stride = 1;
+    for (int i = 0; i < p.size(); i++)
+    {
+        idx += ijk(i) * stride;
+        stride *= ndom_pts(i);
+    }
+}
+

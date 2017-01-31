@@ -78,27 +78,30 @@ namespace mfa
 
         void idx2ijk(int       idx,       // linear index
                      VectorXi& ijk);      // i,j,k,... indices in all dimensions
+        void ijk2idx(VectorXi& ijk,       // i,j,k,... indices to all dimensions
+                     int&      idx);      // (output) linear index
 
-        friend class Encoder;
-        friend class Decoder;
+       friend class Encoder;
+       friend class Decoder;
 
-        VectorXi& p;           // polynomial degree in each dimension
-        VectorXi& ndom_pts;    // number of input data points in each dim
-        VectorXi& nctrl_pts;   // desired number of control points in each dim
-        MatrixXf& domain;      // input data points (1st dim changes fastest)
-        VectorXf  params;      // parameters for input points (1st dim changes fastest)
-        MatrixXf& ctrl_pts;    // (output) control pts (1st dim changes fastest)
-        VectorXf& knots;       // (output) knots (1st dim changes fastest)
-        vector<size_t> po;     // starting offset for params in each dim
-        vector<size_t> ko;     // starting offset for knots in each dim
-        vector<size_t> co;     // starting offset for control points in each dim
-        vector<size_t> cs;     // stride for control points in each dim
-        vector<size_t> ds;     // stride for domain points in each dim
-        int tot_nparams;       // total number of params = sum of ndom_pts over all dims
-                               // not the total number of data pts, which would be the prod.
-        int tot_nknots;        // total nmbr of knots = sum of nmbr of knots over all dims
-        float eps;             // minimum difference considered significant
-    };
+       VectorXi& p;           // polynomial degree in each dimension
+       VectorXi& ndom_pts;    // number of input data points in each dim
+       VectorXi& nctrl_pts;   // desired number of control points in each dim
+       MatrixXf& domain;      // input data points (1st dim changes fastest)
+       VectorXf  params;      // parameters for input points (1st dim changes fastest)
+       MatrixXf& ctrl_pts;    // (output) control pts (1st dim changes fastest)
+       VectorXf& knots;       // (output) knots (1st dim changes fastest)
+       vector<size_t> po;     // starting offset for params in each dim
+       vector<size_t> ko;     // starting offset for knots in each dim
+       vector<size_t> co;     // starting offset for control points in each dim
+       vector<size_t> cs;     // stride for control points in each dim
+       vector<size_t> ds;     // stride for domain points in each dim
+       int tot_nparams;       // total number of params = sum of ndom_pts over all dims
+                              // not the total number of data pts, which would be the prod.
+       int tot_nknots;        // total nmbr of knots = sum of nmbr of knots over all dims
+       float eps;             // minimum difference considered significant
+   };
+
 }
 
 #endif

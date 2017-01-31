@@ -214,14 +214,13 @@ Encode()
     // cerr << "ctrl_pts:\n" << ctrl_pts << endl;
 
     // debug: print gradient of value and gradient of error
-    VectorXf grad(p.size());    // NB gradient is has domain dims size (not domain + range)
-    VectorXf err_grad(p.size());
-    for (size_t i = 0; i < domain.rows(); i++)
-    {
-        Gradient(i, grad);
-        ErrorGradient(i, err_grad);
-        cerr << "pt: " << domain.row(i) << "\ngrad:\n" << grad << "\nerror_grad:\n" << err_grad << "\n" << endl;
-    }
+    // VectorXf grad(p.size());    // NB gradient is domain dims size (not domain + range)
+    // VectorXf err_grad(p.size());
+    // for (size_t i = 0; i < domain.rows(); i++)
+    // {
+    //     ErrorGradient(i, err_grad);
+    //     cerr << "pt: " << domain.row(i) << "\nerror_grad:\n" << err_grad << "\n" << endl;
+    // }
 }
 
 // computes R (residual) vector of P&T eq. 9.63 and 9.67, p. 411-412 for a curve from the
@@ -582,87 +581,47 @@ NormalDistance(VectorXf& pt,          // point whose distance from domain is des
     // normal vector = [df/dx, df/dy, df/dz, ..., -1]
     // -1 is the last coordinate of the domain points, ie, the range value
     VectorXf normal(domain.cols());
-    int      stride  = 1;                    // stride in domain for current dimension
-    int      min_idx = 0;                    // index corresponding to min edge in current dim.
-    int      max_idx = 1;                    // index corresponding to max edge in current dim.
-    int      last    = domain.cols() - 1;    // last coordinate of a domain pt, ie, the range value
+    int      last = domain.cols() - 1;    // last coordinate of a domain pt, ie, the range value
 
     // convert linear idx to multidim. i,j,k... indices in each domain dimension
     VectorXi ijk(p.size());
     mfa.idx2ijk(idx, ijk);
 
-    for (int i = 0; i < p.size(); i++)       // for all domain dimensions
+    // compute i0 and i1 1d and ijk0 and ijk1 nd indices for two points in the cell in each dim.
+    // even though the caller provided the minimum corner index as idx, it's
+    // possible that idx is at the max end of the domain in some dimension
+    // in this case we set i1 <- idx and i0 to be one less
+    int i0, i1;                             // 1-d indices of min, max corner points
+    VectorXi ijk0(p.size());                // n-d ijk index of min corner
+    VectorXi ijk1(p.size());                // n-d ijk index of max corner
+    for (int i = 0; i < p.size(); i++)      // for all domain dimensions
     {
         // at least 2 points needed in each dimension
         // TODO: do something degenerate if not, but probably will never get to this point
         // because there will be insufficient points to encode in the first place
         assert(ndom_pts(i) >= 2);
 
-        // debug
-        // fprintf(stderr, "idx=%d ijk(%d)=%d\n", idx, i, ijk(i));
-
-        // adjust idx until pt is in the cell
-        while (ijk(i) >= 0 && domain(idx, i) - pt(i) > mfa.eps)
-        {
-            if (ijk(i) - 1 >= 0)
-            {
-                idx -= stride;
-                ijk(i)--;
-            }
-            else
-                break;
-            // debug
-            // fprintf(stderr, "idx=%d ijk(%d)=%d\n", idx, i, ijk(i));
-        }
-        while (ijk(i) + 1 < ndom_pts(i) && pt(i) - domain(idx + stride, i) > mfa.eps)
-        {
-            if (ijk(i) + 1 < ndom_pts(i))
-            {
-                idx += stride;
-                ijk(i)++;
-            }
-            else
-                break;
-            // debug
-            // fprintf(stderr, "idx=%d ijk(%d)=%d\n", idx, i, ijk(i));
-        }
-
-        // debug
-        // fprintf(stderr, "1: ijk(%d)=%d idx=%d\n", i, ijk(i), idx);
-
-        // set two vertices of the cell
-        int i0, i1;
+        // two opposite corners of the cell as i,j,k coordinates
         if (ijk(i) + 1 < ndom_pts(i))
         {
-            i0 = idx;
-            i1 = idx + stride;
+            ijk0(i) = ijk(i);
+            ijk1(i) = ijk(i) + 1;
         }
         else
         {
-            i0 = idx - stride;
-            i1 = idx;
+            ijk0(i) = ijk(i) - 1;
+            ijk1(i) = ijk(i);
         }
-
-        // debug
-        // fprintf(stderr, "2: i=%d i0=%d i1=%d\n", i, i0, i1);
-
-        // debug
-        float eps = 1.0e-5;                  // floating point roundoff error
-        if (!(domain(i0, i) - eps < pt(i) && pt(i) < domain(i1, i) + eps))
-        {
-            fprintf(stderr, "i=%d i0=%d i1=%d\n", i, i0, i1);
-            cerr << "domain(i0):\n" << domain(i0) <<
-                "\npt(i):\n" << pt(i) <<
-                "\ndomain(i1):\n" << domain(i1) << endl;
-        }
-        assert(domain(i0, i) - eps < pt(i) && pt(i) < domain(i1, i) + eps);
-
-        normal(i) = (domain(i1, last) - domain(i0, last)) / (domain(i1, i) - domain(i0, i));
-        stride *= ndom_pts(i);
     }
-    normal(last) = -1;
 
-    // unit normal
+    // set i0 and i1 to be the 1-d indices of the corner points
+    mfa.ijk2idx(ijk0, i0);
+    mfa.ijk2idx(ijk1, i1);
+
+    // compute the normal to the domain at i0 and i1
+    for (int i = 0; i < p.size(); i++)      // for all domain dimensions
+        normal(i) = (domain(i1, last) - domain(i0, last)) / (domain(i1, i) - domain(i0, i));
+    normal(last) = -1;
     normal /= normal.norm();
 
     // project distance from (pt - domain(idx)) to unit normal
@@ -679,6 +638,7 @@ NormalDistance(VectorXf& pt,          // point whose distance from domain is des
     return normal.dot(pt - dom_pt);
 }
 
+// DEPRECATED
 // compute the gradient of a grid cell
 // uses 2-point finite differences (first order linear) and
 // approximates gradient from 2 points diagonally opposite each other in all
@@ -691,42 +651,46 @@ Gradient(int       idx,               // index of min. corner of cell in the dom
 {
     // gradient vector = [df/dx, df/dy, df/dz, ... ]
     grad.resize(p.size());
-    int      stride  = 1;                    // stride in domain for current dimension
-    int      last    = domain.cols() - 1;    // last coordinate of a domain pt, ie, the range value
+    int      last = domain.cols() - 1;    // last coordinate of a domain pt, ie, the range value
 
     // convert linear idx to multidim. i,j,k... indices in each domain dimension
     VectorXi ijk(p.size());
     mfa.idx2ijk(idx, ijk);
 
-    for (int i = 0; i < p.size(); i++)       // for all domain dimensions
+    // compute i0 and i1 1d and ijk0 and ijk1 nd indices for two points in the cell in each dim.
+    // even though the caller provided the minimum corner index as idx, it's
+    // possible that idx is at the max end of the domain in some dimension
+    // in this case we set i1 <- idx and i0 to be one less
+    int i0, i1;                             // 1-d indices of min, max corner points
+    VectorXi ijk0(p.size());                // n-d ijk index of min corner
+    VectorXi ijk1(p.size());                // n-d ijk index of max corner
+    for (int i = 0; i < p.size(); i++)      // for all domain dimensions
     {
         // at least 2 points needed in each dimension
         // TODO: do something degenerate if not, but probably will never get to this point
         // because there will be insufficient points to encode in the first place
         assert(ndom_pts(i) >= 2);
 
-        // debug
-        // fprintf(stderr, "idx=%d ijk(%d)=%d\n", idx, i, ijk(i));
-
-        // set two vertices of the cell
-        int i0, i1;
+        // two opposite corners of the cell as i,j,k coordinates
         if (ijk(i) + 1 < ndom_pts(i))
         {
-            i0 = idx;
-            i1 = idx + stride;
+            ijk0(i) = ijk(i);
+            ijk1(i) = ijk(i) + 1;
         }
         else
         {
-            i0 = idx - stride;
-            i1 = idx;
+            ijk0(i) = ijk(i) - 1;
+            ijk1(i) = ijk(i);
         }
-
-        // debug
-        // fprintf(stderr, "2: i=%d i0=%d i1=%d\n", i, i0, i1);
-
-        grad(i) = (domain(i1, last) - domain(i0, last)) / (domain(i1, i) - domain(i0, i));
-        stride *= ndom_pts(i);
     }
+
+    // set i0 and i1 to be the 1-d indices of the corner points
+    mfa.ijk2idx(ijk0, i0);
+    mfa.ijk2idx(ijk1, i1);
+
+    // compute gradient
+    for (int i = 0; i < p.size(); i++)       // for all domain dimensions
+        grad(i) = (domain(i1, last) - domain(i0, last)) / (domain(i1, i) - domain(i0, i));
 
     // debug
     // fprintf(stderr, "idx=%d\n", idx);
@@ -745,7 +709,6 @@ ErrorGradient(int       idx,               // index of min. corner of cell in th
 {
     VectorXf normal(domain.cols());         // normal vector
     grad.resize(p.size());
-    int      stride  = 1;                    // stride in domain for current dimension
     int      last    = domain.cols() - 1;    // last coordinate of a domain pt, ie, the range value
 
     // convert linear idx to multidim. i,j,k... indices in each domain dimension
@@ -766,31 +729,30 @@ ErrorGradient(int       idx,               // index of min. corner of cell in th
         // because there will be insufficient points to encode in the first place
         assert(ndom_pts(i) >= 2);
 
-        // set two vertices of the cell
+        // two opposite corners of the cell as i,j,k coordinates
         if (ijk(i) + 1 < ndom_pts(i))
         {
-            i0      = idx;
-            i1      = idx + stride;
             ijk0(i) = ijk(i);
             ijk1(i) = ijk(i) + 1;
         }
         else
         {
-            i0      = idx - stride;
-            i1      = idx;
             ijk0(i) = ijk(i) - 1;
             ijk1(i) = ijk(i);
         }
-
-        // debug
-        fprintf(stderr, "i=%d i0=%d i1=%d\n", i, i0, i1);
-    
-        // compute the normal to the domain at i0 and i1
-        normal(i) = (domain(i1, last) - domain(i0, last)) / (domain(i1, i) - domain(i0, i));
-
-        stride *= ndom_pts(i);
     }
 
+    // set i0 and i1 to be the 1-d indices of the corner points
+    mfa.ijk2idx(ijk0, i0);
+    mfa.ijk2idx(ijk1, i1);
+
+    // debug
+    // fprintf(stderr, "i0=%d i1=%d\n", i0, i1);
+    // cerr << "ijk0:\n" << ijk0 << "\nijk1:\n" << ijk1 << "\n" << endl;
+
+    // compute the normal to the domain at i0 and i1
+    for (int i = 0; i < p.size(); i++)      // for all domain dimensions
+        normal(i) = (domain(i1, last) - domain(i0, last)) / (domain(i1, i) - domain(i0, i));
     normal(last) = -1;
     normal /= normal.norm();
 
@@ -804,7 +766,7 @@ ErrorGradient(int       idx,               // index of min. corner of cell in th
     }
 
     // debug
-//     cerr << "param0:\n" << param0 << "\nparam1:\n" << param1 << endl;
+    // cerr << "param0:\n" << param0 << "\nparam1:\n" << param1 << endl;
 
     // approximated values for min, max corners
     VectorXf cpt0(ctrl_pts.cols());          // approximated point
@@ -812,10 +774,10 @@ ErrorGradient(int       idx,               // index of min. corner of cell in th
     mfa::Decoder decoder(mfa);
     decoder.VolPt(param0, cpt0);
     decoder.VolPt(param1, cpt1);
- 
+
      // debug
-//     cerr << "cpt0:\n" << cpt0 << "\ncpt1:\n" << cpt1 << endl;
-   
+    // cerr << "cpt0:\n" << cpt0 << "\ncpt1:\n" << cpt1 << endl;
+
     // absolute value of the error (as projected onto gradient)
     // NB, the error is not normalized by the range of the data
     VectorXf d0 = domain.row(i0);
@@ -826,8 +788,8 @@ ErrorGradient(int       idx,               // index of min. corner of cell in th
     // gradient of the error
     for (int i = 0; i < p.size(); i++)
         grad(i) = (e1 - e0) / (domain(i1, i) - domain(i0, i));
-    
+
     // debug
-    fprintf(stderr, "e0=%.3e e1=%.3e\n", e0, e1);
-    cerr << "d0:\n" << d0 << "\nd1:\n" << d1 << "\ncpt0:\n" << cpt0 << "\ncpt1:\n" << cpt1 << endl;
+    // fprintf(stderr, "e0=%.3e e1=%.3e\n", e0, e1);
+    // cerr << "d0:\n" << d0 << "\nd1:\n" << d1 << "\ncpt0:\n" << cpt0 << "\ncpt1:\n" << cpt1 << endl;
 }

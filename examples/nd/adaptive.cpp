@@ -68,7 +68,7 @@ int main(int argc, char** argv)
 //     d_args.s            = 10.0;           // scaling factor on range
 //     master.foreach([&](Block* b, const diy::Master::ProxyWithLink& cp)
 //                    { b->generate_sinc_data(cp, d_args); });
-// 
+//
     // 2d sinc function f(x,y) = sinc(x)sinc(y)
     float norm_err_limit = 1.0e-2;           // normalized maximum allowable error
     d_args.pt_dim       = 3;
