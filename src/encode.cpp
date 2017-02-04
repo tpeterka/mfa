@@ -11,6 +11,7 @@
 #include <mfa/encode.hpp>
 #include <mfa/decode.hpp>
 #include <iostream>
+#include <set>
 
 mfa::
 Encoder::
@@ -221,6 +222,12 @@ Encode()
     //     ErrorGradient(i, err_grad);
     //     cerr << "pt: " << domain.row(i) << "\nerror_grad:\n" << err_grad << "\n" << endl;
     // }
+
+    // debug: try a to search for local minimum of error field from a hard-coded
+    // starting point
+    size_t start_idx = 167;
+    size_t end_idx;
+    GridSearch(start_idx, end_idx);
 }
 
 // computes R (residual) vector of P&T eq. 9.63 and 9.67, p. 411-412 for a curve from the
@@ -574,7 +581,7 @@ float
 mfa::
 Encoder::
 NormalDistance(VectorXf& pt,          // point whose distance from domain is desired
-               int       idx)         // index of min. corner of cell in the domain
+               size_t    idx)         // index of min. corner of cell in the domain
                                       // that will be used to compute partial derivatives
                                       // (linear) search for correct cell will start at this index
 {
@@ -591,7 +598,7 @@ NormalDistance(VectorXf& pt,          // point whose distance from domain is des
     // even though the caller provided the minimum corner index as idx, it's
     // possible that idx is at the max end of the domain in some dimension
     // in this case we set i1 <- idx and i0 to be one less
-    int i0, i1;                             // 1-d indices of min, max corner points
+    size_t i0, i1;                          // 1-d indices of min, max corner points
     VectorXi ijk0(p.size());                // n-d ijk index of min corner
     VectorXi ijk1(p.size());                // n-d ijk index of max corner
     for (int i = 0; i < p.size(); i++)      // for all domain dimensions
@@ -638,6 +645,42 @@ NormalDistance(VectorXf& pt,          // point whose distance from domain is des
     return normal.dot(pt - dom_pt);
 }
 
+// compute the error (absolute value of distance in normal direction) of the mfa at a domain point
+// error is not normalized by the data range (absolute, not relative error)
+float
+mfa::
+Encoder::
+Error(size_t idx)               // index of domain point
+{
+    // convert linear idx to multidim. i,j,k... indices in each domain dimension
+    VectorXi ijk(p.size());
+    mfa.idx2ijk(idx, ijk);
+
+    // compute parameters for the vertices of the cell
+    VectorXf param(p.size());
+    for (int i = 0; i < p.size(); i++)
+        param(i) = params(ijk(i) + po[i]);
+
+    // debug
+    // cerr << "param:\n" << param << endl;
+
+    // approximated value
+    VectorXf cpt(ctrl_pts.cols());          // approximated point
+    mfa::Decoder decoder(mfa);
+    decoder.VolPt(param, cpt);
+
+     // debug
+    // cerr << "cpt:\n" << cpt << endl;
+
+    float err = fabs(NormalDistance(cpt, idx));
+
+    // debug
+    // fprintf(stderr, "error=%.3e\n", err);
+
+    return err;
+}
+
+
 // DEPRECATED
 // compute the gradient of a grid cell
 // uses 2-point finite differences (first order linear) and
@@ -646,7 +689,7 @@ NormalDistance(VectorXf& pt,          // point whose distance from domain is des
 void
 mfa::
 Encoder::
-Gradient(int       idx,               // index of min. corner of cell in the domain
+Gradient(size_t    idx,               // index of min. corner of cell in the domain
          VectorXf& grad)              // output gradient
 {
     // gradient vector = [df/dx, df/dy, df/dz, ... ]
@@ -661,7 +704,7 @@ Gradient(int       idx,               // index of min. corner of cell in the dom
     // even though the caller provided the minimum corner index as idx, it's
     // possible that idx is at the max end of the domain in some dimension
     // in this case we set i1 <- idx and i0 to be one less
-    int i0, i1;                             // 1-d indices of min, max corner points
+    size_t i0, i1;                          // 1-d indices of min, max corner points
     VectorXi ijk0(p.size());                // n-d ijk index of min corner
     VectorXi ijk1(p.size());                // n-d ijk index of max corner
     for (int i = 0; i < p.size(); i++)      // for all domain dimensions
@@ -704,7 +747,7 @@ Gradient(int       idx,               // index of min. corner of cell in the dom
 void
 mfa::
 Encoder::
-ErrorGradient(int       idx,               // index of min. corner of cell in the domain
+ErrorGradient(size_t    idx,               // index of min. corner of cell in the domain
               VectorXf& grad)              // output gradient
 {
     VectorXf normal(domain.cols());         // normal vector
@@ -719,7 +762,7 @@ ErrorGradient(int       idx,               // index of min. corner of cell in th
     // even though the caller provided the minimum corner index as idx, it's
     // possible that idx is at the max end of the domain in some dimension
     // in this case we set i1 <- idx and i0 to be one less
-    int i0, i1;                             // 1-d indices of min, max corner points
+    size_t i0, i1;                          // 1-d indices of min, max corner points
     VectorXi ijk0(p.size());                // n-d ijk index of min corner
     VectorXi ijk1(p.size());                // n-d ijk index of max corner
     for (int i = 0; i < p.size(); i++)      // for all domain dimensions
@@ -792,4 +835,119 @@ ErrorGradient(int       idx,               // index of min. corner of cell in th
     // debug
     // fprintf(stderr, "e0=%.3e e1=%.3e\n", e0, e1);
     // cerr << "d0:\n" << d0 << "\nd1:\n" << d1 << "\ncpt0:\n" << cpt0 << "\ncpt1:\n" << cpt1 << endl;
+}
+
+// grid search along direction of steepest gradient at each neighboring domain
+// point, gradient of discrete grid approximated by finite differences
+void
+mfa::
+Encoder::
+GridSearch(size_t  start_idx,             // starting domain point of search
+           size_t& end_idx)               // (output) ending domain point of search
+{
+    // debug
+    cerr << "\nstart_idx=" << start_idx << " start_pt:\n" << domain.row(start_idx) << endl;
+
+    // convert linear idx to multidim. i,j,k... indices in each domain dimension
+    VectorXi ijk(p.size());
+
+    // search variables
+    size_t stride;                          // stride between domain pts in current dim
+    float steepest_norm;                    // magnitude of steepest descent gradient found so far
+    float cur_norm;                         // magnitude of current gradient
+    size_t steepest_idx;                    // idx of point with steepest gradient norm so far
+    size_t prev_steepest_idx;               // steepest_idx of previous iteration
+    VectorXf grad;                          // current gradient
+    set<int> visited;                       // idxs of visited points TODO: reuse for mutliple GridSearchs
+    set<int>::iterator it;                  // iterator into visited
+
+    // initialize the search
+    steepest_idx   = start_idx;             // index of steepest neighbor so far
+    // search the points
+    while (1)
+    {
+        mfa.idx2ijk(steepest_idx, ijk);
+        prev_steepest_idx = steepest_idx;
+        steepest_norm     = 0.0;
+        stride            = 1;
+        size_t cur_idx    = steepest_idx;
+
+        // debug
+        cerr << "\nnvisited=" << visited.size() << " search arount this point:\n" <<
+            domain.row(cur_idx) << endl;
+        fprintf(stderr, "error=%.3e\n", Error(cur_idx));
+
+        // check gradient at neighboring points
+        // TODO: check diagonal directions? (probably not necessary?)
+        for (int i = 0; i < p.size(); i++)      // for all domain dims
+        {
+            set<int>::iterator temp_it;
+
+            // neighbor in positive direction
+            if (ijk(i) + 1 < ndom_pts(i))
+            {
+                size_t neigh_idx = cur_idx + stride;
+                ErrorGradient(neigh_idx, grad);
+
+                // debug
+                cerr << "1: trying pt:\n" << domain.row(neigh_idx) << endl;
+                fprintf(stderr, "grad(%d)=%.3f norm=%.3f steepest_norm=%.3f\n",
+                        i, grad(i), grad.norm(), steepest_norm);
+                fprintf(stderr, "error=%.3e\n", Error(neigh_idx));
+
+                if (grad(i) > 0 &&
+                        (temp_it = visited.find(neigh_idx)) == visited.end() &&
+                        (cur_norm = grad.norm()) > steepest_norm)
+                {
+                    steepest_norm  = cur_norm;
+                    steepest_idx   = neigh_idx;
+                    it = temp_it;
+
+                    // debug
+                    fprintf(stderr, "1.5: new steepest_norm=%.3f new steepest_idx=%ld\n",
+                            steepest_norm, steepest_idx);
+                }
+            }
+            // neighbor in negative direction
+            if (ijk(i) > 0)
+            {
+                size_t neigh_idx = cur_idx - stride;
+                ErrorGradient(neigh_idx, grad);
+
+                // debug
+                cerr << "2: trying pt:\n" << domain.row(neigh_idx) << endl;
+                fprintf(stderr, "grad(%d)=%.3f norm=%.3f steepest_norm=%.3f\n",
+                        i, grad(i), grad.norm(), steepest_norm);
+                fprintf(stderr, "error=%.3e\n", Error(neigh_idx));
+
+                if (grad(i) > 0 &&
+                        (temp_it = visited.find(neigh_idx)) == visited.end() &&
+                        (cur_norm = grad.norm()) > steepest_norm)
+                {
+                    steepest_norm  = cur_norm;
+                    steepest_idx   = neigh_idx;
+                    it = temp_it;
+
+                    // debug
+                    fprintf(stderr, "2.5: new steepest_norm=%.3f new steepest_idx=%ld\n",
+                            steepest_norm, steepest_idx);
+                }
+            }
+            stride *= ndom_pts(i);
+        }
+
+        if (steepest_idx != prev_steepest_idx)
+        {
+            visited.insert(it, steepest_idx);
+            prev_steepest_idx = steepest_idx;
+        }
+        else
+            break;
+    }
+
+    end_idx = steepest_idx;
+
+    // debug
+    cerr << "\nend_idx=" << end_idx <<" end_pt:\n" << domain.row(end_idx) <<
+        " \nnvisited=" << visited.size() << "\n" << endl;
 }

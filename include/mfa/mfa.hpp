@@ -76,10 +76,10 @@ namespace mfa
                                 size_t    ds,      // stride for domain pts in cuve in cur. dim.
                                 float     coord);  // target coordinate
 
-        void idx2ijk(int       idx,       // linear index
+        void idx2ijk(size_t    idx,       // linear index
                      VectorXi& ijk);      // i,j,k,... indices in all dimensions
         void ijk2idx(VectorXi& ijk,       // i,j,k,... indices to all dimensions
-                     int&      idx);      // (output) linear index
+                     size_t&   idx);      // (output) linear index
 
        friend class Encoder;
        friend class Decoder;

@@ -636,7 +636,7 @@ InterpolateParams(int       cur_dim,  // curent dimension
 void
 mfa::
 MFA::
-idx2ijk(int       idx,                       // linear cell indx
+idx2ijk(size_t    idx,                       // linear cell indx
         VectorXi& ijk)                       // i,j,k,... indices in all dimensions
 {
     if (p.size() == 1)
@@ -670,7 +670,7 @@ void
 mfa::
 MFA::
 ijk2idx(VectorXi& ijk,                      // i,j,k,... indices to all dimensions
-        int&      idx)                      // (output) linear index
+        size_t&   idx)                      // (output) linear index
 {
     idx           = 0;
     size_t stride = 1;

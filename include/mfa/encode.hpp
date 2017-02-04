@@ -33,7 +33,7 @@ namespace mfa
 
         // TODO: move to private once tested, call from Encode instead of by the user
         float NormalDistance(VectorXf& pt,        // point whose distance from domain is desired
-                             int       cell_idx); // index of min. corner of cell in the domain
+                             size_t    cell_idx); // index of min. corner of cell in the domain
                                                   // used to compute partial derivatives
    private:
 
@@ -84,11 +84,16 @@ namespace mfa
                       MatrixXf& temp_ctrl1); // second temporary control points buffer
 
         // DEPRECATED
-        void Gradient(int       idx,             // index of min. corner of cell in the domain
+        void Gradient(size_t    idx,             // index of min. corner of cell in the domain
                       VectorXf& grad);           // output gradient
 
-        void ErrorGradient(int       idx,        // index of min. corner of cell in the domain
+        float Error(size_t idx);                // domain point where to compute approximation error
+
+        void ErrorGradient(size_t    idx,        // index of min. corner of cell in the domain
                            VectorXf& grad);      // output gradient
+
+        void GridSearch(size_t  start_idx,       // starting domain point of search
+                        size_t& end_idx);        // ending domain point of search
 
         MFA& mfa;                       // the mfa object
         // following are references the the data in the mfa object
