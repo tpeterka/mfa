@@ -225,7 +225,7 @@ Encode()
 
     // debug: try a to search for local minimum of error field from a hard-coded
     // starting point
-    size_t start_idx = 167;
+    size_t start_idx = 168;
     size_t end_idx;
     GridSearch(start_idx, end_idx);
 }
@@ -853,24 +853,21 @@ GridSearch(size_t  start_idx,             // starting domain point of search
 
     // search variables
     size_t stride;                          // stride between domain pts in current dim
-    float steepest_norm;                    // magnitude of steepest descent gradient found so far
-    float cur_norm;                         // magnitude of current gradient
-    size_t steepest_idx;                    // idx of point with steepest gradient norm so far
-    size_t prev_steepest_idx;               // steepest_idx of previous iteration
-    VectorXf grad;                          // current gradient
+    size_t best_neigh_idx;                  // idx of point with max. error so far
+    size_t prev_best_idx;                   // best neigh_idx of previous iteration
     set<int> visited;                       // idxs of visited points TODO: reuse for mutliple GridSearchs
     set<int>::iterator it;                  // iterator into visited
 
-    // initialize the search
-    steepest_idx   = start_idx;             // index of steepest neighbor so far
+    best_neigh_idx = start_idx;             // index of best neighbor so far
+
     // search the points
     while (1)
     {
-        mfa.idx2ijk(steepest_idx, ijk);
-        prev_steepest_idx = steepest_idx;
-        steepest_norm     = 0.0;
-        stride            = 1;
-        size_t cur_idx    = steepest_idx;
+        mfa.idx2ijk(best_neigh_idx, ijk);
+        prev_best_idx  = best_neigh_idx;
+        stride         = 1;
+        size_t cur_idx = best_neigh_idx;
+        float max_derr = 0.0;
 
         // debug
         cerr << "\nnvisited=" << visited.size() << " search arount this point:\n" <<
@@ -887,65 +884,55 @@ GridSearch(size_t  start_idx,             // starting domain point of search
             if (ijk(i) + 1 < ndom_pts(i))
             {
                 size_t neigh_idx = cur_idx + stride;
-                ErrorGradient(neigh_idx, grad);
+                float  derr      = Error(neigh_idx) - Error(cur_idx);
 
                 // debug
                 cerr << "1: trying pt:\n" << domain.row(neigh_idx) << endl;
-                fprintf(stderr, "grad(%d)=%.3f norm=%.3f steepest_norm=%.3f\n",
-                        i, grad(i), grad.norm(), steepest_norm);
-                fprintf(stderr, "error=%.3e\n", Error(neigh_idx));
+                fprintf(stderr, "error=%.3e derr=%.3e\n", Error(neigh_idx), derr);
 
-                if (grad(i) > 0 &&
-                        (temp_it = visited.find(neigh_idx)) == visited.end() &&
-                        (cur_norm = grad.norm()) > steepest_norm)
+                if (derr > max_derr && (temp_it = visited.find(neigh_idx)) == visited.end())
                 {
-                    steepest_norm  = cur_norm;
-                    steepest_idx   = neigh_idx;
+                    max_derr       = derr;
+                    best_neigh_idx = neigh_idx;
                     it = temp_it;
 
                     // debug
-                    fprintf(stderr, "1.5: new steepest_norm=%.3f new steepest_idx=%ld\n",
-                            steepest_norm, steepest_idx);
+                    cerr << "1.5: new best neighbor:\n" << domain.row(best_neigh_idx) << endl;
                 }
             }
             // neighbor in negative direction
             if (ijk(i) > 0)
             {
                 size_t neigh_idx = cur_idx - stride;
-                ErrorGradient(neigh_idx, grad);
+                float  derr      = Error(neigh_idx) - Error(cur_idx);
 
                 // debug
                 cerr << "2: trying pt:\n" << domain.row(neigh_idx) << endl;
-                fprintf(stderr, "grad(%d)=%.3f norm=%.3f steepest_norm=%.3f\n",
-                        i, grad(i), grad.norm(), steepest_norm);
-                fprintf(stderr, "error=%.3e\n", Error(neigh_idx));
+                fprintf(stderr, "error=%.3e derr=%.3e\n", Error(neigh_idx), derr);
 
-                if (grad(i) > 0 &&
-                        (temp_it = visited.find(neigh_idx)) == visited.end() &&
-                        (cur_norm = grad.norm()) > steepest_norm)
+                if (derr > max_derr && (temp_it = visited.find(neigh_idx)) == visited.end())
                 {
-                    steepest_norm  = cur_norm;
-                    steepest_idx   = neigh_idx;
+                    max_derr       = derr;
+                    best_neigh_idx = neigh_idx;
                     it = temp_it;
 
                     // debug
-                    fprintf(stderr, "2.5: new steepest_norm=%.3f new steepest_idx=%ld\n",
-                            steepest_norm, steepest_idx);
+                    cerr << "2.5: new best neighbor:\n" << domain.row(best_neigh_idx) << endl;
                 }
             }
             stride *= ndom_pts(i);
         }
 
-        if (steepest_idx != prev_steepest_idx)
+        if (best_neigh_idx != prev_best_idx)
         {
-            visited.insert(it, steepest_idx);
-            prev_steepest_idx = steepest_idx;
+            visited.insert(it, best_neigh_idx);
+            prev_best_idx = best_neigh_idx;
         }
         else
             break;
     }
 
-    end_idx = steepest_idx;
+    end_idx = best_neigh_idx;
 
     // debug
     cerr << "\nend_idx=" << end_idx <<" end_pt:\n" << domain.row(end_idx) <<
