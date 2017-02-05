@@ -321,6 +321,67 @@ function create_approx_geometry()
 }
 
 //
+// create error geometry
+//
+function create_error_geometry()
+{
+    error = new THREE.Object3D();           // curves connecting error points
+    curve_material = new THREE.LineBasicMaterial({ color: 'magenta', linewidth: 2 });
+
+    // 1-d path
+    if (nraw_pts.length < 2)
+        nraw_pts[1] = 1;
+
+    // x-direction curves
+    n = 0;                                   // index into points
+    for (j = 0; j < nraw_pts[1]; j++)
+    {
+        // create points
+        points = new THREE.Geometry();
+        for (i = 0; i < nraw_pts[0]; i++)
+        {
+            point = new THREE.Vector3(err_pts[3 * n],
+                                      err_pts[3 * n + 1],
+                                      err_pts[3 * n + 2]);
+            points.vertices.push(point);
+            n++;
+        }
+
+        // create the lines and add to the scene
+        curve = new THREE.Line(points, curve_material)
+        error.add(curve)
+    }
+
+    // y-direction curves
+    if (nraw_pts.length >= 2)
+    {
+        no = 0;                              // starting offset of curve point
+        for (j = 0; j < nraw_pts[0]; j++)
+        {
+            // create points
+            points = new THREE.Geometry();
+            n = no;
+            for (i = 0; i < nraw_pts[1]; i++)
+            {
+                point = new THREE.Vector3(err_pts[3 * n    ],
+                                          err_pts[3 * n + 1],
+                                          err_pts[3 * n + 2]);
+                points.vertices.push(point);
+                n = n + nraw_pts[0];
+            }
+            no++;
+
+            // create the lines and add to the scene
+            curve = new THREE.Line(points, curve_material)
+            error.add(curve);
+        }
+    }
+    error.material = curve_material;
+    error.name = 'error_curves';
+    scene.add(error);
+}
+
+//
 // create scene geometry
 //
 function create_geometry()
@@ -328,6 +389,7 @@ function create_geometry()
     create_raw_geometry();                   // input data
     create_ctrl_geometry();                  // output control data
     create_approx_geometry();                // approximated data (for rendering only)
+    create_error_geometry();                 // error data (for rendering only)
     create_bb_geometry();                    // bounding boxes
 }
 

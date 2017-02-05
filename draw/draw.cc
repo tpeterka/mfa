@@ -36,6 +36,7 @@ void PrepRenderingData(vector<int>&   nraw_pts,
                        vector<int>&   nctrl_pts,
                        vector<vec3d>& ctrl_pts,
                        vector<vec3d>& approx_pts,
+                       vector<vec3d>& err_pts,
                        vector<vec3d>& mins,
                        vector<vec3d>& maxs,
                        int            nblocks,
@@ -78,6 +79,15 @@ void PrepRenderingData(vector<int>&   nraw_pts,
                 master.block<Block>(i)->approx(j, 2) : 0.0;
             approx_pts.push_back(p);
         }
+        // error points
+        for (size_t j = 0; j < (size_t)(master.block<Block>(i)->errs.rows()); j++)
+        {
+            p.x = master.block<Block>(i)->errs(j, 0);
+            p.y = master.block<Block>(i)->errs(j, 1);
+            p.z = master.block<Block>(i)->errs.cols() > 2 ?
+                master.block<Block>(i)->errs(j, 2) : 0.0;
+            err_pts.push_back(p);
+        }
         // block mins
         p.x = master.block<Block>(i)->domain_mins(0);
         p.y = master.block<Block>(i)->domain_mins(1);
@@ -103,6 +113,7 @@ NAN_METHOD(Main)
     vector<int>   nctrl_pts;                                // number of control pts in each dim.
     vector<vec3d> ctrl_pts;                                 // control points
     vector<vec3d> approx_pts;                               // aproximated data points
+    vector<vec3d> err_pts;                                  // abs value error field
     vector<vec3d> mins;                                     // block mins
     vector<vec3d> maxs;                                     // block maxs
 
@@ -139,6 +150,7 @@ NAN_METHOD(Main)
                       nctrl_pts,
                       ctrl_pts,
                       approx_pts,
+                      err_pts,
                       mins,
                       maxs,
                       nblocks,
@@ -150,7 +162,8 @@ NAN_METHOD(Main)
     Handle<Array> js_nctrl_pts      = Handle<Array>::Cast(info[3]);
     Handle<Array> js_ctrl_pts       = Handle<Array>::Cast(info[4]);
     Handle<Array> js_approx_pts     = Handle<Array>::Cast(info[5]);
-    Handle<Array> js_bbs            = Handle<Array>::Cast(info[6]);
+    Handle<Array> js_err_pts        = Handle<Array>::Cast(info[6]);
+    Handle<Array> js_bbs            = Handle<Array>::Cast(info[7]);
 
   for (size_t i = 0; i < nraw_pts.size(); i++)
         js_nraw_pts->Set(i, Nan::New(nraw_pts[i]));
@@ -173,6 +186,12 @@ NAN_METHOD(Main)
         js_approx_pts->Set(i * 3    , Nan::New(approx_pts[i].x));
         js_approx_pts->Set(i * 3 + 1, Nan::New(approx_pts[i].y));
         js_approx_pts->Set(i * 3 + 2, Nan::New(approx_pts[i].z));
+    }
+    for (size_t i = 0; i < err_pts.size(); i++)
+    {
+        js_err_pts->Set(i * 3    , Nan::New(err_pts[i].x));
+        js_err_pts->Set(i * 3 + 1, Nan::New(err_pts[i].y));
+        js_err_pts->Set(i * 3 + 2, Nan::New(err_pts[i].z));
     }
     for (size_t i = 0; i < mins.size(); i++)
     {

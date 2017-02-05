@@ -225,9 +225,9 @@ Encode()
 
     // debug: try a to search for local minimum of error field from a hard-coded
     // starting point
-    size_t start_idx = 168;
-    size_t end_idx;
-    GridSearch(start_idx, end_idx);
+//     size_t start_idx = 169;
+//     size_t end_idx;
+//     GridSearch(start_idx, end_idx);
 }
 
 // computes R (residual) vector of P&T eq. 9.63 and 9.67, p. 411-412 for a curve from the

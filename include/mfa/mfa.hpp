@@ -39,9 +39,12 @@ namespace mfa
 
         void Decode(MatrixXf& approx); // decode points
 
+        // DEPRECATED
         float Error(VectorXf& pt,    // point some distance away from domain points
                     int       idx);  // index of point in domain near to the point
                                      // search for cell containing the point starts at this index
+
+        float Error(size_t idx);    // index of domain point where to compute error of mfa
 
         // TODO: remove approx parameter below (decode points one at a time)
         void FindExtraKnots(VectorXi& nnew_knots,     // number of new knots in each dim

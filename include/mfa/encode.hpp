@@ -35,6 +35,8 @@ namespace mfa
         float NormalDistance(VectorXf& pt,        // point whose distance from domain is desired
                              size_t    cell_idx); // index of min. corner of cell in the domain
                                                   // used to compute partial derivatives
+        float Error(size_t idx);                // domain point where to compute approximation error
+
    private:
 
         void Residual(int       cur_dim,  // current dimension
@@ -86,8 +88,6 @@ namespace mfa
         // DEPRECATED
         void Gradient(size_t    idx,             // index of min. corner of cell in the domain
                       VectorXf& grad);           // output gradient
-
-        float Error(size_t idx);                // domain point where to compute approximation error
 
         void ErrorGradient(size_t    idx,        // index of min. corner of cell in the domain
                            VectorXf& grad);      // output gradient

@@ -120,6 +120,9 @@ int main(int argc, char** argv)
     encode_time = MPI_Wtime() - encode_time;
     fprintf(stderr, "Adaptive adaptive encoding done in %d iteration(s)\n", iter + 1);
 
+    // compute entire error field
+    master.foreach(&Block::error);
+
     // print results
     master.foreach(&Block::print_block);
     fprintf(stderr, "encoding time = %.3lf s.\n", encode_time);

@@ -7,6 +7,7 @@ var text = {
     RawData     : true,
     ControlData : true,
     ApproxData  : true,
+    ErrorData   : true,
     Boundaries  : true,
     WhitePaper  : false,
     ResetView   : false
@@ -22,8 +23,6 @@ window.onload = function() {
     var f2 = gui.addFolder('Geometry');
 
     f2.add(text, 'RawData').onChange(function(value) {
-        // var object = scene.getObjectByName('raw_pts');
-        // object.visible = value;
         var object = scene.getObjectByName('raw_curves');
         object.visible = value;
     });
@@ -37,6 +36,11 @@ window.onload = function() {
 
     f2.add(text, 'ApproxData').onChange(function(value) {
         var object = scene.getObjectByName('approx_curves');
+        object.visible = value;
+    });
+
+    f2.add(text, 'ErrorData').onChange(function(value) {
+        var object = scene.getObjectByName('error_curves');
         object.visible = value;
     });
 

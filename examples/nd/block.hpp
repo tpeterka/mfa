@@ -82,6 +82,7 @@ struct Block
             diy::save(bb, b->ctrl_pts);
             diy::save(bb, b->knots);
             diy::save(bb, b->approx);
+            diy::save(bb, b->errs);
         }
     static
     void load(void* b_, diy::BinaryBuffer& bb)
@@ -97,6 +98,7 @@ struct Block
             diy::load(bb, b->ctrl_pts);
             diy::load(bb, b->knots);
             diy::load(bb, b->approx);
+            diy::load(bb, b->errs);
         }
     // f(x,y,z,...) = 1
     void generate_constant_data(const diy::Master::ProxyWithLink& cp,
@@ -653,9 +655,7 @@ struct Block
             for (size_t i = 0; i < (size_t)approx.rows(); i++)
             {
                 VectorXf approx_pos = approx.block(i, 0, 1, p.size()).row(0);
-                VectorXf approx_pt = approx.row(i);
-                float err = mfa->Error(approx_pt, i);
-
+                float err = mfa->Error(i);
                 if (i == 0 || fabs(err) > fabs(max_err))
                 {
                     max_err = err;
@@ -670,10 +670,20 @@ struct Block
 
             // debug
             fprintf(stderr, "data range = %.1f\n", range);
-            fprintf(stderr, "raw max_error = %e (re. sign, error = truth - approx)\n", max_err);
+            fprintf(stderr, "raw max_error = %e\n", max_err);
             cerr << "position of max error =\n" << max_err_pos << endl;
 
             max_err /= range;
+        }
+
+    // compute error field (error at every domain point)
+    // error is absolute value but not normalized by data range
+    void error(const diy::Master::ProxyWithLink& cp)
+        {
+            errs.resize(domain.rows(), domain.cols());
+            errs = domain;
+            for (size_t i = 0; i < (size_t)approx.rows(); i++)
+                errs(i, errs.cols() - 1) = mfa->Error(i);
         }
 
     void print_block(const diy::Master::ProxyWithLink& cp)
@@ -700,8 +710,8 @@ struct Block
     VectorXf knots;                          // NURBS knots (1st dim changes fastest)
     MatrixXf approx;                         // points in approximated volume
                                              // (same number as input points, for rendering only)
-    VectorXf errs;                           // distance from each input point to curve
-    float    max_err;                        // maximum distance from input points to curve
+    float    max_err;                        // maximum (abs value) distance from input points to curve
+    MatrixXf errs;                           // error field (abs. value, not normalized by data range)
 
     float s;                                 // scaling factor on range values (for error checking)
     mfa::MFA *mfa;                           // MFA object

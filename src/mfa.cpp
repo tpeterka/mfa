@@ -141,7 +141,9 @@ Decode(MatrixXf& approx)
     decoder.Decode(approx);
 }
 
+// DEPRECATED
 // error (distance in normal direction) from a point to the domain points
+// (error is signed and not normalized by data range)
 float
 mfa::
 MFA::
@@ -151,6 +153,17 @@ Error(VectorXf& pt,               // point some distance away from domain points
 {
     mfa::Encoder encoder(*this);
     return encoder.NormalDistance(pt, idx);
+}
+
+// absolute value of error (distance in normal direction) of the mfa at a domain
+// point (error is absolute value but not normalized by data range)
+float
+mfa::
+MFA::
+Error(size_t idx)                   // index of domain point
+{
+    mfa::Encoder encoder(*this);
+    return encoder.Error(idx);
 }
 
 // binary search to find the span in the knots vector containing a given parameter value

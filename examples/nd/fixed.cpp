@@ -434,18 +434,10 @@ int main(int argc, char** argv)
     decode_time = MPI_Wtime() - decode_time;
 
     // compute max error
-#if 0
-    // for nd magnitude function only
-    // master.foreach(&Block::mag_max_error);
-
-    // for nd sinc function only
-    master.foreach(&Block::sinc_max_error);
-
-    // for nd quadratic function only
-    // master.foreach(&Block::quad_max_error);
-#else
     master.foreach(&Block::max_error);
-#endif
+
+    // compute entire error field
+    master.foreach(&Block::error);
 
     // print results
     master.foreach(&Block::print_block);
