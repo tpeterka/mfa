@@ -88,9 +88,12 @@ Encode()
     MatrixXf temp_ctrl0 = MatrixXf::Zero(tot_ntemp_ctrl, domain.cols());
     MatrixXf temp_ctrl1 = MatrixXf::Zero(tot_ntemp_ctrl, domain.cols());
 
-    VectorXi ntemp_ctrl = ndom_pts;               // current num of temp control pts in each dim
+    VectorXi ntemp_ctrl = ndom_pts;         // current num of temp control pts in each dim
 
-    for (size_t k = 0; k < ndims; k++)            // for all domain dimensions
+    float  max_err_val;                     // maximum solution error, all curves, final dim
+    size_t max_ctrl_idx;                    // control point index where max error occurs
+
+    for (size_t k = 0; k < ndims; k++)      // for all domain dimensions
     {
         // TODO:
         // Investigate whether in later dimensions, when input data points are replaced by
@@ -168,7 +171,27 @@ Encode()
             // debug
             // fprintf(stderr, "j=%ld curve\n", j);
 
+            // compute the one curve of control points
             CtrlCurve(N, NtN, R, P, n, k, pos, kos, co, cs, to, temp_ctrl0, temp_ctrl1);
+
+            // compute solution error for last dimension of curves, keep track of max error
+            if (k == ndims - 1)
+            {
+                // compute max solution error for last (range) coordinate of control points
+                MatrixXf::Index max_row, max_col;                           // index of max error
+                MatrixXf err     = R - NtN * P;                             // solution error
+                VectorXf abs_err = abs(err.col(R.cols() - 1).array());      // abs value of last column of error
+                float max_err    = abs_err.maxCoeff(&max_row, &max_col);    // max error in this curve
+                // max value and index of error in all curves so far
+                if (j == 0 || max_err > max_err_val)
+                {
+                    max_err_val   = max_err;
+                    max_ctrl_idx  = to + (max_row + 1) * cs;        // + 1 because P excludes first ctrl pt
+
+                    // debug
+                    cerr << "max err so far: " << max_err_val << "at ctrl pt: " << P.row(max_row) << endl;
+                }
+            }
 
             // adjust offsets for the next curve
             if ((j + 1) % cs)
@@ -213,6 +236,9 @@ Encode()
 
     // debug
     // cerr << "ctrl_pts:\n" << ctrl_pts << endl;
+
+    // debug
+    cerr << "max solution error: " << max_err_val << " at ctrl pt: " << ctrl_pts.row(max_ctrl_idx) << endl;
 
     // debug: print gradient of value and gradient of error
     // VectorXf grad(p.size());    // NB gradient is domain dims size (not domain + range)
@@ -541,13 +567,6 @@ CtrlCurve(MatrixXf& N,          // basis functions for current dimension
 
     // solve for P
     P = NtN.ldlt().solve(R);
-
-    // debug: print solution error
-    // MatrixXf Rhat(R.rows(), R.cols());
-    // Rhat = NtN * P;
-    // MatrixXf Rerr(R.rows(), R.cols());
-    // Rerr = R - Rhat;
-    // cerr << "Rerr:\n" << Rerr << endl;
 
     // debug
     // cerr << "P:\n" << P << endl;
