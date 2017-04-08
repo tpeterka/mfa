@@ -690,7 +690,7 @@ struct Block
         {
             // cerr << "domain\n" << domain << endl;
             cerr << ctrl_pts.rows() << " control points\n" << ctrl_pts << endl;
-            // cerr << knots.size() << " knots\n" << knots << endl;
+            cerr << knots.size() << " knots\n" << knots << endl;
             // cerr << approx.rows() << " approximated points\n" << approx << endl;
             fprintf(stderr, "|normalized max_err| = %e\n", fabs(max_err));
             fprintf(stderr, "# input points = %ld\n", domain.rows());

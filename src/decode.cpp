@@ -280,8 +280,8 @@ VolPt(VectorXf& param,                       // parameter value in each dim. of 
         temp[0] += (N[0])(0, iter[0] + span[0] - p(0)) * ctrl_pt;
 
         // debug
-        // fprintf(stderr, "1: temp[0] += N[0, %d] * ctrl_pt\n", iter[0] + span[0] - p(0));
-        // cerr << "ctrl_pt=\n" << ctrl_pt << endl;
+//         fprintf(stderr, "1: temp[0] += N[0, %d] * ctrl_pt\n", iter[0] + span[0] - p(0));
+//         cerr << "span: " << span[0] << " ctrl_pt=\n" << ctrl_pt << endl;
         // cerr << "1: i=" << i << " iter[0]=" << iter[0] << " temp[0]=\n" << temp[0] << endl;
         iter[0]++;
 

@@ -73,7 +73,7 @@ MFA(VectorXi& p_,             // polynomial degree in each dimension
     Params();
 
     // debug
-    // cerr << "params:\n" << params << endl;
+//     cerr << "params:\n" << params << endl;
 
     // compute knots
     knots.resize(tot_nknots);
@@ -91,12 +91,140 @@ MFA(VectorXi& p_,             // polynomial degree in each dimension
     co.resize(p.size(), 0);                  // offset for control points
     cs.resize(p.size(), 1);                  // stride for control points
     ds.resize(p.size(), 1);                  // stride for domain points
+    ks.resize(p.size(), 1);                  // stride for knots
     for (size_t i = 1; i < p.size(); i++)
     {
         po[i] = po[i - 1] + ndom_pts[i - 1];
         ko[i] = ko[i - 1] + nctrl_pts[i - 1] + p[i - 1] + 1;
         co[i] = co[i - 1] * nctrl_pts[i - 1];
         ds[i] = ds[i - 1] * ndom_pts[i - 1];
+        ks[i] = ks[i - 1] * (nctrl_pts[i - 1] + p[i - 1] + 1);
+    }
+
+    // knot span index table
+    KnotSpanIndex();
+}
+
+// initialize knot span index
+void
+mfa::
+MFA::
+KnotSpanIndex()
+{
+    // total number of knot spans = product of number of knot spans over all dims
+    size_t int_nspans = 1;                  // number of internal (unique) spans
+    size_t all_nspans = 1;                  // total number of spans, including repeating 0s and 1s
+    for (auto i = 0; i < p.size(); i++)
+    {
+        int_nspans *= (nctrl_pts(i) - p(i));
+        all_nspans *= (nctrl_pts(i) + p(i));
+    }
+
+    knot_spans.resize(int_nspans);
+
+    // for all knot spans, fill the KnotSpan fields
+    VectorXi ijk   = VectorXi::Zero(p.size());      // i,j,k of start of span
+    VectorXi p_ijk = VectorXi::Zero(p.size());      // i,j,k of parameter
+    size_t span_idx = 0;                            // current index into knot_spans
+    for (auto i = 0; i < all_nspans; i++)           // all knot spans (including repeated 0s and 1s)
+    {
+        // skip repeating knot spans
+        bool skip = false;
+        for (auto k = 0; k < p.size(); k++)             // dimensions
+            if ((ijk(k) < p[k]) || ijk(k) >= nctrl_pts[k])
+            {
+                skip = true;
+                break;
+            }
+
+        // save knot span
+        if (!skip)
+        {
+            // knot ijk
+            knot_spans[span_idx].min_knot_ijk = ijk;
+            knot_spans[span_idx].max_knot_ijk = ijk.array() + 1;        // TODO: necessary to store?
+
+            // knot values
+            knot_spans[span_idx].min_knot.resize(p.size());
+            knot_spans[span_idx].max_knot.resize(p.size());
+            for (auto k = 0; k < p.size(); k++)         // dimensions
+            {
+                knot_spans[span_idx].min_knot(k) = knots(ko[k] + knot_spans[span_idx].min_knot_ijk(k));
+                knot_spans[span_idx].max_knot(k) = knots(ko[k] + knot_spans[span_idx].max_knot_ijk(k));
+            }
+
+            // parameter ijk and parameter values
+            knot_spans[span_idx].min_param.resize(p.size());
+            knot_spans[span_idx].max_param.resize(p.size());
+            knot_spans[span_idx].min_param_ijk.resize(p.size());
+            knot_spans[span_idx].max_param_ijk.resize(p.size());
+            VectorXi po_ijk = p_ijk;                    // remember starting param ijk
+            for (auto k = 0; k < p.size(); k++)         // dimensions in knot spans
+            {
+                // min param ijk and value
+                knot_spans[span_idx].min_param_ijk(k) = p_ijk(k);
+                knot_spans[span_idx].min_param(k)     = params(po[k] + p_ijk(k));
+
+                // max param ijk and value
+                // most spans are half open [..., ...)
+                while (params(po[k] + p_ijk(k)) < knot_spans[span_idx].max_knot(k))
+                {
+                    knot_spans[span_idx].max_param_ijk(k) = p_ijk(k);
+                    knot_spans[span_idx].max_param(k)     = params(po[k] + p_ijk(k));
+                    p_ijk(k)++;
+                }
+                // the last span in each dimension is fully closed [..., ...]
+                if (p_ijk(k) == ndom_pts(k) - 1)
+                {
+                    knot_spans[span_idx].max_param_ijk(k) = p_ijk(k);
+                    knot_spans[span_idx].max_param(k)     = params(po[k] + p_ijk(k));
+                }
+            }
+
+            // increment param ijk
+            for (auto k = 0; k < p.size(); k++)     // dimension in params
+            {
+                if (p_ijk(k) < ndom_pts[k] - 1)
+                {
+                    po_ijk(k) = p_ijk(k);
+                    break;
+                }
+                else
+                {
+                    po_ijk(k) = 0;
+                    if (k < p.size() - 1)
+                        po_ijk(k + 1)++;
+                }
+            }
+            p_ijk = po_ijk;
+
+            // debug
+            cerr <<
+                "spand_idx="         << span_idx                           <<
+//                 "\nmin_knot_ijk:\n"  << knot_spans[span_idx].min_knot_ijk  <<
+//                 "\nmax_knot_ijk:\n"  << knot_spans[span_idx].max_knot_ijk  <<
+                "\nmin_knot:\n"      << knot_spans[span_idx].min_knot      <<
+                "\nmax_knot:\n"      << knot_spans[span_idx].max_knot      <<
+//                 "\nmin_param_ijk:\n" << knot_spans[span_idx].min_param_ijk <<
+//                 "\nmax_param_ijk:\n" << knot_spans[span_idx].max_param_ijk <<
+                "\nmin_param:\n"     << knot_spans[span_idx].min_param     <<
+                "\nmax_param:\n"     << knot_spans[span_idx].max_param     <<
+                "\n\n"               << endl;
+
+            span_idx++;
+        }
+
+        // increment knot ijk
+        for (auto k = 0; k < p.size(); k++)             // dimension in knot spans
+        {
+            if (ijk(k) < nctrl_pts[k] + p[k] - 1)
+            {
+                ijk(k)++;
+                break;
+            }
+            else
+                ijk(k) = 0;
+        }
     }
 }
 
@@ -119,17 +247,32 @@ Encode(float err_limit)                      // maximum allowable normalized err
     VectorXi nnew_knots;                     // number of new knots in each dim
     VectorXf new_knots;                      // new knots (1st dim changes fastest)
 
-    // TODO: remove bulk decoding and decode points as needed one at a time instead
-    MatrixXf approx;                         // decoded points
-    approx.resize(domain.rows(), domain.cols());
-    Decode(approx);
-
-    FindExtraKnots(nnew_knots, new_knots, err_limit, approx);
+    FindExtraKnots(nnew_knots, new_knots, err_limit);
     InsertKnots(nnew_knots, new_knots);
 
     mfa::Encoder encoder(*this);
     encoder.Encode();
 }
+
+// // DEPRECATED
+// // re-encode with insertion of new knots into existing knots
+// void
+// mfa::
+// MFA::
+// Encode(float err_limit)                      // maximum allowable normalized error
+// {
+//     VectorXi nnew_knots;                     // number of new knots in each dim
+//     VectorXf new_knots;                      // new knots (1st dim changes fastest)
+// 
+//     MatrixXf approx;                         // decoded points
+//     approx.resize(domain.rows(), domain.cols());
+//     Decode(approx);
+// 
+//     InsertKnots();
+// 
+//     mfa::Encoder encoder(*this);
+//     encoder.Encode();
+// }
 
 // encode
 void
@@ -423,84 +566,104 @@ Knots()
     }
 }
 
+// insert new knots (one for each domain dim) for the worst control point (the one with the most
+// solution error)
+//
+void
+mfa::
+MFA::
+InsertKnots()
+{
+    // find values of the knots
+    VectorXf knot(ndom_pts.size());             // the new knot in each domain dimension
+    for (size_t i = 0; i < ndom_pts.size(); i++)
+        knot(i) = InterpolateParams(i, po[i], ds[i], ctrl_pts(worst_ctrl_idx, i));
+
+    // insert the knots
+    VectorXi nnew_knots = VectorXi::Ones(ndom_pts.size());
+    InsertKnots(nnew_knots, knot);
+
+    // debug
+    cerr << "knot to be inserted:\n" << knot << endl;
+}
+
 // computes additional knot locations where error threshold is exceeded
 //
 // original, inserted, and resulting new knots are same for all curves and
 // stored once for each dimension in row-major order (1st dim changes fastest)
 //
-// TODO: remove approx parameter below and call Decode for each point instead
 void
 mfa::
 MFA::
-FindExtraKnots(VectorXi& nnew_knots,     // number of new knots in each dim
-               VectorXf& new_knots,      // new knots (1st dim changes fastest)
-               float     err_limit,
-               MatrixXf& approx)         // pts in approximated volume (1st dim. changes fastest)
+FindExtraKnots(VectorXi& nnew_knots,    // number of new knots in each dim
+               VectorXf& new_knots,     // new knots (1st dim changes fastest)
+               float     err_limit)     // max error limit
 {
     // data range for error normalization
     float min   = domain.minCoeff();
     float max   = domain.maxCoeff();
     float range = max - min;
-
-    // i,j,k domain coordinates for following iteration over approximated points
-    VectorXi ijk = VectorXi::Zero(ndom_pts.size()); // TODO: domain size, not pt size?
-
-    // // i,j,k coordinates of knots to add in each dimension
-    vector < set <int> > new_knot_indices(ndom_pts.size());
-
-    // normal distance computation
-    for (size_t i = 0; i < approx.rows(); i++)
-    {
-        // debug
-        // cerr << "ijk:\n" << ijk << endl;
-
-        VectorXf approx_pos = approx.block(i, 0, 1, p.size()).row(0);
-        VectorXf approx_pt  = approx.row(i);
-        float    err        = Error(approx_pt, i) / range;
-
-        if (fabs(err) > err_limit)
-        {
-            // add the knot ijk indices
-            for (size_t j = 0; j < ijk.size(); j++)
-                new_knot_indices[j].insert(ijk(j));
-        }
-
-        // increment ijk indices
-        for (size_t j = 0; j < ijk.size(); j++)
-        {
-            ijk(j) = (ijk(j) + 1) % ndom_pts(j);
-            if (ijk(j))
-                break;
-        }
-    }
-
-    // compute sizes and resize nnew_knots and new_knots
-    int tot_nnew_knots = 0;                 // total number of new knots added
-    for (size_t j = 0; j < ijk.size(); j++) // for each domain dim j
-        tot_nnew_knots += new_knot_indices[j].size();
-    nnew_knots.resize(ndom_pts.size());
-    new_knots.resize(tot_nnew_knots);
-
-    // convert knot indices to knot values in new_knots, set quantities of nnew_knots
-    size_t n  = 0;                   // linear counter in new_knots
-    size_t p0 = 0;                   // start of current dim in params
-    for (size_t j = 0; j < ijk.size(); j++) // for each domain dim j
-    {
-        nnew_knots(j) = new_knot_indices[j].size();
-
-        // debug
-        // fprintf(stderr, "nnew_knots(%lu)=%d\n", j, nnew_knots(j));
-
-        for (set<int>::iterator it = new_knot_indices[j].begin();
-             it != new_knot_indices[j].end(); it++)
-        {
-            // debug
-            // fprintf(stderr, "ijk=%i\n", *it);
-
-            new_knots[n++] = params[p0 + *it];
-        }
-        p0 += ndom_pts(j);
-    }
+// 
+//     // i,j,k domain coordinates for following iteration over approximated points
+//     VectorXi ijk = VectorXi::Zero(ndom_pts.size()); // TODO: domain size, not pt size?
+// 
+//     // i,j,k coordinates of knots to add in each dimension
+//     vector < set <int> > new_knot_indices(ndom_pts.size());
+// 
+//     // normal distance computation
+//     // TODO: removed approx, need to decode one point at a time
+//     for (size_t i = 0; i < approx.rows(); i++)
+//     {
+//         // debug
+//         // cerr << "ijk:\n" << ijk << endl;
+// 
+//         VectorXf approx_pos = approx.block(i, 0, 1, p.size()).row(0);
+//         VectorXf approx_pt  = approx.row(i);
+//         float    err        = Error(approx_pt, i) / range;
+// 
+//         if (fabs(err) > err_limit)
+//         {
+//             // add the knot ijk indices
+//             for (size_t j = 0; j < ijk.size(); j++)
+//                 new_knot_indices[j].insert(ijk(j));
+//         }
+// 
+//         // increment ijk indices
+//         for (size_t j = 0; j < ijk.size(); j++)
+//         {
+//             ijk(j) = (ijk(j) + 1) % ndom_pts(j);
+//             if (ijk(j))
+//                 break;
+//         }
+//     }
+// 
+//     // compute sizes and resize nnew_knots and new_knots
+//     int tot_nnew_knots = 0;                 // total number of new knots added
+//     for (size_t j = 0; j < ijk.size(); j++) // for each domain dim j
+//         tot_nnew_knots += new_knot_indices[j].size();
+//     nnew_knots.resize(ndom_pts.size());
+//     new_knots.resize(tot_nnew_knots);
+// 
+//     // convert knot indices to knot values in new_knots, set quantities of nnew_knots
+//     size_t n  = 0;                   // linear counter in new_knots
+//     size_t p0 = 0;                   // start of current dim in params
+//     for (size_t j = 0; j < ijk.size(); j++) // for each domain dim j
+//     {
+//         nnew_knots(j) = new_knot_indices[j].size();
+// 
+//         // debug
+//         // fprintf(stderr, "nnew_knots(%lu)=%d\n", j, nnew_knots(j));
+// 
+//         for (set<int>::iterator it = new_knot_indices[j].begin();
+//              it != new_knot_indices[j].end(); it++)
+//         {
+//             // debug
+//             // fprintf(stderr, "ijk=%i\n", *it);
+// 
+//             new_knots[n++] = params[p0 + *it];
+//         }
+//         p0 += ndom_pts(j);
+//     }
 
     // debug
     // cerr << "nnew_knots:\n" << nnew_knots << endl;
@@ -561,33 +724,29 @@ InsertKnots(VectorXi& nnew_knots,     // number of new knots in each dim
     }
 
     // debug
-    // cerr << "nknots before insertion:\n" << nold_knots << endl;
-    // cerr << "knots before insertion:\n" << knots << endl;
-    // cerr << "nctrl_pts before insertion:\n" << nctrl_pts << endl;
+//     cerr << "nknots before insertion:\n" << nold_knots << endl;
+//     cerr << "knots before insertion:\n" << knots << endl;
+//     cerr << "nctrl_pts before insertion:\n" << nctrl_pts << endl;
 
     // copy temp_knots back to knots
     knots.resize(temp_knots.size());
     knots = temp_knots;
 
     // debug
-    // cerr << "nnew_knots:\n" << nnew_knots << endl;
-    // cerr << "knots after insertion:\n" << knots << endl;
+//     cerr << "nnew_knots:\n" << nnew_knots << endl;
+//     cerr << "knots after insertion:\n" << knots << endl;
 
     // increase number of control points
     nctrl_pts += nnew_knots;
 
     // debug
-    // cerr << "nctrl_pts after insertion:\n" << nctrl_pts << endl;
+    cerr << "nctrl_pts after insertion:\n" << nctrl_pts << endl;
 }
 
 // interpolate parameters to get parameter value for a target coordinate
 //
-// TODO: experiment whether this is more accurate than calling Params
-// with a 1-d space of domain pts:
-// min, target, and max
-//
-// This function currently not used, but can be useful for intersecting an MFA with an
-// axis-aligned plane, which will require the parameter value corresponding to the plane coordinate
+// TODO: experiment whether this is more accurate and/or faster than calling Params
+// with a 1-d space of domain pts: min, target, and max
 float
 mfa::
 MFA::
@@ -649,8 +808,8 @@ InterpolateParams(int       cur_dim,  // curent dimension
 void
 mfa::
 MFA::
-idx2ijk(size_t    idx,                       // linear cell indx
-        VectorXi& ijk)                       // i,j,k,... indices in all dimensions
+idx2ijk(size_t    idx,                  // linear cell indx
+        VectorXi& ijk)                  // i,j,k,... indices in all dimensions
 {
     if (p.size() == 1)
     {
@@ -682,8 +841,8 @@ idx2ijk(size_t    idx,                       // linear cell indx
 void
 mfa::
 MFA::
-ijk2idx(VectorXi& ijk,                      // i,j,k,... indices to all dimensions
-        size_t&   idx)                      // (output) linear index
+ijk2idx(VectorXi& ijk,                  // i,j,k,... indices to all dimensions
+        size_t&   idx)                  // (output) linear index
 {
     idx           = 0;
     size_t stride = 1;

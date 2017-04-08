@@ -17,6 +17,18 @@ typedef Eigen::VectorXi VectorXi;
 
 using namespace std;
 
+struct KnotSpan
+{
+    VectorXf min_knot;                  // parameter vector of min knot in this span
+    VectorXf max_knot;                  // parameter vector of max knot in this span
+    VectorXi min_knot_ijk;              // i,j,k indices of minimum knot in this span
+    VectorXi max_knot_ijk;              // i,j,k indices of maximum knot in this span
+    VectorXf min_param;                 // parameter vector of minimum domain point in this span
+    VectorXf max_param;                 // parameter vector of maximum domain point in this span
+    VectorXi min_param_ijk;             // i,j,k indices of minimum domain point in this span
+    VectorXi max_param_ijk;             // i,j,k indices of maximum domain point in this span
+};
+
 namespace mfa
 {
     class MFA
@@ -47,10 +59,9 @@ namespace mfa
         float Error(size_t idx);    // index of domain point where to compute error of mfa
 
         // TODO: remove approx parameter below (decode points one at a time)
-        void FindExtraKnots(VectorXi& nnew_knots,     // number of new knots in each dim
-                            VectorXf& new_knots,      // new knots (1st dim changes fastest)
-                            float     err_limit,
-                            MatrixXf& approx);        // pts in approximated volume (1st dim. changes fastest)
+        void FindExtraKnots(VectorXi& nnew_knots,   // number of new knots in each dim
+                            VectorXf& new_knots,    // new knots (1st dim changes fastest)
+                            float     err_limit);   // max error limit
 
     private:
 
@@ -71,6 +82,11 @@ namespace mfa
 
         void Knots();
 
+        void KnotSpanIndex();
+
+        void InsertKnots();
+
+        // DEPRECATED
         void InsertKnots(VectorXi& nnew_knots,     // number of new knots in each dim
                          VectorXf& new_knots);     // new knots (1st dim changes fastest)
 
@@ -79,10 +95,10 @@ namespace mfa
                                 size_t    ds,      // stride for domain pts in cuve in cur. dim.
                                 float     coord);  // target coordinate
 
-        void idx2ijk(size_t    idx,       // linear index
-                     VectorXi& ijk);      // i,j,k,... indices in all dimensions
-        void ijk2idx(VectorXi& ijk,       // i,j,k,... indices to all dimensions
-                     size_t&   idx);      // (output) linear index
+        void idx2ijk(size_t     idx,        // linear index
+                    VectorXi&   ijk);       // i,j,k,... indices in all dimensions
+        void ijk2idx(VectorXi&  ijk,        // i,j,k,... indices to all dimensions
+                    size_t&     idx);       // (output) linear index
 
        friend class Encoder;
        friend class Decoder;
@@ -99,10 +115,13 @@ namespace mfa
        vector<size_t> co;     // starting offset for control points in each dim
        vector<size_t> cs;     // stride for control points in each dim
        vector<size_t> ds;     // stride for domain points in each dim
+       vector<size_t> ks;     // stride for knots in each dim
        int tot_nparams;       // total number of params = sum of ndom_pts over all dims
                               // not the total number of data pts, which would be the prod.
        int tot_nknots;        // total nmbr of knots = sum of nmbr of knots over all dims
        float eps;             // minimum difference considered significant
+       size_t worst_ctrl_idx; // index of control point with max solution error
+       vector<KnotSpan> knot_spans; // index of not done (greater than max error) knot spans
    };
 
 }

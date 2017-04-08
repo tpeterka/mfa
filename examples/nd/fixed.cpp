@@ -133,6 +133,18 @@ int main(int argc, char** argv)
 //     master.foreach([&](Block* b, const diy::Master::ProxyWithLink& cp)
 //                    { b->generate_sinc_data(cp, d_args); });
 
+//     // 1d very small sinc function
+//     d_args.pt_dim       = 2;
+//     d_args.dom_dim      = 1;
+//     d_args.p[0]         = 3;
+//     d_args.ndom_pts[0]  = 20;
+//     d_args.nctrl_pts[0] = 6;
+//     d_args.min[0]       = -4.0 * M_PI;
+//     d_args.max[0]       = 4.0 * M_PI;
+//     d_args.s            = 10.0;              // scaling factor on range
+//     master.foreach([&](Block* b, const diy::Master::ProxyWithLink& cp)
+//                    { b->generate_sinc_data(cp, d_args); });
+
     // test of 2 overlapping sinc functions
     // 101 total domain points (100 spans) split into 2 parts with p+1 overlapping points
 //     int ghost = 5;
@@ -161,31 +173,14 @@ int main(int argc, char** argv)
 // #endif
 
     // 2d sinc function f(x,y) = sinc(x)sinc(y)
-//     d_args.pt_dim       = 3;
-//     d_args.dom_dim      = 2;
-//     d_args.p[0]         = 4;
-//     d_args.p[1]         = 4;
-//     d_args.ndom_pts[0]  = 100;
-//     d_args.ndom_pts[1]  = 100;
-//     d_args.nctrl_pts[0] = 20;
-//     d_args.nctrl_pts[1] = 20;
-//     d_args.min[0]       = -4.0 * M_PI;
-//     d_args.min[1]       = -4.0 * M_PI;
-//     d_args.max[0]       = 4.0 * M_PI;
-//     d_args.max[1]       = 4.0 * M_PI;
-//     d_args.s            = 10.0;              // scaling factor on range
-//     master.foreach([&](Block* b, const diy::Master::ProxyWithLink& cp)
-//                    { b->generate_sinc_data(cp, d_args); });
-
-    // 2d very small sinc function f(x,y) = sinc(x)sinc(y)
     d_args.pt_dim       = 3;
     d_args.dom_dim      = 2;
-    d_args.p[0]         = 2;
-    d_args.p[1]         = 2;
-    d_args.ndom_pts[0]  = 20;
-    d_args.ndom_pts[1]  = 20;
-    d_args.nctrl_pts[0] = 5;
-    d_args.nctrl_pts[1] = 5;
+    d_args.p[0]         = 4;
+    d_args.p[1]         = 4;
+    d_args.ndom_pts[0]  = 100;
+    d_args.ndom_pts[1]  = 100;
+    d_args.nctrl_pts[0] = 8;
+    d_args.nctrl_pts[1] = 8;
     d_args.min[0]       = -4.0 * M_PI;
     d_args.min[1]       = -4.0 * M_PI;
     d_args.max[0]       = 4.0 * M_PI;
@@ -193,6 +188,23 @@ int main(int argc, char** argv)
     d_args.s            = 10.0;              // scaling factor on range
     master.foreach([&](Block* b, const diy::Master::ProxyWithLink& cp)
                    { b->generate_sinc_data(cp, d_args); });
+
+    // 2d very small sinc function f(x,y) = sinc(x)sinc(y)
+//     d_args.pt_dim       = 3;
+//     d_args.dom_dim      = 2;
+//     d_args.p[0]         = 2;
+//     d_args.p[1]         = 2;
+//     d_args.ndom_pts[0]  = 20;
+//     d_args.ndom_pts[1]  = 20;
+//     d_args.nctrl_pts[0] = 6;
+//     d_args.nctrl_pts[1] = 6;
+//     d_args.min[0]       = -4.0 * M_PI;
+//     d_args.min[1]       = -4.0 * M_PI;
+//     d_args.max[0]       = 4.0 * M_PI;
+//     d_args.max[1]       = 4.0 * M_PI;
+//     d_args.s            = 10.0;              // scaling factor on range
+//     master.foreach([&](Block* b, const diy::Master::ProxyWithLink& cp)
+//                    { b->generate_sinc_data(cp, d_args); });
 
    // 3d sinc function f(x,y,z) = sinc(x)sinc(y)sinc(z)
     // d_args.pt_dim       = 4;

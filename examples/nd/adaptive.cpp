@@ -57,35 +57,48 @@ int main(int argc, char** argv)
     DomainArgs d_args;
 
     // 1d sinc function f(x) - sinc(x)
-//     float norm_err_limit = 1.5e-2;           // normalized maximum allowable error
-//     d_args.pt_dim       = 2;
-//     d_args.dom_dim      = 1;
-//     d_args.p[0]         = 4;
-//     d_args.ndom_pts[0]  = 100;
-//     d_args.nctrl_pts[0] = 20;
-//     d_args.min[0]       = -4.0 * M_PI;
-//     d_args.max[0]       = 4.0 * M_PI;
-//     d_args.s            = 10.0;           // scaling factor on range
-//     master.foreach([&](Block* b, const diy::Master::ProxyWithLink& cp)
-//                    { b->generate_sinc_data(cp, d_args); });
-//
-    // 2d sinc function f(x,y) = sinc(x)sinc(y)
-    float norm_err_limit = 1.0e-2;           // normalized maximum allowable error
-    d_args.pt_dim       = 3;
-    d_args.dom_dim      = 2;
+    float norm_err_limit =9.2e-3;           // normalized maximum allowable error
+    d_args.pt_dim       = 2;
+    d_args.dom_dim      = 1;
     d_args.p[0]         = 4;
-    d_args.p[1]         = 4;
     d_args.ndom_pts[0]  = 100;
-    d_args.ndom_pts[1]  = 100;
     d_args.nctrl_pts[0] = 20;
-    d_args.nctrl_pts[1] = 20;
     d_args.min[0]       = -4.0 * M_PI;
-    d_args.min[1]       = -4.0 * M_PI;
     d_args.max[0]       = 4.0 * M_PI;
-    d_args.max[1]       = 4.0 * M_PI;
-    d_args.s            = 10.0;              // scaling factor on range
+    d_args.s            = 10.0;           // scaling factor on range
     master.foreach([&](Block* b, const diy::Master::ProxyWithLink& cp)
                    { b->generate_sinc_data(cp, d_args); });
+//
+    // 1d very small sinc function
+//     float norm_err_limit = 1.5e-1;
+//     d_args.pt_dim       = 2;
+//     d_args.dom_dim      = 1;
+//     d_args.p[0]         = 2;
+//     d_args.ndom_pts[0]  = 20;
+//     d_args.nctrl_pts[0] = 6;
+//     d_args.min[0]       = -4.0 * M_PI;
+//     d_args.max[0]       = 4.0 * M_PI;
+//     d_args.s            = 10.0;              // scaling factor on range
+//     master.foreach([&](Block* b, const diy::Master::ProxyWithLink& cp)
+//                    { b->generate_sinc_data(cp, d_args); });
+
+    // 2d sinc function f(x,y) = sinc(x)sinc(y)
+//     float norm_err_limit = 1.0e-2;           // normalized maximum allowable error
+//     d_args.pt_dim       = 3;
+//     d_args.dom_dim      = 2;
+//     d_args.p[0]         = 4;
+//     d_args.p[1]         = 4;
+//     d_args.ndom_pts[0]  = 100;
+//     d_args.ndom_pts[1]  = 100;
+//     d_args.nctrl_pts[0] = 20;
+//     d_args.nctrl_pts[1] = 20;
+//     d_args.min[0]       = -4.0 * M_PI;
+//     d_args.min[1]       = -4.0 * M_PI;
+//     d_args.max[0]       = 4.0 * M_PI;
+//     d_args.max[1]       = 4.0 * M_PI;
+//     d_args.s            = 10.0;              // scaling factor on range
+//     master.foreach([&](Block* b, const diy::Master::ProxyWithLink& cp)
+//                    { b->generate_sinc_data(cp, d_args); });
 
     double encode_time = MPI_Wtime();
 
@@ -95,13 +108,11 @@ int main(int argc, char** argv)
     // knots, and how to converge on the desired error limit (don't need to add control points
     // at every point where the error is too big, one strategically placed control point may
     // suffice). Start with a larger error and cut in half each time?
-    // TODO, for now just 2 iterations after some fixed number of control points, but
-    // much more research to do here
     fprintf(stderr, "Starting adaptive encoding...\n");
     int iter;
     for (iter = 0; ; iter++)
     {
-        fprintf(stderr, "Encoding iteration %d...\n", iter);
+        fprintf(stderr, "-----\n\nEncoding iteration %d...\n", iter);
         if (iter == 0)
             master.foreach(&Block::encode_block);
         else
@@ -109,7 +120,7 @@ int main(int argc, char** argv)
                            { b->reencode_block(cp, norm_err_limit); });
 
         // TODO: remove eventually; should not need complete decoding to adapt knots
-        fprintf(stderr, "Encoding iteration %d done. Decoding and computing max. error...\n", iter);
+        fprintf(stderr, "\nDecoding and computing max. error...\n");
         master.foreach(&Block::decode_block);
         master.foreach(&Block::max_error);
 
@@ -118,7 +129,7 @@ int main(int argc, char** argv)
             break;
     }
     encode_time = MPI_Wtime() - encode_time;
-    fprintf(stderr, "Adaptive adaptive encoding done in %d iteration(s)\n", iter + 1);
+    fprintf(stderr, "-----\n\nAdaptive adaptive encoding done in %d iteration(s)\n", iter + 1);
 
     // compute entire error field
     master.foreach(&Block::error);
