@@ -31,11 +31,11 @@ namespace mfa
         ~Encoder() {}
         void Encode();
 
-        // TODO: move to private once tested, call from Encode instead of by the user
-        float NormalDistance(VectorXf& pt,        // point whose distance from domain is desired
-                             size_t    cell_idx); // index of min. corner of cell in the domain
+// DEPRECATED: moved to mfa.hpp
+//         float NormalDistance(VectorXf& pt,        // point whose distance from domain is desired
+//                              size_t    cell_idx); // index of min. corner of cell in the domain
                                                   // used to compute partial derivatives
-        float Error(size_t idx);                // domain point where to compute approximation error
+        float Error(size_t    idx);             // domain point where to compute approximation error
 
    private:
 
@@ -104,9 +104,12 @@ namespace mfa
         VectorXf& params;              // parameters for input points (1st dim changes fastest)
         MatrixXf& ctrl_pts;            // control points (1st dim changes fastest)
         VectorXf& knots;               // knots (1st dim changes fastest)
+        float     dom_range;           // max extent of input data points
         vector<size_t>& po;            // starting offset for params in each dim
         vector<size_t>& ko;            // starting offset for knots in each dim
         vector<size_t>& co;            // starting offset for control points in each dim
+        vector<KnotSpan>& knot_spans;  // not done (greater than max error) knot spans
+        size_t ndone_knot_spans;       // number of done knot spans
     };
 }
 

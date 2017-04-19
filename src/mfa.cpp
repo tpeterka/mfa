@@ -57,6 +57,9 @@ MFA(VectorXi& p_,             // polynomial degree in each dimension
     // check dimensionality for sanity
     assert(p.size() < domain.cols());
 
+    // max extent of input data points
+    dom_range = domain.maxCoeff() - domain.minCoeff();
+
     // debug
     // cerr << "domain:\n" << domain << endl;
 
@@ -91,14 +94,16 @@ MFA(VectorXi& p_,             // polynomial degree in each dimension
     co.resize(p.size(), 0);                  // offset for control points
     cs.resize(p.size(), 1);                  // stride for control points
     ds.resize(p.size(), 1);                  // stride for domain points
-    ks.resize(p.size(), 1);                  // stride for knots
+// DEPRECATED
+//     ks.resize(p.size(), 1);                  // stride for knots
     for (size_t i = 1; i < p.size(); i++)
     {
         po[i] = po[i - 1] + ndom_pts[i - 1];
         ko[i] = ko[i - 1] + nctrl_pts[i - 1] + p[i - 1] + 1;
         co[i] = co[i - 1] * nctrl_pts[i - 1];
         ds[i] = ds[i - 1] * ndom_pts[i - 1];
-        ks[i] = ks[i - 1] * (nctrl_pts[i - 1] + p[i - 1] + 1);
+// DEPRECATED
+//         ks[i] = ks[i - 1] * (nctrl_pts[i - 1] + p[i - 1] + 1);
     }
 
     // knot span index table
@@ -138,11 +143,14 @@ KnotSpanIndex()
             }
 
         // save knot span
+        // TODO: may not be necessary to store all the knot span fields, but for now it is
+        // convenient; recheck later to see which are actually used
+        // unused ones can be computed locally below but not part of the knot span struct
         if (!skip)
         {
             // knot ijk
             knot_spans[span_idx].min_knot_ijk = ijk;
-            knot_spans[span_idx].max_knot_ijk = ijk.array() + 1;        // TODO: necessary to store?
+            knot_spans[span_idx].max_knot_ijk = ijk.array() + 1;
 
             // knot values
             knot_spans[span_idx].min_knot.resize(p.size());
@@ -198,21 +206,25 @@ KnotSpanIndex()
             }
             p_ijk = po_ijk;
 
+            knot_spans[span_idx].last_split_dim = -1;
+            knot_spans[span_idx].done           = false;
+            ndone_knot_spans                    = 0;
+
             // debug
-            cerr <<
-                "spand_idx="         << span_idx                           <<
+//             cerr <<
+//                 "spand_idx="         << span_idx                           <<
 //                 "\nmin_knot_ijk:\n"  << knot_spans[span_idx].min_knot_ijk  <<
 //                 "\nmax_knot_ijk:\n"  << knot_spans[span_idx].max_knot_ijk  <<
-                "\nmin_knot:\n"      << knot_spans[span_idx].min_knot      <<
-                "\nmax_knot:\n"      << knot_spans[span_idx].max_knot      <<
+//                 "\nmin_knot:\n"      << knot_spans[span_idx].min_knot      <<
+//                 "\nmax_knot:\n"      << knot_spans[span_idx].max_knot      <<
 //                 "\nmin_param_ijk:\n" << knot_spans[span_idx].min_param_ijk <<
 //                 "\nmax_param_ijk:\n" << knot_spans[span_idx].max_param_ijk <<
-                "\nmin_param:\n"     << knot_spans[span_idx].min_param     <<
-                "\nmax_param:\n"     << knot_spans[span_idx].max_param     <<
-                "\n\n"               << endl;
+//                 "\nmin_param:\n"     << knot_spans[span_idx].min_param     <<
+//                 "\nmax_param:\n"     << knot_spans[span_idx].max_param     <<
+//                 "\n\n"               << endl;
 
             span_idx++;
-        }
+        }                                               // !skip
 
         // increment knot ijk
         for (auto k = 0; k < p.size(); k++)             // dimension in knot spans
@@ -274,7 +286,18 @@ Encode(float err_limit)                      // maximum allowable normalized err
 //     encoder.Encode();
 // }
 
-// encode
+// compute error in knot spans
+// remove the knot spans that are done (error < threshold)
+void
+mfa::
+MFA::
+ErrorSpans(float err_limit)
+{
+    mfa::Decoder decoder(*this);
+    decoder.ErrorSpans(err_limit);
+}
+
+// decode
 void
 mfa::
 MFA::
@@ -295,7 +318,7 @@ Error(VectorXf& pt,               // point some distance away from domain points
                                   // search for cell containing the point starting at this index
 {
     mfa::Encoder encoder(*this);
-    return encoder.NormalDistance(pt, idx);
+    return NormalDistance(pt, idx);
 }
 
 // absolute value of error (distance in normal direction) of the mfa at a domain
@@ -853,3 +876,74 @@ ijk2idx(VectorXi& ijk,                  // i,j,k,... indices to all dimensions
     }
 }
 
+// signed normal distance from a point to the domain
+// uses 2-point finite differences (first order linear) method to compute gradient and normal vector
+// approximates gradient from 2 points diagonally opposite each other in all
+// domain dimensions (not from 2 points in each dimension)
+float
+mfa::
+MFA::
+NormalDistance(VectorXf& pt,          // point whose distance from domain is desired
+               size_t    idx)         // index of min. corner of cell in the domain
+                                      // that will be used to compute partial derivatives
+                                      // (linear) search for correct cell will start at this index
+{
+    // normal vector = [df/dx, df/dy, df/dz, ..., -1]
+    // -1 is the last coordinate of the domain points, ie, the range value
+    VectorXf normal(domain.cols());
+    int      last = domain.cols() - 1;    // last coordinate of a domain pt, ie, the range value
+
+    // convert linear idx to multidim. i,j,k... indices in each domain dimension
+    VectorXi ijk(p.size());
+    idx2ijk(idx, ijk);
+
+    // compute i0 and i1 1d and ijk0 and ijk1 nd indices for two points in the cell in each dim.
+    // even though the caller provided the minimum corner index as idx, it's
+    // possible that idx is at the max end of the domain in some dimension
+    // in this case we set i1 <- idx and i0 to be one less
+    size_t i0, i1;                          // 1-d indices of min, max corner points
+    VectorXi ijk0(p.size());                // n-d ijk index of min corner
+    VectorXi ijk1(p.size());                // n-d ijk index of max corner
+    for (int i = 0; i < p.size(); i++)      // for all domain dimensions
+    {
+        // at least 2 points needed in each dimension
+        // TODO: do something degenerate if not, but probably will never get to this point
+        // because there will be insufficient points to encode in the first place
+        assert(ndom_pts(i) >= 2);
+
+        // two opposite corners of the cell as i,j,k coordinates
+        if (ijk(i) + 1 < ndom_pts(i))
+        {
+            ijk0(i) = ijk(i);
+            ijk1(i) = ijk(i) + 1;
+        }
+        else
+        {
+            ijk0(i) = ijk(i) - 1;
+            ijk1(i) = ijk(i);
+        }
+    }
+
+    // set i0 and i1 to be the 1-d indices of the corner points
+    ijk2idx(ijk0, i0);
+    ijk2idx(ijk1, i1);
+
+    // compute the normal to the domain at i0 and i1
+    for (int i = 0; i < p.size(); i++)      // for all domain dimensions
+        normal(i) = (domain(i1, last) - domain(i0, last)) / (domain(i1, i) - domain(i0, i));
+    normal(last) = -1;
+    normal /= normal.norm();
+
+    // project distance from (pt - domain(idx)) to unit normal
+    VectorXf dom_pt = domain.row(idx);
+
+    // debug
+    // fprintf(stderr, "idx=%d\n", idx);
+    // cerr << "unit normal\n" << normal << endl;
+    // cerr << "point\n" << pt << endl;
+    // cerr << "domain point:\n" << dom_pt << endl;
+    // cerr << "pt - dom_pt:\n" << pt - dom_pt << endl;
+    // fprintf(stderr, "projection = %e\n\n", normal.dot(pt - dom_pt));
+
+    return normal.dot(pt - dom_pt);
+}

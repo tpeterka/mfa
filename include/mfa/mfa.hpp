@@ -27,6 +27,8 @@ struct KnotSpan
     VectorXf max_param;                 // parameter vector of maximum domain point in this span
     VectorXi min_param_ijk;             // i,j,k indices of minimum domain point in this span
     VectorXi max_param_ijk;             // i,j,k indices of maximum domain point in this span
+    int      last_split_dim;            // last dimension in which this span was subdivided
+    bool     done;                      // whether the span has converged (<= error_limit everywhere)
 };
 
 namespace mfa
@@ -58,10 +60,11 @@ namespace mfa
 
         float Error(size_t idx);    // index of domain point where to compute error of mfa
 
-        // TODO: remove approx parameter below (decode points one at a time)
         void FindExtraKnots(VectorXi& nnew_knots,   // number of new knots in each dim
                             VectorXf& new_knots,    // new knots (1st dim changes fastest)
                             float     err_limit);   // max error limit
+
+        void ErrorSpans(float err_limit);           // max. allowed error
 
     private:
 
@@ -85,6 +88,9 @@ namespace mfa
         void KnotSpanIndex();
 
         void InsertKnots();
+
+        float NormalDistance(VectorXf& pt,        // point whose distance from domain is desired
+                             size_t    cell_idx); // index of min. corner of cell in the domain
 
         // DEPRECATED
         void InsertKnots(VectorXi& nnew_knots,     // number of new knots in each dim
@@ -110,18 +116,21 @@ namespace mfa
        VectorXf  params;      // parameters for input points (1st dim changes fastest)
        MatrixXf& ctrl_pts;    // (output) control pts (1st dim changes fastest)
        VectorXf& knots;       // (output) knots (1st dim changes fastest)
+       float     dom_range;   // max extent of input data points
        vector<size_t> po;     // starting offset for params in each dim
        vector<size_t> ko;     // starting offset for knots in each dim
        vector<size_t> co;     // starting offset for control points in each dim
        vector<size_t> cs;     // stride for control points in each dim
        vector<size_t> ds;     // stride for domain points in each dim
-       vector<size_t> ks;     // stride for knots in each dim
+// DEPRECATED
+//        vector<size_t> ks;     // stride for knots in each dim
        int tot_nparams;       // total number of params = sum of ndom_pts over all dims
                               // not the total number of data pts, which would be the prod.
        int tot_nknots;        // total nmbr of knots = sum of nmbr of knots over all dims
        float eps;             // minimum difference considered significant
        size_t worst_ctrl_idx; // index of control point with max solution error
-       vector<KnotSpan> knot_spans; // index of not done (greater than max error) knot spans
+       vector<KnotSpan> knot_spans; // knot spans
+       size_t ndone_knot_spans;  // number of done knot spans
    };
 
 }

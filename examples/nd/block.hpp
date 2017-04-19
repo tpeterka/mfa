@@ -647,11 +647,17 @@ struct Block
             mfa->Decode(approx);
         }
 
+    void error_spans(const diy::Master::ProxyWithLink& cp,
+                     float                             err_limit)
+        {
+            mfa->ErrorSpans(err_limit);
+        }
+
     // compute maximum error in the block
     void max_error(const diy::Master::ProxyWithLink& cp)
         {
             // normal distance computation
-            VectorXf max_err_pos(p.size());
+            size_t max_idx;
             for (size_t i = 0; i < (size_t)approx.rows(); i++)
             {
                 VectorXf approx_pos = approx.block(i, 0, 1, p.size()).row(0);
@@ -659,7 +665,7 @@ struct Block
                 if (i == 0 || fabs(err) > fabs(max_err))
                 {
                     max_err = err;
-                    max_err_pos = approx_pos;
+                    max_idx = i;
                 }
             }
 
@@ -671,7 +677,7 @@ struct Block
             // debug
             fprintf(stderr, "data range = %.1f\n", range);
             fprintf(stderr, "raw max_error = %e\n", max_err);
-            cerr << "position of max error =\n" << max_err_pos << endl;
+            cerr << "position of max error: idx=" << max_idx << "\n" << domain.row(max_idx) << endl;
 
             max_err /= range;
         }
@@ -689,8 +695,8 @@ struct Block
     void print_block(const diy::Master::ProxyWithLink& cp)
         {
             // cerr << "domain\n" << domain << endl;
-            cerr << ctrl_pts.rows() << " control points\n" << ctrl_pts << endl;
-            cerr << knots.size() << " knots\n" << knots << endl;
+//             cerr << ctrl_pts.rows() << " control points\n" << ctrl_pts << endl;
+//             cerr << knots.size() << " knots\n" << knots << endl;
             // cerr << approx.rows() << " approximated points\n" << approx << endl;
             fprintf(stderr, "|normalized max_err| = %e\n", fabs(max_err));
             fprintf(stderr, "# input points = %ld\n", domain.rows());

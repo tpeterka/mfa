@@ -24,9 +24,12 @@ Encoder(MFA& mfa_) :
     params(mfa_.params),
     ctrl_pts(mfa_.ctrl_pts),
     knots(mfa_.knots),
+    dom_range(mfa_.dom_range),
     po(mfa_.po),
     ko(mfa_.ko),
-    co(mfa_.co)
+    co(mfa_.co),
+    knot_spans(mfa_.knot_spans),
+    ndone_knot_spans(mfa_.ndone_knot_spans)
 {
 }
 
@@ -593,77 +596,78 @@ CtrlCurve(MatrixXf& N,          // basis functions for current dimension
     //     cerr << "ctrl_pts:\n" << ctrl_pts << endl;
 }
 
-// signed normal distance from a point to the domain
-// uses 2-point finite differences (first order linear) method to compute gradient and normal vector
-// approximates gradient from 2 points diagonally opposite each other in all
-// domain dimensions (not from 2 points in each dimension)
-float
-mfa::
-Encoder::
-NormalDistance(VectorXf& pt,          // point whose distance from domain is desired
-               size_t    idx)         // index of min. corner of cell in the domain
-                                      // that will be used to compute partial derivatives
-                                      // (linear) search for correct cell will start at this index
-{
-    // normal vector = [df/dx, df/dy, df/dz, ..., -1]
-    // -1 is the last coordinate of the domain points, ie, the range value
-    VectorXf normal(domain.cols());
-    int      last = domain.cols() - 1;    // last coordinate of a domain pt, ie, the range value
-
-    // convert linear idx to multidim. i,j,k... indices in each domain dimension
-    VectorXi ijk(p.size());
-    mfa.idx2ijk(idx, ijk);
-
-    // compute i0 and i1 1d and ijk0 and ijk1 nd indices for two points in the cell in each dim.
-    // even though the caller provided the minimum corner index as idx, it's
-    // possible that idx is at the max end of the domain in some dimension
-    // in this case we set i1 <- idx and i0 to be one less
-    size_t i0, i1;                          // 1-d indices of min, max corner points
-    VectorXi ijk0(p.size());                // n-d ijk index of min corner
-    VectorXi ijk1(p.size());                // n-d ijk index of max corner
-    for (int i = 0; i < p.size(); i++)      // for all domain dimensions
-    {
-        // at least 2 points needed in each dimension
-        // TODO: do something degenerate if not, but probably will never get to this point
-        // because there will be insufficient points to encode in the first place
-        assert(ndom_pts(i) >= 2);
-
-        // two opposite corners of the cell as i,j,k coordinates
-        if (ijk(i) + 1 < ndom_pts(i))
-        {
-            ijk0(i) = ijk(i);
-            ijk1(i) = ijk(i) + 1;
-        }
-        else
-        {
-            ijk0(i) = ijk(i) - 1;
-            ijk1(i) = ijk(i);
-        }
-    }
-
-    // set i0 and i1 to be the 1-d indices of the corner points
-    mfa.ijk2idx(ijk0, i0);
-    mfa.ijk2idx(ijk1, i1);
-
-    // compute the normal to the domain at i0 and i1
-    for (int i = 0; i < p.size(); i++)      // for all domain dimensions
-        normal(i) = (domain(i1, last) - domain(i0, last)) / (domain(i1, i) - domain(i0, i));
-    normal(last) = -1;
-    normal /= normal.norm();
-
-    // project distance from (pt - domain(idx)) to unit normal
-    VectorXf dom_pt = domain.row(idx);
-
-    // debug
-    // fprintf(stderr, "idx=%d\n", idx);
-    // cerr << "unit normal\n" << normal << endl;
-    // cerr << "point\n" << pt << endl;
-    // cerr << "domain point:\n" << dom_pt << endl;
-    // cerr << "pt - dom_pt:\n" << pt - dom_pt << endl;
-    // fprintf(stderr, "projection = %e\n\n", normal.dot(pt - dom_pt));
-
-    return normal.dot(pt - dom_pt);
-}
+// DEPRECATED; moved to mfa.cpp
+// // signed normal distance from a point to the domain
+// // uses 2-point finite differences (first order linear) method to compute gradient and normal vector
+// // approximates gradient from 2 points diagonally opposite each other in all
+// // domain dimensions (not from 2 points in each dimension)
+// float
+// mfa::
+// Encoder::
+// NormalDistance(VectorXf& pt,          // point whose distance from domain is desired
+//                size_t    idx)         // index of min. corner of cell in the domain
+//                                       // that will be used to compute partial derivatives
+//                                       // (linear) search for correct cell will start at this index
+// {
+//     // normal vector = [df/dx, df/dy, df/dz, ..., -1]
+//     // -1 is the last coordinate of the domain points, ie, the range value
+//     VectorXf normal(domain.cols());
+//     int      last = domain.cols() - 1;    // last coordinate of a domain pt, ie, the range value
+// 
+//     // convert linear idx to multidim. i,j,k... indices in each domain dimension
+//     VectorXi ijk(p.size());
+//     mfa.idx2ijk(idx, ijk);
+// 
+//     // compute i0 and i1 1d and ijk0 and ijk1 nd indices for two points in the cell in each dim.
+//     // even though the caller provided the minimum corner index as idx, it's
+//     // possible that idx is at the max end of the domain in some dimension
+//     // in this case we set i1 <- idx and i0 to be one less
+//     size_t i0, i1;                          // 1-d indices of min, max corner points
+//     VectorXi ijk0(p.size());                // n-d ijk index of min corner
+//     VectorXi ijk1(p.size());                // n-d ijk index of max corner
+//     for (int i = 0; i < p.size(); i++)      // for all domain dimensions
+//     {
+//         // at least 2 points needed in each dimension
+//         // TODO: do something degenerate if not, but probably will never get to this point
+//         // because there will be insufficient points to encode in the first place
+//         assert(ndom_pts(i) >= 2);
+// 
+//         // two opposite corners of the cell as i,j,k coordinates
+//         if (ijk(i) + 1 < ndom_pts(i))
+//         {
+//             ijk0(i) = ijk(i);
+//             ijk1(i) = ijk(i) + 1;
+//         }
+//         else
+//         {
+//             ijk0(i) = ijk(i) - 1;
+//             ijk1(i) = ijk(i);
+//         }
+//     }
+// 
+//     // set i0 and i1 to be the 1-d indices of the corner points
+//     mfa.ijk2idx(ijk0, i0);
+//     mfa.ijk2idx(ijk1, i1);
+// 
+//     // compute the normal to the domain at i0 and i1
+//     for (int i = 0; i < p.size(); i++)      // for all domain dimensions
+//         normal(i) = (domain(i1, last) - domain(i0, last)) / (domain(i1, i) - domain(i0, i));
+//     normal(last) = -1;
+//     normal /= normal.norm();
+// 
+//     // project distance from (pt - domain(idx)) to unit normal
+//     VectorXf dom_pt = domain.row(idx);
+// 
+//     // debug
+//     // fprintf(stderr, "idx=%d\n", idx);
+//     // cerr << "unit normal\n" << normal << endl;
+//     // cerr << "point\n" << pt << endl;
+//     // cerr << "domain point:\n" << dom_pt << endl;
+//     // cerr << "pt - dom_pt:\n" << pt - dom_pt << endl;
+//     // fprintf(stderr, "projection = %e\n\n", normal.dot(pt - dom_pt));
+// 
+//     return normal.dot(pt - dom_pt);
+// }
 
 // compute the error (absolute value of distance in normal direction) of the mfa at a domain point
 // error is not normalized by the data range (absolute, not relative error)
@@ -692,7 +696,7 @@ Error(size_t idx)               // index of domain point
      // debug
     // cerr << "cpt:\n" << cpt << endl;
 
-    float err = fabs(NormalDistance(cpt, idx));
+    float err = fabs(mfa.NormalDistance(cpt, idx));
 
     // debug
     // fprintf(stderr, "error=%.3e\n", err);

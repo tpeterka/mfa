@@ -29,6 +29,8 @@ namespace mfa
         void VolPt(VectorXf& param,            // parameter value in each dim. of desired point
                    VectorXf& out_pt);          // (output) point
 
+        void ErrorSpans(float err_limit);      // max. allowed error
+
     private:
 
         void CurvePt(int       cur_dim,        // current dimension
@@ -42,6 +44,9 @@ namespace mfa
                          size_t    pre_cs,     // stride for control points in prior dim
                          MatrixXf& out_pts);   // output approximated pts for the curve
 
+        void SplitSpan(size_t      si,         // id of span to split
+        vector<bool>& split_spans);            // spans that were split already in this round, don't split these again
+
         MFA& mfa;                      // the mfa object
         // following are references the the data in the mfa object
         VectorXi& p;                   // polynomial degree in each dimension
@@ -51,9 +56,12 @@ namespace mfa
         VectorXf& params;              // parameters for input points (1st dim changes fastest)
         MatrixXf& ctrl_pts;            // control points (1st dim changes fastest)
         VectorXf& knots;               // knots (1st dim changes fastest)
+        float     dom_range;           // max extent of input data points
         vector<size_t>& po;            // starting offset for params in each dim
         vector<size_t>& ko;            // starting offset for knots in each dim
         vector<size_t>& co;            // starting offset for control points in each dim
+        vector<KnotSpan>& knot_spans;  // not done (greater than max error) knot spans
+        size_t ndone_knot_spans;       // number of done knot spans
     };
 }
 
