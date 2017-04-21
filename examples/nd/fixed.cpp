@@ -441,13 +441,7 @@ int main(int argc, char** argv)
     master.foreach(&Block::encode_block);
     encode_time = MPI_Wtime() - encode_time;
 
-    fprintf(stderr, "Encoding done. Computing error in knot spans...\n");
-    double error_time = MPI_Wtime();
-    master.foreach([&](Block* b, const diy::Master::ProxyWithLink& cp)
-            { b->error_spans(cp, norm_err_limit); });
-    error_time = MPI_Wtime() - error_time;
-
-    fprintf(stderr, "Error in knot spans done. Decoding and computing max. error...\n");
+    fprintf(stderr, "Encoding done. Decoding and computing max. error...\n");
     double decode_time = MPI_Wtime();
     master.foreach(&Block::decode_block);
     decode_time = MPI_Wtime() - decode_time;
@@ -461,7 +455,6 @@ int main(int argc, char** argv)
     // print results
     master.foreach(&Block::print_block);
     fprintf(stderr, "encoding time = %.3lf s.\n", encode_time);
-    fprintf(stderr, "error time = %.3lf s.\n",    error_time);
     fprintf(stderr, "decoding time = %.3lf s.\n", decode_time);
 
     // save the results in diy format

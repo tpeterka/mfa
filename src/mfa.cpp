@@ -251,7 +251,8 @@ Encode()
 }
 
 // re-encode with insertion of new knots into existing knots
-void
+// returns whether normalized (relative) error in all knot spans is below err_limit
+bool
 mfa::
 MFA::
 Encode(float err_limit)                      // maximum allowable normalized error
@@ -259,42 +260,29 @@ Encode(float err_limit)                      // maximum allowable normalized err
     VectorXi nnew_knots;                     // number of new knots in each dim
     VectorXf new_knots;                      // new knots (1st dim changes fastest)
 
-    FindExtraKnots(nnew_knots, new_knots, err_limit);
-    InsertKnots(nnew_knots, new_knots);
+    bool done = ErrorSpans(nnew_knots, new_knots, err_limit);
 
-    mfa::Encoder encoder(*this);
-    encoder.Encode();
+    if (!done)
+    {
+        mfa::Encoder encoder(*this);
+        encoder.Encode();
+    }
+
+    return done;
 }
 
-// // DEPRECATED
-// // re-encode with insertion of new knots into existing knots
-// void
-// mfa::
-// MFA::
-// Encode(float err_limit)                      // maximum allowable normalized error
-// {
-//     VectorXi nnew_knots;                     // number of new knots in each dim
-//     VectorXf new_knots;                      // new knots (1st dim changes fastest)
-// 
-//     MatrixXf approx;                         // decoded points
-//     approx.resize(domain.rows(), domain.cols());
-//     Decode(approx);
-// 
-//     InsertKnots();
-// 
-//     mfa::Encoder encoder(*this);
-//     encoder.Encode();
-// }
-
-// compute error in knot spans
-// remove the knot spans that are done (error < threshold)
-void
+// computes error in knot spans and adds knots to be inserted into nnew_knots and new_knots
+// returns whether normalized (relative) error in all knot spans is below err_limit
+bool
 mfa::
 MFA::
-ErrorSpans(float err_limit)
+ErrorSpans(
+        VectorXi& nnew_knots,                   // number of new knots in each dim
+        VectorXf& new_knots,                    // new knots (1st dim changes fastest)
+        float err_limit)                        // max allowable relative error
 {
     mfa::Decoder decoder(*this);
-    decoder.ErrorSpans(err_limit);
+    return decoder.ErrorSpans(nnew_knots, new_knots, err_limit);
 }
 
 // decode
@@ -310,16 +298,16 @@ Decode(MatrixXf& approx)
 // DEPRECATED
 // error (distance in normal direction) from a point to the domain points
 // (error is signed and not normalized by data range)
-float
-mfa::
-MFA::
-Error(VectorXf& pt,               // point some distance away from domain points
-      int       idx)              // index of point in domain near to the point
-                                  // search for cell containing the point starting at this index
-{
-    mfa::Encoder encoder(*this);
-    return NormalDistance(pt, idx);
-}
+// float
+// mfa::
+// MFA::
+// Error(VectorXf& pt,               // point some distance away from domain points
+//       int       idx)              // index of point in domain near to the point
+//                                   // search for cell containing the point starting at this index
+// {
+//     mfa::Encoder encoder(*this);
+//     return NormalDistance(pt, idx);
+// }
 
 // absolute value of error (distance in normal direction) of the mfa at a domain
 // point (error is absolute value but not normalized by data range)
@@ -589,43 +577,45 @@ Knots()
     }
 }
 
+// DEPRECATED
 // insert new knots (one for each domain dim) for the worst control point (the one with the most
 // solution error)
 //
-void
-mfa::
-MFA::
-InsertKnots()
-{
-    // find values of the knots
-    VectorXf knot(ndom_pts.size());             // the new knot in each domain dimension
-    for (size_t i = 0; i < ndom_pts.size(); i++)
-        knot(i) = InterpolateParams(i, po[i], ds[i], ctrl_pts(worst_ctrl_idx, i));
+// void
+// mfa::
+// MFA::
+// InsertKnots()
+// {
+//     // find values of the knots
+//     VectorXf knot(ndom_pts.size());             // the new knot in each domain dimension
+//     for (size_t i = 0; i < ndom_pts.size(); i++)
+//         knot(i) = InterpolateParams(i, po[i], ds[i], ctrl_pts(worst_ctrl_idx, i));
+// 
+//     // insert the knots
+//     VectorXi nnew_knots = VectorXi::Ones(ndom_pts.size());
+//     InsertKnots(nnew_knots, knot);
+// 
+//     // debug
+//     cerr << "knot to be inserted:\n" << knot << endl;
+// }
 
-    // insert the knots
-    VectorXi nnew_knots = VectorXi::Ones(ndom_pts.size());
-    InsertKnots(nnew_knots, knot);
-
-    // debug
-    cerr << "knot to be inserted:\n" << knot << endl;
-}
-
+// DEPRECATED
 // computes additional knot locations where error threshold is exceeded
 //
 // original, inserted, and resulting new knots are same for all curves and
 // stored once for each dimension in row-major order (1st dim changes fastest)
 //
-void
-mfa::
-MFA::
-FindExtraKnots(VectorXi& nnew_knots,    // number of new knots in each dim
-               VectorXf& new_knots,     // new knots (1st dim changes fastest)
-               float     err_limit)     // max error limit
-{
-    // data range for error normalization
-    float min   = domain.minCoeff();
-    float max   = domain.maxCoeff();
-    float range = max - min;
+// void
+// mfa::
+// MFA::
+// FindExtraKnots(VectorXi& nnew_knots,    // number of new knots in each dim
+//                VectorXf& new_knots,     // new knots (1st dim changes fastest)
+//                float     err_limit)     // max error limit
+// {
+//     // data range for error normalization
+//     float min   = domain.minCoeff();
+//     float max   = domain.maxCoeff();
+//     float range = max - min;
 // 
 //     // i,j,k domain coordinates for following iteration over approximated points
 //     VectorXi ijk = VectorXi::Zero(ndom_pts.size()); // TODO: domain size, not pt size?
@@ -691,7 +681,7 @@ FindExtraKnots(VectorXi& nnew_knots,    // number of new knots in each dim
     // debug
     // cerr << "nnew_knots:\n" << nnew_knots << endl;
     // cerr << "new_knots:\n" << new_knots << endl;
-}
+// }
 
 // inserts a set of knots (in all dimensions) into the original knot set
 // also increases the numbers of control points (in all dimensions) that will result

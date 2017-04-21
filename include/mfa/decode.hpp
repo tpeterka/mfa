@@ -29,7 +29,10 @@ namespace mfa
         void VolPt(VectorXf& param,            // parameter value in each dim. of desired point
                    VectorXf& out_pt);          // (output) point
 
-        void ErrorSpans(float err_limit);      // max. allowed error
+        bool ErrorSpans(
+                VectorXi& nnew_knots,           // number of new knots in each dim
+                VectorXf& new_knots,            // new knots (1st dim changes fastest)
+                float err_limit);               // max. allowed error
 
     private:
 
@@ -44,8 +47,11 @@ namespace mfa
                          size_t    pre_cs,     // stride for control points in prior dim
                          MatrixXf& out_pts);   // output approximated pts for the curve
 
-        void SplitSpan(size_t      si,         // id of span to split
-        vector<bool>& split_spans);            // spans that were split already in this round, don't split these again
+        void SplitSpan(
+                size_t        si,               // id of span to split
+                vector<bool>& split_spans,      // spans that were split already in this round, don't split these again
+                VectorXi&     nnew_knots,       // number of new knots in each dim
+                VectorXf&     new_knots);       // new knots (1st dim changes fastest)
 
         MFA& mfa;                      // the mfa object
         // following are references the the data in the mfa object

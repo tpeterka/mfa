@@ -49,24 +49,28 @@ namespace mfa
 
         void Encode();
 
-        void Encode(float err_limit);  // maximum allowable normalized error
+        bool Encode(float err_limit);  // maximum allowable normalized error
 
         void Decode(MatrixXf& approx); // decode points
 
         // DEPRECATED
-        float Error(VectorXf& pt,    // point some distance away from domain points
-                    int       idx);  // index of point in domain near to the point
+//         float Error(VectorXf& pt,    // point some distance away from domain points
+//                     int       idx);  // index of point in domain near to the point
                                      // search for cell containing the point starts at this index
 
         float Error(size_t idx);    // index of domain point where to compute error of mfa
 
-        void FindExtraKnots(VectorXi& nnew_knots,   // number of new knots in each dim
-                            VectorXf& new_knots,    // new knots (1st dim changes fastest)
-                            float     err_limit);   // max error limit
-
-        void ErrorSpans(float err_limit);           // max. allowed error
+        // DEPRECATED
+//         void FindExtraKnots(VectorXi& nnew_knots,   // number of new knots in each dim
+//                             VectorXf& new_knots,    // new knots (1st dim changes fastest)
+//                             float     err_limit);   // max error limit
 
     private:
+
+        bool ErrorSpans(
+                VectorXi& nnew_knots,                   // number of new knots in each dim
+                VectorXf& new_knots,                    // new knots (1st dim changes fastest)
+                float err_limit);                       // max allowable relative error
 
         int FindSpan(int   cur_dim,       // current dimension
                      float u,             // parameter value
@@ -87,12 +91,12 @@ namespace mfa
 
         void KnotSpanIndex();
 
-        void InsertKnots();
+        // DEPRECATED
+//         void InsertKnots();
 
         float NormalDistance(VectorXf& pt,        // point whose distance from domain is desired
                              size_t    cell_idx); // index of min. corner of cell in the domain
 
-        // DEPRECATED
         void InsertKnots(VectorXi& nnew_knots,     // number of new knots in each dim
                          VectorXf& new_knots);     // new knots (1st dim changes fastest)
 

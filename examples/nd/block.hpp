@@ -636,21 +636,16 @@ struct Block
 
     // re-encode a block with new knots to be inserted
     void reencode_block(const diy::Master::ProxyWithLink& cp,
-                        float                             err_limit)
+                        float                             err_limit,
+                        bool&                             done)
         {
-            mfa->Encode(err_limit);
+            done = mfa->Encode(err_limit);
         }
 
     void decode_block(const diy::Master::ProxyWithLink& cp)
         {
             approx.resize(domain.rows(), domain.cols());
             mfa->Decode(approx);
-        }
-
-    void error_spans(const diy::Master::ProxyWithLink& cp,
-                     float                             err_limit)
-        {
-            mfa->ErrorSpans(err_limit);
         }
 
     // compute maximum error in the block
@@ -680,6 +675,8 @@ struct Block
             cerr << "position of max error: idx=" << max_idx << "\n" << domain.row(max_idx) << endl;
 
             max_err /= range;
+
+            fprintf(stderr, "|normalized max_err| = %e\n", fabs(max_err));
         }
 
     // compute error field (error at every domain point)
@@ -694,6 +691,7 @@ struct Block
 
     void print_block(const diy::Master::ProxyWithLink& cp)
         {
+            fprintf(stderr, "\n--- Final block results ---\n");
             // cerr << "domain\n" << domain << endl;
 //             cerr << ctrl_pts.rows() << " control points\n" << ctrl_pts << endl;
 //             cerr << knots.size() << " knots\n" << knots << endl;
