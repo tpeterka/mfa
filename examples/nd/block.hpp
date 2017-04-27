@@ -483,7 +483,7 @@ struct Block
     // read the flame dataset and take one slice out of the middle of it
     // doubling the resolution because the file I have is a 1/2-resolution downsampled version
     // TODO: only for 1d so far
-    void read_1d_file_data(const diy::Master::ProxyWithLink& cp,
+    void read_1d_file_data_double(const diy::Master::ProxyWithLink& cp,
                            DomainArgs&                       args)
         {
             DomainArgs* a = &args;
@@ -556,6 +556,73 @@ struct Block
             cerr << "domain extent:\n min\n" << domain_mins << "\nmax\n" << domain_maxs << endl;
         }
 
+    // read the flame dataset and take one slice out of the middle of it
+    // TODO: only for 1d so far
+    void read_1d_file_data(const diy::Master::ProxyWithLink& cp,
+                           DomainArgs&                       args)
+        {
+            DomainArgs* a = &args;
+            int tot_ndom_pts = 1;
+            p.resize(a->dom_dim);
+            ndom_pts.resize(a->dom_dim);
+            nctrl_pts.resize(a->dom_dim);
+            domain_mins.resize(a->pt_dim);
+            domain_maxs.resize(a->pt_dim);
+            for (int i = 0; i < a->dom_dim; i++)
+            {
+                p(i)         =  a->p[i];
+                ndom_pts(i)  =  a->ndom_pts[i];
+                nctrl_pts(i) =  a->nctrl_pts[i];
+                tot_ndom_pts *= ndom_pts(i);
+            }
+            domain.resize(tot_ndom_pts, a->pt_dim);
+            vector<float> vel(3 * tot_ndom_pts);
+
+            // rest is hard-coded for 1d
+
+            // open hard-coded file name, seek to hard-coded start of desired section
+            // open hard-coded file name, seek to hard-coded start of desired section
+            // file is 704 * 540 * 550 * 3 floats (vx,vy,vz)
+            FILE *fd = fopen("/Users/tpeterka/datasets/flame/6_small.xyz", "r");
+            assert(fd);
+            fseek(fd, (704 * 540 * 275 + 704 * 270) * 12, SEEK_SET);
+
+            // read all three components of velocity and compute magnitude
+            fread(&vel[0], sizeof(float), tot_ndom_pts * 3, fd);
+            for (size_t i = 0; i < vel.size() / 3; i++)
+            {
+                domain(i, 1) = sqrt(vel[3 * i    ] * vel[3 * i    ] +
+                        vel[3 * i + 1] * vel[3 * i + 1] +
+                        vel[3 * i + 2] * vel[3 * i + 2]);
+                // fprintf(stderr, "vel [%.3f %.3f %.3f] mag %.3f\n",
+                //         vel[3 * i], vel[3 * i + 1], vel[3 * i + 2], range[i]);
+            }
+
+            // find extent of range
+            for (size_t i = 0; i < (size_t)domain.rows(); i++)
+            {
+                if (i == 0 || domain(i, 1) < domain_mins(1))
+                    domain_mins(1) = domain(i, 1);
+                if (i == 0 || domain(i, 1) > domain_maxs(1))
+                    domain_maxs(1) = domain(i, 1);
+            }
+
+            // set domain values (just equal to i, j; ie, dx, dy = 1, 1)
+            int n = 0;
+            for (size_t i = 0; i < (size_t)(ndom_pts(0)); i++)
+            {
+                domain(n, 0) = i;
+                n++;
+            }
+
+            // extents
+            domain_mins(0) = 0.0;
+            domain_maxs(0) = domain(tot_ndom_pts - 1, 0);
+
+            // debug
+            cerr << "domain extent:\n min\n" << domain_mins << "\nmax\n" << domain_maxs << endl;
+        }
+
     // read the flame dataset and take one plane out of the middle of it
     // TODO: only for 2d so far
     void read_2d_file_data(const diy::Master::ProxyWithLink& cp,
@@ -576,9 +643,9 @@ struct Block
                 tot_ndom_pts *= ndom_pts(i);
             }
             domain.resize(tot_ndom_pts, a->pt_dim);
+            vector<float> vel(3 * tot_ndom_pts);
 
             // rest is hard-coded for 2d
-            vector<float> vel(3 * a->ndom_pts[0] * a->ndom_pts[1]);
 
             // open hard-coded file name, seek to hard-coded start of desired section
             // which is an x-y plane in the middle of the z range
@@ -589,7 +656,7 @@ struct Block
             fseek(fd, (704 * 540 * 275) * 12, SEEK_SET);
 
             // read all three components of velocity and compute magnitude
-            fread(&vel[0], sizeof(float), a->ndom_pts[0] * a->ndom_pts[1] * 3, fd);
+            fread(&vel[0], sizeof(float), tot_ndom_pts * 3, fd);
             for (size_t i = 0; i < vel.size() / 3; i++)
             {
                 domain(i, 2) = sqrt(vel[3 * i    ] * vel[3 * i    ] +
@@ -625,7 +692,81 @@ struct Block
             domain_maxs(1) = domain(tot_ndom_pts - 1, 1);
 
             // debug
-            // cerr << "domain extent:\n min\n" << domain_mins << "\nmax\n" << domain_maxs << endl;
+            cerr << "domain extent:\n min\n" << domain_mins << "\nmax\n" << domain_maxs << endl;
+        }
+
+    // read the flame dataset
+    // TODO: only for 3d so far
+    void read_3d_file_data(const diy::Master::ProxyWithLink& cp,
+                           DomainArgs&                       args)
+        {
+            DomainArgs* a = &args;
+            int tot_ndom_pts = 1;
+            p.resize(a->dom_dim);
+            ndom_pts.resize(a->dom_dim);
+            nctrl_pts.resize(a->dom_dim);
+            domain_mins.resize(a->pt_dim);
+            domain_maxs.resize(a->pt_dim);
+            for (int i = 0; i < a->dom_dim; i++)
+            {
+                p(i)         =  a->p[i];
+                ndom_pts(i)  =  a->ndom_pts[i];
+                nctrl_pts(i) =  a->nctrl_pts[i];
+                tot_ndom_pts *= ndom_pts(i);
+            }
+            domain.resize(tot_ndom_pts, a->pt_dim);
+
+            vector<float> vel(3 * tot_ndom_pts);
+
+            // open hard-coded file name
+            // file is 704 * 540 * 550 * 3 floats (vx,vy,vz)
+            FILE *fd = fopen("/Users/tpeterka/datasets/flame/6_small.xyz", "r");
+            assert(fd);
+
+            // read all three components of velocity and compute magnitude
+            fread(&vel[0], sizeof(float), tot_ndom_pts * 3, fd);
+            for (size_t i = 0; i < vel.size() / 3; i++)
+            {
+                domain(i, 3) = sqrt(vel[3 * i    ] * vel[3 * i    ] +
+                                    vel[3 * i + 1] * vel[3 * i + 1] +
+                                    vel[3 * i + 2] * vel[3 * i + 2]);
+                // fprintf(stderr, "vel [%.3f %.3f %.3f] mag %.3f\n",
+                //         vel[3 * i], vel[3 * i + 1], vel[3 * i + 2], range[i]);
+            }
+
+            // rest is hard-coded for 3d
+
+            // find extent of range
+            for (size_t i = 0; i < (size_t)domain.rows(); i++)
+            {
+                if (i == 0 || domain(i, 3) < domain_mins(3))
+                    domain_mins(3) = domain(i, 3);
+                if (i == 0 || domain(i, 3) > domain_maxs(3))
+                    domain_maxs(3) = domain(i, 3);
+            }
+
+            // set domain values (just equal to i, j; ie, dx, dy = 1, 1)
+            int n = 0;
+            for (size_t k = 0; k < (size_t)(ndom_pts(2)); k++)
+                for (size_t j = 0; j < (size_t)(ndom_pts(1)); j++)
+                    for (size_t i = 0; i < (size_t)(ndom_pts(0)); i++)
+                    {
+                        domain(n, 0) = i;
+                        domain(n, 1) = j;
+                        domain(n, 2) = k;
+                        n++;
+                    }
+
+            // extents
+            domain_mins(0) = 0.0;
+            domain_mins(1) = 0.0;
+            domain_mins(2) = 0.0;
+            domain_maxs(0) = domain(tot_ndom_pts - 1, 0);
+            domain_maxs(1) = domain(tot_ndom_pts - 1, 1);
+            domain_maxs(2) = domain(tot_ndom_pts - 1, 2);
+
+            // debug
+            cerr << "domain extent:\n min\n" << domain_mins << "\nmax\n" << domain_maxs << endl;
         }
 
     void encode_block(const diy::Master::ProxyWithLink& cp)

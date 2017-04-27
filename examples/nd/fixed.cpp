@@ -172,23 +172,23 @@ int main(int argc, char** argv)
 //                    { b->generate_sinc_data(cp, d_args); });
 // #endif
 
-    // 2d sinc function f(x,y) = sinc(x)sinc(y)
-    float norm_err_limit = 2.5e-1;
-    d_args.pt_dim       = 3;
-    d_args.dom_dim      = 2;
-    d_args.p[0]         = 4;
-    d_args.p[1]         = 4;
-    d_args.ndom_pts[0]  = 100;
-    d_args.ndom_pts[1]  = 100;
-    d_args.nctrl_pts[0] = 8;
-    d_args.nctrl_pts[1] = 8;
-    d_args.min[0]       = -4.0 * M_PI;
-    d_args.min[1]       = -4.0 * M_PI;
-    d_args.max[0]       = 4.0 * M_PI;
-    d_args.max[1]       = 4.0 * M_PI;
-    d_args.s            = 10.0;              // scaling factor on range
-    master.foreach([&](Block* b, const diy::Master::ProxyWithLink& cp)
-                   { b->generate_sinc_data(cp, d_args); });
+//     // 2d sinc function f(x,y) = sinc(x)sinc(y)
+//     float norm_err_limit = 2.5e-1;
+//     d_args.pt_dim       = 3;
+//     d_args.dom_dim      = 2;
+//     d_args.p[0]         = 4;
+//     d_args.p[1]         = 4;
+//     d_args.ndom_pts[0]  = 100;
+//     d_args.ndom_pts[1]  = 100;
+//     d_args.nctrl_pts[0] = 8;
+//     d_args.nctrl_pts[1] = 8;
+//     d_args.min[0]       = -4.0 * M_PI;
+//     d_args.min[1]       = -4.0 * M_PI;
+//     d_args.max[0]       = 4.0 * M_PI;
+//     d_args.max[1]       = 4.0 * M_PI;
+//     d_args.s            = 10.0;              // scaling factor on range
+//     master.foreach([&](Block* b, const diy::Master::ProxyWithLink& cp)
+//                    { b->generate_sinc_data(cp, d_args); });
 
     // 2d very small sinc function f(x,y) = sinc(x)sinc(y)
 //     d_args.pt_dim       = 3;
@@ -436,6 +436,123 @@ int main(int argc, char** argv)
     // master.foreach([&](Block* b, const diy::Master::ProxyWithLink& cp)
     //                { b->generate_sphere_data(cp, d_args); });
 
+    // --- experiments for paper ---
+
+    // 1d sinc function
+//     d_args.pt_dim       = 2;
+//     d_args.dom_dim      = 1;
+//     d_args.p[0]         = 4;
+//     d_args.ndom_pts[0]  = 100;
+//     d_args.nctrl_pts[0] = 20;
+//     d_args.min[0]       = -4.0 * M_PI;
+//     d_args.max[0]       = 4.0 * M_PI;
+//     d_args.s            = 10.0;           // scaling factor on range
+//     master.foreach([&](Block* b, const diy::Master::ProxyWithLink& cp)
+//                    { b->generate_sinc_data(cp, d_args); });
+
+    // 2d sinc function
+//     d_args.pt_dim       = 3;
+//     d_args.dom_dim      = 2;
+//     d_args.p[0]         = 4;
+//     d_args.p[1]         = 4;
+//     d_args.ndom_pts[0]  = 100;
+//     d_args.ndom_pts[1]  = 100;
+//     d_args.nctrl_pts[0] = 20;
+//     d_args.nctrl_pts[1] = 20;
+//     d_args.min[0]       = -4.0 * M_PI;
+//     d_args.min[1]       = -4.0 * M_PI;
+//     d_args.max[0]       = 4.0 * M_PI;
+//     d_args.max[1]       = 4.0 * M_PI;
+//     d_args.s            = 10.0;              // scaling factor on range
+//     master.foreach([&](Block* b, const diy::Master::ProxyWithLink& cp)
+//                    { b->generate_sinc_data(cp, d_args); });
+
+   // 3d sinc function
+//     d_args.pt_dim       = 4;
+//     d_args.dom_dim      = 3;
+//     d_args.p[0]         = 4;
+//     d_args.p[1]         = 4;
+//     d_args.p[2]         = 4;
+//     d_args.ndom_pts[0]  = 100;
+//     d_args.ndom_pts[1]  = 100;
+//     d_args.ndom_pts[2]  = 100;
+//     d_args.nctrl_pts[0] = 20;
+//     d_args.nctrl_pts[1] = 20;
+//     d_args.nctrl_pts[2] = 20;
+//     d_args.min[0]       = -4.0 * M_PI;
+//     d_args.min[1]       = -4.0 * M_PI;
+//     d_args.min[2]       = -4.0 * M_PI;
+//     d_args.max[0]       = 4.0 * M_PI;
+//     d_args.max[1]       = 4.0 * M_PI;
+//     d_args.max[2]       = 4.0 * M_PI;
+//     d_args.s            = 10.0;              // scaling factor on range
+//     master.foreach([&](Block* b, const diy::Master::ProxyWithLink& cp)
+//                    { b->generate_sinc_data(cp, d_args); });
+
+   // 4d sinc function
+//     d_args.pt_dim       = 5;
+//     d_args.dom_dim      = 4;
+//     d_args.p[0]         = 4;
+//     d_args.p[1]         = 4;
+//     d_args.p[2]         = 4;
+//     d_args.p[3]         = 4;
+//     d_args.ndom_pts[0]  = 100;
+//     d_args.ndom_pts[1]  = 100;
+//     d_args.ndom_pts[2]  = 100;
+//     d_args.ndom_pts[3]  = 100;
+//     d_args.nctrl_pts[0] = 20;
+//     d_args.nctrl_pts[1] = 20;
+//     d_args.nctrl_pts[2] = 20;
+//     d_args.nctrl_pts[3] = 20;
+//     d_args.min[0]       = -4.0 * M_PI;
+//     d_args.min[1]       = -4.0 * M_PI;
+//     d_args.min[2]       = -4.0 * M_PI;
+//     d_args.min[3]       = -4.0 * M_PI;
+//     d_args.max[0]       = 4.0 * M_PI;
+//     d_args.max[1]       = 4.0 * M_PI;
+//     d_args.max[2]       = 4.0 * M_PI;
+//     d_args.max[3]       = 4.0 * M_PI;
+//     d_args.s            = 10.0;              // scaling factor on range
+//     master.foreach([&](Block* b, const diy::Master::ProxyWithLink& cp)
+//                    { b->generate_sinc_data(cp, d_args); });
+
+    // 1d S3D
+//     d_args.pt_dim       = 2;
+//     d_args.dom_dim      = 1;
+//     d_args.p[0]         = 4;
+//     d_args.ndom_pts[0]  = 704;
+//     d_args.nctrl_pts[0] = 140;
+//     master.foreach([&](Block* b, const diy::Master::ProxyWithLink& cp)
+//                    { b->read_1d_file_data(cp, d_args); });
+
+    // 2d S3D
+//     d_args.pt_dim       = 3;
+//     d_args.dom_dim      = 2;
+//     d_args.p[0]         = 4;
+//     d_args.p[1]         = 4;
+//     d_args.ndom_pts[0]  = 704;
+//     d_args.ndom_pts[1]  = 540;
+//     d_args.nctrl_pts[0] = 140;
+//     d_args.nctrl_pts[1] = 108;
+//     master.foreach([&](Block* b, const diy::Master::ProxyWithLink& cp)
+//                    { b->read_2d_file_data(cp, d_args); });
+
+    // 3d S3D
+    d_args.pt_dim       = 4;
+    d_args.dom_dim      = 3;
+    d_args.p[0]         = 4;
+    d_args.p[1]         = 4;
+    d_args.p[2]         = 4;
+    d_args.ndom_pts[0]  = 704;
+    d_args.ndom_pts[1]  = 540;
+    d_args.ndom_pts[2]  = 550;
+    d_args.nctrl_pts[0] = 140;
+    d_args.nctrl_pts[1] = 108;
+    d_args.nctrl_pts[2] = 110;
+    master.foreach([&](Block* b, const diy::Master::ProxyWithLink& cp)
+                   { b->read_3d_file_data(cp, d_args); });
+
+    // 3d constant function f(x,y,z) = 1
     fprintf(stderr, "Encoding...\n");
     double encode_time = MPI_Wtime();
     master.foreach(&Block::encode_block);

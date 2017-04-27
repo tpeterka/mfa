@@ -39,22 +39,22 @@ namespace mfa
 
    private:
 
-        void Residual(int       cur_dim,  // current dimension
-                      MatrixXf& N,        // matrix of basis function coefficients
-                      MatrixXf& R,        // (output) residual matrix allocated by caller
-                      int       ko = 0,   // optional index of starting knot
-                      int       po = 0,   // optional index of starting parameter
-                      int       co = 0,   // optional index of starting domain pt in current curve
-                      int       cs = 1);  // optional stride of domain pts in current curve
+        void RHS(int       cur_dim,  // current dimension
+                 MatrixXf& N,        // matrix of basis function coefficients
+                 MatrixXf& R,        // (output) residual matrix allocated by caller
+                 int       ko = 0,   // optional index of starting knot
+                 int       po = 0,   // optional index of starting parameter
+                 int       co = 0,   // optional index of starting domain pt in current curve
+                 int       cs = 1);  // optional stride of domain pts in current curve
 
-        void Residual(int       cur_dim,  // current dimension
-                      MatrixXf& in_pts,   // input points (not the default domain stored in the mfa)
-                      MatrixXf& N,        // matrix of basis function coefficients
-                      MatrixXf& R,        // (output) residual matrix allocated by caller
-                      int       ko = 0,   // optional index of starting knot
-                      int       po = 0,   // optional index of starting parameter
-                      int       co = 0,   // optional index of starting input pt in current curve
-                      int       cs = 1);  // optional stride of input pts in current curve
+        void RHS(int       cur_dim,  // current dimension
+                 MatrixXf& in_pts,   // input points (not the default domain stored in the mfa)
+                 MatrixXf& N,        // matrix of basis function coefficients
+                 MatrixXf& R,        // (output) residual matrix allocated by caller
+                 int       ko = 0,   // optional index of starting knot
+                 int       po = 0,   // optional index of starting parameter
+                 int       co = 0,   // optional index of starting input pt in current curve
+                 int       cs = 1);  // optional stride of input pts in current curve
 
         void Quants(VectorXi& n,          // (output) number of control point spans in each dim
                     VectorXi& m,          // (output) number of input data point spans in each dim

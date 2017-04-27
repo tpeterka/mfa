@@ -56,7 +56,7 @@ int main(int argc, char** argv)
 
     DomainArgs d_args;
 
-    // 1d sinc function f(x) - sinc(x)
+    // 1d sinc function f(x) = sinc(x)
 //     float norm_err_limit =9.2e-3;           // normalized maximum allowable error
 //     d_args.pt_dim       = 2;
 //     d_args.dom_dim      = 1;
@@ -83,7 +83,9 @@ int main(int argc, char** argv)
 //                    { b->generate_sinc_data(cp, d_args); });
 
     // small 2d sinc function f(x,y) = sinc(x)sinc(y)
-    float norm_err_limit = 5.0e-3;
+    float norm_err_limit = 3.0e-1;
+//     float norm_err_limit = 3.0e-2;
+//     float norm_err_limit = 3.0e-3;
     d_args.pt_dim       = 3;
     d_args.dom_dim      = 2;
     d_args.p[0]         = 4;

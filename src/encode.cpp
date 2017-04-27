@@ -260,18 +260,18 @@ Encode()
 //     GridSearch(start_idx, end_idx);
 }
 
-// computes R (residual) vector of P&T eq. 9.63 and 9.67, p. 411-412 for a curve from the
+// computes right hand side vector of P&T eq. 9.63 and 9.67, p. 411-412 for a curve from the
 // original input domain points
 void
 mfa::
 Encoder::
-Residual(int       cur_dim,             // current dimension
-         MatrixXf& N,                   // matrix of basis function coefficients
-         MatrixXf& R,                   // (output) residual matrix allocated by caller
-         int       ko,                  // optional index of starting knot
-         int       po,                  // optional index of starting parameter
-         int       co,                  // optional index of starting domain pt in current curve
-         int       cs)                  // optional stride of domain pts in current curve
+RHS(int       cur_dim,             // current dimension
+    MatrixXf& N,                   // matrix of basis function coefficients
+    MatrixXf& R,                   // (output) residual matrix allocated by caller
+    int       ko,                  // optional index of starting knot
+    int       po,                  // optional index of starting parameter
+    int       co,                  // optional index of starting domain pt in current curve
+    int       cs)                  // optional stride of domain pts in current curve
 {
     int n      = N.cols() + 1;               // number of control point spans
     int m      = N.rows() + 1;               // number of input data point spans
@@ -281,7 +281,7 @@ Residual(int       cur_dim,             // current dimension
     MatrixXf Nk;                             // basis coefficients for Rk[i]
 
     // debug
-    // cerr << "Residual domain:\n" << domain << endl;
+    // cerr << "RHS domain:\n" << domain << endl;
 
     for (int k = 1; k < m; k++)
     {
@@ -317,19 +317,19 @@ Residual(int       cur_dim,             // current dimension
     }
 }
 
-// computes R (residual) vector of P&T eq. 9.63 and 9.67, p. 411-412 for a curve from a
+// computes right hand side vector of P&T eq. 9.63 and 9.67, p. 411-412 for a curve from a
 // new set of input points, not the default input domain
 void
 mfa::
 Encoder::
-Residual(int       cur_dim,             // current dimension
-         MatrixXf& in_pts,              // input points (not the default domain stored in the mfa)
-         MatrixXf& N,                   // matrix of basis function coefficients
-         MatrixXf& R,                   // (output) residual matrix allocated by caller
-         int       ko,                  // optional index of starting knot
-         int       po,                  // optional index of starting parameter
-         int       co,                  // optional index of starting input pt in current curve
-         int       cs)                  // optional stride of input pts in current curve
+RHS(int       cur_dim,             // current dimension
+    MatrixXf& in_pts,              // input points (not the default domain stored in the mfa)
+    MatrixXf& N,                   // matrix of basis function coefficients
+    MatrixXf& R,                   // (output) residual matrix allocated by caller
+    int       ko,                  // optional index of starting knot
+    int       po,                  // optional index of starting parameter
+    int       co,                  // optional index of starting input pt in current curve
+    int       cs)                  // optional stride of input pts in current curve
 {
     int n      = N.cols() + 1;               // number of control point spans
     int m      = N.rows() + 1;               // number of input data point spans
@@ -339,7 +339,7 @@ Residual(int       cur_dim,             // current dimension
     MatrixXf Nk;                             // basis coefficients for Rk[i]
 
     // debug
-    // cerr << "Residual in_pts:\n" << in_pts << endl;
+    // cerr << "RHS in_pts:\n" << in_pts << endl;
 
     for (int k = 1; k < m; k++)
     {
@@ -563,11 +563,11 @@ CtrlCurve(MatrixXf& N,          // basis functions for current dimension
     // even dim reads temp_ctrl1, odd dim reads temp_ctrl0; opposite of writing order
     // because what was written in the previous dimension is read in the current one
     if (k == 0)
-        Residual(k, N, R, kos[k], pos[k], co, cs);             // input points = default domain
+        RHS(k, N, R, kos[k], pos[k], co, cs);             // input points = default domain
     else if (k % 2)
-        Residual(k, temp_ctrl0, N, R, kos[k], pos[k], co, cs); // input points = temp_ctrl0
+        RHS(k, temp_ctrl0, N, R, kos[k], pos[k], co, cs); // input points = temp_ctrl0
     else
-        Residual(k, temp_ctrl1, N, R, kos[k], pos[k], co, cs); // input points = temp_ctrl1
+        RHS(k, temp_ctrl1, N, R, kos[k], pos[k], co, cs); // input points = temp_ctrl1
 
     // solve for P
     P = NtN.ldlt().solve(R);
