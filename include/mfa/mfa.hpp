@@ -65,6 +65,8 @@ namespace mfa
 //                             VectorXf& new_knots,    // new knots (1st dim changes fastest)
 //                             float     err_limit);   // max error limit
 
+        float NormalDistance(VectorXf& pt,        // point whose distance from domain is desired
+                             size_t    cell_idx); // index of min. corner of cell in the domain
     private:
 
         bool ErrorSpans(
@@ -93,9 +95,6 @@ namespace mfa
 
         // DEPRECATED
 //         void InsertKnots();
-
-        float NormalDistance(VectorXf& pt,        // point whose distance from domain is desired
-                             size_t    cell_idx); // index of min. corner of cell in the domain
 
         void InsertKnots(VectorXi& nnew_knots,     // number of new knots in each dim
                          VectorXf& new_knots);     // new knots (1st dim changes fastest)
@@ -132,7 +131,6 @@ namespace mfa
                               // not the total number of data pts, which would be the prod.
        int tot_nknots;        // total nmbr of knots = sum of nmbr of knots over all dims
        float eps;             // minimum difference considered significant
-       size_t worst_ctrl_idx; // index of control point with max solution error
        vector<KnotSpan> knot_spans; // knot spans
        size_t ndone_knot_spans;  // number of done knot spans
    };

@@ -83,9 +83,9 @@ int main(int argc, char** argv)
 //                    { b->generate_sinc_data(cp, d_args); });
 
     // small 2d sinc function f(x,y) = sinc(x)sinc(y)
-    float norm_err_limit = 3.0e-1;
+//     float norm_err_limit = 3.0e-1;
 //     float norm_err_limit = 3.0e-2;
-//     float norm_err_limit = 3.0e-3;
+    float norm_err_limit = 3.0e-3;
     d_args.pt_dim       = 3;
     d_args.dom_dim      = 2;
     d_args.p[0]         = 4;
@@ -139,8 +139,8 @@ int main(int argc, char** argv)
 
         // debug: compute max error to see that it is decreasing
         fprintf(stderr, "\n iter=%d computing max. error...\n", iter);
-        master.foreach(&Block::decode_block);
-        master.foreach(&Block::max_error);
+        master.foreach([&](Block* b, const diy::Master::ProxyWithLink& cp)
+                { b->error(cp, false); });
 
         if (done)
             break;
@@ -150,11 +150,8 @@ int main(int argc, char** argv)
 
     // debug: compute max error to verify that it is below the threshold
     fprintf(stderr, "\nFinal decoding and computing max. error...\n");
-    master.foreach(&Block::decode_block);
-    master.foreach(&Block::max_error);
-
-    // compute entire error field
-    master.foreach(&Block::error);
+    master.foreach([&](Block* b, const diy::Master::ProxyWithLink& cp)
+            { b->error(cp, true); });
 
     // print results
     master.foreach(&Block::print_block);

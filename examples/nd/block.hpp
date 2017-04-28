@@ -506,19 +506,18 @@ struct Block
             vector<float> vel(3 * a->ndom_pts[0]);
 
             // open hard-coded file name, seek to hard-coded start of desired section
-            // open hard-coded file name, seek to hard-coded start of desired section
             // file is 704 * 540 * 550 * 3 floats (vx,vy,vz)
             // which is 1/2 the x resolution the simulation
             // the "small" in the file name means it was downsampled by factor of 2 in x
-//             FILE *fd = fopen("/Users/tpeterka/datasets/flame/6_small.xyz", "r");
-            FILE *fd = fopen("/homes/tpeterka/datasets/flame/6_small.xyz", "r");
+            FILE *fd = fopen("/Users/tpeterka/datasets/flame/6_small.xyz", "r");
+//             FILE *fd = fopen("/homes/tpeterka/datasets/flame/6_small.xyz", "r");
             assert(fd);
             fseek(fd, (704 * 540 * 275 + 704 * 270) * 12, SEEK_SET);
 
             // read all three components of velocity and compute magnitude
             if (!fread(&vel[0], sizeof(float), a->ndom_pts[0] * 3, fd))
             {
-                fprintf(stderr, "Error: unable to open file\n");
+                fprintf(stderr, "Error: unable to read file\n");
                 exit(0);
             }
             for (size_t i = 0; i < vel.size() / 3; i++)
@@ -586,17 +585,16 @@ struct Block
             // rest is hard-coded for 1d
 
             // open hard-coded file name, seek to hard-coded start of desired section
-            // open hard-coded file name, seek to hard-coded start of desired section
             // file is 704 * 540 * 550 * 3 floats (vx,vy,vz)
-//             FILE *fd = fopen("/Users/tpeterka/datasets/flame/6_small.xyz", "r");
-            FILE *fd = fopen("/homes/tpeterka/datasets/flame/6_small.xyz", "r");
+            FILE *fd = fopen("/Users/tpeterka/datasets/flame/6_small.xyz", "r");
+//             FILE *fd = fopen("/homes/tpeterka/datasets/flame/6_small.xyz", "r");
             assert(fd);
             fseek(fd, (704 * 540 * 275 + 704 * 270) * 12, SEEK_SET);
 
             // read all three components of velocity and compute magnitude
             if (!fread(&vel[0], sizeof(float), tot_ndom_pts * 3, fd))
             {
-                fprintf(stderr, "Error: unable to open file\n");
+                fprintf(stderr, "Error: unable to read file\n");
                 exit(0);
             }
             for (size_t i = 0; i < vel.size() / 3; i++)
@@ -660,8 +658,8 @@ struct Block
             // open hard-coded file name, seek to hard-coded start of desired section
             // which is an x-y plane in the middle of the z range
             // file is 704 * 540 * 550 * 3 floats (vx,vy,vz)
-//             FILE *fd = fopen("/Users/tpeterka/datasets/flame/6_small.xyz", "r");
-            FILE *fd = fopen("/homes/tpeterka/datasets/flame/6_small.xyz", "r");
+            FILE *fd = fopen("/Users/tpeterka/datasets/flame/6_small.xyz", "r");
+//             FILE *fd = fopen("/homes/tpeterka/datasets/flame/6_small.xyz", "r");
             assert(fd);
             // middle plane in z, offset = full x,y range * 1/2 z range
             fseek(fd, (704 * 540 * 275) * 12, SEEK_SET);
@@ -669,7 +667,7 @@ struct Block
             // read all three components of velocity and compute magnitude
             if (!fread(&vel[0], sizeof(float), tot_ndom_pts * 3, fd))
             {
-                fprintf(stderr, "Error: unable to open file\n");
+                fprintf(stderr, "Error: unable to read file\n");
                 exit(0);
             }
             for (size_t i = 0; i < vel.size() / 3; i++)
@@ -735,14 +733,14 @@ struct Block
 
             // open hard-coded file name
             // file is 704 * 540 * 550 * 3 floats (vx,vy,vz)
-//             FILE *fd = fopen("/Users/tpeterka/datasets/flame/6_small.xyz", "r");
-            FILE *fd = fopen("/homes/tpeterka/datasets/flame/6_small.xyz", "r");
+            FILE *fd = fopen("/Users/tpeterka/datasets/flame/6_small.xyz", "r");
+//             FILE *fd = fopen("/homes/tpeterka/datasets/flame/6_small.xyz", "r");
             assert(fd);
 
             // read all three components of velocity and compute magnitude
             if (!fread(&vel[0], sizeof(float), tot_ndom_pts * 3, fd))
             {
-                fprintf(stderr, "Error: unable to open file\n");
+                fprintf(stderr, "Error: unable to read file\n");
                 exit(0);
             }
             for (size_t i = 0; i < vel.size() / 3; i++)
@@ -809,18 +807,33 @@ struct Block
             mfa->Decode(approx);
         }
 
-    // compute maximum error in the block
-    void max_error(const diy::Master::ProxyWithLink& cp)
+    // compute error field and maximum error in the block
+    void error(const diy::Master::ProxyWithLink& cp,
+            bool decode_block)                            // decode entire block first
         {
+            errs.resize(domain.rows(), domain.cols());
+            errs = domain;
+
+            if (decode_block)
+            {
+                approx.resize(domain.rows(), domain.cols());
+                mfa->Decode(approx);
+            }
+
             // normal distance computation
             size_t max_idx;
-            for (size_t i = 0; i < (size_t)approx.rows(); i++)
+            for (size_t i = 0; i < (size_t)domain.rows(); i++)
             {
-                VectorXf approx_pos = approx.block(i, 0, 1, p.size()).row(0);
-                float err = mfa->Error(i);
-                if (i == 0 || fabs(err) > fabs(max_err))
+                if (decode_block)
                 {
-                    max_err = err;
+                    VectorXf cpt = approx.row(i);
+                    errs(i, errs.cols() - 1) = fabs(mfa->NormalDistance(cpt, i));
+                }
+                else
+                    errs(i, errs.cols() - 1) = mfa->Error(i);
+                if (i == 0 || fabs(errs(i, errs.cols() - 1)) > fabs(max_err))
+                {
+                    max_err = errs(i, errs.cols() - 1);
                     max_idx = i;
                 }
             }
@@ -838,16 +851,6 @@ struct Block
             max_err /= range;
 
             fprintf(stderr, "|normalized max_err| = %e\n", fabs(max_err));
-        }
-
-    // compute error field (error at every domain point)
-    // error is absolute value but not normalized by data range
-    void error(const diy::Master::ProxyWithLink& cp)
-        {
-            errs.resize(domain.rows(), domain.cols());
-            errs = domain;
-            for (size_t i = 0; i < (size_t)approx.rows(); i++)
-                errs(i, errs.cols() - 1) = mfa->Error(i);
         }
 
     void print_block(const diy::Master::ProxyWithLink& cp)

@@ -175,28 +175,6 @@ Encode()
             // compute the one curve of control points
             CtrlCurve(N, NtN, R, P, n, k, pos, kos, co, cs, to, temp_ctrl0, temp_ctrl1);
 
-//             // DEPRECATED
-//             // compute solution error for last dimension of curves, keep track of max error
-//             if (k == ndims - 1)
-//             {
-//                 // compute max solution error for last (range) coordinate of control points
-//                 MatrixXf::Index max_row, max_col;                           // index of max error
-//                 MatrixXf err     = R - NtN * P;                             // solution error
-//                 VectorXf abs_err = abs(err.col(R.cols() - 1).array());      // abs value of last column of error
-//                 float max_err    = abs_err.maxCoeff(&max_row, &max_col);    // max error in this curve
-//                 // max value and index of error in all curves so far
-//                 if (j == 0 || max_err > max_err_val)
-//                 {
-//                     max_err_val    = max_err;
-//                     mfa.worst_ctrl_idx = to + (max_row + 1) * cs;        // + 1 because P excludes first ctrl pt
-// 
-//                     // debug
-//                     cerr << "max err so far: " << max_err_val << " at max_row=" << max_row <<
-//                         " at ctrl pt: " << P.row(max_row) << endl;
-// //                     cerr << "abs_err:\n" << abs_err << endl;
-//                 }
-//             }
-
             // adjust offsets for the next curve
             if ((j + 1) % cs)
                 co++;
@@ -213,14 +191,6 @@ Encode()
                 too = to;
             }
         }                                                  // curves in this dimension
-
-        // debug
-        // if (k % 2 == 0 && k < ndims - 1)
-        //     cerr << "temp_ctrl0:\n" << temp_ctrl0 << endl;
-        // else if (k % 2 && k < ndims - 1)
-        //     cerr << "temp_ctrl1:\n" << temp_ctrl1 << endl;
-        // else
-        //     cerr << "ctrl_pts:\n" << ctrl_pts << endl;
 
         // adjust offsets and strides for next dimension
         ntemp_ctrl(k) = nctrl_pts(k);
@@ -240,24 +210,6 @@ Encode()
 
     // debug
 //     cerr << "ctrl_pts:\n" << ctrl_pts << endl;
-
-    // debug
-//     cerr << "max solution error: " << max_err_val << " at ctrl pt: " << ctrl_pts.row(mfa.worst_ctrl_idx) << endl;
-
-    // debug: print gradient of value and gradient of error
-    // VectorXf grad(p.size());    // NB gradient is domain dims size (not domain + range)
-    // VectorXf err_grad(p.size());
-    // for (size_t i = 0; i < domain.rows(); i++)
-    // {
-    //     ErrorGradient(i, err_grad);
-    //     cerr << "pt: " << domain.row(i) << "\nerror_grad:\n" << err_grad << "\n" << endl;
-    // }
-
-    // debug: try a to search for local minimum of error field from a hard-coded
-    // starting point
-//     size_t start_idx = 169;
-//     size_t end_idx;
-//     GridSearch(start_idx, end_idx);
 }
 
 // computes right hand side vector of P&T eq. 9.63 and 9.67, p. 411-412 for a curve from the
