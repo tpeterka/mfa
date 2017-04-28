@@ -31,13 +31,6 @@ namespace mfa
         ~Encoder() {}
         void Encode();
 
-// DEPRECATED: moved to mfa.hpp
-//         float NormalDistance(VectorXf& pt,        // point whose distance from domain is desired
-//                              size_t    cell_idx); // index of min. corner of cell in the domain
-                                                  // used to compute partial derivatives
-        // DEPRECATED: moved to mfa.hpp
-//         float Error(size_t    idx);             // domain point where to compute approximation error
-
    private:
 
         void RHS(int       cur_dim,  // current dimension
@@ -85,18 +78,6 @@ namespace mfa
                       size_t    to,         // starting offset for writing control points
                       MatrixXf& temp_ctrl0, // first temporary control points buffer
                       MatrixXf& temp_ctrl1); // second temporary control points buffer
-
-        // DEPRECATED
-//         void Gradient(size_t    idx,             // index of min. corner of cell in the domain
-//                       VectorXf& grad);           // output gradient
-
-        // DEPECATED
-//         void ErrorGradient(size_t    idx,        // index of min. corner of cell in the domain
-//                            VectorXf& grad);      // output gradient
-
-        // DEPRECATED
-//         void GridSearch(size_t  start_idx,       // starting domain point of search
-//                         size_t& end_idx);        // ending domain point of search
 
         MFA& mfa;                       // the mfa object
         // following are references the the data in the mfa object
