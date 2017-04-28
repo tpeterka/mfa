@@ -53,17 +53,7 @@ namespace mfa
 
         void Decode(MatrixXf& approx); // decode points
 
-        // DEPRECATED
-//         float Error(VectorXf& pt,    // point some distance away from domain points
-//                     int       idx);  // index of point in domain near to the point
-                                     // search for cell containing the point starts at this index
-
         float Error(size_t idx);    // index of domain point where to compute error of mfa
-
-        // DEPRECATED
-//         void FindExtraKnots(VectorXi& nnew_knots,   // number of new knots in each dim
-//                             VectorXf& new_knots,    // new knots (1st dim changes fastest)
-//                             float     err_limit);   // max error limit
 
         float NormalDistance(VectorXf& pt,        // point whose distance from domain is desired
                              size_t    cell_idx); // index of min. corner of cell in the domain
@@ -92,9 +82,6 @@ namespace mfa
         void Knots();
 
         void KnotSpanIndex();
-
-        // DEPRECATED
-//         void InsertKnots();
 
         void InsertKnots(VectorXi& nnew_knots,     // number of new knots in each dim
                          VectorXf& new_knots);     // new knots (1st dim changes fastest)
