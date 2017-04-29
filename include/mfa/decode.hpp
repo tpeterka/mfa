@@ -15,6 +15,8 @@
 
 typedef Eigen::MatrixXf MatrixXf;
 typedef Eigen::VectorXf VectorXf;
+typedef Eigen::MatrixXi MatrixXi;
+typedef Eigen::VectorXi VectorXi;
 
 namespace mfa
 {
@@ -53,6 +55,11 @@ namespace mfa
                 VectorXi&     nnew_knots,       // number of new knots in each dim
                 VectorXf&     new_knots);       // new knots (1st dim changes fastest)
 
+        int tot_iters;                          // total iterations in flattened decoding of all dimensions
+        MatrixXi  ct;                           // coordinates of first control point of curve for given iteration
+                                                // of decoding loop, relative to start of box of
+                                                // control points
+
         MFA& mfa;                      // the mfa object
         // following are references the the data in the mfa object
         VectorXi& p;                   // polynomial degree in each dimension
@@ -65,7 +72,7 @@ namespace mfa
         float     dom_range;           // max extent of input data points
         vector<size_t>& po;            // starting offset for params in each dim
         vector<size_t>& ko;            // starting offset for knots in each dim
-        vector<size_t>& co;            // starting offset for control points in each dim
+        vector<size_t>  cs;            // control point stride (only in decoder, not mfa)
         vector<KnotSpan>& knot_spans;  // not done (greater than max error) knot spans
         size_t ndone_knot_spans;       // number of done knot spans
     };

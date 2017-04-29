@@ -91,19 +91,12 @@ MFA(VectorXi& p_,             // polynomial degree in each dimension
     // then co will be used
     ko.resize(p.size(), 0);                  // offset for knots
     po.resize(p.size(), 0);                  // offset for params
-    co.resize(p.size(), 0);                  // offset for control points
-    cs.resize(p.size(), 1);                  // stride for control points
     ds.resize(p.size(), 1);                  // stride for domain points
-// DEPRECATED
-//     ks.resize(p.size(), 1);                  // stride for knots
     for (size_t i = 1; i < p.size(); i++)
     {
         po[i] = po[i - 1] + ndom_pts[i - 1];
         ko[i] = ko[i - 1] + nctrl_pts[i - 1] + p[i - 1] + 1;
-        co[i] = co[i - 1] * nctrl_pts[i - 1];
         ds[i] = ds[i - 1] * ndom_pts[i - 1];
-// DEPRECATED
-//         ks[i] = ks[i - 1] * (nctrl_pts[i - 1] + p[i - 1] + 1);
     }
 
     // knot span index table

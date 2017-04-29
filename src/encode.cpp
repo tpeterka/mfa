@@ -27,7 +27,6 @@ Encoder(MFA& mfa_) :
     dom_range(mfa_.dom_range),
     po(mfa_.po),
     ko(mfa_.ko),
-    co(mfa_.co),
     knot_spans(mfa_.knot_spans),
     ndone_knot_spans(mfa_.ndone_knot_spans)
 {

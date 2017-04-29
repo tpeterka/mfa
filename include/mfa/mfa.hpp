@@ -109,11 +109,7 @@ namespace mfa
        float     dom_range;   // max extent of input data points
        vector<size_t> po;     // starting offset for params in each dim
        vector<size_t> ko;     // starting offset for knots in each dim
-       vector<size_t> co;     // starting offset for control points in each dim
-       vector<size_t> cs;     // stride for control points in each dim
        vector<size_t> ds;     // stride for domain points in each dim
-// DEPRECATED
-//        vector<size_t> ks;     // stride for knots in each dim
        int tot_nparams;       // total number of params = sum of ndom_pts over all dims
                               // not the total number of data pts, which would be the prod.
        int tot_nknots;        // total nmbr of knots = sum of nmbr of knots over all dims

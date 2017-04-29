@@ -91,7 +91,6 @@ namespace mfa
         float     dom_range;           // max extent of input data points
         vector<size_t>& po;            // starting offset for params in each dim
         vector<size_t>& ko;            // starting offset for knots in each dim
-        vector<size_t>& co;            // starting offset for control points in each dim
         vector<KnotSpan>& knot_spans;  // not done (greater than max error) knot spans
         size_t ndone_knot_spans;       // number of done knot spans
     };

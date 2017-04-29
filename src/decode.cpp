@@ -31,7 +31,6 @@ Decoder(MFA& mfa_) :
     dom_range(mfa_.dom_range),
     po(mfa_.po),
     ko(mfa_.ko),
-    co(mfa_.co),
     knot_spans(mfa_.knot_spans),
     ndone_knot_spans(mfa_.ndone_knot_spans)
 {
@@ -47,6 +46,32 @@ Decoder(MFA& mfa_) :
         fprintf(stderr, "Decoder() error: Attempting to decode before encoding.\n");
         exit(0);
     }
+
+    // initialize decoding data structures
+    cs.resize(p.size(), 1);
+    tot_iters = 1;                              // total number of iterations in the flattened decoding loop
+    for (size_t i = 0; i < p.size(); i++)       // for all dims
+    {
+        tot_iters  *= (p(i) + 1);
+        if (i > 0)
+            cs[i] = cs[i - 1] * nctrl_pts[i - 1];
+    }
+    ct.resize(tot_iters, p.size());
+
+    // compute coordinates of first control point of curve corresponding to this iteration
+    // these are relative to start of the box of control points located at co
+    for (int i = 0; i < tot_iters; i++)      // 1-d flattening all n-d nested loop computations
+    {
+        int div = tot_iters;
+        int i_temp = i;
+        for (int j = p.size() - 1; j >= 0; j--)
+        {
+            div      /= (p(j) + 1);
+            ct(i, j) =  i_temp / div;
+            i_temp   -= (ct(i, j) * div);
+        }
+    }
+
 }
 
 // computes error in knot spans
@@ -436,78 +461,41 @@ Decoder::
 VolPt(VectorXf& param,                       // parameter value in each dim. of desired point
       VectorXf& out_pt)                      // (output) point
 {
-    // debug
-    // cerr << "\n\nparam:\n" << param << endl;
-
     // check dimensionality for sanity
     assert(p.size() < ctrl_pts.cols());
 
-    out_pt = VectorXf::Zero(ctrl_pts.cols());// initializes and resizes
-    vector <MatrixXf> N(p.size());           // basis functions in each dim.
-    vector<VectorXf>  temp(p.size());        // temporary point in each dim.
-    vector<int>       span(p.size());        // span in each dim.
-    vector<int>       n(p.size());           // number of control point spans in each dim
-    vector<int>       iter(p.size());        // iteration number in each dim.
-    int               tot_iters = 1;         // tot. num. iterations in flattened n-d nested loops
-    vector<size_t>    ko(p.size(), 0);       // starting offset for knots in current dim
-    vector<size_t>    co(p.size());          // starting offset for control points in each dim
-    vector<size_t>    ct(p.size());          // relative coordinates of ctrl pt of current iteration
-    vector<size_t>    cs(p.size());          // stride for next co in each dim
+    out_pt = VectorXf::Zero(ctrl_pts.cols());   // initializes and resizes
+    vector <MatrixXf> N(p.size());              // basis functions in each dim.
+    vector<VectorXf>  temp(p.size());           // temporary point in each dim.
+    vector<int>       span(p.size());           // span in each dim.
+    vector<int>       n(p.size());              // number of control point spans in each dim
+    vector<int>       iter(p.size());           // iteration number in each dim.
     VectorXf          ctrl_pt(ctrl_pts.cols()); // one control point
+    vector<size_t>    co(p.size());             // starting ofst for ctrl pts in each dim for this span
+    int ctrl_idx;                               // control point linear ordering index
 
-    for (size_t i = 0; i < p.size(); i++)    // for all dims
+    // init
+    for (size_t i = 0; i < p.size(); i++)       // for all dims
     {
         temp[i]    = VectorXf::Zero(ctrl_pts.cols());
         iter[i]    = 0;
-        tot_iters  *= (p(i) + 1);
         n[i]       = (int)nctrl_pts(i) - 1;
         span[i]    = mfa.FindSpan(i, param(i), ko[i]);
         N[i]       = MatrixXf::Zero(1, n[i] + 1);
+        co[i]      = span[i] - p(i) - ko[i];
         mfa.BasisFuns(i, param(i), span[i], N[i], 0, n[i], 0, ko[i]);
-        if (i == 0)
-            cs[i] = 1;
-        else
-            cs[i] = cs[i - 1] * nctrl_pts(i);
-        co[i] = span[i] - p(i) - ko[i];
-        if (i < p.size() - 1)
-            ko[i + 1] = ko[i] + n[i] + p(i) + 2; // n[i]+p(i)+2 =  number of knots in current dim.
-
-        // debug
-        // cerr << "N[" << i << "] = " << N[i] << endl;
-        // fprintf(stderr, "i=%d co[i]=%d span[i]=%d p(i)=%d ko[i]=%d cs[i]=%d\n",
-        //         i, co[i], span[i], p(i), ko[i], cs[i]);
     }
 
     for (int i = 0; i < tot_iters; i++)      // 1-d flattening all n-d nested loop computations
     {
-        // compute coordinates of first control point of curve corresponding to this iteration
-        // these are relative to start of the box of control points located at co
-        int div = tot_iters;
-        int i_temp = i;
-        for (int j = p.size() - 1; j >= 0; j--)
-        {
-            div    /= (p(j) + 1);
-            ct[j]  = i_temp / div;
-            i_temp -= (ct[j] * div);
-        }
-
         // control point linear order index
-        int ctrl_idx = 0;
-        int fac = 1;
+        ctrl_idx = 0;
         for (int j = 0; j < p.size(); j++)
-        {
-            ctrl_idx += (co[j] + ct[j]) * fac;
-            fac *= nctrl_pts(j);
-        }
+            ctrl_idx += (co[j] + ct(i, j)) * cs[j];
 
         // always compute the point in the first dimension
-        ctrl_pt = ctrl_pts.row(ctrl_idx);
+        ctrl_pt =  ctrl_pts.row(ctrl_idx);
         temp[0] += (N[0])(0, iter[0] + span[0] - p(0)) * ctrl_pt;
-
-        // debug
-//         fprintf(stderr, "1: temp[0] += N[0, %d] * ctrl_pt\n", iter[0] + span[0] - p(0));
-//         cerr << "span: " << span[0] << " ctrl_pt=\n" << ctrl_pt << endl;
-        // cerr << "1: i=" << i << " iter[0]=" << iter[0] << " temp[0]=\n" << temp[0] << endl;
         iter[0]++;
 
         // for all dimensions except last, check if span is finished
@@ -515,20 +503,10 @@ VolPt(VectorXf& param,                       // parameter value in each dim. of 
         {
             if (iter[k] - 1 == p(k))
             {
-                // compute point in next higher dimension
-                temp[k + 1] += (N[k + 1])(0, iter[k + 1] + span[k + 1] - ko[k + 1] - p(k + 1)) *
-                    temp[k];
-
-                // debug
-                // fprintf(stderr, "2: temp[%d] += N[%d, %d] * temp[%d]\n",
-                //         k + 1, k + 1, iter[k + 1] + span[k + 1] - ko[k + 1] - p(k + 1), k);
-                // fprintf(stderr, "3: temp[%d] = 0\n", k);
-                // cerr << "2: i=" << i << " k=" << k << " iter[k+1]=" << iter[k+1] <<
-                //     " temp[k+1]=\n" << temp[k+1] << endl;
-
-                // reset the computation for the current dimension
-                temp[k]    = VectorXf::Zero(ctrl_pts.cols());
-                iter[k]    = 0;
+                // compute point in next higher dimension and reset computation for current dim
+                temp[k + 1] += (N[k + 1])(0, iter[k + 1] + span[k + 1] - ko[k + 1] - p(k + 1)) * temp[k];
+                temp[k]     =  VectorXf::Zero(ctrl_pts.cols());
+                iter[k]     =  0;
                 iter[k + 1]++;
             }
         }
