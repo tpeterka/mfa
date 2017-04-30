@@ -125,7 +125,6 @@ ErrorSpans(
                 break;
             }
 
-
             // increment param ijk
             for (auto k = 0; k < p.size(); k++)                 // dimensions in the parameter
             {
@@ -227,7 +226,6 @@ SplitSpan(
         split_spans[si]     = true;
         return;
     }
-
 
     // find all spans with the same min_knot_ijk as the span to be split and that are not done yet
     // those will be split too (NB, in the same dimension as the original span to be split)

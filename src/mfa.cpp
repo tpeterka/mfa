@@ -248,10 +248,10 @@ Encode()
 bool
 mfa::
 MFA::
-Encode(float err_limit)                      // maximum allowable normalized error
+Encode(float err_limit)                             // maximum allowable normalized error
 {
-    VectorXi nnew_knots;                     // number of new knots in each dim
-    VectorXf new_knots;                      // new knots (1st dim changes fastest)
+    VectorXi nnew_knots = VectorXi::Zero(p.size()); // number of new knots in each dim
+    VectorXf new_knots;                             // new knots (1st dim changes fastest)
 
     bool done = ErrorSpans(nnew_knots, new_knots, err_limit);
 
@@ -633,17 +633,20 @@ InsertKnots(VectorXi& nnew_knots,     // number of new knots in each dim
     knots.resize(temp_knots.size());
     knots = temp_knots;
 
+    // increase number of control points (vector component-wise addition)
+    nctrl_pts += nnew_knots;
+
+    // update knot offsets
+    for (size_t i = 1; i < p.size(); i++)
+        ko[i] = ko[i - 1] + nctrl_pts[i - 1] + p[i - 1] + 1;
+
     // debug
 //     cerr << "nnew_knots:\n" << nnew_knots << endl;
 //     cerr << "knots after insertion:\n" << knots << endl;
-
-    // increase number of control points
-    nctrl_pts += nnew_knots;
-
-    // debug
-    cerr << "nctrl_pts after insertion:\n" << nctrl_pts << endl;
+//     cerr << "MFA nctrl_pts after insertion:\n" << nctrl_pts << endl;
 }
 
+// increase number of control points
 // interpolate parameters to get parameter value for a target coordinate
 //
 // TODO: experiment whether this is more accurate and/or faster than calling Params
