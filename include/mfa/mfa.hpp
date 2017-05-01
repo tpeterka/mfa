@@ -116,6 +116,7 @@ namespace mfa
        float eps;             // minimum difference considered significant
        vector<KnotSpan> knot_spans; // knot spans
        size_t ndone_knot_spans;  // number of done knot spans
+       vector<bool> err_ok;    // whether the error at the domain point is < user_limit, initialized to false
    };
 
 }

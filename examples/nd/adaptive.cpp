@@ -146,8 +146,8 @@ int main(int argc, char** argv)
    // 3d sinc function
 //     float norm_err_limit = 1.0e-2;
 //     float norm_err_limit = 1.0e-3;
-//     float norm_err_limit = 1.0e-4;
-    float norm_err_limit = 1.0e-5;
+    float norm_err_limit = 1.0e-4;
+//     float norm_err_limit = 1.0e-5;
     d_args.pt_dim       = 4;
     d_args.dom_dim      = 3;
     d_args.p[0]         = 4;

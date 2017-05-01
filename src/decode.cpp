@@ -114,15 +114,20 @@ ErrorSpans(
             // approximate the point and measure error
             size_t idx;
             mfa.ijk2idx(p_ijk, idx);
-            VectorXf cpt(ctrl_pts.cols());       // approximated point
-            VolPt(param, cpt);
-            float err = fabs(mfa.NormalDistance(cpt, idx)) / dom_range;     // normalized by data range
-
-            // span is not done
-            if (err > err_limit)
+            if (!mfa.err_ok[idx])                   // check each domain point at most one time
             {
-                span_done = false;
-                break;
+                VectorXf cpt(ctrl_pts.cols());       // approximated point
+                VolPt(param, cpt);
+                float err = fabs(mfa.NormalDistance(cpt, idx)) / dom_range;     // normalized by data range
+
+                // span is not done
+                if (err > err_limit)
+                {
+                    span_done = false;
+                    break;
+                }
+                else
+                    mfa.err_ok[idx] = true;
             }
 
             // increment param ijk
