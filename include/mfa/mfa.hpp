@@ -10,12 +10,14 @@
 
 #include <Eigen/Dense>
 #include <vector>
+#include <tbb/tbb.h>
 
 typedef Eigen::MatrixXf MatrixXf;
 typedef Eigen::VectorXf VectorXf;
 typedef Eigen::VectorXi VectorXi;
 
 using namespace std;
+using namespace tbb;
 
 struct KnotSpan
 {
