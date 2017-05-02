@@ -85,7 +85,8 @@ MFA(VectorXi& p_,             // polynomial degree in each dimension
     // debug
     // cerr << "knots:\n" << knots << endl;
 
-    err_ok.resize(domain.rows());   // error at this domain point is below user limit, initializes to false
+    // DEPRECATED
+//     err_ok.resize(domain.rows());   // error at this domain point is below user limit, initializes to false
 
     // offsets and strides for knots, params, and control points in different dimensions
     // TODO: co for control points currently not used because control points are stored explicitly
@@ -203,7 +204,8 @@ KnotSpanIndex()
 
             knot_spans[span_idx].last_split_dim = -1;
             knot_spans[span_idx].done           = false;
-            ndone_knot_spans                    = 0;
+            // DEPRECATED
+//             ndone_knot_spans                    = 0;
 
             // debug
 //             cerr <<

@@ -117,8 +117,10 @@ namespace mfa
        int tot_nknots;        // total nmbr of knots = sum of nmbr of knots over all dims
        float eps;             // minimum difference considered significant
        vector<KnotSpan> knot_spans; // knot spans
-       size_t ndone_knot_spans;  // number of done knot spans
-       vector<bool> err_ok;    // whether the error at the domain point is < user_limit, initialized to false
+       // DEPRECATED
+//        size_t ndone_knot_spans;  // number of done knot spans
+       // DEPRECATED
+//        vector<bool> err_ok;    // whether the error at the domain point is < user_limit, initialized to false
    };
 
 }

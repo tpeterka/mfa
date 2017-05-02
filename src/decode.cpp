@@ -31,8 +31,9 @@ Decoder(MFA& mfa_) :
     dom_range(mfa_.dom_range),
     po(mfa_.po),
     ko(mfa_.ko),
-    knot_spans(mfa_.knot_spans),
-    ndone_knot_spans(mfa_.ndone_knot_spans)
+    knot_spans(mfa_.knot_spans)
+    // DEPRECATED
+//     ndone_knot_spans(mfa_.ndone_knot_spans)
 {
     // ensure that encoding was already done
     if (!p.size()         ||
@@ -112,20 +113,15 @@ ErrorSpans(
                 // approximate the point and measure error
                 size_t idx;
                 mfa.ijk2idx(p_ijk, idx);
-                if (!mfa.err_ok[idx])                   // check each domain point at most one time
-                {
-                    VectorXf cpt(ctrl_pts.cols());       // approximated point
-                    VolPt(param, cpt);
-                    float err = fabs(mfa.NormalDistance(cpt, idx)) / dom_range;     // normalized by data range
+                VectorXf cpt(ctrl_pts.cols());       // approximated point
+                VolPt(param, cpt);
+                float err = fabs(mfa.NormalDistance(cpt, idx)) / dom_range;     // normalized by data range
 
-                    // span is not done
-                    if (err > err_limit)
-                    {
-                        span_done = false;
-                        break;
-                    }
-                    else
-                        mfa.err_ok[idx] = true;
+                // span is not done
+                if (err > err_limit)
+                {
+                    span_done = false;
+                    break;
                 }
 
                 // increment param ijk
@@ -153,7 +149,7 @@ ErrorSpans(
         if (!knot_spans[i].done && !split_spans[i])
         {
             // debug
-            fprintf(stderr, "*** calling SplitSpan(%d) ***\n", i);
+//             fprintf(stderr, "*** calling SplitSpan(%d) ***\n", i);
 
             SplitSpan(i, split_spans, nnew_knots, new_knots);
             mfa.InsertKnots(nnew_knots, new_knots);
@@ -176,6 +172,7 @@ ErrorSpans(
 //     }
 
     // check if all done
+    // NB: not doint simple counter of done spans because it would have to be locked between tasks
     for (auto i = 0; i < knot_spans.size(); i++)
         if (!knot_spans[i].done)
             return false;
@@ -200,7 +197,6 @@ ErrorSpans(
 
     for (auto i = 0; i < knot_spans.size(); i++)                  // knot spans
     {
-        // TODO: if we swap done spans to the back, then break instead of continue
         if (knot_spans[i].done)
         {
             ndone_knot_spans++;
@@ -225,8 +221,10 @@ ErrorSpans(
             // approximate the point and measure error
             size_t idx;
             mfa.ijk2idx(p_ijk, idx);
-            if (!mfa.err_ok[idx])                   // check each domain point at most one time
-            {
+            // DEPECATED: following test for checking each domain point only once changes results (for
+            // (worse) and doesn't save a lot time
+//             if (!mfa.err_ok[idx])                   // check each domain point at most one time
+//             {
                 VectorXf cpt(ctrl_pts.cols());       // approximated point
                 VolPt(param, cpt);
                 float err = fabs(mfa.NormalDistance(cpt, idx)) / dom_range;     // normalized by data range
@@ -237,9 +235,9 @@ ErrorSpans(
                     span_done = false;
                     break;
                 }
-                else
-                    mfa.err_ok[idx] = true;
-            }
+//                 else
+//                     mfa.err_ok[idx] = true;
+//             }
 
             // increment param ijk
             for (auto k = 0; k < p.size(); k++)                 // dimensions in the parameter
@@ -255,7 +253,6 @@ ErrorSpans(
         }                                                       // parameters in the span
 
         // span is done
-        // TODO: swap done span to the end
         if (span_done)
         {
             knot_spans[i].done = true;
@@ -263,37 +260,20 @@ ErrorSpans(
         }
     }                                                           // knot spans
 
-    // debug
-    fprintf(stderr, "number done knot spans = %ld out of %ld\n", ndone_knot_spans, knot_spans.size());
-//     for (auto i = 0; i < knot_spans.size(); i++)                  // knot spans
-//     {
-//         cerr <<
-//             "span_idx="          << i                           <<
-//             "\nmin_knot_ijk:\n"  << knot_spans[i].min_knot_ijk  <<
-//             "\nmax_knot_ijk:\n"  << knot_spans[i].max_knot_ijk  <<
-//             "\nmin_knot:\n"      << knot_spans[i].min_knot      <<
-//             "\nmax_knot:\n"      << knot_spans[i].max_knot      <<
-//             "\nmin_param_ijk:\n" << knot_spans[i].min_param_ijk <<
-//             "\nmax_param_ijk:\n" << knot_spans[i].max_param_ijk <<
-//             "\nmin_param:\n"     << knot_spans[i].min_param     <<
-//             "\nmax_param:\n"     << knot_spans[i].max_param     <<
-//             "\n"                 << endl;
-//     }
-
     // split spans that are not done
     auto norig_spans = knot_spans.size();
     for (auto i = 0; i < norig_spans; i++)                  // knot spans
         if (!knot_spans[i].done && !split_spans[i])
         {
             // debug
-            fprintf(stderr, "*** calling SplitSpan(%d) ***\n", i);
+//             fprintf(stderr, "*** calling SplitSpan(%d) ***\n", i);
 
             SplitSpan(i, split_spans, nnew_knots, new_knots);
             mfa.InsertKnots(nnew_knots, new_knots);
         }
 
     // debug
-    fprintf(stderr, "number knot spans after splitting= %ld\n", knot_spans.size());
+//     fprintf(stderr, "number knot spans after splitting= %ld\n", knot_spans.size());
 //     for (auto i = 0; i < knot_spans.size(); i++)                  // knot spans
 //     {
 //         cerr <<
@@ -309,7 +289,14 @@ ErrorSpans(
 //             "\n"                 << endl;
 //     }
 
-    return (ndone_knot_spans == knot_spans.size());
+    // check if all done
+    // NB: not tallying a simple count of number of done spans because the multithreaded version
+    // would require locking that count; this version done similarly for compatibility with
+    // multithreaded version
+    for (auto i = 0; i < knot_spans.size(); i++)
+        if (!knot_spans[i].done)
+            return false;
+    return true;
 }
 
 #endif
@@ -342,6 +329,8 @@ SplitSpan(
     {
         knot_spans[si].done = true;
         split_spans[si]     = true;
+        // debug
+//         fprintf(stderr, "--- SplitSpan(): span %ld could not be split further ---\n", si);
         return;
     }
 
@@ -351,6 +340,9 @@ SplitSpan(
     {
         if (knot_spans[j].done || split_spans[j] || knot_spans[j].min_knot_ijk(sd) != knot_spans[si].min_knot_ijk(sd))
             continue;
+
+        // debug
+//         fprintf(stderr, "+++ SplitSpan(): splitting span %ld +++\n", si);
 
         // copy span to the back
         knot_spans.push_back(knot_spans[j]);

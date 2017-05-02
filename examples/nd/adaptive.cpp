@@ -127,6 +127,8 @@ int main(int argc, char** argv)
 //     float norm_err_limit = 3.0e-2;
 //     float norm_err_limit = 3.0e-3;
 //     float norm_err_limit = 3.0e-4;
+//     float norm_err_limit = 3.0e-5;
+//     float norm_err_limit = 3.0e-6;
 //     d_args.pt_dim       = 3;
 //     d_args.dom_dim      = 2;
 //     d_args.p[0]         = 4;
@@ -146,45 +148,44 @@ int main(int argc, char** argv)
    // 3d sinc function
 //     float norm_err_limit = 1.0e-2;
 //     float norm_err_limit = 1.0e-3;
-    float norm_err_limit = 1.0e-4;
-//     float norm_err_limit = 1.0e-5;
-    d_args.pt_dim       = 4;
-    d_args.dom_dim      = 3;
-    d_args.p[0]         = 4;
-    d_args.p[1]         = 4;
-    d_args.p[2]         = 4;
-    d_args.ndom_pts[0]  = 100;
-    d_args.ndom_pts[1]  = 100;
-    d_args.ndom_pts[2]  = 100;
-    d_args.nctrl_pts[0] = 20;
-    d_args.nctrl_pts[1] = 20;
-    d_args.nctrl_pts[2] = 20;
-    d_args.min[0]       = -4.0 * M_PI;
-    d_args.min[1]       = -4.0 * M_PI;
-    d_args.min[2]       = -4.0 * M_PI;
-    d_args.max[0]       = 4.0 * M_PI;
-    d_args.max[1]       = 4.0 * M_PI;
-    d_args.max[2]       = 4.0 * M_PI;
-    d_args.s            = 10.0;              // scaling factor on range
-    master.foreach([&](Block* b, const diy::Master::ProxyWithLink& cp)
-                   { b->generate_sinc_data(cp, d_args); });
-
-    // 3d S3D
-//     float norm_err_limit = 1.0e0;
-//     float norm_err_limit = 1.0e-1;
+//     float norm_err_limit = 1.0e-4;
 //     d_args.pt_dim       = 4;
 //     d_args.dom_dim      = 3;
 //     d_args.p[0]         = 4;
 //     d_args.p[1]         = 4;
 //     d_args.p[2]         = 4;
-//     d_args.ndom_pts[0]  = 704;
-//     d_args.ndom_pts[1]  = 540;
-//     d_args.ndom_pts[2]  = 550;
-//     d_args.nctrl_pts[0] = 140;
-//     d_args.nctrl_pts[1] = 108;
-//     d_args.nctrl_pts[2] = 110;
+//     d_args.ndom_pts[0]  = 100;
+//     d_args.ndom_pts[1]  = 100;
+//     d_args.ndom_pts[2]  = 100;
+//     d_args.nctrl_pts[0] = 20;
+//     d_args.nctrl_pts[1] = 20;
+//     d_args.nctrl_pts[2] = 20;
+//     d_args.min[0]       = -4.0 * M_PI;
+//     d_args.min[1]       = -4.0 * M_PI;
+//     d_args.min[2]       = -4.0 * M_PI;
+//     d_args.max[0]       = 4.0 * M_PI;
+//     d_args.max[1]       = 4.0 * M_PI;
+//     d_args.max[2]       = 4.0 * M_PI;
+//     d_args.s            = 10.0;              // scaling factor on range
 //     master.foreach([&](Block* b, const diy::Master::ProxyWithLink& cp)
-//                    { b->read_3d_file_data(cp, d_args); });
+//                    { b->generate_sinc_data(cp, d_args); });
+
+    // 3d S3D
+//     float norm_err_limit = 1.0e0;
+    float norm_err_limit = 1.0e-1;
+    d_args.pt_dim       = 4;
+    d_args.dom_dim      = 3;
+    d_args.p[0]         = 4;
+    d_args.p[1]         = 4;
+    d_args.p[2]         = 4;
+    d_args.ndom_pts[0]  = 704;
+    d_args.ndom_pts[1]  = 540;
+    d_args.ndom_pts[2]  = 550;
+    d_args.nctrl_pts[0] = 140;
+    d_args.nctrl_pts[1] = 108;
+    d_args.nctrl_pts[2] = 110;
+    master.foreach([&](Block* b, const diy::Master::ProxyWithLink& cp)
+                   { b->read_3d_file_data(cp, d_args); });
 
     double encode_time = MPI_Wtime();
 
