@@ -91,7 +91,7 @@ ErrorSpans(
     // spans that have already been split in this round (to prevent splitting twice)
     vector<bool> split_spans(knot_spans.size());    // intialized to false by default
 
-    parallel_for(size_t(0), knot_spans.size(), [&] (int i)          // knot spans
+    parallel_for(size_t(0), knot_spans.size(), [&] (size_t i)          // knot spans
     {
         if (!knot_spans[i].done)
         {
