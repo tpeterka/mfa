@@ -174,12 +174,13 @@ int main(int argc, char** argv)
 
     // 3d S3D
 //     float norm_err_limit = 1.0e0;
-    float norm_err_limit = 1.0e-1;
+//     float norm_err_limit = 1.0e-1;
+    float norm_err_limit = 1.0e-2;
     d_args.pt_dim       = 4;
     d_args.dom_dim      = 3;
-    d_args.p[0]         = 2;
-    d_args.p[1]         = 2;
-    d_args.p[2]         = 2;
+    d_args.p[0]         = 3;
+    d_args.p[1]         = 3;
+    d_args.p[2]         = 3;
     d_args.ndom_pts[0]  = 704;
     d_args.ndom_pts[1]  = 540;
     d_args.ndom_pts[2]  = 550;

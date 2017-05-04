@@ -95,6 +95,9 @@ ErrorSpans(
     {
         if (!knot_spans[i].done)
         {
+            // debug
+            fprintf(stderr, "ErrorSpans(): span %ld\n", i);
+
             size_t nspan_pts = 1;                                   // number of domain points in the span
             for (auto k = 0; k < p.size(); k++)
                 nspan_pts *= (knot_spans[i].max_param_ijk(k) - knot_spans[i].min_param_ijk(k) + 1);
@@ -107,6 +110,9 @@ ErrorSpans(
             // (error likely to be higher in the center of the span?)
             for (auto j = 0; j < nspan_pts; j++)                    // parameters in the span
             {
+                // debug
+//                 fprintf(stderr, "ErrorSpans(): span %ld point %d\n", i, j);
+
                 for (auto k = 0; k < p.size(); k++)
                 param(k) = params(po[k] + p_ijk(k));
 

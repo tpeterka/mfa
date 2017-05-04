@@ -509,8 +509,8 @@ struct Block
             // file is 704 * 540 * 550 * 3 floats (vx,vy,vz)
             // which is 1/2 the x resolution the simulation
             // the "small" in the file name means it was downsampled by factor of 2 in x
-            FILE *fd = fopen("/Users/tpeterka/datasets/flame/6_small.xyz", "r");
-//             FILE *fd = fopen("/homes/tpeterka/datasets/flame/6_small.xyz", "r");
+//             FILE *fd = fopen("/Users/tpeterka/datasets/flame/6_small.xyz", "r");
+            FILE *fd = fopen("/homes/tpeterka/datasets/flame/6_small.xyz", "r");
             assert(fd);
             fseek(fd, (704 * 540 * 275 + 704 * 270) * 12, SEEK_SET);
 
@@ -586,8 +586,8 @@ struct Block
 
             // open hard-coded file name, seek to hard-coded start of desired section
             // file is 704 * 540 * 550 * 3 floats (vx,vy,vz)
-            FILE *fd = fopen("/Users/tpeterka/datasets/flame/6_small.xyz", "r");
-//             FILE *fd = fopen("/homes/tpeterka/datasets/flame/6_small.xyz", "r");
+//             FILE *fd = fopen("/Users/tpeterka/datasets/flame/6_small.xyz", "r");
+            FILE *fd = fopen("/homes/tpeterka/datasets/flame/6_small.xyz", "r");
             assert(fd);
             fseek(fd, (704 * 540 * 275 + 704 * 270) * 12, SEEK_SET);
 
@@ -658,8 +658,8 @@ struct Block
             // open hard-coded file name, seek to hard-coded start of desired section
             // which is an x-y plane in the middle of the z range
             // file is 704 * 540 * 550 * 3 floats (vx,vy,vz)
-            FILE *fd = fopen("/Users/tpeterka/datasets/flame/6_small.xyz", "r");
-//             FILE *fd = fopen("/homes/tpeterka/datasets/flame/6_small.xyz", "r");
+//             FILE *fd = fopen("/Users/tpeterka/datasets/flame/6_small.xyz", "r");
+            FILE *fd = fopen("/homes/tpeterka/datasets/flame/6_small.xyz", "r");
             assert(fd);
             // middle plane in z, offset = full x,y range * 1/2 z range
             fseek(fd, (704 * 540 * 275) * 12, SEEK_SET);
@@ -733,8 +733,8 @@ struct Block
 
             // open hard-coded file name
             // file is 704 * 540 * 550 * 3 floats (vx,vy,vz)
-            FILE *fd = fopen("/Users/tpeterka/datasets/flame/6_small.xyz", "r");
-//             FILE *fd = fopen("/homes/tpeterka/datasets/flame/6_small.xyz", "r");
+//             FILE *fd = fopen("/Users/tpeterka/datasets/flame/6_small.xyz", "r");
+            FILE *fd = fopen("/homes/tpeterka/datasets/flame/6_small.xyz", "r");
             assert(fd);
 
             // read all three components of velocity and compute magnitude
