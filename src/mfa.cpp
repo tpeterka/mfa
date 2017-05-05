@@ -37,6 +37,8 @@ using namespace std;
 // (N and NtN matrices, used for solving for control points, are very sparse)
 //
 // ------------------
+
+// fixed number of control points version
 mfa::
 MFA::
 MFA(VectorXi& p_,             // polynomial degree in each dimension
@@ -105,6 +107,66 @@ MFA(VectorXi& p_,             // polynomial degree in each dimension
     // knot span index table
     KnotSpanIndex();
 }
+
+// adaptive number of control points version
+mfa::
+MFA::
+MFA(VectorXi& p_,             // polynomial degree in each dimension
+    VectorXi& ndom_pts_,      // number of input data points in each dim
+    MatrixXf& domain_,        // input data points (1st dim changes fastest)
+    MatrixXf& ctrl_pts_,      // (output) control points (1st dim changes fastest)
+    VectorXf& knots_,         // (output) knots (1st dim changes fastest)
+    float     eps_) :         // minimum difference considered significant
+    p(p_),
+    ndom_pts(ndom_pts_),
+    domain(domain_),
+    ctrl_pts(ctrl_pts_),
+    knots(knots_),
+    eps(eps_)
+{
+    // check dimensionality for sanity
+    assert(p.size() < domain.cols());
+
+    // max extent of input data points
+    dom_range = domain.maxCoeff() - domain.minCoeff();
+
+    // set number of control points to the minimum, p + 1
+    nctrl_pts.resize(p.size());
+    for (auto i = 0; i < p.size(); i++)
+        nctrl_pts(i) = p(i) + 1;
+
+    // total number of params = sum of ndom_pts over all dimensions
+    // not the total number of data points, which would be the product
+    tot_nparams = ndom_pts.sum();
+
+    // total number of knots = sum of number of knots over all dims
+    tot_nknots = 0;
+    for (size_t i = 0; i < p.size(); i++)
+        tot_nknots  += (nctrl_pts(i) + p(i) + 1);
+
+    // precompute curve parameters for input points
+    params.resize(tot_nparams);
+    Params();
+
+    // compute knots
+    knots.resize(tot_nknots);
+    Knots();
+
+    // offsets and strides for knots, params, and control points in different dimensions
+    // TODO: co for control points currently not used because control points are stored explicitly
+    // in future, store them like params, x coords followed by y coords, ...
+    // then co will be used
+    ko.resize(p.size(), 0);                  // offset for knots
+    po.resize(p.size(), 0);                  // offset for params
+    ds.resize(p.size(), 1);                  // stride for domain points
+    for (size_t i = 1; i < p.size(); i++)
+    {
+        po[i] = po[i - 1] + ndom_pts[i - 1];
+        ko[i] = ko[i - 1] + nctrl_pts[i - 1] + p[i - 1] + 1;
+        ds[i] = ds[i - 1] * ndom_pts[i - 1];
+    }
+}
+
 
 // initialize knot span index
 void
@@ -245,6 +307,16 @@ Encode()
 {
     mfa::Encoder encoder(*this);
     encoder.Encode();
+}
+
+// adaptive encode
+void
+mfa::
+MFA::
+AdaptiveEncode(float err_limit)                     // maximum allowable normalized error
+{
+    mfa::Encoder encoder(*this);
+    encoder.AdaptiveEncode();
 }
 
 // re-encode with insertion of new knots into existing knots

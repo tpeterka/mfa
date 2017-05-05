@@ -39,9 +39,18 @@ namespace mfa
     {
     public:
 
+        // fixed number of control points version
         MFA(VectorXi& p_,             // polynomial degree in each dimension
             VectorXi& ndom_pts_,      // number of input data points in each dim
             VectorXi& nctrl_pts_,     // desired number of control points in each dim
+            MatrixXf& domain_,        // input data points (1st dim changes fastest)
+            MatrixXf& ctrl_pts_,      // (output) control points (1st dim changes fastest)
+            VectorXf& knots_,         // (output) knots (1st dim changes fastest)
+            float     eps_ = 1.0e-6); // minimum difference considered significant
+
+        // adaptive number of control points version
+        MFA(VectorXi& p_,             // polynomial degree in each dimension
+            VectorXi& ndom_pts_,      // number of input data points in each dim
             MatrixXf& domain_,        // input data points (1st dim changes fastest)
             MatrixXf& ctrl_pts_,      // (output) control points (1st dim changes fastest)
             VectorXf& knots_,         // (output) knots (1st dim changes fastest)
@@ -51,14 +60,16 @@ namespace mfa
 
         void Encode();
 
-        bool Encode(float err_limit);  // maximum allowable normalized error
+        bool AdaptiveEncode(float err_limit);           // maximum allowable normalized error
 
-        void Decode(MatrixXf& approx); // decode points
+        bool Encode(float err_limit);                   // maximum allowable normalized error
 
-        float Error(size_t idx);    // index of domain point where to compute error of mfa
+        void Decode(MatrixXf& approx);                  // decode points
 
-        float NormalDistance(VectorXf& pt,        // point whose distance from domain is desired
-                             size_t    cell_idx); // index of min. corner of cell in the domain
+        float Error(size_t idx);                        // index of domain point where to compute error of mfa
+
+        float NormalDistance(VectorXf& pt,              // point whose distance from domain is desired
+                             size_t    cell_idx);       // index of min. corner of cell in the domain
     private:
 
         bool ErrorSpans(
