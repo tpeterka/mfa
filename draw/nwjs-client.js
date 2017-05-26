@@ -5,7 +5,7 @@
 // var addon = require('bindings')('draw');
 var addon = require('./build/Release/draw');
 
-addon.draw("../install/examples/nd/approx.out",
+addon.draw("../install/examples/adaptive/approx.out",
            nraw_pts,
            raw_pts,
            nctrl_pts,

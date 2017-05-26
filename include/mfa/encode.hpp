@@ -30,6 +30,11 @@ namespace mfa
         Encoder(MFA& mfa_);
         ~Encoder() {}
         void Encode();
+        void AdaptiveEncode(float err_limit);           // maximum allowable normalized error
+        bool FastEncode(
+                VectorXi& nnew_knots,                       // number of new knots in each dim
+                VectorXf& new_knots,                        // new knots (1st dim changes fastest)
+                float err_limit);                           // max allowable error
 
    private:
 
@@ -38,8 +43,16 @@ namespace mfa
                  MatrixXf& R,        // (output) residual matrix allocated by caller
                  int       ko = 0,   // optional index of starting knot
                  int       po = 0,   // optional index of starting parameter
-                 int       co = 0,   // optional index of starting domain pt in current curve
-                 int       cs = 1);  // optional stride of domain pts in current curve
+                 int       co = 0);  // optional index of starting domain pt in current curve
+
+        // DEPRECATED
+//         void RHS(int       cur_dim,  // current dimension
+//                  MatrixXf& N,        // matrix of basis function coefficients
+//                  MatrixXf& R,        // (output) residual matrix allocated by caller
+//                  int       ko = 0,   // optional index of starting knot
+//                  int       po = 0,   // optional index of starting parameter
+//                  int       co = 0,   // optional index of starting domain pt in current curve
+//                  int       cs = 1);  // optional stride of domain pts in current curve
 
         void RHS(int       cur_dim,  // current dimension
                  MatrixXf& in_pts,   // input points (not the default domain stored in the mfa)
@@ -62,8 +75,6 @@ namespace mfa
                        MatrixXf& P,           // solved points for current dimension and curve
                        VectorXi& n,           // number of control point spans in each dimension
                        size_t    k,           // current dimension
-                       vector<size_t> pos,    // starting offsets for params in all dims
-                       vector<size_t> kos,    // starting offsets for knots in all dims
                        size_t    co,          // starting ofst for reading domain pts
                        size_t    cs,          // stride for reading domain points
                        size_t    to,          // starting ofst for writing control pts
@@ -78,6 +89,19 @@ namespace mfa
                       size_t    to,         // starting offset for writing control points
                       MatrixXf& temp_ctrl0, // first temporary control points buffer
                       MatrixXf& temp_ctrl1); // second temporary control points buffer
+
+        void CopyCtrl(MatrixXf& P,          // solved points for current dimension and curve
+                      VectorXi& n,          // number of control point spans in each dimension
+                      int       k,          // current dimension
+                      size_t    co,         // starting offset for reading domain points
+                      MatrixXf& temp_ctrl); // temporary control points buffer
+
+        int ErrorCurve(
+                size_t       k,             // current dimension
+                size_t       co,            // starting ofst for reading domain pts
+                MatrixXf&    temp_ctrl,     // first temporary control points buffer
+                vector<int>& err_spans,     // spans with error greater than err_limit
+                float        err_limit);    // max allowable error
 
         MFA& mfa;                       // the mfa object
         // following are references the the data in the mfa object

@@ -96,7 +96,7 @@ ErrorSpans(
         if (!knot_spans[i].done)
         {
             // debug
-            fprintf(stderr, "ErrorSpans(): span %ld\n", i);
+//             fprintf(stderr, "ErrorSpans(): span %ld\n", i);
 
             size_t nspan_pts = 1;                                   // number of domain points in the span
             for (auto k = 0; k < p.size(); k++)
@@ -463,6 +463,34 @@ Decode(MatrixXf& approx)                 // pts in approximated volume (1st dim.
             fprintf(stderr, "\r%.0f %% decoded", (float)i / (float)(domain.rows()) * 100);
     }
     fprintf(stderr, "\r100 %% decoded\n");
+
+    // normal distance computation
+    float max_err;                          // max. error found so far
+    size_t max_idx;                         // domain point idx at max error
+    for (size_t i = 0; i < (size_t)domain.rows(); i++)
+    {
+        VectorXf cpt = approx.row(i);
+        float err    = fabs(mfa.NormalDistance(cpt, i));
+        if (i == 0 || err > max_err)
+        {
+            max_err = err;
+            max_idx = i;
+        }
+    }
+
+    // normalize max error by size of input data (domain and range)
+    float min = domain.minCoeff();
+    float max = domain.maxCoeff();
+    float range = max - min;
+
+    // debug
+    fprintf(stderr, "data range = %.1f\n", range);
+    fprintf(stderr, "raw max_error = %e\n", max_err);
+    cerr << "position of max error: idx=" << max_idx << "\n" << domain.row(max_idx) << endl;
+
+    max_err /= range;
+
+    fprintf(stderr, "|normalized max_err| = %e\n", max_err);
 }
 
 // compute a point from a NURBS curve at a given parameter value
@@ -484,6 +512,34 @@ CurvePt(int       cur_dim,                     // current dimension
 
     for (int j = 0; j <= p(cur_dim); j++)
         out_pt += N(0, j + span - p(cur_dim)) * ctrl_pts.row(span - p(cur_dim) + j);
+
+    // debug
+    // cerr << "n " << n << " param " << param << " span " << span << " out_pt " << out_pt << endl;
+    // cerr << " N " << N << endl;
+}
+
+// compute a point from a NURBS curve at a given parameter value
+// this version takes a temporary set of control points rather then reading them from the mfa
+// algorithm 4.1, Piegl & Tiller (P&T) p.124
+// this version recomputes basis functions rather than taking them as an input
+// this version also assumes weights = 1; no division by weight is done
+void
+mfa::
+Decoder::
+CurvePt(
+        int       cur_dim,                     // current dimension
+        float     param,                       // parameter value of desired point
+        MatrixXf& temp_ctrl,                   // temporary control points
+        VectorXf& out_pt)                      // (output) point
+{
+    int n      = (int)temp_ctrl.rows() - 1;     // number of control point spans
+    int span   = mfa.FindSpan(cur_dim, param);
+    MatrixXf N = MatrixXf::Zero(1, n + 1);     // basis coefficients
+    mfa.BasisFuns(cur_dim, param, span, N, 0, n, 0);
+    out_pt = VectorXf::Zero(temp_ctrl.cols());  // initializes and resizes
+
+    for (int j = 0; j <= p(cur_dim); j++)
+        out_pt += N(0, j + span - p(cur_dim)) * temp_ctrl.row(span - p(cur_dim) + j);
 
     // debug
     // cerr << "n " << n << " param " << param << " span " << span << " out_pt " << out_pt << endl;

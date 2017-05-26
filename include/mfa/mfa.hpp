@@ -60,7 +60,7 @@ namespace mfa
 
         void Encode();
 
-        bool AdaptiveEncode(float err_limit);           // maximum allowable normalized error
+        void AdaptiveEncode(float err_limit);           // maximum allowable normalized error
 
         bool Encode(float err_limit);                   // maximum allowable normalized error
 
@@ -114,7 +114,7 @@ namespace mfa
 
        VectorXi& p;           // polynomial degree in each dimension
        VectorXi& ndom_pts;    // number of input data points in each dim
-       VectorXi& nctrl_pts;   // desired number of control points in each dim
+       VectorXi  nctrl_pts;   // desired number of control points in each dim
        MatrixXf& domain;      // input data points (1st dim changes fastest)
        VectorXf  params;      // parameters for input points (1st dim changes fastest)
        MatrixXf& ctrl_pts;    // (output) control pts (1st dim changes fastest)
@@ -126,12 +126,9 @@ namespace mfa
        int tot_nparams;       // total number of params = sum of ndom_pts over all dims
                               // not the total number of data pts, which would be the prod.
        int tot_nknots;        // total nmbr of knots = sum of nmbr of knots over all dims
+       int tot_nctrl;         // total nmbr of control points = product of control points over all dims
        float eps;             // minimum difference considered significant
        vector<KnotSpan> knot_spans; // knot spans
-       // DEPRECATED
-//        size_t ndone_knot_spans;  // number of done knot spans
-       // DEPRECATED
-//        vector<bool> err_ok;    // whether the error at the domain point is < user_limit, initialized to false
    };
 
 }

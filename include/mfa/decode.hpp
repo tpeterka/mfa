@@ -36,11 +36,18 @@ namespace mfa
                 VectorXf& new_knots,            // new knots (1st dim changes fastest)
                 float err_limit);               // max. allowed error
 
+        void CurvePt(
+                int       cur_dim,              // current dimension
+                float     param,                // parameter value of desired point
+                MatrixXf& temp_ctrl,            // temporary control points
+                VectorXf& out_pt);              // (output) point
+
     private:
 
-        void CurvePt(int       cur_dim,        // current dimension
-                     float     param,          // parameter value of desired point
-                     VectorXf& out_pt);        // (output) point
+        void CurvePt(
+                int       cur_dim,              // current dimension
+                float     param,                // parameter value of desired point
+                VectorXf& out_pt);              // (output) point
 
         void DecodeCurve(size_t    cur_dim,    // current dimension
                          float     pre_param,  // param value in prior dim of the pts in the curve

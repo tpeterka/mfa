@@ -68,10 +68,14 @@ MFA(VectorXi& p_,             // polynomial degree in each dimension
     // total number of params = sum of ndom_pts over all dimensions
     // not the total number of data points, which would be the product
     tot_nparams = ndom_pts.sum();
+
     // total number of knots = sum of number of knots over all dims
     tot_nknots = 0;
     for (size_t i = 0; i < p.size(); i++)
         tot_nknots  += (nctrl_pts(i) + p(i) + 1);
+
+    // total number of control points = product of control points over all dimensions
+    tot_nctrl = nctrl_pts.prod();
 
     // precompute curve parameters for input points
     params.resize(tot_nparams);
@@ -143,6 +147,9 @@ MFA(VectorXi& p_,             // polynomial degree in each dimension
     tot_nknots = 0;
     for (size_t i = 0; i < p.size(); i++)
         tot_nknots  += (nctrl_pts(i) + p(i) + 1);
+
+    // total number of control points = product of control points over all dimensions
+    tot_nctrl = nctrl_pts.prod();
 
     // precompute curve parameters for input points
     params.resize(tot_nparams);
@@ -316,7 +323,7 @@ MFA::
 AdaptiveEncode(float err_limit)                     // maximum allowable normalized error
 {
     mfa::Encoder encoder(*this);
-    encoder.AdaptiveEncode();
+    encoder.AdaptiveEncode(err_limit);
 }
 
 // re-encode with insertion of new knots into existing knots
@@ -393,7 +400,7 @@ Decode(MatrixXf& approx)
 // binary search to find the span in the knots vector containing a given parameter value
 // returns span index i s.t. u is in [ knots[i], knots[i + 1] )
 // NB closed interval at left and open interval at right
-// except when u == knots.last(), in which case the interval is closed at both ends
+
 // i will be in the range [p, n], where n = number of control points - 1 because there are
 // p + 1 repeated knots at start and end of knot vector
 // algorithm 2.1, P&T, p. 68
@@ -711,6 +718,7 @@ InsertKnots(VectorXi& nnew_knots,     // number of new knots in each dim
 
     // increase number of control points (vector component-wise addition)
     nctrl_pts += nnew_knots;
+    tot_nctrl = nctrl_pts.prod();
 
     // update knot offsets
     for (size_t i = 1; i < p.size(); i++)
