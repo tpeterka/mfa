@@ -155,6 +155,9 @@ MFA(VectorXi& p_,             // polynomial degree in each dimension
     params.resize(tot_nparams);
     Params();
 
+    // debug
+//     cerr << "params:\n" << params << endl;
+
     // compute knots
     knots.resize(tot_nknots);
     Knots();
@@ -320,10 +323,12 @@ Encode()
 void
 mfa::
 MFA::
-AdaptiveEncode(float err_limit)                     // maximum allowable normalized error
+AdaptiveEncode(
+        float    err_limit,                 // maximum allowable normalized error
+        VectorXi &nctrl_pts_)               // (output) number of control points in each dim
 {
     mfa::Encoder encoder(*this);
-    encoder.AdaptiveEncode(err_limit);
+    encoder.AdaptiveEncode(err_limit, nctrl_pts_);
 }
 
 // re-encode with insertion of new knots into existing knots
@@ -712,13 +717,14 @@ InsertKnots(VectorXi& nnew_knots,     // number of new knots in each dim
 //     cerr << "knots before insertion:\n" << knots << endl;
 //     cerr << "nctrl_pts before insertion:\n" << nctrl_pts << endl;
 
-    // copy temp_knots back to knots
+    // copy temp_knots back to knots and increase total number of knots
     knots.resize(temp_knots.size());
-    knots = temp_knots;
+    knots      =  temp_knots;
+    tot_nknots += nnew_knots.sum();
 
     // increase number of control points (vector component-wise addition)
     nctrl_pts += nnew_knots;
-    tot_nctrl = nctrl_pts.prod();
+    tot_nctrl =  nctrl_pts.prod();
 
     // update knot offsets
     for (size_t i = 1; i < p.size(); i++)

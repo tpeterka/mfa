@@ -60,7 +60,9 @@ namespace mfa
 
         void Encode();
 
-        void AdaptiveEncode(float err_limit);           // maximum allowable normalized error
+        void AdaptiveEncode(
+                float     err_limit,        // maximum allowable normalized error
+                VectorXi& nctrl_pts_);      // (output) number of control points in each dim
 
         bool Encode(float err_limit);                   // maximum allowable normalized error
 
@@ -123,10 +125,10 @@ namespace mfa
        vector<size_t> po;     // starting offset for params in each dim
        vector<size_t> ko;     // starting offset for knots in each dim
        vector<size_t> ds;     // stride for domain points in each dim
-       int tot_nparams;       // total number of params = sum of ndom_pts over all dims
+       size_t tot_nparams;    // total number of params = sum of ndom_pts over all dims
                               // not the total number of data pts, which would be the prod.
-       int tot_nknots;        // total nmbr of knots = sum of nmbr of knots over all dims
-       int tot_nctrl;         // total nmbr of control points = product of control points over all dims
+       size_t tot_nknots;     // total nmbr of knots = sum of nmbr of knots over all dims
+       size_t tot_nctrl;      // total nmbr of control points = product of control points over all dims
        float eps;             // minimum difference considered significant
        vector<KnotSpan> knot_spans; // knot spans
    };

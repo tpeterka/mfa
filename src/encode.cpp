@@ -37,7 +37,9 @@ Encoder(MFA& mfa_) :
 void
 mfa::
 Encoder::
-AdaptiveEncode(float err_limit)                     // maximum allowable normalized error
+AdaptiveEncode(
+        float    err_limit,                 // maximum allowable normalized error
+        VectorXi &nctrl_pts_)               // (output) number of control points in each dim
 {
     VectorXi nnew_knots = VectorXi::Zero(p.size()); // number of new knots in each dim
     VectorXf new_knots;                             // new knots (1st dim changes fastest)
@@ -49,19 +51,31 @@ AdaptiveEncode(float err_limit)                     // maximum allowable normali
         fprintf(stderr, "-----\n\nEncoding iteration %d...\n", iter);
         bool done = FastEncode(nnew_knots, new_knots, err_limit);
 
-        // debug: compute max error to see that it is decreasing
-        fprintf(stderr, "\niter=%d computing max. error...\n", iter);
-        mfa.Decode(approx);
+        // no new knots to be added
+        if (done)
+            break;
 
+        // check if the new knots would make the number of control points >= number of input points in any dim
+        done = false;
+        for (auto k = 0; k < p.size(); k++)
+            if (ndom_pts(k) <= nctrl_pts(k) + nnew_knots(k))
+            {
+                done = true;
+                break;
+            }
         if (done)
             break;
 
         mfa.InsertKnots(nnew_knots, new_knots);
     }
 
-    // TODO: slow encode full-d mfa
+    // slow encoding full-d mfa
+    Encode();
 
     // TODO: wrap everything in an outer loop until slow encode is accurate enough?
+    // not sure what that means or what it would change
+
+    nctrl_pts_= nctrl_pts;                           // copy back number of control points to the caller
 }
 
 // fast encode using curves instead of high volume in early rounds to determine knot insertions
@@ -72,10 +86,10 @@ Encoder::
 FastEncode(
         VectorXi& nnew_knots,                       // number of new knots in each dim
         VectorXf& new_knots,                        // new knots (1st dim changes fastest)
-        float err_limit)                            // max allowable error
+        float     err_limit)                        // max allowable error
 {
     // check and assign main quantities
-    int      ndims = ndom_pts.size();               // number of domain dimensions
+    int  ndims = ndom_pts.size();                   // number of domain dimensions
     VectorXi n = nctrl_pts - VectorXi::Ones(ndims); // number of control point spans in each domain dim
     VectorXi m = ndom_pts  - VectorXi::Ones(ndims); // number of input data point spans in each domain dim
     nnew_knots = VectorXi::Zero(p.size());
@@ -92,7 +106,7 @@ FastEncode(
         // error spans for one curve and for worst curve
         vector<int> err_spans;
         vector<int> worst_spans;
-        err_spans.reserve(n(k) - p(k) + 1);
+        err_spans.reserve  (n(k) - p(k) + 1);
         worst_spans.reserve(n(k) - p(k) + 1);
 
         // maximum number of domain points with error greater than err_limit and their curves
@@ -216,22 +230,15 @@ Encode()
     // TODO: some of these quantities mirror this in the mfa
 
     // check and assign main quantities
-    VectorXi n;                 // number of control point spans in each domain dim
-    VectorXi m;                 // number of input data point spans in each domain dim
-    int      tot_nparams;       // total number of params = sum of ndom_pts over all dimensions
-                                // not the total number of data points, which would be the product
-    int      tot_nknots;        // total number of knots = sum of number of knots over all dims
-    int      tot_nctrl;         // total number of control points
-    int      ndims = ndom_pts.size();        // number of domain dimensions
+    VectorXi n;                             // number of control point spans in each domain dim
+    VectorXi m;                             // number of input data point spans in each domain dim
+    int      ndims = ndom_pts.size();       // number of domain dimensions
+    size_t   cs    = 1;                     // stride for domain points in curve in cur. dim
 
-    Quants(n, m, tot_nparams, tot_nknots, tot_nctrl);
-
-    // following are counters for slicing domain and params into curves in different dimensions
-    size_t cs = 1;                    // stride for domain points in curve in cur. dim
-//     size_t dt = 0;                    // starting ofst for reading domain pts in curve in cur. dim.
+    Quants(n, m);
 
     // control points
-    ctrl_pts.resize(tot_nctrl, domain.cols());
+    ctrl_pts.resize(mfa.tot_nctrl, domain.cols());
 
     // 2 buffers of temporary control points
     // double buffer needed to write output curves of current dim without changing its input pts
@@ -526,11 +533,9 @@ RHS(int       cur_dim,             // current dimension
 void
 mfa::
 Encoder::
-Quants(VectorXi& n,                // (output) number of control point spans in each dim
-       VectorXi& m,                // (output) number of input data point spans in each dim
-       int&      tot_nparams,      // (output) total number params in all dims
-       int&      tot_nknots,       // (output) total number of knots in all dims
-       int&      tot_nctrl)        // (output) total number of control points in all dims
+Quants(
+        VectorXi& n,                // (output) number of control point spans in each dim
+        VectorXi& m)                // (output) number of input data point spans in each dim
 {
     if (p.size() != ndom_pts.size())
     {
@@ -547,24 +552,22 @@ Quants(VectorXi& n,                // (output) number of control point spans in 
         }
         if (nctrl_pts(i) > ndom_pts(i))
         {
-            fprintf(stderr, "Error: Encode() number of control points in dimension %ld "
-                    "cannot be greater than number of input data points in dimension %ld\n", i, i);
-            exit(1);
+            fprintf(stderr, "Warning: Encode() number of control points (%d) in dimension %ld "
+                    "exceeds number of input data points (%d) in dimension %ld. "
+                    "Technically, this is not an error, but it could be a sign something is wrong and "
+                    "probably not desired if you want compression. You may not be able to get the "
+                    "desired error limit and compression simultaneously. Try increasing error limit?\n",
+                    nctrl_pts(i), i, ndom_pts(i), i);
+//             exit(1);
         }
     }
 
     n.resize(p.size());
     m.resize(p.size());
-    tot_nparams = 0;
-    tot_nknots  = 0;
-    tot_nctrl   = 1;
     for (size_t i = 0; i < p.size(); i++)
     {
         n(i)        =  nctrl_pts(i) - 1;
         m(i)        =  ndom_pts(i)  - 1;
-        tot_nparams += ndom_pts(i);
-        tot_nknots  += (n(i) + p(i) + 2);
-        tot_nctrl   *= nctrl_pts(i);
     }
 }
 
@@ -766,6 +769,9 @@ CtrlCurve(MatrixXf& N,          // basis functions for current dimension
 
 // returns number of points in a curve that have error greater than err_limit
 // fills err_spans with the span indices of spans that have at least one point with such error
+//      and that have at least one inut point in each half of the span (assuming eventually
+//      the span would be split in half with a knot added in the middle, and an input point would
+//      need to be in each span after splitting)
 // assumes caller reserved err_spans for max number (all) spans in the curve
 // for one curve of control points
 int
@@ -795,9 +801,37 @@ ErrorCurve(
         float err = fabs(mfa.NormalDistance(cpt, co + i * mfa.ds[k])) / dom_range;     // normalized by data range
         if (err > err_limit)
         {
-            // don't duplicate spans (spans are sorted, only need to compare with back entry
+            // don't duplicate spans (spans are sorted, only need to compare with back entry)
             if (!err_spans.size() || span > err_spans.back())
-                err_spans.push_back(span);
+            {
+                // ensure there would be a domain point in both halves of the span if it were split
+                bool split_left = false;
+                for (auto j = i; params(po[k] + j) >= knots(ko[k] + span); j--)
+                    if (params(po[k] + j) < (knots(ko[k] + span) + knots(ko[k] + span + 1)) / 2.0)
+                    {
+                        // debug
+//                         fprintf(stderr, "split_left: param=%.3f span[%d]=[%.3f, %.3f)\n",
+//                                 params(po[k] + j), span, knots(ko[k] + span), knots(ko[k] + span + 1));
+                        split_left = true;
+                        break;
+                    }
+                bool split_right = false;
+                for (auto j = i; params(po[k] + j) < knots(ko[k] + span + 1); j++)
+                    if (params(po[k] + j) >= (knots(ko[k] + span) + knots(ko[k] + span + 1)) / 2.0)
+                    {
+//                         fprintf(stderr, "split_right: param=%.3f span[%d]=[%.3f, %.3f)\n",
+//                                 params(po[k] + j), span, knots(ko[k] + span), knots(ko[k] + span + 1));
+                        split_right = true;
+                        break;
+                    }
+                // mark the span and count the point if the span can (later) be split
+                if (split_left && split_right)
+                    err_spans.push_back(span);
+            }
+            // count the point in the total even if the span is not marked for spitting
+            // total used to find worst curve, defined as the curve with the most domain points in
+            // error (including multiple domain points per span and points in spans that can't be
+            // split further)
             nerr++;
 
             // debug

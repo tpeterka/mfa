@@ -444,6 +444,9 @@ Decode(MatrixXf& approx)                 // pts in approximated volume (1st dim.
         // compute approximated point for this parameter vector
         VolPt(param, cpt);
 
+        // debug
+//         cerr << "domain pt:\n" << domain.row(i) << "\ncpt:\n" << cpt << endl;
+
         // update the indices in the linearized vector of all params for next input point
         for (size_t j = 0; j < p.size(); j++)
         {
