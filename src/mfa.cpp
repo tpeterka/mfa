@@ -328,7 +328,9 @@ AdaptiveEncode(
         VectorXi &nctrl_pts_)               // (output) number of control points in each dim
 {
     mfa::Encoder encoder(*this);
-    encoder.AdaptiveEncode(err_limit, nctrl_pts_);
+    encoder.AdaptiveEncode(err_limit);
+
+    nctrl_pts_ = nctrl_pts;
 }
 
 // re-encode with insertion of new knots into existing knots

@@ -30,9 +30,7 @@ namespace mfa
         Encoder(MFA& mfa_);
         ~Encoder() {}
         void Encode();
-        void AdaptiveEncode(
-                float    err_limit,                 // maximum allowable normalized error
-                VectorXi &nctrl_pts_);              // (output) number of control points in each dim
+        void AdaptiveEncode(float err_limit);               // maximum allowable normalized error
         bool FastEncode(
                 VectorXi& nnew_knots,                       // number of new knots in each dim
                 VectorXf& new_knots,                        // new knots (1st dim changes fastest)

@@ -37,9 +37,7 @@ Encoder(MFA& mfa_) :
 void
 mfa::
 Encoder::
-AdaptiveEncode(
-        float    err_limit,                 // maximum allowable normalized error
-        VectorXi &nctrl_pts_)               // (output) number of control points in each dim
+AdaptiveEncode(float err_limit)                     // maximum allowable normalized error
 {
     VectorXi nnew_knots = VectorXi::Zero(p.size()); // number of new knots in each dim
     VectorXf new_knots;                             // new knots (1st dim changes fastest)
@@ -48,7 +46,7 @@ AdaptiveEncode(
     // fast encoding in 1-d
     for (int iter = 0; ; iter++)
     {
-        fprintf(stderr, "-----\n\nEncoding iteration %d...\n", iter);
+        fprintf(stderr, "\n\nEncoding iteration %d...\n", iter);
         bool done = FastEncode(nnew_knots, new_knots, err_limit);
 
         // no new knots to be added
@@ -71,11 +69,6 @@ AdaptiveEncode(
 
     // slow encoding full-d mfa
     Encode();
-
-    // TODO: wrap everything in an outer loop until slow encode is accurate enough?
-    // not sure what that means or what it would change
-
-    nctrl_pts_= nctrl_pts;                           // copy back number of control points to the caller
 }
 
 // fast encode using curves instead of high volume in early rounds to determine knot insertions
@@ -205,8 +198,8 @@ FastEncode(
     }                                                      // domain dimensions
 
     // debug
-    cerr << "\nnnew_knots:\n" << nnew_knots << endl;
-    cerr << "new_knots:\n"  << new_knots  << endl;
+//     cerr << "\nnnew_knots:\n" << nnew_knots << endl;
+//     cerr << "new_knots:\n"  << new_knots  << endl;
 
     return(nnew_knots.sum() ? 0 : 1);
 }
