@@ -110,7 +110,6 @@ namespace mfa
         vector<size_t>& po;            // starting offset for params in each dim
         vector<size_t>& ko;            // starting offset for knots in each dim
         vector<KnotSpan>& knot_spans;  // not done (greater than max error) knot spans
-        size_t ndone_knot_spans;       // number of done knot spans
     };
 }
 

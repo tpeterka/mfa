@@ -19,6 +19,7 @@
 #include <diy/io/block.hpp>
 
 #include "block.hpp"
+#include "../opts.h"
 
 #include "../include/opts.h"
 
@@ -37,6 +38,21 @@ int main(int argc, char** argv)
     int mem_blocks  = -1;                    // everything in core for now
     int num_threads = 1;                     // needed in order to do timing
 
+    float norm_err_limit = 1.0;             // maximum normalized errro limit
+
+    // get command line arguments
+    using namespace opts;
+    Options ops(argc, argv);
+    ops
+        >> Option('e', "error",  norm_err_limit,        "maximum normalized error limit")
+        ;
+    if (ops >> Present('h', "help", "show help"))
+    {
+        if (world.rank() == 0)
+            std::cout << ops;
+        return 1;
+    }
+
     // initialize DIY
     diy::FileStorage          storage("./DIY.XXXXXX"); // used for blocks to be moved out of core
     diy::Master               master(world,
@@ -53,29 +69,30 @@ int main(int argc, char** argv)
     DomainArgs d_args;
 
     // 2d sinc function f(x,y) = sinc(x)sinc(y)
-    float norm_err_limit = 1.0e-5;
-    d_args.pt_dim       = 3;
-    d_args.dom_dim      = 2;
-    d_args.p[0]         = 4;
-    d_args.p[1]         = 4;
-    d_args.ndom_pts[0]  = 500;
-    d_args.ndom_pts[1]  = 500;
-    d_args.min[0]       = -4.0 * M_PI;
-    d_args.min[1]       = -4.0 * M_PI;
-    d_args.max[0]       = 4.0 * M_PI;
-    d_args.max[1]       = 4.0 * M_PI;
-    d_args.s            = 10.0;              // scaling factor on range
-
-    // small 3d sinc function
 //     float norm_err_limit = 1.0e-5;
+//     d_args.pt_dim       = 3;
+//     d_args.dom_dim      = 2;
+//     d_args.p[0]         = 4;
+//     d_args.p[1]         = 4;
+//     d_args.ndom_pts[0]  = 500;
+//     d_args.ndom_pts[1]  = 500;
+//     d_args.min[0]       = -4.0 * M_PI;
+//     d_args.min[1]       = -4.0 * M_PI;
+//     d_args.max[0]       = 4.0 * M_PI;
+//     d_args.max[1]       = 4.0 * M_PI;
+//     d_args.s            = 10.0;              // scaling factor on range
+//     master.foreach([&](Block* b, const diy::Master::ProxyWithLink& cp)
+//                    { b->generate_sinc_data(cp, d_args); });
+
+   // 3d sinc function
 //     d_args.pt_dim       = 4;
 //     d_args.dom_dim      = 3;
 //     d_args.p[0]         = 4;
 //     d_args.p[1]         = 4;
 //     d_args.p[2]         = 4;
-//     d_args.ndom_pts[0]  = 200;
-//     d_args.ndom_pts[1]  = 200;
-//     d_args.ndom_pts[2]  = 200;
+//     d_args.ndom_pts[0]  = 100;
+//     d_args.ndom_pts[1]  = 100;
+//     d_args.ndom_pts[2]  = 100;
 //     d_args.min[0]       = -4.0 * M_PI;
 //     d_args.min[1]       = -4.0 * M_PI;
 //     d_args.min[2]       = -4.0 * M_PI;
@@ -83,10 +100,43 @@ int main(int argc, char** argv)
 //     d_args.max[1]       = 4.0 * M_PI;
 //     d_args.max[2]       = 4.0 * M_PI;
 //     d_args.s            = 10.0;              // scaling factor on range
+//     master.foreach([&](Block* b, const diy::Master::ProxyWithLink& cp)
+//                    { b->generate_sinc_data(cp, d_args); });
 
-    // generate data
+   // 4d sinc function
+//     d_args.pt_dim       = 5;
+//     d_args.dom_dim      = 4;
+//     d_args.p[0]         = 4;
+//     d_args.p[1]         = 4;
+//     d_args.p[2]         = 4;
+//     d_args.p[3]         = 4;
+//     d_args.ndom_pts[0]  = 100;
+//     d_args.ndom_pts[1]  = 100;
+//     d_args.ndom_pts[2]  = 100;
+//     d_args.ndom_pts[3]  = 100;
+//     d_args.min[0]       = -4.0 * M_PI;
+//     d_args.min[1]       = -4.0 * M_PI;
+//     d_args.min[2]       = -4.0 * M_PI;
+//     d_args.min[3]       = -4.0 * M_PI;
+//     d_args.max[0]       = 4.0 * M_PI;
+//     d_args.max[1]       = 4.0 * M_PI;
+//     d_args.max[2]       = 4.0 * M_PI;
+//     d_args.max[3]       = 4.0 * M_PI;
+//     d_args.s            = 10.0;              // scaling factor on range
+//     master.foreach([&](Block* b, const diy::Master::ProxyWithLink& cp)
+//                    { b->generate_sinc_data(cp, d_args); });
+
+    // 3d S3D
+    d_args.pt_dim       = 4;
+    d_args.dom_dim      = 3;
+    d_args.p[0]         = 3;
+    d_args.p[1]         = 3;
+    d_args.p[2]         = 3;
+    d_args.ndom_pts[0]  = 704;
+    d_args.ndom_pts[1]  = 540;
+    d_args.ndom_pts[2]  = 550;
     master.foreach([&](Block* b, const diy::Master::ProxyWithLink& cp)
-                   { b->generate_sinc_data(cp, d_args); });
+                   { b->read_3d_file_data(cp, d_args); });
 
     // encode data
     fprintf(stderr, "Starting adaptive encoding...\n");

@@ -28,8 +28,6 @@ Encoder(MFA& mfa_) :
     po(mfa_.po),
     ko(mfa_.ko),
     knot_spans(mfa_.knot_spans)
-    // DEPRECATED
-//     ndone_knot_spans(mfa_.ndone_knot_spans)
 {
 }
 
@@ -41,7 +39,6 @@ AdaptiveEncode(float err_limit)                     // maximum allowable normali
 {
     VectorXi nnew_knots = VectorXi::Zero(p.size()); // number of new knots in each dim
     VectorXf new_knots;                             // new knots (1st dim changes fastest)
-    MatrixXf approx(domain.rows(), domain.cols());  // points in approximated volume
 
     // fast encoding in 1-d
     for (int iter = 0; ; iter++)

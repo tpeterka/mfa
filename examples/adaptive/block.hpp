@@ -874,7 +874,7 @@ struct Block
             fprintf(stderr, "# input points = %ld\n", domain.rows());
             fprintf(stderr, "# output ctrl pts = %ld # output knots = %ld\n",
                     ctrl_pts.rows(), knots.size());
-            fprintf(stderr, "compression ratio = %.1f\n",
+            fprintf(stderr, "compression ratio = %.2f\n",
                     (float)(domain.rows()) / (ctrl_pts.rows() + knots.size() / ctrl_pts.cols()));
         }
 
