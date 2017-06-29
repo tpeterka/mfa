@@ -422,6 +422,172 @@ FastEncode(
 
 #endif
 
+#if 1                                       // TBB version
+
+// approximate a NURBS hypervolume of arbitrary dimension for a given input data set
+// weights are all 1 for now
+// n-d version of algorithm 9.7, Piegl & Tiller (P&T) p. 422
+//
+// the outputs, ctrl_pts and knots, are resized by this function;  caller need not resize them
+//
+// There are two types of dimensionality:
+// 1. The dimensionality of the NURBS tensor product (p.size())
+// (1D = NURBS curve, 2D = surface, 3D = volumem 4D = hypervolume, etc.)
+// 2. The dimensionality of individual domain and control points (domain.cols())
+// p.size() should be < domain.cols()
+void
+mfa::
+Encoder::
+Encode()
+{
+    // TODO: some of these quantities mirror this in the mfa
+
+    // check and assign main quantities
+    VectorXi n;                             // number of control point spans in each domain dim
+    VectorXi m;                             // number of input data point spans in each domain dim
+    int      ndims = ndom_pts.size();       // number of domain dimensions
+    size_t   cs    = 1;                     // stride for input points in curve in cur. dim
+                                            // domain points in first dim and ctrl pts from previous
+                                            // dim for later dims.
+    Quants(n, m);
+
+    // control points
+    ctrl_pts.resize(mfa.tot_nctrl, domain.cols());
+
+    // 2 buffers of temporary control points
+    // double buffer needed to write output curves of current dim without changing its input pts
+    // temporary control points need to begin with size as many as the input domain points
+    // except for the first dimension, which can be the correct number of control points
+    // because the input domain points are converted to control points one dimension at a time
+    // TODO: need to find a more space-efficient way
+    size_t tot_ntemp_ctrl = 1;
+    for (size_t k = 0; k < ndims; k++)
+        tot_ntemp_ctrl *= (k == 0 ? nctrl_pts(k) : ndom_pts(k));
+    MatrixXf temp_ctrl0 = MatrixXf::Zero(tot_ntemp_ctrl, domain.cols());
+    MatrixXf temp_ctrl1 = MatrixXf::Zero(tot_ntemp_ctrl, domain.cols());
+
+    VectorXi ntemp_ctrl = ndom_pts;         // current num of temp control pts in each dim
+
+    float  max_err_val;                     // maximum solution error in final dim of all curves
+
+    for (size_t k = 0; k < ndims; k++)      // for all domain dimensions
+    {
+        // TODO:
+        // Investigate whether in later dimensions, when input data points are replaced by
+        // control points, need new knots and params computed.
+        // In the next dimension, the coordinates of the dimension didn't change,
+        // but the chord length did, as control points moved away from the data points in
+        // the prior dim. Need to determine how much difference it would make to recompute
+        // params and knots for the new input points
+
+        // compute the matrix N, eq. 9.66 in P&T
+        // N is a matrix of (m - 1) x (n - 1) scalars that are the basis function coefficients
+        //  _                                _
+        // |  N_1(u[1])   ... N_{n-1}(u[1])   |
+        // |     ...      ...      ...        |
+        // |  N_1(u[m-1]) ... N_{n-1}(u[m-1]) |
+        //  -                                -
+        // TODO: N is going to be very sparse when it is large: switch to sparse representation
+        // N has semibandwidth < p  nonzero entries across diagonal
+        MatrixXf N = MatrixXf::Zero(m(k) - 1, n(k) - 1); // coefficients matrix
+
+        for (int i = 1; i < m(k); i++)            // the rows of N
+        {
+            int span = mfa.FindSpan(k, params(po[k] + i), ko[k]);
+            assert(span - ko[k] <= n(k));            // sanity
+            mfa.BasisFuns(k, params(po[k] + i), span, N, 1, n(k) - 1, i - 1, ko[k]);
+        }
+
+        // debug
+//         cerr << "k " << k << " N:\n" << N << endl;
+
+        // compute the product Nt x N
+        // TODO: NtN is going to be very sparse when it is large: switch to sparse representation
+        // NtN has semibandwidth < p + 1 nonzero entries across diagonal
+        MatrixXf NtN(n(k) - 1, n(k) - 1);
+        NtN = N.transpose() * N;
+
+        // debug
+//         cerr << "k " << k << " NtN:\n" << NtN << endl;
+
+        // number of curves in this dimension
+        size_t ncurves;
+        ncurves = 1;
+        for (int i = 0; i < ndims; i++)
+        {
+            if (i < k)
+                ncurves *= nctrl_pts(i);
+            else if (i > k)
+                ncurves *= ndom_pts(i);
+            // NB: current dimension contributes no curves, hence no i == k case
+        }
+        // debug
+        // cerr << "k: " << k << " ncurves: " << ncurves << endl;
+        // cerr << "ndom_pts:\n" << ndom_pts << endl;
+        // cerr << "ntemp_ctrl:\n" << ntemp_ctrl << endl;
+        // if (k > 0 && k % 2 == 1) // input to odd dims is temp_ctrl0
+        //     cerr << "temp_ctrl0:\n" << temp_ctrl0 << endl;
+        // if (k > 0 && k % 2 == 0) // input to even dims is temp_ctrl1
+        //     cerr << "temp_ctrl1:\n" << temp_ctrl1 << endl;
+
+        parallel_for (size_t(0), ncurves, [&] (size_t j)      // for all the curves in this dimension
+        {
+            // debug
+            // fprintf(stderr, "j=%ld curve\n", j);
+
+            // compute starting offsets for curve and control points
+            size_t co  = 0, to  = 0;                // starting ofst for curve & ctrl pts in cur. dim
+            size_t coo = 0, too = 0;                // co and to at start of contiguous sequence
+            for (auto n = 0; n < j; n++)
+            {
+                // adjust offsets for the next curve
+                if ((n + 1) % cs)
+                    co++;
+                else
+                {
+                    co = coo + cs * ndom_pts(k);
+                    coo = co;
+                }
+                if ((n + 1) % cs)
+                    to++;
+                else
+                {
+                    to = too + cs * nctrl_pts(k);
+                    too = to;
+                }
+            }
+
+            // R is the right hand side needed for solving NtN * P = R
+            MatrixXf R(n(k) - 1, domain.cols());
+
+            // P are the unknown interior control points and the solution to NtN * P = R
+            // NtN is positive definite -> do not need pivoting
+            // TODO: use a common representation for P and ctrl_pts to avoid copying
+            MatrixXf P(n(k) - 1, domain.cols());
+
+            // compute the one curve of control points
+            CtrlCurve(N, NtN, R, P, n, k, co, cs, to, temp_ctrl0, temp_ctrl1);
+        });                                                  // curves in this dimension
+
+        // adjust offsets and strides for next dimension
+        ntemp_ctrl(k) = nctrl_pts(k);
+        cs *= ntemp_ctrl(k);
+
+        NtN.resize(0, 0);                           // free NtN
+
+        // print progress
+        fprintf(stderr, "\rdimension %ld of %d encoded", k + 1, ndims);
+
+    }                                                      // domain dimensions
+
+    fprintf(stderr,"\n");
+
+    // debug
+//     cerr << "ctrl_pts:\n" << ctrl_pts << endl;
+}
+
+#else                                       // original serial version
+
 // approximate a NURBS hypervolume of arbitrary dimension for a given input data set
 // weights are all 1 for now
 // n-d version of algorithm 9.7, Piegl & Tiller (P&T) p. 422
@@ -581,6 +747,8 @@ Encode()
     // debug
 //     cerr << "ctrl_pts:\n" << ctrl_pts << endl;
 }
+
+#endif
 
 // computes right hand side vector of P&T eq. 9.63 and 9.67, p. 411-412 for a curve from the
 // original input domain points
