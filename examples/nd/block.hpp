@@ -793,13 +793,13 @@ struct Block
             mfa->Encode();
         }
 
-    // re-encode a block with new knots to be inserted
-    void reencode_block(const diy::Master::ProxyWithLink& cp,
-                        float                             err_limit,
-                        bool&                             done)
-        {
-            done = mfa->Encode(err_limit);
-        }
+//     // re-encode a block with new knots to be inserted
+//     void reencode_block(const diy::Master::ProxyWithLink& cp,
+//                         float                             err_limit,
+//                         bool&                             done)
+//         {
+//             done = mfa->Encode(err_limit);
+//         }
 
     void decode_block(const diy::Master::ProxyWithLink& cp)
         {

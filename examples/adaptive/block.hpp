@@ -801,13 +801,13 @@ struct Block
             mfa->AdaptiveEncode(err_limit, nctrl_pts);
         }
 
-    // re-encode a block with new knots to be inserted
-    void reencode_block(const diy::Master::ProxyWithLink& cp,
-                        float                             err_limit,
-                        bool&                             done)
-        {
-            done = mfa->Encode(err_limit);
-        }
+//     // re-encode a block with new knots to be inserted
+//     void reencode_block(const diy::Master::ProxyWithLink& cp,
+//                         float                             err_limit,
+//                         bool&                             done)
+//         {
+//             done = mfa->Encode(err_limit);
+//         }
 
     // decode entire block
     void decode_block(const diy::Master::ProxyWithLink& cp)
@@ -829,6 +829,34 @@ struct Block
                 mfa->Decode(approx);
             }
 
+#if 1                                               // TBB version
+
+            // normal distance computation
+            size_t max_idx;
+            if (decode_block)
+            {
+                parallel_for (size_t(0), (size_t)domain.rows(), [&] (size_t i)
+                {
+                    VectorXf cpt = approx.row(i);
+                    errs(i, errs.cols() - 1) = fabs(mfa->NormalDistance(cpt, i));
+                });
+            }
+            else
+            {
+                parallel_for (size_t(0), (size_t)domain.rows(), [&] (size_t i)
+                {
+                    errs(i, errs.cols() - 1) = mfa->Error(i);
+                });
+            }
+            for (size_t i = 0; i < domain.rows(); i++)
+                if (i == 0 || fabs(errs(i, errs.cols() - 1)) > fabs(max_err))
+                {
+                    max_err = errs(i, errs.cols() - 1);
+                    max_idx = i;
+                }
+
+#else                                               // single thread version
+
             // normal distance computation
             size_t max_idx;
             for (size_t i = 0; i < (size_t)domain.rows(); i++)
@@ -846,6 +874,8 @@ struct Block
                     max_idx = i;
                 }
             }
+
+#endif
 
             // normalize max error by size of input data (domain and range)
             float min = domain.minCoeff();

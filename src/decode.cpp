@@ -30,9 +30,9 @@ Decoder(MFA& mfa_) :
     knots(mfa_.knots),
     dom_range(mfa_.dom_range),
     po(mfa_.po),
-    ko(mfa_.ko),
-    knot_spans(mfa_.knot_spans)
+    ko(mfa_.ko)
     // DEPRECATED
+//     knot_spans(mfa_.knot_spans)
 //     ndone_knot_spans(mfa_.ndone_knot_spans)
 {
     // ensure that encoding was already done
@@ -75,340 +75,420 @@ Decoder(MFA& mfa_) :
 
 }
 
-#if 1
-
-// computes error in knot spans, tbb version
-// marks the knot spans that are done (error <= max_error in the entire span)
-// returns whether normalized error in all spans is below the err_limit
-bool
-mfa::
-Decoder::
-ErrorSpans(
-        VectorXi& nnew_knots,                       // number of new knots in each dim
-        VectorXf& new_knots,                        // new knots (1st dim changes fastest)
-        float err_limit)                            // max allowable error
-{
-    // spans that have already been split in this round (to prevent splitting twice)
-    vector<bool> split_spans(knot_spans.size());    // intialized to false by default
-
-    parallel_for(size_t(0), knot_spans.size(), [&] (size_t i)          // knot spans
-    {
-        if (!knot_spans[i].done)
-        {
-            // debug
-//             fprintf(stderr, "ErrorSpans(): span %ld\n", i);
-
-            size_t nspan_pts = 1;                                   // number of domain points in the span
-            for (auto k = 0; k < p.size(); k++)
-                nspan_pts *= (knot_spans[i].max_param_ijk(k) - knot_spans[i].min_param_ijk(k) + 1);
-
-            VectorXi p_ijk = knot_spans[i].min_param_ijk;           // indices of current parameter in the span
-            VectorXf param(p.size());                               // value of current parameter
-            bool span_done = true;                                  // span is done until error > err_limit
-
-            // TODO:  consider binary search of the points in the span?
-            // (error likely to be higher in the center of the span?)
-            for (auto j = 0; j < nspan_pts; j++)                    // parameters in the span
-            {
-                // debug
-//                 fprintf(stderr, "ErrorSpans(): span %ld point %d\n", i, j);
-
-                for (auto k = 0; k < p.size(); k++)
-                param(k) = params(po[k] + p_ijk(k));
-
-                // approximate the point and measure error
-                size_t idx;
-                mfa.ijk2idx(p_ijk, idx);
-                VectorXf cpt(ctrl_pts.cols());       // approximated point
-                VolPt(param, cpt);
-                float err = fabs(mfa.NormalDistance(cpt, idx)) / dom_range;     // normalized by data range
-
-                // span is not done
-                if (err > err_limit)
-                {
-                    span_done = false;
-                    break;
-                }
-
-                // increment param ijk
-                for (auto k = 0; k < p.size(); k++)                 // dimensions in the parameter
-                {
-                    if (p_ijk(k) < knot_spans[i].max_param_ijk(k))
-                    {
-                        p_ijk(k)++;
-                        break;
-                    }
-                    else
-                        p_ijk(k) = knot_spans[i].min_param_ijk(k);
-                }                                                   // dimension in parameter
-            }                                                       // parameters in the span
-
-            if (span_done)
-                knot_spans[i].done = true;
-        }                                                           // knot span not done
-    });                                                           // knot spans
-
-
-    // split spans that are not done
-    auto norig_spans = knot_spans.size();
-    for (auto i = 0; i < norig_spans; i++)                  // knot spans
-        if (!knot_spans[i].done && !split_spans[i])
-        {
-            // debug
-//             fprintf(stderr, "*** calling SplitSpan(%d) ***\n", i);
-
-            SplitSpan(i, split_spans, nnew_knots, new_knots);
-            mfa.InsertKnots(nnew_knots, new_knots);
-        }
-
-    // debug
-//     for (auto i = 0; i < knot_spans.size(); i++)                  // knot spans
+// DEPRECATED
+// #if 1
+// 
+// // computes error in knot spans, tbb version
+// // marks the knot spans that are done (error <= max_error in the entire span)
+// // returns whether normalized error in all spans is below the err_limit
+// bool
+// mfa::
+// Decoder::
+// ErrorSpans(
+//         VectorXi& nnew_knots,                       // number of new knots in each dim
+//         VectorXf& new_knots,                        // new knots (1st dim changes fastest)
+//         float err_limit)                            // max allowable error
+// {
+//     // spans that have already been split in this round (to prevent splitting twice)
+//     vector<bool> split_spans(knot_spans.size());    // intialized to false by default
+// 
+//     parallel_for(size_t(0), knot_spans.size(), [&] (size_t i)          // knot spans
 //     {
-//         cerr <<
-//             "span_idx="          << i                           <<
-//             "\nmin_knot_ijk:\n"  << knot_spans[i].min_knot_ijk  <<
-//             "\nmax_knot_ijk:\n"  << knot_spans[i].max_knot_ijk  <<
-//             "\nmin_knot:\n"      << knot_spans[i].min_knot      <<
-//             "\nmax_knot:\n"      << knot_spans[i].max_knot      <<
-//             "\nmin_param_ijk:\n" << knot_spans[i].min_param_ijk <<
-//             "\nmax_param_ijk:\n" << knot_spans[i].max_param_ijk <<
-//             "\nmin_param:\n"     << knot_spans[i].min_param     <<
-//             "\nmax_param:\n"     << knot_spans[i].max_param     <<
-//             "\n"                 << endl;
-//     }
-
-    // check if all done
-    // NB: not doint simple counter of done spans because it would have to be locked between tasks
-    for (auto i = 0; i < knot_spans.size(); i++)
-        if (!knot_spans[i].done)
-            return false;
-    return true;
-}
-
-#else
-
-// computes error in knot spans, single-threaded version
-// marks the knot spans that are done (error <= max_error in the entire span)
-// returns whether normalized error in all spans is below the err_limit
-bool
-mfa::
-Decoder::
-ErrorSpans(
-        VectorXi& nnew_knots,                       // number of new knots in each dim
-        VectorXf& new_knots,                        // new knots (1st dim changes fastest)
-        float err_limit)                            // max allowable error
-{
-    // spans that have already been split in this round (to prevent splitting twice)
-    vector<bool> split_spans(knot_spans.size());    // intialized to false by default
-
-    for (auto i = 0; i < knot_spans.size(); i++)                  // knot spans
-    {
-        if (knot_spans[i].done)
-        {
-            ndone_knot_spans++;
-            continue;
-        }
-
-        size_t nspan_pts = 1;                                   // number of domain points in the span
-        for (auto k = 0; k < p.size(); k++)
-            nspan_pts *= (knot_spans[i].max_param_ijk(k) - knot_spans[i].min_param_ijk(k) + 1);
-
-        VectorXi p_ijk = knot_spans[i].min_param_ijk;           // indices of current parameter in the span
-        VectorXf param(p.size());                               // value of current parameter
-        bool span_done = true;                                  // span is done until error > err_limit
-
-        // TODO:  consider binary search of the points in the span?
-        // (error likely to be higher in the center of the span?)
-        for (auto j = 0; j < nspan_pts; j++)                    // parameters in the span
-        {
-            for (auto k = 0; k < p.size(); k++)
-                param(k) = params(po[k] + p_ijk(k));
-
-            // approximate the point and measure error
-            size_t idx;
-            mfa.ijk2idx(p_ijk, idx);
-            // DEPECATED: following test for checking each domain point only once changes results (for
-            // (worse) and doesn't save a lot time
-//             if (!mfa.err_ok[idx])                   // check each domain point at most one time
+//         if (!knot_spans[i].done)
+//         {
+//             // debug
+// //             fprintf(stderr, "ErrorSpans(): span %ld\n", i);
+// 
+//             size_t nspan_pts = 1;                                   // number of domain points in the span
+//             for (auto k = 0; k < p.size(); k++)
+//                 nspan_pts *= (knot_spans[i].max_param_ijk(k) - knot_spans[i].min_param_ijk(k) + 1);
+// 
+//             VectorXi p_ijk = knot_spans[i].min_param_ijk;           // indices of current parameter in the span
+//             VectorXf param(p.size());                               // value of current parameter
+//             bool span_done = true;                                  // span is done until error > err_limit
+// 
+//             // TODO:  consider binary search of the points in the span?
+//             // (error likely to be higher in the center of the span?)
+//             for (auto j = 0; j < nspan_pts; j++)                    // parameters in the span
 //             {
-                VectorXf cpt(ctrl_pts.cols());       // approximated point
-                VolPt(param, cpt);
-                float err = fabs(mfa.NormalDistance(cpt, idx)) / dom_range;     // normalized by data range
-
-                // span is not done
-                if (err > err_limit)
-                {
-                    span_done = false;
-                    break;
-                }
-//                 else
-//                     mfa.err_ok[idx] = true;
-//             }
-
-            // increment param ijk
-            for (auto k = 0; k < p.size(); k++)                 // dimensions in the parameter
-            {
-                if (p_ijk(k) < knot_spans[i].max_param_ijk(k))
-                {
-                    p_ijk(k)++;
-                    break;
-                }
-                else
-                    p_ijk(k) = knot_spans[i].min_param_ijk(k);
-            }                                                   // dimension in parameter
-        }                                                       // parameters in the span
-
-        // span is done
-        if (span_done)
-        {
-            knot_spans[i].done = true;
-            ndone_knot_spans++;
-        }
-    }                                                           // knot spans
-
-    // split spans that are not done
-    auto norig_spans = knot_spans.size();
-    for (auto i = 0; i < norig_spans; i++)                  // knot spans
-        if (!knot_spans[i].done && !split_spans[i])
-        {
-            // debug
-//             fprintf(stderr, "*** calling SplitSpan(%d) ***\n", i);
-
-            SplitSpan(i, split_spans, nnew_knots, new_knots);
-            mfa.InsertKnots(nnew_knots, new_knots);
-        }
-
-    // debug
-//     fprintf(stderr, "number knot spans after splitting= %ld\n", knot_spans.size());
+//                 // debug
+// //                 fprintf(stderr, "ErrorSpans(): span %ld point %d\n", i, j);
+// 
+//                 for (auto k = 0; k < p.size(); k++)
+//                 param(k) = params(po[k] + p_ijk(k));
+// 
+//                 // approximate the point and measure error
+//                 size_t idx;
+//                 mfa.ijk2idx(p_ijk, idx);
+//                 VectorXf cpt(ctrl_pts.cols());       // approximated point
+//                 VolPt(param, cpt);
+//                 float err = fabs(mfa.NormalDistance(cpt, idx)) / dom_range;     // normalized by data range
+// 
+//                 // span is not done
+//                 if (err > err_limit)
+//                 {
+//                     span_done = false;
+//                     break;
+//                 }
+// 
+//                 // increment param ijk
+//                 for (auto k = 0; k < p.size(); k++)                 // dimensions in the parameter
+//                 {
+//                     if (p_ijk(k) < knot_spans[i].max_param_ijk(k))
+//                     {
+//                         p_ijk(k)++;
+//                         break;
+//                     }
+//                     else
+//                         p_ijk(k) = knot_spans[i].min_param_ijk(k);
+//                 }                                                   // dimension in parameter
+//             }                                                       // parameters in the span
+// 
+//             if (span_done)
+//                 knot_spans[i].done = true;
+//         }                                                           // knot span not done
+//     });                                                           // knot spans
+// 
+// 
+//     // split spans that are not done
+//     auto norig_spans = knot_spans.size();
+//     for (auto i = 0; i < norig_spans; i++)                  // knot spans
+//         if (!knot_spans[i].done && !split_spans[i])
+//         {
+//             // debug
+// //             fprintf(stderr, "*** calling SplitSpan(%d) ***\n", i);
+// 
+//             SplitSpan(i, split_spans, nnew_knots, new_knots);
+//             mfa.InsertKnots(nnew_knots, new_knots);
+//         }
+// 
+//     // debug
+// //     for (auto i = 0; i < knot_spans.size(); i++)                  // knot spans
+// //     {
+// //         cerr <<
+// //             "span_idx="          << i                           <<
+// //             "\nmin_knot_ijk:\n"  << knot_spans[i].min_knot_ijk  <<
+// //             "\nmax_knot_ijk:\n"  << knot_spans[i].max_knot_ijk  <<
+// //             "\nmin_knot:\n"      << knot_spans[i].min_knot      <<
+// //             "\nmax_knot:\n"      << knot_spans[i].max_knot      <<
+// //             "\nmin_param_ijk:\n" << knot_spans[i].min_param_ijk <<
+// //             "\nmax_param_ijk:\n" << knot_spans[i].max_param_ijk <<
+// //             "\nmin_param:\n"     << knot_spans[i].min_param     <<
+// //             "\nmax_param:\n"     << knot_spans[i].max_param     <<
+// //             "\n"                 << endl;
+// //     }
+// 
+//     // check if all done
+//     // NB: not doint simple counter of done spans because it would have to be locked between tasks
+//     for (auto i = 0; i < knot_spans.size(); i++)
+//         if (!knot_spans[i].done)
+//             return false;
+//     return true;
+// }
+// 
+// #else
+// 
+// // computes error in knot spans, single-threaded version
+// // marks the knot spans that are done (error <= max_error in the entire span)
+// // returns whether normalized error in all spans is below the err_limit
+// bool
+// mfa::
+// Decoder::
+// ErrorSpans(
+//         VectorXi& nnew_knots,                       // number of new knots in each dim
+//         VectorXf& new_knots,                        // new knots (1st dim changes fastest)
+//         float err_limit)                            // max allowable error
+// {
+//     // spans that have already been split in this round (to prevent splitting twice)
+//     vector<bool> split_spans(knot_spans.size());    // intialized to false by default
+// 
 //     for (auto i = 0; i < knot_spans.size(); i++)                  // knot spans
 //     {
-//         cerr <<
-//             "span_idx="          << i                           <<
-//             "\nmin_knot_ijk:\n"  << knot_spans[i].min_knot_ijk  <<
-//             "\nmax_knot_ijk:\n"  << knot_spans[i].max_knot_ijk  <<
-//             "\nmin_knot:\n"      << knot_spans[i].min_knot      <<
-//             "\nmax_knot:\n"      << knot_spans[i].max_knot      <<
-//             "\nmin_param_ijk:\n" << knot_spans[i].min_param_ijk <<
-//             "\nmax_param_ijk:\n" << knot_spans[i].max_param_ijk <<
-//             "\nmin_param:\n"     << knot_spans[i].min_param     <<
-//             "\nmax_param:\n"     << knot_spans[i].max_param     <<
-//             "\n"                 << endl;
+//         if (knot_spans[i].done)
+//         {
+//             ndone_knot_spans++;
+//             continue;
+//         }
+// 
+//         size_t nspan_pts = 1;                                   // number of domain points in the span
+//         for (auto k = 0; k < p.size(); k++)
+//             nspan_pts *= (knot_spans[i].max_param_ijk(k) - knot_spans[i].min_param_ijk(k) + 1);
+// 
+//         VectorXi p_ijk = knot_spans[i].min_param_ijk;           // indices of current parameter in the span
+//         VectorXf param(p.size());                               // value of current parameter
+//         bool span_done = true;                                  // span is done until error > err_limit
+// 
+//         // TODO:  consider binary search of the points in the span?
+//         // (error likely to be higher in the center of the span?)
+//         for (auto j = 0; j < nspan_pts; j++)                    // parameters in the span
+//         {
+//             for (auto k = 0; k < p.size(); k++)
+//                 param(k) = params(po[k] + p_ijk(k));
+// 
+//             // approximate the point and measure error
+//             size_t idx;
+//             mfa.ijk2idx(p_ijk, idx);
+//             // DEPECATED: following test for checking each domain point only once changes results (for
+//             // (worse) and doesn't save a lot time
+// //             if (!mfa.err_ok[idx])                   // check each domain point at most one time
+// //             {
+//                 VectorXf cpt(ctrl_pts.cols());       // approximated point
+//                 VolPt(param, cpt);
+//                 float err = fabs(mfa.NormalDistance(cpt, idx)) / dom_range;     // normalized by data range
+// 
+//                 // span is not done
+//                 if (err > err_limit)
+//                 {
+//                     span_done = false;
+//                     break;
+//                 }
+// //                 else
+// //                     mfa.err_ok[idx] = true;
+// //             }
+// 
+//             // increment param ijk
+//             for (auto k = 0; k < p.size(); k++)                 // dimensions in the parameter
+//             {
+//                 if (p_ijk(k) < knot_spans[i].max_param_ijk(k))
+//                 {
+//                     p_ijk(k)++;
+//                     break;
+//                 }
+//                 else
+//                     p_ijk(k) = knot_spans[i].min_param_ijk(k);
+//             }                                                   // dimension in parameter
+//         }                                                       // parameters in the span
+// 
+//         // span is done
+//         if (span_done)
+//         {
+//             knot_spans[i].done = true;
+//             ndone_knot_spans++;
+//         }
+//     }                                                           // knot spans
+// 
+//     // split spans that are not done
+//     auto norig_spans = knot_spans.size();
+//     for (auto i = 0; i < norig_spans; i++)                  // knot spans
+//         if (!knot_spans[i].done && !split_spans[i])
+//         {
+//             // debug
+// //             fprintf(stderr, "*** calling SplitSpan(%d) ***\n", i);
+// 
+//             SplitSpan(i, split_spans, nnew_knots, new_knots);
+//             mfa.InsertKnots(nnew_knots, new_knots);
+//         }
+// 
+//     // debug
+// //     fprintf(stderr, "number knot spans after splitting= %ld\n", knot_spans.size());
+// //     for (auto i = 0; i < knot_spans.size(); i++)                  // knot spans
+// //     {
+// //         cerr <<
+// //             "span_idx="          << i                           <<
+// //             "\nmin_knot_ijk:\n"  << knot_spans[i].min_knot_ijk  <<
+// //             "\nmax_knot_ijk:\n"  << knot_spans[i].max_knot_ijk  <<
+// //             "\nmin_knot:\n"      << knot_spans[i].min_knot      <<
+// //             "\nmax_knot:\n"      << knot_spans[i].max_knot      <<
+// //             "\nmin_param_ijk:\n" << knot_spans[i].min_param_ijk <<
+// //             "\nmax_param_ijk:\n" << knot_spans[i].max_param_ijk <<
+// //             "\nmin_param:\n"     << knot_spans[i].min_param     <<
+// //             "\nmax_param:\n"     << knot_spans[i].max_param     <<
+// //             "\n"                 << endl;
+// //     }
+// 
+//     // check if all done
+//     // NB: not tallying a simple count of number of done spans because the multithreaded version
+//     // would require locking that count; this version done similarly for compatibility with
+//     // multithreaded version
+//     for (auto i = 0; i < knot_spans.size(); i++)
+//         if (!knot_spans[i].done)
+//             return false;
+//     return true;
+// }
+// 
+// #endif
+
+// // splits a knot span into two
+// void
+// mfa::
+// Decoder::
+// SplitSpan(
+//         size_t        si,                   // id of span to split
+//         vector<bool>& split_spans,          // spans that were split already in this round, don't split these again
+//         VectorXi&     nnew_knots,           // number of new knots in each dim
+//         VectorXf&     new_knots)            // new knots (1st dim changes fastest)
+// {
+//     // check if span can be split (both halves would have domain points in its range)
+//     // if not, check other split directions
+//     int sd = knot_spans[si].last_split_dim;             // new split dimension
+//     float new_knot;                                     // new knot value in the split dimension
+//     size_t k;                                           // dimension
+//     for (k = 0; k < p.size(); k++)
+//     {
+//         sd       = (sd + 1) % p.size();
+//         new_knot = (knot_spans[si].min_knot(sd) + knot_spans[si].max_knot(sd)) / 2;
+//         if (params(po[sd] + knot_spans[si].min_param_ijk(sd)) < new_knot &&
+//                 params(po[sd] + knot_spans[si].max_param_ijk(sd)) > new_knot)
+//             break;
 //     }
+// 
+//     if (k == p.size())                                  // a split direction could not be found
+//     {
+//         knot_spans[si].done = true;
+//         split_spans[si]     = true;
+//         // debug
+// //         fprintf(stderr, "--- SplitSpan(): span %ld could not be split further ---\n", si);
+//         return;
+//     }
+// 
+//     // find all spans with the same min_knot_ijk as the span to be split and that are not done yet
+//     // those will be split too (NB, in the same dimension as the original span to be split)
+//     for (auto j = 0; j < split_spans.size(); j++)       // original number of spans in this round
+//     {
+//         if (knot_spans[j].done || split_spans[j] || knot_spans[j].min_knot_ijk(sd) != knot_spans[si].min_knot_ijk(sd))
+//             continue;
+// 
+//         // debug
+// //         fprintf(stderr, "+++ SplitSpan(): splitting span %ld +++\n", si);
+// 
+//         // copy span to the back
+//         knot_spans.push_back(knot_spans[j]);
+// 
+//         // modify old span
+//         auto pi = knot_spans[j].min_param_ijk(sd);          // one coordinate of ijk index into params
+//         if (params(po[sd] + pi) < new_knot)                 // at least one param (domain pt) in the span
+//         {
+//             while (params(po[sd] + pi) < new_knot)          // pi - 1 = max_param_ijk(sd) in the modified span
+//                 pi++;
+//             knot_spans[j].last_split_dim    = sd;
+//             knot_spans[j].max_knot(sd)      = new_knot;
+//             knot_spans[j].max_param_ijk(sd) = pi - 1;
+//             knot_spans[j].max_param(sd)     = params(po[sd] + pi - 1);
+// 
+//             // modify new span
+//             knot_spans.back().last_split_dim     = -1;
+//             knot_spans.back().min_knot(sd)       = new_knot;
+//             knot_spans.back().min_param_ijk(sd)  = pi;
+//             knot_spans.back().min_param(sd)      = params(po[sd] + pi);
+//             knot_spans.back().min_knot_ijk(sd)++;
+// 
+//             split_spans[j] = true;
+//         }
+//     }
+// 
+//     // increment min and max knot ijk for any knots after the inserted one
+//     for (auto j = 0; j < knot_spans.size(); j++)
+//     {
+//         if (knot_spans[j].min_knot(sd) > knot_spans[si].max_knot(sd))
+//             knot_spans[j].min_knot_ijk(sd)++;
+//         if (knot_spans[j].max_knot(sd) > knot_spans[si].max_knot(sd))
+//             knot_spans[j].max_knot_ijk(sd)++;
+//     }
+// 
+//     // add the new knot to nnew_knots and new_knots
+//     new_knots.resize(1);
+//     new_knots(0)    = new_knot;
+//     nnew_knots      = VectorXi::Zero(p.size());
+//     nnew_knots(sd)  = 1;
+// 
+//     // debug
+// //     cerr << "\n\nAfter splitting spans:" << endl;
+// //     for (auto i = 0; i < knot_spans.size(); i++)
+// //     {
+// //         if (knot_spans[i].done)
+// //             continue;
+// //         cerr <<
+// //             "span_idx="          << i                            <<
+// //             "\nmin_knot_ijk:\n"  << knot_spans[i].min_knot_ijk  <<
+// //             "\nmax_knot_ijk:\n"  << knot_spans[i].max_knot_ijk  <<
+// //             "\nmin_knot:\n"      << knot_spans[i].min_knot      <<
+// //             "\nmax_knot:\n"      << knot_spans[i].max_knot      <<
+// //             "\nmin_param_ijk:\n" << knot_spans[i].min_param_ijk  <<
+// //             "\nmax_param_ijk:\n" << knot_spans[i].max_param_ijk  <<
+// //             "\nmin_param:\n"     << knot_spans[i].min_param      <<
+// //             "\nmax_param:\n"     << knot_spans[i].max_param      <<
+// //             "\n"                 << endl;
+// //     }
+// }
 
-    // check if all done
-    // NB: not tallying a simple count of number of done spans because the multithreaded version
-    // would require locking that count; this version done similarly for compatibility with
-    // multithreaded version
-    for (auto i = 0; i < knot_spans.size(); i++)
-        if (!knot_spans[i].done)
-            return false;
-    return true;
-}
+#if 1                                   // TBB version
 
-#endif
-
-// splits a knot span into two
+// computes approximated points from a given set of domain points and an n-d NURBS volume
+// P&T eq. 9.77, p. 424
+// this version recomputes parameter values of input points and
+// recomputes basis functions rather than taking them as an input
+// this version also assumes weights = 1; no division by weight is done
+// assumes all vectors have been correctly resized by the caller
 void
 mfa::
 Decoder::
-SplitSpan(
-        size_t        si,                   // id of span to split
-        vector<bool>& split_spans,          // spans that were split already in this round, don't split these again
-        VectorXi&     nnew_knots,           // number of new knots in each dim
-        VectorXf&     new_knots)            // new knots (1st dim changes fastest)
+Decode(MatrixXf& approx)                 // pts in approximated volume (1st dim. changes fastest)
 {
-    // check if span can be split (both halves would have domain points in its range)
-    // if not, check other split directions
-    int sd = knot_spans[si].last_split_dim;             // new split dimension
-    float new_knot;                                     // new knot value in the split dimension
-    size_t k;                                           // dimension
-    for (k = 0; k < p.size(); k++)
-    {
-        sd       = (sd + 1) % p.size();
-        new_knot = (knot_spans[si].min_knot(sd) + knot_spans[si].max_knot(sd)) / 2;
-        if (params(po[sd] + knot_spans[si].min_param_ijk(sd)) < new_knot &&
-                params(po[sd] + knot_spans[si].max_param_ijk(sd)) > new_knot)
-            break;
-    }
+    vector<size_t> iter(p.size(), 0);    // parameter index (iteration count) in current dim.
+    vector<size_t> ofst(p.size(), 0);    // start of current dim in linearized params
 
-    if (k == p.size())                                  // a split direction could not be found
+    for (size_t i = 0; i < p.size() - 1; i++)
+        ofst[i + 1] = ofst[i] + ndom_pts(i);
+
+    parallel_for (size_t(0), (size_t)domain.rows(), [&] (size_t i)
     {
-        knot_spans[si].done = true;
-        split_spans[si]     = true;
         // debug
-//         fprintf(stderr, "--- SplitSpan(): span %ld could not be split further ---\n", si);
-        return;
-    }
+        // cerr << "input point:\n" << domain.row(i) << endl;
 
-    // find all spans with the same min_knot_ijk as the span to be split and that are not done yet
-    // those will be split too (NB, in the same dimension as the original span to be split)
-    for (auto j = 0; j < split_spans.size(); j++)       // original number of spans in this round
-    {
-        if (knot_spans[j].done || split_spans[j] || knot_spans[j].min_knot_ijk(sd) != knot_spans[si].min_knot_ijk(sd))
-            continue;
+        // convert linear idx to multidim. i,j,k... indices in each domain dimension
+        VectorXi ijk(p.size());
+        mfa.idx2ijk(i, ijk);
+
+        // compute parameters for the vertices of the cell
+        VectorXf param(p.size());
+        for (int i = 0; i < p.size(); i++)
+            param(i) = params(ijk(i) + po[i]);
+
+        // compute approximated point for this parameter vector
+        VectorXf cpt(ctrl_pts.cols());       // approximated point
+        VolPt(param, cpt);
 
         // debug
-//         fprintf(stderr, "+++ SplitSpan(): splitting span %ld +++\n", si);
+//         cerr << "domain pt:\n" << domain.row(i) << "\ncpt:\n" << cpt << endl;
 
-        // copy span to the back
-        knot_spans.push_back(knot_spans[j]);
+        approx.row(i) = cpt;
 
-        // modify old span
-        auto pi = knot_spans[j].min_param_ijk(sd);          // one coordinate of ijk index into params
-        if (params(po[sd] + pi) < new_knot)                 // at least one param (domain pt) in the span
+        // print progress
+        if (i > 0 && domain.rows() >= 100 && i % (domain.rows() / 100) == 0)
+            fprintf(stderr, "\r%.0f %% decoded", (float)i / (float)(domain.rows()) * 100);
+    });
+    fprintf(stderr, "\r100 %% decoded\n");
+
+    // normal distance computation
+    float max_err;                          // max. error found so far
+    size_t max_idx;                         // domain point idx at max error
+    for (size_t i = 0; i < (size_t)domain.rows(); i++)
+    {
+        VectorXf cpt = approx.row(i);
+        float err    = fabs(mfa.NormalDistance(cpt, i));
+        if (i == 0 || err > max_err)
         {
-            while (params(po[sd] + pi) < new_knot)          // pi - 1 = max_param_ijk(sd) in the modified span
-                pi++;
-            knot_spans[j].last_split_dim    = sd;
-            knot_spans[j].max_knot(sd)      = new_knot;
-            knot_spans[j].max_param_ijk(sd) = pi - 1;
-            knot_spans[j].max_param(sd)     = params(po[sd] + pi - 1);
-
-            // modify new span
-            knot_spans.back().last_split_dim     = -1;
-            knot_spans.back().min_knot(sd)       = new_knot;
-            knot_spans.back().min_param_ijk(sd)  = pi;
-            knot_spans.back().min_param(sd)      = params(po[sd] + pi);
-            knot_spans.back().min_knot_ijk(sd)++;
-
-            split_spans[j] = true;
+            max_err = err;
+            max_idx = i;
         }
     }
 
-    // increment min and max knot ijk for any knots after the inserted one
-    for (auto j = 0; j < knot_spans.size(); j++)
-    {
-        if (knot_spans[j].min_knot(sd) > knot_spans[si].max_knot(sd))
-            knot_spans[j].min_knot_ijk(sd)++;
-        if (knot_spans[j].max_knot(sd) > knot_spans[si].max_knot(sd))
-            knot_spans[j].max_knot_ijk(sd)++;
-    }
-
-    // add the new knot to nnew_knots and new_knots
-    new_knots.resize(1);
-    new_knots(0)    = new_knot;
-    nnew_knots      = VectorXi::Zero(p.size());
-    nnew_knots(sd)  = 1;
+    // normalize max error by size of input data (domain and range)
+    float min = domain.minCoeff();
+    float max = domain.maxCoeff();
+    float range = max - min;
 
     // debug
-//     cerr << "\n\nAfter splitting spans:" << endl;
-//     for (auto i = 0; i < knot_spans.size(); i++)
-//     {
-//         if (knot_spans[i].done)
-//             continue;
-//         cerr <<
-//             "span_idx="          << i                            <<
-//             "\nmin_knot_ijk:\n"  << knot_spans[i].min_knot_ijk  <<
-//             "\nmax_knot_ijk:\n"  << knot_spans[i].max_knot_ijk  <<
-//             "\nmin_knot:\n"      << knot_spans[i].min_knot      <<
-//             "\nmax_knot:\n"      << knot_spans[i].max_knot      <<
-//             "\nmin_param_ijk:\n" << knot_spans[i].min_param_ijk  <<
-//             "\nmax_param_ijk:\n" << knot_spans[i].max_param_ijk  <<
-//             "\nmin_param:\n"     << knot_spans[i].min_param      <<
-//             "\nmax_param:\n"     << knot_spans[i].max_param      <<
-//             "\n"                 << endl;
-//     }
+    fprintf(stderr, "data range = %.1f\n", range);
+    fprintf(stderr, "raw max_error = %e\n", max_err);
+    cerr << "position of max error: idx=" << max_idx << "\n" << domain.row(max_idx) << endl;
+
+    max_err /= range;
+
+    fprintf(stderr, "|normalized max_err| = %e\n", max_err);
 }
+
+#else                                           // original version
 
 // computes approximated points from a given set of domain points and an n-d NURBS volume
 // P&T eq. 9.77, p. 424
@@ -495,6 +575,8 @@ Decode(MatrixXf& approx)                 // pts in approximated volume (1st dim.
 
     fprintf(stderr, "|normalized max_err| = %e\n", max_err);
 }
+
+#endif
 
 // compute a point from a NURBS curve at a given parameter value
 // algorithm 4.1, Piegl & Tiller (P&T) p.124

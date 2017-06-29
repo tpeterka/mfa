@@ -64,7 +64,7 @@ namespace mfa
                 float     err_limit,        // maximum allowable normalized error
                 VectorXi& nctrl_pts_);      // (output) number of control points in each dim
 
-        bool Encode(float err_limit);                   // maximum allowable normalized error
+//         bool Encode(float err_limit);                   // maximum allowable normalized error
 
         void Decode(MatrixXf& approx);                  // decode points
 
@@ -74,10 +74,10 @@ namespace mfa
                              size_t    cell_idx);       // index of min. corner of cell in the domain
     private:
 
-        bool ErrorSpans(
-                VectorXi& nnew_knots,                   // number of new knots in each dim
-                VectorXf& new_knots,                    // new knots (1st dim changes fastest)
-                float err_limit);                       // max allowable relative error
+//         bool ErrorSpans(
+//                 VectorXi& nnew_knots,                   // number of new knots in each dim
+//                 VectorXf& new_knots,                    // new knots (1st dim changes fastest)
+//                 float err_limit);                       // max allowable relative error
 
         int FindSpan(int   cur_dim,       // current dimension
                      float u,             // parameter value
@@ -96,7 +96,7 @@ namespace mfa
 
         void Knots();
 
-        void KnotSpanIndex();
+//         void KnotSpanIndex();
 
         void InsertKnots(VectorXi& nnew_knots,     // number of new knots in each dim
                          VectorXf& new_knots);     // new knots (1st dim changes fastest)
@@ -130,7 +130,7 @@ namespace mfa
        size_t tot_nknots;     // total nmbr of knots = sum of nmbr of knots over all dims
        size_t tot_nctrl;      // total nmbr of control points = product of control points over all dims
        float eps;             // minimum difference considered significant
-       vector<KnotSpan> knot_spans; // knot spans
+//        vector<KnotSpan> knot_spans; // knot spans
    };
 
 }

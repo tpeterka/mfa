@@ -93,7 +93,13 @@ namespace mfa
         int ErrorCurve(
                 size_t       k,             // current dimension
                 size_t       co,            // starting ofst for reading domain pts
-                MatrixXf&    temp_ctrl,     // first temporary control points buffer
+                MatrixXf&    ctrl_pts,      // control points
+                float        err_limit);    // max allowable error
+
+        int ErrorCurve(
+                size_t       k,             // current dimension
+                size_t       co,            // starting ofst for reading domain pts
+                MatrixXf&    ctrl_pts,      // control points
                 vector<int>& err_spans,     // spans with error greater than err_limit
                 float        err_limit);    // max allowable error
 
@@ -109,7 +115,8 @@ namespace mfa
         float     dom_range;           // max extent of input data points
         vector<size_t>& po;            // starting offset for params in each dim
         vector<size_t>& ko;            // starting offset for knots in each dim
-        vector<KnotSpan>& knot_spans;  // not done (greater than max error) knot spans
+        size_t    max_num_curves;       // max num. curves per dimension to check in fast encode
+//         vector<KnotSpan>& knot_spans;  // not done (greater than max error) knot spans
     };
 }
 

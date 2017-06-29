@@ -31,10 +31,10 @@ namespace mfa
         void VolPt(VectorXf& param,            // parameter value in each dim. of desired point
                    VectorXf& out_pt);          // (output) point
 
-        bool ErrorSpans(
-                VectorXi& nnew_knots,           // number of new knots in each dim
-                VectorXf& new_knots,            // new knots (1st dim changes fastest)
-                float err_limit);               // max. allowed error
+//         bool ErrorSpans(
+//                 VectorXi& nnew_knots,           // number of new knots in each dim
+//                 VectorXf& new_knots,            // new knots (1st dim changes fastest)
+//                 float err_limit);               // max. allowed error
 
         void CurvePt(
                 int       cur_dim,              // current dimension
@@ -56,11 +56,11 @@ namespace mfa
                          size_t    pre_cs,     // stride for control points in prior dim
                          MatrixXf& out_pts);   // output approximated pts for the curve
 
-        void SplitSpan(
-                size_t        si,               // id of span to split
-                vector<bool>& split_spans,      // spans that were split already in this round, don't split these again
-                VectorXi&     nnew_knots,       // number of new knots in each dim
-                VectorXf&     new_knots);       // new knots (1st dim changes fastest)
+//         void SplitSpan(
+//                 size_t        si,               // id of span to split
+//                 vector<bool>& split_spans,      // spans that were split already in this round, don't split these again
+//                 VectorXi&     nnew_knots,       // number of new knots in each dim
+//                 VectorXf&     new_knots);       // new knots (1st dim changes fastest)
 
         int tot_iters;                          // total iterations in flattened decoding of all dimensions
         MatrixXi  ct;                           // coordinates of first control point of curve for given iteration
@@ -80,8 +80,8 @@ namespace mfa
         vector<size_t>& po;            // starting offset for params in each dim
         vector<size_t>& ko;            // starting offset for knots in each dim
         vector<size_t>  cs;            // control point stride (only in decoder, not mfa)
-        vector<KnotSpan>& knot_spans;  // not done (greater than max error) knot spans
-        size_t ndone_knot_spans;       // number of done knot spans
+//         vector<KnotSpan>& knot_spans;  // not done (greater than max error) knot spans
+//         size_t ndone_knot_spans;       // number of done knot spans
     };
 }
 
