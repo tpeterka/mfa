@@ -27,8 +27,7 @@ Encoder(MFA& mfa_) :
     dom_range(mfa_.dom_range),
     po(mfa_.po),
     ko(mfa_.ko),
-    max_num_curves(1.0e5)                           // max num. curves to check in one dimension of fast encode
-//     knot_spans(mfa_.knot_spans)
+    max_num_curves(1.0e4)                           // max num. curves to check in one dimension of fast encode
 {
 }
 
@@ -75,7 +74,14 @@ AdaptiveEncode(float err_limit)                     // maximum allowable normali
     Encode();
 }
 
-#if 1
+// NB: the following TBB version is slower (~1.5X) than the serial version
+// probably the offset calculations that must be repeated each time to make the loops reentrant are
+// too expensive and not worth it
+// Don't use this version for now
+// TODO: figure out how to compute the offsets in closed form
+//
+
+#if 0
 
 // TBB version
 // fast encode using curves instead of high volume in early rounds to determine knot insertions
@@ -343,10 +349,10 @@ FastEncode(
         size_t ncurves = domain.rows() / ndom_pts(k);
 
 //         for (size_t s = 1; s >= 1; s /= 2)        // debug only, one step size of s=1
-        for (size_t s = ncurves / 2; s >= 1; s /= 2)        // for all step sizes over curves
+        for (size_t s = ncurves / 2; s >= 1 && ncurves / s < max_num_curves; s /= 2)        // for all step sizes over curves
         {
             // debug
-//             fprintf(stderr, "k=%ld s=%ld max_nerr=%ld\n", k, s, max_nerr);
+            fprintf(stderr, "k=%ld s=%ld\n", k, s);
 
             size_t co         = 0;                          // starting ofst for domain curve pts in cur. dim
             size_t coo        = 0;                          // co at start of contiguous sequence
@@ -422,7 +428,14 @@ FastEncode(
 
 #endif
 
-#if 1                                       // TBB version
+// NB: the following TBB version is slower (~8X) than the serial version
+// probably the offset calculations that must be repeated each time to make the loops reentrant are
+// too expensive and not worth it
+// Don't use this version for now
+// TODO: figure out how to compute the offsets in closed form
+//
+
+#if 0                                       // TBB version
 
 // approximate a NURBS hypervolume of arbitrary dimension for a given input data set
 // weights are all 1 for now

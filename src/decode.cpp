@@ -411,6 +411,8 @@ Decoder(MFA& mfa_) :
 // //     }
 // }
 
+// NB: The TBB version below is definitely faster (~3X) than the serial. Use the TBB version
+
 #if 1                                   // TBB version
 
 // computes approximated points from a given set of domain points and an n-d NURBS volume
@@ -432,9 +434,6 @@ Decode(MatrixXf& approx)                 // pts in approximated volume (1st dim.
 
     parallel_for (size_t(0), (size_t)domain.rows(), [&] (size_t i)
     {
-        // debug
-        // cerr << "input point:\n" << domain.row(i) << endl;
-
         // convert linear idx to multidim. i,j,k... indices in each domain dimension
         VectorXi ijk(p.size());
         mfa.idx2ijk(i, ijk);
@@ -448,16 +447,9 @@ Decode(MatrixXf& approx)                 // pts in approximated volume (1st dim.
         VectorXf cpt(ctrl_pts.cols());       // approximated point
         VolPt(param, cpt);
 
-        // debug
-//         cerr << "domain pt:\n" << domain.row(i) << "\ncpt:\n" << cpt << endl;
-
         approx.row(i) = cpt;
-
-        // print progress
-        if (i > 0 && domain.rows() >= 100 && i % (domain.rows() / 100) == 0)
-            fprintf(stderr, "\r%.0f %% decoded", (float)i / (float)(domain.rows()) * 100);
     });
-    fprintf(stderr, "\r100 %% decoded\n");
+    fprintf(stderr, "100 %% decoded\n");
 
     // normal distance computation
     float max_err;                          // max. error found so far
