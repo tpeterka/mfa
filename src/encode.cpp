@@ -345,8 +345,9 @@ FastEncode(
         // TODO: use a common representation for P and ctrl_pts to avoid copying
         MatrixXf P(n(k) - 1, domain.cols());
 
-        // number of curves in this dimension
-        size_t ncurves = domain.rows() / ndom_pts(k);
+        size_t ncurves  = domain.rows() / ndom_pts(k);      // number of curves in this dimension
+        int nsame_steps = 0;                                // number of steps with same number of erroneous points
+        int n_step_sizes = 0;                               // number of step sizes so far
 
 //         for (size_t s = 1; s >= 1; s /= 2)        // debug only, one step size of s=1
         for (size_t s = ncurves / 2; s >= 1 && ncurves / s < max_num_curves; s /= 2)        // for all step sizes over curves
@@ -360,7 +361,9 @@ FastEncode(
 
             for (size_t j = 0; j < ncurves; j++)            // for all the curves in this dimension
             {
-                if (j % s == 0)                             // this is one of the s-th curves; compute it
+                // each time the step changes, shift start of s-th curves by one (by subtracting
+                // n_step-sizes below)
+                if (j >= n_step_sizes && (j - n_step_sizes) % s == 0)   // this is one of the s-th curves; compute it
                 {
                     // compute R from input domain points
                     RHS(k, N, R, ko[k], po[k], co);
@@ -397,10 +400,16 @@ FastEncode(
                 }
             }                                               // curves in this dimension
 
-//             fprintf(stderr, "k=%ld worst_curve_idx=%ld\n", k, worst_curve);
+            // debug
+//             fprintf(stderr, "k=%ld worst_curve_idx=%ld max_nerr=%ld\n", k, worst_curve, max_nerr);
 
-            if (max_nerr && !new_max_nerr)                  // stop refining step if no change
+            // stop refining step if no change
+            if (max_nerr && !new_max_nerr)
+                nsame_steps++;
+            if (nsame_steps == 2)
                 break;
+
+            n_step_sizes++;
         }                                               // step sizes over curves
 
         // free R, NtN, and P
