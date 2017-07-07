@@ -13,6 +13,7 @@
 
 #include <Eigen/Dense>
 #include <vector>
+#include <set>
 
 typedef Eigen::MatrixXf MatrixXf;
 typedef Eigen::MatrixXi MatrixXi;
@@ -90,17 +91,32 @@ namespace mfa
                 size_t    co,         // starting offset for reading domain points
                 MatrixXf& temp_ctrl); // temporary control points buffer
 
+        // various versions of ErrorCurve follow
+
+        // this version only returns number of erroneous input domain points
         int ErrorCurve(
                 size_t       k,             // current dimension
                 size_t       co,            // starting ofst for reading domain pts
                 MatrixXf&    ctrl_pts,      // control points
                 float        err_limit);    // max allowable error
 
+        // in addition to returning number of erroneous input domain points
+        // this version adds erroneous spans to the back of a vector
         int ErrorCurve(
                 size_t       k,             // current dimension
                 size_t       co,            // starting ofst for reading domain pts
                 MatrixXf&    ctrl_pts,      // control points
                 vector<int>& err_spans,     // spans with error greater than err_limit
+                float        err_limit);    // max allowable error
+
+        // in addition to returning number of erroneous input domain points
+        // this version inserts erroneous spans into a set
+        // allowing the same span to be inserted multiple times w/o duplicates
+        int ErrorCurve(
+                size_t       k,             // current dimension
+                size_t       co,            // starting ofst for reading domain pts
+                MatrixXf&    ctrl_pts,      // control points
+                set<int>& err_spans,        // spans with error greater than err_limit
                 float        err_limit);    // max allowable error
 
         MFA& mfa;                       // the mfa object

@@ -40,16 +40,17 @@ AdaptiveEncode(float err_limit)                     // maximum allowable normali
     VectorXi nnew_knots = VectorXi::Zero(p.size()); // number of new knots in each dim
     VectorXf new_knots;                             // new knots (1st dim changes fastest)
 
-    // fast encoding in 1-d
+    // knot insertion in 1-d
+    fprintf(stderr, "Inserting knots in 1D curves...\n\n");
     for (int iter = 0; ; iter++)
     {
-        fprintf(stderr, "\n\nEncoding iteration %d...\n", iter);
+        fprintf(stderr, "\n\nIteration %d...\n", iter);
         bool done = FastEncode(nnew_knots, new_knots, err_limit);
 
         // no new knots to be added
         if (done)
         {
-            fprintf(stderr, "\n\ndone after %d iterations; no new knots added\n", iter + 1);
+            fprintf(stderr, "\n\nKnot insertion done after %d iterations; no new knots added.\n", iter + 1);
             break;
         }
 
@@ -63,7 +64,7 @@ AdaptiveEncode(float err_limit)                     // maximum allowable normali
             }
         if (done)
         {
-            fprintf(stderr, "\n\ndone after %d iterations; control points would outnumber input points\n", iter + 1);
+            fprintf(stderr, "\n\nKnot insertion done after %d iterations; control points would outnumber input points.\n", iter + 1);
             break;
         }
 
@@ -71,6 +72,7 @@ AdaptiveEncode(float err_limit)                     // maximum allowable normali
     }
 
     // slow encoding full-d mfa
+    fprintf(stderr, "Encoding in full %ldD\n", p.size());
     Encode();
 }
 
@@ -80,6 +82,8 @@ AdaptiveEncode(float err_limit)                     // maximum allowable normali
 // Don't use this version for now
 // TODO: figure out how to compute the offsets in closed form
 //
+// does not include accuracy improvements later added to single threaded version (multiple
+// indentical results before exiting step loop, shifted curve start in step loop, etc.)
 
 #if 0
 
@@ -272,9 +276,11 @@ FastEncode(
     return(nnew_knots.sum() ? 0 : 1);
 }
 
-# else
+#endif
 
+#if 0
 // single thread version
+// adds knots in error spans of worst curve in each direction (into a vector)
 // fast encode using curves instead of high volume in early rounds to determine knot insertions
 // returns true if done, ie, no knots are inserted
 bool
@@ -422,10 +428,186 @@ FastEncode(
         auto old_size = new_knots.size();
         new_knots.conservativeResize(old_size + worst_spans.size());    // existing values are preserved
         for (auto i = 0; i < worst_spans.size(); i++)
+        {
+            // debug
+            assert(worst_spans[i] < 1.0);                          // not trying to go beyond the last span
+
             new_knots(old_size + i) = (knots(ko[k] + worst_spans[i]) + knots(ko[k] + worst_spans[i] + 1)) / 2.0;
+        }
 
         // print progress
         fprintf(stderr, "\rdimension %ld of %d encoded", k + 1, ndims);
+    }                                                      // domain dimensions
+
+    // debug
+//     cerr << "\nnnew_knots:\n" << nnew_knots << endl;
+//     cerr << "new_knots:\n"  << new_knots  << endl;
+
+    return(nnew_knots.sum() ? 0 : 1);
+}
+
+#else
+
+// single thread version
+// adds knots error spans from all curves in all directions (into a set)
+// fast encode using curves instead of high volume in early rounds to determine knot insertions
+// returns true if done, ie, no knots are inserted
+bool
+mfa::
+Encoder::
+FastEncode(
+        VectorXi& nnew_knots,                       // number of new knots in each dim
+        VectorXf& new_knots,                        // new knots (1st dim changes fastest)
+        float     err_limit)                        // max allowable error
+{
+    // check and assign main quantities
+    int  ndims = ndom_pts.size();                   // number of domain dimensions
+    VectorXi n = nctrl_pts - VectorXi::Ones(ndims); // number of control point spans in each domain dim
+    VectorXi m = ndom_pts  - VectorXi::Ones(ndims); // number of input data point spans in each domain dim
+    nnew_knots = VectorXi::Zero(p.size());
+    new_knots.resize(0);
+
+    // control points
+    ctrl_pts.resize(mfa.tot_nctrl, domain.cols());
+
+    for (size_t k = 0; k < ndims; k++)              // for all domain dimensions
+    {
+        // temporary control points for one curve
+        MatrixXf temp_ctrl = MatrixXf::Zero(nctrl_pts(k), domain.cols());
+
+        // error spans for one curve and for worst curve
+        set<int> err_spans;
+
+        // maximum number of domain points with error greater than err_limit and their curves
+        size_t max_nerr     =  0;
+
+        // compute the matrix N, eq. 9.66 in P&T
+        // N is a matrix of (m - 1) x (n - 1) scalars that are the basis function coefficients
+        //  _                                _
+        // |  N_1(u[1])   ... N_{n-1}(u[1])   |
+        // |     ...      ...      ...        |
+        // |  N_1(u[m-1]) ... N_{n-1}(u[m-1]) |
+        //  -                                -
+        // TODO: N is going to be very sparse when it is large: switch to sparse representation
+        // N has semibandwidth < p  nonzero entries across diagonal
+        MatrixXf N = MatrixXf::Zero(m(k) - 1, n(k) - 1); // coefficients matrix
+
+        for (int i = 1; i < m(k); i++)                  // the rows of N
+        {
+            int span = mfa.FindSpan(k, params(po[k] + i), ko[k]);
+            assert(span - ko[k] <= n(k));            // sanity
+            mfa.BasisFuns(k, params(po[k] + i), span, N, 1, n(k) - 1, i - 1, ko[k]);
+        }
+
+        // compute the product Nt x N
+        // TODO: NtN is going to be very sparse when it is large: switch to sparse representation
+        // NtN has semibandwidth < p + 1 nonzero entries across diagonal
+        MatrixXf NtN(n(k) - 1, n(k) - 1);
+        NtN = N.transpose() * N;
+
+        // debug
+        //         cerr << "k " << k << " NtN:\n" << NtN << endl;
+
+        // R is the right hand side needed for solving NtN * P = R
+        MatrixXf R(n(k) - 1, domain.cols());
+
+        // P are the unknown interior control points and the solution to NtN * P = R
+        // NtN is positive definite -> do not need pivoting
+        // TODO: use a common representation for P and ctrl_pts to avoid copying
+        MatrixXf P(n(k) - 1, domain.cols());
+
+        size_t ncurves  = domain.rows() / ndom_pts(k);      // number of curves in this dimension
+        int nsame_steps = 0;                                // number of steps with same number of erroneous points
+        int n_step_sizes = 0;                               // number of step sizes so far
+
+//         for (size_t s = 1; s >= 1; s /= 2)        // debug only, one step size of s=1
+//         for (size_t s = ncurves / max_num_curves; s == ncurves / max_num_curves; s /= 2)        // debug only, one step size of s=ncurves/max_num_curves
+        for (size_t s = ncurves / 2; s >= 1 && ncurves / s < max_num_curves; s /= 2)        // for all step sizes over curves
+        {
+            // debug
+            fprintf(stderr, "k=%ld s=%ld\n", k, s);
+
+            size_t co         = 0;                          // starting ofst for domain curve pts in cur. dim
+            size_t coo        = 0;                          // co at start of contiguous sequence
+            bool new_max_nerr = false;                      // this step size changed the max_nerr
+
+            for (size_t j = 0; j < ncurves; j++)            // for all the curves in this dimension
+            {
+                // debug
+                fprintf(stderr, "\rk=%ld s=%ld j=%ld", k, s, j);
+
+                // each time the step changes, shift start of s-th curves by one (by subtracting
+                // n_step-sizes below)
+                if (j >= n_step_sizes && (j - n_step_sizes) % s == 0)   // this is one of the s-th curves; compute it
+                {
+                    // compute R from input domain points
+                    RHS(k, N, R, ko[k], po[k], co);
+
+                    // solve for P for one curve of control points
+                    P = NtN.ldlt().solve(R);
+
+                    // append points from P to control points
+                    // TODO: any way to avoid this?
+                    CopyCtrl(P, n, k, co, temp_ctrl);
+
+                    // compute the error on the curve (number of input points with error > err_limit)
+                    size_t nerr = ErrorCurve(k, co, temp_ctrl, err_spans, err_limit);
+                    if (nerr > max_nerr)
+                    {
+                        max_nerr     = nerr;
+                        new_max_nerr = true;
+
+                    // debug
+//                     fprintf(stderr, "k=%ld s=%ld j=%ld co=%ld nerr=%ld max_nerr=%ld\n",
+//                             k, s, j, co, nerr, max_nerr);
+                    }
+                }
+
+                // adjust offsets for the next curve
+                if ((j + 1) % mfa.ds[k])
+                    co++;
+                else
+                {
+                    co = coo + mfa.ds[k] * ndom_pts(k);
+                    coo = co;
+                }
+            }                                               // curves in this dimension
+            // debug
+            fprintf(stderr, "\n");
+
+            // debug
+//             fprintf(stderr, "k=%ld worst_curve_idx=%ld max_nerr=%ld\n", k, worst_curve, max_nerr);
+
+            // stop refining step if no change
+            if (max_nerr && !new_max_nerr)
+                nsame_steps++;
+            if (nsame_steps == 2)
+                break;
+
+            n_step_sizes++;
+        }                                               // step sizes over curves
+
+        // free R, NtN, and P
+        R.resize(0, 0);
+        NtN.resize(0, 0);
+        P.resize(0, 0);
+
+        // add new knots in the middle of spans with errors
+        nnew_knots(k) = err_spans.size();
+        auto old_size = new_knots.size();
+        new_knots.conservativeResize(old_size + err_spans.size());    // existing values are preserved
+        size_t i = 0;                                   // index into new_knots
+        for (set<int>::iterator it = err_spans.begin(); it != err_spans.end(); ++it)
+        {
+            // debug
+            assert(*it < 1.0);                          // not trying to go beyond the last span
+
+            new_knots(old_size + i) = (knots(ko[k] + *it) + knots(ko[k] + *it + 1)) / 2.0;
+            i++;
+        }
+
+        // print progress
+        fprintf(stderr, "\rdimension %ld of %d encoded\n", k + 1, ndims);
     }                                                      // domain dimensions
 
     // debug
@@ -657,6 +839,8 @@ Encode()
 
     for (size_t k = 0; k < ndims; k++)      // for all domain dimensions
     {
+        fprintf(stderr, "k=%ld\n", k);
+
         // TODO:
         // Investigate whether in later dimensions, when input data points are replaced by
         // control points, need new knots and params computed.
@@ -727,8 +911,10 @@ Encode()
         size_t coo = 0, too = 0;                  // co and to at start of contiguous sequence
         for (size_t j = 0; j < ncurves; j++)      // for all the curves in this dimension
         {
-            // debug
-            // fprintf(stderr, "j=%ld curve\n", j);
+            // print progress
+            if (j > 0 && j % (ncurves / 100) == 0)
+                fprintf(stderr, "\r dimension %ld: %.0f %% encoded (%ld out of %ld curves)",
+                        k, (float)j / (float)ncurves * 100, j, ncurves);
 
             // compute the one curve of control points
             CtrlCurve(N, NtN, R, P, n, k, co, cs, to, temp_ctrl0, temp_ctrl1);
@@ -760,7 +946,7 @@ Encode()
         P.resize(0, 0);
 
         // print progress
-        fprintf(stderr, "\rdimension %ld of %d encoded", k + 1, ndims);
+        fprintf(stderr, "\rdimension %ld of %d encoded\n", k + 1, ndims);
 
     }                                                      // domain dimensions
 
@@ -1265,6 +1451,84 @@ ErrorCurve(
                 // mark the span and count the point if the span can (later) be split
                 if (split_left && split_right)
                     err_spans.push_back(span);
+            }
+            // count the point in the total even if the span is not marked for spitting
+            // total used to find worst curve, defined as the curve with the most domain points in
+            // error (including multiple domain points per span and points in spans that can't be
+            // split further)
+            nerr++;
+
+            // debug
+//             VectorXf dpt = domain.row(co + i * mfa.ds[k]);
+//             cerr << "\ndomain point:\n" << dpt << endl;
+//             cerr << "approx point:\n" << cpt << endl;
+//             fprintf(stderr, "k=%ld i=%d co=%ld err=%.3e\n\n", k, i, co, err);
+        }
+    }
+
+    return nerr;
+}
+
+// returns number of points in a curve that have error greater than err_limit
+// fills err_spans with the span indices of spans that have at least one point with such error
+//      and that have at least one inut point in each half of the span (assuming eventually
+//      the span would be split in half with a knot added in the middle, and an input point would
+//      need to be in each span after splitting)
+// this version takes a set instead of a vectore for error_spans so that the same span can be
+// added iteratively multiple times without creating duplicates
+int
+mfa::
+Encoder::
+ErrorCurve(
+        size_t       k,                         // current dimension
+        size_t       co,                        // starting ofst for reading domain pts
+        MatrixXf&    ctrl_pts,                  // control points
+        set<int>&    err_spans,                 // spans with error greater than err_limit
+        float        err_limit)                 // max allowable error
+{
+    mfa::Decoder decoder(mfa);
+    VectorXf cpt(domain.cols());                // decoded curve point
+    int nerr = 0;                               // number of points with error greater than err_limit
+    int span = p[k];                            // current knot span of the domain point being checked
+
+    for (auto i = 0; i < ndom_pts[k]; i++)      // all domain points in the curve
+    {
+        while (knots(ko[k] + span + 1) < 1.0 && knots(ko[k] + span + 1) <= params(po[k] + i))
+            span++;
+        // debug
+//         fprintf(stderr, "param=%.3f span=[%.3f %.3f]\n", params(po[k] + i), knots(ko[k] + span), knots(ko[k] + span + 1));
+
+        decoder.CurvePt(k, params(po[k] + i), ctrl_pts, cpt);
+        float err = fabs(mfa.NormalDistance(cpt, co + i * mfa.ds[k])) / dom_range;     // normalized by data range
+        if (err > err_limit)
+        {
+            // don't duplicate spans
+            set<int>::iterator it = err_spans.find(span);
+            if (!err_spans.size() || it == err_spans.end())
+            {
+                // ensure there would be a domain point in both halves of the span if it were split
+                bool split_left = false;
+                for (auto j = i; params(po[k] + j) >= knots(ko[k] + span); j--)
+                    if (params(po[k] + j) < (knots(ko[k] + span) + knots(ko[k] + span + 1)) / 2.0)
+                    {
+                        // debug
+//                         fprintf(stderr, "split_left: param=%.3f span[%d]=[%.3f, %.3f)\n",
+//                                 params(po[k] + j), span, knots(ko[k] + span), knots(ko[k] + span + 1));
+                        split_left = true;
+                        break;
+                    }
+                bool split_right = false;
+                for (auto j = i; params(po[k] + j) < knots(ko[k] + span + 1); j++)
+                    if (params(po[k] + j) >= (knots(ko[k] + span) + knots(ko[k] + span + 1)) / 2.0)
+                    {
+//                         fprintf(stderr, "split_right: param=%.3f span[%d]=[%.3f, %.3f)\n",
+//                                 params(po[k] + j), span, knots(ko[k] + span), knots(ko[k] + span + 1));
+                        split_right = true;
+                        break;
+                    }
+                // mark the span and count the point if the span can (later) be split
+                if (split_left && split_right)
+                    err_spans.insert(it, span);
             }
             // count the point in the total even if the span is not marked for spitting
             // total used to find worst curve, defined as the curve with the most domain points in
