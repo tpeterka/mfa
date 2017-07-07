@@ -79,9 +79,15 @@ namespace mfa
 //                 VectorXf& new_knots,                    // new knots (1st dim changes fastest)
 //                 float err_limit);                       // max allowable relative error
 
+        // debug version, remove when no longer needed
+        int FindSpan(int   cur_dim,       // current dimension
+                     bool  debug,         // print debug info
+                     float u);            // parameter value
+
+
         int FindSpan(int   cur_dim,       // current dimension
                      float u,             // parameter value
-                     int   ko = 0);       // optional index of starting knot
+                     int   ko    = 0);    // optional index of starting knot
 
         void BasisFuns(int       cur_dim, // current dimension
                        float     u,       // parameter value

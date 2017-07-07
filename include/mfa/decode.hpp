@@ -40,21 +40,24 @@ namespace mfa
                 int       cur_dim,              // current dimension
                 float     param,                // parameter value of desired point
                 MatrixXf& temp_ctrl,            // temporary control points
-                VectorXf& out_pt);              // (output) point
+                VectorXf& out_pt,               // (output) point
+                int       ko = 0);              // starting knot offset
 
     private:
 
         void CurvePt(
                 int       cur_dim,              // current dimension
                 float     param,                // parameter value of desired point
-                VectorXf& out_pt);              // (output) point
+                VectorXf& out_pt,               // (output) point
+                int       ko = 0);              // starting knot offset
 
-        void DecodeCurve(size_t    cur_dim,    // current dimension
-                         float     pre_param,  // param value in prior dim of the pts in the curve
-                         size_t    ko,         // starting offset for knots in current dim
-                         size_t    cur_cs,     // stride for control points in current dim
-                         size_t    pre_cs,     // stride for control points in prior dim
-                         MatrixXf& out_pts);   // output approximated pts for the curve
+        // DEPRECATED
+//         void DecodeCurve(size_t    cur_dim,    // current dimension
+//                          float     pre_param,  // param value in prior dim of the pts in the curve
+//                          size_t    ko,         // starting offset for knots in current dim
+//                          size_t    cur_cs,     // stride for control points in current dim
+//                          size_t    pre_cs,     // stride for control points in prior dim
+//                          MatrixXf& out_pts);   // output approximated pts for the curve
 
 //         void SplitSpan(
 //                 size_t        si,               // id of span to split

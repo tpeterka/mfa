@@ -44,8 +44,8 @@ AdaptiveEncode(float err_limit)                     // maximum allowable normali
     fprintf(stderr, "Inserting knots in 1D curves...\n\n");
     for (int iter = 0; ; iter++)
     {
-        fprintf(stderr, "\n\nIteration %d...\n", iter);
-        bool done = FastEncode(nnew_knots, new_knots, err_limit);
+        fprintf(stderr, "\nIteration %d...\n", iter);
+        bool done = FastEncode(nnew_knots, new_knots, err_limit, iter);
 
         // no new knots to be added
         if (done)
@@ -458,7 +458,8 @@ Encoder::
 FastEncode(
         VectorXi& nnew_knots,                       // number of new knots in each dim
         VectorXf& new_knots,                        // new knots (1st dim changes fastest)
-        float     err_limit)                        // max allowable error
+        float     err_limit,                        // max allowable error
+        int       iter)                             // iteration number of caller (for debugging)
 {
     // check and assign main quantities
     int  ndims = ndom_pts.size();                   // number of domain dimensions
@@ -533,13 +534,11 @@ FastEncode(
 
             for (size_t j = 0; j < ncurves; j++)            // for all the curves in this dimension
             {
-                // debug
-                fprintf(stderr, "\rk=%ld s=%ld j=%ld", k, s, j);
-
                 // each time the step changes, shift start of s-th curves by one (by subtracting
                 // n_step-sizes below)
                 if (j >= n_step_sizes && (j - n_step_sizes) % s == 0)   // this is one of the s-th curves; compute it
                 {
+
                     // compute R from input domain points
                     RHS(k, N, R, ko[k], po[k], co);
 
@@ -552,6 +551,7 @@ FastEncode(
 
                     // compute the error on the curve (number of input points with error > err_limit)
                     size_t nerr = ErrorCurve(k, co, temp_ctrl, err_spans, err_limit);
+
                     if (nerr > max_nerr)
                     {
                         max_nerr     = nerr;
@@ -561,6 +561,7 @@ FastEncode(
 //                     fprintf(stderr, "k=%ld s=%ld j=%ld co=%ld nerr=%ld max_nerr=%ld\n",
 //                             k, s, j, co, nerr, max_nerr);
                     }
+
                 }
 
                 // adjust offsets for the next curve
@@ -572,8 +573,6 @@ FastEncode(
                     coo = co;
                 }
             }                                               // curves in this dimension
-            // debug
-            fprintf(stderr, "\n");
 
             // debug
 //             fprintf(stderr, "k=%ld worst_curve_idx=%ld max_nerr=%ld\n", k, worst_curve, max_nerr);
@@ -1380,7 +1379,7 @@ ErrorCurve(
         // debug
 //         fprintf(stderr, "param=%.3f span=[%.3f %.3f]\n", params(po[k] + i), knots(ko[k] + span), knots(ko[k] + span + 1));
 
-        decoder.CurvePt(k, params(po[k] + i), ctrl_pts, cpt);
+        decoder.CurvePt(k, params(po[k] + i), ctrl_pts, cpt, ko[k]);
         float err = fabs(mfa.NormalDistance(cpt, co + i * mfa.ds[k])) / dom_range;     // normalized by data range
         if (err > err_limit)
         {
@@ -1425,7 +1424,7 @@ ErrorCurve(
         // debug
 //         fprintf(stderr, "param=%.3f span=[%.3f %.3f]\n", params(po[k] + i), knots(ko[k] + span), knots(ko[k] + span + 1));
 
-        decoder.CurvePt(k, params(po[k] + i), ctrl_pts, cpt);
+        decoder.CurvePt(k, params(po[k] + i), ctrl_pts, cpt, ko[k]);
         float err = fabs(mfa.NormalDistance(cpt, co + i * mfa.ds[k])) / dom_range;     // normalized by data range
         if (err > err_limit)
         {
@@ -1478,7 +1477,7 @@ ErrorCurve(
 //      and that have at least one inut point in each half of the span (assuming eventually
 //      the span would be split in half with a knot added in the middle, and an input point would
 //      need to be in each span after splitting)
-// this version takes a set instead of a vectore for error_spans so that the same span can be
+// this version takes a set instead of a vector for error_spans so that the same span can be
 // added iteratively multiple times without creating duplicates
 int
 mfa::
@@ -1499,11 +1498,13 @@ ErrorCurve(
     {
         while (knots(ko[k] + span + 1) < 1.0 && knots(ko[k] + span + 1) <= params(po[k] + i))
             span++;
+
         // debug
 //         fprintf(stderr, "param=%.3f span=[%.3f %.3f]\n", params(po[k] + i), knots(ko[k] + span), knots(ko[k] + span + 1));
 
-        decoder.CurvePt(k, params(po[k] + i), ctrl_pts, cpt);
+        decoder.CurvePt(k, params(po[k] + i), ctrl_pts, cpt, ko[k]);
         float err = fabs(mfa.NormalDistance(cpt, co + i * mfa.ds[k])) / dom_range;     // normalized by data range
+
         if (err > err_limit)
         {
             // don't duplicate spans

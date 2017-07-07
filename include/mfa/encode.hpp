@@ -35,7 +35,8 @@ namespace mfa
         bool FastEncode(
                 VectorXi& nnew_knots,                       // number of new knots in each dim
                 VectorXf& new_knots,                        // new knots (1st dim changes fastest)
-                float     err_limit);                       // max allowable error
+                float     err_limit,                        // max allowable error
+                int       iter);                            // iteration number of caller (for debugging)
 
    private:
 

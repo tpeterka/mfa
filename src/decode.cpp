@@ -579,12 +579,13 @@ mfa::
 Decoder::
 CurvePt(int       cur_dim,                     // current dimension
         float     param,                       // parameter value of desired point
-        VectorXf& out_pt)                      // (output) point
+        VectorXf& out_pt,                      // (output) point
+        int       ko)                          // starting knot offset (default = 0)
 {
     int n      = (int)ctrl_pts.rows() - 1;     // number of control point spans
-    int span   = mfa.FindSpan(cur_dim, param);
+    int span   = mfa.FindSpan(cur_dim, param, ko);
     MatrixXf N = MatrixXf::Zero(1, n + 1);     // basis coefficients
-    mfa.BasisFuns(cur_dim, param, span, N, 0, n, 0);
+    mfa.BasisFuns(cur_dim, param, span, N, 0, n, 0, ko);
     out_pt = VectorXf::Zero(ctrl_pts.cols());  // initializes and resizes
 
     for (int j = 0; j <= p(cur_dim); j++)
@@ -607,12 +608,13 @@ CurvePt(
         int       cur_dim,                     // current dimension
         float     param,                       // parameter value of desired point
         MatrixXf& temp_ctrl,                   // temporary control points
-        VectorXf& out_pt)                      // (output) point
+        VectorXf& out_pt,                      // (output) point
+        int       ko)                          // starting knot offset (default = 0)
 {
     int n      = (int)temp_ctrl.rows() - 1;     // number of control point spans
-    int span   = mfa.FindSpan(cur_dim, param);
+    int span   = mfa.FindSpan(cur_dim, param, ko);
     MatrixXf N = MatrixXf::Zero(1, n + 1);     // basis coefficients
-    mfa.BasisFuns(cur_dim, param, span, N, 0, n, 0);
+    mfa.BasisFuns(cur_dim, param, span, N, 0, n, 0, ko);
     out_pt = VectorXf::Zero(temp_ctrl.cols());  // initializes and resizes
 
     for (int j = 0; j <= p(cur_dim); j++)
@@ -623,74 +625,75 @@ CurvePt(
     // cerr << " N " << N << endl;
 }
 
-// decode one curve in one dimension (e.g., y direction) from a set of previously computed
-// control curves in the prior dimension (e.g., x direction)
-// new curve in current dimension (e.g., y) is normal to curves in prior dimension (e.g., x) and
-// is located in the prior dimension (e.g., x) at parameter value prev_param
-//
-// assumes the caller resized the output out_pts to the correct size, which is number of original
-// domain points in the current dimension (e.g., y)
-//
-// currently not used but can be useful for getting a cross-section curve from a surface
-// would need to be expanded to get a curve from a higher dimensional space, currently gets 1D curve
-// from 2D surface
-void
-mfa::
-Decoder::
-DecodeCurve(size_t    cur_dim,    // current dimension
-            float     pre_param,  // parameter value in prior dimension of the pts in the curve
-            size_t    ko,         // starting offset for knots in current dim
-            size_t    cur_cs,     // stride for control points in current dim
-            size_t    pre_cs,     // stride for control points in prior dim
-            MatrixXf& out_pts)    // output approximated pts for the curve
-{
-    if (cur_dim == 0 || cur_dim >= p.size())
-    {
-        fprintf(stderr, "Error in DecodeCurve(): "
-                "cur_dim out of range (must be 1 <= cur_dim <= %ld\n",
-                p.size() - 1);
-        exit(0);
-    }
-
-    // get one set of knots in the prior dimension
-    size_t nknots = nctrl_pts(cur_dim - 1) + p(cur_dim - 1) + 1;
-    VectorXf pre_knots(nknots);
-    for (size_t i = 0; i < nknots; i++)
-        pre_knots(i) = knots(ko + i);
-
-    // debug
-    // cerr << "pre_knots:\n" << pre_knots << endl;
-
-    // control points for one curve in prior dimension
-    MatrixXf pre_ctrl_pts(nctrl_pts(cur_dim - 1), domain.cols());
-    size_t n = 0;                            // index of current control point
-
-    // for the desired approximated points in the current dim, same number as domain points
-    for (size_t j = 0; j < ndom_pts(cur_dim); j++)
-    {
-        // get one curve of control points in the prior dim
-        for (size_t i = 0; i < nctrl_pts(cur_dim - 1); i++)
-        {
-            pre_ctrl_pts.row(i) = ctrl_pts.row(n);
-            n += pre_cs;
-        }
-        n += (cur_cs - nctrl_pts(cur_dim - 1));
-
-        // debug
-        // cerr << "pre_ctrl_pts:\n" << pre_ctrl_pts << endl;
-
-        // get the approximated point
-        VectorXf out_pt(domain.cols());
-        CurvePt(cur_dim - 1, pre_param, out_pt);
-        out_pts.row(j) = out_pt;
-
-        // debug
-        // cerr << "out_pt: " << out_pt << endl;
-    }
-
-    // debug
-    // cerr << "out_pts:\n " << out_pts << endl;
-}
+// // DEPRECATED
+// // decode one curve in one dimension (e.g., y direction) from a set of previously computed
+// // control curves in the prior dimension (e.g., x direction)
+// // new curve in current dimension (e.g., y) is normal to curves in prior dimension (e.g., x) and
+// // is located in the prior dimension (e.g., x) at parameter value prev_param
+// //
+// // assumes the caller resized the output out_pts to the correct size, which is number of original
+// // domain points in the current dimension (e.g., y)
+// //
+// // currently not used but can be useful for getting a cross-section curve from a surface
+// // would need to be expanded to get a curve from a higher dimensional space, currently gets 1D curve
+// // from 2D surface
+// void
+// mfa::
+// Decoder::
+// DecodeCurve(size_t    cur_dim,    // current dimension
+//             float     pre_param,  // parameter value in prior dimension of the pts in the curve
+//             size_t    ko,         // starting offset for knots in current dim
+//             size_t    cur_cs,     // stride for control points in current dim
+//             size_t    pre_cs,     // stride for control points in prior dim
+//             MatrixXf& out_pts)    // output approximated pts for the curve
+// {
+//     if (cur_dim == 0 || cur_dim >= p.size())
+//     {
+//         fprintf(stderr, "Error in DecodeCurve(): "
+//                 "cur_dim out of range (must be 1 <= cur_dim <= %ld\n",
+//                 p.size() - 1);
+//         exit(0);
+//     }
+// 
+//     // get one set of knots in the prior dimension
+//     size_t nknots = nctrl_pts(cur_dim - 1) + p(cur_dim - 1) + 1;
+//     VectorXf pre_knots(nknots);
+//     for (size_t i = 0; i < nknots; i++)
+//         pre_knots(i) = knots(ko + i);
+// 
+//     // debug
+//     // cerr << "pre_knots:\n" << pre_knots << endl;
+// 
+//     // control points for one curve in prior dimension
+//     MatrixXf pre_ctrl_pts(nctrl_pts(cur_dim - 1), domain.cols());
+//     size_t n = 0;                            // index of current control point
+// 
+//     // for the desired approximated points in the current dim, same number as domain points
+//     for (size_t j = 0; j < ndom_pts(cur_dim); j++)
+//     {
+//         // get one curve of control points in the prior dim
+//         for (size_t i = 0; i < nctrl_pts(cur_dim - 1); i++)
+//         {
+//             pre_ctrl_pts.row(i) = ctrl_pts.row(n);
+//             n += pre_cs;
+//         }
+//         n += (cur_cs - nctrl_pts(cur_dim - 1));
+// 
+//         // debug
+//         // cerr << "pre_ctrl_pts:\n" << pre_ctrl_pts << endl;
+// 
+//         // get the approximated point
+//         VectorXf out_pt(domain.cols());
+//         CurvePt(cur_dim - 1, pre_param, out_pt);
+//         out_pts.row(j) = out_pt;
+// 
+//         // debug
+//         // cerr << "out_pt: " << out_pt << endl;
+//     }
+// 
+//     // debug
+//     // cerr << "out_pts:\n " << out_pts << endl;
+// }
 
 // compute a point from a NURBS n-d volume at a given parameter value
 // algorithm 4.3, Piegl & Tiller (P&T) p.134

@@ -731,8 +731,8 @@ struct Block
 
             // open hard-coded file name
             // file is 704 * 540 * 550 * 3 floats (vx,vy,vz)
-//             FILE *fd = fopen("/Users/tpeterka/datasets/flame/6_small.xyz", "r");
-            FILE *fd = fopen("/homes/tpeterka/datasets/flame/6_small.xyz", "r");
+            FILE *fd = fopen("/Users/tpeterka/datasets/flame/6_small.xyz", "r");
+//             FILE *fd = fopen("/homes/tpeterka/datasets/flame/6_small.xyz", "r");
             assert(fd);
 
             // read all three components of velocity and compute magnitude
@@ -898,7 +898,7 @@ struct Block
             // cerr << "domain\n" << domain << endl;
 //             cerr << "nctrl_pts:\n" << nctrl_pts << endl;
 //             cerr << ctrl_pts.rows() << " control points\n" << ctrl_pts << endl;
-//             cerr << knots.size() << " knots\n" << knots << endl;
+            cerr << knots.size() << " knots\n" << knots << endl;
             // cerr << approx.rows() << " approximated points\n" << approx << endl;
             fprintf(stderr, "|normalized max_err| = %e\n", fabs(max_err));
             fprintf(stderr, "# input points = %ld\n", domain.rows());
