@@ -50,7 +50,7 @@ AdaptiveEncode(float err_limit)                     // maximum allowable normali
         // no new knots to be added
         if (done)
         {
-            fprintf(stderr, "\n\nKnot insertion done after %d iterations; no new knots added.\n", iter + 1);
+            fprintf(stderr, "\n\nKnot insertion done after %d iterations; no new knots added.\n\n", iter + 1);
             break;
         }
 
@@ -430,7 +430,7 @@ FastEncode(
         for (auto i = 0; i < worst_spans.size(); i++)
         {
             // debug
-            assert(worst_spans[i] < 1.0);                          // not trying to go beyond the last span
+            assert(worst_spans[i] < nctrl_pts[k]);                      // not trying to go beyond the last span
 
             new_knots(old_size + i) = (knots(ko[k] + worst_spans[i]) + knots(ko[k] + worst_spans[i] + 1)) / 2.0;
         }
@@ -600,7 +600,11 @@ FastEncode(
         for (set<int>::iterator it = err_spans.begin(); it != err_spans.end(); ++it)
         {
             // debug
-            assert(*it < 1.0);                          // not trying to go beyond the last span
+//             fprintf(stderr, "*it=%d span=[%.3f, %.3f]",
+//                     *it, knots(ko[k] + *it), knots(ko[k] + *it +1));
+
+            // debug
+            assert(*it < nctrl_pts[k]);                          // not trying to go beyond the last span
 
             new_knots(old_size + i) = (knots(ko[k] + *it) + knots(ko[k] + *it + 1)) / 2.0;
             i++;
@@ -912,7 +916,7 @@ Encode()
         for (size_t j = 0; j < ncurves; j++)      // for all the curves in this dimension
         {
             // print progress
-            if (j > 0 && j % (ncurves / 100) == 0)
+            if (j > 0 && j > 100 && j % (ncurves / 100) == 0)
                 fprintf(stderr, "\r dimension %ld: %.0f %% encoded (%ld out of %ld curves)",
                         k, (float)j / (float)ncurves * 100, j, ncurves);
 
@@ -946,7 +950,7 @@ Encode()
         P.resize(0, 0);
 
         // print progress
-        fprintf(stderr, "\rdimension %ld of %d encoded\n", k + 1, ndims);
+        fprintf(stderr, "\33[2K\rdimension %ld of %d encoded\n", k + 1, ndims);
 
     }                                                      // domain dimensions
 

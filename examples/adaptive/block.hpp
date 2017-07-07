@@ -731,8 +731,8 @@ struct Block
 
             // open hard-coded file name
             // file is 704 * 540 * 550 * 3 floats (vx,vy,vz)
-            FILE *fd = fopen("/Users/tpeterka/datasets/flame/6_small.xyz", "r");
-//             FILE *fd = fopen("/homes/tpeterka/datasets/flame/6_small.xyz", "r");
+//             FILE *fd = fopen("/Users/tpeterka/datasets/flame/6_small.xyz", "r");
+            FILE *fd = fopen("/homes/tpeterka/datasets/flame/6_small.xyz", "r");
             assert(fd);
 
             // read all three components of velocity and compute magnitude
