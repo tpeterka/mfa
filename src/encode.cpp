@@ -76,6 +76,338 @@ AdaptiveEncode(float err_limit)                     // maximum allowable normali
     Encode();
 }
 
+#if 1
+
+// single thread version
+// adds knots error spans from all curves in all directions (into a set)
+// fast encode using curves instead of high volume in early rounds to determine knot insertions
+// returns true if done, ie, no knots are inserted
+bool
+mfa::
+Encoder::
+FastEncode(
+        VectorXi& nnew_knots,                       // number of new knots in each dim
+        VectorXf& new_knots,                        // new knots (1st dim changes fastest)
+        float     err_limit,                        // max allowable error
+        int       iter)                             // iteration number of caller (for debugging)
+{
+    // check and assign main quantities
+    int  ndims = ndom_pts.size();                   // number of domain dimensions
+    VectorXi n = nctrl_pts - VectorXi::Ones(ndims); // number of control point spans in each domain dim
+    VectorXi m = ndom_pts  - VectorXi::Ones(ndims); // number of input data point spans in each domain dim
+    nnew_knots = VectorXi::Zero(p.size());
+    new_knots.resize(0);
+
+    // control points
+    ctrl_pts.resize(mfa.tot_nctrl, domain.cols());
+
+    for (size_t k = 0; k < ndims; k++)              // for all domain dimensions
+    {
+        // temporary control points for one curve
+        MatrixXf temp_ctrl = MatrixXf::Zero(nctrl_pts(k), domain.cols());
+
+        // error spans for one curve and for worst curve
+        set<int> err_spans;
+
+        // maximum number of domain points with error greater than err_limit and their curves
+        size_t max_nerr     =  0;
+
+        // compute the matrix N, eq. 9.66 in P&T
+        // N is a matrix of (m - 1) x (n - 1) scalars that are the basis function coefficients
+        //  _                                _
+        // |  N_1(u[1])   ... N_{n-1}(u[1])   |
+        // |     ...      ...      ...        |
+        // |  N_1(u[m-1]) ... N_{n-1}(u[m-1]) |
+        //  -                                -
+        // TODO: N is going to be very sparse when it is large: switch to sparse representation
+        // N has semibandwidth < p  nonzero entries across diagonal
+        MatrixXf N = MatrixXf::Zero(m(k) - 1, n(k) - 1); // coefficients matrix
+
+        for (int i = 1; i < m(k); i++)                  // the rows of N
+        {
+            int span = mfa.FindSpan(k, params(po[k] + i), ko[k]);
+            assert(span - ko[k] <= n(k));            // sanity
+            mfa.BasisFuns(k, params(po[k] + i), span, N, 1, n(k) - 1, i - 1, ko[k]);
+        }
+
+        // compute the product Nt x N
+        // TODO: NtN is going to be very sparse when it is large: switch to sparse representation
+        // NtN has semibandwidth < p + 1 nonzero entries across diagonal
+        MatrixXf NtN(n(k) - 1, n(k) - 1);
+        NtN = N.transpose() * N;
+
+        // R is the right hand side needed for solving NtN * P = R
+        MatrixXf R(n(k) - 1, domain.cols());
+
+        // P are the unknown interior control points and the solution to NtN * P = R
+        // NtN is positive definite -> do not need pivoting
+        // TODO: use a common representation for P and ctrl_pts to avoid copying
+        MatrixXf P(n(k) - 1, domain.cols());
+
+        size_t ncurves  = domain.rows() / ndom_pts(k);      // number of curves in this dimension
+        int nsame_steps = 0;                                // number of steps with same number of erroneous points
+        int n_step_sizes = 0;                               // number of step sizes so far
+
+//         for (size_t s = 1; s >= 1; s /= 2)        // debug only, one step size of s=1
+        for (size_t s = ncurves / 2; s >= 1 && ncurves / s < max_num_curves; s /= 2)        // for all step sizes over curves
+        {
+            // debug
+            fprintf(stderr, "k=%ld s=%ld\n", k, s);
+
+            size_t co         = 0;                          // starting ofst for domain curve pts in cur. dim
+            size_t coo        = 0;                          // co at start of contiguous sequence
+            bool new_max_nerr = false;                      // this step size changed the max_nerr
+
+            for (size_t j = 0; j < ncurves; j++)            // for all the curves in this dimension
+            {
+                // each time the step changes, shift start of s-th curves by one (by subtracting
+                // n_step-sizes below)
+                if (j >= n_step_sizes && (j - n_step_sizes) % s == 0)   // this is one of the s-th curves; compute it
+                {
+                    // compute R from input domain points
+                    RHS(k, N, R, ko[k], po[k], co);
+
+                    // solve for P for one curve of control points
+                    P = NtN.ldlt().solve(R);
+
+                    // append points from P to control points
+                    // TODO: any way to avoid this?
+                    CopyCtrl(P, n, k, co, temp_ctrl);
+
+                    // compute the error on the curve (number of input points with error > err_limit)
+                    size_t nerr = ErrorCurve(k, co, temp_ctrl, err_spans, err_limit);
+
+                    if (nerr > max_nerr)
+                    {
+                        max_nerr     = nerr;
+                        new_max_nerr = true;
+                    }
+                }
+
+                // adjust offsets for the next curve
+                if ((j + 1) % mfa.ds[k])
+                    co++;
+                else
+                {
+                    co = coo + mfa.ds[k] * ndom_pts(k);
+                    coo = co;
+                }
+            }                                               // curves in this dimension
+
+            // stop refining step if no change
+            if (max_nerr && !new_max_nerr)
+                nsame_steps++;
+            if (nsame_steps == 2)
+                break;
+
+            n_step_sizes++;
+        }                                               // step sizes over curves
+
+        // free R, NtN, and P
+        R.resize(0, 0);
+        NtN.resize(0, 0);
+        P.resize(0, 0);
+
+        // add new knots in the middle of spans with errors
+        nnew_knots(k) = err_spans.size();
+        auto old_size = new_knots.size();
+        new_knots.conservativeResize(old_size + err_spans.size());    // existing values are preserved
+        size_t i = 0;                                   // index into new_knots
+        for (set<int>::iterator it = err_spans.begin(); it != err_spans.end(); ++it)
+        {
+            // debug
+            assert(*it < nctrl_pts[k]);                          // not trying to go beyond the last span
+
+            new_knots(old_size + i) = (knots(ko[k] + *it) + knots(ko[k] + *it + 1)) / 2.0;
+            i++;
+        }
+
+        // print progress
+        fprintf(stderr, "\rdimension %ld of %d encoded\n", k + 1, ndims);
+    }                                                      // domain dimensions
+
+    // debug
+//     cerr << "\nnnew_knots:\n" << nnew_knots << endl;
+//     cerr << "new_knots:\n"  << new_knots  << endl;
+
+    return(nnew_knots.sum() ? 0 : 1);
+}
+
+#endif
+
+#if 0
+
+// single thread version
+// adds knots in error spans of worst curve in each direction (into a vector)
+// fast encode using curves instead of high volume in early rounds to determine knot insertions
+// returns true if done, ie, no knots are inserted
+bool
+mfa::
+Encoder::
+FastEncode(
+        VectorXi& nnew_knots,                       // number of new knots in each dim
+        VectorXf& new_knots,                        // new knots (1st dim changes fastest)
+        float     err_limit)                        // max allowable error
+{
+    // check and assign main quantities
+    int  ndims = ndom_pts.size();                   // number of domain dimensions
+    VectorXi n = nctrl_pts - VectorXi::Ones(ndims); // number of control point spans in each domain dim
+    VectorXi m = ndom_pts  - VectorXi::Ones(ndims); // number of input data point spans in each domain dim
+    nnew_knots = VectorXi::Zero(p.size());
+    new_knots.resize(0);
+
+    // control points
+    ctrl_pts.resize(mfa.tot_nctrl, domain.cols());
+
+    for (size_t k = 0; k < ndims; k++)              // for all domain dimensions
+    {
+        // temporary control points for one curve
+        MatrixXf temp_ctrl = MatrixXf::Zero(nctrl_pts(k), domain.cols());
+
+        // error spans for one curve and for worst curve
+        vector<int> err_spans;
+        vector<int> worst_spans;
+        err_spans.reserve  (n(k) - p(k) + 1);
+        worst_spans.reserve(n(k) - p(k) + 1);
+
+        // maximum number of domain points with error greater than err_limit and their curves
+        size_t max_nerr     =  0;
+        size_t worst_curve  = -1;
+
+        // compute the matrix N, eq. 9.66 in P&T
+        // N is a matrix of (m - 1) x (n - 1) scalars that are the basis function coefficients
+        //  _                                _
+        // |  N_1(u[1])   ... N_{n-1}(u[1])   |
+        // |     ...      ...      ...        |
+        // |  N_1(u[m-1]) ... N_{n-1}(u[m-1]) |
+        //  -                                -
+        // TODO: N is going to be very sparse when it is large: switch to sparse representation
+        // N has semibandwidth < p  nonzero entries across diagonal
+        MatrixXf N = MatrixXf::Zero(m(k) - 1, n(k) - 1); // coefficients matrix
+
+        for (int i = 1; i < m(k); i++)                  // the rows of N
+        {
+            int span = mfa.FindSpan(k, params(po[k] + i), ko[k]);
+            assert(span - ko[k] <= n(k));            // sanity
+            mfa.BasisFuns(k, params(po[k] + i), span, N, 1, n(k) - 1, i - 1, ko[k]);
+        }
+
+        // compute the product Nt x N
+        // TODO: NtN is going to be very sparse when it is large: switch to sparse representation
+        // NtN has semibandwidth < p + 1 nonzero entries across diagonal
+        MatrixXf NtN(n(k) - 1, n(k) - 1);
+        NtN = N.transpose() * N;
+
+        // debug
+        //         cerr << "k " << k << " NtN:\n" << NtN << endl;
+
+        // R is the right hand side needed for solving NtN * P = R
+        MatrixXf R(n(k) - 1, domain.cols());
+
+        // P are the unknown interior control points and the solution to NtN * P = R
+        // NtN is positive definite -> do not need pivoting
+        // TODO: use a common representation for P and ctrl_pts to avoid copying
+        MatrixXf P(n(k) - 1, domain.cols());
+
+        size_t ncurves  = domain.rows() / ndom_pts(k);      // number of curves in this dimension
+        int nsame_steps = 0;                                // number of steps with same number of erroneous points
+        int n_step_sizes = 0;                               // number of step sizes so far
+
+//         for (size_t s = 1; s >= 1; s /= 2)        // debug only, one step size of s=1
+        for (size_t s = ncurves / 2; s >= 1 && ncurves / s < max_num_curves; s /= 2)        // for all step sizes over curves
+        {
+            // debug
+            fprintf(stderr, "k=%ld s=%ld\n", k, s);
+
+            size_t co         = 0;                          // starting ofst for domain curve pts in cur. dim
+            size_t coo        = 0;                          // co at start of contiguous sequence
+            bool new_max_nerr = false;                      // this step size changed the max_nerr
+
+            for (size_t j = 0; j < ncurves; j++)            // for all the curves in this dimension
+            {
+                // each time the step changes, shift start of s-th curves by one (by subtracting
+                // n_step-sizes below)
+                if (j >= n_step_sizes && (j - n_step_sizes) % s == 0)   // this is one of the s-th curves; compute it
+                {
+                    // compute R from input domain points
+                    RHS(k, N, R, ko[k], po[k], co);
+
+                    // solve for P for one curve of control points
+                    P = NtN.ldlt().solve(R);
+
+                    // append points from P to control points
+                    // TODO: any way to avoid this?
+                    CopyCtrl(P, n, k, co, temp_ctrl);
+
+                    // compute the error on the curve (number of input points with error > err_limit)
+                    size_t nerr = ErrorCurve(k, co, temp_ctrl, err_spans, err_limit);
+                    if (nerr > max_nerr)
+                    {
+                        max_nerr     = nerr;
+                        worst_curve  = j;
+                        new_max_nerr = true;
+                        worst_spans.swap(err_spans);            // shallow copy of worst_spans = err_spans
+
+                    // debug
+//                     fprintf(stderr, "k=%ld s=%ld j=%ld co=%ld nerr=%ld max_nerr=%ld\n",
+//                             k, s, j, co, nerr, max_nerr);
+                    }
+                }
+
+                // adjust offsets for the next curve
+                if ((j + 1) % mfa.ds[k])
+                    co++;
+                else
+                {
+                    co = coo + mfa.ds[k] * ndom_pts(k);
+                    coo = co;
+                }
+            }                                               // curves in this dimension
+
+            // debug
+//             fprintf(stderr, "k=%ld worst_curve_idx=%ld max_nerr=%ld\n", k, worst_curve, max_nerr);
+
+            // stop refining step if no change
+            if (max_nerr && !new_max_nerr)
+                nsame_steps++;
+            if (nsame_steps == 2)
+                break;
+
+            n_step_sizes++;
+        }                                               // step sizes over curves
+
+        // free R, NtN, and P
+        R.resize(0, 0);
+        NtN.resize(0, 0);
+        P.resize(0, 0);
+
+        // add new knots in the middle of spans with errors
+        nnew_knots(k) = worst_spans.size();
+        auto old_size = new_knots.size();
+        new_knots.conservativeResize(old_size + worst_spans.size());    // existing values are preserved
+        for (auto i = 0; i < worst_spans.size(); i++)
+        {
+            // debug
+            assert(worst_spans[i] < nctrl_pts[k]);                      // not trying to go beyond the last span
+
+            new_knots(old_size + i) = (knots(ko[k] + worst_spans[i]) + knots(ko[k] + worst_spans[i] + 1)) / 2.0;
+        }
+
+        // print progress
+        fprintf(stderr, "\rdimension %ld of %d encoded", k + 1, ndims);
+    }                                                      // domain dimensions
+
+    // debug
+//     cerr << "\nnnew_knots:\n" << nnew_knots << endl;
+//     cerr << "new_knots:\n"  << new_knots  << endl;
+
+    return(nnew_knots.sum() ? 0 : 1);
+}
+
+#endif
+
+#if 0
+
 // NB: the following TBB version is slower (~1.5X) than the serial version
 // probably the offset calculations that must be repeated each time to make the loops reentrant are
 // too expensive and not worth it
@@ -84,8 +416,6 @@ AdaptiveEncode(float err_limit)                     // maximum allowable normali
 //
 // does not include accuracy improvements later added to single threaded version (multiple
 // indentical results before exiting step loop, shifted curve start in step loop, etc.)
-
-#if 0
 
 // TBB version
 // fast encode using curves instead of high volume in early rounds to determine knot insertions
@@ -278,43 +608,62 @@ FastEncode(
 
 #endif
 
-#if 0
-// single thread version
-// adds knots in error spans of worst curve in each direction (into a vector)
-// fast encode using curves instead of high volume in early rounds to determine knot insertions
-// returns true if done, ie, no knots are inserted
-bool
+// approximate a NURBS hypervolume of arbitrary dimension for a given input data set
+// weights are all 1 for now
+// n-d version of algorithm 9.7, Piegl & Tiller (P&T) p. 422
+//
+// the outputs, ctrl_pts and knots, are resized by this function;  caller need not resize them
+//
+// There are two types of dimensionality:
+// 1. The dimensionality of the NURBS tensor product (p.size())
+// (1D = NURBS curve, 2D = surface, 3D = volumem 4D = hypervolume, etc.)
+// 2. The dimensionality of individual domain and control points (domain.cols())
+// p.size() should be < domain.cols()
+void
 mfa::
 Encoder::
-FastEncode(
-        VectorXi& nnew_knots,                       // number of new knots in each dim
-        VectorXf& new_knots,                        // new knots (1st dim changes fastest)
-        float     err_limit)                        // max allowable error
+Encode()
 {
+    // TODO: some of these quantities mirror this in the mfa
+
     // check and assign main quantities
-    int  ndims = ndom_pts.size();                   // number of domain dimensions
-    VectorXi n = nctrl_pts - VectorXi::Ones(ndims); // number of control point spans in each domain dim
-    VectorXi m = ndom_pts  - VectorXi::Ones(ndims); // number of input data point spans in each domain dim
-    nnew_knots = VectorXi::Zero(p.size());
-    new_knots.resize(0);
+    VectorXi n;                             // number of control point spans in each domain dim
+    VectorXi m;                             // number of input data point spans in each domain dim
+    int      ndims = ndom_pts.size();       // number of domain dimensions
+    size_t   cs    = 1;                     // stride for domain points in curve in cur. dim
+
+    Quants(n, m);
 
     // control points
     ctrl_pts.resize(mfa.tot_nctrl, domain.cols());
 
-    for (size_t k = 0; k < ndims; k++)              // for all domain dimensions
+    // 2 buffers of temporary control points
+    // double buffer needed to write output curves of current dim without changing its input pts
+    // temporary control points need to begin with size as many as the input domain points
+    // except for the first dimension, which can be the correct number of control points
+    // because the input domain points are converted to control points one dimension at a time
+    // TODO: need to find a more space-efficient way
+    size_t tot_ntemp_ctrl = 1;
+    for (size_t k = 0; k < ndims; k++)
+        tot_ntemp_ctrl *= (k == 0 ? nctrl_pts(k) : ndom_pts(k));
+    MatrixXf temp_ctrl0 = MatrixXf::Zero(tot_ntemp_ctrl, domain.cols());
+    MatrixXf temp_ctrl1 = MatrixXf::Zero(tot_ntemp_ctrl, domain.cols());
+
+    VectorXi ntemp_ctrl = ndom_pts;         // current num of temp control pts in each dim
+
+    float  max_err_val;                     // maximum solution error in final dim of all curves
+
+    for (size_t k = 0; k < ndims; k++)      // for all domain dimensions
     {
-        // temporary control points for one curve
-        MatrixXf temp_ctrl = MatrixXf::Zero(nctrl_pts(k), domain.cols());
+        fprintf(stderr, "k=%ld\n", k);
 
-        // error spans for one curve and for worst curve
-        vector<int> err_spans;
-        vector<int> worst_spans;
-        err_spans.reserve  (n(k) - p(k) + 1);
-        worst_spans.reserve(n(k) - p(k) + 1);
-
-        // maximum number of domain points with error greater than err_limit and their curves
-        size_t max_nerr     =  0;
-        size_t worst_curve  = -1;
+        // TODO:
+        // Investigate whether in later dimensions, when input data points are replaced by
+        // control points, need new knots and params computed.
+        // In the next dimension, the coordinates of the dimension didn't change,
+        // but the chord length did, as control points moved away from the data points in
+        // the prior dim. Need to determine how much difference it would make to recompute
+        // params and knots for the new input points
 
         // compute the matrix N, eq. 9.66 in P&T
         // N is a matrix of (m - 1) x (n - 1) scalars that are the basis function coefficients
@@ -327,12 +676,15 @@ FastEncode(
         // N has semibandwidth < p  nonzero entries across diagonal
         MatrixXf N = MatrixXf::Zero(m(k) - 1, n(k) - 1); // coefficients matrix
 
-        for (int i = 1; i < m(k); i++)                  // the rows of N
+        for (int i = 1; i < m(k); i++)            // the rows of N
         {
             int span = mfa.FindSpan(k, params(po[k] + i), ko[k]);
             assert(span - ko[k] <= n(k));            // sanity
             mfa.BasisFuns(k, params(po[k] + i), span, N, 1, n(k) - 1, i - 1, ko[k]);
         }
+
+        // debug
+//         cerr << "k " << k << " N:\n" << N << endl;
 
         // compute the product Nt x N
         // TODO: NtN is going to be very sparse when it is large: switch to sparse representation
@@ -341,9 +693,9 @@ FastEncode(
         NtN = N.transpose() * N;
 
         // debug
-        //         cerr << "k " << k << " NtN:\n" << NtN << endl;
+//         cerr << "k " << k << " NtN:\n" << NtN << endl;
 
-        // R is the right hand side needed for solving NtN * P = R
+        // R is the residual matrix needed for solving NtN * P = R
         MatrixXf R(n(k) - 1, domain.cols());
 
         // P are the unknown interior control points and the solution to NtN * P = R
@@ -351,276 +703,74 @@ FastEncode(
         // TODO: use a common representation for P and ctrl_pts to avoid copying
         MatrixXf P(n(k) - 1, domain.cols());
 
-        size_t ncurves  = domain.rows() / ndom_pts(k);      // number of curves in this dimension
-        int nsame_steps = 0;                                // number of steps with same number of erroneous points
-        int n_step_sizes = 0;                               // number of step sizes so far
-
-//         for (size_t s = 1; s >= 1; s /= 2)        // debug only, one step size of s=1
-        for (size_t s = ncurves / 2; s >= 1 && ncurves / s < max_num_curves; s /= 2)        // for all step sizes over curves
+        // number of curves in this dimension
+        size_t ncurves;
+        ncurves = 1;
+        for (int i = 0; i < ndims; i++)
         {
-            // debug
-            fprintf(stderr, "k=%ld s=%ld\n", k, s);
-
-            size_t co         = 0;                          // starting ofst for domain curve pts in cur. dim
-            size_t coo        = 0;                          // co at start of contiguous sequence
-            bool new_max_nerr = false;                      // this step size changed the max_nerr
-
-            for (size_t j = 0; j < ncurves; j++)            // for all the curves in this dimension
-            {
-                // each time the step changes, shift start of s-th curves by one (by subtracting
-                // n_step-sizes below)
-                if (j >= n_step_sizes && (j - n_step_sizes) % s == 0)   // this is one of the s-th curves; compute it
-                {
-                    // compute R from input domain points
-                    RHS(k, N, R, ko[k], po[k], co);
-
-                    // solve for P for one curve of control points
-                    P = NtN.ldlt().solve(R);
-
-                    // append points from P to control points
-                    // TODO: any way to avoid this?
-                    CopyCtrl(P, n, k, co, temp_ctrl);
-
-                    // compute the error on the curve (number of input points with error > err_limit)
-                    size_t nerr = ErrorCurve(k, co, temp_ctrl, err_spans, err_limit);
-                    if (nerr > max_nerr)
-                    {
-                        max_nerr     = nerr;
-                        worst_curve  = j;
-                        new_max_nerr = true;
-                        worst_spans.swap(err_spans);            // shallow copy of worst_spans = err_spans
-
-                    // debug
-//                     fprintf(stderr, "k=%ld s=%ld j=%ld co=%ld nerr=%ld max_nerr=%ld\n",
-//                             k, s, j, co, nerr, max_nerr);
-                    }
-                }
-
-                // adjust offsets for the next curve
-                if ((j + 1) % mfa.ds[k])
-                    co++;
-                else
-                {
-                    co = coo + mfa.ds[k] * ndom_pts(k);
-                    coo = co;
-                }
-            }                                               // curves in this dimension
-
-            // debug
-//             fprintf(stderr, "k=%ld worst_curve_idx=%ld max_nerr=%ld\n", k, worst_curve, max_nerr);
-
-            // stop refining step if no change
-            if (max_nerr && !new_max_nerr)
-                nsame_steps++;
-            if (nsame_steps == 2)
-                break;
-
-            n_step_sizes++;
-        }                                               // step sizes over curves
-
-        // free R, NtN, and P
-        R.resize(0, 0);
-        NtN.resize(0, 0);
-        P.resize(0, 0);
-
-        // add new knots in the middle of spans with errors
-        nnew_knots(k) = worst_spans.size();
-        auto old_size = new_knots.size();
-        new_knots.conservativeResize(old_size + worst_spans.size());    // existing values are preserved
-        for (auto i = 0; i < worst_spans.size(); i++)
-        {
-            // debug
-            assert(worst_spans[i] < nctrl_pts[k]);                      // not trying to go beyond the last span
-
-            new_knots(old_size + i) = (knots(ko[k] + worst_spans[i]) + knots(ko[k] + worst_spans[i] + 1)) / 2.0;
+            if (i < k)
+                ncurves *= nctrl_pts(i);
+            else if (i > k)
+                ncurves *= ndom_pts(i);
+            // NB: current dimension contributes no curves, hence no i == k case
         }
-
-        // print progress
-        fprintf(stderr, "\rdimension %ld of %d encoded", k + 1, ndims);
-    }                                                      // domain dimensions
-
-    // debug
-//     cerr << "\nnnew_knots:\n" << nnew_knots << endl;
-//     cerr << "new_knots:\n"  << new_knots  << endl;
-
-    return(nnew_knots.sum() ? 0 : 1);
-}
-
-#else
-
-// single thread version
-// adds knots error spans from all curves in all directions (into a set)
-// fast encode using curves instead of high volume in early rounds to determine knot insertions
-// returns true if done, ie, no knots are inserted
-bool
-mfa::
-Encoder::
-FastEncode(
-        VectorXi& nnew_knots,                       // number of new knots in each dim
-        VectorXf& new_knots,                        // new knots (1st dim changes fastest)
-        float     err_limit,                        // max allowable error
-        int       iter)                             // iteration number of caller (for debugging)
-{
-    // check and assign main quantities
-    int  ndims = ndom_pts.size();                   // number of domain dimensions
-    VectorXi n = nctrl_pts - VectorXi::Ones(ndims); // number of control point spans in each domain dim
-    VectorXi m = ndom_pts  - VectorXi::Ones(ndims); // number of input data point spans in each domain dim
-    nnew_knots = VectorXi::Zero(p.size());
-    new_knots.resize(0);
-
-    // control points
-    ctrl_pts.resize(mfa.tot_nctrl, domain.cols());
-
-    for (size_t k = 0; k < ndims; k++)              // for all domain dimensions
-    {
-        // temporary control points for one curve
-        MatrixXf temp_ctrl = MatrixXf::Zero(nctrl_pts(k), domain.cols());
-
-        // error spans for one curve and for worst curve
-        set<int> err_spans;
-
-        // maximum number of domain points with error greater than err_limit and their curves
-        size_t max_nerr     =  0;
-
-        // compute the matrix N, eq. 9.66 in P&T
-        // N is a matrix of (m - 1) x (n - 1) scalars that are the basis function coefficients
-        //  _                                _
-        // |  N_1(u[1])   ... N_{n-1}(u[1])   |
-        // |     ...      ...      ...        |
-        // |  N_1(u[m-1]) ... N_{n-1}(u[m-1]) |
-        //  -                                -
-        // TODO: N is going to be very sparse when it is large: switch to sparse representation
-        // N has semibandwidth < p  nonzero entries across diagonal
-        MatrixXf N = MatrixXf::Zero(m(k) - 1, n(k) - 1); // coefficients matrix
-
-        for (int i = 1; i < m(k); i++)                  // the rows of N
-        {
-            int span = mfa.FindSpan(k, params(po[k] + i), ko[k]);
-            assert(span - ko[k] <= n(k));            // sanity
-            mfa.BasisFuns(k, params(po[k] + i), span, N, 1, n(k) - 1, i - 1, ko[k]);
-        }
-
-        // compute the product Nt x N
-        // TODO: NtN is going to be very sparse when it is large: switch to sparse representation
-        // NtN has semibandwidth < p + 1 nonzero entries across diagonal
-        MatrixXf NtN(n(k) - 1, n(k) - 1);
-        NtN = N.transpose() * N;
-
         // debug
-        //         cerr << "k " << k << " NtN:\n" << NtN << endl;
+        // cerr << "k: " << k << " ncurves: " << ncurves << endl;
+        // cerr << "ndom_pts:\n" << ndom_pts << endl;
+        // cerr << "ntemp_ctrl:\n" << ntemp_ctrl << endl;
+        // if (k > 0 && k % 2 == 1) // input to odd dims is temp_ctrl0
+        //     cerr << "temp_ctrl0:\n" << temp_ctrl0 << endl;
+        // if (k > 0 && k % 2 == 0) // input to even dims is temp_ctrl1
+        //     cerr << "temp_ctrl1:\n" << temp_ctrl1 << endl;
 
-        // R is the right hand side needed for solving NtN * P = R
-        MatrixXf R(n(k) - 1, domain.cols());
-
-        // P are the unknown interior control points and the solution to NtN * P = R
-        // NtN is positive definite -> do not need pivoting
-        // TODO: use a common representation for P and ctrl_pts to avoid copying
-        MatrixXf P(n(k) - 1, domain.cols());
-
-        size_t ncurves  = domain.rows() / ndom_pts(k);      // number of curves in this dimension
-        int nsame_steps = 0;                                // number of steps with same number of erroneous points
-        int n_step_sizes = 0;                               // number of step sizes so far
-
-//         for (size_t s = 1; s >= 1; s /= 2)        // debug only, one step size of s=1
-//         for (size_t s = ncurves / max_num_curves; s == ncurves / max_num_curves; s /= 2)        // debug only, one step size of s=ncurves/max_num_curves
-        for (size_t s = ncurves / 2; s >= 1 && ncurves / s < max_num_curves; s /= 2)        // for all step sizes over curves
+        size_t co = 0, to = 0;                    // starting ofst for curve & ctrl pts in cur. dim
+        size_t coo = 0, too = 0;                  // co and to at start of contiguous sequence
+        for (size_t j = 0; j < ncurves; j++)      // for all the curves in this dimension
         {
-            // debug
-            fprintf(stderr, "k=%ld s=%ld\n", k, s);
+            // print progress
+            if (j > 0 && j > 100 && j % (ncurves / 100) == 0)
+                fprintf(stderr, "\r dimension %ld: %.0f %% encoded (%ld out of %ld curves)",
+                        k, (float)j / (float)ncurves * 100, j, ncurves);
 
-            size_t co         = 0;                          // starting ofst for domain curve pts in cur. dim
-            size_t coo        = 0;                          // co at start of contiguous sequence
-            bool new_max_nerr = false;                      // this step size changed the max_nerr
+            // compute the one curve of control points
+            CtrlCurve(N, NtN, R, P, n, k, co, cs, to, temp_ctrl0, temp_ctrl1);
 
-            for (size_t j = 0; j < ncurves; j++)            // for all the curves in this dimension
+            // adjust offsets for the next curve
+            if ((j + 1) % cs)
+                co++;
+            else
             {
-                // each time the step changes, shift start of s-th curves by one (by subtracting
-                // n_step-sizes below)
-                if (j >= n_step_sizes && (j - n_step_sizes) % s == 0)   // this is one of the s-th curves; compute it
-                {
+                co = coo + cs * ntemp_ctrl(k);
+                coo = co;
+            }
+            if ((j + 1) % cs)
+                to++;
+            else
+            {
+                to = too + cs * nctrl_pts(k);
+                too = to;
+            }
+        }                                                  // curves in this dimension
 
-                    // compute R from input domain points
-                    RHS(k, N, R, ko[k], po[k], co);
-
-                    // solve for P for one curve of control points
-                    P = NtN.ldlt().solve(R);
-
-                    // append points from P to control points
-                    // TODO: any way to avoid this?
-                    CopyCtrl(P, n, k, co, temp_ctrl);
-
-                    // compute the error on the curve (number of input points with error > err_limit)
-                    size_t nerr = ErrorCurve(k, co, temp_ctrl, err_spans, err_limit);
-
-                    if (nerr > max_nerr)
-                    {
-                        max_nerr     = nerr;
-                        new_max_nerr = true;
-
-                    // debug
-//                     fprintf(stderr, "k=%ld s=%ld j=%ld co=%ld nerr=%ld max_nerr=%ld\n",
-//                             k, s, j, co, nerr, max_nerr);
-                    }
-
-                }
-
-                // adjust offsets for the next curve
-                if ((j + 1) % mfa.ds[k])
-                    co++;
-                else
-                {
-                    co = coo + mfa.ds[k] * ndom_pts(k);
-                    coo = co;
-                }
-            }                                               // curves in this dimension
-
-            // debug
-//             fprintf(stderr, "k=%ld worst_curve_idx=%ld max_nerr=%ld\n", k, worst_curve, max_nerr);
-
-            // stop refining step if no change
-            if (max_nerr && !new_max_nerr)
-                nsame_steps++;
-            if (nsame_steps == 2)
-                break;
-
-            n_step_sizes++;
-        }                                               // step sizes over curves
+        // adjust offsets and strides for next dimension
+        ntemp_ctrl(k) = nctrl_pts(k);
+        cs *= ntemp_ctrl(k);
 
         // free R, NtN, and P
         R.resize(0, 0);
         NtN.resize(0, 0);
         P.resize(0, 0);
 
-        // add new knots in the middle of spans with errors
-        nnew_knots(k) = err_spans.size();
-        auto old_size = new_knots.size();
-        new_knots.conservativeResize(old_size + err_spans.size());    // existing values are preserved
-        size_t i = 0;                                   // index into new_knots
-        for (set<int>::iterator it = err_spans.begin(); it != err_spans.end(); ++it)
-        {
-            // debug
-//             fprintf(stderr, "*it=%d span=[%.3f, %.3f]",
-//                     *it, knots(ko[k] + *it), knots(ko[k] + *it +1));
-
-            // debug
-            assert(*it < nctrl_pts[k]);                          // not trying to go beyond the last span
-
-            new_knots(old_size + i) = (knots(ko[k] + *it) + knots(ko[k] + *it + 1)) / 2.0;
-            i++;
-        }
-
         // print progress
-        fprintf(stderr, "\rdimension %ld of %d encoded\n", k + 1, ndims);
+        fprintf(stderr, "\33[2K\rdimension %ld of %d encoded\n", k + 1, ndims);
+
     }                                                      // domain dimensions
 
+    fprintf(stderr,"\n");
+
     // debug
-//     cerr << "\nnnew_knots:\n" << nnew_knots << endl;
-//     cerr << "new_knots:\n"  << new_knots  << endl;
-
-    return(nnew_knots.sum() ? 0 : 1);
+//     cerr << "ctrl_pts:\n" << ctrl_pts << endl;
 }
-
-#endif
 
 // NB: the following TBB version is slower (~8X) than the serial version
 // probably the offset calculations that must be repeated each time to make the loops reentrant are
@@ -793,172 +943,6 @@ Encode()
 //     cerr << "ctrl_pts:\n" << ctrl_pts << endl;
 }
 
-#else                                       // original serial version
-
-// approximate a NURBS hypervolume of arbitrary dimension for a given input data set
-// weights are all 1 for now
-// n-d version of algorithm 9.7, Piegl & Tiller (P&T) p. 422
-//
-// the outputs, ctrl_pts and knots, are resized by this function;  caller need not resize them
-//
-// There are two types of dimensionality:
-// 1. The dimensionality of the NURBS tensor product (p.size())
-// (1D = NURBS curve, 2D = surface, 3D = volumem 4D = hypervolume, etc.)
-// 2. The dimensionality of individual domain and control points (domain.cols())
-// p.size() should be < domain.cols()
-void
-mfa::
-Encoder::
-Encode()
-{
-    // TODO: some of these quantities mirror this in the mfa
-
-    // check and assign main quantities
-    VectorXi n;                             // number of control point spans in each domain dim
-    VectorXi m;                             // number of input data point spans in each domain dim
-    int      ndims = ndom_pts.size();       // number of domain dimensions
-    size_t   cs    = 1;                     // stride for domain points in curve in cur. dim
-
-    Quants(n, m);
-
-    // control points
-    ctrl_pts.resize(mfa.tot_nctrl, domain.cols());
-
-    // 2 buffers of temporary control points
-    // double buffer needed to write output curves of current dim without changing its input pts
-    // temporary control points need to begin with size as many as the input domain points
-    // except for the first dimension, which can be the correct number of control points
-    // because the input domain points are converted to control points one dimension at a time
-    // TODO: need to find a more space-efficient way
-    size_t tot_ntemp_ctrl = 1;
-    for (size_t k = 0; k < ndims; k++)
-        tot_ntemp_ctrl *= (k == 0 ? nctrl_pts(k) : ndom_pts(k));
-    MatrixXf temp_ctrl0 = MatrixXf::Zero(tot_ntemp_ctrl, domain.cols());
-    MatrixXf temp_ctrl1 = MatrixXf::Zero(tot_ntemp_ctrl, domain.cols());
-
-    VectorXi ntemp_ctrl = ndom_pts;         // current num of temp control pts in each dim
-
-    float  max_err_val;                     // maximum solution error in final dim of all curves
-
-    for (size_t k = 0; k < ndims; k++)      // for all domain dimensions
-    {
-        fprintf(stderr, "k=%ld\n", k);
-
-        // TODO:
-        // Investigate whether in later dimensions, when input data points are replaced by
-        // control points, need new knots and params computed.
-        // In the next dimension, the coordinates of the dimension didn't change,
-        // but the chord length did, as control points moved away from the data points in
-        // the prior dim. Need to determine how much difference it would make to recompute
-        // params and knots for the new input points
-
-        // compute the matrix N, eq. 9.66 in P&T
-        // N is a matrix of (m - 1) x (n - 1) scalars that are the basis function coefficients
-        //  _                                _
-        // |  N_1(u[1])   ... N_{n-1}(u[1])   |
-        // |     ...      ...      ...        |
-        // |  N_1(u[m-1]) ... N_{n-1}(u[m-1]) |
-        //  -                                -
-        // TODO: N is going to be very sparse when it is large: switch to sparse representation
-        // N has semibandwidth < p  nonzero entries across diagonal
-        MatrixXf N = MatrixXf::Zero(m(k) - 1, n(k) - 1); // coefficients matrix
-
-        for (int i = 1; i < m(k); i++)            // the rows of N
-        {
-            int span = mfa.FindSpan(k, params(po[k] + i), ko[k]);
-            assert(span - ko[k] <= n(k));            // sanity
-            mfa.BasisFuns(k, params(po[k] + i), span, N, 1, n(k) - 1, i - 1, ko[k]);
-        }
-
-        // debug
-//         cerr << "k " << k << " N:\n" << N << endl;
-
-        // compute the product Nt x N
-        // TODO: NtN is going to be very sparse when it is large: switch to sparse representation
-        // NtN has semibandwidth < p + 1 nonzero entries across diagonal
-        MatrixXf NtN(n(k) - 1, n(k) - 1);
-        NtN = N.transpose() * N;
-
-        // debug
-//         cerr << "k " << k << " NtN:\n" << NtN << endl;
-
-        // R is the residual matrix needed for solving NtN * P = R
-        MatrixXf R(n(k) - 1, domain.cols());
-
-        // P are the unknown interior control points and the solution to NtN * P = R
-        // NtN is positive definite -> do not need pivoting
-        // TODO: use a common representation for P and ctrl_pts to avoid copying
-        MatrixXf P(n(k) - 1, domain.cols());
-
-        // number of curves in this dimension
-        size_t ncurves;
-        ncurves = 1;
-        for (int i = 0; i < ndims; i++)
-        {
-            if (i < k)
-                ncurves *= nctrl_pts(i);
-            else if (i > k)
-                ncurves *= ndom_pts(i);
-            // NB: current dimension contributes no curves, hence no i == k case
-        }
-        // debug
-        // cerr << "k: " << k << " ncurves: " << ncurves << endl;
-        // cerr << "ndom_pts:\n" << ndom_pts << endl;
-        // cerr << "ntemp_ctrl:\n" << ntemp_ctrl << endl;
-        // if (k > 0 && k % 2 == 1) // input to odd dims is temp_ctrl0
-        //     cerr << "temp_ctrl0:\n" << temp_ctrl0 << endl;
-        // if (k > 0 && k % 2 == 0) // input to even dims is temp_ctrl1
-        //     cerr << "temp_ctrl1:\n" << temp_ctrl1 << endl;
-
-        size_t co = 0, to = 0;                    // starting ofst for curve & ctrl pts in cur. dim
-        size_t coo = 0, too = 0;                  // co and to at start of contiguous sequence
-        for (size_t j = 0; j < ncurves; j++)      // for all the curves in this dimension
-        {
-            // print progress
-            if (j > 0 && j > 100 && j % (ncurves / 100) == 0)
-                fprintf(stderr, "\r dimension %ld: %.0f %% encoded (%ld out of %ld curves)",
-                        k, (float)j / (float)ncurves * 100, j, ncurves);
-
-            // compute the one curve of control points
-            CtrlCurve(N, NtN, R, P, n, k, co, cs, to, temp_ctrl0, temp_ctrl1);
-
-            // adjust offsets for the next curve
-            if ((j + 1) % cs)
-                co++;
-            else
-            {
-                co = coo + cs * ntemp_ctrl(k);
-                coo = co;
-            }
-            if ((j + 1) % cs)
-                to++;
-            else
-            {
-                to = too + cs * nctrl_pts(k);
-                too = to;
-            }
-        }                                                  // curves in this dimension
-
-        // adjust offsets and strides for next dimension
-        ntemp_ctrl(k) = nctrl_pts(k);
-        cs *= ntemp_ctrl(k);
-
-        // free R, NtN, and P
-        R.resize(0, 0);
-        NtN.resize(0, 0);
-        P.resize(0, 0);
-
-        // print progress
-        fprintf(stderr, "\33[2K\rdimension %ld of %d encoded\n", k + 1, ndims);
-
-    }                                                      // domain dimensions
-
-    fprintf(stderr,"\n");
-
-    // debug
-//     cerr << "ctrl_pts:\n" << ctrl_pts << endl;
-}
-
 #endif
 
 // computes right hand side vector of P&T eq. 9.63 and 9.67, p. 411-412 for a curve from the
@@ -1002,64 +986,6 @@ RHS(int       cur_dim,             // current dimension
         }
     }
 }
-
-// DEPRECATED; switch to the one above and confirm the answer is the same
-// computes right hand side vector of P&T eq. 9.63 and 9.67, p. 411-412 for a curve from the
-// original input domain points
-// void
-// mfa::
-// Encoder::
-// RHS(int       cur_dim,             // current dimension
-//     MatrixXf& N,                   // matrix of basis function coefficients
-//     MatrixXf& R,                   // (output) residual matrix allocated by caller
-//     int       ko,                  // optional index of starting knot
-//     int       po,                  // optional index of starting parameter
-//     int       co,                  // optional index of starting domain pt in current curve
-//     int       cs)                  // optional stride of domain pts in current curve
-// {
-//     int n      = N.cols() + 1;               // number of control point spans
-//     int m      = N.rows() + 1;               // number of input data point spans
-// 
-//     // compute the matrix Rk for eq. 9.63 of P&T, p. 411
-//     MatrixXf Rk(m - 1, domain.cols());       // eigen frees MatrixX when leaving scope
-//     MatrixXf Nk;                             // basis coefficients for Rk[i]
-// 
-//     // debug
-//     // cerr << "RHS domain:\n" << domain << endl;
-// 
-//     for (int k = 1; k < m; k++)
-//     {
-//         int span = mfa.FindSpan(cur_dim, params(po + k), ko);
-//         Nk = MatrixXf::Zero(1, n + 1);      // basis coefficients for Rk[i]
-//         mfa.BasisFuns(cur_dim, params(po + k), span, Nk, 0, n, 0, ko);
-// 
-//         // debug
-//         // cerr << "Nk:\n" << Nk << endl;
-// 
-//         // debug
-//         // cerr << "[" << domain.row(co + k * cs) << "] ["
-//         //      << domain.row(co) << "] ["
-//         //      << domain.row(co + m * cs) << "]" << endl;
-// 
-//         Rk.row(k - 1) =
-//             domain.row(co + k * cs) - Nk(0, 0) * domain.row(co) -
-//             Nk(0, n) * domain.row(co + m * cs);
-//     }
-// 
-//     // debug
-//     // cerr << "Rk:\n" << Rk << endl;
-// 
-//     // compute the matrix R
-//     for (int i = 1; i < n; i++)
-//     {
-//         for (int j = 0; j < Rk.cols(); j++)
-//         {
-//             // debug
-//             // fprintf(stderr, "3: i %d j %d R.rows %d Rk.rows %d\n", i, j, R.rows(), Rk.rows());
-//             R(i - 1, j) = (N.col(i - 1).array() * Rk.col(j).array()).sum();
-//         }
-//     }
-// }
 
 // computes right hand side vector of P&T eq. 9.63 and 9.67, p. 411-412 for a curve from a
 // new set of input points, not the default input domain
@@ -1503,6 +1429,10 @@ ErrorCurve(
 //         fprintf(stderr, "param=%.3f span=[%.3f %.3f]\n", params(po[k] + i), knots(ko[k] + span), knots(ko[k] + span + 1));
 
         decoder.CurvePt(k, params(po[k] + i), ctrl_pts, cpt, ko[k]);
+
+        // debug
+//         cerr << "cpt:\n" << cpt << endl;
+
         float err = fabs(mfa.NormalDistance(cpt, co + i * mfa.ds[k])) / dom_range;     // normalized by data range
 
         if (err > err_limit)
