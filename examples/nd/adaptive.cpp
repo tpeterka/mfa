@@ -127,24 +127,24 @@ int main(int argc, char** argv)
 //     float norm_err_limit = 1.0e-1;
 //     float norm_err_limit = 1.0e-2;
 //     float norm_err_limit = 1.0e-3;
-    float norm_err_limit = 1.0e-4;
+//     float norm_err_limit = 1.0e-4;
 //     float norm_err_limit = 1.0e-5;
 //     float norm_err_limit = 1.0e-6;
-    d_args.pt_dim       = 3;
-    d_args.dom_dim      = 2;
-    d_args.p[0]         = 4;
-    d_args.p[1]         = 4;
-    d_args.ndom_pts[0]  = 100;
-    d_args.ndom_pts[1]  = 100;
-    d_args.nctrl_pts[0] = 5;
-    d_args.nctrl_pts[1] = 5;
-    d_args.min[0]       = -4.0 * M_PI;
-    d_args.min[1]       = -4.0 * M_PI;
-    d_args.max[0]       = 4.0 * M_PI;
-    d_args.max[1]       = 4.0 * M_PI;
-    d_args.s            = 10.0;              // scaling factor on range
-    master.foreach([&](Block* b, const diy::Master::ProxyWithLink& cp)
-                   { b->generate_sinc_data(cp, d_args); });
+//     d_args.pt_dim       = 3;
+//     d_args.dom_dim      = 2;
+//     d_args.p[0]         = 4;
+//     d_args.p[1]         = 4;
+//     d_args.ndom_pts[0]  = 100;
+//     d_args.ndom_pts[1]  = 100;
+//     d_args.nctrl_pts[0] = 5;
+//     d_args.nctrl_pts[1] = 5;
+//     d_args.min[0]       = -4.0 * M_PI;
+//     d_args.min[1]       = -4.0 * M_PI;
+//     d_args.max[0]       = 4.0 * M_PI;
+//     d_args.max[1]       = 4.0 * M_PI;
+//     d_args.s            = 10.0;              // scaling factor on range
+//     master.foreach([&](Block* b, const diy::Master::ProxyWithLink& cp)
+//                    { b->generate_sinc_data(cp, d_args); });
 
    // 3d sinc function
 //     float norm_err_limit = 1.0e-1;
@@ -177,7 +177,7 @@ int main(int argc, char** argv)
 //     float norm_err_limit = 1.0e-1;
 //     float norm_err_limit = 1.0e-2;
 //     float norm_err_limit = 1.0e-3;
-//     float norm_err_limit = 1.0e-4;           // hangs around iteration 18
+//     float norm_err_limit = 1.0e-4;           // hangs during iteration 17
 //     d_args.pt_dim       = 3;
 //     d_args.dom_dim      = 2;
 //     d_args.p[0]         = 3;
@@ -188,7 +188,46 @@ int main(int argc, char** argv)
 //     d_args.nctrl_pts[1] = 5;
 //     master.foreach([&](Block* b, const diy::Master::ProxyWithLink& cp)
 //                    { b->read_2d_file_data(cp, d_args); });
+
+    // 2d S3D subset
+//     float norm_err_limit = 1.0e0;
+//     float norm_err_limit = 1.0e-1;
+//     float norm_err_limit = 1.0e-2;
+//     d_args.pt_dim       = 3;
+//     d_args.dom_dim      = 2;
+//     d_args.p[0]         = 3;
+//     d_args.p[1]         = 3;
+//     d_args.starts[0]    = 100;                    // NB starts are in full 3D even if example is in 2D
+//     d_args.starts[1]    = 0;
+//     d_args.starts[2]    = 275;
+//     d_args.ndom_pts[0]  = 250;
+//     d_args.ndom_pts[1]  = 300;
+//     d_args.full_dom_pts[0] = 704;               // full domain size (not just the desired subset)
+//     d_args.full_dom_pts[1] = 540;
+//     d_args.nctrl_pts[0] = 5;
+//     d_args.nctrl_pts[1] = 5;
+//     master.foreach([&](Block* b, const diy::Master::ProxyWithLink& cp)
+//                    { b->read_2d_file_subdata(cp, d_args); });
+
     // 3d S3D
+//     float norm_err_limit = 1.0e0;
+//     float norm_err_limit = 1.0e-1;
+//     float norm_err_limit = 1.0e-2;
+//     d_args.pt_dim       = 4;
+//     d_args.dom_dim      = 3;
+//     d_args.p[0]         = 3;
+//     d_args.p[1]         = 3;
+//     d_args.p[2]         = 3;
+//     d_args.ndom_pts[0]  = 704;
+//     d_args.ndom_pts[1]  = 540;
+//     d_args.ndom_pts[2]  = 550;
+//     d_args.nctrl_pts[0] = 140;
+//     d_args.nctrl_pts[1] = 108;
+//     d_args.nctrl_pts[2] = 110;
+//     master.foreach([&](Block* b, const diy::Master::ProxyWithLink& cp)
+//                    { b->read_3d_file_data(cp, d_args); });
+
+    // 3d S3D subset
 //     float norm_err_limit = 1.0e0;
 //     float norm_err_limit = 1.0e-1;
     float norm_err_limit = 1.0e-2;
@@ -197,14 +236,20 @@ int main(int argc, char** argv)
     d_args.p[0]         = 3;
     d_args.p[1]         = 3;
     d_args.p[2]         = 3;
-    d_args.ndom_pts[0]  = 704;
-    d_args.ndom_pts[1]  = 540;
-    d_args.ndom_pts[2]  = 550;
+    d_args.starts[0]    = 100;                    // NB starts are in full 3D even if example is in 2D
+    d_args.starts[1]    = 0;
+    d_args.starts[2]    = 140;
+    d_args.ndom_pts[0]  = 250;
+    d_args.ndom_pts[1]  = 300;
+    d_args.ndom_pts[2]  = 275;
+    d_args.full_dom_pts[0] = 704;               // full domain size (not just the desired subset)
+    d_args.full_dom_pts[1] = 540;
+    d_args.full_dom_pts[2] = 550;
     d_args.nctrl_pts[0] = 140;
     d_args.nctrl_pts[1] = 108;
     d_args.nctrl_pts[2] = 110;
     master.foreach([&](Block* b, const diy::Master::ProxyWithLink& cp)
-                   { b->read_3d_file_data(cp, d_args); });
+                   { b->read_3d_file_subdata(cp, d_args); });
 
     double encode_time = MPI_Wtime();
 

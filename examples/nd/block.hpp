@@ -35,7 +35,9 @@ struct DomainArgs
     int   pt_dim;                            // dimension of points
     int   dom_dim;                           // dimension of domain (<= pt_dim)
     int   p[MAX_DIM];                        // degree in each dimension of domain
+    int   starts[MAX_DIM];                   // starting offsets of ndom_pts (optional, usually assumed 0)
     int   ndom_pts[MAX_DIM];                 // number of input points in each dimension of domain
+    int   full_dom_pts[MAX_DIM];             // number of points in full domain in case a subset is taken
     int   nctrl_pts[MAX_DIM];                // number of input points in each dimension of domain
     float min[MAX_DIM];                      // minimum corner of domain
     float max[MAX_DIM];                      // maximum corner of domain
@@ -509,8 +511,8 @@ struct Block
             // file is 704 * 540 * 550 * 3 floats (vx,vy,vz)
             // which is 1/2 the x resolution the simulation
             // the "small" in the file name means it was downsampled by factor of 2 in x
-//             FILE *fd = fopen("/Users/tpeterka/datasets/flame/6_small.xyz", "r");
-            FILE *fd = fopen("/homes/tpeterka/datasets/flame/6_small.xyz", "r");
+            FILE *fd = fopen("/Users/tpeterka/datasets/flame/6_small.xyz", "r");
+//             FILE *fd = fopen("/homes/tpeterka/datasets/flame/6_small.xyz", "r");
             assert(fd);
             fseek(fd, (704 * 540 * 275 + 704 * 270) * 12, SEEK_SET);
 
@@ -586,8 +588,8 @@ struct Block
 
             // open hard-coded file name, seek to hard-coded start of desired section
             // file is 704 * 540 * 550 * 3 floats (vx,vy,vz)
-//             FILE *fd = fopen("/Users/tpeterka/datasets/flame/6_small.xyz", "r");
-            FILE *fd = fopen("/homes/tpeterka/datasets/flame/6_small.xyz", "r");
+            FILE *fd = fopen("/Users/tpeterka/datasets/flame/6_small.xyz", "r");
+//             FILE *fd = fopen("/homes/tpeterka/datasets/flame/6_small.xyz", "r");
             assert(fd);
             fseek(fd, (704 * 540 * 275 + 704 * 270) * 12, SEEK_SET);
 
@@ -658,8 +660,8 @@ struct Block
             // open hard-coded file name, seek to hard-coded start of desired section
             // which is an x-y plane in the middle of the z range
             // file is 704 * 540 * 550 * 3 floats (vx,vy,vz)
-//             FILE *fd = fopen("/Users/tpeterka/datasets/flame/6_small.xyz", "r");
-            FILE *fd = fopen("/homes/tpeterka/datasets/flame/6_small.xyz", "r");
+            FILE *fd = fopen("/Users/tpeterka/datasets/flame/6_small.xyz", "r");
+//             FILE *fd = fopen("/homes/tpeterka/datasets/flame/6_small.xyz", "r");
             assert(fd);
             // middle plane in z, offset = full x,y range * 1/2 z range
             fseek(fd, (704 * 540 * 275) * 12, SEEK_SET);
@@ -708,6 +710,105 @@ struct Block
             cerr << "domain extent:\n min\n" << domain_mins << "\nmax\n" << domain_maxs << endl;
         }
 
+    // read the flame dataset and take one 2d (parallel to x-y plane) subset
+    // TODO: only for 2d so far
+    void read_2d_file_subdata(
+            const diy::Master::ProxyWithLink& cp,
+            DomainArgs&                       args)
+        {
+            DomainArgs* a = &args;
+            int tot_ndom_pts = 1;
+            p.resize(a->dom_dim);
+            ndom_pts.resize(a->dom_dim);
+            nctrl_pts.resize(a->dom_dim);
+            domain_mins.resize(a->pt_dim);
+            domain_maxs.resize(a->pt_dim);
+            for (int i = 0; i < a->dom_dim; i++)
+            {
+                p(i)         =  a->p[i];
+                ndom_pts(i)  =  a->ndom_pts[i];
+                nctrl_pts(i) =  a->nctrl_pts[i];
+                tot_ndom_pts *= ndom_pts(i);
+            }
+            domain.resize(tot_ndom_pts, a->pt_dim);
+            vector<float> vel(a->full_dom_pts[0] * a->full_dom_pts[1] * 3);
+
+            FILE *fd = fopen("/Users/tpeterka/datasets/flame/6_small.xyz", "r");
+//             FILE *fd = fopen("/homes/tpeterka/datasets/flame/6_small.xyz", "r");
+            assert(fd);
+
+            // rest is hard-coded for 2d
+
+            // seek to start of desired full x-y plane
+            size_t ofst = 0;                                                    // offset to seek to (in bytes)
+            ofst += a->starts[2] * a->full_dom_pts[0] * a->full_dom_pts[1];     // z direction
+            ofst *= 12;                                                         // 3 components * 4 bytes
+            fseek(fd, ofst, SEEK_SET);
+
+            // read all three components of velocity for the entire plane (not just the subset)
+            if (!fread(&vel[0], sizeof(float), a->full_dom_pts[0] * a->full_dom_pts[1] * 3, fd))
+            {
+                fprintf(stderr, "Error: unable to read file\n");
+                exit(0);
+            }
+
+            // compute velocity magnitude only for the points in the subset, dropping the rest
+            size_t ijk[2] = {0, 0};                          // i,j,k indices of current point
+            size_t n = 0;
+            for (size_t i = 0; i < vel.size() / 3; i++)
+            {
+                // is the point in the subset?
+                bool keep = true;
+                if (ijk[0] < a->starts[0] || ijk[0] >= a->starts[0] + a->ndom_pts[0] ||
+                        ijk[1] < a->starts[1] || ijk[1] >= a->starts[1] + a->ndom_pts[1])
+                    keep = false;
+
+                // debug
+//                 fprintf(stderr, "i=%ld ijk=[%ld %ld] keep=%d\n", i, ijk[0], ijk[1], keep);
+
+                if (keep)
+                {
+                    domain(n, 0) = ijk[0];                  // domain is just i,j
+                    domain(n, 1) = ijk[1];
+                    // range (function value) is magnitude of velocity
+                    domain(n, 2) = sqrt(vel[3 * i    ] * vel[3 * i    ] +
+                            vel[3 * i + 1] * vel[3 * i + 1] +
+                            vel[3 * i + 2] * vel[3 * i + 2]);
+                    n++;
+                    // fprintf(stderr, "vel [%.3f %.3f %.3f] mag %.3f\n",
+                    //         vel[3 * i], vel[3 * i + 1], vel[3 * i + 2], range[i]);
+                }
+
+                // increment ijk
+                if (ijk[0] == a->full_dom_pts[0] - 1)
+                {
+                    ijk[0] = 0;
+                    ijk[1]++;
+                }
+                else
+                    ijk[0]++;
+            }
+
+            // find extent of range
+            for (size_t i = 0; i < (size_t)domain.rows(); i++)
+            {
+                if (i == 0 || domain(i, 2) < domain_mins(2))
+                    domain_mins(2) = domain(i, 2);
+                if (i == 0 || domain(i, 2) > domain_maxs(2))
+                    domain_maxs(2) = domain(i, 2);
+            }
+
+            // extent of domain is just lower left and upper right corner, which in row-major order
+            // is the first point and the last point
+            domain_mins(0) = domain(0, 0);
+            domain_mins(1) = domain(0, 1);
+            domain_maxs(0) = domain(tot_ndom_pts - 1, 0);
+            domain_maxs(1) = domain(tot_ndom_pts - 1, 1);
+
+            // debug
+            cerr << "domain extent:\n min\n" << domain_mins << "\nmax\n" << domain_maxs << endl;
+        }
+
     // read the flame dataset
     // TODO: only for 3d so far
     void read_3d_file_data(const diy::Master::ProxyWithLink& cp,
@@ -733,8 +834,8 @@ struct Block
 
             // open hard-coded file name
             // file is 704 * 540 * 550 * 3 floats (vx,vy,vz)
-//             FILE *fd = fopen("/Users/tpeterka/datasets/flame/6_small.xyz", "r");
-            FILE *fd = fopen("/homes/tpeterka/datasets/flame/6_small.xyz", "r");
+            FILE *fd = fopen("/Users/tpeterka/datasets/flame/6_small.xyz", "r");
+//             FILE *fd = fopen("/homes/tpeterka/datasets/flame/6_small.xyz", "r");
             assert(fd);
 
             // read all three components of velocity and compute magnitude
@@ -779,6 +880,108 @@ struct Block
             domain_mins(0) = 0.0;
             domain_mins(1) = 0.0;
             domain_mins(2) = 0.0;
+            domain_maxs(0) = domain(tot_ndom_pts - 1, 0);
+            domain_maxs(1) = domain(tot_ndom_pts - 1, 1);
+            domain_maxs(2) = domain(tot_ndom_pts - 1, 2);
+
+            // debug
+            cerr << "domain extent:\n min\n" << domain_mins << "\nmax\n" << domain_maxs << endl;
+        }
+
+    // read the flame dataset and take one 3d subset
+    // TODO: only for 3d so far
+    void read_3d_file_subdata(
+            const diy::Master::ProxyWithLink& cp,
+            DomainArgs&                       args)
+        {
+            DomainArgs* a = &args;
+            int tot_ndom_pts = 1;
+            p.resize(a->dom_dim);
+            ndom_pts.resize(a->dom_dim);
+            nctrl_pts.resize(a->dom_dim);
+            domain_mins.resize(a->pt_dim);
+            domain_maxs.resize(a->pt_dim);
+            for (int i = 0; i < a->dom_dim; i++)
+            {
+                p(i)         =  a->p[i];
+                ndom_pts(i)  =  a->ndom_pts[i];
+                nctrl_pts(i) =  a->nctrl_pts[i];
+                tot_ndom_pts *= ndom_pts(i);
+            }
+            domain.resize(tot_ndom_pts, a->pt_dim);
+            vector<float> vel(a->full_dom_pts[0] * a->full_dom_pts[1] * a->full_dom_pts[2] * 3);
+
+            FILE *fd = fopen("/Users/tpeterka/datasets/flame/6_small.xyz", "r");
+//             FILE *fd = fopen("/homes/tpeterka/datasets/flame/6_small.xyz", "r");
+            assert(fd);
+
+            // rest is hard-coded for 3d
+
+            // read all three components of velocity (not just the subset)
+            if (!fread(&vel[0], sizeof(float), a->full_dom_pts[0] * a->full_dom_pts[1] * a->full_dom_pts[2] * 3, fd))
+            {
+                fprintf(stderr, "Error: unable to read file\n");
+                exit(0);
+            }
+
+            // compute velocity magnitude only for the points in the subset, dropping the rest
+            size_t ijk[3] = {0, 0, 0};                          // i,j,k indices of current point
+            size_t n = 0;
+            for (size_t i = 0; i < vel.size() / 3; i++)
+            {
+                // is the point in the subset?
+                bool keep = true;
+                if (ijk[0] < a->starts[0] || ijk[0] >= a->starts[0] + a->ndom_pts[0] ||
+                        ijk[1] < a->starts[1] || ijk[1] >= a->starts[1] + a->ndom_pts[1] ||
+                        ijk[2] < a->starts[2] || ijk[2] >= a->starts[2] + a->ndom_pts[2])
+                    keep = false;
+
+                // debug
+//                 fprintf(stderr, "i=%ld ijk=[%ld %ld %ld] keep=%d\n", i, ijk[0], ijk[1], ijk[2], keep);
+
+                if (keep)
+                {
+                    domain(n, 0) = ijk[0];                  // domain is just i,j
+                    domain(n, 1) = ijk[1];
+                    domain(n, 2) = ijk[2];
+                    domain(n, 3) = sqrt(vel[3 * i    ] * vel[3 * i    ] +
+                            vel[3 * i + 1] * vel[3 * i + 1] +
+                            vel[3 * i + 2] * vel[3 * i + 2]);
+                    n++;
+                    // fprintf(stderr, "vel [%.3f %.3f %.3f] mag %.3f\n",
+                    //         vel[3 * i], vel[3 * i + 1], vel[3 * i + 2], range[i]);
+                }
+
+                // increment ijk
+                if (ijk[0] == a->full_dom_pts[0] - 1)
+                {
+                    ijk[0] = 0;
+                    if (ijk[1] == a->full_dom_pts[1] - 1)
+                    {
+                        ijk[1] = 0;
+                        ijk[2]++;
+                    }
+                    else
+                        ijk[1]++;
+                }
+                else
+                    ijk[0]++;
+            }
+
+            // find extent of range
+            for (size_t i = 0; i < (size_t)domain.rows(); i++)
+            {
+                if (i == 0 || domain(i, 3) < domain_mins(3))
+                    domain_mins(3) = domain(i, 3);
+                if (i == 0 || domain(i, 3) > domain_maxs(3))
+                    domain_maxs(3) = domain(i, 3);
+            }
+
+            // extent of domain is just lower left and upper right corner, which in row-major order
+            // is the first point and the last point
+            domain_mins(0) = domain(0, 0);
+            domain_mins(1) = domain(0, 1);
+            domain_mins(2) = domain(0, 2);
             domain_maxs(0) = domain(tot_ndom_pts - 1, 0);
             domain_maxs(1) = domain(tot_ndom_pts - 1, 1);
             domain_maxs(2) = domain(tot_ndom_pts - 1, 2);
