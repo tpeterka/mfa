@@ -102,15 +102,6 @@ namespace mfa
                 float        err_limit);    // max allowable error
 
         // in addition to returning number of erroneous input domain points
-        // this version adds erroneous spans to the back of a vector
-        int ErrorCurve(
-                size_t       k,             // current dimension
-                size_t       co,            // starting ofst for reading domain pts
-                MatrixXf&    ctrl_pts,      // control points
-                vector<int>& err_spans,     // spans with error greater than err_limit
-                float        err_limit);    // max allowable error
-
-        // in addition to returning number of erroneous input domain points
         // this version inserts erroneous spans into a set
         // allowing the same span to be inserted multiple times w/o duplicates
         int ErrorCurve(
