@@ -1222,9 +1222,27 @@ CopyCtrl(MatrixXf& P,          // solved points for current dimension and curve
 //     int ndims = ndom_pts.size();             // number of domain dimensions
 //     int nctrl_pts = n(k) + 1;                // number of control points in current dim
 
+    // copy first point straight from domain
     temp_ctrl.row(0) = domain.row(co);
+
+    // copy intermediate points
+    // clamp all dimensions other than k to the same as the domain points
+    // this eliminates any wiggles in other dimensions from the computation of P (typically ~10^-5)
     for (int i = 1; i < n(k); i++)
-        temp_ctrl.row(i) = P.row(i - 1);
+    {
+        for (auto j = 0; j < domain.cols(); j++)
+        {
+            if (j < p.size() && j != k)
+                temp_ctrl(i, j) = domain(co, j);
+            else
+                temp_ctrl(i, j) = P(i - 1, j);
+        }
+
+        // DEPRECATED: unclamped copy
+//         temp_ctrl.row(i) = P.row(i - 1);
+    }
+
+    // copy last point straight from domain
     temp_ctrl.row(n(k)) = domain.row(co + (ndom_pts(k) - 1) * mfa.ds[k]);
 }
 
@@ -1307,6 +1325,7 @@ ErrorCurve(
 
         decoder.CurvePt(k, params(po[k] + i), ctrl_pts, cpt, ko[k]);
         float err = fabs(mfa.NormalDistance(cpt, co + i * mfa.ds[k])) / dom_range;     // normalized by data range
+//         float err = fabs(mfa.CurveDistance(k, cpt, co + i * mfa.ds[k])) / dom_range;     // normalized by data range
         if (err > err_limit)
         {
             nerr++;
@@ -1352,6 +1371,7 @@ ErrorCurve(
 
         decoder.CurvePt(k, params(po[k] + i), ctrl_pts, cpt, ko[k]);
         float err = fabs(mfa.NormalDistance(cpt, co + i * mfa.ds[k])) / dom_range;     // normalized by data range
+//         float err = fabs(mfa.CurveDistance(k, cpt, co + i * mfa.ds[k])) / dom_range;     // normalized by data range
         if (err > err_limit)
         {
             // don't duplicate spans (spans are sorted, only need to compare with back entry)
@@ -1420,6 +1440,29 @@ ErrorCurve(
     int nerr = 0;                               // number of points with error greater than err_limit
     int span = p[k];                            // current knot span of the domain point being checked
 
+    // debug: compute max extent of curve in dimensions other than k
+//     VectorXf mins(p.size());
+//     VectorXf maxs(p.size());
+//     for (auto i = 0; i < p.size(); i++)
+//     {
+//         if (i != k)
+//         {
+//             for (auto j = 0; j < ctrl_pts.rows(); j++)
+//             {
+//                 if (j == 0 || ctrl_pts(j, i) < mins(i))
+//                     mins(i) = ctrl_pts(j, i);
+//                 if (j == 0 || ctrl_pts(j, i) > maxs(i))
+//                     maxs(i) = ctrl_pts(j, i);
+//             }
+//         }
+//         else
+//         {
+//             mins(i) = 0.0;
+//             maxs(i) = 0.0;
+//         }
+//     }
+//     cerr << "max ctrl_pt diff along curve:\n" << maxs - mins << endl;
+
     for (auto i = 0; i < ndom_pts[k]; i++)      // all domain points in the curve
     {
         while (knots(ko[k] + span + 1) < 1.0 && knots(ko[k] + span + 1) <= params(po[k] + i))
@@ -1434,6 +1477,7 @@ ErrorCurve(
 //         cerr << "cpt:\n" << cpt << endl;
 
         float err = fabs(mfa.NormalDistance(cpt, co + i * mfa.ds[k])) / dom_range;     // normalized by data range
+//         float err = fabs(mfa.CurveDistance(k, cpt, co + i * mfa.ds[k])) / dom_range;     // normalized by data range
 
         if (err > err_limit)
         {

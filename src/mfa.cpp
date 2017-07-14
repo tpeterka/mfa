@@ -912,12 +912,96 @@ NormalDistance(VectorXf& pt,          // point whose distance from domain is des
     VectorXf dom_pt = domain.row(idx);
 
     // debug
-    // fprintf(stderr, "idx=%d\n", idx);
-    // cerr << "unit normal\n" << normal << endl;
+//     fprintf(stderr, "idx=%ld\n", idx);
+//     cerr << "unit normal\n" << normal << endl;
     // cerr << "point\n" << pt << endl;
     // cerr << "domain point:\n" << dom_pt << endl;
     // cerr << "pt - dom_pt:\n" << pt - dom_pt << endl;
     // fprintf(stderr, "projection = %e\n\n", normal.dot(pt - dom_pt));
+
+    return normal.dot(pt - dom_pt);
+}
+
+// signed normal distance from a point to a curve through the domain (2d slice)
+// uses 2-point finite differences (first order linear) method to compute gradient and normal vector
+// approximates gradient from 2 points in the same slice
+float
+mfa::
+MFA::
+CurveDistance(
+        int       k,                    // current dimension in direction of curve
+        VectorXf& pt,                   // point whose distance from domain is desired
+        size_t    idx)                  // index of min. corner of cell in the domain
+                                        // that will be used to compute partial derivatives
+                                        // (linear) search for correct cell will start at this index
+{
+    // normal vector = [df/dx, df/dy, df/dz, ..., -1]
+    // -1 is the last coordinate of the domain points, ie, the range value
+    VectorXf normal(domain.cols());
+    int      last = domain.cols() - 1;    // last coordinate of a domain pt, ie, the range value
+
+    // convert linear idx to multidim. i,j,k... indices in each domain dimension
+    VectorXi ijk(p.size());
+    idx2ijk(idx, ijk);
+
+    // compute i0 and i1 1d and ijk0 and ijk1 nd indices for two points in the cell in each dim.
+    // even though the caller provided the minimum corner index as idx, it's
+    // possible that idx is at the max end of the domain in some dimension
+    // in this case we set i1 <- idx and i0 to be one less
+    size_t i0, i1;                          // 1-d indices of min, max corner points
+    VectorXi ijk0(p.size());                // n-d ijk index of min corner
+    VectorXi ijk1(p.size());                // n-d ijk index of max corner
+    for (int i = 0; i < p.size(); i++)      // for all domain dimensions
+    {
+        // in the direction of the curve, find cell that encloses the point
+        if (i == k)
+        {
+            // two opposite corners of the cell as i,j,k coordinates
+            if (ijk(i) + 1 < ndom_pts(i))
+            {
+                ijk0(i) = ijk(i);
+                ijk1(i) = ijk(i) + 1;
+            }
+            else
+            {
+                ijk0(i) = ijk(i) - 1;
+                ijk1(i) = ijk(i);
+            }
+        }
+        // all other dimensions except the direction of the curve project to the same value
+        else
+        {
+            ijk0(i) = ijk(i);
+            ijk1(i) = ijk(i);
+        }
+
+    }
+
+    // set i0 and i1 to be the 1-d indices of the corner points
+    ijk2idx(ijk0, i0);
+    ijk2idx(ijk1, i1);
+
+    // compute the normal to the domain at i0 and i1
+    for (int i = 0; i < p.size(); i++)      // for all domain dimensions
+    {
+        if (i == k)
+            normal(i) = (domain(i1, last) - domain(i0, last)) / (domain(i1, i) - domain(i0, i));
+        else
+            normal(i) = 0.0;
+    }
+    normal(last) = -1;
+    normal /= normal.norm();
+
+    // project distance from (pt - domain(idx)) to unit normal
+    VectorXf dom_pt = domain.row(idx);
+
+    // debug
+//     fprintf(stderr, "idx=%ld\n", idx);
+//     cerr << "unit normal\n" << normal << endl;
+//     cerr << "point\n" << pt << endl;
+//     cerr << "domain point:\n" << dom_pt << endl;
+//     cerr << "pt - dom_pt:\n" << pt - dom_pt << endl;
+//     fprintf(stderr, "projection = %e\n\n", normal.dot(pt - dom_pt));
 
     return normal.dot(pt - dom_pt);
 }

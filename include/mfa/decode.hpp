@@ -45,11 +45,12 @@ namespace mfa
 
     private:
 
-        void CurvePt(
-                int       cur_dim,              // current dimension
-                float     param,                // parameter value of desired point
-                VectorXf& out_pt,               // (output) point
-                int       ko = 0);              // starting knot offset
+        // DEPRECATED
+//         void CurvePt(
+//                 int       cur_dim,              // current dimension
+//                 float     param,                // parameter value of desired point
+//                 VectorXf& out_pt,               // (output) point
+//                 int       ko = 0);              // starting knot offset
 
 //         void SplitSpan(
 //                 size_t        si,               // id of span to split

@@ -70,8 +70,14 @@ namespace mfa
 
         float Error(size_t idx);                        // index of domain point where to compute error of mfa
 
-        float NormalDistance(VectorXf& pt,              // point whose distance from domain is desired
-                             size_t    cell_idx);       // index of min. corner of cell in the domain
+        float NormalDistance(
+                VectorXf& pt,              // point whose distance from domain is desired
+                size_t    cell_idx);       // index of min. corner of cell in the domain
+
+        float CurveDistance(
+                int       k,               // current dimension in direction of curve
+                VectorXf& pt,              // point whose distance from domain is desired
+                size_t    cell_idx);       // index of min. corner of cell in the domain
     private:
 
 //         bool ErrorSpans(
