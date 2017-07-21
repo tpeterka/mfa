@@ -214,17 +214,14 @@ FastEncode(
 
 #else
 
-// NB: the following TBB version is slower (~1.5X) than the serial version
-// probably the offset calculations that must be repeated each time to make the loops reentrant are
-// too expensive and not worth it
-// Don't use this version for now
-// TODO: figure out how to compute the offsets in closed form
-//
-// does not include accuracy improvements later added to single threaded version (multiple
-// indentical results before exiting step loop, shifted curve start in step loop, etc.)
-
 // TBB version
+//
 // fast encode using curves instead of high volume in early rounds to determine knot insertions
+// for each dimension, finds worst curve for new knots (not new knots from all curves)
+// this is less accurate than inserting all new knots from all curves into a set (as in the serial
+// version)
+// TODO: need to figure out how to do this in this version
+//
 // returns true if done, ie, no knots are inserted
 bool
 mfa::
@@ -232,7 +229,8 @@ Encoder::
 FastEncode(
         VectorXi& nnew_knots,                       // number of new knots in each dim
         VectorXf& new_knots,                        // new knots (1st dim changes fastest)
-        float     err_limit)                        // max allowable error
+        float     err_limit,                        // max allowable error
+        int       iter)                             // iteration number of caller (for debugging)
 {
     // check and assign main quantities
     int  ndims = mfa.ndom_pts.size();                   // number of domain dimensions
@@ -264,7 +262,7 @@ FastEncode(
         {
             int span = mfa.FindSpan(k, mfa.params(mfa.po[k] + i), mfa.ko[k]);
             assert(span - mfa.ko[k] <= n(k));            // sanity
-            mfa.BasisFuns(k, mfa.params(po[k] + i), span, N, 1, n(k) - 1, i - 1, mfa.ko[k]);
+            mfa.BasisFuns(k, mfa.params(mfa.po[k] + i), span, N, 1, n(k) - 1, i - 1, mfa.ko[k]);
         }
 
         // compute the product Nt x N
@@ -277,34 +275,22 @@ FastEncode(
         //         cerr << "k " << k << " NtN:\n" << NtN << endl;
 
         size_t ncurves         = mfa.domain.rows() / mfa.ndom_pts(k);   // number of curves in this dimension
-        size_t worst_curve_idx = 0;                             // index of worst curve in this dimension
+        int nsame_steps        = 0;                                     // number of steps with same number of erroneous points
+        int n_step_sizes       = 0;                                     // number of step sizes so far
+        size_t worst_curve_idx = 0;                                     // index of worst curve in this dimension
 
-//         for (size_t s = 1; s >= 1; s /= 2)        // debug only, one step size of s=1
+//         for (size_t s = 1; s >= 1; s /= 2)                           // debug only, one step size of s=1
         for (size_t s = ncurves / 2; s >= 1 && ncurves / s < max_num_curves; s /= 2)        // for all step sizes over curves up to max allowed
         {
             // debug
             fprintf(stderr, "k=%ld s=%ld\n", k, s);
 
-            size_t ncurves_s = static_cast<size_t>(ceil(static_cast<float>(ncurves) / s));
+            bool new_max_nerr = false;                      // this step size changed the max_nerr
+            size_t ncurves_s  = static_cast<size_t>(ceil(static_cast<float>(ncurves) / s));
             vector<size_t> nerrs(ncurves_s);                    // number of erroneous points (error > err_limit) in the curve
 
             parallel_for (size_t (0), ncurves_s, [&] (size_t j) // for all the curves in this dimension (given the curve step)
             {
-                // compute co, the curve domain point starting offset
-                size_t co         = 0;                          // starting ofst for domain curve pts in cur. dim
-                size_t coo        = 0;                          // co at start of contiguous sequence
-                for (auto n = 0; n < j * s; n++)
-                {
-                    // adjust offsets for the next curve
-                    if ((n + 1) % mfa.ds[k])
-                        co++;
-                    else
-                    {
-                        co = coo + mfa.ds[k] * mfa.ndom_pts(k);
-                        coo = co;
-                    }
-                }
-
                 // R is the right hand side needed for solving NtN * P = R
                 MatrixXf R(n(k) - 1, mfa.domain.cols());
 
@@ -314,7 +300,7 @@ FastEncode(
                 MatrixXf P(n(k) - 1, mfa.domain.cols());
 
                 // compute R from input domain points
-                RHS(k, N, R, mfa.ko[k], mfa.po[k], co);
+                RHS(k, N, R, mfa.ko[k], mfa.po[k], mfa.co[k][j * s]);
 
                 // solve for P for one curve of control points
                 P = NtN.ldlt().solve(R);
@@ -322,10 +308,10 @@ FastEncode(
                 // append points from P to control points
                 // TODO: any way to avoid this?
                 MatrixXf temp_ctrl = MatrixXf::Zero(mfa.nctrl_pts(k), mfa.domain.cols());   // temporary control points for one curve
-                CopyCtrl(P, n, k, co, temp_ctrl);
+                CopyCtrl(P, n, k, mfa.co[k][j * s], temp_ctrl);
 
                 // compute the error on the curve (number of input points with error > err_limit)
-                nerrs[j] = ErrorCurve(k, co, temp_ctrl, err_limit);
+                nerrs[j] = ErrorCurve(k, mfa.co[k][j * s], temp_ctrl, err_limit);
 
             });                                               // parallel for over curves in this dimension
 
@@ -334,35 +320,26 @@ FastEncode(
             {
                 max_nerr        = *worst_curve;
                 worst_curve_idx = (worst_curve - nerrs.begin()) * s;
+                new_max_nerr    = true;
 
                 // debug
 //                 fprintf(stderr, "k=%ld s=%ld worst_curve_idx=%ld nerr=%ld max_nerr=%ld\n",
 //                 k, s, worst_curve_idx, nerrs[worst_curve_idx / s], max_nerr);
             }
-            else                                            // stop refining step if no change
-                if (max_nerr)
-                    break;
+
+            // stop refining step if no change
+            if (max_nerr && !new_max_nerr)
+                nsame_steps++;
+            if (nsame_steps == 2)
+                break;
+
+            n_step_sizes++;
         }                                               // step sizes over curves
 
+        // --- TODO: change recomputing worst curve to inserting error spans into set ---
+
         // recompute the worst curve
-        vector<int> err_spans;                          // error spans for one curve
-
-        // --- TODO: factor this out into a function ---
-
-        // compute co, the curve domain point starting offset
-        size_t co         = 0;                          // starting ofst for domain curve pts in cur. dim
-        size_t coo        = 0;                          // co at start of contiguous sequence
-        for (auto n = 0; n < worst_curve_idx; n++)
-        {
-            // adjust offsets for the next curve
-            if ((n + 1) % mfa.ds[k])
-                co++;
-            else
-            {
-                co = coo + mfa.ds[k] * mfa.ndom_pts(k);
-                coo = co;
-            }
-        }
+        set<int> err_spans;                          // error spans for one curve
 
         // debug
 //         fprintf(stderr, "k=%ld worst_curve_idx=%ld co=%ld\n", k, worst_curve_idx, co);
@@ -376,7 +353,7 @@ FastEncode(
         MatrixXf P(n(k) - 1, mfa.domain.cols());
 
         // compute R from input domain points
-        RHS(k, N, R, mfa.ko[k], mfa.po[k], co);
+        RHS(k, N, R, mfa.ko[k], mfa.po[k], mfa.co[k][worst_curve_idx]);
 
         // solve for P for one curve of control points
         P = NtN.ldlt().solve(R);
@@ -384,17 +361,26 @@ FastEncode(
         // append points from P to control points
         // TODO: any way to avoid this?
         MatrixXf temp_ctrl = MatrixXf::Zero(mfa.nctrl_pts(k), mfa.domain.cols());   // temporary control points for one curve
-        CopyCtrl(P, n, k, co, temp_ctrl);
+        CopyCtrl(P, n, k, mfa.co[k][worst_curve_idx], temp_ctrl);
 
-        // --- TODO: end of factored out function ---
+        // --- TODO: end of recomputing worst curve ---
 
-        // compute the error spans on the worst curve in this dimension and add new knots in their middles
-        ErrorCurve(k, co, temp_ctrl, err_spans, err_limit);
+        // compute the error spans on the worst curve in this dimension
+        ErrorCurve(k, mfa.co[k][worst_curve_idx], temp_ctrl, err_spans, err_limit);
+
+        // add new knots in the middle of spans with errors
         nnew_knots(k) = err_spans.size();
         auto old_size = new_knots.size();
         new_knots.conservativeResize(old_size + err_spans.size());    // existing values are preserved
-        for (auto i = 0; i < err_spans.size(); i++)
-            new_knots(old_size + i) = (knots(mfa.ko[k] + err_spans[i]) + knots(mfa.ko[k] + err_spans[i] + 1)) / 2.0;
+        size_t i = 0;
+        for (set<int>::iterator it = err_spans.begin(); it != err_spans.end(); ++it)
+        {
+            // debug
+            assert(*it < mfa.nctrl_pts[k]);                          // not trying to go beyond the last span
+
+            new_knots(old_size + i) = (mfa.knots(mfa.ko[k] + *it) + mfa.knots(mfa.ko[k] + *it + 1)) / 2.0;
+            i++;
+        }
 
         // free R, NtN, and P
         R.resize(0, 0);
@@ -402,7 +388,7 @@ FastEncode(
         P.resize(0, 0);
 
         // print progress
-        fprintf(stderr, "\rdimension %ld of %d encoded", k + 1, ndims);
+        fprintf(stderr, "\rdimension %ld of %d encoded\n", k + 1, ndims);
     }                                                      // domain dimensions
 
     // debug
