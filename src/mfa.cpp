@@ -91,9 +91,6 @@ MFA(VectorXi& p_,             // polynomial degree in each dimension
     // debug
     // cerr << "knots:\n" << knots << endl;
 
-    // DEPRECATED
-//     err_ok.resize(domain.rows());   // error at this domain point is below user limit, initializes to false
-
     // offsets and strides for knots, params, and control points in different dimensions
     ko.resize(p.size(), 0);                  // offset for knots
     po.resize(p.size(), 0);                  // offset for params
@@ -133,8 +130,6 @@ MFA(VectorXi& p_,             // polynomial degree in each dimension
 //             fprintf(stderr, "co[%d][%d]=%ld\n", k, j, co[k][j]);
         }
     }
-    // knot span index table
-//     KnotSpanIndex();
 }
 
 // adaptive number of control points version
@@ -228,139 +223,6 @@ MFA(VectorXi& p_,             // polynomial degree in each dimension
     }
 }
 
-
-// DEPRECATED
-// // initialize knot span index
-// void
-// mfa::
-// MFA::
-// KnotSpanIndex()
-// {
-//     // total number of knot spans = product of number of knot spans over all dims
-//     size_t int_nspans = 1;                  // number of internal (unique) spans
-//     size_t all_nspans = 1;                  // total number of spans, including repeating 0s and 1s
-//     for (auto i = 0; i < p.size(); i++)
-//     {
-//         int_nspans *= (nctrl_pts(i) - p(i));
-//         all_nspans *= (nctrl_pts(i) + p(i));
-//     }
-// 
-//     knot_spans.resize(int_nspans);
-// 
-//     // for all knot spans, fill the KnotSpan fields
-//     VectorXi ijk   = VectorXi::Zero(p.size());      // i,j,k of start of span
-//     VectorXi p_ijk = VectorXi::Zero(p.size());      // i,j,k of parameter
-//     size_t span_idx = 0;                            // current index into knot_spans
-//     for (auto i = 0; i < all_nspans; i++)           // all knot spans (including repeated 0s and 1s)
-//     {
-//         // skip repeating knot spans
-//         bool skip = false;
-//         for (auto k = 0; k < p.size(); k++)             // dimensions
-//             if ((ijk(k) < p[k]) || ijk(k) >= nctrl_pts[k])
-//             {
-//                 skip = true;
-//                 break;
-//             }
-// 
-//         // save knot span
-//         // TODO: may not be necessary to store all the knot span fields, but for now it is
-//         // convenient; recheck later to see which are actually used
-//         // unused ones can be computed locally below but not part of the knot span struct
-//         if (!skip)
-//         {
-//             // knot ijk
-//             knot_spans[span_idx].min_knot_ijk = ijk;
-//             knot_spans[span_idx].max_knot_ijk = ijk.array() + 1;
-// 
-//             // knot values
-//             knot_spans[span_idx].min_knot.resize(p.size());
-//             knot_spans[span_idx].max_knot.resize(p.size());
-//             for (auto k = 0; k < p.size(); k++)         // dimensions
-//             {
-//                 knot_spans[span_idx].min_knot(k) = knots(ko[k] + knot_spans[span_idx].min_knot_ijk(k));
-//                 knot_spans[span_idx].max_knot(k) = knots(ko[k] + knot_spans[span_idx].max_knot_ijk(k));
-//             }
-// 
-//             // parameter ijk and parameter values
-//             knot_spans[span_idx].min_param.resize(p.size());
-//             knot_spans[span_idx].max_param.resize(p.size());
-//             knot_spans[span_idx].min_param_ijk.resize(p.size());
-//             knot_spans[span_idx].max_param_ijk.resize(p.size());
-//             VectorXi po_ijk = p_ijk;                    // remember starting param ijk
-//             for (auto k = 0; k < p.size(); k++)         // dimensions in knot spans
-//             {
-//                 // min param ijk and value
-//                 knot_spans[span_idx].min_param_ijk(k) = p_ijk(k);
-//                 knot_spans[span_idx].min_param(k)     = params(po[k] + p_ijk(k));
-// 
-//                 // max param ijk and value
-//                 // most spans are half open [..., ...)
-//                 while (params(po[k] + p_ijk(k)) < knot_spans[span_idx].max_knot(k))
-//                 {
-//                     knot_spans[span_idx].max_param_ijk(k) = p_ijk(k);
-//                     knot_spans[span_idx].max_param(k)     = params(po[k] + p_ijk(k));
-//                     p_ijk(k)++;
-//                 }
-//                 // the last span in each dimension is fully closed [..., ...]
-//                 if (p_ijk(k) == ndom_pts(k) - 1)
-//                 {
-//                     knot_spans[span_idx].max_param_ijk(k) = p_ijk(k);
-//                     knot_spans[span_idx].max_param(k)     = params(po[k] + p_ijk(k));
-//                 }
-//             }
-// 
-//             // increment param ijk
-//             for (auto k = 0; k < p.size(); k++)     // dimension in params
-//             {
-//                 if (p_ijk(k) < ndom_pts[k] - 1)
-//                 {
-//                     po_ijk(k) = p_ijk(k);
-//                     break;
-//                 }
-//                 else
-//                 {
-//                     po_ijk(k) = 0;
-//                     if (k < p.size() - 1)
-//                         po_ijk(k + 1)++;
-//                 }
-//             }
-//             p_ijk = po_ijk;
-// 
-//             knot_spans[span_idx].last_split_dim = -1;
-//             knot_spans[span_idx].done           = false;
-//             // DEPRECATED
-// //             ndone_knot_spans                    = 0;
-// 
-//             // debug
-// //             cerr <<
-// //                 "spand_idx="         << span_idx                           <<
-// //                 "\nmin_knot_ijk:\n"  << knot_spans[span_idx].min_knot_ijk  <<
-// //                 "\nmax_knot_ijk:\n"  << knot_spans[span_idx].max_knot_ijk  <<
-// //                 "\nmin_knot:\n"      << knot_spans[span_idx].min_knot      <<
-// //                 "\nmax_knot:\n"      << knot_spans[span_idx].max_knot      <<
-// //                 "\nmin_param_ijk:\n" << knot_spans[span_idx].min_param_ijk <<
-// //                 "\nmax_param_ijk:\n" << knot_spans[span_idx].max_param_ijk <<
-// //                 "\nmin_param:\n"     << knot_spans[span_idx].min_param     <<
-// //                 "\nmax_param:\n"     << knot_spans[span_idx].max_param     <<
-// //                 "\n\n"               << endl;
-// 
-//             span_idx++;
-//         }                                               // !skip
-// 
-//         // increment knot ijk
-//         for (auto k = 0; k < p.size(); k++)             // dimension in knot spans
-//         {
-//             if (ijk(k) < nctrl_pts[k] + p[k] - 1)
-//             {
-//                 ijk(k)++;
-//                 break;
-//             }
-//             else
-//                 ijk(k) = 0;
-//         }
-//     }
-// }
-
 // encode
 void
 mfa::
@@ -385,41 +247,6 @@ AdaptiveEncode(
     nctrl_pts_ = nctrl_pts;
 }
 
-// // re-encode with insertion of new knots into existing knots
-// // returns whether normalized (relative) error in all knot spans is below err_limit
-// bool
-// mfa::
-// MFA::
-// Encode(float err_limit)                             // maximum allowable normalized error
-// {
-//     VectorXi nnew_knots = VectorXi::Zero(p.size()); // number of new knots in each dim
-//     VectorXf new_knots;                             // new knots (1st dim changes fastest)
-// 
-//     bool done = ErrorSpans(nnew_knots, new_knots, err_limit);
-// 
-//     if (!done)
-//     {
-//         mfa::Encoder encoder(*this);
-//         encoder.Encode();
-//     }
-// 
-//     return done;
-// }
-
-// // computes error in knot spans and adds knots to be inserted into nnew_knots and new_knots
-// // returns whether normalized (relative) error in all knot spans is below err_limit
-// bool
-// mfa::
-// MFA::
-// ErrorSpans(
-//         VectorXi& nnew_knots,                   // number of new knots in each dim
-//         VectorXf& new_knots,                    // new knots (1st dim changes fastest)
-//         float err_limit)                        // max allowable relative error
-// {
-//     mfa::Decoder decoder(*this);
-//     return decoder.ErrorSpans(nnew_knots, new_knots, err_limit);
-// }
-
 // decode
 void
 mfa::
@@ -429,32 +256,6 @@ Decode(MatrixXf& approx)
     mfa::Decoder decoder(*this);
     decoder.Decode(approx);
 }
-
-// DEPRECATED
-// error (distance in normal direction) from a point to the domain points
-// (error is signed and not normalized by data range)
-// float
-// mfa::
-// MFA::
-// Error(VectorXf& pt,               // point some distance away from domain points
-//       int       idx)              // index of point in domain near to the point
-//                                   // search for cell containing the point starting at this index
-// {
-//     mfa::Encoder encoder(*this);
-//     return NormalDistance(pt, idx);
-// }
-
-// DEPRECATED
-// absolute value of error (distance in normal direction) of the mfa at a domain
-// point (error is absolute value but not normalized by data range)
-// float
-// mfa::
-// MFA::
-// Error(size_t idx)                   // index of domain point
-// {
-//     mfa::Encoder encoder(*this);
-//     return encoder.Error(idx);
-// }
 
 // binary search to find the span in the knots vector containing a given parameter value
 // returns span index i s.t. u is in [ knots[i], knots[i + 1] )

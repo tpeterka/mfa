@@ -19,20 +19,6 @@ typedef Eigen::VectorXi VectorXi;
 using namespace std;
 using namespace tbb;
 
-struct KnotSpan
-{
-    VectorXf min_knot;                  // parameter vector of min knot in this span
-    VectorXf max_knot;                  // parameter vector of max knot in this span
-    VectorXi min_knot_ijk;              // i,j,k indices of minimum knot in this span
-    VectorXi max_knot_ijk;              // i,j,k indices of maximum knot in this span
-    VectorXf min_param;                 // parameter vector of minimum domain point in this span
-    VectorXf max_param;                 // parameter vector of maximum domain point in this span
-    VectorXi min_param_ijk;             // i,j,k indices of minimum domain point in this span
-    VectorXi max_param_ijk;             // i,j,k indices of maximum domain point in this span
-    int      last_split_dim;            // last dimension in which this span was subdivided
-    bool     done;                      // whether the span has converged (<= error_limit everywhere)
-};
-
 namespace mfa
 {
     class MFA
@@ -64,8 +50,6 @@ namespace mfa
                 float     err_limit,        // maximum allowable normalized error
                 VectorXi& nctrl_pts_);      // (output) number of control points in each dim
 
-//         bool Encode(float err_limit);                   // maximum allowable normalized error
-
         void Decode(MatrixXf& approx);                  // decode points
 
         float Error(size_t idx);                        // index of domain point where to compute error of mfa
@@ -79,17 +63,6 @@ namespace mfa
                 VectorXf& pt,              // point whose distance from domain is desired
                 size_t    cell_idx);       // index of min. corner of cell in the domain
     private:
-
-//         bool ErrorSpans(
-//                 VectorXi& nnew_knots,                   // number of new knots in each dim
-//                 VectorXf& new_knots,                    // new knots (1st dim changes fastest)
-//                 float err_limit);                       // max allowable relative error
-
-        // debug version, remove when no longer needed
-        int FindSpan(int   cur_dim,       // current dimension
-                     bool  debug,         // print debug info
-                     float u);            // parameter value
-
 
         int FindSpan(int   cur_dim,       // current dimension
                      float u,             // parameter value
@@ -107,8 +80,6 @@ namespace mfa
         void Params();
 
         void Knots();
-
-//         void KnotSpanIndex();
 
         void InsertKnots(VectorXi& nnew_knots,     // number of new knots in each dim
                          VectorXf& new_knots);     // new knots (1st dim changes fastest)
@@ -143,7 +114,6 @@ namespace mfa
        size_t tot_nknots;     // total nmbr of knots = sum of nmbr of knots over all dims
        size_t tot_nctrl;      // total nmbr of control points = product of control points over all dims
        float eps;             // minimum difference considered significant
-//        vector<KnotSpan> knot_spans; // knot spans
    };
 
 }

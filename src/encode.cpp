@@ -17,16 +17,6 @@ mfa::
 Encoder::
 Encoder(MFA& mfa_) :
     mfa(mfa_),
-//     p(mfa_.p),
-//     ndom_pts(mfa_.ndom_pts),
-//     nctrl_pts(mfa_.nctrl_pts),
-//     domain(mfa_.domain),
-//     params(mfa_.params),
-//     ctrl_pts(mfa_.ctrl_pts),
-//     knots(mfa_.knots),
-//     dom_range(mfa_.dom_range),
-//     po(mfa_.po),
-//     ko(mfa_.ko),
     max_num_curves(1.0e4)                           // max num. curves to check in one dimension of fast encode
 {
 }
@@ -1089,28 +1079,9 @@ CtrlCurve(MatrixXf& N,          // basis functions for current dimension
     // solve for P
     P = NtN.ldlt().solve(R);
 
-    // debug
-    // cerr << "P:\n" << P << endl;
-    // Eigen::FullPivLU<MatrixXf> lu_decomp(NtN);
-    // cerr << "Rank of NtN = " << lu_decomp.rank() << endl;
-
     // append points from P to control points
     // TODO: any way to avoid this?
     CopyCtrl(P, n, k, co, cs, to, temp_ctrl0, temp_ctrl1);
-
-    // debug
-    // int ndims = mfa.ndom_pts.size();
-    // cerr << "k " << k << " P:\n" << P << endl;
-    // if (ndims == 1)
-    //     cerr << "ctrl_pts:\n" << mfa.ctrl_pts << endl;
-    // else if (k == 0)
-    //     cerr << "temp_ctrl0:\n" << temp_ctrl0 << endl;
-    // else if (k % 2 == 0 && k < ndims - 1)
-    //     cerr << "temp_ctrl0:\n" << temp_ctrl0 << endl;
-    // else if (k % 2 == 1 && k < ndims - 1)
-    //     cerr << "temp_ctrl1:\n" << temp_ctrl1 << endl;
-    // else if (k == ndims - 1)
-    //     cerr << "ctrl_pts:\n" << mfa.ctrl_pts << endl;
 }
 
 // returns number of points in a curve that have error greater than err_limit

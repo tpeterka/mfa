@@ -111,20 +111,9 @@ namespace mfa
                 set<int>& err_spans,        // spans with error greater than err_limit
                 float        err_limit);    // max allowable error
 
-        MFA& mfa;                       // the mfa object
-        // following are references the the data in the mfa object
-//         VectorXi& p;                   // polynomial degree in each dimension
-//         VectorXi& ndom_pts;            // number of input data points in each dim
-//         VectorXi& nctrl_pts;           // desired number of control points in each dim
-//         MatrixXf& domain;              // input data points (1st dim changes fastest)
-//         VectorXf& params;              // parameters for input points (1st dim changes fastest)
-//         MatrixXf& ctrl_pts;            // control points (1st dim changes fastest)
-//         VectorXf& knots;               // knots (1st dim changes fastest)
-//         float     dom_range;           // max extent of input data points
-//         vector<size_t>& po;            // starting offset for params in each dim
-//         vector<size_t>& ko;            // starting offset for knots in each dim
-        size_t    max_num_curves;       // max num. curves per dimension to check in fast encode
-//         vector<KnotSpan>& knot_spans;  // not done (greater than max error) knot spans
+        size_t  max_num_curves;             // max num. curves per dimension to check in fast encode
+
+        MFA& mfa;                           // the mfa object
     };
 }
 
