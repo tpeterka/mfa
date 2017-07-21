@@ -20,44 +20,44 @@ using namespace std;
 mfa::
 Decoder::
 Decoder(MFA& mfa_) :
-    mfa(mfa_),
-    p(mfa_.p),
-    ndom_pts(mfa_.ndom_pts),
-    nctrl_pts(mfa_.nctrl_pts),
-    domain(mfa_.domain),
-    params(mfa_.params),
-    ctrl_pts(mfa_.ctrl_pts),
-    knots(mfa_.knots),
-    dom_range(mfa_.dom_range),
-    po(mfa_.po),
-    ko(mfa_.ko)
+    mfa(mfa_)
+//     p(mfa_.p),
+//     ndom_pts(mfa_.ndom_pts),
+//     nctrl_pts(mfa_.nctrl_pts),
+//     domain(mfa_.domain),
+//     params(mfa_.params),
+//     ctrl_pts(mfa_.ctrl_pts),
+//     knots(mfa_.knots),
+//     dom_range(mfa_.dom_range),
+//     po(mfa_.po),
+//     ko(mfa_.ko)
     // DEPRECATED
 //     knot_spans(mfa_.knot_spans)
 //     ndone_knot_spans(mfa_.ndone_knot_spans)
 {
     // ensure that encoding was already done
-    if (!p.size()         ||
-        !ndom_pts.size()  ||
-        !nctrl_pts.size() ||
-        !domain.size()    ||
-        !params.size()    ||
-        !ctrl_pts.size()  ||
-        !knots.size())
+    if (!mfa.p.size()         ||
+        !mfa.ndom_pts.size()  ||
+        !mfa.nctrl_pts.size() ||
+        !mfa.domain.size()    ||
+        !mfa.params.size()    ||
+        !mfa.ctrl_pts.size()  ||
+        !mfa.knots.size())
     {
         fprintf(stderr, "Decoder() error: Attempting to decode before encoding.\n");
         exit(0);
     }
 
     // initialize decoding data structures
-    cs.resize(p.size(), 1);
+    cs.resize(mfa.p.size(), 1);
     tot_iters = 1;                              // total number of iterations in the flattened decoding loop
-    for (size_t i = 0; i < p.size(); i++)       // for all dims
+    for (size_t i = 0; i < mfa.p.size(); i++)       // for all dims
     {
-        tot_iters  *= (p(i) + 1);
+        tot_iters  *= (mfa.p(i) + 1);
         if (i > 0)
-            cs[i] = cs[i - 1] * nctrl_pts[i - 1];
+            cs[i] = cs[i - 1] * mfa.nctrl_pts[i - 1];
     }
-    ct.resize(tot_iters, p.size());
+    ct.resize(tot_iters, mfa.p.size());
 
     // compute coordinates of first control point of curve corresponding to this iteration
     // these are relative to start of the box of control points located at co
@@ -65,9 +65,9 @@ Decoder(MFA& mfa_) :
     {
         int div = tot_iters;
         int i_temp = i;
-        for (int j = p.size() - 1; j >= 0; j--)
+        for (int j = mfa.p.size() - 1; j >= 0; j--)
         {
-            div      /= (p(j) + 1);
+            div      /= (mfa.p(j) + 1);
             ct(i, j) =  i_temp / div;
             i_temp   -= (ct(i, j) * div);
         }
@@ -100,11 +100,11 @@ Decoder(MFA& mfa_) :
 // //             fprintf(stderr, "ErrorSpans(): span %ld\n", i);
 // 
 //             size_t nspan_pts = 1;                                   // number of domain points in the span
-//             for (auto k = 0; k < p.size(); k++)
+//             for (auto k = 0; k < mfa.p.size(); k++)
 //                 nspan_pts *= (knot_spans[i].max_param_ijk(k) - knot_spans[i].min_param_ijk(k) + 1);
 // 
 //             VectorXi p_ijk = knot_spans[i].min_param_ijk;           // indices of current parameter in the span
-//             VectorXf param(p.size());                               // value of current parameter
+//             VectorXf param(mfa.p.size());                               // value of current parameter
 //             bool span_done = true;                                  // span is done until error > err_limit
 // 
 //             // TODO:  consider binary search of the points in the span?
@@ -114,15 +114,15 @@ Decoder(MFA& mfa_) :
 //                 // debug
 // //                 fprintf(stderr, "ErrorSpans(): span %ld point %d\n", i, j);
 // 
-//                 for (auto k = 0; k < p.size(); k++)
-//                 param(k) = params(po[k] + p_ijk(k));
+//                 for (auto k = 0; k < mfa.p.size(); k++)
+//                 param(k) = mfa.params(mfa.po[k] + p_ijk(k));
 // 
 //                 // approximate the point and measure error
 //                 size_t idx;
 //                 mfa.ijk2idx(p_ijk, idx);
-//                 VectorXf cpt(ctrl_pts.cols());       // approximated point
+//                 VectorXf cpt(mfa.ctrl_pts.cols());       // approximated point
 //                 VolPt(param, cpt);
-//                 float err = fabs(mfa.NormalDistance(cpt, idx)) / dom_range;     // normalized by data range
+//                 float err = fabs(mfa.NormalDistance(cpt, idx)) / mfa.dom_range;     // normalized by data range
 // 
 //                 // span is not done
 //                 if (err > err_limit)
@@ -132,7 +132,7 @@ Decoder(MFA& mfa_) :
 //                 }
 // 
 //                 // increment param ijk
-//                 for (auto k = 0; k < p.size(); k++)                 // dimensions in the parameter
+//                 for (auto k = 0; k < mfa.p.size(); k++)                 // dimensions in the parameter
 //                 {
 //                     if (p_ijk(k) < knot_spans[i].max_param_ijk(k))
 //                     {
@@ -211,19 +211,19 @@ Decoder(MFA& mfa_) :
 //         }
 // 
 //         size_t nspan_pts = 1;                                   // number of domain points in the span
-//         for (auto k = 0; k < p.size(); k++)
+//         for (auto k = 0; k < mfa.p.size(); k++)
 //             nspan_pts *= (knot_spans[i].max_param_ijk(k) - knot_spans[i].min_param_ijk(k) + 1);
 // 
 //         VectorXi p_ijk = knot_spans[i].min_param_ijk;           // indices of current parameter in the span
-//         VectorXf param(p.size());                               // value of current parameter
+//         VectorXf param(mfa.p.size());                               // value of current parameter
 //         bool span_done = true;                                  // span is done until error > err_limit
 // 
 //         // TODO:  consider binary search of the points in the span?
 //         // (error likely to be higher in the center of the span?)
 //         for (auto j = 0; j < nspan_pts; j++)                    // parameters in the span
 //         {
-//             for (auto k = 0; k < p.size(); k++)
-//                 param(k) = params(po[k] + p_ijk(k));
+//             for (auto k = 0; k < mfa.p.size(); k++)
+//                 param(k) = mfa.params(mfa.po[k] + p_ijk(k));
 // 
 //             // approximate the point and measure error
 //             size_t idx;
@@ -232,9 +232,9 @@ Decoder(MFA& mfa_) :
 //             // (worse) and doesn't save a lot time
 // //             if (!mfa.err_ok[idx])                   // check each domain point at most one time
 // //             {
-//                 VectorXf cpt(ctrl_pts.cols());       // approximated point
+//                 VectorXf cpt(mfa.ctrl_pts.cols());       // approximated point
 //                 VolPt(param, cpt);
-//                 float err = fabs(mfa.NormalDistance(cpt, idx)) / dom_range;     // normalized by data range
+//                 float err = fabs(mfa.NormalDistance(cpt, idx)) / mfa.dom_range;     // normalized by data range
 // 
 //                 // span is not done
 //                 if (err > err_limit)
@@ -247,7 +247,7 @@ Decoder(MFA& mfa_) :
 // //             }
 // 
 //             // increment param ijk
-//             for (auto k = 0; k < p.size(); k++)                 // dimensions in the parameter
+//             for (auto k = 0; k < mfa.p.size(); k++)                 // dimensions in the parameter
 //             {
 //                 if (p_ijk(k) < knot_spans[i].max_param_ijk(k))
 //                 {
@@ -323,16 +323,16 @@ Decoder(MFA& mfa_) :
 //     int sd = knot_spans[si].last_split_dim;             // new split dimension
 //     float new_knot;                                     // new knot value in the split dimension
 //     size_t k;                                           // dimension
-//     for (k = 0; k < p.size(); k++)
+//     for (k = 0; k < mfa.p.size(); k++)
 //     {
-//         sd       = (sd + 1) % p.size();
+//         sd       = (sd + 1) % mfa.p.size();
 //         new_knot = (knot_spans[si].min_knot(sd) + knot_spans[si].max_knot(sd)) / 2;
-//         if (params(po[sd] + knot_spans[si].min_param_ijk(sd)) < new_knot &&
-//                 params(po[sd] + knot_spans[si].max_param_ijk(sd)) > new_knot)
+//         if (mfa.params(mfa.po[sd] + knot_spans[si].min_param_ijk(sd)) < new_knot &&
+//                 mfa.params(mfa.po[sd] + knot_spans[si].max_param_ijk(sd)) > new_knot)
 //             break;
 //     }
 // 
-//     if (k == p.size())                                  // a split direction could not be found
+//     if (k == mfa.p.size())                                  // a split direction could not be found
 //     {
 //         knot_spans[si].done = true;
 //         split_spans[si]     = true;
@@ -356,20 +356,20 @@ Decoder(MFA& mfa_) :
 // 
 //         // modify old span
 //         auto pi = knot_spans[j].min_param_ijk(sd);          // one coordinate of ijk index into params
-//         if (params(po[sd] + pi) < new_knot)                 // at least one param (domain pt) in the span
+//         if (mfa.params(mfa.po[sd] + pi) < new_knot)                 // at least one param (domain pt) in the span
 //         {
-//             while (params(po[sd] + pi) < new_knot)          // pi - 1 = max_param_ijk(sd) in the modified span
+//             while (mfa.params(mfa.po[sd] + pi) < new_knot)          // pi - 1 = max_param_ijk(sd) in the modified span
 //                 pi++;
 //             knot_spans[j].last_split_dim    = sd;
 //             knot_spans[j].max_knot(sd)      = new_knot;
 //             knot_spans[j].max_param_ijk(sd) = pi - 1;
-//             knot_spans[j].max_param(sd)     = params(po[sd] + pi - 1);
+//             knot_spans[j].max_param(sd)     = mfa.params(mfa.po[sd] + pi - 1);
 // 
 //             // modify new span
 //             knot_spans.back().last_split_dim     = -1;
 //             knot_spans.back().min_knot(sd)       = new_knot;
 //             knot_spans.back().min_param_ijk(sd)  = pi;
-//             knot_spans.back().min_param(sd)      = params(po[sd] + pi);
+//             knot_spans.back().min_param(sd)      = mfa.params(mfa.po[sd] + pi);
 //             knot_spans.back().min_knot_ijk(sd)++;
 // 
 //             split_spans[j] = true;
@@ -388,7 +388,7 @@ Decoder(MFA& mfa_) :
 //     // add the new knot to nnew_knots and new_knots
 //     new_knots.resize(1);
 //     new_knots(0)    = new_knot;
-//     nnew_knots      = VectorXi::Zero(p.size());
+//     nnew_knots      = VectorXi::Zero(mfa.p.size());
 //     nnew_knots(sd)  = 1;
 // 
 //     // debug
@@ -426,25 +426,25 @@ mfa::
 Decoder::
 Decode(MatrixXf& approx)                 // pts in approximated volume (1st dim. changes fastest)
 {
-    vector<size_t> iter(p.size(), 0);    // parameter index (iteration count) in current dim.
-    vector<size_t> ofst(p.size(), 0);    // start of current dim in linearized params
+    vector<size_t> iter(mfa.p.size(), 0);    // parameter index (iteration count) in current dim.
+    vector<size_t> ofst(mfa.p.size(), 0);    // start of current dim in linearized params
 
-    for (size_t i = 0; i < p.size() - 1; i++)
-        ofst[i + 1] = ofst[i] + ndom_pts(i);
+    for (size_t i = 0; i < mfa.p.size() - 1; i++)
+        ofst[i + 1] = ofst[i] + mfa.ndom_pts(i);
 
-    parallel_for (size_t(0), (size_t)domain.rows(), [&] (size_t i)
+    parallel_for (size_t(0), (size_t)mfa.domain.rows(), [&] (size_t i)
     {
         // convert linear idx to multidim. i,j,k... indices in each domain dimension
-        VectorXi ijk(p.size());
+        VectorXi ijk(mfa.p.size());
         mfa.idx2ijk(i, ijk);
 
         // compute parameters for the vertices of the cell
-        VectorXf param(p.size());
-        for (int i = 0; i < p.size(); i++)
-            param(i) = params(ijk(i) + po[i]);
+        VectorXf param(mfa.p.size());
+        for (int i = 0; i < mfa.p.size(); i++)
+            param(i) = mfa.params(ijk(i) + mfa.po[i]);
 
         // compute approximated point for this parameter vector
-        VectorXf cpt(ctrl_pts.cols());       // approximated point
+        VectorXf cpt(mfa.ctrl_pts.cols());       // approximated point
         VolPt(param, cpt);
 
         approx.row(i) = cpt;
@@ -454,7 +454,7 @@ Decode(MatrixXf& approx)                 // pts in approximated volume (1st dim.
     // normal distance computation
     float max_err;                          // max. error found so far
     size_t max_idx;                         // domain point idx at max error
-    for (size_t i = 0; i < (size_t)domain.rows(); i++)
+    for (size_t i = 0; i < (size_t)mfa.domain.rows(); i++)
     {
         VectorXf cpt = approx.row(i);
         float err    = fabs(mfa.NormalDistance(cpt, i));
@@ -466,14 +466,14 @@ Decode(MatrixXf& approx)                 // pts in approximated volume (1st dim.
     }
 
     // normalize max error by size of input data (domain and range)
-    float min = domain.minCoeff();
-    float max = domain.maxCoeff();
+    float min = mfa.domain.minCoeff();
+    float max = mfa.domain.maxCoeff();
     float range = max - min;
 
     // debug
     fprintf(stderr, "data range = %.1f\n", range);
     fprintf(stderr, "raw max_error = %e\n", max_err);
-    cerr << "position of max error: idx=" << max_idx << "\n" << domain.row(max_idx) << endl;
+    cerr << "position of max error: idx=" << max_idx << "\n" << mfa.domain.row(max_idx) << endl;
 
     max_err /= range;
 
@@ -493,36 +493,36 @@ mfa::
 Decoder::
 Decode(MatrixXf& approx)                 // pts in approximated volume (1st dim. changes fastest)
 {
-    vector<size_t> iter(p.size(), 0);    // parameter index (iteration count) in current dim.
-    vector<size_t> ofst(p.size(), 0);    // start of current dim in linearized params
+    vector<size_t> iter(mfa.p.size(), 0);    // parameter index (iteration count) in current dim.
+    vector<size_t> ofst(mfa.p.size(), 0);    // start of current dim in linearized params
 
-    for (size_t i = 0; i < p.size() - 1; i++)
-        ofst[i + 1] = ofst[i] + ndom_pts(i);
+    for (size_t i = 0; i < mfa.p.size() - 1; i++)
+        ofst[i + 1] = ofst[i] + mfa.ndom_pts(i);
 
     // eigen frees following temp vectors when leaving scope
-    VectorXf dpt(domain.cols());         // original data point
-    VectorXf cpt(ctrl_pts.cols());       // approximated point
-    VectorXf d(domain.cols());           // apt - dpt
-    VectorXf param(p.size());            // parameters for one point
-    for (size_t i = 0; i < domain.rows(); i++)
+    VectorXf dpt(mfa.domain.cols());         // original data point
+    VectorXf cpt(mfa.ctrl_pts.cols());       // approximated point
+    VectorXf d(mfa.domain.cols());           // apt - dpt
+    VectorXf param(mfa.p.size());            // parameters for one point
+    for (size_t i = 0; i < mfa.domain.rows(); i++)
     {
         // debug
-        // cerr << "input point:\n" << domain.row(i) << endl;
+        // cerr << "input point:\n" << mfa.domain.row(i) << endl;
 
         // extract parameter vector for one input point from the linearized vector of all params
-        for (size_t j = 0; j < p.size(); j++)
-            param(j) = params(iter[j] + ofst[j]);
+        for (size_t j = 0; j < mfa.p.size(); j++)
+            param(j) = mfa.params(iter[j] + ofst[j]);
 
         // compute approximated point for this parameter vector
         VolPt(param, cpt);
 
         // debug
-//         cerr << "domain pt:\n" << domain.row(i) << "\ncpt:\n" << cpt << endl;
+//         cerr << "domain pt:\n" << mfa.domain.row(i) << "\ncpt:\n" << cpt << endl;
 
         // update the indices in the linearized vector of all params for next input point
-        for (size_t j = 0; j < p.size(); j++)
+        for (size_t j = 0; j < mfa.p.size(); j++)
         {
-            if (iter[j] < ndom_pts(j) - 1)
+            if (iter[j] < mfa.ndom_pts(j) - 1)
             {
                 iter[j]++;
                 break;
@@ -534,15 +534,15 @@ Decode(MatrixXf& approx)                 // pts in approximated volume (1st dim.
         approx.row(i) = cpt;
 
         // print progress
-        if (i > 0 && domain.rows() >= 100 && i % (domain.rows() / 100) == 0)
-            fprintf(stderr, "\r%.0f %% decoded", (float)i / (float)(domain.rows()) * 100);
+        if (i > 0 && mfa.domain.rows() >= 100 && i % (mfa.domain.rows() / 100) == 0)
+            fprintf(stderr, "\r%.0f %% decoded", (float)i / (float)(mfa.domain.rows()) * 100);
     }
     fprintf(stderr, "\r100 %% decoded\n");
 
     // normal distance computation
     float max_err;                          // max. error found so far
     size_t max_idx;                         // domain point idx at max error
-    for (size_t i = 0; i < (size_t)domain.rows(); i++)
+    for (size_t i = 0; i < (size_t)mfa.domain.rows(); i++)
     {
         VectorXf cpt = approx.row(i);
         float err    = fabs(mfa.NormalDistance(cpt, i));
@@ -554,14 +554,14 @@ Decode(MatrixXf& approx)                 // pts in approximated volume (1st dim.
     }
 
     // normalize max error by size of input data (domain and range)
-    float min = domain.minCoeff();
-    float max = domain.maxCoeff();
+    float min = mfa.domain.minCoeff();
+    float max = mfa.domain.maxCoeff();
     float range = max - min;
 
     // debug
     fprintf(stderr, "data range = %.1f\n", range);
     fprintf(stderr, "raw max_error = %e\n", max_err);
-    cerr << "position of max error: idx=" << max_idx << "\n" << domain.row(max_idx) << endl;
+    cerr << "position of max error: idx=" << max_idx << "\n" << mfa.domain.row(max_idx) << endl;
 
     max_err /= range;
 
@@ -583,20 +583,20 @@ Decode(MatrixXf& approx)                 // pts in approximated volume (1st dim.
 //         VectorXf& out_pt,                      // (output) point
 //         int       ko)                          // starting knot offset (default = 0)
 // {
-//     int n      = (int)ctrl_pts.rows() - 1;     // number of control point spans
+//     int n      = (int)mfa.ctrl_pts.rows() - 1;     // number of control point spans
 //     int span   = mfa.FindSpan(cur_dim, param, ko);
 //     MatrixXf N = MatrixXf::Zero(1, n + 1);     // basis coefficients
 //     mfa.BasisFuns(cur_dim, param, span, N, 0, n, 0, ko);
-//     out_pt = VectorXf::Zero(ctrl_pts.cols());  // initializes and resizes
+//     out_pt = VectorXf::Zero(mfa.ctrl_pts.cols());  // initializes and resizes
 // 
-//     for (int j = 0; j <= p(cur_dim); j++)
-//         out_pt += N(0, j + span - p(cur_dim)) * ctrl_pts.row(span - p(cur_dim) + j);
+//     for (int j = 0; j <= mfa.p(cur_dim); j++)
+//         out_pt += N(0, j + span - mfa.p(cur_dim)) * mfa.ctrl_pts.row(span - mfa.p(cur_dim) + j);
 // 
 //     // clamp dimensions other than cur_dim to same value as first control point
 //     // eliminates any wiggles in other dimensions due to numerical precision errors
-//     for (auto j = 0; j < p.size(); j++)
+//     for (auto j = 0; j < mfa.p.size(); j++)
 //         if (j != cur_dim)
-//             out_pt(j) = ctrl_pts(span - p(cur_dim), j);
+//             out_pt(j) = mfa.ctrl_pts(span - mfa.p(cur_dim), j);
 //     // debug
 //     // cerr << "n " << n << " param " << param << " span " << span << " out_pt " << out_pt << endl;
 //     // cerr << " N " << N << endl;
@@ -626,12 +626,12 @@ CurvePt(
     mfa.BasisFuns(cur_dim, param, span, N, 0, n, 0);
     out_pt = VectorXf::Zero(temp_ctrl.cols());  // initializes and resizes
 
-    for (int j = 0; j <= p(cur_dim); j++)
-        out_pt += N(0, j + span - p(cur_dim)) * temp_ctrl.row(span - p(cur_dim) + j);
+    for (int j = 0; j <= mfa.p(cur_dim); j++)
+        out_pt += N(0, j + span - mfa.p(cur_dim)) * temp_ctrl.row(span - mfa.p(cur_dim) + j);
 
     // clamp dimensions other than cur_dim to same value as first control point
     // eliminates any wiggles in other dimensions due to numerical precision errors
-    for (auto j = 0; j < p.size(); j++)
+    for (auto j = 0; j < mfa.p.size(); j++)
         if (j != cur_dim)
             out_pt(j) = temp_ctrl(0, j);
 
@@ -657,59 +657,59 @@ VolPt(VectorXf& param,                       // parameter value in each dim. of 
       VectorXf& out_pt)                      // (output) point
 {
     // check dimensionality for sanity
-    assert(p.size() < ctrl_pts.cols());
+    assert(mfa.p.size() < mfa.ctrl_pts.cols());
 
-    out_pt = VectorXf::Zero(ctrl_pts.cols());   // initializes and resizes
-    vector <MatrixXf> N(p.size());              // basis functions in each dim.
-    vector<VectorXf>  temp(p.size());           // temporary point in each dim.
-    vector<int>       span(p.size());           // span in each dim.
-    vector<int>       n(p.size());              // number of control point spans in each dim
-    vector<int>       iter(p.size());           // iteration number in each dim.
-    VectorXf          ctrl_pt(ctrl_pts.cols()); // one control point
-    vector<size_t>    co(p.size());             // starting ofst for ctrl pts in each dim for this span
+    out_pt = VectorXf::Zero(mfa.ctrl_pts.cols());   // initializes and resizes
+    vector <MatrixXf> N(mfa.p.size());              // basis functions in each dim.
+    vector<VectorXf>  temp(mfa.p.size());           // temporary point in each dim.
+    vector<int>       span(mfa.p.size());           // span in each dim.
+    vector<int>       n(mfa.p.size());              // number of control point spans in each dim
+    vector<int>       iter(mfa.p.size());           // iteration number in each dim.
+    VectorXf          ctrl_pt(mfa.ctrl_pts.cols()); // one control point
+    vector<size_t>    co(mfa.p.size());             // starting ofst for ctrl pts in each dim for this span
     int ctrl_idx;                               // control point linear ordering index
 
     // init
-    for (size_t i = 0; i < p.size(); i++)       // for all dims
+    for (size_t i = 0; i < mfa.p.size(); i++)       // for all dims
     {
-        temp[i]    = VectorXf::Zero(ctrl_pts.cols());
+        temp[i]    = VectorXf::Zero(mfa.ctrl_pts.cols());
         iter[i]    = 0;
-        n[i]       = (int)nctrl_pts(i) - 1;
-        span[i]    = mfa.FindSpan(i, param(i), ko[i]);
+        n[i]       = (int)mfa.nctrl_pts(i) - 1;
+        span[i]    = mfa.FindSpan(i, param(i), mfa.ko[i]);
         N[i]       = MatrixXf::Zero(1, n[i] + 1);
-        co[i]      = span[i] - p(i) - ko[i];
-        mfa.BasisFuns(i, param(i), span[i], N[i], 0, n[i], 0, ko[i]);
+        co[i]      = span[i] - mfa.p(i) - mfa.ko[i];
+        mfa.BasisFuns(i, param(i), span[i], N[i], 0, n[i], 0, mfa.ko[i]);
     }
 
     for (int i = 0; i < tot_iters; i++)      // 1-d flattening all n-d nested loop computations
     {
         // control point linear order index
         ctrl_idx = 0;
-        for (int j = 0; j < p.size(); j++)
+        for (int j = 0; j < mfa.p.size(); j++)
             ctrl_idx += (co[j] + ct(i, j)) * cs[j];
 
         // always compute the point in the first dimension
-        ctrl_pt =  ctrl_pts.row(ctrl_idx);
-        temp[0] += (N[0])(0, iter[0] + span[0] - p(0)) * ctrl_pt;
+        ctrl_pt =  mfa.ctrl_pts.row(ctrl_idx);
+        temp[0] += (N[0])(0, iter[0] + span[0] - mfa.p(0)) * ctrl_pt;
         iter[0]++;
 
         // for all dimensions except last, check if span is finished
-        for (size_t k = 0; k < p.size() - 1; k++)
+        for (size_t k = 0; k < mfa.p.size() - 1; k++)
         {
-            if (iter[k] - 1 == p(k))
+            if (iter[k] - 1 == mfa.p(k))
             {
                 // compute point in next higher dimension and reset computation for current dim
-                temp[k + 1] += (N[k + 1])(0, iter[k + 1] + span[k + 1] - ko[k + 1] - p(k + 1)) * temp[k];
-                temp[k]     =  VectorXf::Zero(ctrl_pts.cols());
+                temp[k + 1] += (N[k + 1])(0, iter[k + 1] + span[k + 1] - mfa.ko[k + 1] - mfa.p(k + 1)) * temp[k];
+                temp[k]     =  VectorXf::Zero(mfa.ctrl_pts.cols());
                 iter[k]     =  0;
                 iter[k + 1]++;
             }
         }
     }
 
-    out_pt = temp[p.size() - 1];
+    out_pt = temp[mfa.p.size() - 1];
 
     // debug
-    // fprintf(stderr, "out_pt = temp[%d]\n", p.size() - 1);
+    // fprintf(stderr, "out_pt = temp[%d]\n", mfa.p.size() - 1);
     // cerr << "out_pt:\n" << out_pt << endl;
 }
