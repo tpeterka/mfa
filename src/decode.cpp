@@ -413,7 +413,7 @@ Decoder(MFA& mfa_) :
 
 // NB: The TBB version below is definitely faster (~3X) than the serial. Use the TBB version
 
-#if 0                                   // TBB version
+#if 1                                   // TBB version
 
 // computes approximated points from a given set of domain points and an n-d NURBS volume
 // P&T eq. 9.77, p. 424

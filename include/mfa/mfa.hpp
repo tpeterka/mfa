@@ -135,6 +135,7 @@ namespace mfa
        VectorXf& knots;       // (output) knots (1st dim changes fastest)
        float     dom_range;   // max extent of input data points
        vector<size_t> po;     // starting offset for params in each dim
+       vector< vector <size_t> > co; // starting offset for curves in each dim
        vector<size_t> ko;     // starting offset for knots in each dim
        vector<size_t> ds;     // stride for domain points in each dim
        size_t tot_nparams;    // total number of params = sum of ndom_pts over all dims

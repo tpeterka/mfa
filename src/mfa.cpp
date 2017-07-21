@@ -95,9 +95,6 @@ MFA(VectorXi& p_,             // polynomial degree in each dimension
 //     err_ok.resize(domain.rows());   // error at this domain point is below user limit, initializes to false
 
     // offsets and strides for knots, params, and control points in different dimensions
-    // TODO: co for control points currently not used because control points are stored explicitly
-    // in future, store them like params, x coords followed by y coords, ...
-    // then co will be used
     ko.resize(p.size(), 0);                  // offset for knots
     po.resize(p.size(), 0);                  // offset for params
     ds.resize(p.size(), 1);                  // stride for domain points
@@ -108,6 +105,34 @@ MFA(VectorXi& p_,             // polynomial degree in each dimension
         ds[i] = ds[i - 1] * ndom_pts[i - 1];
     }
 
+    // offsets for curve starting (domain) points in each dimension
+    co.resize(p.size());
+    for (auto k = 0; k < p.size(); k++)
+    {
+        size_t ncurves  = domain.rows() / ndom_pts(k);  // number of curves in this dimension
+        size_t coo      = 0;                            // co at start of contiguous sequence
+        co[k].resize(ncurves);
+
+        co[k][0] = 0;
+
+        // debug
+//         fprintf(stderr, "co[%d][0]=%ld\n", k, co[k][0]);
+
+        for (auto j = 1; j < ncurves; j++)
+        {
+            // adjust offsets for the next curve
+            if (j % ds[k])
+                co[k][j] = co[k][j - 1] + 1;
+            else
+            {
+                co[k][j] = coo + ds[k] * ndom_pts(k);
+                coo = co[k][j];
+            }
+
+            // debug
+//             fprintf(stderr, "co[%d][%d]=%ld\n", k, j, co[k][j]);
+        }
+    }
     // knot span index table
 //     KnotSpanIndex();
 }
@@ -163,9 +188,6 @@ MFA(VectorXi& p_,             // polynomial degree in each dimension
     Knots();
 
     // offsets and strides for knots, params, and control points in different dimensions
-    // TODO: co for control points currently not used because control points are stored explicitly
-    // in future, store them like params, x coords followed by y coords, ...
-    // then co will be used
     ko.resize(p.size(), 0);                  // offset for knots
     po.resize(p.size(), 0);                  // offset for params
     ds.resize(p.size(), 1);                  // stride for domain points
@@ -174,6 +196,35 @@ MFA(VectorXi& p_,             // polynomial degree in each dimension
         po[i] = po[i - 1] + ndom_pts[i - 1];
         ko[i] = ko[i - 1] + nctrl_pts[i - 1] + p[i - 1] + 1;
         ds[i] = ds[i - 1] * ndom_pts[i - 1];
+    }
+
+    // offsets for curve starting (domain) points in each dimension
+    co.resize(p.size());
+    for (auto k = 0; k < p.size(); k++)
+    {
+        size_t ncurves  = domain.rows() / ndom_pts(k);  // number of curves in this dimension
+        size_t coo      = 0;                            // co at start of contiguous sequence
+        co[k].resize(ncurves);
+
+        co[k][0] = 0;
+
+        // debug
+//         fprintf(stderr, "co[%d][0]=%ld\n", k, co[k][0]);
+
+        for (auto j = 1; j < ncurves; j++)
+        {
+            // adjust offsets for the next curve
+            if (j % ds[k])
+                co[k][j] = co[k][j - 1] + 1;
+            else
+            {
+                co[k][j] = coo + ds[k] * ndom_pts(k);
+                coo = co[k][j];
+            }
+
+            // debug
+//             fprintf(stderr, "co[%d][%d]=%ld\n", k, j, co[k][j]);
+        }
     }
 }
 

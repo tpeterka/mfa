@@ -154,8 +154,6 @@ FastEncode(
             // debug
             fprintf(stderr, "k=%ld s=%ld\n", k, s);
 
-            size_t co         = 0;                          // starting ofst for domain curve pts in cur. dim
-            size_t coo        = 0;                          // co at start of contiguous sequence
             bool new_max_nerr = false;                      // this step size changed the max_nerr
 
             for (size_t j = 0; j < ncurves; j++)            // for all the curves in this dimension
@@ -165,32 +163,23 @@ FastEncode(
                 if (j >= n_step_sizes && (j - n_step_sizes) % s == 0)   // this is one of the s-th curves; compute it
                 {
                     // compute R from input domain points
-                    RHS(k, N, R, ko[k], po[k], co);
+                    RHS(k, N, R, ko[k], po[k], mfa.co[k][j]);
 
                     // solve for P for one curve of control points
                     P = NtN.ldlt().solve(R);
 
                     // append points from P to control points
                     // TODO: any way to avoid this?
-                    CopyCtrl(P, n, k, co, temp_ctrl);
+                    CopyCtrl(P, n, k, mfa.co[k][j], temp_ctrl);
 
                     // compute the error on the curve (number of input points with error > err_limit)
-                    size_t nerr = ErrorCurve(k, co, temp_ctrl, err_spans, err_limit);
+                    size_t nerr = ErrorCurve(k, mfa.co[k][j], temp_ctrl, err_spans, err_limit);
 
                     if (nerr > max_nerr)
                     {
                         max_nerr     = nerr;
                         new_max_nerr = true;
                     }
-                }
-
-                // adjust offsets for the next curve
-                if ((j + 1) % mfa.ds[k])
-                    co++;
-                else
-                {
-                    co = coo + mfa.ds[k] * ndom_pts(k);
-                    coo = co;
                 }
             }                                               // curves in this dimension
 
