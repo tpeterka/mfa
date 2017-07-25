@@ -118,23 +118,23 @@ int main(int argc, char** argv)
 //                    { b->generate_sinc_data(cp, d_args); });
 
    // 3d sinc function
-    d_args.pt_dim       = 4;
-    d_args.dom_dim      = 3;
-    d_args.p[0]         = 4;
-    d_args.p[1]         = 4;
-    d_args.p[2]         = 4;
-    d_args.ndom_pts[0]  = 100;
-    d_args.ndom_pts[1]  = 100;
-    d_args.ndom_pts[2]  = 100;
-    d_args.min[0]       = -4.0 * M_PI;
-    d_args.min[1]       = -4.0 * M_PI;
-    d_args.min[2]       = -4.0 * M_PI;
-    d_args.max[0]       = 4.0 * M_PI;
-    d_args.max[1]       = 4.0 * M_PI;
-    d_args.max[2]       = 4.0 * M_PI;
-    d_args.s            = 10.0;              // scaling factor on range
-    master.foreach([&](Block* b, const diy::Master::ProxyWithLink& cp)
-                   { b->generate_sinc_data(cp, d_args); });
+//     d_args.pt_dim       = 4;
+//     d_args.dom_dim      = 3;
+//     d_args.p[0]         = 4;
+//     d_args.p[1]         = 4;
+//     d_args.p[2]         = 4;
+//     d_args.ndom_pts[0]  = 100;
+//     d_args.ndom_pts[1]  = 100;
+//     d_args.ndom_pts[2]  = 100;
+//     d_args.min[0]       = -4.0 * M_PI;
+//     d_args.min[1]       = -4.0 * M_PI;
+//     d_args.min[2]       = -4.0 * M_PI;
+//     d_args.max[0]       = 4.0 * M_PI;
+//     d_args.max[1]       = 4.0 * M_PI;
+//     d_args.max[2]       = 4.0 * M_PI;
+//     d_args.s            = 10.0;              // scaling factor on range
+//     master.foreach([&](Block* b, const diy::Master::ProxyWithLink& cp)
+//                    { b->generate_sinc_data(cp, d_args); });
 
    // small 4d sinc function
 //     d_args.pt_dim       = 5;
@@ -160,27 +160,27 @@ int main(int argc, char** argv)
 //                    { b->generate_sinc_data(cp, d_args); });
 
    // 4d sinc function
-//     d_args.pt_dim       = 5;
-//     d_args.dom_dim      = 4;
-//     d_args.p[0]         = 4;
-//     d_args.p[1]         = 4;
-//     d_args.p[2]         = 4;
-//     d_args.p[3]         = 4;
-//     d_args.ndom_pts[0]  = 100;
-//     d_args.ndom_pts[1]  = 100;
-//     d_args.ndom_pts[2]  = 100;
-//     d_args.ndom_pts[3]  = 100;
-//     d_args.min[0]       = -4.0 * M_PI;
-//     d_args.min[1]       = -4.0 * M_PI;
-//     d_args.min[2]       = -4.0 * M_PI;
-//     d_args.min[3]       = -4.0 * M_PI;
-//     d_args.max[0]       = 4.0 * M_PI;
-//     d_args.max[1]       = 4.0 * M_PI;
-//     d_args.max[2]       = 4.0 * M_PI;
-//     d_args.max[3]       = 4.0 * M_PI;
-//     d_args.s            = 10.0;              // scaling factor on range
-//     master.foreach([&](Block* b, const diy::Master::ProxyWithLink& cp)
-//                    { b->generate_sinc_data(cp, d_args); });
+    d_args.pt_dim       = 5;
+    d_args.dom_dim      = 4;
+    d_args.p[0]         = 4;
+    d_args.p[1]         = 4;
+    d_args.p[2]         = 4;
+    d_args.p[3]         = 4;
+    d_args.ndom_pts[0]  = 100;
+    d_args.ndom_pts[1]  = 100;
+    d_args.ndom_pts[2]  = 100;
+    d_args.ndom_pts[3]  = 100;
+    d_args.min[0]       = -4.0 * M_PI;
+    d_args.min[1]       = -4.0 * M_PI;
+    d_args.min[2]       = -4.0 * M_PI;
+    d_args.min[3]       = -4.0 * M_PI;
+    d_args.max[0]       = 4.0 * M_PI;
+    d_args.max[1]       = 4.0 * M_PI;
+    d_args.max[2]       = 4.0 * M_PI;
+    d_args.max[3]       = 4.0 * M_PI;
+    d_args.s            = 10.0;              // scaling factor on range
+    master.foreach([&](Block* b, const diy::Master::ProxyWithLink& cp)
+                   { b->generate_sinc_data(cp, d_args); });
 
     // 2d S3D
 //     d_args.pt_dim       = 3;
