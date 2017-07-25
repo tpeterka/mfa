@@ -69,6 +69,67 @@ AdaptiveEncode(float err_limit)                     // maximum allowable normali
 #if 1
 
 // single thread version
+//
+// Computes a full (nd) encoding followed by (1d) decoding of curves
+// adds knots error spans from all curves in all directions (into a set)
+// returns true if done, ie, no knots are inserted
+bool
+mfa::
+Encoder::
+FastEncode(
+        VectorXi& nnew_knots,                       // number of new knots in each dim
+        VectorXf& new_knots,                        // new knots (1st dim changes fastest)
+        float     err_limit,                        // max allowable error
+        int       iter)                             // iteration number of caller (for debugging)
+{
+    Encode();
+
+    // check and assign main quantities
+    nnew_knots = VectorXi::Zero(mfa.p.size());
+    new_knots.resize(0);
+
+    // control points
+    mfa.ctrl_pts.resize(mfa.tot_nctrl, mfa.domain.cols());
+
+    for (size_t k = 0; k < mfa.p.size(); k++)                   // for all domain dimensions
+    {
+        set<int> err_spans;                                     // all error spans so far in this dim.
+        size_t ncurves = mfa.domain.rows() / mfa.ndom_pts(k);   // number of curves in this dimension
+
+        // find spans with error > err_limit
+        for (size_t j = 0; j < ncurves; j++)
+            size_t nerr = ErrorCurve(k, mfa.co[k][j], err_spans, err_limit);
+
+        // add new knots in the middle of spans with errors
+        nnew_knots(k) = err_spans.size();
+        auto old_size = new_knots.size();
+        new_knots.conservativeResize(old_size + err_spans.size());    // existing values are preserved
+        size_t i = 0;                                           // index into new_knots
+        for (set<int>::iterator it = err_spans.begin(); it != err_spans.end(); ++it)
+        {
+            // debug
+            assert(*it < mfa.nctrl_pts[k]);                     // not trying to go beyond the last span
+
+            new_knots(old_size + i) = (mfa.knots(mfa.ko[k] + *it) + mfa.knots(mfa.ko[k] + *it + 1)) / 2.0;
+            i++;
+        }
+
+        // print progress
+        fprintf(stderr, "\rdimension %ld of %ld encoded\n", k + 1, mfa.p.size());
+    }                                                          // domain dimensions
+
+    // debug
+//     cerr << "\nnnew_knots:\n" << nnew_knots << endl;
+//     cerr << "new_knots:\n"  << new_knots  << endl;
+
+    return(nnew_knots.sum() ? 0 : 1);
+}
+
+#endif
+
+#if 0
+
+// single thread version
 // adds knots error spans from all curves in all directions (into a set)
 // fast encode using curves instead of high volume in early rounds to determine knot insertions
 // returns true if done, ie, no knots are inserted
@@ -212,7 +273,9 @@ FastEncode(
     return(nnew_knots.sum() ? 0 : 1);
 }
 
-#else
+#endif
+
+#if 0
 
 // TBB version
 //
@@ -1285,11 +1348,14 @@ ErrorCurve(
 
 // returns number of points in a curve that have error greater than err_limit
 // fills err_spans with the span indices of spans that have at least one point with such error
-//      and that have at least one inut point in each half of the span (assuming eventually
-//      the span would be split in half with a knot added in the middle, and an input point would
-//      need to be in each span after splitting)
+//  and that have at least one inut point in each half of the span (assuming eventually
+//  the span would be split in half with a knot added in the middle, and an input point would
+//  need to be in each span after splitting)
+//
 // this version takes a set instead of a vector for error_spans so that the same span can be
 // added iteratively multiple times without creating duplicates
+//
+// this version takes a set of control points as input instead of mfa.ctrl_pts
 int
 mfa::
 Encoder::
@@ -1345,7 +1411,7 @@ ErrorCurve(
                 if (split_left && split_right)
                     err_spans.insert(it, span);
             }
-            // count the point in the total even if the span is not marked for spitting
+            // count the point in the total even if the span is not marked for splitting
             // total used to find worst curve, defined as the curve with the most domain points in
             // error (including multiple domain points per span and points in spans that can't be
             // split further)
@@ -1356,6 +1422,72 @@ ErrorCurve(
 //             cerr << "\ndomain point:\n" << dpt << endl;
 //             cerr << "approx point:\n" << cpt << endl;
 //             fprintf(stderr, "k=%ld i=%d co=%ld err=%.3e\n\n", k, i, co, err);
+        }
+    }
+
+    return nerr;
+}
+
+// returns number of points in a curve that have error greater than err_limit
+// fills err_spans with the span indices of spans that have at least one point with such error
+//  and that have at least one inut point in each half of the span (assuming eventually
+//  the span would be split in half with a knot added in the middle, and an input point would
+//  need to be in each span after splitting)
+//
+// this version takes a set instead of a vector for error_spans so that the same span can be
+// added iteratively multiple times without creating duplicates
+//
+// this version uses mfa.ctrl_pts for control points
+int
+mfa::
+Encoder::
+ErrorCurve(
+        size_t       k,                         // current dimension
+        size_t       co,                        // starting ofst for reading domain pts
+        set<int>&    err_spans,                 // spans with error greater than err_limit
+        float        err_limit)                 // max allowable error
+{
+    mfa::Decoder decoder(mfa);
+    VectorXf cpt(mfa.domain.cols());            // decoded curve point
+    int nerr = 0;                               // number of points with error greater than err_limit
+    int span = mfa.p[k];                        // current knot span of the domain point being checked
+
+    for (auto i = 0; i < mfa.ndom_pts[k]; i++)      // all domain points in the curve
+    {
+        while (mfa.knots(mfa.ko[k] + span + 1) < 1.0 && mfa.knots(mfa.ko[k] + span + 1) <= mfa.params(mfa.po[k] + i))
+            span++;
+
+        decoder.CurvePt(k, mfa.params(mfa.po[k] + i), cpt);
+
+        float err = fabs(mfa.NormalDistance(cpt, co + i * mfa.ds[k])) / mfa.dom_range;     // normalized by data range
+
+        if (err > err_limit)
+        {
+            // don't duplicate spans
+            set<int>::iterator it = err_spans.find(span);
+            if (!err_spans.size() || it == err_spans.end())
+            {
+                // ensure there would be a domain point in both halves of the span if it were split
+                bool split_left = false;
+                for (auto j = i; mfa.params(mfa.po[k] + j) >= mfa.knots(mfa.ko[k] + span); j--)
+                    if (mfa.params(mfa.po[k] + j) < (mfa.knots(mfa.ko[k] + span) + mfa.knots(mfa.ko[k] + span + 1)) / 2.0)
+                    {
+                        split_left = true;
+                        break;
+                    }
+                bool split_right = false;
+                for (auto j = i; mfa.params(mfa.po[k] + j) < mfa.knots(mfa.ko[k] + span + 1); j++)
+                    if (mfa.params(mfa.po[k] + j) >= (mfa.knots(mfa.ko[k] + span) + mfa.knots(mfa.ko[k] + span + 1)) / 2.0)
+                    {
+                        split_right = true;
+                        break;
+                    }
+                // mark the span and count the point if the span can (later) be split
+                if (split_left && split_right)
+                    err_spans.insert(it, span);
+            }
+            // count the point in the total even if the span is not marked for splitting
+            nerr++;
         }
     }
 

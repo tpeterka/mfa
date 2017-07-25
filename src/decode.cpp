@@ -221,37 +221,37 @@ Decode(MatrixXf& approx)                 // pts in approximated volume (1st dim.
 
 #endif
 
-// DEPRECATED
-// // compute a point from a NURBS curve at a given parameter value
-// // algorithm 4.1, Piegl & Tiller (P&T) p.124
-// // this version recomputes basis functions rather than taking them as an input
-// // this version also assumes weights = 1; no division by weight is done
-// void
-// mfa::
-// Decoder::
-// CurvePt(int       cur_dim,                     // current dimension
-//         float     param,                       // parameter value of desired point
-//         VectorXf& out_pt,                      // (output) point
-//         int       ko)                          // starting knot offset (default = 0)
-// {
-//     int n      = (int)mfa.ctrl_pts.rows() - 1;     // number of control point spans
-//     int span   = mfa.FindSpan(cur_dim, param, ko);
-//     MatrixXf N = MatrixXf::Zero(1, n + 1);     // basis coefficients
-//     mfa.BasisFuns(cur_dim, param, span, N, 0, n, 0, ko);
-//     out_pt = VectorXf::Zero(mfa.ctrl_pts.cols());  // initializes and resizes
-// 
-//     for (int j = 0; j <= mfa.p(cur_dim); j++)
-//         out_pt += N(0, j + span - mfa.p(cur_dim)) * mfa.ctrl_pts.row(span - mfa.p(cur_dim) + j);
-// 
-//     // clamp dimensions other than cur_dim to same value as first control point
-//     // eliminates any wiggles in other dimensions due to numerical precision errors
-//     for (auto j = 0; j < mfa.p.size(); j++)
-//         if (j != cur_dim)
-//             out_pt(j) = mfa.ctrl_pts(span - mfa.p(cur_dim), j);
-//     // debug
-//     // cerr << "n " << n << " param " << param << " span " << span << " out_pt " << out_pt << endl;
-//     // cerr << " N " << N << endl;
-// }
+// compute a point from a NURBS curve at a given parameter value
+// algorithm 4.1, Piegl & Tiller (P&T) p.124
+// this version recomputes basis functions rather than taking them as an input
+// this version also assumes weights = 1; no division by weight is done
+void
+mfa::
+Decoder::
+CurvePt(
+        int       cur_dim,                              // current dimension
+        float     param,                                // parameter value of desired point
+        VectorXf& out_pt)                               // (output) point
+{
+    int n      = (int)mfa.ctrl_pts.rows() - 1;          // number of control point spans
+    int span   = mfa.FindSpan(cur_dim, param, mfa.ko[cur_dim]);
+    out_pt     = VectorXf::Zero(mfa.ctrl_pts.cols());   // initializes and resizes
+    MatrixXf N = MatrixXf::Zero(1, n + 1);              // basis coefficients
+    mfa.BasisFuns(cur_dim, param, span, N, 0, n, 0, mfa.ko[cur_dim]);
+
+    for (int j = 0; j <= mfa.p(cur_dim); j++)
+        out_pt += N(0, j + span - mfa.p(cur_dim)) *
+            mfa.ctrl_pts.row(span - (mfa.p(cur_dim) + j) * cs[cur_dim]);
+
+    // clamp dimensions other than cur_dim to same value as first control point
+    // eliminates any wiggles in other dimensions due to numerical precision errors
+    for (auto j = 0; j < mfa.p.size(); j++)
+        if (j != cur_dim)
+            out_pt(j) = mfa.ctrl_pts((span - mfa.p(cur_dim)) * cs[cur_dim], j);
+    // debug
+    // cerr << "n " << n << " param " << param << " span " << span << " out_pt " << out_pt << endl;
+    // cerr << " N " << N << endl;
+}
 
 // compute a point from a NURBS curve at a given parameter value
 // this version takes a temporary set of control points for one curve only rather than

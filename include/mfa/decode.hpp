@@ -34,6 +34,11 @@ namespace mfa
         void CurvePt(
                 int       cur_dim,              // current dimension
                 float     param,                // parameter value of desired point
+                VectorXf& out_pt);               // (output) point
+
+        void CurvePt(
+                int       cur_dim,              // current dimension
+                float     param,                // parameter value of desired point
                 MatrixXf& temp_ctrl,            // temporary control points
                 VectorXf& out_pt,               // (output) point
                 int       ko = 0);              // starting knot offset

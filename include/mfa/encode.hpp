@@ -108,7 +108,17 @@ namespace mfa
                 size_t       k,             // current dimension
                 size_t       co,            // starting ofst for reading domain pts
                 MatrixXf&    ctrl_pts,      // control points
-                set<int>& err_spans,        // spans with error greater than err_limit
+                set<int>&    err_spans,     // spans with error greater than err_limit
+                float        err_limit);    // max allowable error
+
+        // in addition to returning number of erroneous input domain points
+        // this version inserts erroneous spans into a set
+        // allowing the same span to be inserted multiple times w/o duplicates
+        // control points are taken from mfa
+        int ErrorCurve(
+                size_t       k,             // current dimension
+                size_t       co,            // starting ofst for reading domain pts
+                set<int>&    err_spans,     // spans with error greater than err_limit
                 float        err_limit);    // max allowable error
 
         size_t  max_num_curves;             // max num. curves per dimension to check in fast encode
