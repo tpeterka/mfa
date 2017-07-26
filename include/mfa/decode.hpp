@@ -34,6 +34,7 @@ namespace mfa
         void CurvePt(
                 int       cur_dim,              // current dimension
                 float     param,                // parameter value of desired point
+                size_t    co,                   // offset to start of control points for this curve
                 VectorXf& out_pt);               // (output) point
 
         void CurvePt(

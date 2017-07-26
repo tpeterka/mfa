@@ -305,8 +305,7 @@ BasisFuns(int       cur_dim,            // current dimension
           MatrixXf& N,                  // matrix of (output) basis function values
           int       start_n,            // starting basis function N_{start_n} to compute
           int       end_n,              // ending basis function N_{end_n} to compute
-          int       row,                // starting row index in N of result
-          int       ko)                 // optional starting knot to search (default = 0)
+          int       row)                // starting row index in N of result
 {
     // init
     vector<float> scratch(p(cur_dim) + 1);            // scratchpad, same as N in P&T p. 70
@@ -346,7 +345,7 @@ BasisFuns(int       cur_dim,            // current dimension
     // copy scratch to N
     for (int j = 0; j < p(cur_dim) + 1; j++)
     {
-        int n_i = span - ko - p(cur_dim) + j;              // index of basis function N_{n_i}
+        int n_i = span - p(cur_dim) + j;              // index of basis function N_{n_i}
         if (n_i >= start_n && n_i <= end_n)
         {
             int col = n_i - start_n;         // column in N where to write result

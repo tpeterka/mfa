@@ -74,8 +74,7 @@ namespace mfa
                        MatrixXf& N,       // matrix of (output) basis function values
                        int       start_n, // starting basis function N_{start_n} to compute
                        int       end_n,   // ending basis function N_{end_n} to compute
-                       int       row,     // starting row index in N of result
-                       int       ko = 0); // optional index of starting knot
+                       int       row);    // starting row index in N of result
 
         void Params();
 

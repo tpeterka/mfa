@@ -30,8 +30,7 @@ AdaptiveEncode(float err_limit)                     // maximum allowable normali
     VectorXi nnew_knots = VectorXi::Zero(mfa.p.size()); // number of new knots in each dim
     VectorXf new_knots;                             // new knots (1st dim changes fastest)
 
-    // knot insertion in 1-d
-    fprintf(stderr, "Inserting knots in 1D curves...\n\n");
+    // loop until no change in knots
     for (int iter = 0; ; iter++)
     {
         fprintf(stderr, "\nIteration %d...\n", iter);
@@ -61,12 +60,10 @@ AdaptiveEncode(float err_limit)                     // maximum allowable normali
         mfa.InsertKnots(nnew_knots, new_knots);
     }
 
-    // slow encoding full-d mfa
-    fprintf(stderr, "Encoding in full %ldD\n", mfa.p.size());
     Encode();
 }
 
-#if 1
+#if 0
 
 // single thread version
 //
@@ -82,23 +79,48 @@ FastEncode(
         float     err_limit,                        // max allowable error
         int       iter)                             // iteration number of caller (for debugging)
 {
-    Encode();
-
-    // check and assign main quantities
-    nnew_knots = VectorXi::Zero(mfa.p.size());
-    new_knots.resize(0);
-
-    // control points
+    // resize control points based on number of new knots added in previous round
     mfa.ctrl_pts.resize(mfa.tot_nctrl, mfa.domain.cols());
 
+    // debug
+    fprintf(stderr, "tot_nctrl=%ld\n", mfa.tot_nctrl);
+
+    // full n-d encoding
+    Encode();
+
+    size_t ts = 1;                                              // control point stride
+
+    // find new knots
+    nnew_knots = VectorXi::Zero(mfa.p.size());
+    new_knots.resize(0);
     for (size_t k = 0; k < mfa.p.size(); k++)                   // for all domain dimensions
     {
         set<int> err_spans;                                     // all error spans so far in this dim.
         size_t ncurves = mfa.domain.rows() / mfa.ndom_pts(k);   // number of curves in this dimension
 
+        // offsets for starting control point for each curve in this dimension
+        vector<size_t> to(ncurves);
+        size_t too     = 0;                                     // co at start of contiguous sequence
+        to[0]          = 0;
+
+        for (auto j = 1; j < ncurves; j++)
+        {
+            // adjust offsets for the next curve
+            if (j % ts)
+                to[j] = to[j - 1] + 1;
+            else
+            {
+                to[j] = too + ts * mfa.nctrl_pts(k);
+                too   = to[j];
+            }
+
+            // debug
+            fprintf(stderr, "to[%ld][%d]=%ld\n", k, j, to[j]);
+        }
+
         // find spans with error > err_limit
         for (size_t j = 0; j < ncurves; j++)
-            size_t nerr = ErrorCurve(k, mfa.co[k][j], err_spans, err_limit);
+            size_t nerr = ErrorCurve(k, mfa.co[k][j], to[j], err_spans, err_limit);
 
         // add new knots in the middle of spans with errors
         nnew_knots(k) = err_spans.size();
@@ -115,11 +137,14 @@ FastEncode(
         }
 
         // print progress
-        fprintf(stderr, "\rdimension %ld of %ld encoded\n", k + 1, mfa.p.size());
+        fprintf(stderr, "\rchecking for new knots in dimension %ld of %ld", k + 1, mfa.p.size());
+
+        ts *= mfa.nctrl_pts(k);
     }                                                          // domain dimensions
+    fprintf(stderr, "\n");
 
     // debug
-//     cerr << "\nnnew_knots:\n" << nnew_knots << endl;
+    cerr << "\nnnew_knots:\n" << nnew_knots << endl;
 //     cerr << "new_knots:\n"  << new_knots  << endl;
 
     return(nnew_knots.sum() ? 0 : 1);
@@ -127,7 +152,7 @@ FastEncode(
 
 #endif
 
-#if 0
+#if 1
 
 // single thread version
 // adds knots error spans from all curves in all directions (into a set)
@@ -176,9 +201,9 @@ FastEncode(
 
         for (int i = 1; i < m(k); i++)                  // the rows of N
         {
-            int span = mfa.FindSpan(k, mfa.params(mfa.po[k] + i), mfa.ko[k]);
+            int span = mfa.FindSpan(k, mfa.params(mfa.po[k] + i), mfa.ko[k]) - mfa.ko[k];   // relative to ko
             assert(span - mfa.ko[k] <= n(k));            // sanity
-            mfa.BasisFuns(k, mfa.params(mfa.po[k] + i), span, N, 1, n(k) - 1, i - 1, mfa.ko[k]);
+            mfa.BasisFuns(k, mfa.params(mfa.po[k] + i), span, N, 1, n(k) - 1, i - 1);
         }
 
         // compute the product Nt x N
@@ -323,9 +348,9 @@ FastEncode(
 
         for (int i = 1; i < m(k); i++)                  // the rows of N
         {
-            int span = mfa.FindSpan(k, mfa.params(mfa.po[k] + i), mfa.ko[k]);
+            int span = mfa.FindSpan(k, mfa.params(mfa.po[k] + i), mfa.ko[k]) - mfa.ko[k];   // relative to ko
             assert(span - mfa.ko[k] <= n(k));            // sanity
-            mfa.BasisFuns(k, mfa.params(mfa.po[k] + i), span, N, 1, n(k) - 1, i - 1, mfa.ko[k]);
+            mfa.BasisFuns(k, mfa.params(mfa.po[k] + i), span, N, 1, n(k) - 1, i - 1);
         }
 
         // compute the product Nt x N
@@ -574,9 +599,9 @@ Encode()
 
         for (int i = 1; i < m(k); i++)            // the rows of N
         {
-            int span = mfa.FindSpan(k, mfa.params(mfa.po[k] + i), mfa.ko[k]);
+            int span = mfa.FindSpan(k, mfa.params(mfa.po[k] + i), mfa.ko[k]) - mfa.ko[k];   // relative to ko
             assert(span - mfa.ko[k] <= n(k));            // sanity
-            mfa.BasisFuns(k, mfa.params(mfa.po[k] + i), span, N, 1, n(k) - 1, i - 1, mfa.ko[k]);
+            mfa.BasisFuns(k, mfa.params(mfa.po[k] + i), span, N, 1, n(k) - 1, i - 1);
         }
 
         // debug
@@ -746,9 +771,9 @@ Encode()
 
         for (int i = 1; i < m(k); i++)            // the rows of N
         {
-            int span = mfa.FindSpan(k, mfa.params(mfa.po[k] + i), mfa.ko[k]);
+            int span = mfa.FindSpan(k, mfa.params(mfa.po[k] + i), mfa.ko[k]) - mfa.ko[k]);  // relative to ko
             assert(span - mfa.ko[k] <= n(k));            // sanity
-            mfa.BasisFuns(k, mfa.params(mfa.po[k] + i), span, N, 1, n(k) - 1, i - 1, mfa.ko[k]);
+            mfa.BasisFuns(k, mfa.params(mfa.po[k] + i), span, N, 1, n(k) - 1, i - 1);
         }
 
         // debug
@@ -877,9 +902,9 @@ Encode()
 
         for (int i = 1; i < m(k); i++)            // the rows of N
         {
-            int span = mfa.FindSpan(k, mfa.params(mfa.po[k] + i), mfa.ko[k]);
+            int span = mfa.FindSpan(k, mfa.params(mfa.po[k] + i), mfa.ko[k]) - mfa.ko[k];   // relative to ko
             assert(span - mfa.ko[k] <= n(k));            // sanity
-            mfa.BasisFuns(k, mfa.params(mfa.po[k] + i), span, N, 1, n(k) - 1, i - 1, mfa.ko[k]);
+            mfa.BasisFuns(k, mfa.params(mfa.po[k] + i), span, N, 1, n(k) - 1, i - 1);
         }
 
         // debug
@@ -994,9 +1019,9 @@ RHS(int       cur_dim,             // current dimension
 
     for (int k = 1; k < m; k++)
     {
-        int span = mfa.FindSpan(cur_dim, mfa.params(po + k), ko);
+        int span = mfa.FindSpan(cur_dim, mfa.params(po + k), ko) - ko;     // relative to ko
         Nk = MatrixXf::Zero(1, n + 1);      // basis coefficients for Rk[i]
-        mfa.BasisFuns(cur_dim, mfa.params(po + k), span, Nk, 0, n, 0, ko);
+        mfa.BasisFuns(cur_dim, mfa.params(po + k), span, Nk, 0, n, 0);
 
         Rk.row(k - 1) =
             mfa.domain.row(co + k * mfa.ds[cur_dim]) - Nk(0, 0) * mfa.domain.row(co) -
@@ -1041,9 +1066,9 @@ RHS(int       cur_dim,             // current dimension
 
     for (int k = 1; k < m; k++)
     {
-        int span = mfa.FindSpan(cur_dim, mfa.params(po + k), ko);
+        int span = mfa.FindSpan(cur_dim, mfa.params(po + k), ko) - ko;
         Nk = MatrixXf::Zero(1, n + 1);      // basis coefficients for Rk[i]
-        mfa.BasisFuns(cur_dim, mfa.params(po + k), span, Nk, 0, n, 0, ko);
+        mfa.BasisFuns(cur_dim, mfa.params(po + k), span, Nk, 0, n, 0);
 
         // debug
         // cerr << "Nk:\n" << Nk << endl;
@@ -1443,7 +1468,8 @@ mfa::
 Encoder::
 ErrorCurve(
         size_t       k,                         // current dimension
-        size_t       co,                        // starting ofst for reading domain pts
+        size_t       po,                        // starting ofst for reading domain pts
+        size_t       co,                        // starting ofst for reading control pts
         set<int>&    err_spans,                 // spans with error greater than err_limit
         float        err_limit)                 // max allowable error
 {
@@ -1457,9 +1483,9 @@ ErrorCurve(
         while (mfa.knots(mfa.ko[k] + span + 1) < 1.0 && mfa.knots(mfa.ko[k] + span + 1) <= mfa.params(mfa.po[k] + i))
             span++;
 
-        decoder.CurvePt(k, mfa.params(mfa.po[k] + i), cpt);
+        decoder.CurvePt(k, mfa.params(mfa.po[k] + i), co, cpt);
 
-        float err = fabs(mfa.NormalDistance(cpt, co + i * mfa.ds[k])) / mfa.dom_range;     // normalized by data range
+        float err = fabs(mfa.NormalDistance(cpt, po + i * mfa.ds[k])) / mfa.dom_range;     // normalized by data range
 
         if (err > err_limit)
         {

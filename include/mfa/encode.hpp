@@ -118,6 +118,7 @@ namespace mfa
         int ErrorCurve(
                 size_t       k,             // current dimension
                 size_t       co,            // starting ofst for reading domain pts
+                size_t       to,            // starting ofst for reading control pts
                 set<int>&    err_spans,     // spans with error greater than err_limit
                 float        err_limit);    // max allowable error
 

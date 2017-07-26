@@ -231,23 +231,24 @@ Decoder::
 CurvePt(
         int       cur_dim,                              // current dimension
         float     param,                                // parameter value of desired point
+        size_t    to,                                   // offset to start of control points for this curve
         VectorXf& out_pt)                               // (output) point
 {
     int n      = (int)mfa.ctrl_pts.rows() - 1;          // number of control point spans
-    int span   = mfa.FindSpan(cur_dim, param, mfa.ko[cur_dim]);
+    int span   = mfa.FindSpan(cur_dim, param, mfa.ko[cur_dim]) - mfa.ko[cur_dim];    // relative to ko[cur_dim]
     out_pt     = VectorXf::Zero(mfa.ctrl_pts.cols());   // initializes and resizes
     MatrixXf N = MatrixXf::Zero(1, n + 1);              // basis coefficients
-    mfa.BasisFuns(cur_dim, param, span, N, 0, n, 0, mfa.ko[cur_dim]);
+    mfa.BasisFuns(cur_dim, param, span, N, 0, n, 0);
 
     for (int j = 0; j <= mfa.p(cur_dim); j++)
         out_pt += N(0, j + span - mfa.p(cur_dim)) *
-            mfa.ctrl_pts.row(span - (mfa.p(cur_dim) + j) * cs[cur_dim]);
+            mfa.ctrl_pts.row(to + span - (mfa.p(cur_dim) + j) * cs[cur_dim]);
 
     // clamp dimensions other than cur_dim to same value as first control point
     // eliminates any wiggles in other dimensions due to numerical precision errors
     for (auto j = 0; j < mfa.p.size(); j++)
         if (j != cur_dim)
-            out_pt(j) = mfa.ctrl_pts((span - mfa.p(cur_dim)) * cs[cur_dim], j);
+            out_pt(j) = mfa.ctrl_pts((to + span - mfa.p(cur_dim)) * cs[cur_dim], j);
     // debug
     // cerr << "n " << n << " param " << param << " span " << span << " out_pt " << out_pt << endl;
     // cerr << " N " << N << endl;
@@ -270,9 +271,7 @@ CurvePt(
         int       ko)                          // starting knot offset (default = 0)
 {
     int n      = (int)temp_ctrl.rows() - 1;     // number of control point spans
-    // span is computed from n-d set of knots (needs ko offset) but then converted to 1-d curve span
-    // by subtracting ko
-    int span   = mfa.FindSpan(cur_dim, param, ko) - ko;
+    int span   = mfa.FindSpan(cur_dim, param, ko) - ko;         // relative to ko
     MatrixXf N = MatrixXf::Zero(1, n + 1);     // basis coefficients
     mfa.BasisFuns(cur_dim, param, span, N, 0, n, 0);
     out_pt = VectorXf::Zero(temp_ctrl.cols());  // initializes and resizes
@@ -317,8 +316,7 @@ VolPt(VectorXf& param,                       // parameter value in each dim. of 
     vector<int>       n(mfa.p.size());              // number of control point spans in each dim
     vector<int>       iter(mfa.p.size());           // iteration number in each dim.
     VectorXf          ctrl_pt(mfa.ctrl_pts.cols()); // one control point
-    vector<size_t>    co(mfa.p.size());             // starting ofst for ctrl pts in each dim for this span
-    int ctrl_idx;                               // control point linear ordering index
+    int ctrl_idx;                                   // control point linear ordering index
 
     // init
     for (size_t i = 0; i < mfa.p.size(); i++)       // for all dims
@@ -326,18 +324,17 @@ VolPt(VectorXf& param,                       // parameter value in each dim. of 
         temp[i]    = VectorXf::Zero(mfa.ctrl_pts.cols());
         iter[i]    = 0;
         n[i]       = (int)mfa.nctrl_pts(i) - 1;
-        span[i]    = mfa.FindSpan(i, param(i), mfa.ko[i]);
+        span[i]    = mfa.FindSpan(i, param(i), mfa.ko[i]) - mfa.ko[i];  // relative to ko
         N[i]       = MatrixXf::Zero(1, n[i] + 1);
-        co[i]      = span[i] - mfa.p(i) - mfa.ko[i];
-        mfa.BasisFuns(i, param(i), span[i], N[i], 0, n[i], 0, mfa.ko[i]);
+        mfa.BasisFuns(i, param(i), span[i], N[i], 0, n[i], 0);
     }
 
-    for (int i = 0; i < tot_iters; i++)      // 1-d flattening all n-d nested loop computations
+    for (int i = 0; i < tot_iters; i++)             // 1-d flattening all n-d nested loop computations
     {
         // control point linear order index
         ctrl_idx = 0;
         for (int j = 0; j < mfa.p.size(); j++)
-            ctrl_idx += (co[j] + ct(i, j)) * cs[j];
+            ctrl_idx += (span[j] - mfa.p(j) + ct(i, j)) * cs[j];
 
         // always compute the point in the first dimension
         ctrl_pt =  mfa.ctrl_pts.row(ctrl_idx);
@@ -350,7 +347,7 @@ VolPt(VectorXf& param,                       // parameter value in each dim. of 
             if (iter[k] - 1 == mfa.p(k))
             {
                 // compute point in next higher dimension and reset computation for current dim
-                temp[k + 1] += (N[k + 1])(0, iter[k + 1] + span[k + 1] - mfa.ko[k + 1] - mfa.p(k + 1)) * temp[k];
+                temp[k + 1] += (N[k + 1])(0, iter[k + 1] + span[k + 1] - mfa.p(k + 1)) * temp[k];
                 temp[k]     =  VectorXf::Zero(mfa.ctrl_pts.cols());
                 iter[k]     =  0;
                 iter[k + 1]++;
