@@ -20,6 +20,7 @@ MFA is [public domain](./COPYING) software.
 
 Build dependencies
 
+- C++11 compiler
 - [diy](https://github.com/diatomic/diy)
 - [eigen](http://eigen.tuxfamily.org)
 - [MPI](http://www.mpich.org)
@@ -33,8 +34,8 @@ git clone https://bitbucket.org/tpeterka1/mfa
 cmake .. \
 -DCMAKE_CXX_COMPILER=mpicxx \
 -DCMAKE_INSTALL_PREFIX=/path/to/mfa/install \
--DDIY_INCLUDE_DIRS=/path/to/diy2/include \
--DEIGEN_INCLUDE_DIRS=/path/to/eigen-3.2.5 \
+-DDIY_INCLUDE_DIRS=/path/to/diy/include \
+-DEIGEN_INCLUDE_DIRS=/path/to/eigen3 \
 -DTBB_INCLUDE_DIR=/path/to/tbb/include
 
 make
@@ -44,10 +45,8 @@ make install
 (currently only serial)
 
 ```
-cd path/to/mfa/install/examples/nd
-./fixed
-# -- or --
-./adaptive
+cd path/to/mfa/install/examples/adaptive
+./adaptive -e <error_limit, e.g., 1.0e-3>
 ```
 
 The output file, `approx.out`, contains the output mfa data model.
