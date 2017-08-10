@@ -38,7 +38,7 @@ int main(int argc, char** argv)
     int mem_blocks  = -1;                    // everything in core for now
     int num_threads = 1;                     // needed in order to do timing
 
-    float norm_err_limit = 1.0;             // maximum normalized errro limit
+    float norm_err_limit = 1.0;              // maximum normalized error limit
 
     // get command line arguments
     using namespace opts;

@@ -122,6 +122,13 @@ namespace mfa
                 set<int>&    err_spans,     // spans with error greater than err_limit
                 float        err_limit);    // max allowable error
 
+        // error of points decoded from a curve aligned with a curve of control points
+        int ErrorCtrlCurve(
+                size_t       k,             // current dimension
+                size_t       to,            // starting ofst for reading control pts
+                set<int>&    err_spans,     // spans with error greater than err_limit
+                float        err_limit);    // max allowable error
+
         size_t  max_num_curves;             // max num. curves per dimension to check in fast encode
 
         MFA& mfa;                           // the mfa object

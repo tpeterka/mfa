@@ -241,14 +241,19 @@ CurvePt(
     mfa.BasisFuns(cur_dim, param, span, N, 0, n, 0);
 
     for (int j = 0; j <= mfa.p(cur_dim); j++)
+    {
+//         fprintf(stderr, "j=%d to=%ld span=%d cs[%d]=%ld row=%ld\n",
+//                 j, to, span, cur_dim, cs[cur_dim], to + (span - mfa.p(cur_dim) + j) * cs[cur_dim]);
+
         out_pt += N(0, j + span - mfa.p(cur_dim)) *
-            mfa.ctrl_pts.row(to + span - (mfa.p(cur_dim) + j) * cs[cur_dim]);
+            mfa.ctrl_pts.row(to + (span - mfa.p(cur_dim) + j) * cs[cur_dim]);
+    }
 
     // clamp dimensions other than cur_dim to same value as first control point
     // eliminates any wiggles in other dimensions due to numerical precision errors
     for (auto j = 0; j < mfa.p.size(); j++)
         if (j != cur_dim)
-            out_pt(j) = mfa.ctrl_pts((to + span - mfa.p(cur_dim)) * cs[cur_dim], j);
+            out_pt(j) = mfa.ctrl_pts(to + (span - mfa.p(cur_dim)) * cs[cur_dim], j);
     // debug
     // cerr << "n " << n << " param " << param << " span " << span << " out_pt " << out_pt << endl;
     // cerr << " N " << N << endl;

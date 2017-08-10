@@ -362,7 +362,7 @@ BasisFuns(int       cur_dim,            // current dimension
 // n-d version of algorithm 9.3, P&T, p. 377
 // params are computed along curves and averaged over all curves at same data point index i,j,k,...
 // ie, resulting params for a data point i,j,k,... are same for all curves
-// and params are only stored once for each dimension in row-major order (1st dim changes fastest)
+// and params are only stored once for each dimension (1st dim params, 2nd dim params, ...)
 // total number of params is the sum of ndom_pts over the dimensions, much less than the total
 // number of data points (which would be the product)
 // assumes params were allocated by caller
@@ -462,10 +462,8 @@ Params()
 // there are n - p internal knots: {0.25, 0.5, 0.75}
 // there are n - p + 1 internal knot spans [0,0.25), [0.25, 0.5), [0.5, 0.75), [0.75, 1)
 //
-// resulting knots are same for all curves and stored once for each dimension in
-// row-major order (1st dim changes fastest)
-// total number of knots is the sum of number of knots over the dimensions,
-// much less than the product
+// resulting knots are same for all curves and stored once for each dimension (1st dim knots, 2nd dim, ...)
+// total number of knots is the sum of number of knots over the dimensions, much less than the product
 // assumes knots were allocated by caller
 void
 mfa::
@@ -590,7 +588,6 @@ InsertKnots(VectorXi& nnew_knots,     // number of new knots in each dim
 //     cerr << "MFA nctrl_pts after insertion:\n" << nctrl_pts << endl;
 }
 
-// increase number of control points
 // interpolate parameters to get parameter value for a target coordinate
 //
 // TODO: experiment whether this is more accurate and/or faster than calling Params
@@ -711,7 +708,6 @@ MFA::
 NormalDistance(VectorXf& pt,          // point whose distance from domain is desired
                size_t    idx)         // index of min. corner of cell in the domain
                                       // that will be used to compute partial derivatives
-                                      // (linear) search for correct cell will start at this index
 {
     // normal vector = [df/dx, df/dy, df/dz, ..., -1]
     // -1 is the last coordinate of the domain points, ie, the range value
@@ -784,7 +780,6 @@ CurveDistance(
         VectorXf& pt,                   // point whose distance from domain is desired
         size_t    idx)                  // index of min. corner of cell in the domain
                                         // that will be used to compute partial derivatives
-                                        // (linear) search for correct cell will start at this index
 {
     // normal vector = [df/dx, df/dy, df/dz, ..., -1]
     // -1 is the last coordinate of the domain points, ie, the range value

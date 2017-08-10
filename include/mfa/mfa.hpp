@@ -98,11 +98,11 @@ namespace mfa
 
        VectorXi& p;           // polynomial degree in each dimension
        VectorXi& ndom_pts;    // number of input data points in each dim
-       VectorXi  nctrl_pts;   // desired number of control points in each dim
-       MatrixXf& domain;      // input data points (1st dim changes fastest)
-       VectorXf  params;      // parameters for input points (1st dim changes fastest)
-       MatrixXf& ctrl_pts;    // (output) control pts (1st dim changes fastest)
-       VectorXf& knots;       // (output) knots (1st dim changes fastest)
+       VectorXi  nctrl_pts;   // number of control points in each dim
+       MatrixXf& domain;      // input data points (row-major order: 1st dim changes fastest)
+       VectorXf  params;      // parameters for input points (single coords: 1st dim params, 2nd dim, ...)
+       MatrixXf& ctrl_pts;    // (output) control pts (row-major order: 1st dim changes fastest)
+       VectorXf& knots;       // (output) knots (single coords: 1st dim knots, 2nd dim, ...)
        float     dom_range;   // max extent of input data points
        vector<size_t> po;     // starting offset for params in each dim
        vector< vector <size_t> > co; // starting offset for curves in each dim
