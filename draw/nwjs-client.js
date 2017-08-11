@@ -2,10 +2,9 @@
 // nwjs standalone app client (acts as a node server)
 //
 
-// var addon = require('bindings')('draw');
 var addon = require('./build/Release/draw');
 
-addon.draw("../install/examples/adaptive/approx.out",
+addon.draw(nw.App.argv[0],
            nraw_pts,
            raw_pts,
            nctrl_pts,

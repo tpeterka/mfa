@@ -195,13 +195,17 @@ function create_ctrl_geometry()
         // create points
         for (i = 0; i < nctrl_pts[0]; i++)
         {
-            point = new THREE.Vector3(ctrl_pts[3 * n],
-                                      ctrl_pts[3 * n + 1],
-                                      ctrl_pts[3 * n + 2]);
+            var point;
+            if (ctrl_pts_z0)
+                point = new THREE.Vector3(ctrl_pts[3 * n], ctrl_pts[3 * n + 1], 0.0);
+            else
+                point = new THREE.Vector3(ctrl_pts[3 * n], ctrl_pts[3 * n + 1], ctrl_pts[3 * n + 2]);
+
             points.vertices.push(point);
             n++;
         }
     }
+
     pointSet = new THREE.PointCloud(points, point_material);
     pointSet.name = 'ctrl_pts';
     scene.add(pointSet);
@@ -218,9 +222,12 @@ function create_ctrl_geometry()
         points = new THREE.Geometry();
         for (i = 0; i < nctrl_pts[0]; i++)
         {
-            point = new THREE.Vector3(ctrl_pts[3 * n],
-                                      ctrl_pts[3 * n + 1],
-                                      ctrl_pts[3 * n + 2]);
+            var point;
+            if (ctrl_pts_z0)
+                point = new THREE.Vector3(ctrl_pts[3 * n], ctrl_pts[3 * n + 1], 0.0);
+            else
+                point = new THREE.Vector3(ctrl_pts[3 * n], ctrl_pts[3 * n + 1], ctrl_pts[3 * n + 2]);
+
             points.vertices.push(point);
             n++;
         }
@@ -241,9 +248,12 @@ function create_ctrl_geometry()
             n = no;
             for (i = 0; i < nctrl_pts[1]; i++)
             {
-                point = new THREE.Vector3(ctrl_pts[3 * n    ],
-                                          ctrl_pts[3 * n + 1],
-                                          ctrl_pts[3 * n + 2]);
+                var point;
+                if (ctrl_pts_z0)
+                    point = new THREE.Vector3(ctrl_pts[3 * n], ctrl_pts[3 * n + 1], 0.0);
+                else
+                    point = new THREE.Vector3(ctrl_pts[3 * n], ctrl_pts[3 * n + 1], ctrl_pts[3 * n + 2]);
+
                 points.vertices.push(point);
                 n = n + nctrl_pts[0];
             }

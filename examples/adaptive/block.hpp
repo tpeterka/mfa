@@ -478,6 +478,8 @@ struct Block
 
             cerr << "domain_mins:\n" << domain_mins << endl;
             cerr << "domain_maxs:\n" << domain_maxs << endl;
+
+//             cerr << "domain:\n" << domain << endl;
         }
 
     // read the flame dataset and take one slice out of the middle of it

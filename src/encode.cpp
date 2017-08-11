@@ -84,9 +84,6 @@ FastEncode(
     // resize control points based on number of new knots added in previous round
     mfa.ctrl_pts.resize(mfa.tot_nctrl, mfa.domain.cols());
 
-    // debug
-//     fprintf(stderr, "tot_nctrl=%ld\n", mfa.tot_nctrl);
-
     // full n-d encoding
     Encode();
 
@@ -98,11 +95,11 @@ FastEncode(
     for (size_t k = 0; k < mfa.p.size(); k++)                   // for all domain dimensions
     {
         set<int> err_spans;                                     // all error spans so far in this dim.
-        size_t ncurves = mfa.ctrl_pts.rows() / mfa.nctrl_pts(k);// number of curves in this dimension
+        size_t ncurves = mfa.ctrl_pts.rows() / mfa.nctrl_pts(k);    // number of curves in this dimension
 
         // offsets for starting control point for each curve in this dimension
         vector<size_t> to(ncurves);
-        size_t too     = 0;                                     // co at start of contiguous sequence
+        size_t too     = 0;                                     // to at start of contiguous sequence
         to[0]          = 0;
 
         for (auto j = 1; j < ncurves; j++)
@@ -115,17 +112,11 @@ FastEncode(
                 to[j] = too + ts * mfa.nctrl_pts(k);
                 too   = to[j];
             }
-
-            // debug
-//             fprintf(stderr, "to[%ld][%d]=%ld\n", k, j, to[j]);
         }
 
         // find spans with error > err_limit
         for (size_t j = 0; j < ncurves; j++)
-        {
-//             fprintf(stderr, "\nComputing error on control curve k=%ld j=%ld\n", k, j);
             size_t nerr = ErrorCtrlCurve(k, to[j], err_spans, err_limit);
-        }
 
         // add new knots in the middle of spans with errors
         nnew_knots(k) = err_spans.size();
@@ -1558,9 +1549,13 @@ ErrorCtrlCurve(
         // (InterpolateParams has assumption of increasing domain coordinates that needs to be removed)
         param[k] = mfa.InterpolateParams(k, mfa.po[k], mfa.ds[k], mfa.ctrl_pts(to, k));
 
-//     fprintf(stderr, "param[%ld] = %.3f\n", k, param[k]);
+    // debug
+//     fprintf(stderr, "param = [ ");
+//     for (auto k = 0; k < mfa.p.size(); k++)
+//         fprintf(stderr, "%.3f ", param[k]);
+//     fprintf(stderr, "]\n");
 
-    // compute ijk index of closest params to parametervalue at start of control curve
+    // compute ijk index of closest params to parameter value at start of control curve
     VectorXi ijk(mfa.p.size());
     for (auto k = 0; k < mfa.p.size(); k++)
     {
@@ -1570,25 +1565,50 @@ ErrorCtrlCurve(
         ijk(k) = (j > 0 ? j - 1 : j);
     }
 
-//     cerr << "ijk:\n" << ijk << endl;
-
     size_t co;              // starting offset of domain points for curve closest to control point curve
     mfa.ijk2idx(ijk, co);
 
-//     fprintf(stderr, "co=%ld\n", co);
+    // debug
+//     VectorXf ctpt = mfa.ctrl_pts.row(to);
+//     VectorXf dopt = mfa.domain.row(co);
+//     cerr << "start ctrl pt:\n" << ctpt << endl;
+//     cerr << "start inpt pt:\n" << dopt << "\n" << endl;
 
     for (auto i = 0; i < mfa.ndom_pts[k]; i++)      // all domain points in the curve
     {
         while (mfa.knots(mfa.ko[k] + span + 1) < 1.0 && mfa.knots(mfa.ko[k] + span + 1) <= mfa.params(mfa.po[k] + i))
             span++;
 
-//         fprintf(stderr, "k=%ld param=%.3f to=%ld\n", k, mfa.params(mfa.po[k] + i), to);
-
         decoder.CurvePt(k, mfa.params(mfa.po[k] + i), to, cpt);
 
-//         cerr << "cpt:\n" << cpt << endl;
+        // adjust input point index so that input point cell contains cpt
+        size_t j = i;
+        while (j < mfa.ndom_pts[k] - 1 && mfa.domain(co + j * mfa.ds[k], k) < cpt(k))
+            j++;
+        while (j > 0 &&                   mfa.domain(co + j * mfa.ds[k], k) > cpt(k))
+            j--;
 
-        float err = fabs(mfa.NormalDistance(cpt, co + i * mfa.ds[k])) / mfa.dom_range;     // normalized by data range
+        // debug: check that the input cell contains cpt
+        bool error = false;
+        if (j == 0 && mfa.domain(co + (j + 1) * mfa.ds[k], k) < cpt(k))
+            error = true;
+        else if (j == mfa.ndom_pts[k] - 2 && mfa.domain(co + j * mfa.ds[k], k) > cpt(k))
+            error = true;
+        else if (j > 0 && j < mfa.ndom_pts[k] - 2 &&
+                (mfa.domain(co + j * mfa.ds[k], k) > cpt(k) || mfa.domain(co + (j + 1) * mfa.ds[k], k) < cpt(k)))
+            error = true;
+        if (error)
+            fprintf(stderr, "Error: j=%ld %f is not contained in [%f, %f]\n", j,
+                    cpt(k), mfa.domain(co + j * mfa.ds[k], k), mfa.domain(co + (j + 1) * mfa.ds[k], k));
+
+        // compute error
+        float err = fabs(mfa.NormalDistance(cpt, co + j * mfa.ds[k])) / mfa.dom_range;     // normalized by data range
+
+        // debug
+//         VectorXf dopt = mfa.domain.row(co + j * mfa.ds[k]);
+//         cerr << "decoded pt:\n" << cpt  << endl;
+//         cerr << "input pt:\n"   << dopt << endl;
+//         fprintf(stderr, "err = %.3e\n\n", err);
 
         if (err > err_limit)
         {

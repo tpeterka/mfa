@@ -5,7 +5,8 @@ var text = {
         theFile.dispatchEvent(evt);
     },
     RawData     : true,
-    ControlData : true,
+    Visible     : true,
+    Z0          : false,
     ApproxData  : true,
     ErrorData   : true,
     Boundaries  : true,
@@ -27,11 +28,22 @@ window.onload = function() {
         object.visible = value;
     });
 
-    f2.add(text, 'ControlData').onChange(function(value) {
+    var f4 = f2.addFolder('ControlData');
+
+    f4.add(text, 'Visible').onChange(function(value) {
         var object = scene.getObjectByName('ctrl_pts');
         object.visible = value;
         var object = scene.getObjectByName('ctrl_curves');
         object.visible = value;
+    });
+
+    f4.add(text, 'Z0').onChange(function(value) {
+        var object = scene.getObjectByName('ctrl_pts');
+        scene.remove(object);
+        var object = scene.getObjectByName('ctrl_curves');
+        scene.remove(object);
+        ctrl_pts_z0 = value;
+        create_ctrl_geometry();
     });
 
     f2.add(text, 'ApproxData').onChange(function(value) {
