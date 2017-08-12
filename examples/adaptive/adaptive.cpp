@@ -73,8 +73,8 @@ int main(int argc, char** argv)
     d_args.dom_dim      = 2;
     d_args.p[0]         = 4;
     d_args.p[1]         = 4;
-    d_args.ndom_pts[0]  = 200;
-    d_args.ndom_pts[1]  = 200;
+    d_args.ndom_pts[0]  = 50;
+    d_args.ndom_pts[1]  = 50;
     d_args.min[0]       = -4.0 * M_PI;
     d_args.min[1]       = -4.0 * M_PI;
     d_args.max[0]       = 4.0 * M_PI;
@@ -243,7 +243,7 @@ int main(int argc, char** argv)
     master.foreach([&](Block* b, const diy::Master::ProxyWithLink& cp)
             { b->adaptive_encode_block(cp, norm_err_limit); });
     encode_time = MPI_Wtime() - encode_time;
-    fprintf(stderr, "Adaptive encoding done.\n\n");
+    fprintf(stderr, "\n\nAdaptive encoding done.\n\n");
 
     // debug: compute error field for visualization and max error to verify that it is below the threshold
     fprintf(stderr, "\nFinal decoding and computing max. error...\n");

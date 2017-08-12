@@ -34,6 +34,10 @@ AdaptiveEncode(float err_limit)                     // maximum allowable normali
     for (int iter = 0; ; iter++)
     {
         fprintf(stderr, "\nIteration %d...\n", iter);
+
+        // debug
+//         cerr << "current knots:\n" << mfa.knots << endl;
+
         bool done = FastEncode(nnew_knots, new_knots, err_limit, iter);
 
         // no new knots to be added
@@ -60,15 +64,100 @@ AdaptiveEncode(float err_limit)                     // maximum allowable normali
         mfa.InsertKnots(nnew_knots, new_knots);
     }
 
-    // debug: only Encode at the end if using older version of FastEncode that encodes 1d curves
-    // remove once not needed
-//     Encode();
+    // final full encoding needed after last knot insertion above
+    fprintf(stderr, "Encoding in full %ldD\n", mfa.p.size());
+    Encode();
 }
+
+#if 0
+
+// single thread version
+//
+// encodes at full dimensionality
+// decodes one full-d point in the center of each control point span and
+// adds new knot spans where error > err_limit
+// returns true if done, ie, no knots are inserted
+bool
+mfa::
+Encoder::
+FastEncode(
+        VectorXi& nnew_knots,                       // number of new knots in each dim
+        VectorXf& new_knots,                        // new knots (1st dim changes fastest)
+        float     err_limit,                        // max allowable error
+        int       iter)                             // iteration number of caller (for debugging)
+{
+    // resize control points based on number of new knots added in previous round
+    mfa.ctrl_pts.resize(mfa.tot_nctrl, mfa.domain.cols());
+
+    // full n-d encoding
+    Encode();
+
+    size_t ts = 1;                                              // control point stride
+
+    // find new knots
+    nnew_knots = VectorXi::Zero(mfa.p.size());
+    new_knots.resize(0);
+    for (size_t k = 0; k < mfa.p.size(); k++)                   // for all domain dimensions
+    {
+        set<int> err_spans;                                     // all error spans so far in this dim.
+        size_t ncurves = mfa.ctrl_pts.rows() / mfa.nctrl_pts(k);    // number of curves in this dimension
+
+        // offsets for starting control point for each curve in this dimension
+        vector<size_t> to(ncurves);
+        size_t too     = 0;                                     // to at start of contiguous sequence
+        to[0]          = 0;
+
+        for (auto j = 1; j < ncurves; j++)
+        {
+            // adjust offsets for the next curve
+            if (j % ts)
+                to[j] = to[j - 1] + 1;
+            else
+            {
+                to[j] = too + ts * mfa.nctrl_pts(k);
+                too   = to[j];
+            }
+        }
+
+        // find spans with error > err_limit
+        for (size_t j = 0; j < ncurves; j++)
+            size_t nerr = ErrorCtrlCurve(k, to[j], err_spans, err_limit);
+
+        // add new knots in the middle of spans with errors
+        nnew_knots(k) = err_spans.size();
+        auto old_size = new_knots.size();
+        new_knots.conservativeResize(old_size + err_spans.size());    // existing values are preserved
+        size_t i = 0;                                           // index into new_knots
+        for (set<int>::iterator it = err_spans.begin(); it != err_spans.end(); ++it)
+        {
+            // debug
+            assert(*it < mfa.nctrl_pts[k]);                     // not trying to go beyond the last span
+
+            new_knots(old_size + i) = (mfa.knots(mfa.ko[k] + *it) + mfa.knots(mfa.ko[k] + *it + 1)) / 2.0;
+            i++;
+        }
+
+        // print progress
+        fprintf(stderr, "found total %d new knots after dimension %ld of %ld\n", nnew_knots.sum(), k + 1, mfa.p.size());
+
+        ts *= mfa.nctrl_pts(k);
+    }                                                          // domain dimensions
+    fprintf(stderr, "\n");
+
+    // debug
+    cerr << "\nnnew_knots:\n" << nnew_knots << endl;
+//     cerr << "new_knots:\n"  << new_knots  << endl;
+
+    return(nnew_knots.sum() ? 0 : 1);
+}
+
+#endif
 
 #if 1
 
 // single thread version
 //
+// encodes at full dimensionality
 // decodes 1d curves at control points and
 // adds knots error spans from all curves in all directions (into a set)
 // returns true if done, ie, no knots are inserted
@@ -140,7 +229,7 @@ FastEncode(
     fprintf(stderr, "\n");
 
     // debug
-    cerr << "\nnnew_knots:\n" << nnew_knots << endl;
+//     cerr << "\nnnew_knots:\n" << nnew_knots << endl;
 //     cerr << "new_knots:\n"  << new_knots  << endl;
 
     return(nnew_knots.sum() ? 0 : 1);
@@ -1602,16 +1691,17 @@ ErrorCtrlCurve(
                     cpt(k), mfa.domain(co + j * mfa.ds[k], k), mfa.domain(co + (j + 1) * mfa.ds[k], k));
 
         // compute error
-        float err = fabs(mfa.NormalDistance(cpt, co + j * mfa.ds[k])) / mfa.dom_range;     // normalized by data range
-
-        // debug
-//         VectorXf dopt = mfa.domain.row(co + j * mfa.ds[k]);
-//         cerr << "decoded pt:\n" << cpt  << endl;
-//         cerr << "input pt:\n"   << dopt << endl;
-//         fprintf(stderr, "err = %.3e\n\n", err);
+//         float err = fabs(mfa.NormalDistance(cpt, co + j * mfa.ds[k])) / mfa.dom_range;     // normalized by data range
+        float err = fabs(mfa.CurveDistance(k, cpt, co + j * mfa.ds[k])) / mfa.dom_range;     // normalized by data range
 
         if (err > err_limit)
         {
+            // debug
+//             VectorXf dopt = mfa.domain.row(co + j * mfa.ds[k]);
+//             cerr << "decoded pt:\n" << cpt  << endl;
+//             cerr << "input pt:\n"   << dopt << endl;
+//             fprintf(stderr, "err = %.3e\n\n", err);
+
             // don't duplicate spans
             set<int>::iterator it = err_spans.find(span);
             if (!err_spans.size() || it == err_spans.end())
