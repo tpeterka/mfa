@@ -19,22 +19,26 @@ typedef Eigen::VectorXi VectorXi;
 using namespace std;
 using namespace tbb;
 
+struct KnotSpan
+{
+    VectorXf min_knot;                  // parameter vector of min knot in this span
+    VectorXf max_knot;                  // parameter vector of max knot in this span
+    VectorXi min_knot_ijk;              // i,j,k indices of minimum knot in this span
+    VectorXi max_knot_ijk;              // i,j,k indices of maximum knot in this span
+    VectorXf min_param;                 // parameter vector of minimum domain point in this span
+    VectorXf max_param;                 // parameter vector of maximum domain point in this span
+    VectorXi min_param_ijk;             // i,j,k indices of minimum domain point in this span
+    VectorXi max_param_ijk;             // i,j,k indices of maximum domain point in this span
+    int      last_split_dim;            // last dimension in which this span was subdivided
+    bool     done;                      // whether the span has converged (<= error_limit everywhere)
+};
+
 namespace mfa
 {
     class MFA
     {
     public:
 
-        // fixed number of control points version
-        MFA(VectorXi& p_,             // polynomial degree in each dimension
-            VectorXi& ndom_pts_,      // number of input data points in each dim
-            VectorXi& nctrl_pts_,     // desired number of control points in each dim
-            MatrixXf& domain_,        // input data points (1st dim changes fastest)
-            MatrixXf& ctrl_pts_,      // (output) control points (1st dim changes fastest)
-            VectorXf& knots_,         // (output) knots (1st dim changes fastest)
-            float     eps_ = 1.0e-6); // minimum difference considered significant
-
-        // adaptive number of control points version
         MFA(VectorXi& p_,             // polynomial degree in each dimension
             VectorXi& ndom_pts_,      // number of input data points in each dim
             MatrixXf& domain_,        // input data points (1st dim changes fastest)
@@ -62,6 +66,7 @@ namespace mfa
                 int       k,               // current dimension in direction of curve
                 VectorXf& pt,              // point whose distance from domain is desired
                 size_t    cell_idx);       // index of min. corner of cell in the domain
+
     private:
 
         int FindSpan(int   cur_dim,       // current dimension
@@ -80,8 +85,10 @@ namespace mfa
 
         void Knots();
 
-        void InsertKnots(VectorXi& nnew_knots,     // number of new knots in each dim
-                         VectorXf& new_knots);     // new knots (1st dim changes fastest)
+        void KnotSpanIndex();
+
+        void InsertKnots(VectorXi& nnew_knots,      // number of new knots in each dim
+                VectorXf& new_knots);               // new knots (1st dim changes fastest)
 
         float InterpolateParams(int       cur_dim, // curent dimension
                                 size_t    po,      // starting offset for params in cur. dim.
@@ -113,7 +120,9 @@ namespace mfa
        size_t tot_nknots;     // total nmbr of knots = sum of nmbr of knots over all dims
        size_t tot_nctrl;      // total nmbr of control points = product of control points over all dims
        float eps;             // minimum difference considered significant
-   };
+
+       vector<KnotSpan> knot_spans; // knot spans
+    };
 
 }
 

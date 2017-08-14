@@ -44,9 +44,20 @@ namespace mfa
                 VectorXf& out_pt,               // (output) point
                 int       ko = 0);              // starting knot offset
 
+        bool ErrorSpans(
+                VectorXi& nnew_knots,           // number of new knots in each dim
+                VectorXf& new_knots,            // new knots (1st dim changes fastest)
+                float err_limit);               // max. allowed error
+
     private:
 
+        void SplitSpan(
+                size_t        si,               // id of span to split
+                VectorXi&     nnew_knots,       // number of new knots in each dim
+                VectorXf&     new_knots);       // new knots (1st dim changes fastest)
+
         int tot_iters;                          // total iterations in flattened decoding of all dimensions
+
         MatrixXi  ct;                           // coordinates of first control point of curve for given iteration
                                                 // of decoding loop, relative to start of box of
                                                 // control points
