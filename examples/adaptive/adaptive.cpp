@@ -48,7 +48,7 @@ int main(int argc, char** argv)
     int pt_dim = 3;
     ops >> Option('d', "pt_dim", pt_dim, " dimension of points");
     int dom_dim = 2; // dimension of domain (<= pt_dim)
-    ops >> Option('m', "dom_dim", pt_dim, " dimension of domain");
+    ops >> Option('m', "dom_dim", dom_dim, " dimension of domain");
     int degree = 4;
     ops >> Option('p', "degree", degree, "degree in each dimension of domain");
     int ndomp = 100;
