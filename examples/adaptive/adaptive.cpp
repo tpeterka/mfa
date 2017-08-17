@@ -73,8 +73,8 @@ int main(int argc, char** argv)
     d_args.dom_dim      = 2;
     d_args.p[0]         = 4;
     d_args.p[1]         = 4;
-    d_args.ndom_pts[0]  = 50;
-    d_args.ndom_pts[1]  = 50;
+    d_args.ndom_pts[0]  = 100;
+    d_args.ndom_pts[1]  = 100;
     d_args.min[0]       = -4.0 * M_PI;
     d_args.min[1]       = -4.0 * M_PI;
     d_args.max[0]       = 4.0 * M_PI;

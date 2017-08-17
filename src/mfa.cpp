@@ -231,17 +231,17 @@ KnotSpanIndex()
             knot_spans[span_idx].done           = false;
 
             // debug
-            cerr <<
-                "span_idx="          << span_idx                           <<
-                "\nmin_knot_ijk:\n"  << knot_spans[span_idx].min_knot_ijk  <<
-                "\nmax_knot_ijk:\n"  << knot_spans[span_idx].max_knot_ijk  <<
-                "\nmin_knot:\n"      << knot_spans[span_idx].min_knot      <<
-                "\nmax_knot:\n"      << knot_spans[span_idx].max_knot      <<
-                "\nmin_param_ijk:\n" << knot_spans[span_idx].min_param_ijk <<
-                "\nmax_param_ijk:\n" << knot_spans[span_idx].max_param_ijk <<
-                "\nmin_param:\n"     << knot_spans[span_idx].min_param     <<
-                "\nmax_param:\n"     << knot_spans[span_idx].max_param     <<
-                "\n\n"               << endl;
+//             cerr <<
+//                 "span_idx="          << span_idx                           <<
+//                 "\nmin_knot_ijk:\n"  << knot_spans[span_idx].min_knot_ijk  <<
+//                 "\nmax_knot_ijk:\n"  << knot_spans[span_idx].max_knot_ijk  <<
+//                 "\nmin_knot:\n"      << knot_spans[span_idx].min_knot      <<
+//                 "\nmax_knot:\n"      << knot_spans[span_idx].max_knot      <<
+//                 "\nmin_param_ijk:\n" << knot_spans[span_idx].min_param_ijk <<
+//                 "\nmax_param_ijk:\n" << knot_spans[span_idx].max_param_ijk <<
+//                 "\nmin_param:\n"     << knot_spans[span_idx].min_param     <<
+//                 "\nmax_param:\n"     << knot_spans[span_idx].max_param     <<
+//                 "\n\n"               << endl;
 
             span_idx++;
         }                                               // !skip
@@ -556,8 +556,9 @@ Knots()
 void
 mfa::
 MFA::
-InsertKnots(VectorXi& nnew_knots,     // number of new knots in each dim
-            VectorXf& new_knots)      // new knots (1st dim changes fastest)
+InsertKnots(
+        VectorXi&      nnew_knots,          // number of new knots in each dim
+        vector<float>& new_knots)           // new knots (1st dim changes fastest)
 {
     VectorXf temp_knots(knots.size() + nnew_knots.sum());
     VectorXi nold_knots = VectorXi::Zero(nnew_knots.size());
@@ -579,11 +580,11 @@ InsertKnots(VectorXi& nnew_knots,     // number of new knots in each dim
         nk = 0;
         while (nk < nold_knots(k))
         {
-            if (mk < nnew_knots(k) && new_knots(m) < knots(n))
+            if (mk < nnew_knots(k) && new_knots[m] < knots(n))
             {
                 // debug
                 // fprintf(stderr, "ntemp+1=%d m+1=%d\n", ntemp + 1, m + 1);
-                temp_knots(ntemp++) = new_knots(m++);
+                temp_knots(ntemp++) = new_knots[m++];
                 mk++;
             }
             else

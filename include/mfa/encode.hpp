@@ -33,10 +33,10 @@ namespace mfa
         void Encode();
         void AdaptiveEncode(float err_limit);               // maximum allowable normalized error
         bool FastEncode(
-                VectorXi& nnew_knots,                       // number of new knots in each dim
-                VectorXf& new_knots,                        // new knots (1st dim changes fastest)
-                float     err_limit,                        // max allowable error
-                int       iter);                            // iteration number of caller (for debugging)
+                VectorXi&      nnew_knots,                  // number of new knots in each dim
+                vector<float>& new_knots,                   // new knots (1st dim changes fastest)
+                float          err_limit,                   // max allowable error
+                int            iter);                       // iteration number of caller (for debugging)
 
    private:
 

@@ -74,13 +74,17 @@ bool
 mfa::
 Decoder::
 ErrorSpans(
-        VectorXi& nnew_knots,                       // number of new knots in each dim
-        VectorXf& new_knots,                        // new knots (1st dim changes fastest)
-        float err_limit)                            // max allowable error
+        VectorXi&      nnew_knots,                          // number of new knots in each dim
+        vector<float>& new_knots,                           // new knots (1st dim changes fastest)
+        float          err_limit,                           // max allowable error
+        int            iter)                                // iteration number
 {
     // initialize all knot spans to not done
     for (auto i = 0; i < mfa.knot_spans.size(); i++)
         mfa.knot_spans[i].done = false;
+
+    // spans that have already been split in this round (to prevent splitting twice)
+    vector<bool> split_spans(mfa.knot_spans.size());                // intialized to false by default
 
     parallel_for(size_t(0), mfa.knot_spans.size(), [&] (size_t i)          // knot spans
     {
@@ -139,12 +143,27 @@ ErrorSpans(
         }                                                           // knot span not done
     });                                                           // knot spans
 
-
     // split spans that are not done
     auto norig_spans = mfa.knot_spans.size();
-    for (auto i = 0; i < norig_spans; i++)                  // knot spans
+    list<float> new_knots_list;
+    for (auto i = 0; i < norig_spans; i++)
         if (!mfa.knot_spans[i].done)
-            SplitSpan(i, nnew_knots, new_knots);
+            SplitSpan(i, nnew_knots, new_knots_list, iter, split_spans);
+
+    // copy new knots from list to vector because vector can be sorted in nlogn time (random access)
+    new_knots.resize(new_knots_list.size());
+    size_t n = 0;
+    for (auto it = new_knots_list.begin(); it != new_knots_list.end(); it++)
+        new_knots[n++] = *it;
+
+    // sort knot values in each dimension of new_knots
+    // (because knot_spans don't maintain increasing knot order as spans are split)
+    size_t start_pos = 0;
+    for (auto k = 0; k < mfa.p.size(); k++)
+    {
+        sort(new_knots.begin() + start_pos, new_knots.begin() + start_pos + nnew_knots(k));
+        start_pos += nnew_knots(k);
+    }
 
     // debug
 //     for (auto i = 0; i < mfa.knot_spans.size(); i++)                  // knot spans
@@ -176,13 +195,17 @@ bool
 mfa::
 Decoder::
 ErrorSpans(
-        VectorXi& nnew_knots,                       // number of new knots in each dim
-        VectorXf& new_knots,                        // new knots (1st dim changes fastest)
-        float err_limit)                            // max allowable error
+        VectorXi&      nnew_knots,                          // number of new knots in each dim
+        vector<float>& new_knots,                           // new knots (1st dim changes fastest)
+        float          err_limit,                           // max allowable error
+        int            iter)                                // iteration number
 {
     // initialize all knot spans to not done
     for (auto i = 0; i < mfa.knot_spans.size(); i++)
         mfa.knot_spans[i].done = false;
+
+    // spans that have already been split in this round (to prevent splitting twice)
+    vector<bool> split_spans(mfa.knot_spans.size());                // intialized to false by default
 
     for (auto i = 0; i < mfa.knot_spans.size(); i++)                // knot spans
     {
@@ -250,9 +273,25 @@ ErrorSpans(
 
     // split spans that are not done
     auto norig_spans = mfa.knot_spans.size();
+    list<float> new_knots_list;
     for (auto i = 0; i < norig_spans; i++)
         if (!mfa.knot_spans[i].done)
-            SplitSpan(i, nnew_knots, new_knots);
+                SplitSpan(i, nnew_knots, new_knots_list, iter, split_spans);
+
+    // copy new knots from list to vector because vector can be sorted in nlogn time (random access)
+    new_knots.resize(new_knots_list.size());
+    size_t n = 0;
+    for (auto it = new_knots_list.begin(); it != new_knots_list.end(); it++)
+        new_knots[n++] = *it;
+
+    // sort knot values in each dimension of new_knots
+    // (because knot_spans don't maintain increasing knot order as spans are split)
+    size_t start_pos = 0;
+    for (auto k = 0; k < mfa.p.size(); k++)
+    {
+        sort(new_knots.begin() + start_pos, new_knots.begin() + start_pos + nnew_knots(k));
+        start_pos += nnew_knots(k);
+    }
 
     // debug
 //     fprintf(stderr, "number knot spans after splitting= %ld\n", mfa.knot_spans.size());
@@ -260,12 +299,12 @@ ErrorSpans(
 //     {
 //         cerr <<
 //             "span_idx="          << i                           <<
-//             "\nmin_knot_ijk:\n"  << mfa.knot_spans[i].min_knot_ijk  <<
-//             "\nmax_knot_ijk:\n"  << mfa.knot_spans[i].max_knot_ijk  <<
+// //             "\nmin_knot_ijk:\n"  << mfa.knot_spans[i].min_knot_ijk  <<
+// //             "\nmax_knot_ijk:\n"  << mfa.knot_spans[i].max_knot_ijk  <<
 //             "\nmin_knot:\n"      << mfa.knot_spans[i].min_knot      <<
 //             "\nmax_knot:\n"      << mfa.knot_spans[i].max_knot      <<
-//             "\nmin_param_ijk:\n" << mfa.knot_spans[i].min_param_ijk <<
-//             "\nmax_param_ijk:\n" << mfa.knot_spans[i].max_param_ijk <<
+// //             "\nmin_param_ijk:\n" << mfa.knot_spans[i].min_param_ijk <<
+// //             "\nmax_param_ijk:\n" << mfa.knot_spans[i].max_param_ijk <<
 //             "\nmin_param:\n"     << mfa.knot_spans[i].min_param     <<
 //             "\nmax_param:\n"     << mfa.knot_spans[i].max_param     <<
 //             "\n"                 << endl;
@@ -277,39 +316,26 @@ ErrorSpans(
 #endif
 
 // splits a knot span into two
-// assumes caller allocated new_knots to number of spans and nnew_knots to domain dimensions
-// (does no resizing of new_knots and nnew_knots to save time)
+// also splits all other spans sharing the same knot values
 void
 mfa::
 Decoder::
 SplitSpan(
         size_t        si,                   // id of span to split
         VectorXi&     nnew_knots,           // number of new knots in each dim
-        VectorXf&     new_knots)            // new knots (1st dim changes fastest)
+        list<float>&  new_knots,            // new knots (1st dim changes fastest)
+        int           iter,                 // iteration number
+        vector<bool>& split_spans)          // spans that have already been split in this iteration
 {
     // debug
-    fprintf(stderr, "\nSplitSpan() before splitting span %ld\n", si);
-    cerr << "nnew_knots:\n" << nnew_knots << endl;
-    cerr << "new_knots:\n"  << new_knots  << endl;
+//     fprintf(stderr, "Calling SplitSpan on span %ld\n", si);
 
-    // spans that have already been split in this round (to prevent splitting twice)
-    vector<bool> split_spans(mfa.knot_spans.size());    // intialized to false by default
-
+    // new split dimension based on iteration number (same for all spans in current iteration)
     // check if span can be split (both halves would have domain points in its range)
-    // if not, check other split directions
-    int sd = mfa.knot_spans[si].last_split_dim;             // new split dimension
-    float new_knot;                                     // new knot value in the split dimension
-    size_t k;                                           // dimension
-    for (k = 0; k < mfa.p.size(); k++)
-    {
-        sd       = (sd + 1) % mfa.p.size();
-        new_knot = (mfa.knot_spans[si].min_knot(sd) + mfa.knot_spans[si].max_knot(sd)) / 2;
-        if (mfa.params(mfa.po[sd] + mfa.knot_spans[si].min_param_ijk(sd)) < new_knot &&
-                mfa.params(mfa.po[sd] + mfa.knot_spans[si].max_param_ijk(sd)) > new_knot)
-            break;
-    }
-
-    if (k == mfa.p.size())                                  // a split direction could not be found
+    int sd = iter % mfa.p.size();                       // split dimension
+    float new_knot = (mfa.knot_spans[si].min_knot(sd) + mfa.knot_spans[si].max_knot(sd)) / 2;
+    if (!(mfa.params(mfa.po[sd] + mfa.knot_spans[si].min_param_ijk(sd)) < new_knot &&
+                mfa.params(mfa.po[sd] + mfa.knot_spans[si].max_param_ijk(sd)) > new_knot))
     {
         mfa.knot_spans[si].done = true;
         split_spans[si]         = true;
@@ -320,15 +346,46 @@ SplitSpan(
         return;
     }
 
+#if 0
+    // new split dimension based on alternating dimension per span
+    // check if span can be split (both halves would have domain points in its range)
+    // if not, check other split directions
+    int sd = mfa.knot_spans[si].last_split_dim;         // alternating per knot span
+    float new_knot;                                     // new knot value in the split dimension
+    size_t k;                                           // dimension
+    for (k = 0; k < mfa.p.size(); k++)
+    {
+        sd       = (sd + 1) % mfa.p.size();
+        new_knot = (mfa.knot_spans[si].min_knot(sd) + mfa.knot_spans[si].max_knot(sd)) / 2;
+        if (mfa.params(mfa.po[sd] + mfa.knot_spans[si].min_param_ijk(sd)) < new_knot &&
+                mfa.params(mfa.po[sd] + mfa.knot_spans[si].max_param_ijk(sd)) > new_knot)
+            break;
+    }
+    if (k == mfa.p.size())                                  // a split direction could not be found
+    {
+        mfa.knot_spans[si].done = true;
+        split_spans[si]         = true;
+
+        // debug
+        fprintf(stderr, "--- SplitSpan(): span %ld could not be split further ---\n", si);
+
+        return;
+    }
+#endif
+
     // find all spans with the same min_knot_ijk as the span to be split and that are not done yet
     // those will be split too (NB, in the same dimension as the original span to be split)
-    for (auto j = 0; j < split_spans.size(); j++)       // original number of spans in this round
+    auto orig_size = split_spans.size();                // original number of spans before adding any
+    bool new_split = false;                             // the new knot was used to actually split a span
+    for (auto j = 0; j < orig_size; j++)                // original number of spans in this round
     {
         if (mfa.knot_spans[j].done || split_spans[j] || mfa.knot_spans[j].min_knot_ijk(sd) != mfa.knot_spans[si].min_knot_ijk(sd))
             continue;
 
         // debug
-//         fprintf(stderr, "+++ SplitSpan(): splitting span %ld +++\n", si);
+//         fprintf(stderr, "splitting span %d in sd=%d by new_knot=%.3f\n", j, sd, new_knot);
+
+        new_split = true;
 
         // copy span to the back
         mfa.knot_spans.push_back(mfa.knot_spans[j]);
@@ -355,6 +412,9 @@ SplitSpan(
         }
     }
 
+    if (!new_split)
+        return;
+
     // increment min and max knot ijk for any knots after the inserted one
     for (auto j = 0; j < mfa.knot_spans.size(); j++)
     {
@@ -365,13 +425,16 @@ SplitSpan(
     }
 
     // add the new knot to nnew_knots and new_knots
-    new_knots(nnew_knots.sum())     = new_knot;
-    nnew_knots(sd)                  = nnew_knots(sd) + 1;
+    size_t pos = 0;                                                 // insertion position in new_knots
+    for (auto i = 0; i <= sd; i++)
+        pos += nnew_knots(i);
+    auto it = new_knots.begin();
+    advance(it, pos);
+    new_knots.insert(it, new_knot);
+    nnew_knots(sd)++;
 
     // debug
-    fprintf(stderr, "\nSplitSpan() after splitting span %ld\n", si);
-    cerr << "nnew_knots:\n" << nnew_knots << endl;
-    cerr << "new_knots:\n"  << new_knots  << endl;
+//     fprintf(stderr, "inserted new knot value=%.3f dim=%d at pos=%ld\n", new_knot, sd, pos);
 
     // debug
 //     cerr << "\n\nAfter splitting spans:" << endl;

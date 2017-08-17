@@ -45,16 +45,19 @@ namespace mfa
                 int       ko = 0);              // starting knot offset
 
         bool ErrorSpans(
-                VectorXi& nnew_knots,           // number of new knots in each dim
-                VectorXf& new_knots,            // new knots (1st dim changes fastest)
-                float err_limit);               // max. allowed error
+                VectorXi&      nnew_knots,      // number of new knots in each dim
+                vector<float>& new_knots,       // new knots (1st dim changes fastest)
+                float          err_limit,       // max. allowed error
+                int            iter);           // iteration number
 
     private:
 
         void SplitSpan(
                 size_t        si,               // id of span to split
                 VectorXi&     nnew_knots,       // number of new knots in each dim
-                VectorXf&     new_knots);       // new knots (1st dim changes fastest)
+                list<float>&  new_knots,        // new knots (1st dim changes fastest)
+                int           iter,             // iteration number
+                vector<bool>& split_spans);     // spans that have already been split in this iteration
 
         int tot_iters;                          // total iterations in flattened decoding of all dimensions
 

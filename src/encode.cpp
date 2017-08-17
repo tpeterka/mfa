@@ -25,13 +25,14 @@ Encoder(MFA& mfa_) :
 void
 mfa::
 Encoder::
-AdaptiveEncode(float err_limit)                         // maximum allowable normalized error
+AdaptiveEncode(float err_limit)                                 // maximum allowable normalized error
 {
-    VectorXi nnew_knots = VectorXi::Zero(mfa.p.size()); // number of new knots in each dim
-    VectorXf new_knots;                                 // new knots (1st dim changes fastest)
+    VectorXi      nnew_knots = VectorXi::Zero(mfa.p.size());    // number of new knots in each dim
+    vector<float> new_knots;                                    // new knots (1st dim changes fastest)
 
     // loop until no change in knots
-    for (int iter = 0; iter < 2; iter++)
+//     for (int iter = 0; ; iter++)
+    for (int iter = 0; iter < 10; iter++)
     {
         fprintf(stderr, "\nIteration %d...\n", iter);
 
@@ -79,10 +80,10 @@ bool
 mfa::
 Encoder::
 FastEncode(
-        VectorXi& nnew_knots,                       // number of new knots in each dim
-        VectorXf& new_knots,                        // new knots (1st dim changes fastest)
-        float     err_limit,                        // max allowable error
-        int       iter)                             // iteration number of caller (for debugging)
+        VectorXi&      nnew_knots,                  // number of new knots in each dim
+        vector<float>& new_knots,                   // new knots (1st dim changes fastest)
+        float          err_limit,                   // max allowable error
+        int            iter)                        // iteration number of caller (for debugging)
 {
     // resize control points based on number of new knots added in previous round
     mfa.ctrl_pts.resize(mfa.tot_nctrl, mfa.domain.cols());
@@ -92,15 +93,14 @@ FastEncode(
 
     // find new knots
     nnew_knots = VectorXi::Zero(mfa.p.size());
-    new_knots.resize(mfa.knot_spans.size());
+    new_knots.resize(0);
     mfa::Decoder decoder(mfa);
-    bool done = decoder.ErrorSpans(nnew_knots, new_knots, err_limit);
+    bool done = decoder.ErrorSpans(nnew_knots, new_knots, err_limit, iter);
 
     fprintf(stderr, "found total %d new knots\n\n", nnew_knots.sum());
 
     // debug
     cerr << "\nnnew_knots:\n" << nnew_knots << endl;
-    cerr << "new_knots:\n"  << new_knots  << endl;
 
     return done;
 }
