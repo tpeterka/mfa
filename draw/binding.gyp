@@ -5,15 +5,11 @@
       "sources": [ "draw.cc" ],
       "include_dirs": [
         "<!(node -e \"require('nan')\")",
-        "/homes/iulian/lib/mfa/include",
-        "/homes/iulian/source/diy/include",
-        "/homes/iulian/3rdparty/eigen/include/eigen3",
-        "/homes/fathom/3rdparty/mpich/3.1/gnu/include"
+        "/Users/tpeterka/software/mfa/install/include",
+        "/Users/tpeterka/software/diy/include",
+        "/usr/local/include/eigen3"
       ],
-      "libraries" : [
-                       "/homes/iulian/lib/mfa/lib/libmfa.so", 
-                       "/homes/fathom/3rdparty/mpich/3.1/gnu/lib/libmpich.so"
-                    ]
+      "libraries" : ["/Users/tpeterka/software/mfa/install/lib/libmfa.dylib"]
     }
   ]
 }

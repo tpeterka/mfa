@@ -43,9 +43,17 @@ int main(int argc, char** argv)
     // get command line arguments
     using namespace opts;
     Options ops(argc, argv);
-    ops
-        >> Option('e', "error",  norm_err_limit,        "maximum normalized error limit")
-        ;
+    ops >> Option('e', "error",  norm_err_limit,        "maximum normalized error limit");
+
+    int pt_dim = 3;
+    ops >> Option('d', "pt_dim", pt_dim, " dimension of points");
+    int dom_dim = 2; // dimension of domain (<= pt_dim)
+    ops >> Option('m', "dom_dim", pt_dim, " dimension of domain");
+    int degree = 4;
+    ops >> Option('p', "degree", degree, "degree in each dimension of domain");
+    int ndomp = 100;
+    ops >> Option('n', "ndomp", ndomp, "  number of input points in each dimension of domain");
+
     if (ops >> Present('h', "help", "show help"))
     {
         if (world.rank() == 0)
@@ -84,19 +92,19 @@ int main(int argc, char** argv)
 //                    { b->generate_sinc_data(cp, d_args); });
 
     // 2d sinc function f(x,y) = sinc(x)sinc(y)
-//     d_args.pt_dim       = 3;
-//     d_args.dom_dim      = 2;
-//     d_args.p[0]         = 4;
-//     d_args.p[1]         = 4;
-//     d_args.ndom_pts[0]  = 500;
-//     d_args.ndom_pts[1]  = 500;
-//     d_args.min[0]       = -4.0 * M_PI;
-//     d_args.min[1]       = -4.0 * M_PI;
-//     d_args.max[0]       = 4.0 * M_PI;
-//     d_args.max[1]       = 4.0 * M_PI;
-//     d_args.s            = 10.0;              // scaling factor on range
-//     master.foreach([&](Block* b, const diy::Master::ProxyWithLink& cp)
-//                    { b->generate_sinc_data(cp, d_args); });
+     d_args.pt_dim       = pt_dim;
+     d_args.dom_dim      = dom_dim;
+     d_args.p[0]         = degree;
+     d_args.p[1]         = degree;
+     d_args.ndom_pts[0]  = ndomp;
+     d_args.ndom_pts[1]  = ndomp;
+     d_args.min[0]       = -4.0 * M_PI;
+     d_args.min[1]       = -4.0 * M_PI;
+     d_args.max[0]       = 4.0 * M_PI;
+     d_args.max[1]       = 4.0 * M_PI;
+     d_args.s            = 10.0;              // scaling factor on range
+     master.foreach([&](Block* b, const diy::Master::ProxyWithLink& cp)
+                    { b->generate_sinc_data(cp, d_args); });
 
    // small 3d sinc function
 //     d_args.pt_dim       = 4;
@@ -117,6 +125,7 @@ int main(int argc, char** argv)
 //     master.foreach([&](Block* b, const diy::Master::ProxyWithLink& cp)
 //                    { b->generate_sinc_data(cp, d_args); });
 
+#if 0
    // 3d sinc function
     d_args.pt_dim       = 4;
     d_args.dom_dim      = 3;
@@ -135,7 +144,7 @@ int main(int argc, char** argv)
     d_args.s            = 10.0;              // scaling factor on range
     master.foreach([&](Block* b, const diy::Master::ProxyWithLink& cp)
                    { b->generate_sinc_data(cp, d_args); });
-
+#endif
    // small 4d sinc function
 //     d_args.pt_dim       = 5;
 //     d_args.dom_dim      = 4;
