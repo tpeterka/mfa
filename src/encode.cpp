@@ -31,8 +31,7 @@ AdaptiveEncode(float err_limit)                                 // maximum allow
     vector<float> new_knots;                                    // new knots (1st dim changes fastest)
 
     // loop until no change in knots
-//     for (int iter = 0; ; iter++)
-    for (int iter = 0; iter < 7; iter++)
+    for (int iter = 0; ; iter++)
     {
         fprintf(stderr, "\nIteration %d...\n", iter);
 
@@ -70,9 +69,8 @@ AdaptiveEncode(float err_limit)                                 // maximum allow
 
 #if 1
 
-// encodes at full dimensionality
-// decodes one full-d point in the center of each control point span and
-// adds new knot spans where error > err_limit
+// encodes at full dimensionality and decodes at full dimensionality
+// decodes full-d points in each knot span and adds new knot spans where error > err_limit
 // returns true if done, ie, no knots are inserted
 bool
 mfa::
@@ -104,18 +102,20 @@ FastEncode(
 
 // single thread version
 //
-// encodes at full dimensionality
-// decodes 1d curves at control points and
-// adds knots error spans from all curves in all directions (into a set)
+// encodes at full dimensionality and decodes in 1d curves
+// decodes 1d curves at control points and adds knot spans from all curves in all directions (into a set)
 // returns true if done, ie, no knots are inserted
+//
+// this version produces an excessive number of knots and control points and is not recommended
+// remove eventually
 bool
 mfa::
 Encoder::
 FastEncode(
-        VectorXi& nnew_knots,                       // number of new knots in each dim
-        VectorXf& new_knots,                        // new knots (1st dim changes fastest)
-        float     err_limit,                        // max allowable error
-        int       iter)                             // iteration number of caller (for debugging)
+        VectorXi&      nnew_knots,                       // number of new knots in each dim
+        vector<float>& new_knots,                        // new knots (1st dim changes fastest)
+        float          err_limit,                        // max allowable error
+        int            iter)                             // iteration number of caller (for debugging)
 {
     // resize control points based on number of new knots added in previous round
     mfa.ctrl_pts.resize(mfa.tot_nctrl, mfa.domain.cols());
@@ -157,14 +157,14 @@ FastEncode(
         // add new knots in the middle of spans with errors
         nnew_knots(k) = err_spans.size();
         auto old_size = new_knots.size();
-        new_knots.conservativeResize(old_size + err_spans.size());    // existing values are preserved
+        new_knots.resize(old_size + err_spans.size());    // existing values are preserved
         size_t i = 0;                                           // index into new_knots
         for (set<int>::iterator it = err_spans.begin(); it != err_spans.end(); ++it)
         {
             // debug
             assert(*it < mfa.nctrl_pts[k]);                     // not trying to go beyond the last span
 
-            new_knots(old_size + i) = (mfa.knots(mfa.ko[k] + *it) + mfa.knots(mfa.ko[k] + *it + 1)) / 2.0;
+            new_knots[old_size + i] = (mfa.knots(mfa.ko[k] + *it) + mfa.knots(mfa.ko[k] + *it + 1)) / 2.0;
             i++;
         }
 
@@ -189,6 +189,8 @@ FastEncode(
 #if 0
 
 // single thread version
+//
+// 1d encoding and 1d decoding
 // adds knots error spans from all curves in all directions (into a set)
 // fast encode using curves instead of high volume in early rounds to determine knot insertions
 // returns true if done, ie, no knots are inserted
@@ -196,10 +198,10 @@ bool
 mfa::
 Encoder::
 FastEncode(
-        VectorXi& nnew_knots,                       // number of new knots in each dim
-        VectorXf& new_knots,                        // new knots (1st dim changes fastest)
-        float     err_limit,                        // max allowable error
-        int       iter)                             // iteration number of caller (for debugging)
+        VectorXi&      nnew_knots,                       // number of new knots in each dim
+        vector<float>& new_knots,                        // new knots (1st dim changes fastest)
+        float          err_limit,                        // max allowable error
+        int            iter)                             // iteration number of caller (for debugging)
 {
     // check and assign main quantities
     int  ndims = mfa.ndom_pts.size();                   // number of domain dimensions
@@ -310,14 +312,14 @@ FastEncode(
         // add new knots in the middle of spans with errors
         nnew_knots(k) = err_spans.size();
         auto old_size = new_knots.size();
-        new_knots.conservativeResize(old_size + err_spans.size());    // existing values are preserved
+        new_knots.resize(old_size + err_spans.size());    // existing values are preserved
         size_t i = 0;                                   // index into new_knots
         for (set<int>::iterator it = err_spans.begin(); it != err_spans.end(); ++it)
         {
             // debug
             assert(*it < mfa.nctrl_pts[k]);                          // not trying to go beyond the last span
 
-            new_knots(old_size + i) = (mfa.knots(mfa.ko[k] + *it) + mfa.knots(mfa.ko[k] + *it + 1)) / 2.0;
+            new_knots[old_size + i] = (mfa.knots(mfa.ko[k] + *it) + mfa.knots(mfa.ko[k] + *it + 1)) / 2.0;
             i++;
         }
 
@@ -351,10 +353,10 @@ bool
 mfa::
 Encoder::
 FastEncode(
-        VectorXi& nnew_knots,                       // number of new knots in each dim
-        VectorXf& new_knots,                        // new knots (1st dim changes fastest)
-        float     err_limit,                        // max allowable error
-        int       iter)                             // iteration number of caller (for debugging)
+        VectorXi&      nnew_knots,                       // number of new knots in each dim
+        vector<float>& new_knots,                        // new knots (1st dim changes fastest)
+        float          err_limit,                        // max allowable error
+        int            iter)                             // iteration number of caller (for debugging)
 {
     // check and assign main quantities
     int  ndims = mfa.ndom_pts.size();                   // number of domain dimensions
@@ -495,14 +497,14 @@ FastEncode(
         // add new knots in the middle of spans with errors
         nnew_knots(k) = err_spans.size();
         auto old_size = new_knots.size();
-        new_knots.conservativeResize(old_size + err_spans.size());    // existing values are preserved
+        new_knots.resize(old_size + err_spans.size());    // existing values are preserved
         size_t i = 0;
         for (set<int>::iterator it = err_spans.begin(); it != err_spans.end(); ++it)
         {
             // debug
             assert(*it < mfa.nctrl_pts[k]);                          // not trying to go beyond the last span
 
-            new_knots(old_size + i) = (mfa.knots(mfa.ko[k] + *it) + mfa.knots(mfa.ko[k] + *it + 1)) / 2.0;
+            new_knots[old_size + i] = (mfa.knots(mfa.ko[k] + *it) + mfa.knots(mfa.ko[k] + *it + 1)) / 2.0;
             i++;
         }
 
@@ -526,7 +528,7 @@ FastEncode(
 
 #endif
 
-#if 0
+#if 1
 
 // TBB version
 // ~2X faster than serial, still expensive to compute curve offsets
@@ -690,7 +692,7 @@ Encode()
 
 #endif
 
-#if 1
+#if 0
 
 // serial version
 //
@@ -820,7 +822,7 @@ Encode()
         NtN = N.transpose() * N;
 
         // debug
-        cerr << "k " << k << " NtN:\n" << NtN << endl;
+//         cerr << "k " << k << " NtN:\n" << NtN << endl;
 
         // R is the residual matrix needed for solving NtN * P = R
         MatrixXf R(n(k) - 1, mfa.domain.cols());
@@ -841,174 +843,6 @@ Encode()
             // compute the one curve of control points
             CtrlCurve(N, NtN, R, P, n, k, co[j], cs, to[j], temp_ctrl0, temp_ctrl1);
         }
-
-        // adjust offsets and strides for next dimension
-        ntemp_ctrl(k) = mfa.nctrl_pts(k);
-        cs *= ntemp_ctrl(k);
-
-        // free R, NtN, and P
-        R.resize(0, 0);
-        NtN.resize(0, 0);
-        P.resize(0, 0);
-
-        // print progress
-        fprintf(stderr, "\33[2K\rdimension %ld of %d encoded\n", k + 1, ndims);
-
-    }                                                      // domain dimensions
-
-    fprintf(stderr,"\n");
-
-    // debug
-//     cerr << "ctrl_pts:\n" << mfa.ctrl_pts << endl;
-}
-
-#endif
-
-#if 0
-
-// original version of encode, serial and computes co on the fly (remove eventually)
-//
-// approximate a NURBS hypervolume of arbitrary dimension for a given input data set
-// weights are all 1 for now
-// n-d version of algorithm 9.7, Piegl & Tiller (P&T) p. 422
-//
-// the outputs, ctrl_pts and knots, are resized by this function;  caller need not resize them
-//
-// There are two types of dimensionality:
-// 1. The dimensionality of the NURBS tensor product (p.size())
-// (1D = NURBS curve, 2D = surface, 3D = volumem 4D = hypervolume, etc.)
-// 2. The dimensionality of individual domain and control points (domain.cols())
-// p.size() should be < domain.cols()
-void
-mfa::
-Encoder::
-Encode()
-{
-    // TODO: some of these quantities mirror this in the mfa
-
-    // check and assign main quantities
-    VectorXi n;                             // number of control point spans in each domain dim
-    VectorXi m;                             // number of input data point spans in each domain dim
-    int      ndims = mfa.ndom_pts.size();       // number of domain dimensions
-    size_t   cs    = 1;                     // stride for domain points in curve in cur. dim
-
-    Quants(n, m);
-
-    // control points
-    mfa.ctrl_pts.resize(mfa.tot_nctrl, mfa.domain.cols());
-
-    // 2 buffers of temporary control points
-    // double buffer needed to write output curves of current dim without changing its input pts
-    // temporary control points need to begin with size as many as the input domain points
-    // except for the first dimension, which can be the correct number of control points
-    // because the input domain points are converted to control points one dimension at a time
-    // TODO: need to find a more space-efficient way
-    size_t tot_ntemp_ctrl = 1;
-    for (size_t k = 0; k < ndims; k++)
-        tot_ntemp_ctrl *= (k == 0 ? mfa.nctrl_pts(k) : mfa.ndom_pts(k));
-    MatrixXf temp_ctrl0 = MatrixXf::Zero(tot_ntemp_ctrl, mfa.domain.cols());
-    MatrixXf temp_ctrl1 = MatrixXf::Zero(tot_ntemp_ctrl, mfa.domain.cols());
-
-    VectorXi ntemp_ctrl = mfa.ndom_pts;         // current num of temp control pts in each dim
-
-    float  max_err_val;                     // maximum solution error in final dim of all curves
-
-    for (size_t k = 0; k < ndims; k++)      // for all domain dimensions
-    {
-        // TODO:
-        // Investigate whether in later dimensions, when input data points are replaced by
-        // control points, need new knots and params computed.
-        // In the next dimension, the coordinates of the dimension didn't change,
-        // but the chord length did, as control points moved away from the data points in
-        // the prior dim. Need to determine how much difference it would make to recompute
-        // params and knots for the new input points
-
-        // compute the matrix N, eq. 9.66 in P&T
-        // N is a matrix of (m - 1) x (n - 1) scalars that are the basis function coefficients
-        //  _                                _
-        // |  N_1(u[1])   ... N_{n-1}(u[1])   |
-        // |     ...      ...      ...        |
-        // |  N_1(u[m-1]) ... N_{n-1}(u[m-1]) |
-        //  -                                -
-        // TODO: N is going to be very sparse when it is large: switch to sparse representation
-        // N has semibandwidth < p  nonzero entries across diagonal
-        MatrixXf N = MatrixXf::Zero(m(k) - 1, n(k) - 1); // coefficients matrix
-
-        for (int i = 1; i < m(k); i++)            // the rows of N
-        {
-            int span = mfa.FindSpan(k, mfa.params(mfa.po[k] + i), mfa.ko[k]) - mfa.ko[k];   // relative to ko
-            assert(span <= n(k));            // sanity
-            mfa.BasisFuns(k, mfa.params(mfa.po[k] + i), span, N, 1, n(k) - 1, i - 1);
-        }
-
-        // debug
-//         cerr << "k " << k << " N:\n" << N << endl;
-
-        // compute the product Nt x N
-        // TODO: NtN is going to be very sparse when it is large: switch to sparse representation
-        // NtN has semibandwidth < p + 1 nonzero entries across diagonal
-        MatrixXf NtN(n(k) - 1, n(k) - 1);
-        NtN = N.transpose() * N;
-
-        // debug
-//         cerr << "k " << k << " NtN:\n" << NtN << endl;
-
-        // R is the residual matrix needed for solving NtN * P = R
-        MatrixXf R(n(k) - 1, mfa.domain.cols());
-
-        // P are the unknown interior control points and the solution to NtN * P = R
-        // NtN is positive definite -> do not need pivoting
-        // TODO: use a common representation for P and ctrl_pts to avoid copying
-        MatrixXf P(n(k) - 1, mfa.domain.cols());
-
-        // number of curves in this dimension
-        size_t ncurves;
-        ncurves = 1;
-        for (int i = 0; i < ndims; i++)
-        {
-            if (i < k)
-                ncurves *= mfa.nctrl_pts(i);
-            else if (i > k)
-                ncurves *= mfa.ndom_pts(i);
-            // NB: current dimension contributes no curves, hence no i == k case
-        }
-        // debug
-        // cerr << "k: " << k << " ncurves: " << ncurves << endl;
-        // cerr << "ndom_pts:\n" << mfa.ndom_pts << endl;
-        // cerr << "ntemp_ctrl:\n" << ntemp_ctrl << endl;
-        // if (k > 0 && k % 2 == 1) // input to odd dims is temp_ctrl0
-        //     cerr << "temp_ctrl0:\n" << temp_ctrl0 << endl;
-        // if (k > 0 && k % 2 == 0) // input to even dims is temp_ctrl1
-        //     cerr << "temp_ctrl1:\n" << temp_ctrl1 << endl;
-
-        size_t co = 0, to = 0;                    // starting ofst for curve & ctrl pts in cur. dim
-        size_t coo = 0, too = 0;                  // co and to at start of contiguous sequence
-        for (size_t j = 0; j < ncurves; j++)      // for all the curves in this dimension
-        {
-            // print progress
-            if (j > 0 && j > 100 && j % (ncurves / 100) == 0)
-                fprintf(stderr, "\r dimension %ld: %.0f %% encoded (%ld out of %ld curves)",
-                        k, (float)j / (float)ncurves * 100, j, ncurves);
-
-            // compute the one curve of control points
-            CtrlCurve(N, NtN, R, P, n, k, co, cs, to, temp_ctrl0, temp_ctrl1);
-
-            // adjust offsets for the next curve
-            if ((j + 1) % cs)
-                co++;
-            else
-            {
-                co = coo + cs * ntemp_ctrl(k);
-                coo = co;
-            }
-            if ((j + 1) % cs)
-                to++;
-            else
-            {
-                to = too + cs * mfa.nctrl_pts(k);
-                too = to;
-            }
-        }                                                  // curves in this dimension
 
         // adjust offsets and strides for next dimension
         ntemp_ctrl(k) = mfa.nctrl_pts(k);
