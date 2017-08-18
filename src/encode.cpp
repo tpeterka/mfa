@@ -32,7 +32,7 @@ AdaptiveEncode(float err_limit)                                 // maximum allow
 
     // loop until no change in knots
 //     for (int iter = 0; ; iter++)
-    for (int iter = 0; iter < 10; iter++)
+    for (int iter = 0; iter < 7; iter++)
     {
         fprintf(stderr, "\nIteration %d...\n", iter);
 
@@ -61,12 +61,10 @@ AdaptiveEncode(float err_limit)                                 // maximum allow
             fprintf(stderr, "\n\nKnot insertion done after %d iterations; control points would outnumber input points.\n", iter + 1);
             break;
         }
-
-        mfa.InsertKnots(nnew_knots, new_knots);
     }
 
     // final full encoding needed after last knot insertion above
-    fprintf(stderr, "Encoding in full %ldD\n", mfa.p.size());
+    fprintf(stderr, "\nEncoding in full %ldD\n", mfa.p.size());
     Encode();
 }
 
@@ -96,11 +94,6 @@ FastEncode(
     new_knots.resize(0);
     mfa::Decoder decoder(mfa);
     bool done = decoder.ErrorSpans(nnew_knots, new_knots, err_limit, iter);
-
-    fprintf(stderr, "found total %d new knots\n\n", nnew_knots.sum());
-
-    // debug
-    cerr << "\nnnew_knots:\n" << nnew_knots << endl;
 
     return done;
 }
@@ -181,6 +174,8 @@ FastEncode(
         ts *= mfa.nctrl_pts(k);
     }                                                          // domain dimensions
     fprintf(stderr, "\n");
+
+    mfa.InsertKnots(nnew_knots, new_knots);
 
     // debug
 //     cerr << "\nnnew_knots:\n" << nnew_knots << endl;
@@ -329,6 +324,8 @@ FastEncode(
         // print progress
         fprintf(stderr, "\rdimension %ld of %d encoded\n", k + 1, ndims);
     }                                                      // domain dimensions
+
+    mfa.InsertKnots(nnew_knots, new_knots);
 
     // debug
 //     cerr << "\nnnew_knots:\n" << nnew_knots << endl;
@@ -518,6 +515,8 @@ FastEncode(
         fprintf(stderr, "\rdimension %ld of %d encoded\n", k + 1, ndims);
     }                                                      // domain dimensions
 
+    mfa.InsertKnots(nnew_knots, new_knots);
+
     // debug
 //     cerr << "\nnnew_knots:\n" << nnew_knots << endl;
 //     cerr << "new_knots:\n"  << new_knots  << endl;
@@ -527,7 +526,7 @@ FastEncode(
 
 #endif
 
-#if 1
+#if 0
 
 // TBB version
 // ~2X faster than serial, still expensive to compute curve offsets
@@ -691,7 +690,7 @@ Encode()
 
 #endif
 
-#if 0
+#if 1
 
 // serial version
 //
@@ -711,13 +710,11 @@ mfa::
 Encoder::
 Encode()
 {
-    // TODO: some of these quantities mirror this in the mfa
-
     // check and assign main quantities
-    VectorXi n;                             // number of control point spans in each domain dim
-    VectorXi m;                             // number of input data point spans in each domain dim
+    VectorXi n;                                 // number of control point spans in each domain dim
+    VectorXi m;                                 // number of input data point spans in each domain dim
     int      ndims = mfa.ndom_pts.size();       // number of domain dimensions
-    size_t   cs    = 1;                     // stride for domain points in curve in cur. dim
+    size_t   cs    = 1;                         // stride for domain points in curve in cur. dim
 
     Quants(n, m);
 
@@ -737,8 +734,6 @@ Encode()
     MatrixXf temp_ctrl1 = MatrixXf::Zero(tot_ntemp_ctrl, mfa.domain.cols());
 
     VectorXi ntemp_ctrl = mfa.ndom_pts;         // current num of temp control pts in each dim
-
-    float  max_err_val;                         // maximum solution error in final dim of all curves
 
     for (size_t k = 0; k < ndims; k++)          // for all domain dimensions
     {
@@ -810,7 +805,7 @@ Encode()
 
         for (int i = 1; i < m(k); i++)            // the rows of N
         {
-            int span = mfa.FindSpan(k, mfa.params(mfa.po[k] + i), mfa.ko[k]) - mfa.ko[k]);  // relative to ko
+            int span = mfa.FindSpan(k, mfa.params(mfa.po[k] + i), mfa.ko[k]) - mfa.ko[k];  // relative to ko
             assert(span <= n(k));            // sanity
             mfa.BasisFuns(k, mfa.params(mfa.po[k] + i), span, N, 1, n(k) - 1, i - 1);
         }
@@ -825,7 +820,7 @@ Encode()
         NtN = N.transpose() * N;
 
         // debug
-//         cerr << "k " << k << " NtN:\n" << NtN << endl;
+        cerr << "k " << k << " NtN:\n" << NtN << endl;
 
         // R is the residual matrix needed for solving NtN * P = R
         MatrixXf R(n(k) - 1, mfa.domain.cols());

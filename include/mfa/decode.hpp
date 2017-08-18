@@ -53,11 +53,11 @@ namespace mfa
     private:
 
         void SplitSpan(
-                size_t        si,               // id of span to split
-                VectorXi&     nnew_knots,       // number of new knots in each dim
-                list<float>&  new_knots,        // new knots (1st dim changes fastest)
-                int           iter,             // iteration number
-                vector<bool>& split_spans);     // spans that have already been split in this iteration
+                size_t         si,              // id of span to split
+                VectorXi&      nnew_knots,      // number of new knots in each dim
+                vector<float>& new_knots,       // new knots (1st dim changes fastest)
+                int            iter,            // iteration number
+                vector<bool>&  split_spans);    // spans that have already been split in this iteration
 
         int tot_iters;                          // total iterations in flattened decoding of all dimensions
 

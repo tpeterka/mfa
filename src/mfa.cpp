@@ -338,7 +338,7 @@ mfa::
 MFA::
 BasisFuns(int       cur_dim,            // current dimension
           float     u,                  // parameter value
-          int       span,               // index of span in the knots vector containing u
+          int       span,               // index of span in the knots vector containing u, relative to ko
           MatrixXf& N,                  // matrix of (output) basis function values
           int       start_n,            // starting basis function N_{start_n} to compute
           int       end_n,              // ending basis function N_{end_n} to compute
@@ -350,18 +350,11 @@ BasisFuns(int       cur_dim,            // current dimension
     vector<float> left(p(cur_dim) + 1);               // temporary recurrence results
     vector<float> right(p(cur_dim) + 1);
 
-    // debug
-    // fprintf(stderr, "param=%.3f span=%d\n", u, span);
-
     // fill N
     for (int j = 1; j <= p(cur_dim); j++)
     {
-        left[j]  = u - knots(span + 1 - j);
-        right[j] = knots(span + j) - u;
-
-        // debug
-        // fprintf(stderr, "min: knot[%d]=%.3f max: knot[%d]=%.3f\n",
-        //         span + 1 - j, knots(span + 1 - j), span + j, knots(span + j));
+        left[j]  = u - knots(span + ko[cur_dim]+ 1 - j);
+        right[j] = knots(span + ko[cur_dim] + j) - u;
 
         float saved = 0.0;
         for (int r = 0; r < j; r++)
@@ -372,12 +365,6 @@ BasisFuns(int       cur_dim,            // current dimension
         }
         scratch[j] = saved;
     }
-
-    // debug
-    // cerr << "scratch: ";
-    // for (int i = 0; i < p(cur_dim) + 1; i++)
-    //     cerr << scratch[i] << " ";
-    // cerr << endl;
 
     // copy scratch to N
     for (int j = 0; j < p(cur_dim) + 1; j++)
