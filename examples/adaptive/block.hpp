@@ -85,6 +85,8 @@ struct Block
             diy::save(bb, b->knots);
             diy::save(bb, b->approx);
             diy::save(bb, b->errs);
+            diy::save(bb, b->span_mins);
+            diy::save(bb, b->span_maxs);
         }
     static
     void load(void* b_, diy::BinaryBuffer& bb)
@@ -101,6 +103,8 @@ struct Block
             diy::load(bb, b->knots);
             diy::load(bb, b->approx);
             diy::load(bb, b->errs);
+            diy::load(bb, b->span_mins);
+            diy::load(bb, b->span_maxs);
         }
     // f(x,y,z,...) = 1
     void generate_constant_data(const diy::Master::ProxyWithLink& cp,
@@ -1082,11 +1086,17 @@ struct Block
             fprintf(stderr, "|normalized max_err| = %e\n", fabs(max_err));
         }
 
+    // save knot span domains for later comparison with error field
+    void knot_span_domains(const diy::Master::ProxyWithLink& cp)
+        {
+            mfa->KnotSpanDomains(span_mins, span_maxs);
+        }
+
     void print_block(const diy::Master::ProxyWithLink& cp)
         {
             fprintf(stderr, "\n--- Final block results ---\n");
             // cerr << "domain\n" << domain << endl;
-            cerr << "nctrl_pts:\n" << nctrl_pts << endl;
+//             cerr << "nctrl_pts:\n" << nctrl_pts << endl;
 //             cerr << ctrl_pts.rows() << " control points\n" << ctrl_pts << endl;
             cerr << knots.size() << " knots\n" << knots << endl;
             // cerr << approx.rows() << " approximated points\n" << approx << endl;
@@ -1107,6 +1117,9 @@ struct Block
     MatrixXf ctrl_pts;                       // NURBS control points (1st dim changes fastest)
     VectorXf knots;                          // NURBS knots (1st dim changes fastest)
     MatrixXf approx;                         // points in approximated volume
+    MatrixXf span_mins;                      // minimum domain points of all knot spans
+    MatrixXf span_maxs;                      // maximum domain points of all knot spans
+
                                              // (same number as input points, for rendering only)
     float    max_err;                        // maximum (abs value) distance from input points to curve
     MatrixXf errs;                           // error field (abs. value, not normalized by data range)

@@ -131,6 +131,44 @@ MFA(VectorXi& p_,             // polynomial degree in each dimension
     KnotSpanIndex();
 }
 
+// get knot span min/max domain points (for debugging)
+void
+mfa::
+MFA::
+KnotSpanDomains(
+        MatrixXf& span_mins,                      // minimum domain points of all knot spans
+        MatrixXf& span_maxs)                      // maximum domain points of all knot spans
+{
+    // (re)compute knot span index from current set of knots
+    knot_spans.resize(0);
+    KnotSpanIndex();
+
+    // total number of internal knot spans = product of number of internal knot spans over all dims
+    size_t int_nspans = 1;                  // number of internal (unique) spans
+    for (auto i = 0; i < p.size(); i++)
+        int_nspans *= (nctrl_pts(i) - p(i));
+
+    span_mins.resize(int_nspans, p.size());
+    span_maxs.resize(int_nspans, p.size());
+
+    // copy out extent info
+    for (auto i = 0; i < int_nspans; i++)
+    {
+        size_t idx;
+        ijk2idx(knot_spans[i].min_param_ijk, idx);
+        span_mins.row(i) = domain.block(idx, 0, 1, p.size());
+        ijk2idx(knot_spans[i].max_param_ijk, idx);
+        span_maxs.row(i) = domain.block(idx, 0, 1, p.size());
+    }
+
+    // debug
+    for (auto i = 0; i < int_nspans; i++)
+    {
+        cerr << "\nspan " << i << " min:\n" << span_mins(i) << endl;
+        cerr << "max:\n" << span_maxs(i) << endl;
+    }
+}
+
 // initialize knot span index
 void
 mfa::

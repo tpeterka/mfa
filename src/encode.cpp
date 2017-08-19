@@ -38,7 +38,7 @@ AdaptiveEncode(float err_limit)                                 // maximum allow
         // debug
 //         cerr << "current knots:\n" << mfa.knots << endl;
 
-        bool done = FastEncode(nnew_knots, new_knots, err_limit, iter);
+        bool done = NewKnots(nnew_knots, new_knots, err_limit, iter);
 
         // no new knots to be added
         if (done)
@@ -75,7 +75,7 @@ AdaptiveEncode(float err_limit)                                 // maximum allow
 bool
 mfa::
 Encoder::
-FastEncode(
+NewKnots(
         VectorXi&      nnew_knots,                  // number of new knots in each dim
         vector<float>& new_knots,                   // new knots (1st dim changes fastest)
         float          err_limit,                   // max allowable error
@@ -111,7 +111,7 @@ FastEncode(
 bool
 mfa::
 Encoder::
-FastEncode(
+NewKNots(
         VectorXi&      nnew_knots,                       // number of new knots in each dim
         vector<float>& new_knots,                        // new knots (1st dim changes fastest)
         float          err_limit,                        // max allowable error
@@ -197,7 +197,7 @@ FastEncode(
 bool
 mfa::
 Encoder::
-FastEncode(
+NewKnots(
         VectorXi&      nnew_knots,                       // number of new knots in each dim
         vector<float>& new_knots,                        // new knots (1st dim changes fastest)
         float          err_limit,                        // max allowable error
@@ -342,7 +342,7 @@ FastEncode(
 
 // TBB version
 //
-// fast encode using curves instead of high volume in early rounds to determine knot insertions
+// 1d encoding and 1d decoding
 // for each dimension, finds worst curve for new knots (not new knots from all curves)
 // this is less accurate than inserting all new knots from all curves into a set (as in the serial
 // version)
@@ -352,7 +352,7 @@ FastEncode(
 bool
 mfa::
 Encoder::
-FastEncode(
+NewKnots(
         VectorXi&      nnew_knots,                       // number of new knots in each dim
         vector<float>& new_knots,                        // new knots (1st dim changes fastest)
         float          err_limit,                        // max allowable error
