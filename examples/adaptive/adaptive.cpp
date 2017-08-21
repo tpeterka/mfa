@@ -18,7 +18,7 @@
 #include <diy/assigner.hpp>
 #include <diy/io/block.hpp>
 
-#include "block.hpp"
+#include "../block.hpp"
 #include "../opts.h"
 
 using namespace std;
@@ -36,14 +36,22 @@ int main(int argc, char** argv)
     int mem_blocks  = -1;                    // everything in core for now
     int num_threads = 1;                     // needed in order to do timing
 
-    float norm_err_limit = 1.0;              // maximum normalized error limit
+    // default command line arguments
+    float norm_err_limit = 1.0;                 // maximum normalized error limit
+    int   pt_dim         = 3;                   // dimension of input points
+    int   dom_dim        = 2;                   // dimension of domain (<= pt_dim)
+    int   degree         = 4;                   // degree (same for all dims)
+    int   ndomp          = 100;                 // input number of domain points (same for all dims)
 
     // get command line arguments
     using namespace opts;
     Options ops(argc, argv);
-    ops
-        >> Option('e', "error",  norm_err_limit,        "maximum normalized error limit")
-        ;
+    ops >> Option('e', "error",  norm_err_limit, "maximum normalized error limit");
+    ops >> Option('d', "pt_dim", pt_dim, " dimension of points");
+    ops >> Option('m', "dom_dim", dom_dim, " dimension of domain");
+    ops >> Option('p', "degree", degree, "degree in each dimension of domain");
+    ops >> Option('n', "ndomp", ndomp, "  number of input points in each dimension of domain");
+
     if (ops >> Present('h', "help", "show help"))
     {
         if (world.rank() == 0)
@@ -66,119 +74,62 @@ int main(int argc, char** argv)
 
     DomainArgs d_args;
 
-    // 1d sinc function f(x) = sinc(x)
-//     d_args.pt_dim       = 2;
-//     d_args.dom_dim      = 1;
-//     d_args.p[0]         = 4;
-//     d_args.ndom_pts[0]  = 500;
+    // 1d sinc function f(x) = sin(x)/x
+//     d_args.pt_dim       = pt_dim;
+//     d_args.dom_dim      = dom_dim;
+//     d_args.p[0]         = degree;
+//     d_args.ndom_pts[0]  = ndomp;
 //     d_args.min[0]       = -4.0 * M_PI;
 //     d_args.max[0]       = 4.0 * M_PI;
 //     d_args.s            = 10.0;              // scaling factor on range
 //     master.foreach([&](Block* b, const diy::Master::ProxyWithLink& cp)
 //                    { b->generate_sinc_data(cp, d_args); });
-
-    // small 2d sinc function f(x,y) = sinc(x)sinc(y)
-    d_args.pt_dim       = 3;
-    d_args.dom_dim      = 2;
-    d_args.p[0]         = 4;
-    d_args.p[1]         = 4;
-    d_args.ndom_pts[0]  = 100;
-    d_args.ndom_pts[1]  = 100;
-    d_args.min[0]       = -4.0 * M_PI;
-    d_args.min[1]       = -4.0 * M_PI;
-    d_args.max[0]       = 4.0 * M_PI;
-    d_args.max[1]       = 4.0 * M_PI;
-    d_args.s            = 10.0;              // scaling factor on range
-    master.foreach([&](Block* b, const diy::Master::ProxyWithLink& cp)
-                   { b->generate_sinc_data(cp, d_args); });
 
     // 2d sinc function f(x,y) = sinc(x)sinc(y)
-//     d_args.pt_dim       = 3;
-//     d_args.dom_dim      = 2;
-//     d_args.p[0]         = 4;
-//     d_args.p[1]         = 4;
-//     d_args.ndom_pts[0]  = 500;
-//     d_args.ndom_pts[1]  = 500;
-//     d_args.min[0]       = -4.0 * M_PI;
-//     d_args.min[1]       = -4.0 * M_PI;
-//     d_args.max[0]       = 4.0 * M_PI;
-//     d_args.max[1]       = 4.0 * M_PI;
-//     d_args.s            = 10.0;              // scaling factor on range
-//     master.foreach([&](Block* b, const diy::Master::ProxyWithLink& cp)
-//                    { b->generate_sinc_data(cp, d_args); });
-
-   // small 3d sinc function
-//     d_args.pt_dim       = 4;
-//     d_args.dom_dim      = 3;
-//     d_args.p[0]         = 4;
-//     d_args.p[1]         = 4;
-//     d_args.p[2]         = 4;
-//     d_args.ndom_pts[0]  = 5;
-//     d_args.ndom_pts[1]  = 5;
-//     d_args.ndom_pts[2]  = 5;
-//     d_args.min[0]       = -4.0 * M_PI;
-//     d_args.min[1]       = -4.0 * M_PI;
-//     d_args.min[2]       = -4.0 * M_PI;
-//     d_args.max[0]       = 4.0 * M_PI;
-//     d_args.max[1]       = 4.0 * M_PI;
-//     d_args.max[2]       = 4.0 * M_PI;
-//     d_args.s            = 10.0;              // scaling factor on range
-//     master.foreach([&](Block* b, const diy::Master::ProxyWithLink& cp)
-//                    { b->generate_sinc_data(cp, d_args); });
+     d_args.pt_dim       = pt_dim;
+     d_args.dom_dim      = dom_dim;
+     d_args.p[0]         = degree;
+     d_args.p[1]         = degree;
+     d_args.ndom_pts[0]  = ndomp;
+     d_args.ndom_pts[1]  = ndomp;
+     d_args.min[0]       = -4.0 * M_PI;
+     d_args.min[1]       = -4.0 * M_PI;
+     d_args.max[0]       = 4.0 * M_PI;
+     d_args.max[1]       = 4.0 * M_PI;
+     d_args.s            = 10.0;              // scaling factor on range
+     master.foreach([&](Block* b, const diy::Master::ProxyWithLink& cp)
+                    { b->generate_sinc_data(cp, d_args); });
 
    // 3d sinc function
-//     d_args.pt_dim       = 4;
-//     d_args.dom_dim      = 3;
-//     d_args.p[0]         = 4;
-//     d_args.p[1]         = 4;
-//     d_args.p[2]         = 4;
-//     d_args.ndom_pts[0]  = 100;
-//     d_args.ndom_pts[1]  = 100;
-//     d_args.ndom_pts[2]  = 100;
+//     d_args.pt_dim       = pt_dim;
+//     d_args.dom_dim      = dom_dim;
+//     d_args.p[0]         = degree;
+//     d_args.p[1]         = degree;
+//     d_args.p[2]         = degree;
+//     d_args.ndom_pts[0]  = ndomp;
+//     d_args.ndom_pts[1]  = ndomp;
+//     d_args.ndom_pts[2]  = ndomp;
 //     d_args.min[0]       = -4.0 * M_PI;
 //     d_args.min[1]       = -4.0 * M_PI;
 //     d_args.min[2]       = -4.0 * M_PI;
 //     d_args.max[0]       = 4.0 * M_PI;
 //     d_args.max[1]       = 4.0 * M_PI;
 //     d_args.max[2]       = 4.0 * M_PI;
-//     d_args.s            = 10.0;              // scaling factor on range
-//     master.foreach([&](Block* b, const diy::Master::ProxyWithLink& cp)
-//                    { b->generate_sinc_data(cp, d_args); });
-
-   // small 4d sinc function
-//     d_args.pt_dim       = 5;
-//     d_args.dom_dim      = 4;
-//     d_args.p[0]         = 4;
-//     d_args.p[1]         = 4;
-//     d_args.p[2]         = 4;
-//     d_args.p[3]         = 4;
-//     d_args.ndom_pts[0]  = 5;
-//     d_args.ndom_pts[1]  = 5;
-//     d_args.ndom_pts[2]  = 5;
-//     d_args.ndom_pts[3]  = 5;
-//     d_args.min[0]       = -4.0 * M_PI;
-//     d_args.min[1]       = -4.0 * M_PI;
-//     d_args.min[2]       = -4.0 * M_PI;
-//     d_args.min[3]       = -4.0 * M_PI;
-//     d_args.max[0]       = 4.0 * M_PI;
-//     d_args.max[1]       = 4.0 * M_PI;
-//     d_args.max[2]       = 4.0 * M_PI;
-//     d_args.max[3]       = 4.0 * M_PI;
 //     d_args.s            = 10.0;              // scaling factor on range
 //     master.foreach([&](Block* b, const diy::Master::ProxyWithLink& cp)
 //                    { b->generate_sinc_data(cp, d_args); });
 
    // 4d sinc function
-//     d_args.pt_dim       = 5;
-//     d_args.dom_dim      = 4;
-//     d_args.p[0]         = 4;
-//     d_args.p[1]         = 4;
-//     d_args.p[2]         = 4;
-//     d_args.p[3]         = 4;
-//     d_args.ndom_pts[0]  = 100;
-//     d_args.ndom_pts[1]  = 100;
-//     d_args.ndom_pts[2]  = 100;
-//     d_args.ndom_pts[3]  = 100;
+//     d_args.pt_dim       = pt_dim;
+//     d_args.dom_dim      = dom_dim;
+//     d_args.p[0]         = degree;
+//     d_args.p[1]         = degree;
+//     d_args.p[2]         = degree;
+//     d_args.p[3]         = degree;
+//     d_args.ndom_pts[0]  = ndomp;
+//     d_args.ndom_pts[1]  = ndomp;
+//     d_args.ndom_pts[2]  = ndomp;
+//     d_args.ndom_pts[3]  = ndomp;
 //     d_args.min[0]       = -4.0 * M_PI;
 //     d_args.min[1]       = -4.0 * M_PI;
 //     d_args.min[2]       = -4.0 * M_PI;
