@@ -80,9 +80,6 @@ MFA(VectorXi& p_,             // polynomial degree in each dimension
     params.resize(tot_nparams);
     Params();
 
-    // debug
-//     cerr << "params:\n" << params << endl;
-
     // compute knots
     knots.resize(tot_nknots);
     Knots();
@@ -108,9 +105,6 @@ MFA(VectorXi& p_,             // polynomial degree in each dimension
 
         co[k][0] = 0;
 
-        // debug
-//         fprintf(stderr, "co[%d][0]=%ld\n", k, co[k][0]);
-
         for (auto j = 1; j < ncurves; j++)
         {
             // adjust offsets for the next curve
@@ -121,9 +115,6 @@ MFA(VectorXi& p_,             // polynomial degree in each dimension
                 co[k][j] = coo + ds[k] * ndom_pts(k);
                 coo = co[k][j];
             }
-
-            // debug
-//             fprintf(stderr, "co[%d][%d]=%ld\n", k, j, co[k][j]);
         }
     }
 
@@ -162,11 +153,11 @@ KnotSpanDomains(
     }
 
     // debug
-    for (auto i = 0; i < int_nspans; i++)
-    {
-        cerr << "\nspan " << i << " min:\n" << span_mins.row(i) << endl;
-        cerr << "max:\n" << span_maxs.row(i) << endl;
-    }
+//     for (auto i = 0; i < int_nspans; i++)
+//     {
+//         cerr << "\nspan " << i << " min:\n" << span_mins.row(i) << endl;
+//         cerr << "max:\n" << span_maxs.row(i) << endl;
+//     }
 }
 
 // initialize knot span index
