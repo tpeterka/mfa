@@ -48,9 +48,22 @@ namespace mfa
 
     private:
 
-        size_t  max_num_curves;             // max num. curves per dimension to check in curve version
+        bool ErrorSpans(
+                VectorXi&      nnew_knots,      // number of new knots in each dim
+                vector<float>& new_knots,       // new knots (1st dim changes fastest)
+                float          err_limit,       // max. allowed error
+                int            iter);           // iteration number
 
-        MFA& mfa;                           // the mfa object
+        void SplitSpan(
+                size_t         si,              // id of span to split
+                VectorXi&      nnew_knots,      // number of new knots in each dim
+                vector<float>& new_knots,       // new knots (1st dim changes fastest)
+                int            iter,            // iteration number
+                vector<bool>&  split_spans);    // spans that have already been split in this iteration
+
+        size_t  max_num_curves;                 // max num. curves per dimension to check in curve version
+
+        MFA& mfa;                               // the mfa object
     };
 }
 

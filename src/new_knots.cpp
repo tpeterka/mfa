@@ -44,96 +44,9 @@ NewKnots_full(
     // find new knots
     nnew_knots = VectorXi::Zero(mfa.p.size());
     new_knots.resize(0);
-    mfa::Decoder decoder(mfa);
-    bool done = decoder.ErrorSpans(nnew_knots, new_knots, err_limit, iter);
+    bool done = ErrorSpans(nnew_knots, new_knots, err_limit, iter);
 
     return done;
-}
-
-// single thread version
-//
-// encodes at full dimensionality and decodes in 1d curves
-// decodes 1d curves at control points and adds knot spans from all curves in all directions (into a set)
-// returns true if done, ie, no knots are inserted
-//
-// this version produces an excessive number of knots and control points and is not recommended
-// remove eventually
-bool
-mfa::
-NewKnots::
-NewKnots_hybrid(
-        VectorXi&      nnew_knots,                       // number of new knots in each dim
-        vector<float>& new_knots,                        // new knots (1st dim changes fastest)
-        float          err_limit,                        // max allowable error
-        int            iter)                             // iteration number of caller (for debugging)
-{
-    mfa::Encoder encoder(mfa);
-
-    // resize control points based on number of new knots added in previous round
-    mfa.ctrl_pts.resize(mfa.tot_nctrl, mfa.domain.cols());
-
-    // full n-d encoding
-    encoder.Encode();
-
-    size_t ts = 1;                                              // control point stride
-
-    // find new knots
-    nnew_knots = VectorXi::Zero(mfa.p.size());
-    new_knots.resize(0);
-    for (size_t k = 0; k < mfa.p.size(); k++)                   // for all domain dimensions
-    {
-        set<int> err_spans;                                     // all error spans so far in this dim.
-        size_t ncurves = mfa.ctrl_pts.rows() / mfa.nctrl_pts(k);    // number of curves in this dimension
-
-        // offsets for starting control point for each curve in this dimension
-        vector<size_t> to(ncurves);
-        size_t too     = 0;                                     // to at start of contiguous sequence
-        to[0]          = 0;
-
-        for (auto j = 1; j < ncurves; j++)
-        {
-            // adjust offsets for the next curve
-            if (j % ts)
-                to[j] = to[j - 1] + 1;
-            else
-            {
-                to[j] = too + ts * mfa.nctrl_pts(k);
-                too   = to[j];
-            }
-        }
-
-        // find spans with error > err_limit
-        for (size_t j = 0; j < ncurves; j++)
-            size_t nerr = encoder.ErrorCtrlCurve(k, to[j], err_spans, err_limit);
-
-        // add new knots in the middle of spans with errors
-        nnew_knots(k) = err_spans.size();
-        auto old_size = new_knots.size();
-        new_knots.resize(old_size + err_spans.size());    // existing values are preserved
-        size_t i = 0;                                           // index into new_knots
-        for (set<int>::iterator it = err_spans.begin(); it != err_spans.end(); ++it)
-        {
-            // debug
-            assert(*it < mfa.nctrl_pts[k]);                     // not trying to go beyond the last span
-
-            new_knots[old_size + i] = (mfa.knots(mfa.ko[k] + *it) + mfa.knots(mfa.ko[k] + *it + 1)) / 2.0;
-            i++;
-        }
-
-        // print progress
-        fprintf(stderr, "found total %d new knots after dimension %ld of %ld\n", nnew_knots.sum(), k + 1, mfa.p.size());
-
-        ts *= mfa.nctrl_pts(k);
-    }                                                          // domain dimensions
-    fprintf(stderr, "\n");
-
-    mfa.InsertKnots(nnew_knots, new_knots);
-
-    // debug
-//     cerr << "\nnnew_knots:\n" << nnew_knots << endl;
-//     cerr << "new_knots:\n"  << new_knots  << endl;
-
-    return(nnew_knots.sum() ? 0 : 1);
 }
 
 #if 1
@@ -259,7 +172,7 @@ NewKnots_curve(
                 break;
 
             n_step_sizes++;
-        }                                               // step sizes over curves
+        }                                                   // step sizes over curves
 
         // free R, NtN, and P
         R.resize(0, 0);
@@ -269,8 +182,8 @@ NewKnots_curve(
         // add new knots in the middle of spans with errors
         nnew_knots(k) = err_spans.size();
         auto old_size = new_knots.size();
-        new_knots.resize(old_size + err_spans.size());    // existing values are preserved
-        size_t i = 0;                                   // index into new_knots
+        new_knots.resize(old_size + err_spans.size());      // existing values are preserved
+        size_t i = 0;                                       // index into new_knots
         for (set<int>::iterator it = err_spans.begin(); it != err_spans.end(); ++it)
         {
             // debug
@@ -489,4 +402,420 @@ NewKnots_curve(
 }
 
 #endif
+
+// encodes at full dimensionality and decodes in 1d curves
+// decodes 1d curves at control points and adds knot spans from all curves in all directions (into a set)
+// returns true if done, ie, no knots are inserted
+//
+// this version produces an excessive number of knots and control points and is not recommended
+// remove eventually
+bool
+mfa::
+NewKnots::
+NewKnots_hybrid(
+        VectorXi&      nnew_knots,                       // number of new knots in each dim
+        vector<float>& new_knots,                        // new knots (1st dim changes fastest)
+        float          err_limit,                        // max allowable error
+        int            iter)                             // iteration number of caller (for debugging)
+{
+    mfa::Encoder encoder(mfa);
+
+    // resize control points based on number of new knots added in previous round
+    mfa.ctrl_pts.resize(mfa.tot_nctrl, mfa.domain.cols());
+
+    // full n-d encoding
+    encoder.Encode();
+
+    size_t ts = 1;                                              // control point stride
+
+    // find new knots
+    nnew_knots = VectorXi::Zero(mfa.p.size());
+    new_knots.resize(0);
+    for (size_t k = 0; k < mfa.p.size(); k++)                   // for all domain dimensions
+    {
+        set<int> err_spans;                                     // all error spans so far in this dim.
+        size_t ncurves = mfa.ctrl_pts.rows() / mfa.nctrl_pts(k);    // number of curves in this dimension
+
+        // offsets for starting control point for each curve in this dimension
+        vector<size_t> to(ncurves);
+        size_t too     = 0;                                     // to at start of contiguous sequence
+        to[0]          = 0;
+
+        for (auto j = 1; j < ncurves; j++)
+        {
+            // adjust offsets for the next curve
+            if (j % ts)
+                to[j] = to[j - 1] + 1;
+            else
+            {
+                to[j] = too + ts * mfa.nctrl_pts(k);
+                too   = to[j];
+            }
+        }
+
+        // find spans with error > err_limit
+        for (size_t j = 0; j < ncurves; j++)
+            size_t nerr = encoder.ErrorCtrlCurve(k, to[j], err_spans, err_limit);
+
+        // add new knots in the middle of spans with errors
+        nnew_knots(k) = err_spans.size();
+        auto old_size = new_knots.size();
+        new_knots.resize(old_size + err_spans.size());    // existing values are preserved
+        size_t i = 0;                                           // index into new_knots
+        for (set<int>::iterator it = err_spans.begin(); it != err_spans.end(); ++it)
+        {
+            // debug
+            assert(*it < mfa.nctrl_pts[k]);                     // not trying to go beyond the last span
+
+            new_knots[old_size + i] = (mfa.knots(mfa.ko[k] + *it) + mfa.knots(mfa.ko[k] + *it + 1)) / 2.0;
+            i++;
+        }
+
+        // print progress
+        fprintf(stderr, "found total %d new knots after dimension %ld of %ld\n", nnew_knots.sum(), k + 1, mfa.p.size());
+
+        ts *= mfa.nctrl_pts(k);
+    }                                                          // domain dimensions
+    fprintf(stderr, "\n");
+
+    mfa.InsertKnots(nnew_knots, new_knots);
+
+    // debug
+//     cerr << "\nnnew_knots:\n" << nnew_knots << endl;
+//     cerr << "new_knots:\n"  << new_knots  << endl;
+
+    return(nnew_knots.sum() ? 0 : 1);
+}
+
+#if 1
+
+// TBB version
+// computes error in knot spans
+// marks the knot spans that are done (error <= max_error in the entire span)
+// assumes caller allocated new_knots to number of spans and nnew_knots to domain dimensions
+// (does no resizing of new_knots and nnew_knots) and zeroed nnew_knots
+// returns true if all done, ie, no new knots inserted
+bool
+mfa::
+NewKnots::
+ErrorSpans(
+        VectorXi&      nnew_knots,                          // number of new knots in each dim
+        vector<float>& new_knots,                           // new knots (1st dim changes fastest)
+        float          err_limit,                           // max allowable error
+        int            iter)                                // iteration number
+{
+    mfa::Decoder decoder(mfa);
+
+    // initialize all knot spans to not done
+    for (auto i = 0; i < mfa.knot_spans.size(); i++)
+        mfa.knot_spans[i].done = false;
+
+    // spans that have already been split in this round (to prevent splitting twice)
+    vector<bool> split_spans(mfa.knot_spans.size());                // intialized to false by default
+
+    parallel_for(size_t(0), mfa.knot_spans.size(), [&] (size_t i)          // knot spans
+    {
+        if (!mfa.knot_spans[i].done)
+        {
+            size_t nspan_pts = 1;                                   // number of domain points in the span
+            for (auto k = 0; k < mfa.p.size(); k++)
+                nspan_pts *= (mfa.knot_spans[i].max_param_ijk(k) - mfa.knot_spans[i].min_param_ijk(k) + 1);
+
+            VectorXi p_ijk = mfa.knot_spans[i].min_param_ijk;           // indices of current parameter in the span
+            VectorXf param(mfa.p.size());                               // value of current parameter
+            bool span_done = true;                                  // span is done until error > err_limit
+
+            // TODO:  consider binary search of the points in the span?
+            // (error likely to be higher in the center of the span?)
+            for (auto j = 0; j < nspan_pts; j++)                    // parameters in the span
+            {
+                // debug
+//                 fprintf(stderr, "ErrorSpans(): span %ld point %d\n", i, j);
+
+                for (auto k = 0; k < mfa.p.size(); k++)
+                param(k) = mfa.params(mfa.po[k] + p_ijk(k));
+
+                // approximate the point and measure error
+                size_t idx;
+                mfa.ijk2idx(p_ijk, idx);
+                VectorXf cpt(mfa.ctrl_pts.cols());       // approximated point
+                decoder.VolPt(param, cpt);
+                float err = fabs(mfa.NormalDistance(cpt, idx)) / mfa.dom_range;     // normalized by data range
+
+                // span is not done
+                if (err > err_limit)
+                {
+                    span_done = false;
+                    break;
+                }
+
+                // increment param ijk
+                for (auto k = 0; k < mfa.p.size(); k++)                 // dimensions in the parameter
+                {
+                    if (p_ijk(k) < mfa.knot_spans[i].max_param_ijk(k))
+                    {
+                        p_ijk(k)++;
+                        break;
+                    }
+                    else
+                        p_ijk(k) = mfa.knot_spans[i].min_param_ijk(k);
+                }                                                   // dimension in parameter
+            }                                                       // parameters in the span
+
+            if (span_done)
+                mfa.knot_spans[i].done = true;
+        }                                                           // knot span not done
+    });                                                           // knot spans
+
+    // split spans that are not done
+    auto norig_spans = mfa.knot_spans.size();
+    bool new_knot_found = false;
+    for (auto i = 0; i < norig_spans; i++)
+    {
+        if (!mfa.knot_spans[i].done && !split_spans[i])
+        {
+            new_knots.resize(1);
+            nnew_knots = VectorXi::Zero(mfa.p.size());
+            SplitSpan(i, nnew_knots, new_knots, iter, split_spans);
+            if (nnew_knots.sum())
+            {
+                new_knot_found = true;
+                mfa.InsertKnots(nnew_knots, new_knots);
+
+                // debug
+//             cerr << "inserting nnew_knots:\n" << nnew_knots << endl;
+            }
+        }
+    }
+
+    // debug
+//     for (auto i = 0; i < mfa.knot_spans.size(); i++)                  // knot spans
+//     {
+//         cerr <<
+//             "span_idx="          << i                           <<
+//             "\nmin_knot_ijk:\n"  << mfa.knot_spans[i].min_knot_ijk  <<
+//             "\nmax_knot_ijk:\n"  << mfa.knot_spans[i].max_knot_ijk  <<
+//             "\nmin_knot:\n"      << mfa.knot_spans[i].min_knot      <<
+//             "\nmax_knot:\n"      << mfa.knot_spans[i].max_knot      <<
+//             "\nmin_param_ijk:\n" << mfa.knot_spans[i].min_param_ijk <<
+//             "\nmax_param_ijk:\n" << mfa.knot_spans[i].max_param_ijk <<
+//             "\nmin_param:\n"     << mfa.knot_spans[i].min_param     <<
+//             "\nmax_param:\n"     << mfa.knot_spans[i].max_param     <<
+//             "\n"                 << endl;
+//     }
+
+    return !nnew_knots.sum();
+}
+
+#else
+
+// computes error in knot spans, single-threaded version
+// marks the knot spans that are done (error <= max_error in the entire span)
+// assumes caller allocated new_knots to number of spans and nnew_knots to domain dimensions
+// (does no resizing of new_knots and nnew_knots) and zeroed nnew_knots
+// returns true if all done, ie, no new knots inserted
+bool
+mfa::
+NewKnots::
+ErrorSpans(
+        VectorXi&      nnew_knots,                          // number of new knots in each dim
+        vector<float>& new_knots,                           // new knots (1st dim changes fastest)
+        float          err_limit,                           // max allowable error
+        int            iter)                                // iteration number
+{
+    mfa::Decoder decoder(mfa);
+
+    // initialize all knot spans to not done
+    for (auto i = 0; i < mfa.knot_spans.size(); i++)
+        mfa.knot_spans[i].done = false;
+
+    // spans that have already been split in this round (to prevent splitting twice)
+    vector<bool> split_spans(mfa.knot_spans.size());                // intialized to false by default
+
+    for (auto i = 0; i < mfa.knot_spans.size(); i++)                // knot spans
+    {
+        size_t nspan_pts = 1;                                       // number of domain points in the span
+        for (auto k = 0; k < mfa.p.size(); k++)
+            nspan_pts *= (mfa.knot_spans[i].max_param_ijk(k) - mfa.knot_spans[i].min_param_ijk(k) + 1);
+
+        VectorXi p_ijk = mfa.knot_spans[i].min_param_ijk;           // indices of current parameter in the span
+        VectorXf param(mfa.p.size());                               // value of current parameter
+        bool span_done = true;                                      // span is done until error > err_limit
+
+        // TODO:  consider binary search of the points in the span?
+        // (error likely to be higher in the center of the span?)
+        for (size_t j = 0; j < nspan_pts; j++)                      // parameters in the span
+        {
+            for (auto k = 0; k < mfa.p.size(); k++)
+                param(k) = mfa.params(mfa.po[k] + p_ijk(k));
+
+            // approximate the point and measure error
+            size_t idx;
+            mfa.ijk2idx(p_ijk, idx);
+            VectorXf cpt(mfa.ctrl_pts.cols());                      // approximated point
+            decoder.VolPt(param, cpt);
+            float err = fabs(mfa.NormalDistance(cpt, idx)) / mfa.dom_range;     // normalized by data range
+
+            // span is not done
+            if (err > err_limit)
+            {
+                span_done = false;
+                break;
+            }
+
+            // increment param ijk
+            for (auto k = 0; k < mfa.p.size(); k++)                 // dimensions in the parameter
+            {
+                if (p_ijk(k) < mfa.knot_spans[i].max_param_ijk(k))
+                {
+                    p_ijk(k)++;
+                    break;
+                }
+                else
+                    p_ijk(k) = mfa.knot_spans[i].min_param_ijk(k);
+            }                                                       // dimension in parameter
+        }                                                           // parameters in the span
+
+        if (span_done)
+            mfa.knot_spans[i].done = true;
+    }                                                               // knot spans
+
+    // debug
+//     fprintf(stderr, "\nspans to be split:\n-----\n");
+//     for (auto i = 0; i < mfa.knot_spans.size(); i++)                  // knot spans
+//         if (!mfa.knot_spans[i].done && !split_spans[i])
+//             fprintf(stderr, "i=%d min_knot=[%.3f %.3f] max_knot=[%.3f %.3f]\n", i,
+//                     mfa.knot_spans[i].min_knot(0), mfa.knot_spans[i].min_knot(1),
+//                     mfa.knot_spans[i].max_knot(0), mfa.knot_spans[i].max_knot(1));
+
+    // split spans that are not done
+    auto norig_spans = mfa.knot_spans.size();
+    bool new_knot_found = false;
+    for (auto i = 0; i < norig_spans; i++)
+    {
+        if (!mfa.knot_spans[i].done && !split_spans[i])
+        {
+            new_knots.resize(1);
+            nnew_knots = VectorXi::Zero(mfa.p.size());
+            SplitSpan(i, nnew_knots, new_knots, iter, split_spans);
+            if (nnew_knots.sum())
+            {
+                new_knot_found = true;
+                mfa.InsertKnots(nnew_knots, new_knots);
+            }
+        }
+    }
+
+    // debug
+//     fprintf(stderr, "\nspans after splitting:\n-----\n");
+//     for (auto i = 0; i < mfa.knot_spans.size(); i++)                  // knot spans
+//         fprintf(stderr, "i=%d min_knot=[%.3f %.3f] max_knot=[%.3f %.3f]\n", i,
+//                 mfa.knot_spans[i].min_knot(0), mfa.knot_spans[i].min_knot(1),
+//                 mfa.knot_spans[i].max_knot(0), mfa.knot_spans[i].max_knot(1));
+
+    return !new_knot_found;
+}
+
+#endif
+
+// splits a knot span into two
+// also splits all other spans sharing the same knot values
+void
+mfa::
+NewKnots::
+SplitSpan(
+        size_t         si,                   // id of span to split
+        VectorXi&      nnew_knots,           // number of new knots in each dim
+        vector<float>& new_knots,            // new knots (1st dim changes fastest)
+        int            iter,                 // iteration number
+        vector<bool>&  split_spans)          // spans that have already been split in this iteration
+{
+    // debug
+//     fprintf(stderr, "Calling SplitSpan on span %ld\n", si);
+
+    // new split dimension based on alternating dimension per span
+    // check if span can be split (both halves would have domain points in its range)
+    // if not, check other split directions
+    int sd = mfa.knot_spans[si].last_split_dim;         // alternating per knot span
+    float new_knot;                                     // new knot value in the split dimension
+    size_t k;                                           // dimension
+    for (k = 0; k < mfa.p.size(); k++)
+    {
+        sd       = (sd + 1) % mfa.p.size();
+        new_knot = (mfa.knot_spans[si].min_knot(sd) + mfa.knot_spans[si].max_knot(sd)) / 2;
+        if (mfa.params(mfa.po[sd] + mfa.knot_spans[si].min_param_ijk(sd)) < new_knot &&
+                mfa.params(mfa.po[sd] + mfa.knot_spans[si].max_param_ijk(sd)) > new_knot)
+            break;
+    }
+    if (k == mfa.p.size())                                  // a split direction could not be found
+    {
+        mfa.knot_spans[si].done = true;
+        split_spans[si]         = true;
+
+        // debug
+        fprintf(stderr, "--- SplitSpan(): span %ld could not be split further ---\n", si);
+
+        return;
+    }
+
+    // find all spans with the same min_knot_ijk as the span to be split and that are not done yet
+    // those will be split too (NB, in the same dimension as the original span to be split)
+    bool new_split = false;                             // the new knot was used to actually split a span
+    for (auto j = 0; j < split_spans.size(); j++)       // original number of spans in this round
+    {
+        if (split_spans[j] || mfa.knot_spans[j].min_knot_ijk(sd) != mfa.knot_spans[si].min_knot_ijk(sd))
+            continue;
+
+        // debug
+//      fprintf(stderr, "splitting span %d in sd=%d by new_knot=%.3f\n", j, sd, new_knot);
+
+        new_split = true;
+
+        // copy span to the back
+        mfa.knot_spans.push_back(mfa.knot_spans[j]);
+
+        // modify old span
+        auto pi = mfa.knot_spans[j].min_param_ijk(sd);          // one coordinate of ijk index into params
+        if (mfa.params(mfa.po[sd] + pi) < new_knot)                 // at least one param (domain pt) in the span
+        {
+            while (mfa.params(mfa.po[sd] + pi) < new_knot)          // pi - 1 = max_param_ijk(sd) in the modified span
+                pi++;
+            mfa.knot_spans[j].last_split_dim    = sd;
+            mfa.knot_spans[j].max_knot(sd)      = new_knot;
+            mfa.knot_spans[j].max_param_ijk(sd) = pi - 1;
+            mfa.knot_spans[j].max_param(sd)     = mfa.params(mfa.po[sd] + pi - 1);
+
+            // modify new span
+            mfa.knot_spans.back().last_split_dim     = -1;
+            mfa.knot_spans.back().min_knot(sd)       = new_knot;
+            mfa.knot_spans.back().min_param_ijk(sd)  = pi;
+            mfa.knot_spans.back().min_param(sd)      = mfa.params(mfa.po[sd] + pi);
+            mfa.knot_spans.back().min_knot_ijk(sd)++;
+
+            split_spans[j] = true;
+        }
+    }
+
+    if (!new_split)
+        return;
+
+    // increment min and max knot ijk for any knots after the inserted one
+    for (auto j = 0; j < mfa.knot_spans.size(); j++)
+    {
+        if (mfa.knot_spans[j].min_knot(sd) > mfa.knot_spans[si].max_knot(sd))
+            mfa.knot_spans[j].min_knot_ijk(sd)++;
+        if (mfa.knot_spans[j].max_knot(sd) > mfa.knot_spans[si].max_knot(sd))
+            mfa.knot_spans[j].max_knot_ijk(sd)++;
+    }
+
+    // add the new knot to nnew_knots and new_knots (only a single knot inserted at a time)
+    new_knots.resize(1);
+    new_knots[0]    = new_knot;
+    nnew_knots      = VectorXi::Zero(mfa.p.size());
+    nnew_knots(sd)  = 1;
+
+    // debug
+    fprintf(stderr, "inserted new knot value=%.3f dim=%d\n", new_knot, sd);
+}
+
 
