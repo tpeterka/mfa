@@ -164,8 +164,8 @@ KnotSpanDomains(
     // debug
     for (auto i = 0; i < int_nspans; i++)
     {
-        cerr << "\nspan " << i << " min:\n" << span_mins(i) << endl;
-        cerr << "max:\n" << span_maxs(i) << endl;
+        cerr << "\nspan " << i << " min:\n" << span_mins.row(i) << endl;
+        cerr << "max:\n" << span_maxs.row(i) << endl;
     }
 }
 

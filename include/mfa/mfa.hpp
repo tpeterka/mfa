@@ -114,6 +114,7 @@ namespace mfa
 
        friend class Encoder;
        friend class Decoder;
+       friend class NewKnots;
 
        VectorXi& p;                     // polynomial degree in each dimension
        VectorXi& ndom_pts;              // number of input data points in each dim

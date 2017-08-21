@@ -32,11 +32,6 @@ namespace mfa
         ~Encoder() {}
         void Encode();
         void AdaptiveEncode(float err_limit);               // maximum allowable normalized error
-        bool NewKnots(
-                VectorXi&      nnew_knots,                  // number of new knots in each dim
-                vector<float>& new_knots,                   // new knots (1st dim changes fastest)
-                float          err_limit,                   // max allowable error
-                int            iter);                       // iteration number of caller (for debugging)
 
    private:
 
@@ -129,7 +124,7 @@ namespace mfa
                 set<int>&    err_spans,     // spans with error greater than err_limit
                 float        err_limit);    // max allowable error
 
-        size_t  max_num_curves;             // max num. curves per dimension to check in fast encode
+        friend class NewKnots;
 
         MFA& mfa;                           // the mfa object
     };
