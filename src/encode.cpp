@@ -67,7 +67,7 @@ AdaptiveEncode(float err_limit)                                 // maximum allow
     Encode();
 }
 
-#if 1
+#if 0
 
 // encodes at full dimensionality and decodes at full dimensionality
 // decodes full-d points in each knot span and adds new knot spans where error > err_limit
@@ -186,7 +186,7 @@ NewKNots(
 
 #endif
 
-#if 0
+#if 1
 
 // single thread version
 //
@@ -256,12 +256,17 @@ NewKnots(
         // TODO: use a common representation for P and ctrl_pts to avoid copying
         MatrixXf P(n(k) - 1, mfa.domain.cols());
 
-        size_t ncurves  = mfa.domain.rows() / mfa.ndom_pts(k);      // number of curves in this dimension
-        int nsame_steps = 0;                                // number of steps with same number of erroneous points
-        int n_step_sizes = 0;                               // number of step sizes so far
+        size_t ncurves   = mfa.domain.rows() / mfa.ndom_pts(k); // number of curves in this dimension
+        int nsame_steps  = 0;                                   // number of steps with same number of erroneous points
+        int n_step_sizes = 0;                                   // number of step sizes so far
 
-//         for (size_t s = 1; s >= 1; s /= 2)        // debug only, one step size of s=1
-        for (size_t s = ncurves / 2; s >= 1 && ncurves / s < max_num_curves; s /= 2)        // for all step sizes over curves
+        // starting step size over curves
+        size_t s0 = ncurves / 2 > 0 ? ncurves / 2 : 1;
+
+        // debug, only one step size s=1
+//         s0 = 1;
+
+        for (size_t s = s0; s >= 1 && ncurves / s < max_num_curves; s /= 2)        // for all step sizes over curves
         {
             // debug
             fprintf(stderr, "k=%ld s=%ld\n", k, s);
@@ -405,8 +410,13 @@ NewKnots(
         int n_step_sizes       = 0;                                     // number of step sizes so far
         size_t worst_curve_idx = 0;                                     // index of worst curve in this dimension
 
-//         for (size_t s = 1; s >= 1; s /= 2)                           // debug only, one step size of s=1
-        for (size_t s = ncurves / 2; s >= 1 && ncurves / s < max_num_curves; s /= 2)        // for all step sizes over curves up to max allowed
+        // starting step size over curves
+        size_t s0 = ncurves / 2 > 0 ? ncurves / 2 : 1;
+
+        // debug, only one step size s=1
+//         s0 = 1;
+
+        for (size_t s = s0; s >= 1 && ncurves / s < max_num_curves; s /= 2)  // for all step sizes over curves up to max allowed
         {
             // debug
             fprintf(stderr, "k=%ld s=%ld\n", k, s);
