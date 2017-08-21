@@ -21,8 +21,6 @@
 #include "block.hpp"
 #include "../opts.h"
 
-#include "../include/opts.h"
-
 using namespace std;
 
 typedef  diy::RegularDecomposer<Bounds> Decomposer;
