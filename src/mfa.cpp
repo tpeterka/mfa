@@ -127,8 +127,8 @@ void
 mfa::
 MFA::
 KnotSpanDomains(
-        MatrixXf& span_mins,                      // minimum domain points of all knot spans
-        MatrixXf& span_maxs)                      // maximum domain points of all knot spans
+        VectorXi& span_mins,                      // idx of minimum domain points of all knot spans
+        VectorXi& span_maxs)                      // idx of maximum domain points of all knot spans
 {
     // (re)compute knot span index from current set of knots
     knot_spans.resize(0);
@@ -139,24 +139,24 @@ KnotSpanDomains(
     for (auto i = 0; i < p.size(); i++)
         int_nspans *= (nctrl_pts(i) - p(i));
 
-    span_mins.resize(int_nspans, p.size());
-    span_maxs.resize(int_nspans, p.size());
+    span_mins.resize(int_nspans);
+    span_maxs.resize(int_nspans);
 
     // copy out extent info
     for (auto i = 0; i < int_nspans; i++)
     {
         size_t idx;
         ijk2idx(knot_spans[i].min_param_ijk, idx);
-        span_mins.row(i) = domain.block(idx, 0, 1, p.size());
+        span_mins(i) = idx;
         ijk2idx(knot_spans[i].max_param_ijk, idx);
-        span_maxs.row(i) = domain.block(idx, 0, 1, p.size());
+        span_maxs(i) = idx;
     }
 
     // debug
 //     for (auto i = 0; i < int_nspans; i++)
 //     {
-//         cerr << "\nspan " << i << " min:\n" << span_mins.row(i) << endl;
-//         cerr << "max:\n" << span_maxs.row(i) << endl;
+//         cerr << "\nspan " << i << " min:\n" << domain.row(span_mins(i)) << endl;
+//         cerr << "max:\n"  << domain.row(span_maxs(i)) << endl;
 //     }
 }
 

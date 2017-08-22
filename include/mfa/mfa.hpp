@@ -70,8 +70,8 @@ namespace mfa
                 size_t    cell_idx);       // index of min. corner of cell in the domain
 
         void KnotSpanDomains(
-                MatrixXf& span_mins,        // minimum domain points of all knot spans
-                MatrixXf& span_maxs);       // maximum domain points of all knot spans
+                VectorXi& span_mins,        // minimum domain points of all knot spans
+                VectorXi& span_maxs);       // maximum domain points of all knot spans
 
     private:
 

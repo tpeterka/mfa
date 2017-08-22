@@ -1117,8 +1117,8 @@ struct Block
     MatrixXf ctrl_pts;                       // NURBS control points (1st dim changes fastest)
     VectorXf knots;                          // NURBS knots (1st dim changes fastest)
     MatrixXf approx;                         // points in approximated volume
-    MatrixXf span_mins;                      // minimum domain points of all knot spans
-    MatrixXf span_maxs;                      // maximum domain points of all knot spans
+    VectorXi span_mins;                      // idx of minimum domain points of all knot spans
+    VectorXi span_maxs;                      // idx of maximum domain points of all knot spans
 
                                              // (same number as input points, for rendering only)
     float    max_err;                        // maximum (abs value) distance from input points to curve
