@@ -300,11 +300,11 @@ int main(int argc, char ** argv)
             /* int useBinary */ 0,
             /* int *dims */ &nraw_pts[0],
             /* float *pts */ &(err_pts[0].x),
-            /* int nvars */ 0,
-            /* int *vardim */ NULL,
-            /* int *centering */ NULL,
-            /* const char * const *varnames */NULL,
-            /* float **vars */ NULL);
+            /* int nvars */ 1,
+            /* int *vardim */ vardim,
+            /* int *centering */ centering,
+            /* const char * const *varnames */ &name_err,
+            /* float **vars */ pval);
 
     // write knot points
     write_curvilinear_mesh(
