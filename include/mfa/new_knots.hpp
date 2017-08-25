@@ -35,6 +35,11 @@ namespace mfa
                 vector<float>& new_knots,                   // new knots (1st dim changes fastest)
                 float          err_limit,                   // max allowable error
                 int            iter);                       // iteration number of caller (for debugging)
+        bool NewKnots_curve1(
+                VectorXi&      nnew_knots,                  // number of new knots in each dim
+                vector<float>& new_knots,                   // new knots (1st dim changes fastest)
+                float          err_limit,                   // max allowable error
+                int            iter);                       // iteration number of caller (for debugging)
         bool NewKnots_curve(
                 VectorXi&      nnew_knots,                  // number of new knots in each dim
                 vector<float>& new_knots,                   // new knots (1st dim changes fastest)

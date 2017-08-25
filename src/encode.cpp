@@ -34,13 +34,22 @@ AdaptiveEncode(float err_limit)                                 // maximum allow
 
     // loop until no change in knots
     for (int iter = 0; ; iter++)
+//     for (int iter = 0; iter < 6; iter++)
     {
         fprintf(stderr, "\nIteration %d...\n", iter);
 
         // debug
 //         cerr << "current knots:\n" << mfa.knots << endl;
 
+#if 1           // split spans in the middle
+
         bool done = nk.NewKnots_curve(nnew_knots, new_knots, err_limit, iter);
+
+#else           // split spans at point of greatest error
+
+        bool done = nk.NewKnots_curve1(nnew_knots, new_knots, err_limit, iter);
+
+#endif
 
         // no new knots to be added
         if (done)
@@ -776,6 +785,88 @@ ErrorCurve(
     }
 
     return nerr;
+}
+
+// computes new knots to be inserted into a curve
+// for each current knot span where the error is greater than the limit, finds the domain point
+// where the error is greatest and adds the knot at that parameter value
+//
+// this version takes a set of control points as input instead of mfa.ctrl_pts
+void
+mfa::
+Encoder::
+ErrorCurve(
+        size_t         k,                       // current dimension
+        size_t         co,                      // starting ofst for reading domain pts
+        MatrixXf&      ctrl_pts,                // control points
+        VectorXi&      nnew_knots,              // number of new knots
+        vector<float>& new_knots,               // new knots
+        float          err_limit)               // max allowable error
+{
+    mfa::Decoder decoder(mfa);
+    VectorXf cpt(mfa.domain.cols());            // decoded curve point
+    int span      = mfa.p[k];                    // current knot span of the domain point being checked
+    int old_span  = -1;                          // span of previous domain point
+    float max_err = 0;                          // max error seen so far in the same span
+    size_t max_err_pt;                          // index of domain point in same span with max error
+    bool new_split = false;                     // a new split was found in the current span
+
+    for (auto i = 0; i < mfa.ndom_pts[k]; i++)      // all domain points in the curve
+    {
+        while (mfa.knots(mfa.ko[k] + span + 1) < 1.0 && mfa.knots(mfa.ko[k] + span + 1) <= mfa.params(mfa.po[k] + i))
+            span++;
+
+        if (span != old_span)
+            max_err = 0;
+
+        // record max of previous span if span changed and previous span had a new split
+        if (span != old_span && new_split)
+        {
+            nnew_knots(k)++;
+            new_knots.push_back(mfa.params(mfa.po[k] + max_err_pt));
+            new_split = false;
+        }
+
+        decoder.CurvePt(k, mfa.params(mfa.po[k] + i), ctrl_pts, cpt, mfa.ko[k]);
+
+        float err = fabs(mfa.NormalDistance(cpt, co + i * mfa.ds[k])) / mfa.dom_range;     // normalized by data range
+
+        if (err > err_limit && err > max_err)  // potential new knot
+        {
+            // ensure there would be a domain point in both halves of the span if it were split
+            bool split_left = false;
+            for (auto j = i; mfa.params(mfa.po[k] + j) >= mfa.knots(mfa.ko[k] + span); j--)
+                if (mfa.params(mfa.po[k] + j) < mfa.params(mfa.po[k] + i))
+                {
+                    split_left = true;
+                    break;
+                }
+            bool split_right = false;
+            for (auto j = i; mfa.params(mfa.po[k] + j) < mfa.knots(mfa.ko[k] + span + 1); j++)
+                if (mfa.params(mfa.po[k] + j) >= mfa.params(mfa.po[k] + i))
+                {
+                    split_right = true;
+                    break;
+                }
+            // record the potential split point
+            if (split_left && split_right && err > max_err)
+            {
+                max_err = err;
+                max_err_pt = i;
+                new_split = true;
+            }
+        }                                                           // potential new knot
+
+        if (span != old_span)
+            old_span = span;
+    }
+
+    // record max of last span
+    if (new_split)
+    {
+        nnew_knots(k)++;
+        new_knots.push_back(mfa.params(mfa.po[k] + max_err_pt));
+    }
 }
 
 // returns number of points in a curve that have error greater than err_limit
