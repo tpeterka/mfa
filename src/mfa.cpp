@@ -44,7 +44,8 @@ MFA::
 MFA(VectorXi& p_,             // polynomial degree in each dimension
     VectorXi& ndom_pts_,      // number of input data points in each dim
     MatrixXf& domain_,        // input data points (1st dim changes fastest)
-    MatrixXf& ctrl_pts_,      // (output) control points (1st dim changes fastest) (can be initialized by caller)
+    MatrixXf& ctrl_pts_,      // (output, optional input) control points (1st dim changes fastest) (can be initialized by caller)
+    VectorXi& nctrl_pts_,     // (output, optional input) number of control points in each dim
     VectorXf& knots_,         // (output) knots (1st dim changes fastest)
     float     eps_) :         // minimum difference considered significant
     p(p_),
@@ -68,6 +69,8 @@ MFA(VectorXi& p_,             // polynomial degree in each dimension
         for (auto i = 0; i < p.size(); i++)
             nctrl_pts(i) = p(i) + 1;
     }
+    else
+        nctrl_pts = nctrl_pts_;
 
     // total number of params = sum of ndom_pts over all dimensions
     // not the total number of data points, which would be the product
@@ -81,14 +84,6 @@ MFA(VectorXi& p_,             // polynomial degree in each dimension
     // total number of control points = product of control points over all dimensions
     tot_nctrl = nctrl_pts.prod();
 
-    // precompute curve parameters for input points
-    params.resize(tot_nparams);
-    Params();
-
-    // compute knots
-    knots.resize(tot_nknots);
-    Knots();
-
     // offsets and strides for knots, params, and control points in different dimensions
     ko.resize(p.size(), 0);                  // offset for knots
     po.resize(p.size(), 0);                  // offset for params
@@ -99,6 +94,22 @@ MFA(VectorXi& p_,             // polynomial degree in each dimension
         ko[i] = ko[i - 1] + nctrl_pts[i - 1] + p[i - 1] + 1;
         ds[i] = ds[i - 1] * ndom_pts[i - 1];
     }
+
+    // precompute curve parameters for input points
+    params.resize(tot_nparams);
+#if 0
+    Params();                               // params space according to the curve length (per P&T)
+#else
+    DomainParams();                         // params spaced according to domain spacing
+#endif
+
+    // compute knots
+    knots.resize(tot_nknots);
+#if 0
+    Knots();                                // knots spaced according to parameters (per P&T)
+#else
+    UniformKnots();                         // knots spaced uniformly
+#endif
 
     // offsets for curve starting (domain) points in each dimension
     co.resize(p.size());
@@ -327,8 +338,7 @@ NonlinearEncode(
         VectorXi &nctrl_pts_)               // (output) number of control points in each dim
 {
     mfa::NL_Encoder nl_encoder(*this);
-    // TODO: use error limit eventually; for now just simple test
-    nl_encoder.Encode();
+    nl_encoder.Encode(err_limit);
 
     nctrl_pts_ = nctrl_pts;
 }
@@ -439,7 +449,6 @@ BasisFuns(int       cur_dim,            // current dimension
 // total number of params is the sum of ndom_pts over the dimensions, much less than the total
 // number of data points (which would be the product)
 // assumes params were allocated by caller
-// TODO: investigate other schemes (domain only, normalized domain and range, etc.)
 void
 mfa::
 MFA::
@@ -522,6 +531,29 @@ Params()
     }                                                    // domain dimensions
 }
 
+// precompute parameters for input data points using domain spacing only (not length along curve)
+// params are only stored once for each dimension (1st dim params, 2nd dim params, ...)
+// total number of params is the sum of ndom_pts over the dimensions, much less than the total
+// number of data points (which would be the product)
+// assumes params were allocated by caller
+void
+mfa::
+MFA::
+DomainParams()
+{
+    for (size_t k = 0; k < p.size(); k++)               // for all domain dimensions
+    {
+        params(po[k] = 0.0);
+        for (size_t i = 1; i < ndom_pts(k) - 1; i++)
+            params(po[k] + i) = fabs(   (domain(po[k] + i,               k) - domain(po[k], k)) /
+                                        (domain(po[k] + ndom_pts(k) - 1, k) - domain(po[k], k)) );
+        params(po[k] + ndom_pts(k) - 1) = 1.0;
+    }                                                    // domain dimensions
+
+    // debug
+    cerr << "params:\n" << params << endl;
+}
+
 // compute knots
 // n-d version of eqs. 9.68, 9.69, P&T
 //
@@ -578,6 +610,49 @@ Knots()
             knots(ko + i) = 0.0;
             knots(ko + nknots - 1 - i) = 1.0;
         }
+
+        po += ndom_pts(k);
+        ko += nknots;
+    }
+}
+
+// compute knots
+// n-d version of uniform spacing
+//
+// nknots = n + p + 2
+// eg, for p = 3 and nctrl_pts = 7, n = nctrl_pts - 1 = 6, nknots = 11
+// let knots = {0, 0, 0, 0, 0.25, 0.5, 0.75, 1, 1, 1, 1}
+// there are p + 1 external knots at each end: {0, 0, 0, 0} and {1, 1, 1, 1}
+// there are n - p internal knots: {0.25, 0.5, 0.75}
+// there are n - p + 1 internal knot spans [0,0.25), [0.25, 0.5), [0.5, 0.75), [0.75, 1)
+//
+// resulting knots are same for all curves and stored once for each dimension (1st dim knots, 2nd dim, ...)
+// total number of knots is the sum of number of knots over the dimensions, much less than the product
+// assumes knots were allocated by caller
+void
+mfa::
+MFA::
+UniformKnots()
+{
+    // following are counters for slicing domain and params into curves in different dimensions
+    size_t po = 0;                                // starting offset for params in current dim
+    size_t ko = 0;                                // starting offset for knots in current dim
+
+    for (size_t k = 0; k < p.size(); k++)         // for all domain dimensions
+    {
+        int nknots = nctrl_pts(k) + p(k) + 1;    // number of knots in current dim
+
+        // set p + 1 external knots at each end
+        for (int i = 0; i < p(k) + 1; i++)
+        {
+            knots(ko + i) = 0.0;
+            knots(ko + nknots - 1 - i) = 1.0;
+        }
+
+        // compute remaining n - p internal knots
+        float step = 1.0 / (nctrl_pts(k) - p(k));               // size of internal knot span
+        for (int j = 1; j <= nctrl_pts(k) - p(k) - 1; j++)
+            knots(ko + p(k) + j) = knots(ko + p(k) + j - 1) + step;
 
         po += ndom_pts(k);
         ko += nknots;

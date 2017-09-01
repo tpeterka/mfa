@@ -93,20 +93,20 @@ int main(int argc, char** argv)
     encode_time = MPI_Wtime() - encode_time;
     fprintf(stderr, "\n\nNonlinear encoding done.\n\n");
 
-    // debug: compute error field for visualization and max error to verify that it is below the threshold
-    fprintf(stderr, "\nFinal decoding and computing max. error...\n");
-    master.foreach([&](Block* b, const diy::Master::ProxyWithLink& cp)
-            { b->error(cp, true); });
-
-    // debug: save knot span domains for comparing error with location in knot span
-    fprintf(stderr, "\nFinal decoding and computing max. error...\n");
-    master.foreach([&](Block* b, const diy::Master::ProxyWithLink& cp)
-            { b->knot_span_domains(cp); });
+//     // debug: compute error field for visualization and max error to verify that it is below the threshold
+//     fprintf(stderr, "\nFinal decoding and computing max. error...\n");
+//     master.foreach([&](Block* b, const diy::Master::ProxyWithLink& cp)
+//             { b->error(cp, true); });
+// 
+//     // debug: save knot span domains for comparing error with location in knot span
+//     fprintf(stderr, "\nFinal decoding and computing max. error...\n");
+//     master.foreach([&](Block* b, const diy::Master::ProxyWithLink& cp)
+//             { b->knot_span_domains(cp); });
 
     // print results
     master.foreach(&Block::print_block);
     fprintf(stderr, "encoding time = %.3lf s.\n", encode_time);
 
-    // save the results in diy format
-    diy::io::write_blocks("approx.out", world, master);
+//     // save the results in diy format
+//     diy::io::write_blocks("approx.out", world, master);
 }

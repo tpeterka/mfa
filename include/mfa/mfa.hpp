@@ -44,7 +44,8 @@ namespace mfa
                 VectorXi& p_,             // polynomial degree in each dimension
                 VectorXi& ndom_pts_,      // number of input data points in each dim
                 MatrixXf& domain_,        // input data points (1st dim changes fastest)
-                MatrixXf& ctrl_pts_,      // (output) control points (1st dim changes fastest)
+                MatrixXf& ctrl_pts_,      // (output, optional input) control points (1st dim changes fastest)
+                VectorXi& nctrl_pts_,     // (output, optional input) number of control points in each dim
                 VectorXf& knots_,         // (output) knots (1st dim changes fastest)
                 float     eps_ = 1.0e-6); // minimum difference considered significant
 
@@ -94,8 +95,10 @@ namespace mfa
                 int       row);             // starting row index in N of result
 
         void Params();
+        void DomainParams();
 
         void Knots();
+        void UniformKnots();
 
         void KnotSpanIndex();
 
@@ -120,6 +123,11 @@ namespace mfa
        friend class NL_Encoder;
        friend class Decoder;
        friend class NewKnots;
+       // TODO: I don't understand why MaxDist can't be a friend of MFA
+//        friend class MaxDist;
+
+       // TODO: these members are public until I figure out why MaxDist can't be a friend of MFA
+    public:
 
        VectorXi& p;                     // polynomial degree in each dimension
        VectorXi& ndom_pts;              // number of input data points in each dim
