@@ -7,6 +7,7 @@
 // tpeterka@mcs.anl.gov
 //--------------------------------------------------------------
 #include <mfa/encode.hpp>
+#include <mfa/nl_encode.hpp>
 #include <mfa/decode.hpp>
 
 #include <Eigen/Dense>
@@ -43,7 +44,7 @@ MFA::
 MFA(VectorXi& p_,             // polynomial degree in each dimension
     VectorXi& ndom_pts_,      // number of input data points in each dim
     MatrixXf& domain_,        // input data points (1st dim changes fastest)
-    MatrixXf& ctrl_pts_,      // (output) control points (1st dim changes fastest)
+    MatrixXf& ctrl_pts_,      // (output) control points (1st dim changes fastest) (can be initialized by caller)
     VectorXf& knots_,         // (output) knots (1st dim changes fastest)
     float     eps_) :         // minimum difference considered significant
     p(p_),
@@ -59,10 +60,14 @@ MFA(VectorXi& p_,             // polynomial degree in each dimension
     // max extent of input data points
     dom_range = domain.maxCoeff() - domain.minCoeff();
 
-    // set number of control points to the minimum, p + 1
-    nctrl_pts.resize(p.size());
-    for (auto i = 0; i < p.size(); i++)
-        nctrl_pts(i) = p(i) + 1;
+    // set number of control points to the minimum, p + 1, if they have not been initialized by
+    // caller
+    if (ctrl_pts_.rows() == 0)
+    {
+        nctrl_pts.resize(p.size());
+        for (auto i = 0; i < p.size(); i++)
+            nctrl_pts(i) = p(i) + 1;
+    }
 
     // total number of params = sum of ndom_pts over all dimensions
     // not the total number of data points, which would be the product
@@ -309,6 +314,21 @@ AdaptiveEncode(
 {
     mfa::Encoder encoder(*this);
     encoder.AdaptiveEncode(err_limit);
+
+    nctrl_pts_ = nctrl_pts;
+}
+
+// nonlinear encode
+void
+mfa::
+MFA::
+NonlinearEncode(
+        float    err_limit,                 // maximum allowable normalized error
+        VectorXi &nctrl_pts_)               // (output) number of control points in each dim
+{
+    mfa::NL_Encoder nl_encoder(*this);
+    // TODO: use error limit eventually; for now just simple test
+    nl_encoder.Encode();
 
     nctrl_pts_ = nctrl_pts;
 }

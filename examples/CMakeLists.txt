@@ -1,2 +1,3 @@
 add_subdirectory              (adaptive)
 add_subdirectory              (convert)
+add_subdirectory              (nonlinear)

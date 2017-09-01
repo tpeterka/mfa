@@ -1003,6 +1003,16 @@ struct Block
             mfa->AdaptiveEncode(err_limit, nctrl_pts);
         }
 
+    // nonlinear encoding of block to desired error limit
+    void nonlinear_encode_block(
+            const diy::Master::ProxyWithLink& cp,
+            float                             err_limit)
+        {
+            // TODO: set initial control points here
+            mfa = new mfa::MFA(p, ndom_pts, domain, ctrl_pts, knots);
+            mfa->NonlinearEncode(err_limit, nctrl_pts);
+        }
+
     // decode entire block
     void decode_block(const diy::Master::ProxyWithLink& cp)
         {

@@ -56,6 +56,10 @@ namespace mfa
                 float     err_limit,        // maximum allowable normalized error
                 VectorXi& nctrl_pts_);      // (output) number of control points in each dim
 
+        void NonlinearEncode(
+                float     err_limit,        // maximum allowable normalized error
+                VectorXi& nctrl_pts_);      // (output) number of control points in each dim
+
         void Decode(MatrixXf& approx);      // decode points
 
         float Error(size_t idx);            // index of domain point where to compute error of mfa
@@ -113,6 +117,7 @@ namespace mfa
                 size_t&    idx);            // (output) linear index
 
        friend class Encoder;
+       friend class NL_Encoder;
        friend class Decoder;
        friend class NewKnots;
 
