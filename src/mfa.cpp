@@ -551,7 +551,7 @@ DomainParams()
     }                                                    // domain dimensions
 
     // debug
-    cerr << "params:\n" << params << endl;
+//     cerr << "params:\n" << params << endl;
 }
 
 // compute knots

@@ -1039,7 +1039,7 @@ struct Block
         nctrl_pts(0) = ctrl_pts.rows();
 
         // debug
-//         cerr << ctrl_pts.rows() << " initial control points:\n" << ctrl_pts << endl;
+        cerr << ctrl_pts.rows() << " initial control points:\n" << ctrl_pts << "\n" << endl;
 
         mfa = new mfa::MFA(p, ndom_pts, domain, ctrl_pts, nctrl_pts, knots);
         mfa->NonlinearEncode(err_limit, nctrl_pts);
@@ -1113,19 +1113,13 @@ struct Block
 
 #endif
 
-        // normalize max error by size of input data (domain and range)
-        float min = domain.minCoeff();
-        float max = domain.maxCoeff();
-        float range = max - min;
+        mfa->max_err = max_err;
 
         // debug
-        fprintf(stderr, "data range = %.1f\n", range);
+        fprintf(stderr, "data range = %.1f\n", mfa->dom_range);
         fprintf(stderr, "raw max_error = %e\n", max_err);
         cerr << "position of max error: idx=" << max_idx << "\n" << domain.row(max_idx) << endl;
-
-        max_err /= range;
-
-        fprintf(stderr, "|normalized max_err| = %e\n", fabs(max_err));
+        fprintf(stderr, "|normalized max_err| = %e\n", max_err / mfa->dom_range);
     }
 
     // save knot span domains for later comparison with error field
@@ -1139,10 +1133,10 @@ struct Block
         fprintf(stderr, "\n--- Final block results ---\n");
         // cerr << "domain\n" << domain << endl;
         //             cerr << "nctrl_pts:\n" << nctrl_pts << endl;
-        //             cerr << ctrl_pts.rows() << " control points\n" << ctrl_pts << endl;
+        cerr << ctrl_pts.rows() << " final control points\n" << ctrl_pts << endl;
         cerr << knots.size() << " knots\n" << knots << endl;
         // cerr << approx.rows() << " approximated points\n" << approx << endl;
-        fprintf(stderr, "|normalized max_err| = %e\n", fabs(max_err));
+        fprintf(stderr, "|normalized max_err| = %e\n", mfa->max_err / mfa->dom_range);
         fprintf(stderr, "# input points = %ld\n", domain.rows());
         fprintf(stderr, "# output ctrl pts = %ld # output knots = %ld\n",
                 ctrl_pts.rows(), knots.size());

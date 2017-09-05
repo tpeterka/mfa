@@ -145,7 +145,8 @@ namespace mfa
                                         // not the total number of data pts, which would be the prod.
        size_t tot_nknots;               // total nmbr of knots = sum of nmbr of knots over all dims
        size_t tot_nctrl;                // total nmbr of control points = product of control points over all dims
-       float eps;                       // minimum difference considered significant
+       float  eps;                      // minimum difference considered significant
+       float  max_err;                  // unnormalized absolute value of maximum error
 
        vector<KnotSpan> knot_spans;     // knot spans
     };
