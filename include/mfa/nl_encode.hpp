@@ -57,13 +57,14 @@ namespace mfa
                     // push old control points
                     MatrixXf old_ctrl_pts = mfa.ctrl_pts;
 
-                    // TODO: is x scalar, vector, or matrix?
-                    // how does the MFA get updated
-
-                    // first test, x is a scalar
-                    // update all control point range values by the same scaling factor
+                    // x is a vector of scaling factors, one per control point
+                    // used to scale the last coordinate of the control point
                     int last = mfa.ctrl_pts.cols() - 1;             // index of last column of control pts
-                    mfa.ctrl_pts.col(last) *= x(0);
+                    for (auto i = 0; i < mfa.ctrl_pts.rows(); i++)
+                        mfa.ctrl_pts(i, last) *= x(i);
+
+                    // debug
+//                     cerr << "current control points:\n" << mfa.ctrl_pts << endl;
 
                     // compute max error
                     // TODO: not checking all points (yet), still using old error computation
@@ -76,13 +77,14 @@ namespace mfa
                     }
 
                     niter++;
+                    mfa.max_err = max_err;
+
+                    opt_ctrl_pts = mfa.ctrl_pts;
+                    if (max_err / mfa.dom_range < err_limit)
+                        done = true;
 
                     // pop old control points
                     mfa.ctrl_pts = old_ctrl_pts;
-
-                    mfa.max_err = max_err;
-                    if (max_err / mfa.dom_range < err_limit)
-                        done = true;
 
                     // debug
                     cerr << "iteration=" << niter << " err=" << max_err / mfa.dom_range << " x=" << x.transpose() << endl;
@@ -90,7 +92,8 @@ namespace mfa
                     return max_err;
                 }
 
-                size_t num_iters() { return niter; }
+                size_t    num_iters() { return niter; }
+                MatrixXf& ctrl_pts()  { return opt_ctrl_pts; }
 
             private:
 
@@ -98,6 +101,7 @@ namespace mfa
                 size_t niter;               // number of iterations performed
                 float  err_limit;           // user error limit
                 bool   done;                // achieved user error limit; stop computing objective
+                MatrixXf opt_ctrl_pts;      // control points found by optimization
         };
 
     class NL_Encoder

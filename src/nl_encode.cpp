@@ -30,11 +30,11 @@ Encode(float err_limit)                             // maximum allowable normali
     // initialize the optimization problem
     MaxDist<float> f(mfa, err_limit);
 
-    // first test: x is a scalar scaling factor on the y-coordinates of the control points
+    // x is a vector of scalar scaling factors on the y-coordinates of the control points
 
     // initialize starting point
-    VectorXf x(1);
-    x(0) = 1.0;
+    VectorXf x = VectorXf::Ones(mfa.tot_nctrl);
+    x *= 1.5;
 //     f.setLowerBound(VectorXf::Ones(1));             // for Lbfgsb solver
 
     // choose a solver
@@ -42,11 +42,13 @@ Encode(float err_limit)                             // maximum allowable normali
     BfgsSolver<MaxDist<float>> solver;
 //     LbfgsbSolver<MaxDist<float>> solver;             // bounded
 
-    // and minimize the function
+    // minimize the function
     solver.minimize(f, x);
 
+    mfa.ctrl_pts = f.ctrl_pts();
+
     // print results
-    cerr << "argmin      " << x             << endl;
+    cerr << "argmin      " << x.transpose() << endl;
     cerr << "f(argmin)   " << f(x)          << endl;
     cerr << "num iters   " << f.num_iters() << endl;
 }
