@@ -53,6 +53,8 @@ namespace mfa
 
         void Encode();
 
+        void FixedEncode(VectorXi& nctrl_pts_); // (output) number of control points in each dim
+
         void AdaptiveEncode(
                 float     err_limit,        // maximum allowable normalized error
                 VectorXi& nctrl_pts_);      // (output) number of control points in each dim

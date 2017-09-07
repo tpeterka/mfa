@@ -994,6 +994,19 @@ struct Block
         cerr << "domain extent:\n min\n" << domain_mins << "\nmax\n" << domain_maxs << endl;
     }
 
+    // fixed number of control points encode block
+    void fixed_encode_block(
+            const diy::Master::ProxyWithLink& cp,
+            DomainArgs&                       args)
+    {
+        DomainArgs* a = &args;
+        nctrl_pts.resize(a->dom_dim);
+        for (int i = 0; i < a->dom_dim; i++)
+            nctrl_pts(i) =  a->nctrl_pts[i];
+        mfa = new mfa::MFA(p, ndom_pts, domain, ctrl_pts, nctrl_pts, knots);
+        mfa->FixedEncode(nctrl_pts);
+    }
+
     // adaptively encode block to desired error limit
     void adaptive_encode_block(
             const diy::Master::ProxyWithLink& cp,

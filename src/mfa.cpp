@@ -61,9 +61,8 @@ MFA(VectorXi& p_,             // polynomial degree in each dimension
     // max extent of input data points
     dom_range = domain.maxCoeff() - domain.minCoeff();
 
-    // set number of control points to the minimum, p + 1, if they have not been initialized by
-    // caller
-    if (ctrl_pts_.rows() == 0)
+    // set number of control points to the minimum, p + 1, if they have not been initialized
+    if (!ctrl_pts_.rows() && !nctrl_pts_.size())
     {
         nctrl_pts.resize(p.size());
         for (auto i = 0; i < p.size(); i++)
@@ -313,6 +312,18 @@ Encode()
 {
     mfa::Encoder encoder(*this);
     encoder.Encode();
+}
+
+// fixed number of control points encode
+void
+mfa::
+MFA::
+FixedEncode(VectorXi &nctrl_pts_)           // (output) number of control points in each dim
+{
+    mfa::Encoder encoder(*this);
+    encoder.Encode();
+
+    nctrl_pts_ = nctrl_pts;
 }
 
 // adaptive encode

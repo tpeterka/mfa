@@ -33,8 +33,8 @@ AdaptiveEncode(float err_limit)                                 // maximum allow
     mfa::NewKnots nk(mfa);
 
     // loop until no change in knots
-//     for (int iter = 0; ; iter++)
-    for (int iter = 0; iter < 3; iter++)
+    for (int iter = 0; ; iter++)
+//     for (int iter = 0; iter < 3; iter++)
     {
         fprintf(stderr, "\nIteration %d...\n", iter);
 
