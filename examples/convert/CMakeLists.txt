@@ -1,5 +1,4 @@
-add_executable              (write_vtk    write_vtk.cpp)
-target_sources              (write_vtk    PUBLIC  writer.cpp)
+add_executable              (write_vtk    write_vtk.cpp writer.cpp)
 target_link_libraries       (write_vtk    mfa ${libraries})
 
 install                     (TARGETS write_vtk

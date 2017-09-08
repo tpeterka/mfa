@@ -540,6 +540,8 @@ Params()
         po += ndom_pts(k);
         cs *= ndom_pts(k);
     }                                                    // domain dimensions
+    // debug
+//     cerr << "params:\n" << params << endl;
 }
 
 // precompute parameters for input data points using domain spacing only (not length along curve)
@@ -555,23 +557,18 @@ DomainParams()
     size_t cs = 1;                                      // stride for domain points in current dim.
     for (size_t k = 0; k < p.size(); k++)               // for all domain dimensions
     {
-        fprintf(stderr, "k=%ld: po=[%ld %ld]\n", k, po[0], po[1]);
-        params(po[k] = 0.0);
-        fprintf(stderr, "k=%ld po[k]=%ld\n", k, po[k]);
+        params(po[k]) = 0.0;
+
         for (size_t i = 1; i < ndom_pts(k) - 1; i++)
-        {
-            fprintf(stderr, "params(po[k] + i)=%.3f\n",
-                    fabs( (domain(cs * i,                 k) - domain(0, k)) /
-                          (domain(cs * (ndom_pts(k) - 1), k) - domain(0, k)) ) );
             params(po[k] + i) = fabs( (domain(cs * i,                 k) - domain(0, k)) /
                                       (domain(cs * (ndom_pts(k) - 1), k) - domain(0, k)) );
-        }
+
         params(po[k] + ndom_pts(k) - 1) = 1.0;
         cs *= ndom_pts(k);
     }                                                    // domain dimensions
 
     // debug
-    cerr << "params:\n" << params << endl;
+//     cerr << "params:\n" << params << endl;
 }
 
 // compute knots
