@@ -66,6 +66,7 @@ namespace mfa
         void Decode(MatrixXf& approx);      // decode points
 
         float Error(size_t idx);            // index of domain point where to compute error of mfa
+        float RangeError(size_t idx);       // index of domain point where to compute error of mfa
 
         float NormalDistance(
                 VectorXf& pt,              // point whose distance from domain is desired

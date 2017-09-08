@@ -1041,3 +1041,39 @@ Error(size_t idx)               // index of domain point
 
     return err;
 }
+
+// compute the error (absolute value of difference of range coordinates) of the mfa at a domain point
+// error is not normalized by the data range (absolute, not relative error)
+float
+mfa::
+MFA::
+RangeError(size_t idx)               // index of domain point
+{
+    // convert linear idx to multidim. i,j,k... indices in each domain dimension
+    VectorXi ijk(p.size());
+    idx2ijk(idx, ijk);
+
+    // compute parameters for the vertices of the cell
+    VectorXf param(p.size());
+    for (int i = 0; i < p.size(); i++)
+        param(i) = params(ijk(i) + po[i]);
+
+    // debug
+    // cerr << "param:\n" << param << endl;
+
+    // approximated value
+    VectorXf cpt(ctrl_pts.cols());          // approximated point
+    Decoder decoder(*this);
+    decoder.VolPt(param, cpt);
+
+     // debug
+    // cerr << "cpt:\n" << cpt << endl;
+
+    int last = domain.cols() - 1;           // range coordinate
+    float err = fabs(cpt(last) - domain(idx, last));
+
+    // debug
+    // fprintf(stderr, "error=%.3e\n", err);
+
+    return err;
+}

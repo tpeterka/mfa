@@ -1066,6 +1066,7 @@ struct Block
     }
 
     // compute error field and maximum error in the block
+    // uses normal distance to the curve, surface, etc.
     void error(const diy::Master::ProxyWithLink& cp,
             bool decode_block)                            // decode entire block first
     {
@@ -1080,7 +1081,7 @@ struct Block
 
 #if 1                                               // TBB version
 
-        // normal distance computation
+        // distance computation
         size_t max_idx;
         if (decode_block)
         {
@@ -1097,16 +1098,20 @@ struct Block
                     errs(i, errs.cols() - 1) = mfa->Error(i);
                     });
         }
+        sum_sq_err = 0.0;
         for (size_t i = 0; i < domain.rows(); i++)
-            if (i == 0 || fabs(errs(i, errs.cols() - 1)) > fabs(max_err))
+        {
+            sum_sq_err += (errs(i, errs.cols() - 1) * errs(i, errs.cols() - 1));
+            if (i == 0 || errs(i, errs.cols() - 1) > max_err)
             {
                 max_err = errs(i, errs.cols() - 1);
                 max_idx = i;
             }
+        }
 
 #else                                               // single thread version
 
-        // normal distance computation
+        // distance computation
         size_t max_idx;
         for (size_t i = 0; i < (size_t)domain.rows(); i++)
         {
@@ -1135,6 +1140,83 @@ struct Block
         fprintf(stderr, "|normalized max_err| = %e\n", max_err / mfa->dom_range);
     }
 
+    // compute error field and maximum error in the block
+    // uses difference between range values
+    void range_error(const diy::Master::ProxyWithLink& cp,
+            bool decode_block)                            // decode entire block first
+    {
+        errs.resize(domain.rows(), domain.cols());
+        errs = domain;
+
+        if (decode_block)
+        {
+            approx.resize(domain.rows(), domain.cols());
+            mfa->Decode(approx);
+        }
+
+#if 1                                               // TBB version
+
+        // distance computation
+        size_t max_idx;
+        int last = errs.cols() - 1;                 // range coordinate
+        if (decode_block)
+        {
+            parallel_for (size_t(0), (size_t)domain.rows(), [&] (size_t i)
+                    {
+                    VectorXf cpt = approx.row(i);
+                    errs(i, last) = fabs(cpt(last) - domain(i, last));
+                    });
+        }
+        else
+        {
+            parallel_for (size_t(0), (size_t)domain.rows(), [&] (size_t i)
+                    {
+                    errs(i, last) = mfa->RangeError(i);
+                    });
+        }
+        sum_sq_err = 0.0;
+        for (size_t i = 0; i < domain.rows(); i++)
+        {
+            sum_sq_err += (errs(i, last) * errs(i, last));
+            if (i == 0 || errs(i, last) > max_err)
+            {
+                max_err = errs(i, last);
+                max_idx = i;
+            }
+        }
+
+#else                                               // single thread version
+
+        // distance computation
+        size_t max_idx;
+        int last = errs.cols() - 1;                 // range coordinate
+        for (size_t i = 0; i < (size_t)domain.rows(); i++)
+        {
+            if (decode_block)
+            {
+                VectorXf cpt = approx.row(i);
+                errs(i, last) = fabs(cpt(last) - domain(i, last));
+            }
+            else
+                errs(i, last) = mfa->RangeError(i);
+            if (i == 0 || errs(i, last) > max_err)
+            {
+                max_err = errs(i, last);
+                max_idx = i;
+            }
+        }
+
+#endif
+
+        mfa->max_err = max_err;
+
+        // debug
+        fprintf(stderr, "data range = %.1f\n", mfa->dom_range);
+        fprintf(stderr, "raw max_error = %e\n", max_err);
+        cerr << "position of max error: idx=" << max_idx << "\n" << domain.row(max_idx) << endl;
+        fprintf(stderr, "|normalized max_err| = %e\n", max_err / mfa->dom_range);
+    }
+
     // save knot span domains for later comparison with error field
     void knot_span_domains(const diy::Master::ProxyWithLink& cp)
     {
@@ -1144,12 +1226,13 @@ struct Block
     void print_block(const diy::Master::ProxyWithLink& cp)
     {
         fprintf(stderr, "\n--- Final block results ---\n");
-        // cerr << "domain\n" << domain << endl;
-        //             cerr << "nctrl_pts:\n" << nctrl_pts << endl;
-        cerr << ctrl_pts.rows() << " final control points\n" << ctrl_pts << endl;
+//         cerr << "domain\n" << domain << endl;
+//         cerr << "nctrl_pts:\n" << nctrl_pts << endl;
+//         cerr << ctrl_pts.rows() << " final control points\n" << ctrl_pts << endl;
         cerr << knots.size() << " knots\n" << knots << endl;
-        // cerr << approx.rows() << " approximated points\n" << approx << endl;
+//         cerr << approx.rows() << " approximated points\n" << approx << endl;
         fprintf(stderr, "|normalized max_err| = %e\n", mfa->max_err / mfa->dom_range);
+        fprintf(stderr, "sum of squared errors = %e\n", sum_sq_err);
         fprintf(stderr, "# input points = %ld\n", domain.rows());
         fprintf(stderr, "# output ctrl pts = %ld # output knots = %ld\n",
                 ctrl_pts.rows(), knots.size());
@@ -1171,6 +1254,7 @@ struct Block
 
     // (same number as input points, for rendering only)
     float    max_err;                        // maximum (abs value) distance from input points to curve
+    float    sum_sq_err;                     // sum of squared errors
     MatrixXf errs;                           // error field (abs. value, not normalized by data range)
 
     float s;                                 // scaling factor on range values (for error checking)

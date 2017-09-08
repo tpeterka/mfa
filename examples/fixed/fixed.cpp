@@ -28,25 +28,23 @@ typedef  diy::RegularDecomposer<Bounds> Decomposer;
 int main(int argc, char** argv)
 {
     // initialize MPI
-    diy::mpi::environment  env(argc, argv); // equivalent of MPI_Init(argc, argv)/MPI_Finalize()
-    diy::mpi::communicator world;           // equivalent of MPI_COMM_WORLD
+    diy::mpi::environment  env(argc, argv);     // equivalent of MPI_Init(argc, argv)/MPI_Finalize()
+    diy::mpi::communicator world;               // equivalent of MPI_COMM_WORLD
 
-    int nblocks     = 1;                     // number of local blocks
-    int tot_blocks  = nblocks * world.size();
-    int mem_blocks  = -1;                    // everything in core for now
-    int num_threads = 1;                     // needed in order to do timing
+    int nblocks     = 1;                        // number of local blocks
+    int tot_blocks  = nblocks * world.size();   // number of global blocks
+    int mem_blocks  = -1;                       // everything in core for now
+    int num_threads = 1;                        // needed in order to do timing
 
     // default command line arguments
-    float norm_err_limit = 1.0;                 // maximum normalized error limit
-    int   pt_dim         = 3;                   // dimension of input points
-    int   dom_dim        = 2;                   // dimension of domain (<= pt_dim)
-    int   degree         = 4;                   // degree (same for all dims)
-    int   ndomp          = 100;                 // input number of domain points (same for all dims)
+    int   pt_dim    = 3;                        // dimension of input points
+    int   dom_dim   = 2;                        // dimension of domain (<= pt_dim)
+    int   degree    = 4;                        // degree (same for all dims)
+    int   ndomp     = 100;                      // input number of domain points (same for all dims)
 
     // get command line arguments
     using namespace opts;
     Options ops(argc, argv);
-    ops >> Option('e', "error",  norm_err_limit, "maximum normalized error limit");
     ops >> Option('d', "pt_dim", pt_dim, " dimension of points");
     ops >> Option('m', "dom_dim", dom_dim, " dimension of domain");
     ops >> Option('p', "degree", degree, "degree in each dimension of domain");
@@ -85,7 +83,7 @@ int main(int argc, char** argv)
     master.foreach([&](Block* b, const diy::Master::ProxyWithLink& cp)
                    { b->generate_sinc_data(cp, d_args); });
 
-    d_args.nctrl_pts[0] = 9;                // set numbers of control points here, matching dimensionality of data
+    d_args.nctrl_pts[0] = 15;                // set numbers of control points here, matching dimensionality of data
 
     fprintf(stderr, "\nStarting fixed encoding...\n\n");
     double encode_time = MPI_Wtime();
@@ -96,8 +94,13 @@ int main(int argc, char** argv)
 
     // debug: compute error field for visualization and max error to verify that it is below the threshold
     fprintf(stderr, "\nFinal decoding and computing max. error...\n");
+#if 0       // normal distance
     master.foreach([&](Block* b, const diy::Master::ProxyWithLink& cp)
             { b->error(cp, true); });
+#else       // range coordinate difference
+    master.foreach([&](Block* b, const diy::Master::ProxyWithLink& cp)
+            { b->range_error(cp, true); });
+#endif
 
     // debug: save knot span domains for comparing error with location in knot span
     fprintf(stderr, "\nFinal decoding and computing max. error...\n");
