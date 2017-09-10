@@ -41,11 +41,19 @@ AdaptiveEncode(float err_limit)                                 // maximum allow
         // debug
 //         cerr << "current knots:\n" << mfa.knots << endl;
 
-#if 1           // split spans in the middle
+#if 0           // high-d w/ splitting spans in the middle
+
+        bool done = nk.NewKnots_full(nnew_knots, new_knots, err_limit, iter);
+
+#endif
+
+#if 1           // low-d w/ splitting spans in the middle
 
         bool done = nk.NewKnots_curve(nnew_knots, new_knots, err_limit, iter);
 
-#else           // split spans at point of greatest error
+#endif
+
+#if 0           // low-d w/ splitting spans at point of greatest error
 
         bool done = nk.NewKnots_curve1(nnew_knots, new_knots, err_limit, iter);
 

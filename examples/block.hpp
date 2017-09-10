@@ -1229,7 +1229,7 @@ struct Block
 //         cerr << "domain\n" << domain << endl;
 //         cerr << "nctrl_pts:\n" << nctrl_pts << endl;
 //         cerr << ctrl_pts.rows() << " final control points\n" << ctrl_pts << endl;
-        cerr << knots.size() << " knots\n" << knots << endl;
+//         cerr << knots.size() << " knots\n" << knots << endl;
 //         cerr << approx.rows() << " approximated points\n" << approx << endl;
         fprintf(stderr, "|normalized max_err| = %e\n", mfa->max_err / mfa->dom_range);
         fprintf(stderr, "sum of squared errors = %e\n", sum_sq_err);

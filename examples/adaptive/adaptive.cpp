@@ -86,19 +86,19 @@ int main(int argc, char** argv)
 //                    { b->generate_sinc_data(cp, d_args); });
 
     // 2d sinc function f(x,y) = sinc(x)sinc(y)
-     d_args.pt_dim       = pt_dim;
-     d_args.dom_dim      = dom_dim;
-     d_args.p[0]         = degree;
-     d_args.p[1]         = degree;
-     d_args.ndom_pts[0]  = ndomp;
-     d_args.ndom_pts[1]  = ndomp;
-     d_args.min[0]       = -4.0 * M_PI;
-     d_args.min[1]       = -4.0 * M_PI;
-     d_args.max[0]       = 4.0 * M_PI;
-     d_args.max[1]       = 4.0 * M_PI;
-     d_args.s            = 10.0;              // scaling factor on range
-     master.foreach([&](Block* b, const diy::Master::ProxyWithLink& cp)
-                    { b->generate_sinc_data(cp, d_args); });
+//      d_args.pt_dim       = pt_dim;
+//      d_args.dom_dim      = dom_dim;
+//      d_args.p[0]         = degree;
+//      d_args.p[1]         = degree;
+//      d_args.ndom_pts[0]  = ndomp;
+//      d_args.ndom_pts[1]  = ndomp;
+//      d_args.min[0]       = -4.0 * M_PI;
+//      d_args.min[1]       = -4.0 * M_PI;
+//      d_args.max[0]       = 4.0 * M_PI;
+//      d_args.max[1]       = 4.0 * M_PI;
+//      d_args.s            = 10.0;              // scaling factor on range
+//      master.foreach([&](Block* b, const diy::Master::ProxyWithLink& cp)
+//                     { b->generate_sinc_data(cp, d_args); });
 
    // 3d sinc function
 //     d_args.pt_dim       = pt_dim;
@@ -145,8 +145,8 @@ int main(int argc, char** argv)
     // 2d S3D
 //     d_args.pt_dim       = 3;
 //     d_args.dom_dim      = 2;
-//     d_args.p[0]         = 3;
-//     d_args.p[1]         = 3;
+//     d_args.p[0]         = 4;
+//     d_args.p[1]         = 4;
 //     d_args.ndom_pts[0]  = 704;
 //     d_args.ndom_pts[1]  = 540;
 //     master.foreach([&](Block* b, const diy::Master::ProxyWithLink& cp)
@@ -155,8 +155,8 @@ int main(int argc, char** argv)
     // 2d S3D subset
 //     d_args.pt_dim       = 3;
 //     d_args.dom_dim      = 2;
-//     d_args.p[0]         = 3;
-//     d_args.p[1]         = 3;
+//     d_args.p[0]         = 4;
+//     d_args.p[1]         = 4;
 //     d_args.starts[0]    = 100;                    // NB starts are in full 3D even if example is in 2D
 //     d_args.starts[1]    = 0;
 //     d_args.starts[2]    = 275;
@@ -168,23 +168,23 @@ int main(int argc, char** argv)
 //                    { b->read_2d_file_subdata(cp, d_args); });
 
     // 3d S3D
-//     d_args.pt_dim       = 4;
-//     d_args.dom_dim      = 3;
-//     d_args.p[0]         = 3;
-//     d_args.p[1]         = 3;
-//     d_args.p[2]         = 3;
-//     d_args.ndom_pts[0]  = 704;
-//     d_args.ndom_pts[1]  = 540;
-//     d_args.ndom_pts[2]  = 550;
-//     master.foreach([&](Block* b, const diy::Master::ProxyWithLink& cp)
-//                    { b->read_3d_file_data(cp, d_args); });
+    d_args.pt_dim       = 4;
+    d_args.dom_dim      = 3;
+    d_args.p[0]         = 4;
+    d_args.p[1]         = 4;
+    d_args.p[2]         = 4;
+    d_args.ndom_pts[0]  = 704;
+    d_args.ndom_pts[1]  = 540;
+    d_args.ndom_pts[2]  = 550;
+    master.foreach([&](Block* b, const diy::Master::ProxyWithLink& cp)
+                   { b->read_3d_file_data(cp, d_args); });
 
     // 3d S3D subset
 //     d_args.pt_dim       = 4;
 //     d_args.dom_dim      = 3;
-//     d_args.p[0]         = 3;
-//     d_args.p[1]         = 3;
-//     d_args.p[2]         = 3;
+//     d_args.p[0]         = 4;
+//     d_args.p[1]         = 4;
+//     d_args.p[2]         = 4;
 //     d_args.starts[0]    = 100;                    // NB starts are in full 3D even if example is in 2D
 //     d_args.starts[1]    = 0;
 //     d_args.starts[2]    = 140;
