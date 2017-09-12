@@ -499,9 +499,11 @@ Params()
 
                 d = domain.row(co + i * cs) - domain.row(co + (i + 1) * cs);
                 dists(i) = d.norm();                     // Euclidean distance (l-2 norm)
-                // fprintf(stderr, "dists[%lu] = %.3f\n", i, dists[i]);
+//                 fprintf(stderr, "dists[%lu] = %.3f\n", i, dists[i]);
                 tot_dist += dists(i);
             }
+
+//             fprintf(stderr, "tot_dist=%.3f\n", tot_dist);
 
             // accumulate (sum) parameters from this curve into the params for this dim.
             if (tot_dist > 0.0)                          // skip zero length curves
@@ -514,9 +516,9 @@ Params()
                     float dfrac = dists(i) / tot_dist;
                     params(po + i + 1) += prev_param + dfrac;
                     // debug
-                    // fprintf(stderr, "k %ld j %ld i %ld po %ld "
-                    //         "param %.3f = prev_param %.3f + dfrac %.3f\n",
-                    //         k, j, i, po, prev_param + dfrac, prev_param, dfrac);
+//                     fprintf(stderr, "k %ld j %ld i %ld po %ld "
+//                             "param %.3f = prev_param %.3f + dfrac %.3f\n",
+//                             k, j, i, po, prev_param + dfrac, prev_param, dfrac);
                     prev_param += dfrac;
                 }
             }
@@ -541,7 +543,7 @@ Params()
         cs *= ndom_pts(k);
     }                                                    // domain dimensions
     // debug
-//     cerr << "params:\n" << params << endl;
+    cerr << "params:\n" << params << endl;
 }
 
 // precompute parameters for input data points using domain spacing only (not length along curve)
@@ -601,7 +603,7 @@ Knots()
         int nknots = nctrl_pts(k) + p(k) + 1;    // number of knots in current dim
 
         // in P&T, d is the ratio of number of input points (r+1) to internal knot spans (n-p+1)
-        // float d = (float)(r + 1) / (n - p + 1);         // eq. 9.68, r is P&T's m
+//         float d = (float)(ndom_pts(k)) / (nctrl_pts(k) - p(k));         // eq. 9.68, r is P&T's m
         // but I prefer d to be the ratio of input spans r to internal knot spans (n-p+1)
         float d = (float)(ndom_pts(k) - 1) / (nctrl_pts(k) - p(k));
 
@@ -615,7 +617,7 @@ Knots()
             // cerr << "d " << d << " j " << j << " i " << i << " a " << a << endl;
 
             // when using P&T's eq. 9.68, compute knots using the following
-            // knots(p + j) = (1.0 - a) * params(i - 1) + a * params(i);
+//             knots(ko + p(k) + j) = (1.0 - a) * params(po + i - 1) + a * params(po + i);
 
             // when using my version of d, use the following
             knots(ko + p(k) + j) = (1.0 - a) * params(po + i) + a * params(po + i + 1);
