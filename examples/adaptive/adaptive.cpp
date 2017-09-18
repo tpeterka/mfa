@@ -145,18 +145,20 @@ int main(int argc, char** argv)
     // 2d S3D
 //     d_args.pt_dim       = 3;
 //     d_args.dom_dim      = 2;
-//     d_args.p[0]         = 4;
-//     d_args.p[1]         = 4;
+//     d_args.p[0]         = degree;
+//     d_args.p[1]         = degree;
 //     d_args.ndom_pts[0]  = 704;
 //     d_args.ndom_pts[1]  = 540;
+//     d_args.ndom_pts[2]  = 550;
+//     strncpy(d_args.infile, "/Users/tpeterka/datasets/flame/6_small.xyz", sizeof(d_args.infile));
 //     master.foreach([&](Block* b, const diy::Master::ProxyWithLink& cp)
 //                    { b->read_2d_file_data(cp, d_args); });
 
     // 2d S3D subset
 //     d_args.pt_dim       = 3;
 //     d_args.dom_dim      = 2;
-//     d_args.p[0]         = 4;
-//     d_args.p[1]         = 4;
+//     d_args.p[0]         = degree;
+//     d_args.p[1]         = degree;
 //     d_args.starts[0]    = 100;                    // NB starts are in full 3D even if example is in 2D
 //     d_args.starts[1]    = 0;
 //     d_args.starts[2]    = 275;
@@ -164,27 +166,29 @@ int main(int argc, char** argv)
 //     d_args.ndom_pts[1]  = 300;
 //     d_args.full_dom_pts[0] = 704;               // full domain size (not just the desired subset)
 //     d_args.full_dom_pts[1] = 540;
+//     strncpy(d_args.infile, "/Users/tpeterka/datasets/flame/6_small.xyz", sizeof(d_args.infile));
 //     master.foreach([&](Block* b, const diy::Master::ProxyWithLink& cp)
 //                    { b->read_2d_file_subdata(cp, d_args); });
 
     // 3d S3D
-    d_args.pt_dim       = 4;
-    d_args.dom_dim      = 3;
-    d_args.p[0]         = 4;
-    d_args.p[1]         = 4;
-    d_args.p[2]         = 4;
-    d_args.ndom_pts[0]  = 704;
-    d_args.ndom_pts[1]  = 540;
-    d_args.ndom_pts[2]  = 550;
-    master.foreach([&](Block* b, const diy::Master::ProxyWithLink& cp)
-                   { b->read_3d_file_data(cp, d_args); });
+//     d_args.pt_dim       = 4;
+//     d_args.dom_dim      = 3;
+//     d_args.p[0]         = degree;
+//     d_args.p[1]         = degree;
+//     d_args.p[2]         = degree;
+//     d_args.ndom_pts[0]  = 704;
+//     d_args.ndom_pts[1]  = 540;
+//     d_args.ndom_pts[2]  = 550;
+//     strncpy(d_args.infile, "/Users/tpeterka/datasets/flame/6_small.xyz", sizeof(d_args.infile));
+//     master.foreach([&](Block* b, const diy::Master::ProxyWithLink& cp)
+//                    { b->read_3d_file_data(cp, d_args); });
 
     // 3d S3D subset
 //     d_args.pt_dim       = 4;
 //     d_args.dom_dim      = 3;
-//     d_args.p[0]         = 4;
-//     d_args.p[1]         = 4;
-//     d_args.p[2]         = 4;
+//     d_args.p[0]         = degree;
+//     d_args.p[1]         = degree;
+//     d_args.p[2]         = degree;
 //     d_args.starts[0]    = 100;                    // NB starts are in full 3D even if example is in 2D
 //     d_args.starts[1]    = 0;
 //     d_args.starts[2]    = 140;
@@ -194,8 +198,34 @@ int main(int argc, char** argv)
 //     d_args.full_dom_pts[0] = 704;               // full domain size (not just the desired subset)
 //     d_args.full_dom_pts[1] = 540;
 //     d_args.full_dom_pts[2] = 550;
+//     strncpy(d_args.infile, "/Users/tpeterka/datasets/flame/6_small.xyz", sizeof(d_args.infile));
 //     master.foreach([&](Block* b, const diy::Master::ProxyWithLink& cp)
 //                    { b->read_3d_file_subdata(cp, d_args); });
+
+    // 2d nek5000
+//     d_args.pt_dim       = 3;
+//     d_args.dom_dim      = 2;
+//     d_args.p[0]         = degree;
+//     d_args.p[1]         = degree;
+//     d_args.ndom_pts[0]  = 200;
+//     d_args.ndom_pts[1]  = 200;
+//     d_args.ndom_pts[2]  = 200;
+//     strncpy(d_args.infile, "/Users/tpeterka/datasets/nek5000/200x200x200/0.xyz", sizeof(d_args.infile));
+//     master.foreach([&](Block* b, const diy::Master::ProxyWithLink& cp)
+//                    { b->read_2d_file_data(cp, d_args); });
+
+    // 3d nek5000
+    d_args.pt_dim       = 4;
+    d_args.dom_dim      = 3;
+    d_args.p[0]         = degree;
+    d_args.p[1]         = degree;
+    d_args.p[2]         = degree;
+    d_args.ndom_pts[0]  = 200;
+    d_args.ndom_pts[1]  = 200;
+    d_args.ndom_pts[2]  = 200;
+    strncpy(d_args.infile, "/Users/tpeterka/datasets/nek5000/200x200x200/0.xyz", sizeof(d_args.infile));
+    master.foreach([&](Block* b, const diy::Master::ProxyWithLink& cp)
+                   { b->read_3d_file_data(cp, d_args); });
 
     fprintf(stderr, "\nStarting adaptive encoding...\n\n");
     double encode_time = MPI_Wtime();

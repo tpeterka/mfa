@@ -543,7 +543,7 @@ Params()
         cs *= ndom_pts(k);
     }                                                    // domain dimensions
     // debug
-    cerr << "params:\n" << params << endl;
+//     cerr << "params:\n" << params << endl;
 }
 
 // precompute parameters for input data points using domain spacing only (not length along curve)
