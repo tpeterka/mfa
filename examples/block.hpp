@@ -572,7 +572,7 @@ struct Block
 
     // read a floating point 3d vector dataset and take one 1-d curve out of the middle of it
     // f = (x, velocity magnitude)
-    void read_1d_file_data(
+    void read_1d_slice_3d_vector_data(
             const       diy::Master::ProxyWithLink& cp,
             DomainArgs& args)
     {
@@ -642,7 +642,7 @@ struct Block
 
     // read a floating point 3d vector dataset and take one 2-d surface out of the middle of it
     // f = (x, y, velocity magnitude)
-    void read_2d_file_data(
+    void read_2d_slice_3d_vector_data(
             const       diy::Master::ProxyWithLink& cp,
             DomainArgs& args)
     {
@@ -717,7 +717,7 @@ struct Block
 
     // read a floating point 3d vector dataset and take one 2d (parallel to x-y plane) subset
     // f = (x, y, velocity magnitude)
-    void read_2d_file_subdata(
+    void read_2d_subset_3d_vector_data(
             const       diy::Master::ProxyWithLink& cp,
             DomainArgs& args)
     {
@@ -815,7 +815,7 @@ struct Block
 
     // read a floating point 3d vector dataset
     // f = (x, y, z, velocity magnitude)
-    void read_3d_file_data(
+    void read_3d_vector_data(
             const       diy::Master::ProxyWithLink& cp,
             DomainArgs& args)
     {
@@ -892,7 +892,7 @@ struct Block
 
     // read a floating point 3d vector dataset and take a 3d subset out of it
     // f = (x, y, z, velocity magnitude)
-    void read_3d_file_subdata(
+    void read_3d_subset_3d_vector_data(
             const       diy::Master::ProxyWithLink& cp,
             DomainArgs& args)
     {
@@ -983,6 +983,144 @@ struct Block
         domain_mins(0) = domain(0, 0);
         domain_mins(1) = domain(0, 1);
         domain_mins(2) = domain(0, 2);
+        domain_maxs(0) = domain(tot_ndom_pts - 1, 0);
+        domain_maxs(1) = domain(tot_ndom_pts - 1, 1);
+        domain_maxs(2) = domain(tot_ndom_pts - 1, 2);
+
+        // debug
+        cerr << "domain extent:\n min\n" << domain_mins << "\nmax\n" << domain_maxs << endl;
+    }
+
+    // read a floating point 2d scalar dataset
+    // f = (x, y, value)
+    void read_2d_scalar_data(
+            const       diy::Master::ProxyWithLink& cp,
+            DomainArgs& args)
+    {
+        DomainArgs* a = &args;
+        int tot_ndom_pts = 1;
+        p.resize(a->dom_dim);
+        ndom_pts.resize(a->dom_dim);
+        nctrl_pts.resize(a->dom_dim);
+        domain_mins.resize(a->pt_dim);
+        domain_maxs.resize(a->pt_dim);
+        for (int i = 0; i < a->dom_dim; i++)
+        {
+            p(i)         =  a->p[i];
+            ndom_pts(i)  =  a->ndom_pts[i];
+            nctrl_pts(i) =  a->nctrl_pts[i];
+            tot_ndom_pts *= ndom_pts(i);
+        }
+        domain.resize(tot_ndom_pts, a->pt_dim);
+
+        vector<float> val(tot_ndom_pts);
+
+        FILE *fd = fopen(a->infile, "r");
+        assert(fd);
+
+        // read data values
+        if (!fread(&val[0], sizeof(float), tot_ndom_pts, fd))
+        {
+            fprintf(stderr, "Error: unable to read file\n");
+            exit(0);
+        }
+        for (size_t i = 0; i < val.size(); i++)
+            domain(i, 2) = val[i];
+
+        // rest is hard-coded for 3d
+
+        // find extent of range
+        for (size_t i = 0; i < (size_t)domain.rows(); i++)
+        {
+            if (i == 0 || domain(i, 2) < domain_mins(2))
+                domain_mins(2) = domain(i, 2);
+            if (i == 0 || domain(i, 2) > domain_maxs(2))
+                domain_maxs(2) = domain(i, 2);
+        }
+
+        // set domain values (just equal to i, j; ie, dx, dy = 1, 1)
+        int n = 0;
+        for (size_t j = 0; j < (size_t)(ndom_pts(1)); j++)
+            for (size_t i = 0; i < (size_t)(ndom_pts(0)); i++)
+            {
+                domain(n, 0) = i;
+                domain(n, 1) = j;
+                n++;
+            }
+
+        // extents
+        domain_mins(0) = 0.0;
+        domain_mins(1) = 0.0;
+        domain_maxs(0) = domain(tot_ndom_pts - 1, 0);
+        domain_maxs(1) = domain(tot_ndom_pts - 1, 1);
+
+        // debug
+        cerr << "domain extent:\n min\n" << domain_mins << "\nmax\n" << domain_maxs << endl;
+    }
+
+    // read a floating point 3d scalar dataset
+    // f = (x, y, z, value)
+    void read_3d_scalar_data(
+            const       diy::Master::ProxyWithLink& cp,
+            DomainArgs& args)
+    {
+        DomainArgs* a = &args;
+        int tot_ndom_pts = 1;
+        p.resize(a->dom_dim);
+        ndom_pts.resize(a->dom_dim);
+        nctrl_pts.resize(a->dom_dim);
+        domain_mins.resize(a->pt_dim);
+        domain_maxs.resize(a->pt_dim);
+        for (int i = 0; i < a->dom_dim; i++)
+        {
+            p(i)         =  a->p[i];
+            ndom_pts(i)  =  a->ndom_pts[i];
+            nctrl_pts(i) =  a->nctrl_pts[i];
+            tot_ndom_pts *= ndom_pts(i);
+        }
+        domain.resize(tot_ndom_pts, a->pt_dim);
+
+        vector<float> val(tot_ndom_pts);
+
+        FILE *fd = fopen(a->infile, "r");
+        assert(fd);
+
+        // read data values
+        if (!fread(&val[0], sizeof(float), tot_ndom_pts, fd))
+        {
+            fprintf(stderr, "Error: unable to read file\n");
+            exit(0);
+        }
+        for (size_t i = 0; i < val.size(); i++)
+            domain(i, 3) = val[i];
+
+        // rest is hard-coded for 3d
+
+        // find extent of range
+        for (size_t i = 0; i < (size_t)domain.rows(); i++)
+        {
+            if (i == 0 || domain(i, 3) < domain_mins(3))
+                domain_mins(3) = domain(i, 3);
+            if (i == 0 || domain(i, 3) > domain_maxs(3))
+                domain_maxs(3) = domain(i, 3);
+        }
+
+        // set domain values (just equal to i, j; ie, dx, dy = 1, 1)
+        int n = 0;
+        for (size_t k = 0; k < (size_t)(ndom_pts(2)); k++)
+            for (size_t j = 0; j < (size_t)(ndom_pts(1)); j++)
+                for (size_t i = 0; i < (size_t)(ndom_pts(0)); i++)
+                {
+                    domain(n, 0) = i;
+                    domain(n, 1) = j;
+                    domain(n, 2) = k;
+                    n++;
+                }
+
+        // extents
+        domain_mins(0) = 0.0;
+        domain_mins(1) = 0.0;
+        domain_mins(2) = 0.0;
         domain_maxs(0) = domain(tot_ndom_pts - 1, 0);
         domain_maxs(1) = domain(tot_ndom_pts - 1, 1);
         domain_maxs(2) = domain(tot_ndom_pts - 1, 2);

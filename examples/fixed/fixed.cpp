@@ -174,7 +174,7 @@ int main(int argc, char** argv)
 //     d_args.nctrl_pts[0] = 140;                // set numbers of control points here, matching dimensionality of data
 //     strncpy(d_args.infile, "/Users/tpeterka/datasets/flame/6_small.xyz", sizeof(d_args.infile));
 //     master.foreach([&](Block* b, const diy::Master::ProxyWithLink& cp)
-//                    { b->read_1d_file_data(cp, d_args); });
+//                    { b->read_1d_slice_3d_vector_data(cp, d_args); });
 
     // 2d S3D
 //     d_args.pt_dim       = 3;
@@ -188,7 +188,7 @@ int main(int argc, char** argv)
 //     d_args.nctrl_pts[1] = 108;
 //     strncpy(d_args.infile, "/Users/tpeterka/datasets/flame/6_small.xyz", sizeof(d_args.infile));
 //     master.foreach([&](Block* b, const diy::Master::ProxyWithLink& cp)
-//                    { b->read_2d_file_data(cp, d_args); });
+//                    { b->read_2d_slice_3d_vector_data(cp, d_args); });
 
     // 3d S3D
 //     d_args.pt_dim       = 4;
@@ -204,7 +204,7 @@ int main(int argc, char** argv)
 //     d_args.nctrl_pts[2] = 110;
 //     strncpy(d_args.infile, "/Users/tpeterka/datasets/flame/6_small.xyz", sizeof(d_args.infile));
 //     master.foreach([&](Block* b, const diy::Master::ProxyWithLink& cp)
-//                    { b->read_3d_file_data(cp, d_args); });
+//                    { b->read_3d_vector_data(cp, d_args); });
 
     fprintf(stderr, "\nStarting fixed encoding...\n\n");
     double encode_time = MPI_Wtime();
