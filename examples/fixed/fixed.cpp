@@ -87,21 +87,21 @@ int main(int argc, char** argv)
 //                    { b->generate_sine_data(cp, d_args); });
 
     // 2d sine function f(x,y) = sine(x)sine(y)
-     d_args.pt_dim       = pt_dim;
-     d_args.dom_dim      = dom_dim;
-     d_args.p[0]         = degree;
-     d_args.p[1]         = degree;
-     d_args.ndom_pts[0]  = ndomp;
-     d_args.ndom_pts[1]  = ndomp;
-     d_args.min[0]       = -4.0 * M_PI;
-     d_args.min[1]       = -4.0 * M_PI;
-     d_args.max[0]       = 4.0 * M_PI;
-     d_args.max[1]       = 4.0 * M_PI;
-     d_args.s            = 10.0;              // scaling factor on range
+    d_args.pt_dim       = pt_dim;
+    d_args.dom_dim      = dom_dim;
+    d_args.p[0]         = degree;
+    d_args.p[1]         = degree;
+    d_args.ndom_pts[0]  = ndomp;
+    d_args.ndom_pts[1]  = ndomp;
+    d_args.min[0]       = -4.0 * M_PI;
+    d_args.min[1]       = -4.0 * M_PI;
+    d_args.max[0]       = 4.0 * M_PI;
+    d_args.max[1]       = 4.0 * M_PI;
+    d_args.s            = 1.0;              // scaling factor on range
     d_args.nctrl_pts[0] = nctrl;             // set numbers of control points here, matching dimensionality of data
     d_args.nctrl_pts[1] = nctrl;
-     master.foreach([&](Block* b, const diy::Master::ProxyWithLink& cp)
-                    { b->generate_sine_data(cp, d_args); });
+    master.foreach([&](Block* b, const diy::Master::ProxyWithLink& cp)
+            { b->generate_sine_data(cp, d_args); });
 
     // 1d sinc function f(x) = sin(x)/x
 //     d_args.pt_dim       = pt_dim;
