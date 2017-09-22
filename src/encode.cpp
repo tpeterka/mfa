@@ -710,9 +710,6 @@ CopyCtrl(MatrixXf& P,          // solved points for current dimension and curve
             else
                 temp_ctrl(i, j) = P(i - 1, j);
         }
-
-        // DEPRECATED: unclamped copy
-//         temp_ctrl.row(i) = P.row(i - 1);
     }
 
     // copy last point straight from domain
