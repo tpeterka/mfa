@@ -1,4 +1,4 @@
-//--------------------------------------------------------------
+
 // decoder object
 // ref: [P&T] Piegl & Tiller, The NURBS Book, 1995
 //
@@ -225,8 +225,6 @@ Decode(MatrixXf& approx)                 // pts in approximated volume (1st dim.
 
 // compute a point from a NURBS curve at a given parameter value
 // algorithm 4.1, Piegl & Tiller (P&T) p.124
-// this version recomputes basis functions rather than taking them as an input
-// this version also assumes weights = 1; no division by weight is done
 void
 mfa::
 Decoder::
@@ -236,7 +234,7 @@ CurvePt(
         size_t    to,                                   // offset to start of control points for this curve
         VectorXf& out_pt)                               // (output) point
 {
-    int n      = (int)mfa.ctrl_pts.rows() - 1;          // number of control point spans
+    int n      = (int)mfa.nctrl_pts(cur_dim) - 1;          // number of control point spans
     int span   = mfa.FindSpan(cur_dim, param, mfa.ko[cur_dim]) - mfa.ko[cur_dim];    // relative to ko[cur_dim]
     out_pt     = VectorXf::Zero(mfa.ctrl_pts.cols());   // initializes and resizes
     MatrixXf N = MatrixXf::Zero(1, n + 1);              // basis coefficients
@@ -244,9 +242,6 @@ CurvePt(
 
     for (int j = 0; j <= mfa.p(cur_dim); j++)
     {
-//         fprintf(stderr, "j=%d to=%ld span=%d cs[%d]=%ld row=%ld\n",
-//                 j, to, span, cur_dim, cs[cur_dim], to + (span - mfa.p(cur_dim) + j) * cs[cur_dim]);
-
         out_pt += N(0, j + span - mfa.p(cur_dim)) *
             mfa.ctrl_pts.row(to + (span - mfa.p(cur_dim) + j) * cs[cur_dim]);
     }
@@ -256,17 +251,26 @@ CurvePt(
     for (auto j = 0; j < mfa.p.size(); j++)
         if (j != cur_dim)
             out_pt(j) = mfa.ctrl_pts(to + (span - mfa.p(cur_dim)) * cs[cur_dim], j);
+
+    // compute the denominator of the rational curve point and divide
+    // basis function and weights arrays must be same size and shape to be multiplied element-wise
+    ArrayXXf w(1, mfa.nctrl_pts(cur_dim));              // weights for this curve
+    ArrayXXf b(1, mfa.nctrl_pts(cur_dim));              // basis functions for this curve
+    for (auto j = 0; j < mfa.nctrl_pts(cur_dim); j++)
+        w(0, j) = mfa.weights(to + j * cs[cur_dim]);
+    b = N.row(0).array();
+    float denom = (b * w).sum();                        // sum of element-wise products
+    out_pt /= denom;
+
     // debug
-    // cerr << "n " << n << " param " << param << " span " << span << " out_pt " << out_pt << endl;
-    // cerr << " N " << N << endl;
+//     fprintf(stderr, "1: denom=%.3f\n", denom);
 }
 
 // compute a point from a NURBS curve at a given parameter value
 // this version takes a temporary set of control points for one curve only rather than
 // reading full n-d set of control points from the mfa
 // algorithm 4.1, Piegl & Tiller (P&T) p.124
-// this version recomputes basis functions rather than taking them as an input
-// this version also assumes weights = 1; no division by weight is done
+// this version assumes weights = 1; no division by weight is done
 void
 mfa::
 Decoder::
@@ -291,22 +295,52 @@ CurvePt(
     for (auto j = 0; j < mfa.p.size(); j++)
         if (j != cur_dim)
             out_pt(j) = temp_ctrl(0, j);
+}
+
+// compute a point from a NURBS curve at a given parameter value
+// this version takes a temporary set of control points for one curve only rather than
+// reading full n-d set of control points from the mfa
+// algorithm 4.1, Piegl & Tiller (P&T) p.124
+void
+mfa::
+Decoder::
+CurvePt(
+        int       cur_dim,                      // current dimension
+        float     param,                        // parameter value of desired point
+        MatrixXf& temp_ctrl,                    // temporary control points
+        VectorXf& temp_weights,                 // weights associated with temporary control points
+        VectorXf& out_pt,                       // (output) point
+        int       ko)                           // starting knot offset (default = 0)
+{
+    int n      = (int)temp_ctrl.rows() - 1;     // number of control point spans
+    int span   = mfa.FindSpan(cur_dim, param, ko) - ko;         // relative to ko
+    MatrixXf N = MatrixXf::Zero(1, n + 1);      // basis coefficients
+    mfa.BasisFuns(cur_dim, param, span, N, 0, n, 0);
+    out_pt = VectorXf::Zero(temp_ctrl.cols());  // initializes and resizes
+
+    for (int j = 0; j <= mfa.p(cur_dim); j++)
+        out_pt += N(0, j + span - mfa.p(cur_dim)) * temp_ctrl.row(span - mfa.p(cur_dim) + j);
+
+    // clamp dimensions other than cur_dim to same value as first control point
+    // eliminates any wiggles in other dimensions due to numerical precision errors
+    for (auto j = 0; j < mfa.p.size(); j++)
+        if (j != cur_dim)
+            out_pt(j) = temp_ctrl(0, j);
+
+    // compute the denominator of the rational curve point and divide
+    ArrayXXf w(1, temp_ctrl.rows());            // arrays need to be same shape to be multiplied element-wise
+    ArrayXXf b(1, temp_ctrl.rows());
+    w = temp_weights;
+    b = N.row(0);
+    float denom = (b * w).sum();                // sum of element-wise products
+    out_pt /= denom;
 
     // debug
-//     cerr << " param " << param << " span " << span << " out_pt:\n" << out_pt << endl;
-//     cerr << "param " << param << " span " << span << " ko " << ko << endl;
+//     fprintf(stderr, "2: denom=%.3f\n", denom);
 }
 
 // compute a point from a NURBS n-d volume at a given parameter value
 // algorithm 4.3, Piegl & Tiller (P&T) p.134
-// this version recomputes basis functions rather than taking them as an input
-// this version also assumes weights = 1; no division by weight is done
-//
-// There are two types of dimensionality:
-// 1. The dimensionality of the NURBS tensor product (p.size())
-// (1D = NURBS curve, 2D = surface, 3D = volumem 4D = hypervolume, etc.)
-// 2. The dimensionality of individual control points (ctrl_pts.cols())
-// p.size() should be < ctrl_pts.cols()
 void
 mfa::
 Decoder::
@@ -364,7 +398,36 @@ VolPt(VectorXf& param,                       // parameter value in each dim. of 
 
     out_pt = temp[mfa.p.size() - 1];
 
+    // compute rational NURBS denominator and divide the point by it
+    float denom       = 0.0;                            // denominator for dividing point coordinates
+    VectorXi ijk      = VectorXi::Zero(mfa.p.size());   // i,j,k,... coords of basis function and weight
+    VectorXi next_ijk = ijk;                            // i,j,k,... for next iteration
+    for (auto i = 0; i < mfa.weights.size(); i++)       // for all weights
+    {
+        next_ijk   = ijk;
+        float temp = mfa.weights(i);
+        bool stop  = false;
+        for (auto k = 0; k < mfa.p.size(); k++)
+        {
+            temp *= N[k](ijk(k));
+            // ijk for next iteration
+            if (!stop)
+            {
+                if (ijk(k) == mfa.nctrl_pts(k) - 1)
+                    next_ijk(k) = 0;
+                else
+                {
+                    next_ijk(k)++;
+                    stop = true;
+                }
+            }
+        }
+        denom += temp;
+        ijk = next_ijk;
+    }
+    out_pt /= denom;
+
     // debug
-    // fprintf(stderr, "out_pt = temp[%d]\n", mfa.p.size() - 1);
-    // cerr << "out_pt:\n" << out_pt << endl;
+//     fprintf(stderr, "3: denom=%.3f\n", denom);
+//     cerr << "out_pt:\n" << out_pt << endl;
 }

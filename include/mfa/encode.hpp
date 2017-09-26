@@ -94,6 +94,7 @@ namespace mfa
                 size_t       k,             // current dimension
                 size_t       co,            // starting ofst for reading domain pts
                 MatrixXf&    ctrl_pts,      // control points
+                VectorXf&    weights,       // weights associated with control points
                 float        err_limit);    // max allowable error
 
         // in addition to returning number of erroneous input domain points
@@ -103,6 +104,7 @@ namespace mfa
                 size_t       k,             // current dimension
                 size_t       co,            // starting ofst for reading domain pts
                 MatrixXf&    ctrl_pts,      // control points
+                VectorXf&    weights,       // weights associated with control points
                 set<int>&    err_spans,     // spans with error greater than err_limit
                 float        err_limit);    // max allowable error
 
@@ -111,6 +113,7 @@ namespace mfa
                 size_t         k,           // current dimension
                 size_t         co,          // starting ofst for reading domain pts
                 MatrixXf&      ctrl_pts,    // control points
+                VectorXf&      weights,     // weights associated with control points
                 VectorXi&      nnew_knots,  // number of new knots
                 vector<float>& new_knots,   // new knots
                 float          err_limit);  // max allowable error

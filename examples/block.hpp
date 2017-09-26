@@ -83,6 +83,7 @@ struct Block
             diy::save(bb, b->p);
             diy::save(bb, b->nctrl_pts);
             diy::save(bb, b->ctrl_pts);
+            diy::save(bb, b->weights);
             diy::save(bb, b->knots);
             diy::save(bb, b->approx);
             diy::save(bb, b->errs);
@@ -101,6 +102,7 @@ struct Block
             diy::load(bb, b->p);
             diy::load(bb, b->nctrl_pts);
             diy::load(bb, b->ctrl_pts);
+            diy::load(bb, b->weights);
             diy::load(bb, b->knots);
             diy::load(bb, b->approx);
             diy::load(bb, b->errs);
@@ -1138,7 +1140,7 @@ struct Block
         nctrl_pts.resize(a->dom_dim);
         for (int i = 0; i < a->dom_dim; i++)
             nctrl_pts(i) =  a->nctrl_pts[i];
-        mfa = new mfa::MFA(p, ndom_pts, domain, ctrl_pts, nctrl_pts, knots);
+        mfa = new mfa::MFA(p, ndom_pts, domain, ctrl_pts, nctrl_pts, weights, knots);
         mfa->FixedEncode(nctrl_pts);
     }
 
@@ -1148,7 +1150,7 @@ struct Block
             float                             err_limit)
     {
         VectorXi unused;
-        mfa = new mfa::MFA(p, ndom_pts, domain, ctrl_pts, unused, knots);
+        mfa = new mfa::MFA(p, ndom_pts, domain, ctrl_pts, unused, weights, knots);
         mfa->AdaptiveEncode(err_limit, nctrl_pts);
     }
 
@@ -1186,10 +1188,13 @@ struct Block
         }
         nctrl_pts(0) = ctrl_pts.rows();
 
+        // set initial weights to 1.0
+        weights = VectorXf::Ones(ctrl_pts.rows());
+
         // debug
         cerr << ctrl_pts.rows() << " initial control points:\n" << ctrl_pts << "\n" << endl;
 
-        mfa = new mfa::MFA(p, ndom_pts, domain, ctrl_pts, nctrl_pts, knots);
+        mfa = new mfa::MFA(p, ndom_pts, domain, ctrl_pts, nctrl_pts, weights, knots);
         mfa->NonlinearEncode(err_limit, nctrl_pts);
     }
 
@@ -1387,6 +1392,7 @@ struct Block
     VectorXi p;                              // degree in each dimension
     VectorXi nctrl_pts;                      // number of control points in each dimension
     MatrixXf ctrl_pts;                       // NURBS control points (1st dim changes fastest)
+    VectorXf weights;                        // weights associated with control points
     VectorXf knots;                          // NURBS knots (1st dim changes fastest)
     MatrixXf approx;                         // points in approximated volume
     VectorXi span_mins;                      // idx of minimum domain points of all knot spans

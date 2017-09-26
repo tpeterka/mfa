@@ -46,6 +46,7 @@ namespace mfa
                 MatrixXf& domain_,        // input data points (1st dim changes fastest)
                 MatrixXf& ctrl_pts_,      // (output, optional input) control points (1st dim changes fastest)
                 VectorXi& nctrl_pts_,     // (output, optional input) number of control points in each dim
+                VectorXf& weights_,       // (output, optional input) weights associated with control points
                 VectorXf& knots_,         // (output) knots (1st dim changes fastest)
                 float     eps_ = 1.0e-6); // minimum difference considered significant
 
@@ -138,6 +139,7 @@ namespace mfa
        MatrixXf& domain;                // input data points (row-major order: 1st dim changes fastest)
        VectorXf  params;                // parameters for input points (single coords: 1st dim params, 2nd dim, ...)
        MatrixXf& ctrl_pts;              // (output) control pts (row-major order: 1st dim changes fastest)
+       VectorXf& weights;               // (output) weights associated with control points
        VectorXf& knots;                 // (output) knots (single coords: 1st dim knots, 2nd dim, ...)
        float     dom_range;             // max extent of input data points
        vector<size_t> po;               // starting offset for params in each dim

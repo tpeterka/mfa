@@ -18,7 +18,7 @@
 #include <nan.h>
 
 #include "mfa/mfa.hpp"
-#include "../examples/adaptive/block.hpp"
+#include "../examples/block.hpp"
 
 #include <diy/master.hpp>
 #include <diy/io/block.hpp>

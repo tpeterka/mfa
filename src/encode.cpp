@@ -86,7 +86,7 @@ AdaptiveEncode(float err_limit)                                 // maximum allow
     Encode();
 }
 
-#if 1
+#if 0
 
 // TBB version
 // ~2X faster than serial, still expensive to compute curve offsets
@@ -454,14 +454,8 @@ RHS(int       cur_dim,             // current dimension
 
     // compute the matrix R
     for (int i = 1; i < n; i++)
-    {
         for (int j = 0; j < Rk.cols(); j++)
-        {
-            // debug
-            // fprintf(stderr, "3: i %d j %d R.rows %d Rk.rows %d\n", i, j, R.rows(), Rk.rows());
             R(i - 1, j) = (N.col(i - 1).array() * Rk.col(j).array()).sum();
-        }
-    }
 }
 
 // computes right hand side vector of P&T eq. 9.63 and 9.67, p. 411-412 for a curve from a
@@ -485,41 +479,21 @@ RHS(int       cur_dim,             // current dimension
     MatrixXf Rk(m - 1, in_pts.cols());       // eigen frees MatrixX when leaving scope
     MatrixXf Nk;                             // basis coefficients for Rk[i]
 
-    // debug
-    // cerr << "RHS in_pts:\n" << in_pts << endl;
-
     for (int k = 1; k < m; k++)
     {
         int span = mfa.FindSpan(cur_dim, mfa.params(po + k), ko) - ko;
         Nk = MatrixXf::Zero(1, n + 1);      // basis coefficients for Rk[i]
         mfa.BasisFuns(cur_dim, mfa.params(po + k), span, Nk, 0, n, 0);
 
-        // debug
-        // cerr << "Nk:\n" << Nk << endl;
-
-        // debug
-        // cerr << "[" << in_pts.row(co + k * cs) << "] ["
-        //      << in_pts.row(co) << "] ["
-        //      << in_pts.row(co + m * cs) << "]" << endl;
-
         Rk.row(k - 1) =
             in_pts.row(co + k * cs) - Nk(0, 0) * in_pts.row(co) -
             Nk(0, n) * in_pts.row(co + m * cs);
     }
 
-    // debug
-    // cerr << "Rk:\n" << Rk << endl;
-
     // compute the matrix R
     for (int i = 1; i < n; i++)
-    {
         for (int j = 0; j < Rk.cols(); j++)
-        {
-            // debug
-            // fprintf(stderr, "3: i %d j %d R.rows %d Rk.rows %d\n", i, j, R.rows(), Rk.rows());
             R(i - 1, j) = (N.col(i - 1).array() * Rk.col(j).array()).sum();
-        }
-    }
 }
 
 // Checks quantities needed for approximation
@@ -760,6 +734,7 @@ ErrorCurve(
         size_t       k,                         // current dimension
         size_t       co,                        // starting ofst for reading domain pts
         MatrixXf&    ctrl_pts,                  // control points
+        VectorXf&    weights,                   // weights associated with control points
         float        err_limit)                 // max allowable error
 {
     mfa::Decoder decoder(mfa);
@@ -774,7 +749,7 @@ ErrorCurve(
         // debug
 //         fprintf(stderr, "param=%.3f span=[%.3f %.3f]\n", mfa.params(po[k] + i), knots(mfa.ko[k] + span), knots(mfa.ko[k] + span + 1));
 
-        decoder.CurvePt(k, mfa.params(mfa.po[k] + i), ctrl_pts, cpt, mfa.ko[k]);
+        decoder.CurvePt(k, mfa.params(mfa.po[k] + i), ctrl_pts, weights, cpt, mfa.ko[k]);
         float err = fabs(mfa.NormalDistance(cpt, co + i * mfa.ds[k])) / mfa.dom_range;     // normalized by data range
 //         float err = fabs(mfa.CurveDistance(k, cpt, co + i * mfa.ds[k])) / mfa.dom_range;     // normalized by data range
         if (err > err_limit)
@@ -804,6 +779,7 @@ ErrorCurve(
         size_t         k,                       // current dimension
         size_t         co,                      // starting ofst for reading domain pts
         MatrixXf&      ctrl_pts,                // control points
+        VectorXf&      weights,                 // weights associated with control points
         VectorXi&      nnew_knots,              // number of new knots
         vector<float>& new_knots,               // new knots
         float          err_limit)               // max allowable error
@@ -832,7 +808,7 @@ ErrorCurve(
             new_split = false;
         }
 
-        decoder.CurvePt(k, mfa.params(mfa.po[k] + i), ctrl_pts, cpt, mfa.ko[k]);
+        decoder.CurvePt(k, mfa.params(mfa.po[k] + i), ctrl_pts, weights, cpt, mfa.ko[k]);
 
         float err = fabs(mfa.NormalDistance(cpt, co + i * mfa.ds[k])) / mfa.dom_range;     // normalized by data range
 
@@ -891,6 +867,7 @@ ErrorCurve(
         size_t       k,                         // current dimension
         size_t       co,                        // starting ofst for reading domain pts
         MatrixXf&    ctrl_pts,                  // control points
+        VectorXf&    weights,                   // weights associated with control points
         set<int>&    err_spans,                 // spans with error greater than err_limit
         float        err_limit)                 // max allowable error
 {
@@ -904,7 +881,7 @@ ErrorCurve(
         while (mfa.knots(mfa.ko[k] + span + 1) < 1.0 && mfa.knots(mfa.ko[k] + span + 1) <= mfa.params(mfa.po[k] + i))
             span++;
 
-        decoder.CurvePt(k, mfa.params(mfa.po[k] + i), ctrl_pts, cpt, mfa.ko[k]);
+        decoder.CurvePt(k, mfa.params(mfa.po[k] + i), ctrl_pts, weights, cpt, mfa.ko[k]);
 
         float err = fabs(mfa.NormalDistance(cpt, co + i * mfa.ds[k])) / mfa.dom_range;     // normalized by data range
 //         float err = fabs(mfa.CurveDistance(k, cpt, co + i * mfa.ds[k])) / mfa.dom_range;     // normalized by data range

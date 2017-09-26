@@ -17,6 +17,7 @@ typedef Eigen::MatrixXf MatrixXf;
 typedef Eigen::VectorXf VectorXf;
 typedef Eigen::MatrixXi MatrixXi;
 typedef Eigen::VectorXi VectorXi;
+typedef Eigen::ArrayXXf ArrayXXf;
 
 namespace mfa
 {
@@ -41,6 +42,14 @@ namespace mfa
                 int       cur_dim,              // current dimension
                 float     param,                // parameter value of desired point
                 MatrixXf& temp_ctrl,            // temporary control points
+                VectorXf& out_pt,               // (output) point
+                int       ko = 0);              // starting knot offset
+
+        void CurvePt(
+                int       cur_dim,              // current dimension
+                float     param,                // parameter value of desired point
+                MatrixXf& temp_ctrl,            // temporary control points
+                VectorXf& temp_weights,         // weights associate with temporary control points
                 VectorXf& out_pt,               // (output) point
                 int       ko = 0);              // starting knot offset
 

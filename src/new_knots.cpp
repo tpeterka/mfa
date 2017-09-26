@@ -82,6 +82,9 @@ NewKnots_curve1(
         // maximum number of domain points with error greater than err_limit
         size_t max_nerr     =  0;
 
+        // hard-coded weights all equal to 1 for now
+        VectorXf temp_weights = VectorXf::Ones(mfa.nctrl_pts(k));
+
         // compute the matrix N, eq. 9.66 in P&T
         // N is a matrix of (m - 1) x (n - 1) scalars that are the basis function coefficients
         //  _                                _
@@ -151,7 +154,7 @@ NewKnots_curve1(
                 encoder.CopyCtrl(P, n, k, mfa.co[k][j * s], temp_ctrl);
 
                 // compute the error on the curve (number of input points with error > err_limit)
-                nerrs[j] = encoder.ErrorCurve(k, mfa.co[k][j * s], temp_ctrl, err_limit);
+                nerrs[j] = encoder.ErrorCurve(k, mfa.co[k][j * s], temp_ctrl, temp_weights, err_limit);
 
             });                                               // parallel for over curves in this dimension
 
@@ -206,7 +209,7 @@ NewKnots_curve1(
         // --- TODO: end of recomputing worst curve ---
 
         // compute the new knots on the worst curve in this dimension
-        encoder.ErrorCurve(k, mfa.co[k][worst_curve_idx], temp_ctrl, nnew_knots, new_knots, err_limit);
+        encoder.ErrorCurve(k, mfa.co[k][worst_curve_idx], temp_ctrl, temp_weights, nnew_knots, new_knots, err_limit);
 
         // free R, NtN, and P
         R.resize(0, 0);
@@ -265,6 +268,9 @@ NewKnots_curve(
 
         // maximum number of domain points with error greater than err_limit and their curves
         size_t max_nerr     =  0;
+
+        // hard-coded weights all equal to 1 for now
+        VectorXf temp_weights = VectorXf::Ones(mfa.nctrl_pts(k));
 
         // compute the matrix N, eq. 9.66 in P&T
         // N is a matrix of (m - 1) x (n - 1) scalars that are the basis function coefficients
@@ -332,7 +338,7 @@ NewKnots_curve(
                     encoder.CopyCtrl(P, n, k, mfa.co[k][j], temp_ctrl);
 
                     // compute the error on the curve (number of input points with error > err_limit)
-                    size_t nerr = encoder.ErrorCurve(k, mfa.co[k][j], temp_ctrl, err_spans, err_limit);
+                    size_t nerr = encoder.ErrorCurve(k, mfa.co[k][j], temp_ctrl, temp_weights, err_spans, err_limit);
 
                     if (nerr > max_nerr)
                     {

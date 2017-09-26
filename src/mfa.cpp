@@ -37,6 +37,12 @@ using namespace std;
 // TODO: think about Eigen sparse matrices
 // (N and NtN matrices, used for solving for control points, are very sparse)
 //
+// There are two types of dimensionality:
+// 1. The dimensionality of the NURBS tensor product (p.size())
+// (1D = NURBS curve, 2D = surface, 3D = volumem 4D = hypervolume, etc.)
+// 2. The dimensionality of individual control points (ctrl_pts.cols())
+// p.size() < ctrl_pts.cols()
+//
 // ------------------
 
 mfa::
@@ -46,12 +52,14 @@ MFA(VectorXi& p_,             // polynomial degree in each dimension
     MatrixXf& domain_,        // input data points (1st dim changes fastest)
     MatrixXf& ctrl_pts_,      // (output, optional input) control points (1st dim changes fastest) (can be initialized by caller)
     VectorXi& nctrl_pts_,     // (output, optional input) number of control points in each dim
+    VectorXf& weights_,       // (output, optional input) weights associated with control points
     VectorXf& knots_,         // (output) knots (1st dim changes fastest)
     float     eps_) :         // minimum difference considered significant
     p(p_),
     ndom_pts(ndom_pts_),
     domain(domain_),
     ctrl_pts(ctrl_pts_),
+    weights(weights_),
     knots(knots_),
     eps(eps_)
 {
@@ -324,6 +332,9 @@ FixedEncode(VectorXi &nctrl_pts_)           // (output) number of control points
     encoder.Encode();
 
     nctrl_pts_ = nctrl_pts;
+
+    // for now, set weights to 1.0
+    weights = VectorXf::Ones(ctrl_pts.rows());
 }
 
 // adaptive encode
@@ -338,6 +349,9 @@ AdaptiveEncode(
     encoder.AdaptiveEncode(err_limit);
 
     nctrl_pts_ = nctrl_pts;
+
+    // for now, set weights to 1.0
+    weights = VectorXf::Ones(ctrl_pts.rows());
 }
 
 // nonlinear encode
@@ -352,6 +366,9 @@ NonlinearEncode(
     nl_encoder.Encode(err_limit);
 
     nctrl_pts_ = nctrl_pts;
+
+    // for now, set weights to 1.0
+    weights = VectorXf::Ones(ctrl_pts.rows());
 }
 
 // decode
