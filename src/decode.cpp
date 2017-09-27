@@ -243,7 +243,8 @@ CurvePt(
     for (int j = 0; j <= mfa.p(cur_dim); j++)
     {
         out_pt += N(0, j + span - mfa.p(cur_dim)) *
-            mfa.ctrl_pts.row(to + (span - mfa.p(cur_dim) + j) * cs[cur_dim]);
+            mfa.ctrl_pts.row(to + (span - mfa.p(cur_dim) + j) * cs[cur_dim]) *
+            mfa.weights(to + (span - mfa.p(cur_dim) + j) * cs[cur_dim]);
     }
 
     // clamp dimensions other than cur_dim to same value as first control point
@@ -319,7 +320,9 @@ CurvePt(
     out_pt = VectorXf::Zero(temp_ctrl.cols());  // initializes and resizes
 
     for (int j = 0; j <= mfa.p(cur_dim); j++)
-        out_pt += N(0, j + span - mfa.p(cur_dim)) * temp_ctrl.row(span - mfa.p(cur_dim) + j);
+        out_pt += N(0, j + span - mfa.p(cur_dim)) *
+            temp_ctrl.row(span - mfa.p(cur_dim) + j) *
+            temp_weights(span - mfa.p(cur_dim) + j);
 
     // clamp dimensions other than cur_dim to same value as first control point
     // eliminates any wiggles in other dimensions due to numerical precision errors
@@ -378,8 +381,9 @@ VolPt(VectorXf& param,                       // parameter value in each dim. of 
             ctrl_idx += (span[j] - mfa.p(j) + ct(i, j)) * cs[j];
 
         // always compute the point in the first dimension
-        ctrl_pt =  mfa.ctrl_pts.row(ctrl_idx);
-        temp[0] += (N[0])(0, iter[0] + span[0] - mfa.p(0)) * ctrl_pt;
+        ctrl_pt = mfa.ctrl_pts.row(ctrl_idx);
+        float w = mfa.weights(ctrl_idx);
+        temp[0] += (N[0])(0, iter[0] + span[0] - mfa.p(0)) * ctrl_pt * w;
         iter[0]++;
 
         // for all dimensions except last, check if span is finished

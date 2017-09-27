@@ -86,7 +86,7 @@ AdaptiveEncode(float err_limit)                                 // maximum allow
     Encode();
 }
 
-#if 0
+#if 1
 
 // TBB version
 // ~2X faster than serial, still expensive to compute curve offsets
