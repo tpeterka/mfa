@@ -22,6 +22,8 @@
 
 using namespace std;
 
+typedef float                          precision;
+
 typedef Eigen::MatrixXf                MatrixXf;
 typedef Eigen::VectorXf                VectorXf;
 typedef MatrixXf::Index                Index;
@@ -54,6 +56,7 @@ struct ErrArgs
 };
 
 // block
+template <typename T>
 struct Block
 {
     Block(int point_dim)
@@ -1140,7 +1143,7 @@ struct Block
         nctrl_pts.resize(a->dom_dim);
         for (int i = 0; i < a->dom_dim; i++)
             nctrl_pts(i) =  a->nctrl_pts[i];
-        mfa = new mfa::MFA(p, ndom_pts, domain, ctrl_pts, nctrl_pts, weights, knots);
+        mfa = new mfa::MFA<T>(p, ndom_pts, domain, ctrl_pts, nctrl_pts, weights, knots);
         mfa->FixedEncode(nctrl_pts);
 
         // debug: play with weights
@@ -1154,7 +1157,7 @@ struct Block
             float                             err_limit)
     {
         VectorXi unused;
-        mfa = new mfa::MFA(p, ndom_pts, domain, ctrl_pts, unused, weights, knots);
+        mfa = new mfa::MFA<T>(p, ndom_pts, domain, ctrl_pts, unused, weights, knots);
         mfa->AdaptiveEncode(err_limit, nctrl_pts);
     }
 
@@ -1198,7 +1201,7 @@ struct Block
         // debug
         cerr << ctrl_pts.rows() << " initial control points:\n" << ctrl_pts << "\n" << endl;
 
-        mfa = new mfa::MFA(p, ndom_pts, domain, ctrl_pts, nctrl_pts, weights, knots);
+        mfa = new mfa::MFA<T>(p, ndom_pts, domain, ctrl_pts, nctrl_pts, weights, knots);
         mfa->NonlinearEncode(err_limit, nctrl_pts);
     }
 
@@ -1408,7 +1411,7 @@ struct Block
     MatrixXf errs;                           // error field (abs. value, not normalized by data range)
 
     float s;                                 // scaling factor on range values (for error checking)
-    mfa::MFA *mfa;                           // MFA object
+    mfa::MFA<T> *mfa;                           // MFA object
 };
 
 namespace diy

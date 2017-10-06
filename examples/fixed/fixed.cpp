@@ -64,11 +64,11 @@ int main(int argc, char** argv)
     diy::Master               master(world,
                                      num_threads,
                                      mem_blocks,
-                                     &Block::create,
-                                     &Block::destroy,
+                                     &Block<precision>::create,
+                                     &Block<precision>::destroy,
                                      &storage,
-                                     &Block::save,
-                                     &Block::load);
+                                     &Block<precision>::save,
+                                     &Block<precision>::load);
     diy::ContiguousAssigner   assigner(world.size(), tot_blocks);
     diy::decompose(world.rank(), assigner, master);
 
@@ -83,7 +83,7 @@ int main(int argc, char** argv)
 //     d_args.max[0]       = 4.0 * M_PI;
 //     d_args.s            = 1.0;              // scaling factor on range
 //     d_args.nctrl_pts[0] = nctrl;            // set numbers of control points here, matching dimensionality of data
-//     master.foreach([&](Block* b, const diy::Master::ProxyWithLink& cp)
+//     master.foreach([&](Block<precision>* b, const diy::Master::ProxyWithLink& cp)
 //                    { b->generate_sine_data(cp, d_args); });
 
     // 2d sine function f(x,y) = sine(x)sine(y)
@@ -100,7 +100,7 @@ int main(int argc, char** argv)
 //     d_args.s            = 1.0;              // scaling factor on range
 //     d_args.nctrl_pts[0] = nctrl;             // set numbers of control points here, matching dimensionality of data
 //     d_args.nctrl_pts[1] = nctrl;
-//     master.foreach([&](Block* b, const diy::Master::ProxyWithLink& cp)
+//     master.foreach([&](Block<precision>* b, const diy::Master::ProxyWithLink& cp)
 //             { b->generate_sine_data(cp, d_args); });
 
     // 1d sinc function f(x) = sin(x)/x
@@ -112,7 +112,7 @@ int main(int argc, char** argv)
     d_args.max[0]       = 4.0 * M_PI;
     d_args.s            = 10.0;              // scaling factor on range
     d_args.nctrl_pts[0] = nctrl;            // set numbers of control points here, matching dimensionality of data
-    master.foreach([&](Block* b, const diy::Master::ProxyWithLink& cp)
+    master.foreach([&](Block<precision>* b, const diy::Master::ProxyWithLink& cp)
                    { b->generate_sinc_data(cp, d_args); });
 
     // 2d sinc function f(x,y) = sinc(x)sinc(y)
@@ -129,7 +129,7 @@ int main(int argc, char** argv)
 //      d_args.s            = 10.0;              // scaling factor on range
 //     d_args.nctrl_pts[0] = nctrl;             // set numbers of control points here, matching dimensionality of data
 //     d_args.nctrl_pts[1] = nctrl;
-//      master.foreach([&](Block* b, const diy::Master::ProxyWithLink& cp)
+//      master.foreach([&](Block<precision>* b, const diy::Master::ProxyWithLink& cp)
 //                     { b->generate_sinc_data(cp, d_args); });
 
    // 3d sinc function
@@ -151,7 +151,7 @@ int main(int argc, char** argv)
 //     d_args.nctrl_pts[0] = nctrl;             // set numbers of control points here, matching dimensionality of data
 //     d_args.nctrl_pts[1] = nctrl;
 //     d_args.nctrl_pts[2] = nctrl;
-//     master.foreach([&](Block* b, const diy::Master::ProxyWithLink& cp)
+//     master.foreach([&](Block<precision>* b, const diy::Master::ProxyWithLink& cp)
 //                    { b->generate_sinc_data(cp, d_args); });
 
    // 4d sinc function
@@ -178,7 +178,7 @@ int main(int argc, char** argv)
 //     d_args.nctrl_pts[1] = nctrl;
 //     d_args.nctrl_pts[2] = nctrl;
 //     d_args.nctrl_pts[3] = nctrl;
-//     master.foreach([&](Block* b, const diy::Master::ProxyWithLink& cp)
+//     master.foreach([&](Block<precision>* b, const diy::Master::ProxyWithLink& cp)
 //                    { b->generate_sinc_data(cp, d_args); });
 
     // 1d S3D
@@ -190,7 +190,7 @@ int main(int argc, char** argv)
 //     d_args.ndom_pts[2]  = 550;
 //     d_args.nctrl_pts[0] = 140;                // set numbers of control points here, matching dimensionality of data
 //     strncpy(d_args.infile, "/Users/tpeterka/datasets/flame/6_small.xyz", sizeof(d_args.infile));
-//     master.foreach([&](Block* b, const diy::Master::ProxyWithLink& cp)
+//     master.foreach([&](Block<precision>* b, const diy::Master::ProxyWithLink& cp)
 //                    { b->read_1d_slice_3d_vector_data(cp, d_args); });
 
     // 2d S3D
@@ -204,7 +204,7 @@ int main(int argc, char** argv)
 //     d_args.nctrl_pts[0] = 140;                // set numbers of control points here, matching dimensionality of data
 //     d_args.nctrl_pts[1] = 108;
 //     strncpy(d_args.infile, "/Users/tpeterka/datasets/flame/6_small.xyz", sizeof(d_args.infile));
-//     master.foreach([&](Block* b, const diy::Master::ProxyWithLink& cp)
+//     master.foreach([&](Block<precision>* b, const diy::Master::ProxyWithLink& cp)
 //                    { b->read_2d_slice_3d_vector_data(cp, d_args); });
 
     // 3d S3D
@@ -220,12 +220,12 @@ int main(int argc, char** argv)
 //     d_args.nctrl_pts[1] = 108;
 //     d_args.nctrl_pts[2] = 110;
 //     strncpy(d_args.infile, "/Users/tpeterka/datasets/flame/6_small.xyz", sizeof(d_args.infile));
-//     master.foreach([&](Block* b, const diy::Master::ProxyWithLink& cp)
+//     master.foreach([&](Block<precision>* b, const diy::Master::ProxyWithLink& cp)
 //                    { b->read_3d_vector_data(cp, d_args); });
 
     fprintf(stderr, "\nStarting fixed encoding...\n\n");
     double encode_time = MPI_Wtime();
-    master.foreach([&](Block* b, const diy::Master::ProxyWithLink& cp)
+    master.foreach([&](Block<precision>* b, const diy::Master::ProxyWithLink& cp)
             { b->fixed_encode_block(cp, d_args); });
     encode_time = MPI_Wtime() - encode_time;
     fprintf(stderr, "\n\nFixed encoding done.\n\n");
@@ -233,20 +233,20 @@ int main(int argc, char** argv)
     // debug: compute error field for visualization and max error to verify that it is below the threshold
     fprintf(stderr, "\nFinal decoding and computing max. error...\n");
 #if 0       // normal distance
-    master.foreach([&](Block* b, const diy::Master::ProxyWithLink& cp)
+    master.foreach([&](Block<precision>* b, const diy::Master::ProxyWithLink& cp)
             { b->error(cp, true); });
 #else       // range coordinate difference
-    master.foreach([&](Block* b, const diy::Master::ProxyWithLink& cp)
+    master.foreach([&](Block<precision>* b, const diy::Master::ProxyWithLink& cp)
             { b->range_error(cp, true); });
 #endif
 
     // debug: save knot span domains for comparing error with location in knot span
     fprintf(stderr, "\nFinal decoding and computing max. error...\n");
-    master.foreach([&](Block* b, const diy::Master::ProxyWithLink& cp)
+    master.foreach([&](Block<precision>* b, const diy::Master::ProxyWithLink& cp)
             { b->knot_span_domains(cp); });
 
     // print results
-    master.foreach(&Block::print_block);
+    master.foreach(&Block<precision>::print_block);
     fprintf(stderr, "encoding time = %.3lf s.\n", encode_time);
 
     // save the results in diy format

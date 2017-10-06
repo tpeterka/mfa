@@ -33,7 +33,7 @@ namespace mfa
 //         class MaxDist : public BoundedProblem<T> {
             public:
 
-                MaxDist(MFA& mfa_,
+                MaxDist(MFA<T>& mfa_,
                         float err_limit_) :
                     mfa(mfa_),
                     err_limit(err_limit_),
@@ -97,23 +97,24 @@ namespace mfa
 
             private:
 
-                MFA&   mfa;                 // the mfa object
+                MFA<T>&   mfa;                 // the mfa object
                 size_t niter;               // number of iterations performed
                 float  err_limit;           // user error limit
                 bool   done;                // achieved user error limit; stop computing objective
                 MatrixXf opt_ctrl_pts;      // control points found by optimization
         };
 
+    template <typename T>
     class NL_Encoder
     {
     public:
 
-        NL_Encoder(MFA& mfa_);
+        NL_Encoder(MFA<T>& mfa_);
         ~NL_Encoder() {}
         void Encode(float err_limit);       // maximum allowable normalized error
 
     private:
-        MFA& mfa;                           // the mfa object
+        MFA<T>& mfa;                           // the mfa object
     };
 }
 

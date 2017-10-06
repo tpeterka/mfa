@@ -45,8 +45,9 @@ using namespace std;
 //
 // ------------------
 
+template <typename T>
 mfa::
-MFA::
+MFA<T>::
 MFA(VectorXi& p_,             // polynomial degree in each dimension
     VectorXi& ndom_pts_,      // number of input data points in each dim
     MatrixXf& domain_,        // input data points (1st dim changes fastest)
@@ -146,9 +147,10 @@ MFA(VectorXi& p_,             // polynomial degree in each dimension
 }
 
 // get knot span min/max domain points (for debugging)
+template <typename T>
 void
 mfa::
-MFA::
+MFA<T>::
 KnotSpanDomains(
         VectorXi& span_mins,                      // idx of minimum domain points of all knot spans
         VectorXi& span_maxs)                      // idx of maximum domain points of all knot spans
@@ -184,9 +186,10 @@ KnotSpanDomains(
 }
 
 // initialize knot span index
+template <typename T>
 void
 mfa::
-MFA::
+MFA<T>::
 KnotSpanIndex()
 {
     // total number of knot spans = product of number of knot spans over all dims
@@ -313,22 +316,24 @@ KnotSpanIndex()
 }
 
 // encode
+template <typename T>
 void
 mfa::
-MFA::
+MFA<T>::
 Encode()
 {
-    mfa::Encoder encoder(*this);
+    mfa::Encoder<T> encoder(*this);
     encoder.Encode();
 }
 
 // fixed number of control points encode
+template <typename T>
 void
 mfa::
-MFA::
+MFA<T>::
 FixedEncode(VectorXi &nctrl_pts_)           // (output) number of control points in each dim
 {
-    mfa::Encoder encoder(*this);
+    mfa::Encoder<T> encoder(*this);
     encoder.Encode();
 
     nctrl_pts_ = nctrl_pts;
@@ -338,14 +343,15 @@ FixedEncode(VectorXi &nctrl_pts_)           // (output) number of control points
 }
 
 // adaptive encode
+template <typename T>
 void
 mfa::
-MFA::
+MFA<T>::
 AdaptiveEncode(
         float    err_limit,                 // maximum allowable normalized error
         VectorXi &nctrl_pts_)               // (output) number of control points in each dim
 {
-    mfa::Encoder encoder(*this);
+    mfa::Encoder<T> encoder(*this);
     encoder.AdaptiveEncode(err_limit);
 
     nctrl_pts_ = nctrl_pts;
@@ -355,14 +361,15 @@ AdaptiveEncode(
 }
 
 // nonlinear encode
+template <typename T>
 void
 mfa::
-MFA::
+MFA<T>::
 NonlinearEncode(
         float    err_limit,                 // maximum allowable normalized error
         VectorXi &nctrl_pts_)               // (output) number of control points in each dim
 {
-    mfa::NL_Encoder nl_encoder(*this);
+    mfa::NL_Encoder<T> nl_encoder(*this);
     nl_encoder.Encode(err_limit);
 
     nctrl_pts_ = nctrl_pts;
@@ -372,12 +379,13 @@ NonlinearEncode(
 }
 
 // decode
+template <typename T>
 void
 mfa::
-MFA::
+MFA<T>::
 Decode(MatrixXf& approx)
 {
-    mfa::Decoder decoder(*this);
+    mfa::Decoder<T> decoder(*this);
     decoder.Decode(approx);
 }
 
@@ -388,9 +396,10 @@ Decode(MatrixXf& approx)
 // i will be in the range [p, n], where n = number of control points - 1 because there are
 // p + 1 repeated knots at start and end of knot vector
 // algorithm 2.1, P&T, p. 68
+template <typename T>
 int
 mfa::
-MFA::
+MFA<T>::
 FindSpan(int       cur_dim,              // current dimension
          float     u,                    // parameter value
          int       ko)                   // optional starting knot to search (default = 0)
@@ -420,9 +429,10 @@ FindSpan(int       cur_dim,              // current dimension
 // writes results in a subset of a row of N starting at index N(start_row, start_col)
 // algorithm 2.2 of P&T, p. 70
 // assumes N has been allocated by caller
+template <typename T>
 void
 mfa::
-MFA::
+MFA<T>::
 BasisFuns(int       cur_dim,            // current dimension
           float     u,                  // parameter value
           int       span,               // index of span in the knots vector containing u, relative to ko
@@ -477,9 +487,10 @@ BasisFuns(int       cur_dim,            // current dimension
 // total number of params is the sum of ndom_pts over the dimensions, much less than the total
 // number of data points (which would be the product)
 // assumes params were allocated by caller
+template <typename T>
 void
 mfa::
-MFA::
+MFA<T>::
 Params()
 {
     float tot_dist;                    // total chord length
@@ -568,9 +579,10 @@ Params()
 // total number of params is the sum of ndom_pts over the dimensions, much less than the total
 // number of data points (which would be the product)
 // assumes params were allocated by caller
+template <typename T>
 void
 mfa::
-MFA::
+MFA<T>::
 DomainParams()
 {
     size_t cs = 1;                                      // stride for domain points in current dim.
@@ -606,9 +618,10 @@ DomainParams()
 // resulting knots are same for all curves and stored once for each dimension (1st dim knots, 2nd dim, ...)
 // total number of knots is the sum of number of knots over the dimensions, much less than the product
 // assumes knots were allocated by caller
+template <typename T>
 void
 mfa::
-MFA::
+MFA<T>::
 Knots()
 {
     // following are counters for slicing domain and params into curves in different dimensions
@@ -665,9 +678,10 @@ Knots()
 // resulting knots are same for all curves and stored once for each dimension (1st dim knots, 2nd dim, ...)
 // total number of knots is the sum of number of knots over the dimensions, much less than the product
 // assumes knots were allocated by caller
+template <typename T>
 void
 mfa::
-MFA::
+MFA<T>::
 UniformKnots()
 {
     // following are counters for slicing domain and params into curves in different dimensions
@@ -700,9 +714,10 @@ UniformKnots()
 //
 // original, inserted, and resulting new knots are same for all curves and
 // stored once for each dimension in row-major order (1st dim changes fastest)
+template <typename T>
 void
 mfa::
-MFA::
+MFA<T>::
 InsertKnots(
         VectorXi&      nnew_knots,          // number of new knots in each dim
         vector<float>& new_knots)           // new knots (1st dim changes fastest)
@@ -772,9 +787,10 @@ InsertKnots(
 //
 // TODO: experiment whether this is more accurate and/or faster than calling Params
 // with a 1-d space of domain pts: min, target, and max
+template <typename T>
 float
 mfa::
-MFA::
+MFA<T>::
 InterpolateParams(int       cur_dim,  // curent dimension
                   size_t    po,       // starting offset for params in current dim
                   size_t    ds,       // stride for domain pts in cuve in cur. dim.
@@ -830,9 +846,10 @@ InterpolateParams(int       cur_dim,  // curent dimension
 // convert linear domain point index into (i,j,k,...) multidimensional index
 // number of dimensions is the domain dimensionality
 // (not domain * range dimensionality, ie, p.size(), not domain_point.cols())
+template <typename T>
 void
 mfa::
-MFA::
+MFA<T>::
 idx2ijk(size_t    idx,                  // linear cell indx
         VectorXi& ijk)                  // i,j,k,... indices in all dimensions
 {
@@ -863,9 +880,10 @@ idx2ijk(size_t    idx,                  // linear cell indx
 // convert (i,j,k,...) multidimensional index into linear index into domain
 // number of dimension is the domain dimensionality (p.size()), not
 // domain + range dimensionality (domain_points.size())
+template <typename T>
 void
 mfa::
-MFA::
+MFA<T>::
 ijk2idx(VectorXi& ijk,                  // i,j,k,... indices to all dimensions
         size_t&   idx)                  // (output) linear index
 {
@@ -882,9 +900,10 @@ ijk2idx(VectorXi& ijk,                  // i,j,k,... indices to all dimensions
 // uses 2-point finite differences (first order linear) method to compute gradient and normal vector
 // approximates gradient from 2 points diagonally opposite each other in all
 // domain dimensions (not from 2 points in each dimension)
+template <typename T>
 float
 mfa::
-MFA::
+MFA<T>::
 NormalDistance(VectorXf& pt,          // point whose distance from domain is desired
                size_t    idx)         // index of min. corner of cell in the domain
                                       // that will be used to compute partial derivatives
@@ -952,9 +971,10 @@ NormalDistance(VectorXf& pt,          // point whose distance from domain is des
 // signed normal distance from a point to a curve through the domain (2d slice)
 // uses 2-point finite differences (first order linear) method to compute gradient and normal vector
 // approximates gradient from 2 points in the same slice
+template <typename T>
 float
 mfa::
-MFA::
+MFA<T>::
 CurveDistance(
         int       k,                    // current dimension in direction of curve
         VectorXf& pt,                   // point whose distance from domain is desired
@@ -1034,9 +1054,10 @@ CurveDistance(
 
 // compute the error (absolute value of distance in normal direction) of the mfa at a domain point
 // error is not normalized by the data range (absolute, not relative error)
+template <typename T>
 float
 mfa::
-MFA::
+MFA<T>::
 Error(size_t idx)               // index of domain point
 {
     // convert linear idx to multidim. i,j,k... indices in each domain dimension
@@ -1053,7 +1074,7 @@ Error(size_t idx)               // index of domain point
 
     // approximated value
     VectorXf cpt(ctrl_pts.cols());          // approximated point
-    Decoder decoder(*this);
+    Decoder<T> decoder(*this);
     decoder.VolPt(param, cpt);
 
      // debug
@@ -1069,9 +1090,10 @@ Error(size_t idx)               // index of domain point
 
 // compute the error (absolute value of difference of range coordinates) of the mfa at a domain point
 // error is not normalized by the data range (absolute, not relative error)
+template <typename T>
 float
 mfa::
-MFA::
+MFA<T>::
 RangeError(size_t idx)               // index of domain point
 {
     // convert linear idx to multidim. i,j,k... indices in each domain dimension
@@ -1088,7 +1110,7 @@ RangeError(size_t idx)               // index of domain point
 
     // approximated value
     VectorXf cpt(ctrl_pts.cols());          // approximated point
-    Decoder decoder(*this);
+    Decoder<T> decoder(*this);
     decoder.VolPt(param, cpt);
 
      // debug
@@ -1102,3 +1124,5 @@ RangeError(size_t idx)               // index of domain point
 
     return err;
 }
+
+#include    "mfa_templates.cpp"

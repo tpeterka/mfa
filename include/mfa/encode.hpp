@@ -24,11 +24,12 @@ using namespace std;
 
 namespace mfa
 {
+    template <typename T>
     class Encoder
     {
     public:
 
-        Encoder(MFA& mfa_);
+        Encoder(MFA<T>& mfa_);
         ~Encoder() {}
         void Encode();
         void AdaptiveEncode(float err_limit);               // maximum allowable normalized error
@@ -136,9 +137,10 @@ namespace mfa
                 set<int>&    err_spans,     // spans with error greater than err_limit
                 float        err_limit);    // max allowable error
 
+        template <typename>
         friend class NewKnots;
 
-        MFA& mfa;                           // the mfa object
+        MFA<T>& mfa;                           // the mfa object
     };
 }
 

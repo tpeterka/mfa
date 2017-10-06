@@ -24,11 +24,12 @@ using namespace std;
 
 namespace mfa
 {
+    template <typename T>
     class NewKnots
     {
     public:
 
-        NewKnots(MFA& mfa_);
+        NewKnots(MFA<T>& mfa_);
         ~NewKnots() {}
         bool NewKnots_full(
                 VectorXi&      nnew_knots,                  // number of new knots in each dim
@@ -68,7 +69,7 @@ namespace mfa
 
         size_t  max_num_curves;                 // max num. curves per dimension to check in curve version
 
-        MFA& mfa;                               // the mfa object
+        MFA<T>& mfa;                               // the mfa object
     };
 }
 

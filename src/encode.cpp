@@ -14,23 +14,25 @@
 #include <iostream>
 #include <set>
 
+template <typename T>
 mfa::
-Encoder::
-Encoder(MFA& mfa_) :
+Encoder<T>::
+Encoder(MFA<T>& mfa_) :
     mfa(mfa_)
 {
 }
 
 // adaptive encode
+template <typename T>
 void
 mfa::
-Encoder::
+Encoder<T>::
 AdaptiveEncode(float err_limit)                                 // maximum allowable normalized error
 {
     VectorXi      nnew_knots = VectorXi::Zero(mfa.p.size());    // number of new knots in each dim
     vector<float> new_knots;                                    // new knots (1st dim changes fastest)
 
-    mfa::NewKnots nk(mfa);
+    mfa::NewKnots<T> nk(mfa);
 
     // loop until no change in knots
     for (int iter = 0; ; iter++)
@@ -102,9 +104,10 @@ AdaptiveEncode(float err_limit)                                 // maximum allow
 // (1D = NURBS curve, 2D = surface, 3D = volumem 4D = hypervolume, etc.)
 // 2. The dimensionality of individual domain and control points (domain.cols())
 // p.size() should be < domain.cols()
+template <typename T>
 void
 mfa::
-Encoder::
+Encoder<T>::
 Encode()
 {
     // TODO: some of these quantities mirror this in the mfa
@@ -263,9 +266,10 @@ Encode()
 // (1D = NURBS curve, 2D = surface, 3D = volumem 4D = hypervolume, etc.)
 // 2. The dimensionality of individual domain and control points (domain.cols())
 // p.size() should be < domain.cols()
+template <typename T>
 void
 mfa::
-Encoder::
+Encoder<T>::
 Encode()
 {
     // check and assign main quantities
@@ -424,9 +428,10 @@ Encode()
 
 // computes right hand side vector of P&T eq. 9.63 and 9.67, p. 411-412 for a curve from the
 // original input domain points
+template <typename T>
 void
 mfa::
-Encoder::
+Encoder<T>::
 RHS(int       cur_dim,             // current dimension
     MatrixXf& N,                   // matrix of basis function coefficients
     MatrixXf& R,                   // (output) residual matrix allocated by caller
@@ -460,9 +465,10 @@ RHS(int       cur_dim,             // current dimension
 
 // computes right hand side vector of P&T eq. 9.63 and 9.67, p. 411-412 for a curve from a
 // new set of input points, not the default input domain
+template <typename T>
 void
 mfa::
-Encoder::
+Encoder<T>::
 RHS(int       cur_dim,             // current dimension
     MatrixXf& in_pts,              // input points (not the default domain stored in the mfa)
     MatrixXf& N,                   // matrix of basis function coefficients
@@ -497,9 +503,10 @@ RHS(int       cur_dim,             // current dimension
 }
 
 // Checks quantities needed for approximation
+template <typename T>
 void
 mfa::
-Encoder::
+Encoder<T>::
 Quants(
         VectorXi& n,                // (output) number of control point spans in each dim
         VectorXi& m)                // (output) number of input data point spans in each dim
@@ -543,9 +550,10 @@ Quants(
 // TODO: any way to avoid this copy?
 // last dimension gets copied to final control points
 // previous dimensions get copied to alternating double buffers
+template <typename T>
 void
 mfa::
-Encoder::
+Encoder<T>::
 CopyCtrl(MatrixXf& P,          // solved points for current dimension and curve
          VectorXi& n,          // number of control point spans in each dimension
          int       k,          // current dimension
@@ -660,9 +668,10 @@ CopyCtrl(MatrixXf& P,          // solved points for current dimension and curve
 // TODO: any way to avoid this copy?
 // just simple copy to one temporary buffer, no alternating double buffers
 // nor copy to final control points
+template <typename T>
 void
 mfa::
-Encoder::
+Encoder<T>::
 CopyCtrl(MatrixXf& P,          // solved points for current dimension and curve
          VectorXi& n,          // number of control point spans in each dimension
          int       k,          // current dimension
@@ -691,9 +700,10 @@ CopyCtrl(MatrixXf& P,          // solved points for current dimension and curve
 }
 
 // solves for one curve of control points
+template <typename T>
 void
 mfa::
-Encoder::
+Encoder<T>::
 CtrlCurve(MatrixXf& N,          // basis functions for current dimension
           MatrixXf& NtN,        // N^t * N
           MatrixXf& R,          // residual matrix for current dimension and curve
@@ -727,9 +737,10 @@ CtrlCurve(MatrixXf& N,          // basis functions for current dimension
 }
 
 // returns number of points in a curve that have error greater than err_limit
+template <typename T>
 int
 mfa::
-Encoder::
+Encoder<T>::
 ErrorCurve(
         size_t       k,                         // current dimension
         size_t       co,                        // starting ofst for reading domain pts
@@ -737,7 +748,7 @@ ErrorCurve(
         VectorXf&    weights,                   // weights associated with control points
         float        err_limit)                 // max allowable error
 {
-    mfa::Decoder decoder(mfa);
+    mfa::Decoder<T> decoder(mfa);
     VectorXf cpt(mfa.domain.cols());            // decoded curve point
     int nerr = 0;                               // number of points with error greater than err_limit
     int span = mfa.p[k];                        // current knot span of the domain point being checked
@@ -772,9 +783,10 @@ ErrorCurve(
 // where the error is greatest and adds the knot at that parameter value
 //
 // this version takes a set of control points as input instead of mfa.ctrl_pts
+template <typename T>
 void
 mfa::
-Encoder::
+Encoder<T>::
 ErrorCurve(
         size_t         k,                       // current dimension
         size_t         co,                      // starting ofst for reading domain pts
@@ -784,7 +796,7 @@ ErrorCurve(
         vector<float>& new_knots,               // new knots
         float          err_limit)               // max allowable error
 {
-    mfa::Decoder decoder(mfa);
+    mfa::Decoder<T> decoder(mfa);
     VectorXf cpt(mfa.domain.cols());            // decoded curve point
     int span      = mfa.p[k];                    // current knot span of the domain point being checked
     int old_span  = -1;                          // span of previous domain point
@@ -860,9 +872,10 @@ ErrorCurve(
 // added iteratively multiple times without creating duplicates
 //
 // this version takes a set of control points as input instead of mfa.ctrl_pts
+template <typename T>
 int
 mfa::
-Encoder::
+Encoder<T>::
 ErrorCurve(
         size_t       k,                         // current dimension
         size_t       co,                        // starting ofst for reading domain pts
@@ -871,7 +884,7 @@ ErrorCurve(
         set<int>&    err_spans,                 // spans with error greater than err_limit
         float        err_limit)                 // max allowable error
 {
-    mfa::Decoder decoder(mfa);
+    mfa::Decoder<T> decoder(mfa);
     VectorXf cpt(mfa.domain.cols());            // decoded curve point
     int nerr = 0;                               // number of points with error greater than err_limit
     int span = mfa.p[k];                        // current knot span of the domain point being checked
@@ -943,9 +956,10 @@ ErrorCurve(
 // added iteratively multiple times without creating duplicates
 //
 // this version uses mfa.ctrl_pts for control points
+template <typename T>
 int
 mfa::
-Encoder::
+Encoder<T>::
 ErrorCurve(
         size_t       k,                         // current dimension
         size_t       co,                        // starting ofst for reading domain pts
@@ -953,7 +967,7 @@ ErrorCurve(
         set<int>&    err_spans,                 // spans with error greater than err_limit
         float        err_limit)                 // max allowable error
 {
-    mfa::Decoder decoder(mfa);
+    mfa::Decoder<T> decoder(mfa);
     VectorXf cpt(mfa.domain.cols());            // decoded curve point
     int nerr = 0;                               // number of points with error greater than err_limit
     int span = mfa.p[k];                        // current knot span of the domain point being checked
@@ -1012,16 +1026,17 @@ ErrorCurve(
 // added iteratively multiple times without creating duplicates
 //
 // this version uses mfa.ctrl_pts for control points
+template <typename T>
 int
 mfa::
-Encoder::
+Encoder<T>::
 ErrorCtrlCurve(
         size_t       k,                         // current dimension
         size_t       to,                        // starting ofst for reading control pts
         set<int>&    err_spans,                 // spans with error greater than err_limit
         float        err_limit)                 // max allowable error
 {
-    mfa::Decoder decoder(mfa);
+    mfa::Decoder<T> decoder(mfa);
     VectorXf cpt(mfa.domain.cols());            // decoded curve point
     int nerr = 0;                               // number of points with error greater than err_limit
     int span = mfa.p[k];                        // current knot span of the domain point being checked
@@ -1127,3 +1142,5 @@ ErrorCtrlCurve(
 
     return nerr;
 }
+
+#include    "encode_templates.cpp"

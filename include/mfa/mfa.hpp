@@ -36,6 +36,7 @@ struct KnotSpan
 
 namespace mfa
 {
+    template <typename T>
     class MFA
     {
     public:
@@ -123,10 +124,14 @@ namespace mfa
                 VectorXi&  ijk,             // i,j,k,... indices to all dimensions
                 size_t&    idx);            // (output) linear index
 
-       friend class Encoder;
-       friend class NL_Encoder;
-       friend class Decoder;
-       friend class NewKnots;
+        template <typename>
+            friend class Encoder;
+        template <typename>
+            friend class NL_Encoder;
+        template <typename>
+            friend class Decoder;
+        template <typename>
+            friend class NewKnots;
        // TODO: I don't understand why MaxDist can't be a friend of MFA
 //        friend class MaxDist;
 

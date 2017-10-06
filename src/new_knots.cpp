@@ -13,9 +13,10 @@
 #include <iostream>
 #include <set>
 
+template <typename T>
 mfa::
-NewKnots::
-NewKnots(MFA& mfa_) :
+NewKnots<T>::
+NewKnots(MFA<T>& mfa_) :
     mfa(mfa_),
     max_num_curves(1.0e4)                           // max num. curves to check in one dimension of curve version
 {
@@ -24,16 +25,17 @@ NewKnots(MFA& mfa_) :
 // encodes at full dimensionality and decodes at full dimensionality
 // decodes full-d points in each knot span and adds new knot spans where error > err_limit
 // returns true if done, ie, no knots are inserted
+template <typename T>
 bool
 mfa::
-NewKnots::
+NewKnots<T>::
 NewKnots_full(
         VectorXi&      nnew_knots,                  // number of new knots in each dim
         vector<float>& new_knots,                   // new knots (1st dim changes fastest)
         float          err_limit,                   // max allowable error
         int            iter)                        // iteration number of caller (for debugging)
 {
-    mfa::Encoder encoder(mfa);
+    mfa::Encoder<T> encoder(mfa);
 
     // resize control points based on number of new knots added in previous round
     mfa.ctrl_pts.resize(mfa.tot_nctrl, mfa.domain.cols());
@@ -56,16 +58,17 @@ NewKnots_full(
 // then inserts knots in spans at locations of highest error
 //
 // returns true if done, ie, no knots are inserted
+template <typename T>
 bool
 mfa::
-NewKnots::
+NewKnots<T>::
 NewKnots_curve1(
         VectorXi&      nnew_knots,                       // number of new knots in each dim
         vector<float>& new_knots,                        // new knots (1st dim changes fastest)
         float          err_limit,                        // max allowable error
         int            iter)                             // iteration number of caller (for debugging)
 {
-    mfa::Encoder encoder(mfa);
+    mfa::Encoder<T> encoder(mfa);
 
     // check and assign main quantities
     int  ndims = mfa.ndom_pts.size();                   // number of domain dimensions
@@ -237,16 +240,17 @@ NewKnots_curve1(
 // adds knots error spans from all curves in all directions (into a set)
 // adds knots in middles of spans that have error higher than the limit
 // returns true if done, ie, no knots are inserted
+template <typename T>
 bool
 mfa::
-NewKnots::
+NewKnots<T>::
 NewKnots_curve(
         VectorXi&      nnew_knots,                       // number of new knots in each dim
         vector<float>& new_knots,                        // new knots (1st dim changes fastest)
         float          err_limit,                        // max allowable error
         int            iter)                             // iteration number of caller (for debugging)
 {
-    mfa::Encoder encoder(mfa);
+    mfa::Encoder<T> encoder(mfa);
 
     // check and assign main quantities
     int  ndims = mfa.ndom_pts.size();                   // number of domain dimensions
@@ -400,9 +404,10 @@ NewKnots_curve(
 // TODO: need to figure out how to do this in this version
 //
 // returns true if done, ie, no knots are inserted
+template <typename T>
 bool
 mfa::
-NewKnots::
+NewKnots<T>::
 NewKnots_curve(
         VectorXi&      nnew_knots,                       // number of new knots in each dim
         vector<float>& new_knots,                        // new knots (1st dim changes fastest)
@@ -592,16 +597,17 @@ NewKnots_curve(
 //
 // this version produces an excessive number of knots and control points and is not recommended
 // remove eventually
+template <typename T>
 bool
 mfa::
-NewKnots::
+NewKnots<T>::
 NewKnots_hybrid(
         VectorXi&      nnew_knots,                       // number of new knots in each dim
         vector<float>& new_knots,                        // new knots (1st dim changes fastest)
         float          err_limit,                        // max allowable error
         int            iter)                             // iteration number of caller (for debugging)
 {
-    mfa::Encoder encoder(mfa);
+    mfa::Encoder<T> encoder(mfa);
 
     // resize control points based on number of new knots added in previous round
     mfa.ctrl_pts.resize(mfa.tot_nctrl, mfa.domain.cols());
@@ -678,16 +684,17 @@ NewKnots_hybrid(
 // assumes caller allocated new_knots to number of spans and nnew_knots to domain dimensions
 // (does no resizing of new_knots and nnew_knots) and zeroed nnew_knots
 // returns true if all done, ie, no new knots inserted
+template <typename T>
 bool
 mfa::
-NewKnots::
+NewKnots<T>::
 ErrorSpans(
         VectorXi&      nnew_knots,                          // number of new knots in each dim
         vector<float>& new_knots,                           // new knots (1st dim changes fastest)
         float          err_limit,                           // max allowable error
         int            iter)                                // iteration number
 {
-    mfa::Decoder decoder(mfa);
+    mfa::Decoder<T> decoder(mfa);
 
     // initialize all knot spans to not done
     for (auto i = 0; i < mfa.knot_spans.size(); i++)
@@ -797,9 +804,10 @@ ErrorSpans(
 // assumes caller allocated new_knots to number of spans and nnew_knots to domain dimensions
 // (does no resizing of new_knots and nnew_knots) and zeroed nnew_knots
 // returns true if all done, ie, no new knots inserted
+template <typename T>
 bool
 mfa::
-NewKnots::
+NewKnots<T>::
 ErrorSpans(
         VectorXi&      nnew_knots,                          // number of new knots in each dim
         vector<float>& new_knots,                           // new knots (1st dim changes fastest)
@@ -903,9 +911,10 @@ ErrorSpans(
 
 // splits a knot span into two
 // also splits all other spans sharing the same knot values
+template <typename T>
 void
 mfa::
-NewKnots::
+NewKnots<T>::
 SplitSpan(
         size_t         si,                   // id of span to split
         VectorXi&      nnew_knots,           // number of new knots in each dim
@@ -1001,4 +1010,4 @@ SplitSpan(
     fprintf(stderr, "inserted new knot value=%.3f dim=%d\n", new_knot, sd);
 }
 
-
+#include    "new_knots_templates.cpp"

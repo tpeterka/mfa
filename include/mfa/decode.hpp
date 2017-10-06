@@ -21,11 +21,12 @@ typedef Eigen::ArrayXXf ArrayXXf;
 
 namespace mfa
 {
+    template <typename T>
     class Decoder
     {
     public:
 
-        Decoder(MFA& mfa_);
+        Decoder(MFA<T>& mfa_);
         ~Decoder() {}
         void Decode(MatrixXf& approx);         // (output) points (1st dim changes fastest)
 
@@ -63,7 +64,7 @@ namespace mfa
 
         vector<size_t>  cs;                     // control point stride (only in decoder, not mfa)
 
-        MFA& mfa;                               // the mfa object
+        MFA<T>& mfa;                               // the mfa object
     };
 }
 

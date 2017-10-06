@@ -15,16 +15,18 @@
 #include <cppoptlib/solver/bfgssolver.h>
 #include <cppoptlib/solver/lbfgsbsolver.h>
 
+template <typename T>
 mfa::
-NL_Encoder::
-NL_Encoder(MFA& mfa_) :
+NL_Encoder<T>::
+NL_Encoder(MFA<T>& mfa_) :
     mfa(mfa_)
 {
 }
 
+template <typename T>
 void
 mfa::
-NL_Encoder::
+NL_Encoder<T>::
 Encode(float err_limit)                             // maximum allowable normalized error
 {
     // initialize the optimization problem
@@ -52,3 +54,5 @@ Encode(float err_limit)                             // maximum allowable normali
     cerr << "f(argmin)   " << f(x)          << endl;
     cerr << "num iters   " << f.num_iters() << endl;
 }
+
+#include    "nl_encode_templates.cpp"

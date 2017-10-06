@@ -32,7 +32,7 @@ void PrepRenderingData(
     for (int i = 0; i < nblocks; i++)          // blocks
     {
         vec3d p;
-        Block* block = master.block<Block>(i);
+        Block<precision>* block = master.block< Block<precision> >(i);
 
         // number of raw points
        for (size_t j = 0; j < (size_t)(block->ndom_pts.size()); j++)
@@ -216,11 +216,11 @@ int main(int argc, char ** argv)
     diy::Master               master(world,
             -1,
             -1,
-            &Block::create,
-            &Block::destroy);
+            &Block<precision>::create,
+            &Block<precision>::destroy);
     diy::ContiguousAssigner   assigner(world.size(),
             -1);                                  // number of blocks set by read_blocks()
-    diy::io::read_blocks(infile.c_str(), world, assigner, master, &Block::load);
+    diy::io::read_blocks(infile.c_str(), world, assigner, master, &Block<precision>::load);
     nblocks = master.size();
     std::cout << nblocks << " blocks read from file "<< infile << "\n";
 

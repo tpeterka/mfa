@@ -17,9 +17,10 @@
 
 using namespace std;
 
+template <typename T>
 mfa::
-Decoder::
-Decoder(MFA& mfa_) :
+Decoder<T>::
+Decoder(MFA<T>& mfa_) :
     mfa(mfa_)
 {
     // ensure that encoding was already done
@@ -72,9 +73,10 @@ Decoder(MFA& mfa_) :
 // recomputes basis functions rather than taking them as an input
 // this version also assumes weights = 1; no division by weight is done
 // assumes all vectors have been correctly resized by the caller
+template <typename T>
 void
 mfa::
-Decoder::
+Decoder<T>::
 Decode(MatrixXf& approx)                 // pts in approximated volume (1st dim. changes fastest)
 {
     vector<size_t> iter(mfa.p.size(), 0);    // parameter index (iteration count) in current dim.
@@ -141,9 +143,10 @@ Decode(MatrixXf& approx)                 // pts in approximated volume (1st dim.
 // recomputes basis functions rather than taking them as an input
 // this version also assumes weights = 1; no division by weight is done
 // assumes all vectors have been correctly resized by the caller
+template <typename T>
 void
 mfa::
-Decoder::
+Decoder<T>::
 Decode(MatrixXf& approx)                 // pts in approximated volume (1st dim. changes fastest)
 {
     vector<size_t> iter(mfa.p.size(), 0);    // parameter index (iteration count) in current dim.
@@ -225,9 +228,10 @@ Decode(MatrixXf& approx)                 // pts in approximated volume (1st dim.
 
 // compute a point from a NURBS curve at a given parameter value
 // algorithm 4.1, Piegl & Tiller (P&T) p.124
+template <typename T>
 void
 mfa::
-Decoder::
+Decoder<T>::
 CurvePt(
         int       cur_dim,                              // current dimension
         float     param,                                // parameter value of desired point
@@ -272,9 +276,10 @@ CurvePt(
 // reading full n-d set of control points from the mfa
 // algorithm 4.1, Piegl & Tiller (P&T) p.124
 // this version assumes weights = 1; no division by weight is done
+template <typename T>
 void
 mfa::
-Decoder::
+Decoder<T>::
 CurvePt(
         int       cur_dim,                     // current dimension
         float     param,                       // parameter value of desired point
@@ -302,9 +307,10 @@ CurvePt(
 // this version takes a temporary set of control points for one curve only rather than
 // reading full n-d set of control points from the mfa
 // algorithm 4.1, Piegl & Tiller (P&T) p.124
+template <typename T>
 void
 mfa::
-Decoder::
+Decoder<T>::
 CurvePt(
         int       cur_dim,                      // current dimension
         float     param,                        // parameter value of desired point
@@ -344,9 +350,10 @@ CurvePt(
 
 // compute a point from a NURBS n-d volume at a given parameter value
 // algorithm 4.3, Piegl & Tiller (P&T) p.134
+template <typename T>
 void
 mfa::
-Decoder::
+Decoder<T>::
 VolPt(VectorXf& param,                       // parameter value in each dim. of desired point
       VectorXf& out_pt)                      // (output) point
 {
@@ -435,3 +442,5 @@ VolPt(VectorXf& param,                       // parameter value in each dim. of 
 //     fprintf(stderr, "3: denom=%.3f\n", denom);
 //     cerr << "out_pt:\n" << out_pt << endl;
 }
+
+#include    "decode_templates.cpp"

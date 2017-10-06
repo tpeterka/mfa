@@ -64,11 +64,11 @@ int main(int argc, char** argv)
     diy::Master               master(world,
                                      num_threads,
                                      mem_blocks,
-                                     &Block::create,
-                                     &Block::destroy,
+                                     &Block<precision>::create,
+                                     &Block<precision>::destroy,
                                      &storage,
-                                     &Block::save,
-                                     &Block::load);
+                                     &Block<precision>::save,
+                                     &Block<precision>::load);
     diy::ContiguousAssigner   assigner(world.size(), tot_blocks);
     diy::decompose(world.rank(), assigner, master);
 
@@ -82,13 +82,13 @@ int main(int argc, char** argv)
     d_args.min[0]       = -4.0 * M_PI;
     d_args.max[0]       = 4.0 * M_PI;
     d_args.s            = 10.0;              // scaling factor on range
-    master.foreach([&](Block* b, const diy::Master::ProxyWithLink& cp)
+    master.foreach([&](Block<precision>* b, const diy::Master::ProxyWithLink& cp)
                    { b->generate_sinc_data(cp, d_args); });
 
     // encode data
     fprintf(stderr, "\nStarting nonlinear encoding...\n\n");
     double encode_time = MPI_Wtime();
-    master.foreach([&](Block* b, const diy::Master::ProxyWithLink& cp)
+    master.foreach([&](Block<precision>* b, const diy::Master::ProxyWithLink& cp)
             { b->nonlinear_encode_block(cp, norm_err_limit); });
     encode_time = MPI_Wtime() - encode_time;
     fprintf(stderr, "\n\nNonlinear encoding done.\n\n");
@@ -96,20 +96,20 @@ int main(int argc, char** argv)
     // debug: compute error field for visualization and max error to verify that it is below the threshold
     fprintf(stderr, "\nFinal decoding and computing max. error...\n");
 #if 0       // normal distance
-    master.foreach([&](Block* b, const diy::Master::ProxyWithLink& cp)
+    master.foreach([&](Block<precision>* b, const diy::Master::ProxyWithLink& cp)
             { b->error(cp, true); });
 #else       // range coordinate difference
-    master.foreach([&](Block* b, const diy::Master::ProxyWithLink& cp)
+    master.foreach([&](Block<precision>* b, const diy::Master::ProxyWithLink& cp)
             { b->range_error(cp, true); });
 #endif
 
     // debug: save knot span domains for comparing error with location in knot span
     fprintf(stderr, "\nFinal decoding and computing max. error...\n");
-    master.foreach([&](Block* b, const diy::Master::ProxyWithLink& cp)
+    master.foreach([&](Block<precision>* b, const diy::Master::ProxyWithLink& cp)
             { b->knot_span_domains(cp); });
 
     // print results
-    master.foreach(&Block::print_block);
+    master.foreach(&Block<precision>::print_block);
     fprintf(stderr, "encoding time = %.3lf s.\n", encode_time);
 
     // save the results in diy format
