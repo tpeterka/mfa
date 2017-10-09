@@ -37,11 +37,11 @@ int main(int argc, char** argv)
     int num_threads = 1;                     // needed in order to do timing
 
     // default command line arguments
-    float norm_err_limit = 1.0;                 // maximum normalized error limit
-    int   pt_dim         = 3;                   // dimension of input points
-    int   dom_dim        = 2;                   // dimension of domain (<= pt_dim)
-    int   degree         = 4;                   // degree (same for all dims)
-    int   ndomp          = 100;                 // input number of domain points (same for all dims)
+    real_t norm_err_limit = 1.0;                 // maximum normalized error limit
+    int    pt_dim         = 3;                   // dimension of input points
+    int    dom_dim        = 2;                   // dimension of domain (<= pt_dim)
+    int    degree         = 4;                   // degree (same for all dims)
+    int    ndomp          = 100;                 // input number of domain points (same for all dims)
 
     // get command line arguments
     using namespace opts;
@@ -64,11 +64,11 @@ int main(int argc, char** argv)
     diy::Master               master(world,
                                      num_threads,
                                      mem_blocks,
-                                     &Block<precision>::create,
-                                     &Block<precision>::destroy,
+                                     &Block<real_t>::create,
+                                     &Block<real_t>::destroy,
                                      &storage,
-                                     &Block<precision>::save,
-                                     &Block<precision>::load);
+                                     &Block<real_t>::save,
+                                     &Block<real_t>::load);
     diy::ContiguousAssigner   assigner(world.size(), tot_blocks);
     diy::decompose(world.rank(), assigner, master);
 
@@ -82,13 +82,13 @@ int main(int argc, char** argv)
     d_args.min[0]       = -4.0 * M_PI;
     d_args.max[0]       = 4.0 * M_PI;
     d_args.s            = 10.0;              // scaling factor on range
-    master.foreach([&](Block<precision>* b, const diy::Master::ProxyWithLink& cp)
+    master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
                    { b->generate_sinc_data(cp, d_args); });
 
     // encode data
     fprintf(stderr, "\nStarting nonlinear encoding...\n\n");
     double encode_time = MPI_Wtime();
-    master.foreach([&](Block<precision>* b, const diy::Master::ProxyWithLink& cp)
+    master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
             { b->nonlinear_encode_block(cp, norm_err_limit); });
     encode_time = MPI_Wtime() - encode_time;
     fprintf(stderr, "\n\nNonlinear encoding done.\n\n");
@@ -96,20 +96,20 @@ int main(int argc, char** argv)
     // debug: compute error field for visualization and max error to verify that it is below the threshold
     fprintf(stderr, "\nFinal decoding and computing max. error...\n");
 #if 0       // normal distance
-    master.foreach([&](Block<precision>* b, const diy::Master::ProxyWithLink& cp)
+    master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
             { b->error(cp, true); });
 #else       // range coordinate difference
-    master.foreach([&](Block<precision>* b, const diy::Master::ProxyWithLink& cp)
+    master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
             { b->range_error(cp, true); });
 #endif
 
     // debug: save knot span domains for comparing error with location in knot span
     fprintf(stderr, "\nFinal decoding and computing max. error...\n");
-    master.foreach([&](Block<precision>* b, const diy::Master::ProxyWithLink& cp)
+    master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
             { b->knot_span_domains(cp); });
 
     // print results
-    master.foreach(&Block<precision>::print_block);
+    master.foreach(&Block<real_t>::print_block);
     fprintf(stderr, "encoding time = %.3lf s.\n", encode_time);
 
     // save the results in diy format

@@ -1,3 +1,13 @@
+//--------------------------------------------------------------
+// converts output files from DIY to VTK
+//
+// output precision is float irrespective whether input is float or double
+//
+// Iulian Grindeanu and Tom Peterka
+// Argonne National Laboratory
+// tpeterka@mcs.anl.gov
+//--------------------------------------------------------------
+
 #include "mfa/mfa.hpp"
 #include "../block.hpp"
 #include <iostream>
@@ -32,7 +42,7 @@ void PrepRenderingData(
     for (int i = 0; i < nblocks; i++)          // blocks
     {
         vec3d p;
-        Block<precision>* block = master.block< Block<precision> >(i);
+        Block<real_t>* block = master.block< Block<real_t> >(i);
 
         // number of raw points
        for (size_t j = 0; j < (size_t)(block->ndom_pts.size()); j++)
@@ -216,11 +226,11 @@ int main(int argc, char ** argv)
     diy::Master               master(world,
             -1,
             -1,
-            &Block<precision>::create,
-            &Block<precision>::destroy);
+            &Block<real_t>::create,
+            &Block<real_t>::destroy);
     diy::ContiguousAssigner   assigner(world.size(),
             -1);                                  // number of blocks set by read_blocks()
-    diy::io::read_blocks(infile.c_str(), world, assigner, master, &Block<precision>::load);
+    diy::io::read_blocks(infile.c_str(), world, assigner, master, &Block<real_t>::load);
     nblocks = master.size();
     std::cout << nblocks << " blocks read from file "<< infile << "\n";
 

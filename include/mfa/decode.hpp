@@ -13,46 +13,42 @@
 
 #include <Eigen/Dense>
 
-typedef Eigen::MatrixXf MatrixXf;
-typedef Eigen::VectorXf VectorXf;
 typedef Eigen::MatrixXi MatrixXi;
-typedef Eigen::VectorXi VectorXi;
-typedef Eigen::ArrayXXf ArrayXXf;
 
 namespace mfa
 {
-    template <typename T>
+    template <typename T>                       // float or double
     class Decoder
     {
     public:
 
         Decoder(MFA<T>& mfa_);
         ~Decoder() {}
-        void Decode(MatrixXf& approx);         // (output) points (1st dim changes fastest)
+        void Decode(MatrixX<T>& approx);         // (output) points (1st dim changes fastest)
 
-        void VolPt(VectorXf& param,            // parameter value in each dim. of desired point
-                   VectorXf& out_pt);          // (output) point
-
-        void CurvePt(
-                int       cur_dim,              // current dimension
-                float     param,                // parameter value of desired point
-                size_t    co,                   // offset to start of control points for this curve
-                VectorXf& out_pt);               // (output) point
+        void VolPt(VectorX<T>& param,            // parameter value in each dim. of desired point
+                   VectorX<T>& out_pt);          // (output) point
 
         void CurvePt(
-                int       cur_dim,              // current dimension
-                float     param,                // parameter value of desired point
-                MatrixXf& temp_ctrl,            // temporary control points
-                VectorXf& out_pt,               // (output) point
-                int       ko = 0);              // starting knot offset
+                int         cur_dim,              // current dimension
+                T           param,                // parameter value of desired point
+                size_t      co,                   // offset to start of control points for this curve
+                VectorX<T>& out_pt);              // (output) point
 
         void CurvePt(
-                int       cur_dim,              // current dimension
-                float     param,                // parameter value of desired point
-                MatrixXf& temp_ctrl,            // temporary control points
-                VectorXf& temp_weights,         // weights associate with temporary control points
-                VectorXf& out_pt,               // (output) point
-                int       ko = 0);              // starting knot offset
+                int         cur_dim,              // current dimension
+                T           param,                // parameter value of desired point
+                MatrixX<T>& temp_ctrl,            // temporary control points
+                VectorX<T>& out_pt,               // (output) point
+                int         ko = 0);              // starting knot offset
+
+        void CurvePt(
+                int         cur_dim,              // current dimension
+                T           param,                // parameter value of desired point
+                MatrixX<T>& temp_ctrl,            // temporary control points
+                VectorX<T>& temp_weights,         // weights associate with temporary control points
+                VectorX<T>& out_pt,               // (output) point
+                int         ko = 0);              // starting knot offset
 
     private:
 

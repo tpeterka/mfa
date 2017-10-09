@@ -28,13 +28,13 @@ using namespace cppoptlib;
 
 namespace mfa
 {
-    template<typename T>
+    template<typename T>                        // float or double
         class MaxDist : public Problem<T> {
 //         class MaxDist : public BoundedProblem<T> {
             public:
 
                 MaxDist(MFA<T>& mfa_,
-                        float err_limit_) :
+                        T err_limit_) :
                     mfa(mfa_),
                     err_limit(err_limit_),
                     niter(0),
@@ -55,7 +55,7 @@ namespace mfa
                         return(0.0);
 
                     // push old control points
-                    MatrixXf old_ctrl_pts = mfa.ctrl_pts;
+                    MatrixX<T> old_ctrl_pts = mfa.ctrl_pts;
 
                     // x is a vector of scaling factors, one per control point
                     // used to scale the last coordinate of the control point
@@ -68,10 +68,10 @@ namespace mfa
 
                     // compute max error
                     // TODO: not checking all points (yet), still using old error computation
-                    float max_err = 0.0;
+                    T max_err = 0.0;
                     for (size_t i = 0; i < (size_t)mfa.domain.rows(); i++)
                     {
-                        float err = mfa.Error(i);
+                        T err = mfa.Error(i);
                         if (i == 0 || err > max_err)
                             max_err = err;
                     }
@@ -93,25 +93,25 @@ namespace mfa
                 }
 
                 size_t    num_iters() { return niter; }
-                MatrixXf& ctrl_pts()  { return opt_ctrl_pts; }
+                MatrixX<T>& ctrl_pts()  { return opt_ctrl_pts; }
 
             private:
 
-                MFA<T>&   mfa;                 // the mfa object
-                size_t niter;               // number of iterations performed
-                float  err_limit;           // user error limit
-                bool   done;                // achieved user error limit; stop computing objective
-                MatrixXf opt_ctrl_pts;      // control points found by optimization
+                MFA<T>&    mfa;                 // the mfa object
+                size_t     niter;               // number of iterations performed
+                T          err_limit;           // user error limit
+                bool       done;                // achieved user error limit; stop computing objective
+                MatrixX<T> opt_ctrl_pts;        // control points found by optimization
         };
 
-    template <typename T>
+    template <typename T>                       // float or double
     class NL_Encoder
     {
     public:
 
         NL_Encoder(MFA<T>& mfa_);
         ~NL_Encoder() {}
-        void Encode(float err_limit);       // maximum allowable normalized error
+        void Encode(T err_limit);               // maximum allowable normalized error
 
     private:
         MFA<T>& mfa;                           // the mfa object

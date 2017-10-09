@@ -24,7 +24,7 @@ using namespace std;
 
 namespace mfa
 {
-    template <typename T>
+    template <typename T>                                   // float or double
     class NewKnots
     {
     public:
@@ -33,37 +33,37 @@ namespace mfa
         ~NewKnots() {}
         bool NewKnots_full(
                 VectorXi&      nnew_knots,                  // number of new knots in each dim
-                vector<float>& new_knots,                   // new knots (1st dim changes fastest)
-                float          err_limit,                   // max allowable error
+                vector<T>&     new_knots,                   // new knots (1st dim changes fastest)
+                T              err_limit,                   // max allowable error
                 int            iter);                       // iteration number of caller (for debugging)
         bool NewKnots_curve1(
                 VectorXi&      nnew_knots,                  // number of new knots in each dim
-                vector<float>& new_knots,                   // new knots (1st dim changes fastest)
-                float          err_limit,                   // max allowable error
+                vector<T>&     new_knots,                   // new knots (1st dim changes fastest)
+                T              err_limit,                   // max allowable error
                 int            iter);                       // iteration number of caller (for debugging)
         bool NewKnots_curve(
                 VectorXi&      nnew_knots,                  // number of new knots in each dim
-                vector<float>& new_knots,                   // new knots (1st dim changes fastest)
-                float          err_limit,                   // max allowable error
+                vector<T>&     new_knots,                   // new knots (1st dim changes fastest)
+                T              err_limit,                   // max allowable error
                 int            iter);                       // iteration number of caller (for debugging)
         bool NewKnots_hybrid(
                 VectorXi&      nnew_knots,                  // number of new knots in each dim
-                vector<float>& new_knots,                   // new knots (1st dim changes fastest)
-                float          err_limit,                   // max allowable error
+                vector<T>&     new_knots,                   // new knots (1st dim changes fastest)
+                T              err_limit,                   // max allowable error
                 int            iter);                       // iteration number of caller (for debugging)
 
     private:
 
         bool ErrorSpans(
                 VectorXi&      nnew_knots,      // number of new knots in each dim
-                vector<float>& new_knots,       // new knots (1st dim changes fastest)
-                float          err_limit,       // max. allowed error
+                vector<T>&     new_knots,       // new knots (1st dim changes fastest)
+                T              err_limit,       // max. allowed error
                 int            iter);           // iteration number
 
         void SplitSpan(
                 size_t         si,              // id of span to split
                 VectorXi&      nnew_knots,      // number of new knots in each dim
-                vector<float>& new_knots,       // new knots (1st dim changes fastest)
+                vector<T>&     new_knots,       // new knots (1st dim changes fastest)
                 int            iter,            // iteration number
                 vector<bool>&  split_spans);    // spans that have already been split in this iteration
 

@@ -45,17 +45,17 @@ using namespace std;
 //
 // ------------------
 
-template <typename T>
+template <typename T>           // float or double
 mfa::
 MFA<T>::
-MFA(VectorXi& p_,             // polynomial degree in each dimension
-    VectorXi& ndom_pts_,      // number of input data points in each dim
-    MatrixXf& domain_,        // input data points (1st dim changes fastest)
-    MatrixXf& ctrl_pts_,      // (output, optional input) control points (1st dim changes fastest) (can be initialized by caller)
-    VectorXi& nctrl_pts_,     // (output, optional input) number of control points in each dim
-    VectorXf& weights_,       // (output, optional input) weights associated with control points
-    VectorXf& knots_,         // (output) knots (1st dim changes fastest)
-    float     eps_) :         // minimum difference considered significant
+MFA(VectorXi&   p_,             // polynomial degree in each dimension
+    VectorXi&   ndom_pts_,      // number of input data points in each dim
+    MatrixX<T>& domain_,        // input data points (1st dim changes fastest)
+    MatrixX<T>& ctrl_pts_,      // (output, optional input) control points (1st dim changes fastest) (can be initialized by caller)
+    VectorXi&   nctrl_pts_,     // (output, optional input) number of control points in each dim
+    VectorX<T>& weights_,       // (output, optional input) weights associated with control points
+    VectorX<T>& knots_,         // (output) knots (1st dim changes fastest)
+    T           eps_) :         // minimum difference considered significant
     p(p_),
     ndom_pts(ndom_pts_),
     domain(domain_),
@@ -339,7 +339,7 @@ FixedEncode(VectorXi &nctrl_pts_)           // (output) number of control points
     nctrl_pts_ = nctrl_pts;
 
     // for now, set weights to 1.0
-    weights = VectorXf::Ones(ctrl_pts.rows());
+    weights = VectorX<T>::Ones(ctrl_pts.rows());
 }
 
 // adaptive encode
@@ -348,7 +348,7 @@ void
 mfa::
 MFA<T>::
 AdaptiveEncode(
-        float    err_limit,                 // maximum allowable normalized error
+        T        err_limit,                 // maximum allowable normalized error
         VectorXi &nctrl_pts_)               // (output) number of control points in each dim
 {
     mfa::Encoder<T> encoder(*this);
@@ -357,7 +357,7 @@ AdaptiveEncode(
     nctrl_pts_ = nctrl_pts;
 
     // for now, set weights to 1.0
-    weights = VectorXf::Ones(ctrl_pts.rows());
+    weights = VectorX<T>::Ones(ctrl_pts.rows());
 }
 
 // nonlinear encode
@@ -366,7 +366,7 @@ void
 mfa::
 MFA<T>::
 NonlinearEncode(
-        float    err_limit,                 // maximum allowable normalized error
+        T        err_limit,                 // maximum allowable normalized error
         VectorXi &nctrl_pts_)               // (output) number of control points in each dim
 {
     mfa::NL_Encoder<T> nl_encoder(*this);
@@ -375,7 +375,7 @@ NonlinearEncode(
     nctrl_pts_ = nctrl_pts;
 
     // for now, set weights to 1.0
-    weights = VectorXf::Ones(ctrl_pts.rows());
+    weights = VectorX<T>::Ones(ctrl_pts.rows());
 }
 
 // decode
@@ -383,7 +383,7 @@ template <typename T>
 void
 mfa::
 MFA<T>::
-Decode(MatrixXf& approx)
+Decode(MatrixX<T>& approx)
 {
     mfa::Decoder<T> decoder(*this);
     decoder.Decode(approx);
@@ -401,7 +401,7 @@ int
 mfa::
 MFA<T>::
 FindSpan(int       cur_dim,              // current dimension
-         float     u,                    // parameter value
+         T         u,                    // parameter value
          int       ko)                   // optional starting knot to search (default = 0)
 {
     if (u == knots(ko + nctrl_pts(cur_dim)))
@@ -433,19 +433,19 @@ template <typename T>
 void
 mfa::
 MFA<T>::
-BasisFuns(int       cur_dim,            // current dimension
-          float     u,                  // parameter value
-          int       span,               // index of span in the knots vector containing u, relative to ko
-          MatrixXf& N,                  // matrix of (output) basis function values
-          int       start_n,            // starting basis function N_{start_n} to compute
-          int       end_n,              // ending basis function N_{end_n} to compute
-          int       row)                // starting row index in N of result
+BasisFuns(int         cur_dim,            // current dimension
+          T           u,                  // parameter value
+          int         span,               // index of span in the knots vector containing u, relative to ko
+          MatrixX<T>& N,                  // matrix of (output) basis function values
+          int         start_n,            // starting basis function N_{start_n} to compute
+          int         end_n,              // ending basis function N_{end_n} to compute
+          int         row)                // starting row index in N of result
 {
     // init
-    vector<float> scratch(p(cur_dim) + 1);            // scratchpad, same as N in P&T p. 70
+    vector<T> scratch(p(cur_dim) + 1);                  // scratchpad, same as N in P&T p. 70
     scratch[0] = 1.0;
-    vector<float> left(p(cur_dim) + 1);               // temporary recurrence results
-    vector<float> right(p(cur_dim) + 1);
+    vector<T> left(p(cur_dim) + 1);                     // temporary recurrence results
+    vector<T> right(p(cur_dim) + 1);
 
     // fill N
     for (int j = 1; j <= p(cur_dim); j++)
@@ -453,10 +453,10 @@ BasisFuns(int       cur_dim,            // current dimension
         left[j]  = u - knots(span + ko[cur_dim]+ 1 - j);
         right[j] = knots(span + ko[cur_dim] + j) - u;
 
-        float saved = 0.0;
+        T saved = 0.0;
         for (int r = 0; r < j; r++)
         {
-            float temp = scratch[r] / (right[r + 1] + left[j - r]);
+            T temp = scratch[r] / (right[r + 1] + left[j - r]);
             scratch[r] = saved + right[r + 1] * temp;
             saved = left[j - r] * temp;
         }
@@ -493,10 +493,10 @@ mfa::
 MFA<T>::
 Params()
 {
-    float tot_dist;                    // total chord length
-    VectorXf dists(ndom_pts.maxCoeff() - 1);  // chord lengths of data point spans for any dim
-    params = VectorXf::Zero(params.size());
-    VectorXf d;                        // current chord length
+    T          tot_dist;                          // total chord length
+    VectorX<T> dists(ndom_pts.maxCoeff() - 1);    // chord lengths of data point spans for any dim
+    params = VectorX<T>::Zero(params.size());
+    VectorX<T> d;                                 // current chord length
 
     // following are counters for slicing domain and params into curves in different dimensions
     size_t po = 0;                     // starting offset for parameters in current dim
@@ -538,10 +538,10 @@ Params()
             {
                 params(po)                   = 0.0;      // first parameter is known
                 params(po + ndom_pts(k) - 1) = 1.0;      // last parameter is known
-                float prev_param             = 0.0;      // param value at previous iteration below
+                T prev_param                 = 0.0;      // param value at previous iteration below
                 for (size_t i = 0; i < ndom_pts(k) - 2; i++)
                 {
-                    float dfrac = dists(i) / tot_dist;
+                    T dfrac             = dists(i) / tot_dist;
                     params(po + i + 1) += prev_param + dfrac;
                     // debug
 //                     fprintf(stderr, "k %ld j %ld i %ld po %ld "
@@ -633,15 +633,15 @@ Knots()
         int nknots = nctrl_pts(k) + p(k) + 1;    // number of knots in current dim
 
         // in P&T, d is the ratio of number of input points (r+1) to internal knot spans (n-p+1)
-//         float d = (float)(ndom_pts(k)) / (nctrl_pts(k) - p(k));         // eq. 9.68, r is P&T's m
+//         T d = (T)(ndom_pts(k)) / (nctrl_pts(k) - p(k));         // eq. 9.68, r is P&T's m
         // but I prefer d to be the ratio of input spans r to internal knot spans (n-p+1)
-        float d = (float)(ndom_pts(k) - 1) / (nctrl_pts(k) - p(k));
+        T d = (T)(ndom_pts(k) - 1) / (nctrl_pts(k) - p(k));
 
         // compute n - p internal knots
         for (int j = 1; j <= nctrl_pts(k) - p(k) - 1; j++)    // eq. 9.69
         {
             int   i = j * d;                      // integer part of j steps of d
-            float a = j * d - i;                  // fractional part of j steps of d, P&T's alpha
+            T a = j * d - i;                  // fractional part of j steps of d, P&T's alpha
 
             // debug
             // cerr << "d " << d << " j " << j << " i " << i << " a " << a << endl;
@@ -700,7 +700,7 @@ UniformKnots()
         }
 
         // compute remaining n - p internal knots
-        float step = 1.0 / (nctrl_pts(k) - p(k));               // size of internal knot span
+        T step = 1.0 / (nctrl_pts(k) - p(k));               // size of internal knot span
         for (int j = 1; j <= nctrl_pts(k) - p(k) - 1; j++)
             knots(ko + p(k) + j) = knots(ko + p(k) + j - 1) + step;
 
@@ -719,10 +719,10 @@ void
 mfa::
 MFA<T>::
 InsertKnots(
-        VectorXi&      nnew_knots,          // number of new knots in each dim
-        vector<float>& new_knots)           // new knots (1st dim changes fastest)
+        VectorXi&  nnew_knots,          // number of new knots in each dim
+        vector<T>& new_knots)           // new knots (1st dim changes fastest)
 {
-    VectorXf temp_knots(knots.size() + nnew_knots.sum());
+    VectorX<T> temp_knots(knots.size() + nnew_knots.sum());
     VectorXi nold_knots = VectorXi::Zero(nnew_knots.size());
 
     size_t ntemp = 0;                             // current number of temp_knots
@@ -788,13 +788,14 @@ InsertKnots(
 // TODO: experiment whether this is more accurate and/or faster than calling Params
 // with a 1-d space of domain pts: min, target, and max
 template <typename T>
-float
+T
 mfa::
 MFA<T>::
-InterpolateParams(int       cur_dim,  // curent dimension
-                  size_t    po,       // starting offset for params in current dim
-                  size_t    ds,       // stride for domain pts in cuve in cur. dim.
-                  float     coord)    // target coordinate
+InterpolateParams(
+        int       cur_dim,  // curent dimension
+        size_t    po,       // starting offset for params in current dim
+        size_t    ds,       // stride for domain pts in cuve in cur. dim.
+        T         coord)    // target coordinate
 {
     if (coord <= domain(0, cur_dim))
         return params(po);
@@ -825,14 +826,14 @@ InterpolateParams(int       cur_dim,  // curent dimension
     if (coord <= domain((mid) * ds, cur_dim) && mid > 0)
     {
         assert(coord >= domain((mid - 1) * ds, cur_dim));
-        float frac = (coord - domain((mid - 1) * ds, cur_dim)) /
+        T frac = (coord - domain((mid - 1) * ds, cur_dim)) /
             (domain((mid) * ds, cur_dim) - domain((mid - 1) * ds, cur_dim));
         return params(po + mid - 1) + frac * (params(po + mid) - params(po + mid - 1));
     }
     else if (coord >= domain((mid) * ds, cur_dim) && mid < ndom_pts(cur_dim) - 1)
     {
         assert(coord <= domain((mid + 1) * ds, cur_dim));
-        float frac = (coord - domain((mid) * ds, cur_dim)) /
+        T frac = (coord - domain((mid) * ds, cur_dim)) /
             (domain((mid + 1) * ds, cur_dim) - domain((mid) * ds, cur_dim));
         return params(po + mid) + frac * (params(po + mid + 1) - params(po + mid));
     }
@@ -901,16 +902,16 @@ ijk2idx(VectorXi& ijk,                  // i,j,k,... indices to all dimensions
 // approximates gradient from 2 points diagonally opposite each other in all
 // domain dimensions (not from 2 points in each dimension)
 template <typename T>
-float
+T
 mfa::
 MFA<T>::
-NormalDistance(VectorXf& pt,          // point whose distance from domain is desired
-               size_t    idx)         // index of min. corner of cell in the domain
-                                      // that will be used to compute partial derivatives
+NormalDistance(VectorX<T>& pt,          // point whose distance from domain is desired
+               size_t      idx)         // index of min. corner of cell in the domain
+                                        // that will be used to compute partial derivatives
 {
     // normal vector = [df/dx, df/dy, df/dz, ..., -1]
     // -1 is the last coordinate of the domain points, ie, the range value
-    VectorXf normal(domain.cols());
+    VectorX<T> normal(domain.cols());
     int      last = domain.cols() - 1;    // last coordinate of a domain pt, ie, the range value
 
     // convert linear idx to multidim. i,j,k... indices in each domain dimension
@@ -955,7 +956,7 @@ NormalDistance(VectorXf& pt,          // point whose distance from domain is des
     normal /= normal.norm();
 
     // project distance from (pt - domain(idx)) to unit normal
-    VectorXf dom_pt = domain.row(idx);
+    VectorX<T> dom_pt = domain.row(idx);
 
     // debug
 //     fprintf(stderr, "idx=%ld\n", idx);
@@ -972,18 +973,18 @@ NormalDistance(VectorXf& pt,          // point whose distance from domain is des
 // uses 2-point finite differences (first order linear) method to compute gradient and normal vector
 // approximates gradient from 2 points in the same slice
 template <typename T>
-float
+T
 mfa::
 MFA<T>::
 CurveDistance(
-        int       k,                    // current dimension in direction of curve
-        VectorXf& pt,                   // point whose distance from domain is desired
-        size_t    idx)                  // index of min. corner of cell in the domain
-                                        // that will be used to compute partial derivatives
+        int         k,                    // current dimension in direction of curve
+        VectorX<T>& pt,                   // point whose distance from domain is desired
+        size_t      idx)                  // index of min. corner of cell in the domain
+                                          // that will be used to compute partial derivatives
 {
     // normal vector = [df/dx, df/dy, df/dz, ..., -1]
     // -1 is the last coordinate of the domain points, ie, the range value
-    VectorXf normal(domain.cols());
+    VectorX<T> normal(domain.cols());
     int      last = domain.cols() - 1;    // last coordinate of a domain pt, ie, the range value
 
     // convert linear idx to multidim. i,j,k... indices in each domain dimension
@@ -1039,7 +1040,7 @@ CurveDistance(
     normal /= normal.norm();
 
     // project distance from (pt - domain(idx)) to unit normal
-    VectorXf dom_pt = domain.row(idx);
+    VectorX<T> dom_pt = domain.row(idx);
 
     // debug
 //     fprintf(stderr, "idx=%ld\n", idx);
@@ -1055,7 +1056,7 @@ CurveDistance(
 // compute the error (absolute value of distance in normal direction) of the mfa at a domain point
 // error is not normalized by the data range (absolute, not relative error)
 template <typename T>
-float
+T
 mfa::
 MFA<T>::
 Error(size_t idx)               // index of domain point
@@ -1065,7 +1066,7 @@ Error(size_t idx)               // index of domain point
     idx2ijk(idx, ijk);
 
     // compute parameters for the vertices of the cell
-    VectorXf param(p.size());
+    VectorX<T> param(p.size());
     for (int i = 0; i < p.size(); i++)
         param(i) = params(ijk(i) + po[i]);
 
@@ -1073,14 +1074,14 @@ Error(size_t idx)               // index of domain point
     // cerr << "param:\n" << param << endl;
 
     // approximated value
-    VectorXf cpt(ctrl_pts.cols());          // approximated point
+    VectorX<T> cpt(ctrl_pts.cols());          // approximated point
     Decoder<T> decoder(*this);
     decoder.VolPt(param, cpt);
 
      // debug
     // cerr << "cpt:\n" << cpt << endl;
 
-    float err = fabs(NormalDistance(cpt, idx));
+    T err = fabs(NormalDistance(cpt, idx));
 
     // debug
     // fprintf(stderr, "error=%.3e\n", err);
@@ -1091,7 +1092,7 @@ Error(size_t idx)               // index of domain point
 // compute the error (absolute value of difference of range coordinates) of the mfa at a domain point
 // error is not normalized by the data range (absolute, not relative error)
 template <typename T>
-float
+T
 mfa::
 MFA<T>::
 RangeError(size_t idx)               // index of domain point
@@ -1101,7 +1102,7 @@ RangeError(size_t idx)               // index of domain point
     idx2ijk(idx, ijk);
 
     // compute parameters for the vertices of the cell
-    VectorXf param(p.size());
+    VectorX<T> param(p.size());
     for (int i = 0; i < p.size(); i++)
         param(i) = params(ijk(i) + po[i]);
 
@@ -1109,7 +1110,7 @@ RangeError(size_t idx)               // index of domain point
     // cerr << "param:\n" << param << endl;
 
     // approximated value
-    VectorXf cpt(ctrl_pts.cols());          // approximated point
+    VectorX<T> cpt(ctrl_pts.cols());          // approximated point
     Decoder<T> decoder(*this);
     decoder.VolPt(param, cpt);
 
@@ -1117,7 +1118,7 @@ RangeError(size_t idx)               // index of domain point
     // cerr << "cpt:\n" << cpt << endl;
 
     int last = domain.cols() - 1;           // range coordinate
-    float err = fabs(cpt(last) - domain(idx, last));
+    T err = fabs(cpt(last) - domain(idx, last));
 
     // debug
     // fprintf(stderr, "error=%.3e\n", err);

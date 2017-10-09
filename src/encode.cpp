@@ -14,7 +14,7 @@
 #include <iostream>
 #include <set>
 
-template <typename T>
+template <typename T>                                           // float or double
 mfa::
 Encoder<T>::
 Encoder(MFA<T>& mfa_) :
@@ -27,10 +27,10 @@ template <typename T>
 void
 mfa::
 Encoder<T>::
-AdaptiveEncode(float err_limit)                                 // maximum allowable normalized error
+AdaptiveEncode(T err_limit)                                     // maximum allowable normalized error
 {
-    VectorXi      nnew_knots = VectorXi::Zero(mfa.p.size());    // number of new knots in each dim
-    vector<float> new_knots;                                    // new knots (1st dim changes fastest)
+    VectorXi  nnew_knots = VectorXi::Zero(mfa.p.size());        // number of new knots in each dim
+    vector<T> new_knots;                                        // new knots (1st dim changes fastest)
 
     mfa::NewKnots<T> nk(mfa);
 
@@ -115,7 +115,7 @@ Encode()
     // check and assign main quantities
     VectorXi n;                             // number of control point spans in each domain dim
     VectorXi m;                             // number of input data point spans in each domain dim
-    int      ndims = mfa.ndom_pts.size();       // number of domain dimensions
+    int      ndims = mfa.ndom_pts.size();   // number of domain dimensions
     size_t   cs    = 1;                     // stride for input points in curve in cur. dim
 
     Quants(n, m);
@@ -132,12 +132,12 @@ Encode()
     size_t tot_ntemp_ctrl = 1;
     for (size_t k = 0; k < ndims; k++)
         tot_ntemp_ctrl *= (k == 0 ? mfa.nctrl_pts(k) : mfa.ndom_pts(k));
-    MatrixXf temp_ctrl0 = MatrixXf::Zero(tot_ntemp_ctrl, mfa.domain.cols());
-    MatrixXf temp_ctrl1 = MatrixXf::Zero(tot_ntemp_ctrl, mfa.domain.cols());
+    MatrixX<T> temp_ctrl0 = MatrixX<T>::Zero(tot_ntemp_ctrl, mfa.domain.cols());
+    MatrixX<T> temp_ctrl1 = MatrixX<T>::Zero(tot_ntemp_ctrl, mfa.domain.cols());
 
-    VectorXi ntemp_ctrl = mfa.ndom_pts;         // current num of temp control pts in each dim
+    VectorXi ntemp_ctrl = mfa.ndom_pts;     // current num of temp control pts in each dim
 
-    float  max_err_val;                     // maximum solution error in final dim of all curves
+    T  max_err_val;                     // maximum solution error in final dim of all curves
 
     for (size_t k = 0; k < ndims; k++)      // for all domain dimensions
     {
@@ -196,7 +196,7 @@ Encode()
         //  -                                -
         // TODO: N is going to be very sparse when it is large: switch to sparse representation
         // N has semibandwidth < p  nonzero entries across diagonal
-        MatrixXf N = MatrixXf::Zero(m(k) - 1, n(k) - 1); // coefficients matrix
+        MatrixX<T> N = MatrixX<T>::Zero(m(k) - 1, n(k) - 1); // coefficients matrix
 
         for (int i = 1; i < m(k); i++)            // the rows of N
         {
@@ -211,7 +211,7 @@ Encode()
         // compute the product Nt x N
         // TODO: NtN is going to be very sparse when it is large: switch to sparse representation
         // NtN has semibandwidth < p + 1 nonzero entries across diagonal
-        MatrixXf NtN(n(k) - 1, n(k) - 1);
+        MatrixX<T> NtN(n(k) - 1, n(k) - 1);
         NtN = N.transpose() * N;
 
         // debug
@@ -223,12 +223,12 @@ Encode()
             // fprintf(stderr, "j=%ld curve\n", j);
 
             // R is the right hand side needed for solving NtN * P = R
-            MatrixXf R(n(k) - 1, mfa.domain.cols());
+            MatrixX<T> R(n(k) - 1, mfa.domain.cols());
 
             // P are the unknown interior control points and the solution to NtN * P = R
             // NtN is positive definite -> do not need pivoting
             // TODO: use a common representation for P and ctrl_pts to avoid copying
-            MatrixXf P(n(k) - 1, mfa.domain.cols());
+            MatrixX<T> P(n(k) - 1, mfa.domain.cols());
 
             // compute the one curve of control points
             CtrlCurve(N, NtN, R, P, n, k, co[j], cs, to[j], temp_ctrl0, temp_ctrl1);
@@ -292,8 +292,8 @@ Encode()
     size_t tot_ntemp_ctrl = 1;
     for (size_t k = 0; k < ndims; k++)
         tot_ntemp_ctrl *= (k == 0 ? mfa.nctrl_pts(k) : mfa.ndom_pts(k));
-    MatrixXf temp_ctrl0 = MatrixXf::Zero(tot_ntemp_ctrl, mfa.domain.cols());
-    MatrixXf temp_ctrl1 = MatrixXf::Zero(tot_ntemp_ctrl, mfa.domain.cols());
+    MatrixX<T> temp_ctrl0 = MatrixX<T>::Zero(tot_ntemp_ctrl, mfa.domain.cols());
+    MatrixX<T> temp_ctrl1 = MatrixX<T>::Zero(tot_ntemp_ctrl, mfa.domain.cols());
 
     VectorXi ntemp_ctrl = mfa.ndom_pts;         // current num of temp control pts in each dim
 
@@ -363,7 +363,7 @@ Encode()
         //  -                                -
         // TODO: N is going to be very sparse when it is large: switch to sparse representation
         // N has semibandwidth < p  nonzero entries across diagonal
-        MatrixXf N = MatrixXf::Zero(m(k) - 1, n(k) - 1); // coefficients matrix
+        MatrixX<T> N = MatrixX<T>::Zero(m(k) - 1, n(k) - 1); // coefficients matrix
 
         for (int i = 1; i < m(k); i++)            // the rows of N
         {
@@ -378,19 +378,19 @@ Encode()
         // compute the product Nt x N
         // TODO: NtN is going to be very sparse when it is large: switch to sparse representation
         // NtN has semibandwidth < p + 1 nonzero entries across diagonal
-        MatrixXf NtN(n(k) - 1, n(k) - 1);
+        MatrixX<T> NtN(n(k) - 1, n(k) - 1);
         NtN = N.transpose() * N;
 
         // debug
 //         cerr << "k " << k << " NtN:\n" << NtN << endl;
 
         // R is the residual matrix needed for solving NtN * P = R
-        MatrixXf R(n(k) - 1, mfa.domain.cols());
+        MatrixX<T> R(n(k) - 1, mfa.domain.cols());
 
         // P are the unknown interior control points and the solution to NtN * P = R
         // NtN is positive definite -> do not need pivoting
         // TODO: use a common representation for P and ctrl_pts to avoid copying
-        MatrixXf P(n(k) - 1, mfa.domain.cols());
+        MatrixX<T> P(n(k) - 1, mfa.domain.cols());
 
         // encode curves in this dimension
         for (size_t j = 0; j < ncurves; j++)
@@ -398,7 +398,7 @@ Encode()
             // print progress
             if (j > 0 && j > 100 && j % (ncurves / 100) == 0)
                 fprintf(stderr, "\r dimension %ld: %.0f %% encoded (%ld out of %ld curves)",
-                        k, (float)j / (float)ncurves * 100, j, ncurves);
+                        k, (T)j / (T)ncurves * 100, j, ncurves);
 
             // compute the one curve of control points
             CtrlCurve(N, NtN, R, P, n, k, co[j], cs, to[j], temp_ctrl0, temp_ctrl1);
@@ -432,24 +432,24 @@ template <typename T>
 void
 mfa::
 Encoder<T>::
-RHS(int       cur_dim,             // current dimension
-    MatrixXf& N,                   // matrix of basis function coefficients
-    MatrixXf& R,                   // (output) residual matrix allocated by caller
-    int       ko,                  // optional index of starting knot
-    int       po,                  // optional index of starting parameter
-    int       co)                  // optional index of starting domain pt in current curve
+RHS(int         cur_dim,             // current dimension
+    MatrixX<T>& N,                   // matrix of basis function coefficients
+    MatrixX<T>& R,                   // (output) residual matrix allocated by caller
+    int         ko,                  // optional index of starting knot
+    int         po,                  // optional index of starting parameter
+    int         co)                  // optional index of starting domain pt in current curve
 {
     int n      = N.cols() + 1;               // number of control point spans
     int m      = N.rows() + 1;               // number of input data point spans
 
     // compute the matrix Rk for eq. 9.63 of P&T, p. 411
-    MatrixXf Rk(m - 1, mfa.domain.cols());       // eigen frees MatrixX when leaving scope
-    MatrixXf Nk;                             // basis coefficients for Rk[i]
+    MatrixX<T> Rk(m - 1, mfa.domain.cols());       // eigen frees MatrixX when leaving scope
+    MatrixX<T> Nk;                             // basis coefficients for Rk[i]
 
     for (int k = 1; k < m; k++)
     {
         int span = mfa.FindSpan(cur_dim, mfa.params(po + k), ko) - ko;     // relative to ko
-        Nk = MatrixXf::Zero(1, n + 1);      // basis coefficients for Rk[i]
+        Nk = MatrixX<T>::Zero(1, n + 1);      // basis coefficients for Rk[i]
         mfa.BasisFuns(cur_dim, mfa.params(po + k), span, Nk, 0, n, 0);
 
         Rk.row(k - 1) =
@@ -469,26 +469,26 @@ template <typename T>
 void
 mfa::
 Encoder<T>::
-RHS(int       cur_dim,             // current dimension
-    MatrixXf& in_pts,              // input points (not the default domain stored in the mfa)
-    MatrixXf& N,                   // matrix of basis function coefficients
-    MatrixXf& R,                   // (output) residual matrix allocated by caller
-    int       ko,                  // optional index of starting knot
-    int       po,                  // optional index of starting parameter
-    int       co,                  // optional index of starting input pt in current curve
-    int       cs)                  // optional stride of input pts in current curve
+RHS(int         cur_dim,             // current dimension
+    MatrixX<T>& in_pts,              // input points (not the default domain stored in the mfa)
+    MatrixX<T>& N,                   // matrix of basis function coefficients
+    MatrixX<T>& R,                   // (output) residual matrix allocated by caller
+    int         ko,                  // optional index of starting knot
+    int         po,                  // optional index of starting parameter
+    int         co,                  // optional index of starting input pt in current curve
+    int         cs)                  // optional stride of input pts in current curve
 {
     int n      = N.cols() + 1;               // number of control point spans
     int m      = N.rows() + 1;               // number of input data point spans
 
     // compute the matrix Rk for eq. 9.63 of P&T, p. 411
-    MatrixXf Rk(m - 1, in_pts.cols());       // eigen frees MatrixX when leaving scope
-    MatrixXf Nk;                             // basis coefficients for Rk[i]
+    MatrixX<T> Rk(m - 1, in_pts.cols());       // eigen frees MatrixX when leaving scope
+    MatrixX<T> Nk;                             // basis coefficients for Rk[i]
 
     for (int k = 1; k < m; k++)
     {
         int span = mfa.FindSpan(cur_dim, mfa.params(po + k), ko) - ko;
-        Nk = MatrixXf::Zero(1, n + 1);      // basis coefficients for Rk[i]
+        Nk = MatrixX<T>::Zero(1, n + 1);      // basis coefficients for Rk[i]
         mfa.BasisFuns(cur_dim, mfa.params(po + k), span, Nk, 0, n, 0);
 
         Rk.row(k - 1) =
@@ -554,14 +554,14 @@ template <typename T>
 void
 mfa::
 Encoder<T>::
-CopyCtrl(MatrixXf& P,          // solved points for current dimension and curve
-         VectorXi& n,          // number of control point spans in each dimension
-         int       k,          // current dimension
-         size_t    co,         // starting offset for reading domain points
-         size_t    cs,         // stride for reading domain points
-         size_t    to,         // starting offset for writing control points
-         MatrixXf& temp_ctrl0, // first temporary control points buffer
-         MatrixXf& temp_ctrl1) // second temporary control points buffer
+CopyCtrl(MatrixX<T>& P,          // solved points for current dimension and curve
+         VectorXi&   n,          // number of control point spans in each dimension
+         int         k,          // current dimension
+         size_t      co,         // starting offset for reading domain points
+         size_t      cs,         // stride for reading domain points
+         size_t      to,         // starting offset for writing control points
+         MatrixX<T>& temp_ctrl0, // first temporary control points buffer
+         MatrixX<T>& temp_ctrl1) // second temporary control points buffer
 {
     int ndims = mfa.ndom_pts.size();             // number of domain dimensions
 
@@ -672,11 +672,11 @@ template <typename T>
 void
 mfa::
 Encoder<T>::
-CopyCtrl(MatrixXf& P,          // solved points for current dimension and curve
-         VectorXi& n,          // number of control point spans in each dimension
-         int       k,          // current dimension
-         size_t    co,         // starting offset for reading domain points
-         MatrixXf& temp_ctrl)  // temporary control points buffer
+CopyCtrl(MatrixX<T>& P,          // solved points for current dimension and curve
+         VectorXi&   n,          // number of control point spans in each dimension
+         int         k,          // current dimension
+         size_t      co,         // starting offset for reading domain points
+         MatrixX<T>& temp_ctrl)  // temporary control points buffer
 {
     // copy first point straight from domain
     temp_ctrl.row(0) = mfa.domain.row(co);
@@ -704,17 +704,17 @@ template <typename T>
 void
 mfa::
 Encoder<T>::
-CtrlCurve(MatrixXf& N,          // basis functions for current dimension
-          MatrixXf& NtN,        // N^t * N
-          MatrixXf& R,          // residual matrix for current dimension and curve
-          MatrixXf& P,          // solved points for current dimension and curve
-          VectorXi& n,          // number of control point spans in each dimension
-          size_t    k,          // current dimension
-          size_t    co,         // starting ofst for reading domain pts
-          size_t    cs,         // stride for reading domain points
-          size_t    to,         // starting ofst for writing control pts
-          MatrixXf& temp_ctrl0, // first temporary control points buffer
-          MatrixXf& temp_ctrl1) // second temporary control points buffer
+CtrlCurve(MatrixX<T>& N,          // basis functions for current dimension
+          MatrixX<T>& NtN,        // N^t * N
+          MatrixX<T>& R,          // residual matrix for current dimension and curve
+          MatrixX<T>& P,          // solved points for current dimension and curve
+          VectorXi&   n,          // number of control point spans in each dimension
+          size_t      k,          // current dimension
+          size_t      co,         // starting ofst for reading domain pts
+          size_t      cs,         // stride for reading domain points
+          size_t      to,         // starting ofst for writing control pts
+          MatrixX<T>& temp_ctrl0, // first temporary control points buffer
+          MatrixX<T>& temp_ctrl1) // second temporary control points buffer
 {
     // compute R
     // first dimension reads from domain
@@ -742,14 +742,14 @@ int
 mfa::
 Encoder<T>::
 ErrorCurve(
-        size_t       k,                         // current dimension
-        size_t       co,                        // starting ofst for reading domain pts
-        MatrixXf&    ctrl_pts,                  // control points
-        VectorXf&    weights,                   // weights associated with control points
-        float        err_limit)                 // max allowable error
+        size_t         k,                         // current dimension
+        size_t         co,                        // starting ofst for reading domain pts
+        MatrixX<T>&    ctrl_pts,                  // control points
+        VectorX<T>&    weights,                   // weights associated with control points
+        T          err_limit)                 // max allowable error
 {
     mfa::Decoder<T> decoder(mfa);
-    VectorXf cpt(mfa.domain.cols());            // decoded curve point
+    VectorX<T> cpt(mfa.domain.cols());            // decoded curve point
     int nerr = 0;                               // number of points with error greater than err_limit
     int span = mfa.p[k];                        // current knot span of the domain point being checked
 
@@ -761,14 +761,14 @@ ErrorCurve(
 //         fprintf(stderr, "param=%.3f span=[%.3f %.3f]\n", mfa.params(po[k] + i), knots(mfa.ko[k] + span), knots(mfa.ko[k] + span + 1));
 
         decoder.CurvePt(k, mfa.params(mfa.po[k] + i), ctrl_pts, weights, cpt, mfa.ko[k]);
-        float err = fabs(mfa.NormalDistance(cpt, co + i * mfa.ds[k])) / mfa.dom_range;     // normalized by data range
-//         float err = fabs(mfa.CurveDistance(k, cpt, co + i * mfa.ds[k])) / mfa.dom_range;     // normalized by data range
+        T err = fabs(mfa.NormalDistance(cpt, co + i * mfa.ds[k])) / mfa.dom_range;     // normalized by data range
+//         T err = fabs(mfa.CurveDistance(k, cpt, co + i * mfa.ds[k])) / mfa.dom_range;     // normalized by data range
         if (err > err_limit)
         {
             nerr++;
 
             // debug
-//             VectorXf dpt = mfa.domain.row(co + i * mfa.ds[k]);
+//             VectorX<T> dpt = mfa.domain.row(co + i * mfa.ds[k]);
 //             cerr << "\ndomain point:\n" << dpt << endl;
 //             cerr << "approx point:\n" << cpt << endl;
 //             fprintf(stderr, "k=%ld i=%d co=%ld err=%.3e\n\n", k, i, co, err);
@@ -788,19 +788,19 @@ void
 mfa::
 Encoder<T>::
 ErrorCurve(
-        size_t         k,                       // current dimension
-        size_t         co,                      // starting ofst for reading domain pts
-        MatrixXf&      ctrl_pts,                // control points
-        VectorXf&      weights,                 // weights associated with control points
-        VectorXi&      nnew_knots,              // number of new knots
-        vector<float>& new_knots,               // new knots
-        float          err_limit)               // max allowable error
+        size_t           k,                       // current dimension
+        size_t           co,                      // starting ofst for reading domain pts
+        MatrixX<T>&      ctrl_pts,                // control points
+        VectorX<T>&      weights,                 // weights associated with control points
+        VectorXi&        nnew_knots,              // number of new knots
+        vector<T>&       new_knots,               // new knots
+        T                err_limit)               // max allowable error
 {
     mfa::Decoder<T> decoder(mfa);
-    VectorXf cpt(mfa.domain.cols());            // decoded curve point
+    VectorX<T> cpt(mfa.domain.cols());            // decoded curve point
     int span      = mfa.p[k];                    // current knot span of the domain point being checked
     int old_span  = -1;                          // span of previous domain point
-    float max_err = 0;                          // max error seen so far in the same span
+    T max_err = 0;                          // max error seen so far in the same span
     size_t max_err_pt;                          // index of domain point in same span with max error
     bool new_split = false;                     // a new split was found in the current span
 
@@ -822,7 +822,7 @@ ErrorCurve(
 
         decoder.CurvePt(k, mfa.params(mfa.po[k] + i), ctrl_pts, weights, cpt, mfa.ko[k]);
 
-        float err = fabs(mfa.NormalDistance(cpt, co + i * mfa.ds[k])) / mfa.dom_range;     // normalized by data range
+        T err = fabs(mfa.NormalDistance(cpt, co + i * mfa.ds[k])) / mfa.dom_range;     // normalized by data range
 
         if (err > err_limit && err > max_err)  // potential new knot
         {
@@ -877,15 +877,15 @@ int
 mfa::
 Encoder<T>::
 ErrorCurve(
-        size_t       k,                         // current dimension
-        size_t       co,                        // starting ofst for reading domain pts
-        MatrixXf&    ctrl_pts,                  // control points
-        VectorXf&    weights,                   // weights associated with control points
-        set<int>&    err_spans,                 // spans with error greater than err_limit
-        float        err_limit)                 // max allowable error
+        size_t         k,                         // current dimension
+        size_t         co,                        // starting ofst for reading domain pts
+        MatrixX<T>&    ctrl_pts,                  // control points
+        VectorX<T>&    weights,                   // weights associated with control points
+        set<int>&      err_spans,                 // spans with error greater than err_limit
+        T              err_limit)                 // max allowable error
 {
     mfa::Decoder<T> decoder(mfa);
-    VectorXf cpt(mfa.domain.cols());            // decoded curve point
+    VectorX<T> cpt(mfa.domain.cols());            // decoded curve point
     int nerr = 0;                               // number of points with error greater than err_limit
     int span = mfa.p[k];                        // current knot span of the domain point being checked
 
@@ -896,8 +896,8 @@ ErrorCurve(
 
         decoder.CurvePt(k, mfa.params(mfa.po[k] + i), ctrl_pts, weights, cpt, mfa.ko[k]);
 
-        float err = fabs(mfa.NormalDistance(cpt, co + i * mfa.ds[k])) / mfa.dom_range;     // normalized by data range
-//         float err = fabs(mfa.CurveDistance(k, cpt, co + i * mfa.ds[k])) / mfa.dom_range;     // normalized by data range
+        T err = fabs(mfa.NormalDistance(cpt, co + i * mfa.ds[k])) / mfa.dom_range;     // normalized by data range
+//         T err = fabs(mfa.CurveDistance(k, cpt, co + i * mfa.ds[k])) / mfa.dom_range;     // normalized by data range
 
         if (err > err_limit)
         {
@@ -936,7 +936,7 @@ ErrorCurve(
             nerr++;
 
             // debug
-//             VectorXf dpt = mfa.domain.row(co + i * mfa.ds[k]);
+//             VectorX<T> dpt = mfa.domain.row(co + i * mfa.ds[k]);
 //             cerr << "\ndomain point:\n" << dpt << endl;
 //             cerr << "approx point:\n" << cpt << endl;
 //             fprintf(stderr, "k=%ld i=%d co=%ld err=%.3e\n\n", k, i, co, err);
@@ -965,10 +965,10 @@ ErrorCurve(
         size_t       co,                        // starting ofst for reading domain pts
         size_t       to,                        // starting ofst for reading control pts
         set<int>&    err_spans,                 // spans with error greater than err_limit
-        float        err_limit)                 // max allowable error
+        T            err_limit)                 // max allowable error
 {
     mfa::Decoder<T> decoder(mfa);
-    VectorXf cpt(mfa.domain.cols());            // decoded curve point
+    VectorX<T> cpt(mfa.domain.cols());            // decoded curve point
     int nerr = 0;                               // number of points with error greater than err_limit
     int span = mfa.p[k];                        // current knot span of the domain point being checked
 
@@ -979,7 +979,7 @@ ErrorCurve(
 
         decoder.CurvePt(k, mfa.params(mfa.po[k] + i), to, cpt);
 
-        float err = fabs(mfa.NormalDistance(cpt, co + i * mfa.ds[k])) / mfa.dom_range;     // normalized by data range
+        T err = fabs(mfa.NormalDistance(cpt, co + i * mfa.ds[k])) / mfa.dom_range;     // normalized by data range
 
         if (err > err_limit)
         {
@@ -1034,15 +1034,15 @@ ErrorCtrlCurve(
         size_t       k,                         // current dimension
         size_t       to,                        // starting ofst for reading control pts
         set<int>&    err_spans,                 // spans with error greater than err_limit
-        float        err_limit)                 // max allowable error
+        T            err_limit)                 // max allowable error
 {
     mfa::Decoder<T> decoder(mfa);
-    VectorXf cpt(mfa.domain.cols());            // decoded curve point
+    VectorX<T> cpt(mfa.domain.cols());            // decoded curve point
     int nerr = 0;                               // number of points with error greater than err_limit
     int span = mfa.p[k];                        // current knot span of the domain point being checked
 
     // compute parameter value of start of control curve
-    vector<float> param(mfa.p.size());
+    vector<T> param(mfa.p.size());
     for (auto k = 0; k < mfa.p.size(); k++)
         // TODO: decide whether to use InterpolateParams() or write Param() function for one target point
         // (InterpolateParams has assumption of increasing domain coordinates that needs to be removed)
@@ -1068,8 +1068,8 @@ ErrorCtrlCurve(
     mfa.ijk2idx(ijk, co);
 
     // debug
-//     VectorXf ctpt = mfa.ctrl_pts.row(to);
-//     VectorXf dopt = mfa.domain.row(co);
+//     VectorX<T> ctpt = mfa.ctrl_pts.row(to);
+//     VectorX<T> dopt = mfa.domain.row(co);
 //     cerr << "start ctrl pt:\n" << ctpt << endl;
 //     cerr << "start inpt pt:\n" << dopt << "\n" << endl;
 
@@ -1101,13 +1101,13 @@ ErrorCtrlCurve(
                     cpt(k), mfa.domain(co + j * mfa.ds[k], k), mfa.domain(co + (j + 1) * mfa.ds[k], k));
 
         // compute error
-//         float err = fabs(mfa.NormalDistance(cpt, co + j * mfa.ds[k])) / mfa.dom_range;     // normalized by data range
-        float err = fabs(mfa.CurveDistance(k, cpt, co + j * mfa.ds[k])) / mfa.dom_range;     // normalized by data range
+//         T err = fabs(mfa.NormalDistance(cpt, co + j * mfa.ds[k])) / mfa.dom_range;     // normalized by data range
+        T err = fabs(mfa.CurveDistance(k, cpt, co + j * mfa.ds[k])) / mfa.dom_range;     // normalized by data range
 
         if (err > err_limit)
         {
             // debug
-//             VectorXf dopt = mfa.domain.row(co + j * mfa.ds[k]);
+//             VectorX<T> dopt = mfa.domain.row(co + j * mfa.ds[k]);
 //             cerr << "decoded pt:\n" << cpt  << endl;
 //             cerr << "input pt:\n"   << dopt << endl;
 //             fprintf(stderr, "err = %.3e\n\n", err);

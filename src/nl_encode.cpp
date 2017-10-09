@@ -15,7 +15,7 @@
 #include <cppoptlib/solver/bfgssolver.h>
 #include <cppoptlib/solver/lbfgsbsolver.h>
 
-template <typename T>
+template <typename T>                                   // float or double
 mfa::
 NL_Encoder<T>::
 NL_Encoder(MFA<T>& mfa_) :
@@ -27,22 +27,22 @@ template <typename T>
 void
 mfa::
 NL_Encoder<T>::
-Encode(float err_limit)                             // maximum allowable normalized error
+Encode(T err_limit)                                     // maximum allowable normalized error
 {
     // initialize the optimization problem
-    MaxDist<float> f(mfa, err_limit);
+    MaxDist<T> f(mfa, err_limit);
 
     // x is a vector of scalar scaling factors on the y-coordinates of the control points
 
     // initialize starting point
-    VectorXf x = VectorXf::Ones(mfa.tot_nctrl);
+    VectorX<T> x = VectorX<T>::Ones(mfa.tot_nctrl);
     x *= 1.5;
-//     f.setLowerBound(VectorXf::Ones(1));             // for Lbfgsb solver
+//     f.setLowerBound(VectorX<T>::Ones(1));             // for Lbfgsb solver
 
     // choose a solver
-//     ConjugatedGradientDescentSolver<MaxDist<float>> solver;
-    BfgsSolver<MaxDist<float>> solver;
-//     LbfgsbSolver<MaxDist<float>> solver;             // bounded
+//     ConjugatedGradientDescentSolver<MaxDist<T>> solver;
+    BfgsSolver<MaxDist<T>> solver;
+//     LbfgsbSolver<MaxDist<T>> solver;                 // bounded
 
     // minimize the function
     solver.minimize(f, x);

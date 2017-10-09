@@ -1,3 +1,5 @@
+// float version of function declarations
+
 template
 mfa::
 Encoder<float>::
@@ -152,5 +154,162 @@ ErrorCtrlCurve(
         size_t       to,            // starting ofst for reading control pts
         set<int>&    err_spans,     // spans with error greater than err_limit
         float        err_limit);    // max allowable error
+
+// double version of function declarations
+
+template
+mfa::
+Encoder<double>::
+Encoder(MFA<double>& mfa_);
+
+template
+mfa::
+Encoder<double>::
+~Encoder();
+
+template
+void
+mfa::
+Encoder<double>::
+Encode();
+
+template
+void
+mfa::
+Encoder<double>::
+AdaptiveEncode(double err_limit);               // maximum allowable normalized error
+
+template
+void
+mfa::
+Encoder<double>::
+RHS(
+        int       cur_dim,  // current dimension
+        MatrixXd& N,        // matrix of basis function coefficients
+        MatrixXd& R,        // (output) residual matrix allocated by caller
+        int       ko = 0,   // optional index of starting knot
+        int       po = 0,   // optional index of starting parameter
+        int       co = 0);  // optional index of starting domain pt in current curve
+
+template
+void
+mfa::
+Encoder<double>::
+RHS(
+        int       cur_dim,  // current dimension
+        MatrixXd& in_pts,   // input points (not the default domain stored in the mfa)
+        MatrixXd& N,        // matrix of basis function coefficients
+        MatrixXd& R,        // (output) residual matrix allocated by caller
+        int       ko = 0,   // optional index of starting knot
+        int       po = 0,   // optional index of starting parameter
+        int       co = 0,   // optional index of starting input pt in current curve
+        int       cs = 1);  // optional stride of input pts in current curve
+
+template
+void
+mfa::
+Encoder<double>::
+Quants(
+        VectorXi& n,          // (output) number of control point spans in each dim
+        VectorXi& m);         // (output) number of input data point spans in each dim
+
+template
+void
+mfa::
+Encoder<double>::
+CtrlCurve(
+        MatrixXd& N,           // basis functions for current dimension
+        MatrixXd& NtN,         // N^t * N
+        MatrixXd& R,           // residual matrix for current dimension and curve
+        MatrixXd& P,           // solved points for current dimension and curve
+        VectorXi& n,           // number of control point spans in each dimension
+        size_t    k,           // current dimension
+        size_t    co,          // starting ofst for reading domain pts
+        size_t    cs,          // stride for reading domain points
+        size_t    to,          // starting ofst for writing control pts
+        MatrixXd& temp_ctrl0,  // first temporary control points buffer
+        MatrixXd& temp_ctrl1); // second temporary control points buffer
+
+template
+void
+mfa::
+Encoder<double>::
+CopyCtrl(
+        MatrixXd& P,          // solved points for current dimension and curve
+        VectorXi& n,          // number of control point spans in each dimension
+        int       k,          // current dimension
+        size_t    co,         // starting offset for reading domain points
+        size_t    cs,         // stride for reading domain points
+        size_t    to,         // starting offset for writing control points
+        MatrixXd& temp_ctrl0, // first temporary control points buffer
+        MatrixXd& temp_ctrl1); // second temporary control points buffer
+
+template
+void
+mfa::
+Encoder<double>::
+CopyCtrl(
+        MatrixXd& P,          // solved points for current dimension and curve
+        VectorXi& n,          // number of control point spans in each dimension
+        int       k,          // current dimension
+        size_t    co,         // starting offset for reading domain points
+        MatrixXd& temp_ctrl); // temporary control points buffer
+
+template
+int
+mfa::
+Encoder<double>::
+ErrorCurve(
+        size_t       k,             // current dimension
+        size_t       co,            // starting ofst for reading domain pts
+        MatrixXd&    ctrl_pts,      // control points
+        VectorXd&    weights,       // weights associated with control points
+        double        err_limit);    // max allowable error
+
+template
+int
+mfa::
+Encoder<double>::
+ErrorCurve(
+        size_t       k,             // current dimension
+        size_t       co,            // starting ofst for reading domain pts
+        MatrixXd&    ctrl_pts,      // control points
+        VectorXd&    weights,       // weights associated with control points
+        set<int>&    err_spans,     // spans with error greater than err_limit
+        double        err_limit);    // max allowable error
+
+template
+void
+mfa::
+Encoder<double>::
+ErrorCurve(
+        size_t         k,           // current dimension
+        size_t         co,          // starting ofst for reading domain pts
+        MatrixXd&      ctrl_pts,    // control points
+        VectorXd&      weights,     // weights associated with control points
+        VectorXi&      nnew_knots,  // number of new knots
+        vector<double>& new_knots,   // new knots
+        double          err_limit);  // max allowable error
+
+template
+int
+mfa::
+Encoder<double>::
+ErrorCurve(
+        size_t       k,             // current dimension
+        size_t       co,            // starting ofst for reading domain pts
+        size_t       to,            // starting ofst for reading control pts
+        set<int>&    err_spans,     // spans with error greater than err_limit
+        double        err_limit);    // max allowable error
+
+template
+int
+mfa::
+Encoder<double>::
+ErrorCtrlCurve(
+        size_t       k,             // current dimension
+        size_t       to,            // starting ofst for reading control pts
+        set<int>&    err_spans,     // spans with error greater than err_limit
+        double        err_limit);    // max allowable error
 
 

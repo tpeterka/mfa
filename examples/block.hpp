@@ -22,11 +22,21 @@
 
 using namespace std;
 
-typedef float                          precision;
+// set input and ouptut precision here, float or double
+#if 0
+typedef float                          real_t;
+#else
+typedef double                         real_t;
+#endif
 
 typedef Eigen::MatrixXf                MatrixXf;
 typedef Eigen::VectorXf                VectorXf;
 typedef MatrixXf::Index                Index;
+
+template <typename T>
+using MatrixX = Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic>;
+template <typename T>
+using VectorX  = Eigen::Matrix<T, Eigen::Dynamic, 1>;
 
 typedef diy::ContinuousBounds          Bounds;
 typedef diy::RegularContinuousLink     RCLink;
@@ -34,24 +44,24 @@ typedef diy::RegularContinuousLink     RCLink;
 // arguments to block foreach functions
 struct DomainArgs
 {
-    int   pt_dim;                            // dimension of points
-    int   dom_dim;                           // dimension of domain (<= pt_dim)
-    int   p[MAX_DIM];                        // degree in each dimension of domain
-    int   starts[MAX_DIM];                   // starting offsets of ndom_pts (optional, usually assumed 0)
-    int   ndom_pts[MAX_DIM];                 // number of input points in each dimension of domain
-    int   full_dom_pts[MAX_DIM];             // number of points in full domain in case a subset is taken
-    int   nctrl_pts[MAX_DIM];                // number of input points in each dimension of domain
-    float min[MAX_DIM];                      // minimum corner of domain
-    float max[MAX_DIM];                      // maximum corner of domain
-    float s;                                 // scaling factor or any other usage
-    char infile[256];                        // input filename
+    int       pt_dim;                            // dimension of points
+    int       dom_dim;                           // dimension of domain (<= pt_dim)
+    int       p[MAX_DIM];                        // degree in each dimension of domain
+    int       starts[MAX_DIM];                   // starting offsets of ndom_pts (optional, usually assumed 0)
+    int       ndom_pts[MAX_DIM];                 // number of input points in each dimension of domain
+    int       full_dom_pts[MAX_DIM];             // number of points in full domain in case a subset is taken
+    int       nctrl_pts[MAX_DIM];                // number of input points in each dimension of domain
+    real_t    min[MAX_DIM];                      // minimum corner of domain
+    real_t    max[MAX_DIM];                      // maximum corner of domain
+    real_t    s;                                 // scaling factor or any other usage
+    char      infile[256];                        // input filename
 };
 
 struct ErrArgs
 {
-    int   max_niter;                         // max num iterations to search for nearest curve pt
-    float err_bound;                         // desired error bound (stop searching if less)
-    int   search_rad;                        // number of parameter steps to search path on either
+    int    max_niter;                         // max num iterations to search for nearest curve pt
+    real_t err_bound;                         // desired error bound (stop searching if less)
+    int    search_rad;                        // number of parameter steps to search path on either
     // side of parameter value of input point
 };
 
@@ -137,7 +147,7 @@ struct Block
         int cs = 1;                  // stride of a coordinate in this dim
         for (int i = 0; i < a->dom_dim; i++) // all dimensions in the domain
         {
-            float d = (a->max[i] - a->min[i]) / (ndom_pts(i) - 1);
+            real_t d = (a->max[i] - a->min[i]) / (ndom_pts(i) - 1);
             int k = 0;
             int co = 0;                  // j index of start of a new coordinate value
             for (int j = 0; j < tot_ndom_pts; j++)
@@ -195,7 +205,7 @@ struct Block
         int cs = 1;                  // stride of a coordinate in this dim
         for (int i = 0; i < a->dom_dim; i++) // all dimensions in the domain
         {
-            float d = (a->max[i] - a->min[i]) / (ndom_pts(i) - 1);
+            real_t d = (a->max[i] - a->min[i]) / (ndom_pts(i) - 1);
             int k = 0;
             int co = 0;                  // j index of start of a new coordinate value
             for (int j = 0; j < tot_ndom_pts; j++)
@@ -252,7 +262,7 @@ struct Block
         int cs = 1;                  // stride of a coordinate in this dim
         for (int i = 0; i < a->dom_dim; i++) // all dimensions in the domain
         {
-            float d = (a->max[i] - a->min[i]) / (ndom_pts(i) - 1);
+            real_t d = (a->max[i] - a->min[i]) / (ndom_pts(i) - 1);
             int k = 0;
             int co = 0;                  // j index of start of a new coordinate value
             for (int j = 0; j < tot_ndom_pts; j++)
@@ -309,7 +319,7 @@ struct Block
         int cs = 1;                  // stride of a coordinate in this dim
         for (int i = 0; i < a->dom_dim; i++) // all dimensions in the domain
         {
-            float d = (a->max[i] - a->min[i]) / (ndom_pts(i) - 1);
+            real_t d = (a->max[i] - a->min[i]) / (ndom_pts(i) - 1);
             int k = 0;
             int co = 0;                  // j index of start of a new coordinate value
             for (int j = 0; j < tot_ndom_pts; j++)
@@ -332,7 +342,7 @@ struct Block
             // magnitude function
             for (int j = 0; j < tot_ndom_pts; j++)
             {
-                VectorXf one_pt = domain.block(j, 0, 1, a->dom_dim).row(0);
+                VectorX<T> one_pt = domain.block(j, 0, 1, a->dom_dim).row(0);
                 domain(j, i) = one_pt.norm();
             }
         }
@@ -373,7 +383,7 @@ struct Block
         int cs = 1;                  // stride of a coordinate in this dim
         for (int i = 0; i < a->dom_dim; i++) // all dimensions in the domain
         {
-            float d = (a->max[i] - a->min[i]) / (ndom_pts(i) - 1);
+            real_t d = (a->max[i] - a->min[i]) / (ndom_pts(i) - 1);
             int k = 0;
             int co = 0;                  // j index of start of a new coordinate value
             for (int j = 0; j < tot_ndom_pts; j++)
@@ -396,8 +406,8 @@ struct Block
             // sphere function
             for (int j = 0; j < tot_ndom_pts; j++)
             {
-                VectorXf one_pt = domain.block(j, 0, 1, a->dom_dim).row(0);
-                float r = a->s;           // shere radius
+                VectorX<T> one_pt = domain.block(j, 0, 1, a->dom_dim).row(0);
+                real_t r = a->s;           // shere radius
                 if (r * r - one_pt.squaredNorm() < 0)
                 {
                     fprintf(stderr, "Error: radius is not large enough for domain points\n");
@@ -440,10 +450,10 @@ struct Block
 
         // assign values to the domain (geometry)
         int cs = 1;                           // stride of a coordinate in this dim
-        float eps = 1.0e-5;                   // floating point roundoff error
+        real_t eps = 1.0e-5;                   // real_ting point roundoff error
         for (int i = 0; i < a->dom_dim; i++)  // all dimensions in the domain
         {
-            float d = (a->max[i] - a->min[i]) / (ndom_pts(i) - 1);
+            real_t d = (a->max[i] - a->min[i]) / (ndom_pts(i) - 1);
             int k = 0;
             int co = 0;                       // j index of start of a new coordinate value
             for (int j = 0; j < tot_ndom_pts; j++)
@@ -460,13 +470,13 @@ struct Block
             cs *= ndom_pts(i);
         }
 
-        float min, max;                       // extents of range
+        real_t min, max;                       // extents of range
 
         // assign values to the range (physics attributes)
         // f(x,y,z,...) = sine(x) * sine(y) * sine(z) * ...
         for (int j = 0; j < tot_ndom_pts; j++)
         {
-            float res = 1.0;                  // product of the sinc functions
+            real_t res = 1.0;                  // product of the sinc functions
             for (int i = 0; i < a->dom_dim; i++)
                     res *= sin(domain(j, i));
             res *= a->s;
@@ -517,10 +527,10 @@ struct Block
 
         // assign values to the domain (geometry)
         int cs = 1;                           // stride of a coordinate in this dim
-        float eps = 1.0e-5;                   // floating point roundoff error
+        real_t eps = 1.0e-5;                   // real_ting point roundoff error
         for (int i = 0; i < a->dom_dim; i++)  // all dimensions in the domain
         {
-            float d = (a->max[i] - a->min[i]) / (ndom_pts(i) - 1);
+            real_t d = (a->max[i] - a->min[i]) / (ndom_pts(i) - 1);
             int k = 0;
             int co = 0;                       // j index of start of a new coordinate value
             for (int j = 0; j < tot_ndom_pts; j++)
@@ -537,13 +547,13 @@ struct Block
             cs *= ndom_pts(i);
         }
 
-        float min, max;                       // extents of range
+        real_t min, max;                       // extents of range
 
         // assign values to the range (physics attributes)
         // f(x,y,z,...) = sine(x)/x * sine(y)/y * sine(z)/z * ...
         for (int j = 0; j < tot_ndom_pts; j++)
         {
-            float res = 1.0;                  // product of the sinc functions
+            real_t res = 1.0;                  // product of the sinc functions
             for (int i = 0; i < a->dom_dim; i++)
             {
                 if (domain(j, i) != 0.0)
@@ -1154,7 +1164,7 @@ struct Block
     // adaptively encode block to desired error limit
     void adaptive_encode_block(
             const diy::Master::ProxyWithLink& cp,
-            float                             err_limit)
+            real_t                             err_limit)
     {
         VectorXi unused;
         mfa = new mfa::MFA<T>(p, ndom_pts, domain, ctrl_pts, unused, weights, knots);
@@ -1165,12 +1175,12 @@ struct Block
     // only for 1D so far
     void nonlinear_encode_block(
             const   diy::Master::ProxyWithLink& cp,
-            float   err_limit)
+            real_t   err_limit)
     {
         // set initial control points here
         // TODO: what if there aren'e enough control points (p + 1 is the minimum needed)?
-        float grad;                             // current gradient (finite difference)
-        float prev_grad = 0.0;                  // previous gradient (finite difference)
+        real_t grad;                             // current gradient (finite difference)
+        real_t prev_grad = 0.0;                  // previous gradient (finite difference)
         nctrl_pts.resize(1);
         for (auto i = 0; i < domain.rows(); i++)
         {
@@ -1196,7 +1206,7 @@ struct Block
         nctrl_pts(0) = ctrl_pts.rows();
 
         // set initial weights to 1.0
-        weights = VectorXf::Ones(ctrl_pts.rows());
+        weights = VectorX<T>::Ones(ctrl_pts.rows());
 
         // debug
         cerr << ctrl_pts.rows() << " initial control points:\n" << ctrl_pts << "\n" << endl;
@@ -1235,7 +1245,7 @@ struct Block
         {
             parallel_for (size_t(0), (size_t)domain.rows(), [&] (size_t i)
                     {
-                    VectorXf cpt = approx.row(i);
+                    VectorX<T> cpt = approx.row(i);
                     errs(i, errs.cols() - 1) = fabs(mfa->NormalDistance(cpt, i));
                     });
         }
@@ -1265,7 +1275,7 @@ struct Block
         {
             if (decode_block)
             {
-                VectorXf cpt = approx.row(i);
+                VectorX<T> cpt = approx.row(i);
                 errs(i, errs.cols() - 1) = fabs(mfa->NormalDistance(cpt, i));
             }
             else
@@ -1312,7 +1322,7 @@ struct Block
         {
             parallel_for (size_t(0), (size_t)domain.rows(), [&] (size_t i)
                     {
-                    VectorXf cpt = approx.row(i);
+                    VectorX<T> cpt = approx.row(i);
                     errs(i, last) = fabs(cpt(last) - domain(i, last));
                     });
         }
@@ -1343,7 +1353,7 @@ struct Block
         {
             if (decode_block)
             {
-                VectorXf cpt = approx.row(i);
+                VectorX<T> cpt = approx.row(i);
                 errs(i, last) = fabs(cpt(last) - domain(i, last));
             }
             else
@@ -1389,45 +1399,45 @@ struct Block
         fprintf(stderr, "# output ctrl pts = %ld # output knots = %ld\n",
                 ctrl_pts.rows(), knots.size());
         fprintf(stderr, "compression ratio = %.2f\n",
-                (float)(domain.rows()) / (ctrl_pts.rows() + knots.size() / ctrl_pts.cols()));
+                (real_t)(domain.rows()) / (ctrl_pts.rows() + knots.size() / ctrl_pts.cols()));
     }
 
-    VectorXi ndom_pts;                       // number of domain points in each dimension
-    MatrixXf domain;                         // input data (1st dim changes fastest)
-    VectorXf domain_mins;                    // local domain minimum corner
-    VectorXf domain_maxs;                    // local domain maximum corner
-    VectorXi p;                              // degree in each dimension
-    VectorXi nctrl_pts;                      // number of control points in each dimension
-    MatrixXf ctrl_pts;                       // NURBS control points (1st dim changes fastest)
-    VectorXf weights;                        // weights associated with control points
-    VectorXf knots;                          // NURBS knots (1st dim changes fastest)
-    MatrixXf approx;                         // points in approximated volume
-    VectorXi span_mins;                      // idx of minimum domain points of all knot spans
-    VectorXi span_maxs;                      // idx of maximum domain points of all knot spans
+    VectorXi   ndom_pts;                       // number of domain points in each dimension
+    MatrixX<T> domain;                         // input data (1st dim changes fastest)
+    VectorX<T> domain_mins;                    // local domain minimum corner
+    VectorX<T> domain_maxs;                    // local domain maximum corner
+    VectorXi   p;                              // degree in each dimension
+    VectorXi   nctrl_pts;                      // number of control points in each dimension
+    MatrixX<T> ctrl_pts;                       // NURBS control points (1st dim changes fastest)
+    VectorX<T> weights;                        // weights associated with control points
+    VectorX<T> knots;                          // NURBS knots (1st dim changes fastest)
+    MatrixX<T> approx;                         // points in approximated volume
+    VectorXi   span_mins;                      // idx of minimum domain points of all knot spans
+    VectorXi   span_maxs;                      // idx of maximum domain points of all knot spans
 
     // (same number as input points, for rendering only)
-    float    max_err;                        // maximum (abs value) distance from input points to curve
-    float    sum_sq_err;                     // sum of squared errors
-    MatrixXf errs;                           // error field (abs. value, not normalized by data range)
+    real_t     max_err;                        // maximum (abs value) distance from input points to curve
+    real_t     sum_sq_err;                     // sum of squared errors
+    MatrixX<T> errs;                           // error field (abs. value, not normalized by data range)
 
-    float s;                                 // scaling factor on range values (for error checking)
+    real_t      s;                              // scaling factor on range values (for error checking)
     mfa::MFA<T> *mfa;                           // MFA object
 };
 
 namespace diy
 {
-    template<>
-        struct Serialization<MatrixXf>
+        template <typename T>
+        struct Serialization<MatrixX<T>>
         {
             static
-                void save(diy::BinaryBuffer& bb, const MatrixXf& m)
+                void save(diy::BinaryBuffer& bb, const MatrixX<T>& m)
                 {
                     diy::save(bb, m.rows());
                     diy::save(bb, m.cols());
                     diy::save(bb, m.data(), m.rows() * m.cols());
                 }
             static
-                void load(diy::BinaryBuffer& bb, MatrixXf& m)
+                void load(diy::BinaryBuffer& bb, MatrixX<T>& m)
                 {
                     Index rows, cols;
                     diy::load(bb, rows);
@@ -1436,17 +1446,17 @@ namespace diy
                     diy::load(bb, m.data(), rows * cols);
                 }
         };
-    template<>
-        struct Serialization<VectorXf>
+        template <typename T>
+        struct Serialization<VectorX<T>>
         {
             static
-                void save(diy::BinaryBuffer& bb, const VectorXf& v)
+                void save(diy::BinaryBuffer& bb, const VectorX<T>& v)
                 {
                     diy::save(bb, v.size());
                     diy::save(bb, v.data(), v.size());
                 }
             static
-                void load(diy::BinaryBuffer& bb, VectorXf& v)
+                void load(diy::BinaryBuffer& bb, VectorX<T>& v)
                 {
                     Index size;
                     diy::load(bb, size);
@@ -1454,7 +1464,7 @@ namespace diy
                     diy::load(bb, v.data(), size);
                 }
         };
-    template<>
+        template<>
         struct Serialization<VectorXi>
         {
             static

@@ -17,7 +17,7 @@
 
 using namespace std;
 
-template <typename T>
+template <typename T>                            // float or double
 mfa::
 Decoder<T>::
 Decoder(MFA<T>& mfa_) :
@@ -39,7 +39,7 @@ Decoder(MFA<T>& mfa_) :
     // initialize decoding data structures
     cs.resize(mfa.p.size(), 1);
     tot_iters = 1;                              // total number of iterations in the flattened decoding loop
-    for (size_t i = 0; i < mfa.p.size(); i++)       // for all dims
+    for (size_t i = 0; i < mfa.p.size(); i++)   // for all dims
     {
         tot_iters  *= (mfa.p(i) + 1);
         if (i > 0)
@@ -77,7 +77,7 @@ template <typename T>
 void
 mfa::
 Decoder<T>::
-Decode(MatrixXf& approx)                 // pts in approximated volume (1st dim. changes fastest)
+Decode(MatrixX<T>& approx)                 // pts in approximated volume (1st dim. changes fastest)
 {
     vector<size_t> iter(mfa.p.size(), 0);    // parameter index (iteration count) in current dim.
     vector<size_t> ofst(mfa.p.size(), 0);    // start of current dim in linearized params
@@ -92,12 +92,12 @@ Decode(MatrixXf& approx)                 // pts in approximated volume (1st dim.
         mfa.idx2ijk(i, ijk);
 
         // compute parameters for the vertices of the cell
-        VectorXf param(mfa.p.size());
+        VectorX<T> param(mfa.p.size());
         for (int i = 0; i < mfa.p.size(); i++)
             param(i) = mfa.params(ijk(i) + mfa.po[i]);
 
         // compute approximated point for this parameter vector
-        VectorXf cpt(mfa.ctrl_pts.cols());       // approximated point
+        VectorX<T> cpt(mfa.ctrl_pts.cols());       // approximated point
         VolPt(param, cpt);
 
         approx.row(i) = cpt;
@@ -105,12 +105,12 @@ Decode(MatrixXf& approx)                 // pts in approximated volume (1st dim.
     fprintf(stderr, "100 %% decoded\n");
 
     // normal distance computation
-    float max_err;                          // max. error found so far
+    T      max_err;                         // max. error found so far
     size_t max_idx;                         // domain point idx at max error
     for (size_t i = 0; i < (size_t)mfa.domain.rows(); i++)
     {
-        VectorXf cpt = approx.row(i);
-        float err    = fabs(mfa.NormalDistance(cpt, i));
+        VectorX<T> cpt = approx.row(i);
+        T err    = fabs(mfa.NormalDistance(cpt, i));
         if (i == 0 || err > max_err)
         {
             max_err = err;
@@ -119,9 +119,9 @@ Decode(MatrixXf& approx)                 // pts in approximated volume (1st dim.
     }
 
     // normalize max error by size of input data (domain and range)
-    float min = mfa.domain.minCoeff();
-    float max = mfa.domain.maxCoeff();
-    float range = max - min;
+    T min = mfa.domain.minCoeff();
+    T max = mfa.domain.maxCoeff();
+    T range = max - min;
 
     // debug
     fprintf(stderr, "data range = %.1f\n", range);
@@ -147,7 +147,7 @@ template <typename T>
 void
 mfa::
 Decoder<T>::
-Decode(MatrixXf& approx)                 // pts in approximated volume (1st dim. changes fastest)
+Decode(MatrixX<T>& approx)                 // pts in approximated volume (1st dim. changes fastest)
 {
     vector<size_t> iter(mfa.p.size(), 0);    // parameter index (iteration count) in current dim.
     vector<size_t> ofst(mfa.p.size(), 0);    // start of current dim in linearized params
@@ -156,10 +156,10 @@ Decode(MatrixXf& approx)                 // pts in approximated volume (1st dim.
         ofst[i + 1] = ofst[i] + mfa.ndom_pts(i);
 
     // eigen frees following temp vectors when leaving scope
-    VectorXf dpt(mfa.domain.cols());         // original data point
-    VectorXf cpt(mfa.ctrl_pts.cols());       // approximated point
-    VectorXf d(mfa.domain.cols());           // apt - dpt
-    VectorXf param(mfa.p.size());            // parameters for one point
+    VectorX<T> dpt(mfa.domain.cols());         // original data point
+    VectorX<T> cpt(mfa.ctrl_pts.cols());       // approximated point
+    VectorX<T> d(mfa.domain.cols());           // apt - dpt
+    VectorX<T> param(mfa.p.size());            // parameters for one point
     for (size_t i = 0; i < mfa.domain.rows(); i++)
     {
         // debug
@@ -191,17 +191,17 @@ Decode(MatrixXf& approx)                 // pts in approximated volume (1st dim.
 
         // print progress
         if (i > 0 && mfa.domain.rows() >= 100 && i % (mfa.domain.rows() / 100) == 0)
-            fprintf(stderr, "\r%.0f %% decoded", (float)i / (float)(mfa.domain.rows()) * 100);
+            fprintf(stderr, "\r%.0f %% decoded", (T)i / (T)(mfa.domain.rows()) * 100);
     }
     fprintf(stderr, "\r100 %% decoded\n");
 
     // normal distance computation
-    float max_err;                          // max. error found so far
+    T max_err;                          // max. error found so far
     size_t max_idx;                         // domain point idx at max error
     for (size_t i = 0; i < (size_t)mfa.domain.rows(); i++)
     {
-        VectorXf cpt = approx.row(i);
-        float err    = fabs(mfa.NormalDistance(cpt, i));
+        VectorX<T> cpt = approx.row(i);
+        T err    = fabs(mfa.NormalDistance(cpt, i));
         if (i == 0 || err > max_err)
         {
             max_err = err;
@@ -210,9 +210,9 @@ Decode(MatrixXf& approx)                 // pts in approximated volume (1st dim.
     }
 
     // normalize max error by size of input data (domain and range)
-    float min = mfa.domain.minCoeff();
-    float max = mfa.domain.maxCoeff();
-    float range = max - min;
+    T min = mfa.domain.minCoeff();
+    T max = mfa.domain.maxCoeff();
+    T range = max - min;
 
     // debug
     fprintf(stderr, "data range = %.1f\n", range);
@@ -233,15 +233,15 @@ void
 mfa::
 Decoder<T>::
 CurvePt(
-        int       cur_dim,                              // current dimension
-        float     param,                                // parameter value of desired point
-        size_t    to,                                   // offset to start of control points for this curve
-        VectorXf& out_pt)                               // (output) point
+        int         cur_dim,                              // current dimension
+        T           param,                                // parameter value of desired point
+        size_t      to,                                   // offset to start of control points for this curve
+        VectorX<T>& out_pt)                               // (output) point
 {
     int n      = (int)mfa.nctrl_pts(cur_dim) - 1;          // number of control point spans
     int span   = mfa.FindSpan(cur_dim, param, mfa.ko[cur_dim]) - mfa.ko[cur_dim];    // relative to ko[cur_dim]
-    out_pt     = VectorXf::Zero(mfa.ctrl_pts.cols());   // initializes and resizes
-    MatrixXf N = MatrixXf::Zero(1, n + 1);              // basis coefficients
+    out_pt     = VectorX<T>::Zero(mfa.ctrl_pts.cols());   // initializes and resizes
+    MatrixX<T> N = MatrixX<T>::Zero(1, n + 1);              // basis coefficients
     mfa.BasisFuns(cur_dim, param, span, N, 0, n, 0);
 
     for (int j = 0; j <= mfa.p(cur_dim); j++)
@@ -259,12 +259,12 @@ CurvePt(
 
     // compute the denominator of the rational curve point and divide
     // basis function and weights arrays must be same size and shape to be multiplied element-wise
-    ArrayXXf w(1, mfa.nctrl_pts(cur_dim));              // weights for this curve
-    ArrayXXf b(1, mfa.nctrl_pts(cur_dim));              // basis functions for this curve
+    ArrayXX<T> w(1, mfa.nctrl_pts(cur_dim));              // weights for this curve
+    ArrayXX<T> b(1, mfa.nctrl_pts(cur_dim));              // basis functions for this curve
     for (auto j = 0; j < mfa.nctrl_pts(cur_dim); j++)
         w(0, j) = mfa.weights(to + j * cs[cur_dim]);
     b = N.row(0).array();
-    float denom = (b * w).sum();                        // sum of element-wise products
+    T denom = (b * w).sum();                        // sum of element-wise products
     out_pt /= denom;
 
     // debug
@@ -281,17 +281,17 @@ void
 mfa::
 Decoder<T>::
 CurvePt(
-        int       cur_dim,                     // current dimension
-        float     param,                       // parameter value of desired point
-        MatrixXf& temp_ctrl,                   // temporary control points
-        VectorXf& out_pt,                      // (output) point
-        int       ko)                          // starting knot offset (default = 0)
+        int         cur_dim,                     // current dimension
+        T           param,                       // parameter value of desired point
+        MatrixX<T>& temp_ctrl,                   // temporary control points
+        VectorX<T>& out_pt,                      // (output) point
+        int         ko)                          // starting knot offset (default = 0)
 {
     int n      = (int)temp_ctrl.rows() - 1;     // number of control point spans
     int span   = mfa.FindSpan(cur_dim, param, ko) - ko;         // relative to ko
-    MatrixXf N = MatrixXf::Zero(1, n + 1);     // basis coefficients
+    MatrixX<T> N = MatrixX<T>::Zero(1, n + 1);     // basis coefficients
     mfa.BasisFuns(cur_dim, param, span, N, 0, n, 0);
-    out_pt = VectorXf::Zero(temp_ctrl.cols());  // initializes and resizes
+    out_pt = VectorX<T>::Zero(temp_ctrl.cols());  // initializes and resizes
 
     for (int j = 0; j <= mfa.p(cur_dim); j++)
         out_pt += N(0, j + span - mfa.p(cur_dim)) * temp_ctrl.row(span - mfa.p(cur_dim) + j);
@@ -312,18 +312,18 @@ void
 mfa::
 Decoder<T>::
 CurvePt(
-        int       cur_dim,                      // current dimension
-        float     param,                        // parameter value of desired point
-        MatrixXf& temp_ctrl,                    // temporary control points
-        VectorXf& temp_weights,                 // weights associated with temporary control points
-        VectorXf& out_pt,                       // (output) point
-        int       ko)                           // starting knot offset (default = 0)
+        int         cur_dim,                      // current dimension
+        T           param,                        // parameter value of desired point
+        MatrixX<T>& temp_ctrl,                    // temporary control points
+        VectorX<T>& temp_weights,                 // weights associated with temporary control points
+        VectorX<T>& out_pt,                       // (output) point
+        int         ko)                           // starting knot offset (default = 0)
 {
     int n      = (int)temp_ctrl.rows() - 1;     // number of control point spans
     int span   = mfa.FindSpan(cur_dim, param, ko) - ko;         // relative to ko
-    MatrixXf N = MatrixXf::Zero(1, n + 1);      // basis coefficients
+    MatrixX<T> N = MatrixX<T>::Zero(1, n + 1);      // basis coefficients
     mfa.BasisFuns(cur_dim, param, span, N, 0, n, 0);
-    out_pt = VectorXf::Zero(temp_ctrl.cols());  // initializes and resizes
+    out_pt = VectorX<T>::Zero(temp_ctrl.cols());  // initializes and resizes
 
     for (int j = 0; j <= mfa.p(cur_dim); j++)
         out_pt += N(0, j + span - mfa.p(cur_dim)) *
@@ -337,11 +337,11 @@ CurvePt(
             out_pt(j) = temp_ctrl(0, j);
 
     // compute the denominator of the rational curve point and divide
-    ArrayXXf w(1, temp_ctrl.rows());            // arrays need to be same shape to be multiplied element-wise
-    ArrayXXf b(1, temp_ctrl.rows());
+    ArrayXX<T> w(1, temp_ctrl.rows());            // arrays need to be same shape to be multiplied element-wise
+    ArrayXX<T> b(1, temp_ctrl.rows());
     w = temp_weights;
     b = N.row(0);
-    float denom = (b * w).sum();                // sum of element-wise products
+    T denom = (b * w).sum();                // sum of element-wise products
     out_pt /= denom;
 
     // debug
@@ -354,29 +354,29 @@ template <typename T>
 void
 mfa::
 Decoder<T>::
-VolPt(VectorXf& param,                       // parameter value in each dim. of desired point
-      VectorXf& out_pt)                      // (output) point
+VolPt(VectorX<T>& param,                       // parameter value in each dim. of desired point
+      VectorX<T>& out_pt)                      // (output) point
 {
     // check dimensionality for sanity
     assert(mfa.p.size() < mfa.ctrl_pts.cols());
 
-    out_pt = VectorXf::Zero(mfa.ctrl_pts.cols());   // initializes and resizes
-    vector <MatrixXf> N(mfa.p.size());              // basis functions in each dim.
-    vector<VectorXf>  temp(mfa.p.size());           // temporary point in each dim.
-    vector<int>       span(mfa.p.size());           // span in each dim.
-    vector<int>       n(mfa.p.size());              // number of control point spans in each dim
-    vector<int>       iter(mfa.p.size());           // iteration number in each dim.
-    VectorXf          ctrl_pt(mfa.ctrl_pts.cols()); // one control point
-    int ctrl_idx;                                   // control point linear ordering index
+    out_pt = VectorX<T>::Zero(mfa.ctrl_pts.cols());   // initializes and resizes
+    vector <MatrixX<T>> N(mfa.p.size());              // basis functions in each dim.
+    vector<VectorX<T>>  temp(mfa.p.size());           // temporary point in each dim.
+    vector<int>         span(mfa.p.size());           // span in each dim.
+    vector<int>         n(mfa.p.size());              // number of control point spans in each dim
+    vector<int>         iter(mfa.p.size());           // iteration number in each dim.
+    VectorX<T>          ctrl_pt(mfa.ctrl_pts.cols()); // one control point
+    int                 ctrl_idx;                     // control point linear ordering index
 
     // init
     for (size_t i = 0; i < mfa.p.size(); i++)       // for all dims
     {
-        temp[i]    = VectorXf::Zero(mfa.ctrl_pts.cols());
+        temp[i]    = VectorX<T>::Zero(mfa.ctrl_pts.cols());
         iter[i]    = 0;
         n[i]       = (int)mfa.nctrl_pts(i) - 1;
         span[i]    = mfa.FindSpan(i, param(i), mfa.ko[i]) - mfa.ko[i];  // relative to ko
-        N[i]       = MatrixXf::Zero(1, n[i] + 1);
+        N[i]       = MatrixX<T>::Zero(1, n[i] + 1);
         mfa.BasisFuns(i, param(i), span[i], N[i], 0, n[i], 0);
     }
 
@@ -389,7 +389,7 @@ VolPt(VectorXf& param,                       // parameter value in each dim. of 
 
         // always compute the point in the first dimension
         ctrl_pt = mfa.ctrl_pts.row(ctrl_idx);
-        float w = mfa.weights(ctrl_idx);
+        T w = mfa.weights(ctrl_idx);
         temp[0] += (N[0])(0, iter[0] + span[0] - mfa.p(0)) * ctrl_pt * w;
         iter[0]++;
 
@@ -400,7 +400,7 @@ VolPt(VectorXf& param,                       // parameter value in each dim. of 
             {
                 // compute point in next higher dimension and reset computation for current dim
                 temp[k + 1] += (N[k + 1])(0, iter[k + 1] + span[k + 1] - mfa.p(k + 1)) * temp[k];
-                temp[k]     =  VectorXf::Zero(mfa.ctrl_pts.cols());
+                temp[k]     =  VectorX<T>::Zero(mfa.ctrl_pts.cols());
                 iter[k]     =  0;
                 iter[k + 1]++;
             }
@@ -410,13 +410,13 @@ VolPt(VectorXf& param,                       // parameter value in each dim. of 
     out_pt = temp[mfa.p.size() - 1];
 
     // compute rational NURBS denominator and divide the point by it
-    float denom       = 0.0;                            // denominator for dividing point coordinates
+    T denom           = 0.0;                            // denominator for dividing point coordinates
     VectorXi ijk      = VectorXi::Zero(mfa.p.size());   // i,j,k,... coords of basis function and weight
     VectorXi next_ijk = ijk;                            // i,j,k,... for next iteration
     for (auto i = 0; i < mfa.weights.size(); i++)       // for all weights
     {
         next_ijk   = ijk;
-        float temp = mfa.weights(i);
+        T temp = mfa.weights(i);
         bool stop  = false;
         for (auto k = 0; k < mfa.p.size(); k++)
         {

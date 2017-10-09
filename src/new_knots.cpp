@@ -13,7 +13,7 @@
 #include <iostream>
 #include <set>
 
-template <typename T>
+template <typename T>                               // float or double
 mfa::
 NewKnots<T>::
 NewKnots(MFA<T>& mfa_) :
@@ -31,8 +31,8 @@ mfa::
 NewKnots<T>::
 NewKnots_full(
         VectorXi&      nnew_knots,                  // number of new knots in each dim
-        vector<float>& new_knots,                   // new knots (1st dim changes fastest)
-        float          err_limit,                   // max allowable error
+        vector<T>&     new_knots,                   // new knots (1st dim changes fastest)
+        T              err_limit,                   // max allowable error
         int            iter)                        // iteration number of caller (for debugging)
 {
     mfa::Encoder<T> encoder(mfa);
@@ -64,8 +64,8 @@ mfa::
 NewKnots<T>::
 NewKnots_curve1(
         VectorXi&      nnew_knots,                       // number of new knots in each dim
-        vector<float>& new_knots,                        // new knots (1st dim changes fastest)
-        float          err_limit,                        // max allowable error
+        vector<T>&     new_knots,                        // new knots (1st dim changes fastest)
+        T              err_limit,                        // max allowable error
         int            iter)                             // iteration number of caller (for debugging)
 {
     mfa::Encoder<T> encoder(mfa);
@@ -86,7 +86,7 @@ NewKnots_curve1(
         size_t max_nerr     =  0;
 
         // hard-coded weights all equal to 1 for now
-        VectorXf temp_weights = VectorXf::Ones(mfa.nctrl_pts(k));
+        VectorX<T> temp_weights = VectorX<T>::Ones(mfa.nctrl_pts(k));
 
         // compute the matrix N, eq. 9.66 in P&T
         // N is a matrix of (m - 1) x (n - 1) scalars that are the basis function coefficients
@@ -97,7 +97,7 @@ NewKnots_curve1(
         //  -                                -
         // TODO: N is going to be very sparse when it is large: switch to sparse representation
         // N has semibandwidth < p  nonzero entries across diagonal
-        MatrixXf N = MatrixXf::Zero(m(k) - 1, n(k) - 1); // coefficients matrix
+        MatrixX<T> N = MatrixX<T>::Zero(m(k) - 1, n(k) - 1); // coefficients matrix
 
         for (int i = 1; i < m(k); i++)                  // the rows of N
         {
@@ -109,7 +109,7 @@ NewKnots_curve1(
         // compute the product Nt x N
         // TODO: NtN is going to be very sparse when it is large: switch to sparse representation
         // NtN has semibandwidth < p + 1 nonzero entries across diagonal
-        MatrixXf NtN(n(k) - 1, n(k) - 1);
+        MatrixX<T> NtN(n(k) - 1, n(k) - 1);
         NtN = N.transpose() * N;
 
         // debug
@@ -132,18 +132,18 @@ NewKnots_curve1(
             fprintf(stderr, "k=%ld s=%ld\n", k, s);
 
             bool new_max_nerr = false;                      // this step size changed the max_nerr
-            size_t ncurves_s  = static_cast<size_t>(ceil(static_cast<float>(ncurves) / s));
+            size_t ncurves_s  = static_cast<size_t>(ceil(static_cast<T>(ncurves) / s));
             vector<size_t> nerrs(ncurves_s);                    // number of erroneous points (error > err_limit) in the curve
 
             parallel_for (size_t (0), ncurves_s, [&] (size_t j) // for all the curves in this dimension (given the curve step)
             {
                 // R is the right hand side needed for solving NtN * P = R
-                MatrixXf R(n(k) - 1, mfa.domain.cols());
+                MatrixX<T> R(n(k) - 1, mfa.domain.cols());
 
                 // P are the unknown interior control points and the solution to NtN * P = R
                 // NtN is positive definite -> do not need pivoting
                 // TODO: use a common representation for P and ctrl_pts to avoid copying
-                MatrixXf P(n(k) - 1, mfa.domain.cols());
+                MatrixX<T> P(n(k) - 1, mfa.domain.cols());
 
                 // compute R from input domain points
                 encoder.RHS(k, N, R, mfa.ko[k], mfa.po[k], mfa.co[k][j * s]);
@@ -153,7 +153,7 @@ NewKnots_curve1(
 
                 // append points from P to control points
                 // TODO: any way to avoid this?
-                MatrixXf temp_ctrl = MatrixXf::Zero(mfa.nctrl_pts(k), mfa.domain.cols());   // temporary control points for one curve
+                MatrixX<T> temp_ctrl = MatrixX<T>::Zero(mfa.nctrl_pts(k), mfa.domain.cols());   // temporary control points for one curve
                 encoder.CopyCtrl(P, n, k, mfa.co[k][j * s], temp_ctrl);
 
                 // compute the error on the curve (number of input points with error > err_limit)
@@ -191,12 +191,12 @@ NewKnots_curve1(
         fprintf(stderr, "k=%ld worst_curve_idx=%ld co=%ld\n", k, worst_curve_idx, mfa.co[k][worst_curve_idx]);
 
         // R is the right hand side needed for solving NtN * P = R
-        MatrixXf R(n(k) - 1, mfa.domain.cols());
+        MatrixX<T> R(n(k) - 1, mfa.domain.cols());
 
         // P are the unknown interior control points and the solution to NtN * P = R
         // NtN is positive definite -> do not need pivoting
         // TODO: use a common representation for P and ctrl_pts to avoid copying
-        MatrixXf P(n(k) - 1, mfa.domain.cols());
+        MatrixX<T> P(n(k) - 1, mfa.domain.cols());
 
         // compute R from input domain points
         encoder.RHS(k, N, R, mfa.ko[k], mfa.po[k], mfa.co[k][worst_curve_idx]);
@@ -206,7 +206,7 @@ NewKnots_curve1(
 
         // append points from P to control points
         // TODO: any way to avoid this?
-        MatrixXf temp_ctrl = MatrixXf::Zero(mfa.nctrl_pts(k), mfa.domain.cols());   // temporary control points for one curve
+        MatrixX<T> temp_ctrl = MatrixX<T>::Zero(mfa.nctrl_pts(k), mfa.domain.cols());   // temporary control points for one curve
         encoder.CopyCtrl(P, n, k, mfa.co[k][worst_curve_idx], temp_ctrl);
 
         // --- TODO: end of recomputing worst curve ---
@@ -246,8 +246,8 @@ mfa::
 NewKnots<T>::
 NewKnots_curve(
         VectorXi&      nnew_knots,                       // number of new knots in each dim
-        vector<float>& new_knots,                        // new knots (1st dim changes fastest)
-        float          err_limit,                        // max allowable error
+        vector<T>&     new_knots,                        // new knots (1st dim changes fastest)
+        T              err_limit,                        // max allowable error
         int            iter)                             // iteration number of caller (for debugging)
 {
     mfa::Encoder<T> encoder(mfa);
@@ -265,7 +265,7 @@ NewKnots_curve(
     for (size_t k = 0; k < ndims; k++)              // for all domain dimensions
     {
         // temporary control points for one curve
-        MatrixXf temp_ctrl = MatrixXf::Zero(mfa.nctrl_pts(k), mfa.domain.cols());
+        MatrixX<T> temp_ctrl = MatrixX<T>::Zero(mfa.nctrl_pts(k), mfa.domain.cols());
 
         // error spans for one curve and for worst curve
         set<int> err_spans;
@@ -274,7 +274,7 @@ NewKnots_curve(
         size_t max_nerr     =  0;
 
         // hard-coded weights all equal to 1 for now
-        VectorXf temp_weights = VectorXf::Ones(mfa.nctrl_pts(k));
+        VectorX<T> temp_weights = VectorX<T>::Ones(mfa.nctrl_pts(k));
 
         // compute the matrix N, eq. 9.66 in P&T
         // N is a matrix of (m - 1) x (n - 1) scalars that are the basis function coefficients
@@ -285,7 +285,7 @@ NewKnots_curve(
         //  -                                -
         // TODO: N is going to be very sparse when it is large: switch to sparse representation
         // N has semibandwidth < p  nonzero entries across diagonal
-        MatrixXf N = MatrixXf::Zero(m(k) - 1, n(k) - 1); // coefficients matrix
+        MatrixX<T> N = MatrixX<T>::Zero(m(k) - 1, n(k) - 1); // coefficients matrix
 
         for (int i = 1; i < m(k); i++)                  // the rows of N
         {
@@ -297,16 +297,16 @@ NewKnots_curve(
         // compute the product Nt x N
         // TODO: NtN is going to be very sparse when it is large: switch to sparse representation
         // NtN has semibandwidth < p + 1 nonzero entries across diagonal
-        MatrixXf NtN(n(k) - 1, n(k) - 1);
+        MatrixX<T> NtN(n(k) - 1, n(k) - 1);
         NtN = N.transpose() * N;
 
         // R is the right hand side needed for solving NtN * P = R
-        MatrixXf R(n(k) - 1, mfa.domain.cols());
+        MatrixX<T> R(n(k) - 1, mfa.domain.cols());
 
         // P are the unknown interior control points and the solution to NtN * P = R
         // NtN is positive definite -> do not need pivoting
         // TODO: use a common representation for P and ctrl_pts to avoid copying
-        MatrixXf P(n(k) - 1, mfa.domain.cols());
+        MatrixX<T> P(n(k) - 1, mfa.domain.cols());
 
         size_t ncurves   = mfa.domain.rows() / mfa.ndom_pts(k); // number of curves in this dimension
         int nsame_steps  = 0;                                   // number of steps with same number of erroneous points
@@ -410,8 +410,8 @@ mfa::
 NewKnots<T>::
 NewKnots_curve(
         VectorXi&      nnew_knots,                       // number of new knots in each dim
-        vector<float>& new_knots,                        // new knots (1st dim changes fastest)
-        float          err_limit,                        // max allowable error
+        vector<T>&     new_knots,                        // new knots (1st dim changes fastest)
+        T              err_limit,                        // max allowable error
         int            iter)                             // iteration number of caller (for debugging)
 {
     mfa::Encoder encoder(mfa);
@@ -440,7 +440,7 @@ NewKnots_curve(
         //  -                                -
         // TODO: N is going to be very sparse when it is large: switch to sparse representation
         // N has semibandwidth < p  nonzero entries across diagonal
-        MatrixXf N = MatrixXf::Zero(m(k) - 1, n(k) - 1); // coefficients matrix
+        MatrixX<T> N = MatrixX<T>::Zero(m(k) - 1, n(k) - 1); // coefficients matrix
 
         for (int i = 1; i < m(k); i++)                  // the rows of N
         {
@@ -452,7 +452,7 @@ NewKnots_curve(
         // compute the product Nt x N
         // TODO: NtN is going to be very sparse when it is large: switch to sparse representation
         // NtN has semibandwidth < p + 1 nonzero entries across diagonal
-        MatrixXf NtN(n(k) - 1, n(k) - 1);
+        MatrixX<T> NtN(n(k) - 1, n(k) - 1);
         NtN = N.transpose() * N;
 
         // debug
@@ -475,18 +475,18 @@ NewKnots_curve(
             fprintf(stderr, "k=%ld s=%ld\n", k, s);
 
             bool new_max_nerr = false;                      // this step size changed the max_nerr
-            size_t ncurves_s  = static_cast<size_t>(ceil(static_cast<float>(ncurves) / s));
+            size_t ncurves_s  = static_cast<size_t>(ceil(static_cast<T>(ncurves) / s));
             vector<size_t> nerrs(ncurves_s);                    // number of erroneous points (error > err_limit) in the curve
 
             parallel_for (size_t (0), ncurves_s, [&] (size_t j) // for all the curves in this dimension (given the curve step)
             {
                 // R is the right hand side needed for solving NtN * P = R
-                MatrixXf R(n(k) - 1, mfa.domain.cols());
+                MatrixX<T> R(n(k) - 1, mfa.domain.cols());
 
                 // P are the unknown interior control points and the solution to NtN * P = R
                 // NtN is positive definite -> do not need pivoting
                 // TODO: use a common representation for P and ctrl_pts to avoid copying
-                MatrixXf P(n(k) - 1, mfa.domain.cols());
+                MatrixX<T> P(n(k) - 1, mfa.domain.cols());
 
                 // compute R from input domain points
                 RHS(k, N, R, mfa.ko[k], mfa.po[k], mfa.co[k][j * s]);
@@ -496,7 +496,7 @@ NewKnots_curve(
 
                 // append points from P to control points
                 // TODO: any way to avoid this?
-                MatrixXf temp_ctrl = MatrixXf::Zero(mfa.nctrl_pts(k), mfa.domain.cols());   // temporary control points for one curve
+                MatrixX<T> temp_ctrl = MatrixX<T>::Zero(mfa.nctrl_pts(k), mfa.domain.cols());   // temporary control points for one curve
                 CopyCtrl(P, n, k, mfa.co[k][j * s], temp_ctrl);
 
                 // compute the error on the curve (number of input points with error > err_limit)
@@ -534,12 +534,12 @@ NewKnots_curve(
 //         fprintf(stderr, "k=%ld worst_curve_idx=%ld co=%ld\n", k, worst_curve_idx, co);
 
         // R is the right hand side needed for solving NtN * P = R
-        MatrixXf R(n(k) - 1, mfa.domain.cols());
+        MatrixX<T> R(n(k) - 1, mfa.domain.cols());
 
         // P are the unknown interior control points and the solution to NtN * P = R
         // NtN is positive definite -> do not need pivoting
         // TODO: use a common representation for P and ctrl_pts to avoid copying
-        MatrixXf P(n(k) - 1, mfa.domain.cols());
+        MatrixX<T> P(n(k) - 1, mfa.domain.cols());
 
         // compute R from input domain points
         RHS(k, N, R, mfa.ko[k], mfa.po[k], mfa.co[k][worst_curve_idx]);
@@ -549,7 +549,7 @@ NewKnots_curve(
 
         // append points from P to control points
         // TODO: any way to avoid this?
-        MatrixXf temp_ctrl = MatrixXf::Zero(mfa.nctrl_pts(k), mfa.domain.cols());   // temporary control points for one curve
+        MatrixX<T> temp_ctrl = MatrixX<T>::Zero(mfa.nctrl_pts(k), mfa.domain.cols());   // temporary control points for one curve
         CopyCtrl(P, n, k, mfa.co[k][worst_curve_idx], temp_ctrl);
 
         // --- TODO: end of recomputing worst curve ---
@@ -603,8 +603,8 @@ mfa::
 NewKnots<T>::
 NewKnots_hybrid(
         VectorXi&      nnew_knots,                       // number of new knots in each dim
-        vector<float>& new_knots,                        // new knots (1st dim changes fastest)
-        float          err_limit,                        // max allowable error
+        vector<T>&     new_knots,                        // new knots (1st dim changes fastest)
+        T              err_limit,                        // max allowable error
         int            iter)                             // iteration number of caller (for debugging)
 {
     mfa::Encoder<T> encoder(mfa);
@@ -690,8 +690,8 @@ mfa::
 NewKnots<T>::
 ErrorSpans(
         VectorXi&      nnew_knots,                          // number of new knots in each dim
-        vector<float>& new_knots,                           // new knots (1st dim changes fastest)
-        float          err_limit,                           // max allowable error
+        vector<T>&     new_knots,                           // new knots (1st dim changes fastest)
+        T              err_limit,                           // max allowable error
         int            iter)                                // iteration number
 {
     mfa::Decoder<T> decoder(mfa);
@@ -712,7 +712,7 @@ ErrorSpans(
                 nspan_pts *= (mfa.knot_spans[i].max_param_ijk(k) - mfa.knot_spans[i].min_param_ijk(k) + 1);
 
             VectorXi p_ijk = mfa.knot_spans[i].min_param_ijk;           // indices of current parameter in the span
-            VectorXf param(mfa.p.size());                               // value of current parameter
+            VectorX<T> param(mfa.p.size());                               // value of current parameter
             bool span_done = true;                                  // span is done until error > err_limit
 
             // TODO:  consider binary search of the points in the span?
@@ -728,9 +728,9 @@ ErrorSpans(
                 // approximate the point and measure error
                 size_t idx;
                 mfa.ijk2idx(p_ijk, idx);
-                VectorXf cpt(mfa.ctrl_pts.cols());       // approximated point
+                VectorX<T> cpt(mfa.ctrl_pts.cols());       // approximated point
                 decoder.VolPt(param, cpt);
-                float err = fabs(mfa.NormalDistance(cpt, idx)) / mfa.dom_range;     // normalized by data range
+                T err = fabs(mfa.NormalDistance(cpt, idx)) / mfa.dom_range;     // normalized by data range
 
                 // span is not done
                 if (err > err_limit)
@@ -810,8 +810,8 @@ mfa::
 NewKnots<T>::
 ErrorSpans(
         VectorXi&      nnew_knots,                          // number of new knots in each dim
-        vector<float>& new_knots,                           // new knots (1st dim changes fastest)
-        float          err_limit,                           // max allowable error
+        vector<T>&     new_knots,                           // new knots (1st dim changes fastest)
+        T              err_limit,                           // max allowable error
         int            iter)                                // iteration number
 {
     mfa::Decoder decoder(mfa);
@@ -830,7 +830,7 @@ ErrorSpans(
             nspan_pts *= (mfa.knot_spans[i].max_param_ijk(k) - mfa.knot_spans[i].min_param_ijk(k) + 1);
 
         VectorXi p_ijk = mfa.knot_spans[i].min_param_ijk;           // indices of current parameter in the span
-        VectorXf param(mfa.p.size());                               // value of current parameter
+        VectorX<T> param(mfa.p.size());                               // value of current parameter
         bool span_done = true;                                      // span is done until error > err_limit
 
         // TODO:  consider binary search of the points in the span?
@@ -843,9 +843,9 @@ ErrorSpans(
             // approximate the point and measure error
             size_t idx;
             mfa.ijk2idx(p_ijk, idx);
-            VectorXf cpt(mfa.ctrl_pts.cols());                      // approximated point
+            VectorX<T> cpt(mfa.ctrl_pts.cols());                      // approximated point
             decoder.VolPt(param, cpt);
-            float err = fabs(mfa.NormalDistance(cpt, idx)) / mfa.dom_range;     // normalized by data range
+            T err = fabs(mfa.NormalDistance(cpt, idx)) / mfa.dom_range;     // normalized by data range
 
             // span is not done
             if (err > err_limit)
@@ -918,7 +918,7 @@ NewKnots<T>::
 SplitSpan(
         size_t         si,                   // id of span to split
         VectorXi&      nnew_knots,           // number of new knots in each dim
-        vector<float>& new_knots,            // new knots (1st dim changes fastest)
+        vector<T>&     new_knots,            // new knots (1st dim changes fastest)
         int            iter,                 // iteration number
         vector<bool>&  split_spans)          // spans that have already been split in this iteration
 {
@@ -929,7 +929,7 @@ SplitSpan(
     // check if span can be split (both halves would have domain points in its range)
     // if not, check other split directions
     int sd = mfa.knot_spans[si].last_split_dim;         // alternating per knot span
-    float new_knot;                                     // new knot value in the split dimension
+    T new_knot;                                     // new knot value in the split dimension
     size_t k;                                           // dimension
     for (k = 0; k < mfa.p.size(); k++)
     {
