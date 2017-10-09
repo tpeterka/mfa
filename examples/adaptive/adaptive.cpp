@@ -11,6 +11,7 @@
 #include <vector>
 #include <iostream>
 #include <cmath>
+#include <string>
 
 #include <diy/master.hpp>
 #include <diy/reduce-operations.hpp>
@@ -40,19 +41,21 @@ int main(int argc, char** argv)
 
     // default command line arguments
     real_t norm_err_limit = 1.0;                 // maximum normalized error limit
-    int    pt_dim         = 3;                   // dimension of input points
-    int    dom_dim        = 2;                   // dimension of domain (<= pt_dim)
-    int    degree         = 4;                   // degree (same for all dims)
-    int    ndomp          = 100;                 // input number of domain points (same for all dims)
+    int    pt_dim    = 3;                        // dimension of input points
+    int    dom_dim   = 2;                        // dimension of domain (<= pt_dim)
+    int    degree    = 4;                        // degree (same for all dims)
+    int    ndomp     = 100;                      // input number of domain points (same for all dims)
+    string input     = "sinc";                   // input dataset
 
     // get command line arguments
     using namespace opts;
     Options ops(argc, argv);
-    ops >> Option('e', "error",  norm_err_limit, "maximum normalized error limit");
-    ops >> Option('d', "pt_dim", pt_dim, " dimension of points");
-    ops >> Option('m', "dom_dim", dom_dim, " dimension of domain");
-    ops >> Option('p', "degree", degree, "degree in each dimension of domain");
-    ops >> Option('n', "ndomp", ndomp, "  number of input points in each dimension of domain");
+    ops >> Option('e', "error",   norm_err_limit, " maximum normalized error limit");
+    ops >> Option('d', "pt_dim",  pt_dim,         " dimension of points");
+    ops >> Option('m', "dom_dim", dom_dim,        " dimension of domain");
+    ops >> Option('p', "degree",  degree,         " degree in each dimension of domain");
+    ops >> Option('n', "ndomp",   ndomp,          " number of input points in each dimension of domain");
+    ops >> Option('i', "input",   input,          " input dataset");
 
     if (ops >> Present('h', "help", "show help"))
     {
@@ -76,178 +79,105 @@ int main(int argc, char** argv)
 
     DomainArgs d_args;
 
-    // 1d sinc function f(x) = sin(x)/x
-//     d_args.pt_dim       = pt_dim;
-//     d_args.dom_dim      = dom_dim;
-//     d_args.p[0]         = degree;
-//     d_args.ndom_pts[0]  = ndomp;
-//     d_args.min[0]       = -4.0 * M_PI;
-//     d_args.max[0]       = 4.0 * M_PI;
-//     d_args.s            = 10.0;              // scaling factor on range
-//     master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-//                    { b->generate_sinc_data(cp, d_args); });
+    // set default args for diy foreach callback functions
+    d_args.pt_dim       = pt_dim;
+    d_args.dom_dim      = dom_dim;
+    for (int i = 0; i < MAX_DIM; i++)
+    {
+        d_args.p[i]         = degree;
+        d_args.ndom_pts[i]  = ndomp;
+    }
 
-    // 2d sinc function f(x,y) = sinc(x)sinc(y)
-     d_args.pt_dim       = pt_dim;
-     d_args.dom_dim      = dom_dim;
-     d_args.p[0]         = degree;
-     d_args.p[1]         = degree;
-     d_args.ndom_pts[0]  = ndomp;
-     d_args.ndom_pts[1]  = ndomp;
-     d_args.min[0]       = -4.0 * M_PI;
-     d_args.min[1]       = -4.0 * M_PI;
-     d_args.max[0]       = 4.0 * M_PI;
-     d_args.max[1]       = 4.0 * M_PI;
-     d_args.s            = 10.0;              // scaling factor on range
-     master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-                    { b->generate_sinc_data(cp, d_args); });
+    // sinc function f(x) = sin(x)/x, f(x,y) = sinc(x)sinc(y), ...
+    if (input == "sinc")
+    {
+        for (int i = 0; i < MAX_DIM; i++)
+        {
+            d_args.min[i]       = -4.0 * M_PI;
+            d_args.max[i]       = 4.0  * M_PI;
+        }
+        d_args.s            = 10.0;              // scaling factor on range
+        master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
+                { b->generate_sinc_data(cp, d_args); });
+    }
 
-   // 3d sinc function
-//     d_args.pt_dim       = pt_dim;
-//     d_args.dom_dim      = dom_dim;
-//     d_args.p[0]         = degree;
-//     d_args.p[1]         = degree;
-//     d_args.p[2]         = degree;
-//     d_args.ndom_pts[0]  = ndomp;
-//     d_args.ndom_pts[1]  = ndomp;
-//     d_args.ndom_pts[2]  = ndomp;
-//     d_args.min[0]       = -4.0 * M_PI;
-//     d_args.min[1]       = -4.0 * M_PI;
-//     d_args.min[2]       = -4.0 * M_PI;
-//     d_args.max[0]       = 4.0 * M_PI;
-//     d_args.max[1]       = 4.0 * M_PI;
-//     d_args.max[2]       = 4.0 * M_PI;
-//     d_args.s            = 10.0;              // scaling factor on range
-//     master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-//                    { b->generate_sinc_data(cp, d_args); });
+    // S3D dataset
+    if (input == "s3d")
+    {
+        d_args.ndom_pts[0]  = 704;
+        d_args.ndom_pts[1]  = 540;
+        d_args.ndom_pts[2]  = 550;
+        strncpy(d_args.infile, "/Users/tpeterka/datasets/flame/6_small.xyz", sizeof(d_args.infile));
+        if (dom_dim == 2)
+            master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
+                    { b->read_2d_slice_3d_vector_data(cp, d_args); });
+        else if (dom_dim == 3)
+            master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
+                    { b->read_3d_vector_data(cp, d_args); });
+        else
+        {
+            fprintf(stderr, "S3D data only available in 1, 2, or 3d domain\n");
+            exit(0);
+        }
+    }
 
-   // 4d sinc function
-//     d_args.pt_dim       = pt_dim;
-//     d_args.dom_dim      = dom_dim;
-//     d_args.p[0]         = degree;
-//     d_args.p[1]         = degree;
-//     d_args.p[2]         = degree;
-//     d_args.p[3]         = degree;
-//     d_args.ndom_pts[0]  = ndomp;
-//     d_args.ndom_pts[1]  = ndomp;
-//     d_args.ndom_pts[2]  = ndomp;
-//     d_args.ndom_pts[3]  = ndomp;
-//     d_args.min[0]       = -4.0 * M_PI;
-//     d_args.min[1]       = -4.0 * M_PI;
-//     d_args.min[2]       = -4.0 * M_PI;
-//     d_args.min[3]       = -4.0 * M_PI;
-//     d_args.max[0]       = 4.0 * M_PI;
-//     d_args.max[1]       = 4.0 * M_PI;
-//     d_args.max[2]       = 4.0 * M_PI;
-//     d_args.max[3]       = 4.0 * M_PI;
-//     d_args.s            = 10.0;              // scaling factor on range
-//     master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-//                    { b->generate_sinc_data(cp, d_args); });
+    // nek5000 dataset
+    if (input == "nek")
+    {
+        d_args.ndom_pts[0]  = 200;
+        d_args.ndom_pts[1]  = 200;
+        d_args.ndom_pts[2]  = 200;
+        strncpy(d_args.infile, "/Users/tpeterka/datasets/nek5000/200x200x200/0.xyz", sizeof(d_args.infile));
+        if (dom_dim == 2)
+            master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
+                    { b->read_2d_slice_3d_vector_data(cp, d_args); });
+        else if (dom_dim == 3)
+            master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
+                    { b->read_3d_vector_data(cp, d_args); });
+        else
+        {
+            fprintf(stderr, "nek5000 data only available in 2 or 3d domain\n");
+            exit(0);
+        }
+    }
 
-    // 2d S3D
-//     d_args.pt_dim       = 3;
-//     d_args.dom_dim      = 2;
-//     d_args.p[0]         = degree;
-//     d_args.p[1]         = degree;
-//     d_args.ndom_pts[0]  = 704;
-//     d_args.ndom_pts[1]  = 540;
-//     d_args.ndom_pts[2]  = 550;
-//     strncpy(d_args.infile, "/Users/tpeterka/datasets/flame/6_small.xyz", sizeof(d_args.infile));
-//     master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-//                    { b->read_2d_slice_3d_vector_data(cp, d_args); });
+    // rti dataset
+    if (input == "rti")
+    {
+        d_args.ndom_pts[0]  = 288;
+        d_args.ndom_pts[1]  = 512;
+        d_args.ndom_pts[2]  = 512;
+        strncpy(d_args.infile, "/Users/tpeterka/datasets/rti/dd07g_xxsmall_le.xyz", sizeof(d_args.infile));
+        if (dom_dim == 2)
+            master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
+                    { b->read_2d_slice_3d_vector_data(cp, d_args); });
+        else if (dom_dim == 3)
+            master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
+                    { b->read_3d_vector_data(cp, d_args); });
+        else
+        {
+            fprintf(stderr, "rti data only available in 2 or 3d domain\n");
+            exit(0);
+        }
+    }
 
-    // 3d S3D
-//     d_args.pt_dim       = 4;
-//     d_args.dom_dim      = 3;
-//     d_args.p[0]         = degree;
-//     d_args.p[1]         = degree;
-//     d_args.p[2]         = degree;
-//     d_args.ndom_pts[0]  = 704;
-//     d_args.ndom_pts[1]  = 540;
-//     d_args.ndom_pts[2]  = 550;
-//     strncpy(d_args.infile, "/Users/tpeterka/datasets/flame/6_small.xyz", sizeof(d_args.infile));
-//     master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-//                    { b->read_3d_vector_data(cp, d_args); });
+    // cesm dataset
+    if (input == "cesm")
+    {
+        d_args.ndom_pts[0]  = 1800;
+        d_args.ndom_pts[1]  = 3600;
+        strncpy(d_args.infile, "/Users/tpeterka/datasets/CESM-ATM-tylor/1800x3600/FLDSC_1_1800_3600.dat", sizeof(d_args.infile));
+        if (dom_dim == 2)
+            master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
+                    { b->read_2d_scalar_data(cp, d_args); });
+        else
+        {
+            fprintf(stderr, "cesm data only available in 2 or 3d domain\n");
+            exit(0);
+        }
+    }
 
-    // 3d S3D subset
-//     d_args.pt_dim       = 4;
-//     d_args.dom_dim      = 3;
-//     d_args.p[0]         = degree;
-//     d_args.p[1]         = degree;
-//     d_args.p[2]         = degree;
-//     d_args.starts[0]    = 100;                    // NB starts are in full 3D even if example is in 2D
-//     d_args.starts[1]    = 0;
-//     d_args.starts[2]    = 140;
-//     d_args.ndom_pts[0]  = 250;
-//     d_args.ndom_pts[1]  = 300;
-//     d_args.ndom_pts[2]  = 275;
-//     d_args.full_dom_pts[0] = 704;               // full domain size (not just the desired subset)
-//     d_args.full_dom_pts[1] = 540;
-//     d_args.full_dom_pts[2] = 550;
-//     strncpy(d_args.infile, "/Users/tpeterka/datasets/flame/6_small.xyz", sizeof(d_args.infile));
-//     master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-//                    { b->read_3d_subset_3d_vector_data(cp, d_args); });
-
-    // 2d nek5000
-//     d_args.pt_dim       = 3;
-//     d_args.dom_dim      = 2;
-//     d_args.p[0]         = degree;
-//     d_args.p[1]         = degree;
-//     d_args.ndom_pts[0]  = 200;
-//     d_args.ndom_pts[1]  = 200;
-//     d_args.ndom_pts[2]  = 200;
-//     strncpy(d_args.infile, "/Users/tpeterka/datasets/nek5000/200x200x200/0.xyz", sizeof(d_args.infile));
-//     master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-//                    { b->read_2d_slice_3d_vector_data(cp, d_args); });
-
-    // 3d nek5000
-//     d_args.pt_dim       = 4;
-//     d_args.dom_dim      = 3;
-//     d_args.p[0]         = degree;
-//     d_args.p[1]         = degree;
-//     d_args.p[2]         = degree;
-//     d_args.ndom_pts[0]  = 200;
-//     d_args.ndom_pts[1]  = 200;
-//     d_args.ndom_pts[2]  = 200;
-//     strncpy(d_args.infile, "/Users/tpeterka/datasets/nek5000/200x200x200/0.xyz", sizeof(d_args.infile));
-//     master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-//                    { b->read_3d_vector_data(cp, d_args); });
-
-    // 2d rti
-//     d_args.pt_dim       = 3;
-//     d_args.dom_dim      = 2;
-//     d_args.p[0]         = degree;
-//     d_args.p[1]         = degree;
-//     d_args.ndom_pts[0]  = 288;
-//     d_args.ndom_pts[1]  = 512;
-//     d_args.ndom_pts[2]  = 512;
-//     strncpy(d_args.infile, "/Users/tpeterka/datasets/rti/dd07g_xxsmall_le.xyz", sizeof(d_args.infile));
-//     master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-//                    { b->read_2d_slice_3d_vector_data(cp, d_args); });
-
-    // 3d rti
-//     d_args.pt_dim       = 4;
-//     d_args.dom_dim      = 3;
-//     d_args.p[0]         = degree;
-//     d_args.p[1]         = degree;
-//     d_args.p[2]         = degree;
-//     d_args.ndom_pts[0]  = 288;
-//     d_args.ndom_pts[1]  = 512;
-//     d_args.ndom_pts[2]  = 512;
-//     strncpy(d_args.infile, "/Users/tpeterka/datasets/rti/dd07g_xxsmall_le.xyz", sizeof(d_args.infile));
-//     master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-//                    { b->read_3d_vector_data(cp, d_args); });
-
-    // 2d cesm (this is the full dimensionality of this dataset)
-//     d_args.pt_dim       = 3;
-//     d_args.dom_dim      = 2;
-//     d_args.p[0]         = degree;
-//     d_args.p[1]         = degree;
-//     d_args.ndom_pts[0]  = 1800;
-//     d_args.ndom_pts[1]  = 3600;
-//     strncpy(d_args.infile, "/Users/tpeterka/datasets/CESM-ATM-tylor/1800x3600/FLDSC_1_1800_3600.dat", sizeof(d_args.infile));
-//     master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-//                    { b->read_2d_scalar_data(cp, d_args); });
+    // compute the MFA
 
     fprintf(stderr, "\nStarting adaptive encoding...\n\n");
     double encode_time = MPI_Wtime();

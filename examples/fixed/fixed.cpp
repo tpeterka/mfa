@@ -11,6 +11,7 @@
 #include <vector>
 #include <iostream>
 #include <cmath>
+#include <string>
 
 #include <diy/master.hpp>
 #include <diy/reduce-operations.hpp>
@@ -37,11 +38,12 @@ int main(int argc, char** argv)
     int num_threads = 1;                        // needed in order to do timing
 
     // default command line arguments
-    int   pt_dim    = 3;                        // dimension of input points
-    int   dom_dim   = 2;                        // dimension of domain (<= pt_dim)
-    int   degree    = 4;                        // degree (same for all dims)
-    int   ndomp     = 100;                      // input number of domain points (same for all dims)
-    int   nctrl     = 11;                       // input number of control points (same for all dims)
+    int    pt_dim    = 3;                        // dimension of input points
+    int    dom_dim   = 2;                        // dimension of domain (<= pt_dim)
+    int    degree    = 4;                        // degree (same for all dims)
+    int    ndomp     = 100;                      // input number of domain points (same for all dims)
+    int    nctrl     = 11;                       // input number of control points (same for all dims)
+    string input     = "sine";                   // input dataset
 
     // get command line arguments
     using namespace opts;
@@ -51,6 +53,7 @@ int main(int argc, char** argv)
     ops >> Option('p', "degree",  degree,   " degree in each dimension of domain");
     ops >> Option('n', "ndomp",   ndomp,    " number of input points in each dimension of domain");
     ops >> Option('c', "nctrl",   nctrl,    " number of control points in each dimension");
+    ops >> Option('i', "input",   input,    " input dataset");
 
     if (ops >> Present('h', "help", "show help"))
     {
@@ -74,154 +77,69 @@ int main(int argc, char** argv)
 
     DomainArgs d_args;
 
-    // 1d sine function f(x) = sin(x)
+    // set default args for diy foreach callback functions
     d_args.pt_dim       = pt_dim;
     d_args.dom_dim      = dom_dim;
-    d_args.p[0]         = degree;
-    d_args.ndom_pts[0]  = ndomp;
-    d_args.min[0]       = -4.0 * M_PI;
-    d_args.max[0]       = 4.0 * M_PI;
-    d_args.s            = 1.0;              // scaling factor on range
-    d_args.nctrl_pts[0] = nctrl;            // set numbers of control points here, matching dimensionality of data
-    master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-                   { b->generate_sine_data(cp, d_args); });
+    for (int i = 0; i < MAX_DIM; i++)
+    {
+        d_args.p[i]         = degree;
+        d_args.ndom_pts[i]  = ndomp;
+    }
 
-    // 2d sine function f(x,y) = sine(x)sine(y)
-//     d_args.pt_dim       = pt_dim;
-//     d_args.dom_dim      = dom_dim;
-//     d_args.p[0]         = degree;
-//     d_args.p[1]         = degree;
-//     d_args.ndom_pts[0]  = ndomp;
-//     d_args.ndom_pts[1]  = ndomp;
-//     d_args.min[0]       = -4.0 * M_PI;
-//     d_args.min[1]       = -4.0 * M_PI;
-//     d_args.max[0]       = 4.0 * M_PI;
-//     d_args.max[1]       = 4.0 * M_PI;
-//     d_args.s            = 1.0;              // scaling factor on range
-//     d_args.nctrl_pts[0] = nctrl;             // set numbers of control points here, matching dimensionality of data
-//     d_args.nctrl_pts[1] = nctrl;
-//     master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-//             { b->generate_sine_data(cp, d_args); });
+    // initilize input data
 
-    // 1d sinc function f(x) = sin(x)/x
-//     d_args.pt_dim       = pt_dim;
-//     d_args.dom_dim      = dom_dim;
-//     d_args.p[0]         = degree;
-//     d_args.ndom_pts[0]  = ndomp;
-//     d_args.min[0]       = -4.0 * M_PI;
-//     d_args.max[0]       = 4.0 * M_PI;
-//     d_args.s            = 10.0;              // scaling factor on range
-//     d_args.nctrl_pts[0] = nctrl;            // set numbers of control points here, matching dimensionality of data
-//     master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-//                    { b->generate_sinc_data(cp, d_args); });
+    // sine function f(x) = sin(x), f(x,y) = sin(x)sin(y), ...
+    if (input == "sine")
+    {
+        for (int i = 0; i < MAX_DIM; i++)
+        {
+            d_args.min[i]       = -4.0 * M_PI;
+            d_args.max[i]       = 4.0  * M_PI;
+            d_args.nctrl_pts[i] = nctrl;
+        }
+        d_args.s            = 1.0;              // scaling factor on range
+        master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
+                { b->generate_sine_data(cp, d_args); });
+    }
 
-    // 2d sinc function f(x,y) = sinc(x)sinc(y)
-//      d_args.pt_dim       = pt_dim;
-//      d_args.dom_dim      = dom_dim;
-//      d_args.p[0]         = degree;
-//      d_args.p[1]         = degree;
-//      d_args.ndom_pts[0]  = ndomp;
-//      d_args.ndom_pts[1]  = ndomp;
-//      d_args.min[0]       = -4.0 * M_PI;
-//      d_args.min[1]       = -4.0 * M_PI;
-//      d_args.max[0]       = 4.0 * M_PI;
-//      d_args.max[1]       = 4.0 * M_PI;
-//      d_args.s            = 10.0;              // scaling factor on range
-//     d_args.nctrl_pts[0] = nctrl;             // set numbers of control points here, matching dimensionality of data
-//     d_args.nctrl_pts[1] = nctrl;
-//      master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-//                     { b->generate_sinc_data(cp, d_args); });
+    // sinc function f(x) = sin(x)/x, f(x,y) = sinc(x)sinc(y), ...
+    if (input == "sinc")
+    {
+        for (int i = 0; i < MAX_DIM; i++)
+        {
+            d_args.min[i]       = -4.0 * M_PI;
+            d_args.max[i]       = 4.0  * M_PI;
+            d_args.nctrl_pts[i] = nctrl;
+        }
+        d_args.s            = 10.0;              // scaling factor on range
+        master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
+                { b->generate_sinc_data(cp, d_args); });
+    }
 
-   // 3d sinc function
-//     d_args.pt_dim       = pt_dim;
-//     d_args.dom_dim      = dom_dim;
-//     d_args.p[0]         = degree;
-//     d_args.p[1]         = degree;
-//     d_args.p[2]         = degree;
-//     d_args.ndom_pts[0]  = ndomp;
-//     d_args.ndom_pts[1]  = ndomp;
-//     d_args.ndom_pts[2]  = ndomp;
-//     d_args.min[0]       = -4.0 * M_PI;
-//     d_args.min[1]       = -4.0 * M_PI;
-//     d_args.min[2]       = -4.0 * M_PI;
-//     d_args.max[0]       = 4.0 * M_PI;
-//     d_args.max[1]       = 4.0 * M_PI;
-//     d_args.max[2]       = 4.0 * M_PI;
-//     d_args.s            = 10.0;              // scaling factor on range
-//     d_args.nctrl_pts[0] = nctrl;             // set numbers of control points here, matching dimensionality of data
-//     d_args.nctrl_pts[1] = nctrl;
-//     d_args.nctrl_pts[2] = nctrl;
-//     master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-//                    { b->generate_sinc_data(cp, d_args); });
+    // S3D dataset
+    if (input == "s3d")
+    {
+        d_args.ndom_pts[0]  = 704;
+        d_args.ndom_pts[1]  = 540;
+        d_args.ndom_pts[2]  = 550;
+        d_args.nctrl_pts[0] = 140;
+        d_args.nctrl_pts[1] = 108;
+        d_args.nctrl_pts[2] = 110;
+        strncpy(d_args.infile, "/Users/tpeterka/datasets/flame/6_small.xyz", sizeof(d_args.infile));
+        if (dom_dim == 2)
+            master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
+                    { b->read_2d_slice_3d_vector_data(cp, d_args); });
+        else if (dom_dim == 3)
+            master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
+                    { b->read_3d_vector_data(cp, d_args); });
+        else
+        {
+            fprintf(stderr, "S3D data only available in 2 or 3d domain\n");
+            exit(0);
+        }
+    }
 
-   // 4d sinc function
-//     d_args.pt_dim       = pt_dim;
-//     d_args.dom_dim      = dom_dim;
-//     d_args.p[0]         = degree;
-//     d_args.p[1]         = degree;
-//     d_args.p[2]         = degree;
-//     d_args.p[3]         = degree;
-//     d_args.ndom_pts[0]  = ndomp;
-//     d_args.ndom_pts[1]  = ndomp;
-//     d_args.ndom_pts[2]  = ndomp;
-//     d_args.ndom_pts[3]  = ndomp;
-//     d_args.min[0]       = -4.0 * M_PI;
-//     d_args.min[1]       = -4.0 * M_PI;
-//     d_args.min[2]       = -4.0 * M_PI;
-//     d_args.min[3]       = -4.0 * M_PI;
-//     d_args.max[0]       = 4.0 * M_PI;
-//     d_args.max[1]       = 4.0 * M_PI;
-//     d_args.max[2]       = 4.0 * M_PI;
-//     d_args.max[3]       = 4.0 * M_PI;
-//     d_args.s            = 10.0;              // scaling factor on range
-//     d_args.nctrl_pts[0] = nctrl;             // set numbers of control points here, matching dimensionality of data
-//     d_args.nctrl_pts[1] = nctrl;
-//     d_args.nctrl_pts[2] = nctrl;
-//     d_args.nctrl_pts[3] = nctrl;
-//     master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-//                    { b->generate_sinc_data(cp, d_args); });
-
-    // 1d S3D
-//     d_args.pt_dim       = 2;
-//     d_args.dom_dim      = 1;
-//     d_args.p[0]         = degree;
-//     d_args.ndom_pts[0]  = 704;
-//     d_args.ndom_pts[1]  = 540;
-//     d_args.ndom_pts[2]  = 550;
-//     d_args.nctrl_pts[0] = 140;                // set numbers of control points here, matching dimensionality of data
-//     strncpy(d_args.infile, "/Users/tpeterka/datasets/flame/6_small.xyz", sizeof(d_args.infile));
-//     master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-//                    { b->read_1d_slice_3d_vector_data(cp, d_args); });
-
-    // 2d S3D
-//     d_args.pt_dim       = 3;
-//     d_args.dom_dim      = 2;
-//     d_args.p[0]         = degree;
-//     d_args.p[1]         = degree;
-//     d_args.ndom_pts[0]  = 704;
-//     d_args.ndom_pts[1]  = 540;
-//     d_args.ndom_pts[2]  = 550;
-//     d_args.nctrl_pts[0] = 140;                // set numbers of control points here, matching dimensionality of data
-//     d_args.nctrl_pts[1] = 108;
-//     strncpy(d_args.infile, "/Users/tpeterka/datasets/flame/6_small.xyz", sizeof(d_args.infile));
-//     master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-//                    { b->read_2d_slice_3d_vector_data(cp, d_args); });
-
-    // 3d S3D
-//     d_args.pt_dim       = 4;
-//     d_args.dom_dim      = 3;
-//     d_args.p[0]         = degree;
-//     d_args.p[1]         = degree;
-//     d_args.p[2]         = degree;
-//     d_args.ndom_pts[0]  = 704;
-//     d_args.ndom_pts[1]  = 540;
-//     d_args.ndom_pts[2]  = 550;
-//     d_args.nctrl_pts[0] = 140;                // set numbers of control points here, matching dimensionality of data
-//     d_args.nctrl_pts[1] = 108;
-//     d_args.nctrl_pts[2] = 110;
-//     strncpy(d_args.infile, "/Users/tpeterka/datasets/flame/6_small.xyz", sizeof(d_args.infile));
-//     master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-//                    { b->read_3d_vector_data(cp, d_args); });
+    // compute the MFA
 
     fprintf(stderr, "\nStarting fixed encoding...\n\n");
     double encode_time = MPI_Wtime();
