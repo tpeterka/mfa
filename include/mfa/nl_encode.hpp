@@ -80,14 +80,14 @@ namespace mfa
                     mfa.max_err = max_err;
 
                     opt_ctrl_pts = mfa.ctrl_pts;
-                    if (max_err / mfa.dom_range < err_limit)
+                    if (max_err / mfa.range_extent < err_limit)
                         done = true;
 
                     // pop old control points
                     mfa.ctrl_pts = old_ctrl_pts;
 
                     // debug
-                    cerr << "iteration=" << niter << " err=" << max_err / mfa.dom_range << " x=" << x.transpose() << endl;
+                    cerr << "iteration=" << niter << " err=" << max_err / mfa.range_extent << " x=" << x.transpose() << endl;
 
                     return max_err;
                 }

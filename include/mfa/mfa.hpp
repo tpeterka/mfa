@@ -161,7 +161,7 @@ namespace mfa
        MatrixX<T>&               ctrl_pts;      // (output) control pts (row-major order: 1st dim changes fastest)
        VectorX<T>&               weights;       // (output) weights associated with control points
        VectorX<T>&               knots;         // (output) knots (single coords: 1st dim knots, 2nd dim, ...)
-       T                         dom_range;     // max extent of input data points
+       T                         range_extent;  // extent of range value of input data points
        vector<size_t>            po;            // starting offset for params in each dim
        vector< vector <size_t> > co;            // starting offset for curves in each dim
        vector<size_t>            ko;            // starting offset for knots in each dim

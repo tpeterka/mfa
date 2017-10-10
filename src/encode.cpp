@@ -761,7 +761,7 @@ ErrorCurve(
 //         fprintf(stderr, "param=%.3f span=[%.3f %.3f]\n", mfa.params(po[k] + i), knots(mfa.ko[k] + span), knots(mfa.ko[k] + span + 1));
 
         decoder.CurvePt(k, mfa.params(mfa.po[k] + i), ctrl_pts, weights, cpt, mfa.ko[k]);
-        T err = fabs(mfa.NormalDistance(cpt, co + i * mfa.ds[k])) / mfa.dom_range;     // normalized by data range
+        T err = fabs(mfa.NormalDistance(cpt, co + i * mfa.ds[k])) / mfa.range_extent;       // normalized by data range
 //         T err = fabs(mfa.CurveDistance(k, cpt, co + i * mfa.ds[k])) / mfa.dom_range;     // normalized by data range
         if (err > err_limit)
         {
@@ -822,7 +822,7 @@ ErrorCurve(
 
         decoder.CurvePt(k, mfa.params(mfa.po[k] + i), ctrl_pts, weights, cpt, mfa.ko[k]);
 
-        T err = fabs(mfa.NormalDistance(cpt, co + i * mfa.ds[k])) / mfa.dom_range;     // normalized by data range
+        T err = fabs(mfa.NormalDistance(cpt, co + i * mfa.ds[k])) / mfa.range_extent;     // normalized by data range
 
         if (err > err_limit && err > max_err)  // potential new knot
         {
@@ -896,7 +896,7 @@ ErrorCurve(
 
         decoder.CurvePt(k, mfa.params(mfa.po[k] + i), ctrl_pts, weights, cpt, mfa.ko[k]);
 
-        T err = fabs(mfa.NormalDistance(cpt, co + i * mfa.ds[k])) / mfa.dom_range;     // normalized by data range
+        T err = fabs(mfa.NormalDistance(cpt, co + i * mfa.ds[k])) / mfa.range_extent;       // normalized by data range
 //         T err = fabs(mfa.CurveDistance(k, cpt, co + i * mfa.ds[k])) / mfa.dom_range;     // normalized by data range
 
         if (err > err_limit)
@@ -979,7 +979,7 @@ ErrorCurve(
 
         decoder.CurvePt(k, mfa.params(mfa.po[k] + i), to, cpt);
 
-        T err = fabs(mfa.NormalDistance(cpt, co + i * mfa.ds[k])) / mfa.dom_range;     // normalized by data range
+        T err = fabs(mfa.NormalDistance(cpt, co + i * mfa.ds[k])) / mfa.range_extent;     // normalized by data range
 
         if (err > err_limit)
         {
@@ -1101,8 +1101,8 @@ ErrorCtrlCurve(
                     cpt(k), mfa.domain(co + j * mfa.ds[k], k), mfa.domain(co + (j + 1) * mfa.ds[k], k));
 
         // compute error
-//         T err = fabs(mfa.NormalDistance(cpt, co + j * mfa.ds[k])) / mfa.dom_range;     // normalized by data range
-        T err = fabs(mfa.CurveDistance(k, cpt, co + j * mfa.ds[k])) / mfa.dom_range;     // normalized by data range
+//         T err = fabs(mfa.NormalDistance(cpt, co + j * mfa.ds[k])) / mfa.range_extent;     // normalized by data range
+        T err = fabs(mfa.CurveDistance(k, cpt, co + j * mfa.ds[k])) / mfa.range_extent;      // normalized by data range
 
         if (err > err_limit)
         {

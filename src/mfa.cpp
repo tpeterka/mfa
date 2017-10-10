@@ -68,7 +68,8 @@ MFA(VectorXi&   p_,             // polynomial degree in each dimension
     assert(p.size() < domain.cols());
 
     // max extent of input data points
-    dom_range = domain.maxCoeff() - domain.minCoeff();
+    int last     = domain.cols() - 1;
+    range_extent = domain.col(last).maxCoeff() - domain.col(last).minCoeff();
 
     // set number of control points to the minimum, p + 1, if they have not been initialized
     if (!ctrl_pts_.rows() && !nctrl_pts_.size())
@@ -105,7 +106,7 @@ MFA(VectorXi&   p_,             // polynomial degree in each dimension
 
     // precompute curve parameters for input points
     params.resize(tot_nparams);
-#if 0
+#if 1
     Params();                               // params space according to the curve length (per P&T)
 #else
     DomainParams();                         // params spaced according to domain spacing
@@ -113,7 +114,7 @@ MFA(VectorXi&   p_,             // polynomial degree in each dimension
 
     // compute knots
     knots.resize(tot_nknots);
-#if 0
+#if 1
     Knots();                                // knots spaced according to parameters (per P&T)
 #else
     UniformKnots();                         // knots spaced uniformly

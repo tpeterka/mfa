@@ -88,6 +88,19 @@ int main(int argc, char** argv)
         d_args.ndom_pts[i]  = ndomp;
     }
 
+    // sine function f(x) = sin(x), f(x,y) = sin(x)sin(y), ...
+    if (input == "sine")
+    {
+        for (int i = 0; i < MAX_DIM; i++)
+        {
+            d_args.min[i]       = -4.0 * M_PI;
+            d_args.max[i]       = 4.0  * M_PI;
+        }
+        d_args.s            = 1.0;              // scaling factor on range
+        master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
+                { b->generate_sine_data(cp, d_args); });
+    }
+
     // sinc function f(x) = sin(x)/x, f(x,y) = sinc(x)sinc(y), ...
     if (input == "sinc")
     {
