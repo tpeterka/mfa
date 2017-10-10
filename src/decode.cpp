@@ -321,7 +321,7 @@ VolPt(VectorX<T>& param,                       // parameter value in each dim. o
 
         // always compute the point in the first dimension
         ctrl_pt = mfa.ctrl_pts.row(ctrl_idx);
-        T w = mfa.weights(ctrl_idx);
+        T w     = mfa.weights(ctrl_idx);
         temp[0] += (N[0])(0, iter[0] + span[0] - mfa.p(0)) * ctrl_pt * w;
         iter[0]++;
 

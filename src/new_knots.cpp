@@ -37,8 +37,9 @@ NewKnots_full(
 {
     mfa::Encoder<T> encoder(mfa);
 
-    // resize control points based on number of new knots added in previous round
+    // resize control points and weights
     mfa.ctrl_pts.resize(mfa.tot_nctrl, mfa.domain.cols());
+    mfa.weights = VectorX<T>::Ones(mfa.ctrl_pts.rows());
 
     // full n-d encoding
     encoder.Encode();
@@ -77,8 +78,9 @@ NewKnots_curve1(
     nnew_knots = VectorXi::Zero(mfa.p.size());
     new_knots.resize(0);
 
-    // control points
+    // resize control points and weights
     mfa.ctrl_pts.resize(mfa.tot_nctrl, mfa.domain.cols());
+    mfa.weights = VectorX<T>::Ones(mfa.ctrl_pts.rows());
 
     for (size_t k = 0; k < ndims; k++)              // for all domain dimensions
     {
@@ -259,8 +261,9 @@ NewKnots_curve(
     nnew_knots = VectorXi::Zero(mfa.p.size());
     new_knots.resize(0);
 
-    // control points
+    // resize control points and weights
     mfa.ctrl_pts.resize(mfa.tot_nctrl, mfa.domain.cols());
+    mfa.weights = VectorX<T>::Ones(mfa.ctrl_pts.rows());
 
     for (size_t k = 0; k < ndims; k++)              // for all domain dimensions
     {
@@ -423,8 +426,9 @@ NewKnots_curve(
     nnew_knots = VectorXi::Zero(mfa.p.size());
     new_knots.resize(0);
 
-    // control points
+    // resize control points and weights
     mfa.ctrl_pts.resize(mfa.tot_nctrl, mfa.domain.cols());
+    mfa.weights = VectorX<T>::Ones(mfa.ctrl_pts.rows());
 
     for (size_t k = 0; k < ndims; k++)              // for all domain dimensions
     {
@@ -609,8 +613,9 @@ NewKnots_hybrid(
 {
     mfa::Encoder<T> encoder(mfa);
 
-    // resize control points based on number of new knots added in previous round
+    // resize control points and weights
     mfa.ctrl_pts.resize(mfa.tot_nctrl, mfa.domain.cols());
+    mfa.weights = VectorX<T>::Ones(mfa.ctrl_pts.rows());
 
     // full n-d encoding
     encoder.Encode();
@@ -1007,7 +1012,7 @@ SplitSpan(
     nnew_knots(sd)  = 1;
 
     // debug
-    fprintf(stderr, "inserted new knot value=%.3f dim=%d\n", new_knot, sd);
+//     fprintf(stderr, "inserted new knot value=%.3f dim=%d\n", new_knot, sd);
 }
 
 #include    "new_knots_templates.cpp"

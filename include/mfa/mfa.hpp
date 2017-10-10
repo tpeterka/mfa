@@ -12,6 +12,10 @@
 // domain parameterization is the default method if no method is specified
 // #define CURVE_PARAMS
 
+// comment out the following line for low-d knot insertion
+// low-d is the default if no method is specified
+// #define HIGH_D
+
 #include <Eigen/Dense>
 #include <vector>
 #include <list>
