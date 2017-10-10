@@ -8,6 +8,10 @@
 #ifndef _MFA_HPP
 #define _MFA_HPP
 
+// comment out the following line for domain parameterization
+// domain parameterization is the default method if no method is specified
+// #define CURVE_PARAMS
+
 #include <Eigen/Dense>
 #include <vector>
 #include <list>

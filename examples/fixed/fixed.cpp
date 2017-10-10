@@ -62,6 +62,19 @@ int main(int argc, char** argv)
         return 1;
     }
 
+    // echo args
+    fprintf(stderr, "\n--------- Input arguments ----------\n");
+    cerr <<
+        "pt_dim = "    << pt_dim << " dom_dim = "    << dom_dim <<
+        "\ndegree = " << degree  << " input pts = "  << ndomp   << " ctrl pts = " << nctrl   <<
+        "\ninput = "  << input   << endl;
+#ifdef CURVE_PARAMS
+    cerr << "parameterization method = curve" << endl;
+#else
+    cerr << "parameterization method = domain" << endl;
+#endif
+    fprintf(stderr, "-------------------------------------\n\n");
+
     // initialize DIY
     diy::FileStorage          storage("./DIY.XXXXXX"); // used for blocks to be moved out of core
     diy::Master               master(world,
@@ -150,22 +163,23 @@ int main(int argc, char** argv)
 
     // debug: compute error field for visualization and max error to verify that it is below the threshold
     fprintf(stderr, "\nFinal decoding and computing max. error...\n");
-#if 1       // normal distance
+#ifdef CURVE_PARAMS     // normal distance
     master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
             { b->error(cp, true); });
-#else       // range coordinate difference
+#else                   // range coordinate difference
     master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
             { b->range_error(cp, true); });
 #endif
 
     // debug: save knot span domains for comparing error with location in knot span
-    fprintf(stderr, "\nFinal decoding and computing max. error...\n");
     master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
             { b->knot_span_domains(cp); });
 
     // print results
+    fprintf(stderr, "\n------- Final block results --------\n");
     master.foreach(&Block<real_t>::print_block);
-    fprintf(stderr, "encoding time = %.3lf s.\n", encode_time);
+    fprintf(stderr, "encoding time         = %.3lf s.\n", encode_time);
+    fprintf(stderr, "-------------------------------------\n\n");
 
     // save the results in diy format
     diy::io::write_blocks("approx.out", world, master);

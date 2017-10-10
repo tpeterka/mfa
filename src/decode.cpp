@@ -69,9 +69,6 @@ Decoder(MFA<T>& mfa_) :
 //
 // computes approximated points from a given set of domain points and an n-d NURBS volume
 // P&T eq. 9.77, p. 424
-// this version recomputes parameter values of input points and
-// recomputes basis functions rather than taking them as an input
-// this version also assumes weights = 1; no division by weight is done
 // assumes all vectors have been correctly resized by the caller
 template <typename T>
 void
@@ -103,34 +100,6 @@ Decode(MatrixX<T>& approx)                 // pts in approximated volume (1st di
         approx.row(i) = cpt;
     });
     fprintf(stderr, "100 %% decoded\n");
-
-    // normal distance computation
-    T      max_err;                         // max. error found so far
-    size_t max_idx;                         // domain point idx at max error
-    for (size_t i = 0; i < (size_t)mfa.domain.rows(); i++)
-    {
-        VectorX<T> cpt = approx.row(i);
-        T err    = fabs(mfa.NormalDistance(cpt, i));
-        if (i == 0 || err > max_err)
-        {
-            max_err = err;
-            max_idx = i;
-        }
-    }
-
-    // normalize max error by size of input data (domain and range)
-    T min = mfa.domain.minCoeff();
-    T max = mfa.domain.maxCoeff();
-    T range = max - min;
-
-    // debug
-    fprintf(stderr, "data range = %.1f\n", range);
-    fprintf(stderr, "raw max_error = %e\n", max_err);
-    cerr << "position of max error: idx=" << max_idx << "\n" << mfa.domain.row(max_idx) << endl;
-
-    max_err /= range;
-
-    fprintf(stderr, "|normalized max_err| = %e\n", max_err);
 }
 
 #else
@@ -139,9 +108,6 @@ Decode(MatrixX<T>& approx)                 // pts in approximated volume (1st di
 //
 // computes approximated points from a given set of domain points and an n-d NURBS volume
 // P&T eq. 9.77, p. 424
-// this version recomputes parameter values of input points and
-// recomputes basis functions rather than taking them as an input
-// this version also assumes weights = 1; no division by weight is done
 // assumes all vectors have been correctly resized by the caller
 template <typename T>
 void
@@ -162,18 +128,12 @@ Decode(MatrixX<T>& approx)                 // pts in approximated volume (1st di
     VectorX<T> param(mfa.p.size());            // parameters for one point
     for (size_t i = 0; i < mfa.domain.rows(); i++)
     {
-        // debug
-        // cerr << "input point:\n" << mfa.domain.row(i) << endl;
-
         // extract parameter vector for one input point from the linearized vector of all params
         for (size_t j = 0; j < mfa.p.size(); j++)
             param(j) = mfa.params(iter[j] + ofst[j]);
 
         // compute approximated point for this parameter vector
         VolPt(param, cpt);
-
-        // debug
-//         cerr << "domain pt:\n" << mfa.domain.row(i) << "\ncpt:\n" << cpt << endl;
 
         // update the indices in the linearized vector of all params for next input point
         for (size_t j = 0; j < mfa.p.size(); j++)
@@ -194,34 +154,6 @@ Decode(MatrixX<T>& approx)                 // pts in approximated volume (1st di
             fprintf(stderr, "\r%.0f %% decoded", (T)i / (T)(mfa.domain.rows()) * 100);
     }
     fprintf(stderr, "\r100 %% decoded\n");
-
-    // normal distance computation
-    T max_err;                          // max. error found so far
-    size_t max_idx;                         // domain point idx at max error
-    for (size_t i = 0; i < (size_t)mfa.domain.rows(); i++)
-    {
-        VectorX<T> cpt = approx.row(i);
-        T err    = fabs(mfa.NormalDistance(cpt, i));
-        if (i == 0 || err > max_err)
-        {
-            max_err = err;
-            max_idx = i;
-        }
-    }
-
-    // normalize max error by size of input data (domain and range)
-    T min = mfa.domain.minCoeff();
-    T max = mfa.domain.maxCoeff();
-    T range = max - min;
-
-    // debug
-    fprintf(stderr, "data range = %.1f\n", range);
-    fprintf(stderr, "raw max_error = %e\n", max_err);
-    cerr << "position of max error: idx=" << max_idx << "\n" << mfa.domain.row(max_idx) << endl;
-
-    max_err /= range;
-
-    fprintf(stderr, "|normalized max_err| = %e\n", max_err);
 }
 
 #endif

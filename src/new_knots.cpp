@@ -321,7 +321,7 @@ NewKnots_curve(
         for (size_t s = s0; s >= 1 && ncurves / s < max_num_curves; s /= 2)        // for all step sizes over curves
         {
             // debug
-            fprintf(stderr, "k=%ld s=%ld\n", k, s);
+//             fprintf(stderr, "k=%ld s=%ld\n", k, s);
 
             bool new_max_nerr = false;                      // this step size changed the max_nerr
 
@@ -381,7 +381,7 @@ NewKnots_curve(
         }
 
         // print progress
-        fprintf(stderr, "\rdimension %ld of %d encoded\n", k + 1, ndims);
+//         fprintf(stderr, "\rdimension %ld of %d encoded\n", k + 1, ndims);
     }                                                      // domain dimensions
 
     mfa.InsertKnots(nnew_knots, new_knots);

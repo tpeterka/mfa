@@ -38,7 +38,7 @@ AdaptiveEncode(T err_limit)                                     // maximum allow
     for (int iter = 0; ; iter++)
 //     for (int iter = 0; iter < 3; iter++)
     {
-        fprintf(stderr, "\nIteration %d...\n", iter);
+        fprintf(stderr, "Iteration %d...\n", iter);
 
         // debug
 //         cerr << "current knots:\n" << mfa.knots << endl;
@@ -64,7 +64,7 @@ AdaptiveEncode(T err_limit)                                     // maximum allow
         // no new knots to be added
         if (done)
         {
-            fprintf(stderr, "\n\nKnot insertion done after %d iterations; no new knots added.\n\n", iter + 1);
+            fprintf(stderr, "\nKnot insertion done after %d iterations; no new knots added.\n\n", iter + 1);
             break;
         }
 
@@ -78,13 +78,13 @@ AdaptiveEncode(T err_limit)                                     // maximum allow
             }
         if (done)
         {
-            fprintf(stderr, "\n\nKnot insertion done after %d iterations; control points would outnumber input points.\n", iter + 1);
+            fprintf(stderr, "\nKnot insertion done after %d iterations; control points would outnumber input points.\n", iter + 1);
             break;
         }
     }
 
     // final full encoding needed after last knot insertion above
-    fprintf(stderr, "\nEncoding in full %ldD\n", mfa.p.size());
+    fprintf(stderr, "Encoding in full %ldD\n", mfa.p.size());
     Encode();
 }
 

@@ -1290,12 +1290,6 @@ struct Block
 #endif
 
         mfa->max_err = max_err;
-
-        // debug
-        fprintf(stderr, "data range = %.1f\n", mfa->range_extent);
-        fprintf(stderr, "raw max_error = %e\n", max_err);
-        cerr << "position of max error: idx=" << max_idx << "\n" << domain.row(max_idx) << endl;
-        fprintf(stderr, "|normalized max_err| = %e\n", max_err / mfa->range_extent);
     }
 
     // compute error field and maximum error in the block
@@ -1368,12 +1362,6 @@ struct Block
 #endif
 
         mfa->max_err = max_err;
-
-        // debug
-//         fprintf(stderr, "range extent  = %.1f\n", mfa->range_extent);
-//         fprintf(stderr, "raw max_error = %e\n", max_err);
-//         cerr << "position of max error: idx=" << max_idx << "\n" << domain.row(max_idx) << endl;
-//         fprintf(stderr, "|normalized max_err| = %e\n", max_err / mfa->dom_range);
     }
 
     // save knot span domains for later comparison with error field
@@ -1384,7 +1372,6 @@ struct Block
 
     void print_block(const diy::Master::ProxyWithLink& cp)
     {
-        fprintf(stderr, "\n--- Final block results ---\n");
 //         cerr << "domain\n" << domain << endl;
 //         cerr << "nctrl_pts:\n" << nctrl_pts << endl;
 //         cerr << ctrl_pts.rows() << " final control points\n" << ctrl_pts << endl;
@@ -1397,9 +1384,9 @@ struct Block
         fprintf(stderr, "L2 error              = %e\n", sqrt(sum_sq_err /nctrl_pts.rows()));
         fprintf(stderr, "RMS error             = %e\n", sqrt(sum_sq_err /domain.rows()));
         fprintf(stderr, "# input points        = %ld\n", domain.rows());
-        fprintf(stderr, "# output ctrl pts     = %ld    # output knots = %ld\n",
-                ctrl_pts.rows(), knots.size());
-        fprintf(stderr, "compression ratio = %.2f\n",
+        fprintf(stderr, "# output ctrl pts     = %ld\n", ctrl_pts.rows());
+        fprintf(stderr, "# output knots        = %ld\n",knots.size());
+        fprintf(stderr, "compression ratio     = %.2f\n",
                 (real_t)(domain.rows()) / (ctrl_pts.rows() + knots.size() / ctrl_pts.cols()));
     }
 

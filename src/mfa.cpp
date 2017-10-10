@@ -104,19 +104,14 @@ MFA(VectorXi&   p_,             // polynomial degree in each dimension
         ds[i] = ds[i - 1] * ndom_pts[i - 1];
     }
 
-    // precompute curve parameters for input points
+    // precompute curve parameters and knots for input points
     params.resize(tot_nparams);
-#if 1
-    Params();                               // params space according to the curve length (per P&T)
-#else
-    DomainParams();                         // params spaced according to domain spacing
-#endif
-
-    // compute knots
     knots.resize(tot_nknots);
-#if 1
+#ifdef CURVE_PARAMS
+    Params();                               // params space according to the curve length (per P&T)
     Knots();                                // knots spaced according to parameters (per P&T)
 #else
+    DomainParams();                         // params spaced according to domain spacing
     UniformKnots();                         // knots spaced uniformly
 #endif
 
