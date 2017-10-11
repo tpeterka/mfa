@@ -84,6 +84,10 @@ NewKnots_curve1(
 
     for (size_t k = 0; k < ndims; k++)              // for all domain dimensions
     {
+        // for now set weights to 1, TODO: get weights from elsewhere
+        // NB: weights are for all n + 1 control points, not just the n -1 interior ones
+        VectorX<T> weights = VectorX<T>::Ones(n(k) + 1);
+
         // maximum number of domain points with error greater than err_limit
         size_t max_nerr     =  0;
 
@@ -148,7 +152,7 @@ NewKnots_curve1(
                 MatrixX<T> P(n(k) - 1, mfa.domain.cols());
 
                 // compute R from input domain points
-                encoder.RHS(k, N, R, mfa.ko[k], mfa.po[k], mfa.co[k][j * s]);
+                encoder.RHS(k, N, R, weights, mfa.ko[k], mfa.po[k], mfa.co[k][j * s]);
 
                 // solve for P for one curve of control points
                 P = NtN.ldlt().solve(R);
@@ -201,7 +205,7 @@ NewKnots_curve1(
         MatrixX<T> P(n(k) - 1, mfa.domain.cols());
 
         // compute R from input domain points
-        encoder.RHS(k, N, R, mfa.ko[k], mfa.po[k], mfa.co[k][worst_curve_idx]);
+        encoder.RHS(k, N, R, weights, mfa.ko[k], mfa.po[k], mfa.co[k][worst_curve_idx]);
 
         // solve for P for one curve of control points
         P = NtN.ldlt().solve(R);
@@ -267,6 +271,10 @@ NewKnots_curve(
 
     for (size_t k = 0; k < ndims; k++)              // for all domain dimensions
     {
+        // for now set weights to 1, TODO: get weights from elsewhere
+        // NB: weights are for all n + 1 control points, not just the n -1 interior ones
+        VectorX<T> weights = VectorX<T>::Ones(n(k) + 1);
+
         // temporary control points for one curve
         MatrixX<T> temp_ctrl = MatrixX<T>::Zero(mfa.nctrl_pts(k), mfa.domain.cols());
 
@@ -335,7 +343,7 @@ NewKnots_curve(
                 if (j >= n_step_sizes && (j - n_step_sizes) % s == 0)   // this is one of the s-th curves; compute it
                 {
                     // compute R from input domain points
-                    encoder.RHS(k, N, R, mfa.ko[k], mfa.po[k], mfa.co[k][j]);
+                    encoder.RHS(k, N, R, weights, mfa.ko[k], mfa.po[k], mfa.co[k][j]);
 
                     // solve for P for one curve of control points
                     P = NtN.ldlt().solve(R);
@@ -432,6 +440,10 @@ NewKnots_curve(
 
     for (size_t k = 0; k < ndims; k++)              // for all domain dimensions
     {
+        // for now set weights to 1, TODO: get weights from elsewhere
+        // NB: weights are for all n + 1 control points, not just the n -1 interior ones
+        VectorX<T> weights = VectorX<T>::Ones(n(k) + 1);
+
         // maximum number of domain points with error greater than err_limit
         size_t max_nerr     =  0;
 
@@ -493,7 +505,7 @@ NewKnots_curve(
                 MatrixX<T> P(n(k) - 1, mfa.domain.cols());
 
                 // compute R from input domain points
-                RHS(k, N, R, mfa.ko[k], mfa.po[k], mfa.co[k][j * s]);
+                RHS(k, N, R, weights, mfa.ko[k], mfa.po[k], mfa.co[k][j * s]);
 
                 // solve for P for one curve of control points
                 P = NtN.ldlt().solve(R);
@@ -546,7 +558,7 @@ NewKnots_curve(
         MatrixX<T> P(n(k) - 1, mfa.domain.cols());
 
         // compute R from input domain points
-        RHS(k, N, R, mfa.ko[k], mfa.po[k], mfa.co[k][worst_curve_idx]);
+        RHS(k, N, R, weights, mfa.ko[k], mfa.po[k], mfa.co[k][worst_curve_idx]);
 
         // solve for P for one curve of control points
         P = NtN.ldlt().solve(R);

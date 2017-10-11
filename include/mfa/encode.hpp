@@ -40,6 +40,7 @@ namespace mfa
                 int         cur_dim,  // current dimension
                 MatrixX<T>& N,        // matrix of basis function coefficients
                 MatrixX<T>& R,        // (output) residual matrix allocated by caller
+                VectorX<T>& weights,  // precomputed weights for n + 1 control points on this curve
                 int         ko = 0,   // optional index of starting knot
                 int         po = 0,   // optional index of starting parameter
                 int         co = 0);  // optional index of starting domain pt in current curve
@@ -49,6 +50,7 @@ namespace mfa
                 MatrixX<T>& in_pts,   // input points (not the default domain stored in the mfa)
                 MatrixX<T>& N,        // matrix of basis function coefficients
                 MatrixX<T>& R,        // (output) residual matrix allocated by caller
+                VectorX<T>& weights,  // precomputed weights for n + 1 control points on this curve
                 int         ko = 0,   // optional index of starting knot
                 int         po = 0,   // optional index of starting parameter
                 int         co = 0,   // optional index of starting input pt in current curve
@@ -69,7 +71,8 @@ namespace mfa
                 size_t      cs,          // stride for reading domain points
                 size_t      to,          // starting ofst for writing control pts
                 MatrixX<T>& temp_ctrl0,  // first temporary control points buffer
-                MatrixX<T>& temp_ctrl1); // second temporary control points buffer
+                MatrixX<T>& temp_ctrl1,  // second temporary control points buffer
+                VectorX<T>& weights);    // precomputed weights for control points on this curve
 
         void CopyCtrl(
                 MatrixX<T>& P,          // solved points for current dimension and curve

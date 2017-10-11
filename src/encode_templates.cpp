@@ -30,6 +30,7 @@ RHS(
         int       cur_dim,  // current dimension
         MatrixXf& N,        // matrix of basis function coefficients
         MatrixXf& R,        // (output) residual matrix allocated by caller
+        VectorXf& weights,  // precomputed weights for n + 1 control points on this curve
         int       ko = 0,   // optional index of starting knot
         int       po = 0,   // optional index of starting parameter
         int       co = 0);  // optional index of starting domain pt in current curve
@@ -43,6 +44,7 @@ RHS(
         MatrixXf& in_pts,   // input points (not the default domain stored in the mfa)
         MatrixXf& N,        // matrix of basis function coefficients
         MatrixXf& R,        // (output) residual matrix allocated by caller
+        VectorXf& weights,  // precomputed weights for n + 1 control points on this curve
         int       ko = 0,   // optional index of starting knot
         int       po = 0,   // optional index of starting parameter
         int       co = 0,   // optional index of starting input pt in current curve
@@ -71,7 +73,8 @@ CtrlCurve(
         size_t    cs,          // stride for reading domain points
         size_t    to,          // starting ofst for writing control pts
         MatrixXf& temp_ctrl0,  // first temporary control points buffer
-        MatrixXf& temp_ctrl1); // second temporary control points buffer
+        MatrixXf& temp_ctrl1,  // second temporary control points buffer
+        VectorXf& weights);    // precomputed weights for control points on this curve
 
 template
 void
@@ -187,6 +190,7 @@ RHS(
         int       cur_dim,  // current dimension
         MatrixXd& N,        // matrix of basis function coefficients
         MatrixXd& R,        // (output) residual matrix allocated by caller
+        VectorXd& weights,  // precomputed weights for n + 1 control points on this curve
         int       ko = 0,   // optional index of starting knot
         int       po = 0,   // optional index of starting parameter
         int       co = 0);  // optional index of starting domain pt in current curve
@@ -200,6 +204,7 @@ RHS(
         MatrixXd& in_pts,   // input points (not the default domain stored in the mfa)
         MatrixXd& N,        // matrix of basis function coefficients
         MatrixXd& R,        // (output) residual matrix allocated by caller
+        VectorXd& weights,  // precomputed weights for n + 1 control points on this curve
         int       ko = 0,   // optional index of starting knot
         int       po = 0,   // optional index of starting parameter
         int       co = 0,   // optional index of starting input pt in current curve
@@ -228,7 +233,8 @@ CtrlCurve(
         size_t    cs,          // stride for reading domain points
         size_t    to,          // starting ofst for writing control pts
         MatrixXd& temp_ctrl0,  // first temporary control points buffer
-        MatrixXd& temp_ctrl1); // second temporary control points buffer
+        MatrixXd& temp_ctrl1,  // second temporary control points buffer
+        VectorXd& weights);    // precomputed weights for control points on this curve
 
 template
 void

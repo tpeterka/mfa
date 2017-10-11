@@ -139,6 +139,10 @@ Encode()
 
     for (size_t k = 0; k < ndims; k++)      // for all domain dimensions
     {
+        // for now set weights to 1, TODO: get weights from elsewhere
+        // NB: weights are for all n + 1 control points, not just the n -1 interior ones
+        VectorX<T> weights = VectorX<T>::Ones(n(k) + 1);
+
         // number of curves in this dimension
         size_t ncurves;
         ncurves = 1;
@@ -229,7 +233,7 @@ Encode()
             MatrixX<T> P(n(k) - 1, mfa.domain.cols());
 
             // compute the one curve of control points
-            CtrlCurve(N, NtN, R, P, n, k, co[j], cs, to[j], temp_ctrl0, temp_ctrl1);
+            CtrlCurve(N, NtN, R, P, n, k, co[j], cs, to[j], temp_ctrl0, temp_ctrl1, weights);
         });                                                  // curves in this dimension
 
         // adjust offsets and strides for next dimension
@@ -297,6 +301,10 @@ Encode()
 
     for (size_t k = 0; k < ndims; k++)          // for all domain dimensions
     {
+        // for now set weights to 1, TODO: get weights from elsewhere
+        // NB: weights are for all n + 1 control points, not just the n -1 interior ones
+        VectorX<T> weights = VectorX<T>::Ones(n(k) + 1);
+
         // number of curves in this dimension
         size_t ncurves;
         ncurves = 1;
@@ -399,7 +407,7 @@ Encode()
                         k, (T)j / (T)ncurves * 100, j, ncurves);
 
             // compute the one curve of control points
-            CtrlCurve(N, NtN, R, P, n, k, co[j], cs, to[j], temp_ctrl0, temp_ctrl1);
+            CtrlCurve(N, NtN, R, P, n, k, co[j], cs, to[j], temp_ctrl0, temp_ctrl1, weights);
         }
 
         // adjust offsets and strides for next dimension
@@ -430,12 +438,14 @@ template <typename T>
 void
 mfa::
 Encoder<T>::
-RHS(int         cur_dim,             // current dimension
-    MatrixX<T>& N,                   // matrix of basis function coefficients
-    MatrixX<T>& R,                   // (output) residual matrix allocated by caller
-    int         ko,                  // optional index of starting knot
-    int         po,                  // optional index of starting parameter
-    int         co)                  // optional index of starting domain pt in current curve
+RHS(
+        int         cur_dim,             // current dimension
+        MatrixX<T>& N,                   // matrix of basis function coefficients
+        MatrixX<T>& R,                   // (output) residual matrix allocated by caller
+        VectorX<T>& weights,             // precomputed weights for n + 1 control points on this curve
+        int         ko,                  // optional index of starting knot
+        int         po,                  // optional index of starting parameter
+        int         co)                  // optional index of starting domain pt in current curve
 {
     int n      = N.cols() + 1;               // number of control point spans
     int m      = N.rows() + 1;               // number of input data point spans
@@ -459,6 +469,10 @@ RHS(int         cur_dim,             // current dimension
     for (int i = 1; i < n; i++)
         for (int j = 0; j < Rk.cols(); j++)
             R(i - 1, j) = (N.col(i - 1).array() * Rk.col(j).array()).sum();
+
+    // multiply R by weights
+    for (int i = 1; i < n; i++)
+        R.row(i - 1) *= weights(i);         // skip first and last weight; R has only n - 1 rows but weights has all n + 1 elements
 }
 
 // computes right hand side vector of P&T eq. 9.63 and 9.67, p. 411-412 for a curve from a
@@ -467,14 +481,16 @@ template <typename T>
 void
 mfa::
 Encoder<T>::
-RHS(int         cur_dim,             // current dimension
-    MatrixX<T>& in_pts,              // input points (not the default domain stored in the mfa)
-    MatrixX<T>& N,                   // matrix of basis function coefficients
-    MatrixX<T>& R,                   // (output) residual matrix allocated by caller
-    int         ko,                  // optional index of starting knot
-    int         po,                  // optional index of starting parameter
-    int         co,                  // optional index of starting input pt in current curve
-    int         cs)                  // optional stride of input pts in current curve
+RHS(
+        int         cur_dim,             // current dimension
+        MatrixX<T>& in_pts,              // input points (not the default domain stored in the mfa)
+        MatrixX<T>& N,                   // matrix of basis function coefficients
+        MatrixX<T>& R,                   // (output) residual matrix allocated by caller
+        VectorX<T>& weights,             // precomputed weights for n + 1 control points on this curve
+        int         ko,                  // optional index of starting knot
+        int         po,                  // optional index of starting parameter
+        int         co,                  // optional index of starting input pt in current curve
+        int         cs)                  // optional stride of input pts in current curve
 {
     int n      = N.cols() + 1;               // number of control point spans
     int m      = N.rows() + 1;               // number of input data point spans
@@ -498,6 +514,10 @@ RHS(int         cur_dim,             // current dimension
     for (int i = 1; i < n; i++)
         for (int j = 0; j < Rk.cols(); j++)
             R(i - 1, j) = (N.col(i - 1).array() * Rk.col(j).array()).sum();
+
+    // multiply R by weights
+    for (int i = 1; i < n; i++)
+        R.row(i - 1) *= weights(i);         // skip first and last weight; R has only n - 1 rows but weights has all n + 1 elements
 }
 
 // Checks quantities needed for approximation
@@ -712,7 +732,8 @@ CtrlCurve(MatrixX<T>& N,          // basis functions for current dimension
           size_t      cs,         // stride for reading domain points
           size_t      to,         // starting ofst for writing control pts
           MatrixX<T>& temp_ctrl0, // first temporary control points buffer
-          MatrixX<T>& temp_ctrl1) // second temporary control points buffer
+          MatrixX<T>& temp_ctrl1, // second temporary control points buffer
+          VectorX<T>& weights)    // precomputed weights for control points on this curve
 {
     // compute R
     // first dimension reads from domain
@@ -720,11 +741,11 @@ CtrlCurve(MatrixX<T>& N,          // basis functions for current dimension
     // even dim reads temp_ctrl1, odd dim reads temp_ctrl0; opposite of writing order
     // because what was written in the previous dimension is read in the current one
     if (k == 0)
-        RHS(k, N, R, mfa.ko[k], mfa.po[k], co);                 // input points = default domain
+        RHS(k, N, R, weights, mfa.ko[k], mfa.po[k], co);                 // input points = default domain
     else if (k % 2)
-        RHS(k, temp_ctrl0, N, R, mfa.ko[k], mfa.po[k], co, cs); // input points = temp_ctrl0
+        RHS(k, temp_ctrl0, N, R, weights, mfa.ko[k], mfa.po[k], co, cs); // input points = temp_ctrl0
     else
-        RHS(k, temp_ctrl1, N, R, mfa.ko[k], mfa.po[k], co, cs); // input points = temp_ctrl1
+        RHS(k, temp_ctrl1, N, R, weights, mfa.ko[k], mfa.po[k], co, cs); // input points = temp_ctrl1
 
     // solve for P
     P = NtN.ldlt().solve(R);
