@@ -1157,7 +1157,7 @@ struct Block
         mfa->FixedEncode(nctrl_pts);
 
         // debug: play with weights
-//         weights(4) = 1.2;
+//         weights(4) = 1.1;
 //         cerr << "weights: " << weights.transpose() << endl;
     }
 
