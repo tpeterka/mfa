@@ -434,6 +434,14 @@ Encode()
 
 // computes right hand side vector of P&T eq. 9.63 and 9.67, p. 411-412 for a curve from the
 // original input domain points
+//
+// includes multiplication by weights, so that R = (N^TQ)Nw
+// where:
+// N is the matrix of basis function coefficients
+// Q is a diagonal matrix of input points on the diagonals and 0 elsewhere (excluding first and last points)
+// w is the weights vector, excluding first and last weights
+// R is column vector of m - 1 elements, each element multiple coordinates of the control points
+// ie, a matrix of m - 1 rows and control point dims columns
 template <typename T>
 void
 mfa::
@@ -471,12 +479,23 @@ RHS(
             R(i - 1, j) = (N.col(i - 1).array() * Rk.col(j).array()).sum();
 
     // multiply R by weights
-    for (int i = 1; i < n; i++)
-        R.row(i - 1) *= weights(i);         // skip first and last weight; R has only n - 1 rows but weights has all n + 1 elements
+    // skip first and last weight; R has only n - 1 rows but weights has all n + 1 elements
+    // each column of R done separately, because R has columns for each coordinate (multiple R
+    // vectors combined into one matrix)
+//     for (auto i = 0; i < R.cols(); i++)
+//         R.col(i) = R.col(i) * N * weights.segment(1, n - 1);
 }
 
 // computes right hand side vector of P&T eq. 9.63 and 9.67, p. 411-412 for a curve from a
 // new set of input points, not the default input domain
+//
+// includes multiplication by weights, so that R = (N^TQ)Nw
+// where:
+// N is the matrix of basis function coefficients
+// Q is a diagonal matrix of input points on the diagonals and 0 elsewhere (excluding first and last points)
+// w is the weights vector, excluding first and last weights
+// R is column vector of m - 1 elements, each element multiple coordinates of the control points
+// ie, a matrix of m - 1 rows and control point dims columns
 template <typename T>
 void
 mfa::
@@ -516,8 +535,11 @@ RHS(
             R(i - 1, j) = (N.col(i - 1).array() * Rk.col(j).array()).sum();
 
     // multiply R by weights
-    for (int i = 1; i < n; i++)
-        R.row(i - 1) *= weights(i);         // skip first and last weight; R has only n - 1 rows but weights has all n + 1 elements
+    // skip first and last weight; R has only n - 1 rows but weights has all n + 1 elements
+    // each column of R done separately, because R has columns for each coordinate (multiple R
+    // vectors combined into one matrix)
+//     for (auto i = 0; i < R.cols(); i++)
+//         R.col(i) = R.col(i) * N * weights.segment(1, n - 1);
 }
 
 // Checks quantities needed for approximation
