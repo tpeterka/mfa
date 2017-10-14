@@ -337,8 +337,8 @@ VolPt(VectorX<T>& param,                       // parameter value in each dim. o
                 temp[k + 1]        += (N[k + 1])(0, iter[k + 1] + span[k + 1] - mfa.p(k + 1)) * temp[k];
                 temp_denom(k + 1)  += temp_denom(k) * N[k + 1](0, iter[k + 1] + span[k + 1] - mfa.p(k + 1));
                 temp_denom(k)       = 0.0;
-                temp[k]             =  VectorX<T>::Zero(mfa.ctrl_pts.cols());
-                iter[k]             =  0;
+                temp[k]             = VectorX<T>::Zero(mfa.ctrl_pts.cols());
+                iter[k]             = 0;
                 iter[k + 1]++;
             }
         }

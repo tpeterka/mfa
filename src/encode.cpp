@@ -27,7 +27,9 @@ template <typename T>
 void
 mfa::
 Encoder<T>::
-AdaptiveEncode(T err_limit)                                     // maximum allowable normalized error
+AdaptiveEncode(
+        T   err_limit,                                          // maximum allowed normalized error
+        int max_rounds)                                         // (optional) maximum number of rounds
 {
     VectorXi  nnew_knots = VectorXi::Zero(mfa.p.size());        // number of new knots in each dim
     vector<T> new_knots;                                        // new knots (1st dim changes fastest)
@@ -36,12 +38,11 @@ AdaptiveEncode(T err_limit)                                     // maximum allow
 
     // loop until no change in knots
     for (int iter = 0; ; iter++)
-//     for (int iter = 0; iter < 3; iter++)
     {
-        fprintf(stderr, "Iteration %d...\n", iter);
+        if (max_rounds > 0 && iter >= max_rounds)               // optional cap on number of rounds
+            break;
 
-        // debug
-//         cerr << "current knots:\n" << mfa.knots << endl;
+        fprintf(stderr, "Iteration %d...\n", iter);
 
 #ifdef HIGH_D           // high-d w/ splitting spans in the middle
 

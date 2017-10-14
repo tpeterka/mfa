@@ -46,6 +46,7 @@ int main(int argc, char** argv)
     int    degree         = 4;                        // degree (same for all dims)
     int    ndomp          = 100;                      // input number of domain points (same for all dims)
     string input          = "sinc";                   // input dataset
+    int    max_rounds     = 0;                        // max. number of rounds (0 = no maximum)
 
     // get command line arguments
     using namespace opts;
@@ -56,6 +57,7 @@ int main(int argc, char** argv)
     ops >> Option('p', "degree",  degree,         " degree in each dimension of domain");
     ops >> Option('n', "ndomp",   ndomp,          " number of input points in each dimension of domain");
     ops >> Option('i', "input",   input,          " input dataset");
+    ops >> Option('r', "rounds",  max_rounds,     " maximum number of iterations");
 
     if (ops >> Present('h', "help", "show help"))
     {
@@ -67,9 +69,9 @@ int main(int argc, char** argv)
     // echo args
     fprintf(stderr, "\n--------- Input arguments ----------\n");
     cerr <<
-        "error = "    << norm_err_limit << " pt_dim = "     << pt_dim << " dom_dim = " << dom_dim <<
-        "\ndegree = " << degree         << " input pts = "  << ndomp  <<
-        "\ninput = "  << input          << endl;
+        "error = "    << norm_err_limit << " pt_dim = "      << pt_dim << " dom_dim = " << dom_dim <<
+        "\ndegree = " << degree         << " input pts = "   << ndomp  <<
+        "\ninput = "  << input          << " max. rounds = " << max_rounds << endl;
 #ifdef CURVE_PARAMS
     cerr << "parameterization method = curve" << endl;
 #else
@@ -211,7 +213,7 @@ int main(int argc, char** argv)
     fprintf(stderr, "\nStarting adaptive encoding...\n\n");
     double encode_time = MPI_Wtime();
     master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-            { b->adaptive_encode_block(cp, norm_err_limit); });
+            { b->adaptive_encode_block(cp, norm_err_limit, max_rounds); });
     encode_time = MPI_Wtime() - encode_time;
     fprintf(stderr, "\nAdaptive encoding done.\n");
 

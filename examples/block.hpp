@@ -1164,11 +1164,12 @@ struct Block
     // adaptively encode block to desired error limit
     void adaptive_encode_block(
             const diy::Master::ProxyWithLink& cp,
-            real_t                             err_limit)
+            real_t                            err_limit,
+            int                               max_rounds)
     {
         VectorXi unused;
         mfa = new mfa::MFA<T>(p, ndom_pts, domain, ctrl_pts, unused, weights, knots);
-        mfa->AdaptiveEncode(err_limit, nctrl_pts);
+        mfa->AdaptiveEncode(err_limit, nctrl_pts, max_rounds);
     }
 
     // nonlinear encoding of block to desired error limit

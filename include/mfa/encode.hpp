@@ -32,7 +32,9 @@ namespace mfa
         Encoder(MFA<T>& mfa_);
         ~Encoder() {}
         void Encode();
-        void AdaptiveEncode(T err_limit);   // maximum allowable normalized error
+        void AdaptiveEncode(
+                T   err_limit,              // maximum allowable normalized error
+                int max_rounds = 0);        // optional maximum number of rounds
 
    private:
 

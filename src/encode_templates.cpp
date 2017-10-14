@@ -20,7 +20,9 @@ template
 void
 mfa::
 Encoder<float>::
-AdaptiveEncode(float err_limit);               // maximum allowable normalized error
+AdaptiveEncode(
+        float err_limit,               // maximum allowable normalized error
+        int max_rounds);               // (optional) maximum number of rounds
 
 template
 void
@@ -177,7 +179,9 @@ template
 void
 mfa::
 Encoder<double>::
-AdaptiveEncode(double err_limit);               // maximum allowable normalized error
+AdaptiveEncode(
+        double err_limit,              // maximum allowable normalized error
+        int max_rounds);               // (optional) maximum number of rounds
 
 template
 void
