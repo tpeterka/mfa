@@ -1304,6 +1304,12 @@ struct Block
         if (decode_block)
         {
             approx.resize(domain.rows(), domain.cols());
+
+            // debug: test nonuniform weights
+//             for (size_t i = 0; i < mfa->weights.size(); i++)
+//                 mfa->weights(i) += i * .01;
+//             cerr << "weights:\n" << mfa->weights << endl;
+
             mfa->Decode(approx);
         }
 

@@ -203,6 +203,8 @@ CurvePt(
 //     fprintf(stderr, "1: denom=%.3f\n", denom);
 }
 
+// DEPRECATED
+#if 0
 // compute a point from a NURBS curve at a given parameter value
 // this version takes a temporary set of control points for one curve only rather than
 // reading full n-d set of control points from the mfa
@@ -234,6 +236,7 @@ CurvePt(
         if (j != cur_dim)
             out_pt(j) = temp_ctrl(0, j);
 }
+#endif
 
 // compute a point from a NURBS curve at a given parameter value
 // this version takes a temporary set of control points for one curve only rather than
@@ -298,6 +301,7 @@ VolPt(VectorX<T>& param,                       // parameter value in each dim. o
     vector<int>         iter(mfa.p.size());           // iteration number in each dim.
     VectorX<T>          ctrl_pt(mfa.ctrl_pts.cols()); // one control point
     int                 ctrl_idx;                     // control point linear ordering index
+    VectorX<T>          temp_denom = VectorX<T>::Zero(mfa.p.size());     // temporary rational NURBS denominator in each dim
 
     // init
     for (size_t i = 0; i < mfa.p.size(); i++)       // for all dims
@@ -319,8 +323,9 @@ VolPt(VectorX<T>& param,                       // parameter value in each dim. o
 
         // always compute the point in the first dimension
         ctrl_pt = mfa.ctrl_pts.row(ctrl_idx);
-        T w     = mfa.weights(ctrl_idx);
-        temp[0] += (N[0])(0, iter[0] + span[0] - mfa.p(0)) * ctrl_pt * w;
+        T w            = mfa.weights(ctrl_idx);
+        temp[0]       += (N[0])(0, iter[0] + span[0] - mfa.p(0)) * ctrl_pt * w;
+        temp_denom(0) += w * N[0](0, iter[0] + span[0] - mfa.p(0));
         iter[0]++;
 
         // for all dimensions except last, check if span is finished
@@ -329,18 +334,24 @@ VolPt(VectorX<T>& param,                       // parameter value in each dim. o
             if (iter[k] - 1 == mfa.p(k))
             {
                 // compute point in next higher dimension and reset computation for current dim
-                temp[k + 1] += (N[k + 1])(0, iter[k + 1] + span[k + 1] - mfa.p(k + 1)) * temp[k];
-                temp[k]     =  VectorX<T>::Zero(mfa.ctrl_pts.cols());
-                iter[k]     =  0;
+                temp[k + 1]        += (N[k + 1])(0, iter[k + 1] + span[k + 1] - mfa.p(k + 1)) * temp[k];
+                temp_denom(k + 1)  += temp_denom(k) * N[k + 1](0, iter[k + 1] + span[k + 1] - mfa.p(k + 1));
+                temp_denom(k)       = 0.0;
+                temp[k]             =  VectorX<T>::Zero(mfa.ctrl_pts.cols());
+                iter[k]             =  0;
                 iter[k + 1]++;
             }
         }
     }
+    T denom = temp_denom(mfa.p.size() - 1);
 
     out_pt = temp[mfa.p.size() - 1];
+    out_pt /= denom;
 
-    // compute rational NURBS denominator and divide the point by it
-    T denom           = 0.0;                            // denominator for dividing point coordinates
+    // DEPRECATED
+#if 0
+    // compute rational NURBS denominator the slow way
+    T old_denom       = 0.0;                            // denominator for dividing point coordinates
     VectorXi ijk      = VectorXi::Zero(mfa.p.size());   // i,j,k,... coords of basis function and weight
     VectorXi next_ijk = ijk;                            // i,j,k,... for next iteration
     for (auto i = 0; i < mfa.weights.size(); i++)       // for all weights
@@ -363,14 +374,14 @@ VolPt(VectorX<T>& param,                       // parameter value in each dim. o
                 }
             }
         }
-        denom += temp;
-        ijk    = next_ijk;
+        old_denom += temp;
+        ijk        = next_ijk;
     }
-    out_pt /= denom;
-
     // debug
-//     fprintf(stderr, "3: denom=%.3f\n", denom);
-//     cerr << "out_pt:\n" << out_pt << endl;
+    if (fabs(old_denom - denom) > 1e-13)
+        fprintf(stderr, "Error: old_denom = %.3f but denom = %.3f. These should match but differ by %e.\n", 
+                old_denom, denom, old_denom - denom);
+#endif
 }
 
 #include    "decode_templates.cpp"

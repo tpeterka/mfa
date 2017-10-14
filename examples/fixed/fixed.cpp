@@ -139,7 +139,10 @@ int main(int argc, char** argv)
         d_args.nctrl_pts[1] = 108;
         d_args.nctrl_pts[2] = 110;
         strncpy(d_args.infile, "/Users/tpeterka/datasets/flame/6_small.xyz", sizeof(d_args.infile));
-        if (dom_dim == 2)
+        if (dom_dim == 1)
+            master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
+                    { b->read_1d_slice_3d_vector_data(cp, d_args); });
+        else if (dom_dim == 2)
             master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
                     { b->read_2d_slice_3d_vector_data(cp, d_args); });
         else if (dom_dim == 3)
@@ -163,6 +166,7 @@ int main(int argc, char** argv)
 
     // debug: compute error field for visualization and max error to verify that it is below the threshold
     fprintf(stderr, "\nFinal decoding and computing max. error...\n");
+    double decode_time = MPI_Wtime();
 #ifdef CURVE_PARAMS     // normal distance
     master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
             { b->error(cp, true); });
@@ -170,6 +174,7 @@ int main(int argc, char** argv)
     master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
             { b->range_error(cp, true); });
 #endif
+    decode_time = MPI_Wtime() - decode_time;
 
     // debug: save knot span domains for comparing error with location in knot span
     master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
@@ -179,6 +184,7 @@ int main(int argc, char** argv)
     fprintf(stderr, "\n------- Final block results --------\n");
     master.foreach(&Block<real_t>::print_block);
     fprintf(stderr, "encoding time         = %.3lf s.\n", encode_time);
+    fprintf(stderr, "decoding time         = %.3lf s.\n", decode_time);
     fprintf(stderr, "-------------------------------------\n\n");
 
     // save the results in diy format

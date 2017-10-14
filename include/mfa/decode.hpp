@@ -35,12 +35,15 @@ namespace mfa
                 size_t      co,                   // offset to start of control points for this curve
                 VectorX<T>& out_pt);              // (output) point
 
+        // DEPRECATED
+#if 0
         void CurvePt(
                 int         cur_dim,              // current dimension
                 T           param,                // parameter value of desired point
                 MatrixX<T>& temp_ctrl,            // temporary control points
                 VectorX<T>& out_pt,               // (output) point
                 int         ko = 0);              // starting knot offset
+#endif
 
         void CurvePt(
                 int         cur_dim,              // current dimension

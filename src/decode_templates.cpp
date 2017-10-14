@@ -33,6 +33,8 @@ CurvePt(
         size_t    co,                   // offset to start of control points for this curve
         VectorXf& out_pt);               // (output) point
 
+// DEPRECATED
+#if 0
 template
 void
 mfa::
@@ -43,6 +45,7 @@ CurvePt(
         MatrixXf& temp_ctrl,            // temporary control points
         VectorXf& out_pt,               // (output) point
         int       ko = 0);              // starting knot offset
+#endif
 
 template
 void
@@ -91,6 +94,8 @@ CurvePt(
         size_t    co,                   // offset to start of control points for this curve
         VectorXd& out_pt);               // (output) point
 
+// DEPRECATED
+#if 0
 template
 void
 mfa::
@@ -101,6 +106,7 @@ CurvePt(
         MatrixXd& temp_ctrl,            // temporary control points
         VectorXd& out_pt,               // (output) point
         int       ko = 0);              // starting knot offset
+#endif
 
 template
 void
