@@ -268,12 +268,10 @@ CurvePt(
         if (j != cur_dim)
             out_pt(j) = temp_ctrl(0, j);
 
-    // compute the denominator of the rational curve point and divide
-    ArrayXX<T> w(1, temp_ctrl.rows());            // arrays need to be same shape to be multiplied element-wise
-    ArrayXX<T> b(1, temp_ctrl.rows());
-    w = temp_weights;
-    b = N.row(0);
-    T denom = (b * w).sum();                // sum of element-wise products
+    // compute the denominator of the rational curve point and divide by it
+    // sum of element-wise multiplication requires transpose so that both arrays are same shape
+    // (rows in this case), otherwise eigen cannot multiply them
+    T denom = (N.row(0).cwiseProduct(temp_weights.transpose())).sum();
     out_pt /= denom;
 
     // debug
@@ -348,7 +346,7 @@ VolPt(VectorX<T>& param,                       // parameter value in each dim. o
     for (auto i = 0; i < mfa.weights.size(); i++)       // for all weights
     {
         next_ijk   = ijk;
-        T temp = mfa.weights(i);
+        T temp     = mfa.weights(i);
         bool stop  = false;
         for (auto k = 0; k < mfa.p.size(); k++)
         {
@@ -366,7 +364,7 @@ VolPt(VectorX<T>& param,                       // parameter value in each dim. o
             }
         }
         denom += temp;
-        ijk = next_ijk;
+        ijk    = next_ijk;
     }
     out_pt /= denom;
 
