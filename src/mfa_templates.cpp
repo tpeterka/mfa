@@ -36,7 +36,8 @@ mfa::
 MFA<float>::
 AdaptiveEncode(
         float     err_limit,        // maximum allowable normalized error
-        VectorXi& nctrl_pts_);      // (output) number of control points in each dim
+        VectorXi& nctrl_pts_,       // (output) number of control points in each dim
+        int       max_rounds);      // optional maximum number of rounds
 
 template
 void
@@ -213,7 +214,8 @@ mfa::
 MFA<double>::
 AdaptiveEncode(
         double     err_limit,        // maximum allowable normalized error
-        VectorXi& nctrl_pts_);      // (output) number of control points in each dim
+        VectorXi& nctrl_pts_,        // (output) number of control points in each dim
+        int       max_rounds);       // optional maximum number of rounds
 
 template
 void

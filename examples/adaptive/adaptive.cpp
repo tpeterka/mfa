@@ -46,6 +46,7 @@ int main(int argc, char** argv)
     int    degree         = 4;                        // degree (same for all dims)
     int    ndomp          = 100;                      // input number of domain points (same for all dims)
     string input          = "sinc";                   // input dataset
+    int    max_rounds     = 0;                        // max. number of rounds (0 = no maximum)
 
     // get command line arguments
     using namespace opts;
@@ -56,6 +57,7 @@ int main(int argc, char** argv)
     ops >> Option('p', "degree",  degree,         " degree in each dimension of domain");
     ops >> Option('n', "ndomp",   ndomp,          " number of input points in each dimension of domain");
     ops >> Option('i', "input",   input,          " input dataset");
+    ops >> Option('r', "rounds",  max_rounds,     " maximum number of iterations");
 
     if (ops >> Present('h', "help", "show help"))
     {
@@ -67,9 +69,9 @@ int main(int argc, char** argv)
     // echo args
     fprintf(stderr, "\n--------- Input arguments ----------\n");
     cerr <<
-        "error = "    << norm_err_limit << " pt_dim = "     << pt_dim << " dom_dim = " << dom_dim <<
-        "\ndegree = " << degree         << " input pts = "  << ndomp  <<
-        "\ninput = "  << input          << endl;
+        "error = "    << norm_err_limit << " pt_dim = "      << pt_dim << " dom_dim = " << dom_dim <<
+        "\ndegree = " << degree         << " input pts = "   << ndomp  <<
+        "\ninput = "  << input          << " max. rounds = " << max_rounds << endl;
 #ifdef CURVE_PARAMS
     cerr << "parameterization method = curve" << endl;
 #else
@@ -134,7 +136,10 @@ int main(int argc, char** argv)
         d_args.ndom_pts[1]  = 540;
         d_args.ndom_pts[2]  = 550;
         strncpy(d_args.infile, "/Users/tpeterka/datasets/flame/6_small.xyz", sizeof(d_args.infile));
-        if (dom_dim == 2)
+        if (dom_dim == 1)
+            master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
+                    { b->read_1d_slice_3d_vector_data(cp, d_args); });
+        else if (dom_dim == 2)
             master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
                     { b->read_2d_slice_3d_vector_data(cp, d_args); });
         else if (dom_dim == 3)
@@ -208,12 +213,13 @@ int main(int argc, char** argv)
     fprintf(stderr, "\nStarting adaptive encoding...\n\n");
     double encode_time = MPI_Wtime();
     master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-            { b->adaptive_encode_block(cp, norm_err_limit); });
+            { b->adaptive_encode_block(cp, norm_err_limit, max_rounds); });
     encode_time = MPI_Wtime() - encode_time;
     fprintf(stderr, "\nAdaptive encoding done.\n");
 
     // debug: compute error field for visualization and max error to verify that it is below the threshold
     fprintf(stderr, "\nFinal decoding and computing max. error...\n");
+    double decode_time = MPI_Wtime();
 #ifdef CURVE_PARAMS     // normal distance
     master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
             { b->error(cp, true); });
@@ -221,6 +227,7 @@ int main(int argc, char** argv)
     master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
             { b->range_error(cp, true); });
 #endif
+    decode_time = MPI_Wtime() - decode_time;
 
     // debug: save knot span domains for comparing error with location in knot span
     master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
@@ -230,6 +237,7 @@ int main(int argc, char** argv)
     fprintf(stderr, "\n------- Final block results --------\n");
     master.foreach(&Block<real_t>::print_block);
     fprintf(stderr, "encoding time         = %.3lf s.\n", encode_time);
+    fprintf(stderr, "decoding time         = %.3lf s.\n", decode_time);
     fprintf(stderr, "-------------------------------------\n\n");
 
     // save the results in diy format
