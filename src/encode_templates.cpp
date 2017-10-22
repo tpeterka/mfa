@@ -26,6 +26,17 @@ template
 void
 mfa::
 Encoder<float>::
+Weights(
+        MatrixXf& Q,               // input points
+        MatrixXf& N,               // basis function coefficients (B in M&K)
+        MatrixXf& Nt,              // transpose of N
+        MatrixXf& NtN,             // Nt * N
+        MatrixXf& NtNi);           // inverse of NtN
+
+template
+void
+mfa::
+Encoder<float>::
 RHS(
         int       cur_dim,  // current dimension
         MatrixXf& N,        // matrix of basis function coefficients
@@ -64,7 +75,9 @@ mfa::
 Encoder<float>::
 CtrlCurve(
         MatrixXf& N,           // basis functions for current dimension
-        MatrixXf& NtN,         // N^t * N
+        MatrixXf& Nt,          // transpose of N
+        MatrixXf& NtN,         // Nt * N
+        MatrixXf& NtNi,        // inverse of NtN
         MatrixXf& R,           // residual matrix for current dimension and curve
         MatrixXf& P,           // solved points for current dimension and curve
         VectorXi& n,           // number of control point spans in each dimension
@@ -186,6 +199,17 @@ template
 void
 mfa::
 Encoder<double>::
+Weights(
+        MatrixXd& Q,               // input points
+        MatrixXd& N,               // basis function coefficients (B in M&K)
+        MatrixXd& Nt,              // transpose of N
+        MatrixXd& NtN,             // Nt * N
+        MatrixXd& NtNi);           // inverse of NtN
+
+template
+void
+mfa::
+Encoder<double>::
 RHS(
         int       cur_dim,  // current dimension
         MatrixXd& N,        // matrix of basis function coefficients
@@ -224,7 +248,9 @@ mfa::
 Encoder<double>::
 CtrlCurve(
         MatrixXd& N,           // basis functions for current dimension
-        MatrixXd& NtN,         // N^t * N
+        MatrixXd& Nt,          // transpose of N
+        MatrixXd& NtN,         // Nt * N
+        MatrixXd& NtNi,        // inverse of NtN
         MatrixXd& R,           // residual matrix for current dimension and curve
         MatrixXd& P,           // solved points for current dimension and curve
         VectorXi& n,           // number of control point spans in each dimension

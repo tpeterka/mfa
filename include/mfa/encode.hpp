@@ -36,6 +36,13 @@ namespace mfa
 
    private:
 
+        void Weights(
+                MatrixX<T>& Q,              // input points
+                MatrixX<T>& N,               // basis function coefficients (B in M&K)
+                MatrixX<T>& Nt,              // transpose of N
+                MatrixX<T>& NtN,             // Nt * N
+                MatrixX<T>& NtNi);           // inverse of NtN
+
         void RHS(
                 int         cur_dim,  // current dimension
                 MatrixX<T>& N,        // matrix of basis function coefficients
@@ -62,7 +69,9 @@ namespace mfa
 
         void CtrlCurve(
                 MatrixX<T>& N,           // basis functions for current dimension
-                MatrixX<T>& NtN,         // N^t * N
+                MatrixX<T>& Nt,          // transpose of N
+                MatrixX<T>& NtN,         // Nt * N
+                MatrixX<T>& NtNi,        // inverse of NtN
                 MatrixX<T>& R,           // residual matrix for current dimension and curve
                 MatrixX<T>& P,           // solved points for current dimension and curve
                 VectorXi&   n,           // number of control point spans in each dimension

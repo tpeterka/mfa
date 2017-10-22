@@ -86,6 +86,48 @@ AdaptiveEncode(T err_limit)                                     // maximum allow
     Encode();
 }
 
+// linear solution of weights according to Ma and Kruth 1995 (M&K95)
+// our N is M&K's B
+// our Q is M&K's X_bar
+// However, we skip end points that are pinned, so we solve a smaller system by 2 points in each dimension
+template <typename T>
+void
+mfa::
+Encoder<T>::
+Weights(
+        MatrixX<T>& Q,               // input points
+        MatrixX<T>& N,               // basis function coefficients (B in M&K)
+        MatrixX<T>& Nt,              // transpose of N
+        MatrixX<T>& NtN,             // Nt * N
+        MatrixX<T>& NtNi)            // inverse of NtN
+{
+    int pt_dim = mfa.domain.cols();             // dimensionality of input and control points (domain and range)
+    vector<MatrixX<T>> NtQ2N(pt_dim);           // matrices N^T x Q^2 x N for each dim of points
+    vector<MatrixX<T>> NtQN(pt_dim);            // matrices N^T x Q x N for each dim of points
+
+    // allocate sizes of NtQ2N and NtQN
+    for (auto k = 0; k < pt_dim; k++)
+    {
+        NtQ2N[k] = MatrixX<T>::Zero(N.rows(), N.cols());
+        NtQN[k]  = MatrixX<T>::Zero(N.rows(), N.cols());
+    }
+
+    // compute the matrix X according to eq.3 and eq. 4 of M&K95
+    MatrixX<T> M = MatrixX<T>::Zero(N.rows(), N.cols());
+    for (auto k = 0; k < pt_dim; k++)           // for all point dims
+    {
+        for (auto i = 0; i < Nt.cols(); i++)
+        {
+            T dom_pt_coord = mfa.domain(mfa.po[k] + i + 1, k); // current coordinate of current input point
+            NtQN[k].col(i)  = Nt.col(i) * dom_pt_coord;
+            NtQ2N[k].col(i) = Nt.col(i) * dom_pt_coord * dom_pt_coord;
+        }
+    }
+    for (auto k = 0; k < pt_dim; k++)           // for all point dims
+        M += NtQ2N[k] - NtQN[k] * NtNi * NtQN[k];
+
+}
+
 #if 1
 
 // TBB version
@@ -210,11 +252,13 @@ Encode()
         // debug
 //         cerr << "k " << k << " N:\n" << N << endl;
 
-        // compute the product Nt x N
+        // compute various other matrices from N
         // TODO: NtN is going to be very sparse when it is large: switch to sparse representation
         // NtN has semibandwidth < p + 1 nonzero entries across diagonal
-        MatrixX<T> NtN(n(k) - 1, n(k) - 1);
-        NtN = N.transpose() * N;
+        // TODO: I don't think I need to give the sizes, automatically allocated by the assignment
+        MatrixX<T> Nt   = N.transpose();
+        MatrixX<T> NtN  = Nt * N;;
+        MatrixX<T> NtNi = NtN.partialPivLu().inverse();
 
         // debug
 //         cerr << "k " << k << " NtN:\n" << NtN << endl;
@@ -233,7 +277,7 @@ Encode()
             MatrixX<T> P(n(k) - 1, mfa.domain.cols());
 
             // compute the one curve of control points
-            CtrlCurve(N, NtN, R, P, n, k, co[j], cs, to[j], temp_ctrl0, temp_ctrl1, weights);
+            CtrlCurve(N, Nt, NtN, NtNi, R, P, n, k, co[j], cs, to[j], temp_ctrl0, temp_ctrl1, weights);
         });                                                  // curves in this dimension
 
         // adjust offsets and strides for next dimension
@@ -381,11 +425,13 @@ Encode()
         // debug
 //         cerr << "k " << k << " N:\n" << N << endl;
 
-        // compute the product Nt x N
+        // compute various other matrices from N
         // TODO: NtN is going to be very sparse when it is large: switch to sparse representation
         // NtN has semibandwidth < p + 1 nonzero entries across diagonal
-        MatrixX<T> NtN(n(k) - 1, n(k) - 1);
-        NtN = N.transpose() * N;
+        // TODO: I don't think I need to give the sizes, automatically allocated by the assignment
+        MatrixX<T> Nt   = N.transpose();
+        MatrixX<T> NtN  = Nt * N;;
+        MatrixX<T> NtNi = NtN.partialPivLu().inverse();
 
         // debug
 //         cerr << "k " << k << " NtN:\n" << NtN << endl;
@@ -745,7 +791,9 @@ void
 mfa::
 Encoder<T>::
 CtrlCurve(MatrixX<T>& N,          // basis functions for current dimension
-          MatrixX<T>& NtN,        // N^t * N
+          MatrixX<T>& Nt,         // transpose of N
+          MatrixX<T>& NtN,        // Nt * N
+          MatrixX<T>& NtNi,       // inverse of NtN
           MatrixX<T>& R,          // residual matrix for current dimension and curve
           MatrixX<T>& P,          // solved points for current dimension and curve
           VectorXi&   n,          // number of control point spans in each dimension
@@ -757,6 +805,30 @@ CtrlCurve(MatrixX<T>& N,          // basis functions for current dimension
           MatrixX<T>& temp_ctrl1, // second temporary control points buffer
           VectorX<T>& weights)    // precomputed weights for control points on this curve
 {
+    // solve for weights
+    // TODO: avoid copying into Q by passing temp_ctrl0, temp_ctrl1, co, cs to Weights()
+    // TODO: check that this is right, using co and cs for copying control points and domain points
+    MatrixX<T> Q;
+    if (k == 0)
+    {
+        Q.resize(mfa.ndom_pts(k), mfa.domain.cols());
+        for (auto i = 0; i < mfa.ndom_pts(k); i++)
+            Q.row(i) = mfa.domain.row(co + i * cs);
+    }
+    else if (k % 2)
+    {
+        Q.resize(mfa.ctrl_pts(k), mfa.ctrl_pts.cols());
+        for (auto i = 0; i < mfa.nctrl_pts(k); i++)
+            Q.row(i) = temp_ctrl0.row(co + i * cs);
+    }
+    else
+    {
+        Q.resize(mfa.ctrl_pts(k), mfa.ctrl_pts.cols());
+        for (auto i = 0; i < mfa.nctrl_pts(k); i++)
+            Q.row(i) = temp_ctrl1.row(co + i * cs);
+    }
+    Weights(Q, N, Nt, NtN, NtNi);
+
     // compute R
     // first dimension reads from domain
     // subsequent dims alternate reading temp_ctrl0 and temp_ctrl1
