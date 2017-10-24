@@ -102,31 +102,54 @@ Weights(
         MatrixX<T>& NtN,             // Nt * N
         MatrixX<T>& NtNi)            // inverse of NtN
 {
+    // TODO: decide if I need to represent all dims or only 2 dims for current curve
+    // ie, we are finding weights of high-d points for a 2-d curve
     int pt_dim = mfa.domain.cols();             // dimensionality of input and control points (domain and range)
+    vector<MatrixX<T>> NtQ2(pt_dim);            // temp. matrices N^T x Q^2 for each dim of points (TODO: any way to avoid?)
     vector<MatrixX<T>> NtQ2N(pt_dim);           // matrices N^T x Q^2 x N for each dim of points
+    vector<MatrixX<T>> NtQ(pt_dim);             // temp. matrices N^T x Q  for each dim of points (TODO: any way to avoid?)
     vector<MatrixX<T>> NtQN(pt_dim);            // matrices N^T x Q x N for each dim of points
 
-    // allocate sizes of NtQ2N and NtQN
+    // allocate matrices of NtQ, NtQ2, NtQ2N, and NtQN
     for (auto k = 0; k < pt_dim; k++)
     {
-        NtQ2N[k] = MatrixX<T>::Zero(N.rows(), N.cols());
-        NtQN[k]  = MatrixX<T>::Zero(N.rows(), N.cols());
+        NtQ2[k]  = MatrixX<T>::Zero(Nt.rows(),  Nt.cols());
+        NtQ[k]   = MatrixX<T>::Zero(Nt.rows(),  Nt.cols());
+        NtQ2N[k] = MatrixX<T>::Zero(NtN.rows(), NtN.cols());
+        NtQN[k]  = MatrixX<T>::Zero(NtN.rows(), NtN.cols());
     }
 
-    // compute the matrix X according to eq.3 and eq. 4 of M&K95
-    MatrixX<T> M = MatrixX<T>::Zero(N.rows(), N.cols());
+    // compute NtQN and NtQ2N
     for (auto k = 0; k < pt_dim; k++)           // for all point dims
     {
+        // temporary matrices NtQ and NtQ2
         for (auto i = 0; i < Nt.cols(); i++)
         {
-            T dom_pt_coord = mfa.domain(mfa.po[k] + i + 1, k); // current coordinate of current input point
-            NtQN[k].col(i)  = Nt.col(i) * dom_pt_coord;
-            NtQ2N[k].col(i) = Nt.col(i) * dom_pt_coord * dom_pt_coord;
+            T dom_pt_coord = Q(i + 1, k);      // current coordinate of current input point
+            NtQ[k].col(i)  = Nt.col(i) * dom_pt_coord;
+            NtQ2[k].col(i) = Nt.col(i) * dom_pt_coord * dom_pt_coord;
         }
+        // final matrices NtQN and NtQ2N
+        NtQN[k]  = NtQ[k] * N;
+        NtQ2N[k] = NtQ2[k] * N;
     }
+
+    // compute the matrix M according to eq.3 and eq. 4 of M&K95
+    MatrixX<T> M = MatrixX<T>::Zero(NtN.rows(), NtN.cols());
     for (auto k = 0; k < pt_dim; k++)           // for all point dims
         M += NtQ2N[k] - NtQN[k] * NtNi * NtQN[k];
 
+    // compute the eigenvalues and eigenvectors of M (eq. 9 of M&K95)
+    Eigen::SelfAdjointEigenSolver<MatrixX<T>> eigensolver(M);
+    if (eigensolver.info() != Eigen::Success)
+    {
+        fprintf(stderr, "Error: Encoder::Weights(), computing eigenvalues of M failed, perhaps M is not self-adjoint?\n");
+        exit(0);
+    }
+    // debug
+//     cerr << "M:\n"            << M                          << endl;
+//     cerr << "Eigenvalues:\n"  << eigensolver.eigenvalues()  << endl;
+//     cerr << "Eigenvectors:\n" << eigensolver.eigenvectors() << endl;
 }
 
 #if 1
@@ -231,6 +254,7 @@ Encode()
         // but the chord length did, as control points moved away from the data points in
         // the prior dim. Need to determine how much difference it would make to recompute
         // params and knots for the new input points
+        // (moot when using domain decomposition)
 
         // compute the matrix N, eq. 9.66 in P&T
         // N is a matrix of (m - 1) x (n - 1) scalars that are the basis function coefficients
@@ -425,6 +449,8 @@ Encode()
 
         // debug
 //         cerr << "k " << k << " N:\n" << N << endl;
+//         for (auto i = 0; i < N.rows(); i++)
+//             cerr << "row " << i << " sum (should be 1.0): " << N.row(i).sum() << endl;
 
         // compute various other matrices from N
         // TODO: NtN is going to be very sparse when it is large: switch to sparse representation
@@ -454,7 +480,7 @@ Encode()
                         k, (T)j / (T)ncurves * 100, j, ncurves);
 
             // compute the one curve of control points
-            CtrlCurve(N, NtN, R, P, n, k, co[j], cs, to[j], temp_ctrl0, temp_ctrl1, weights);
+            CtrlCurve(N, Nt, NtN, NtNi, R, P, n, k, co[j], cs, to[j], temp_ctrl0, temp_ctrl1, weights);
         }
 
         // adjust offsets and strides for next dimension
@@ -487,7 +513,7 @@ Encode()
 // N is the matrix of basis function coefficients
 // Q is a diagonal matrix of input points on the diagonals and 0 elsewhere (excluding first and last points)
 // w is the weights vector, excluding first and last weights
-// R is column vector of m - 1 elements, each element multiple coordinates of the control points
+// R is column vector of m - 1 elements, each element multiple coordinates of the input points
 // ie, a matrix of m - 1 rows and control point dims columns
 template <typename T>
 void
@@ -541,7 +567,7 @@ RHS(
 // N is the matrix of basis function coefficients
 // Q is a diagonal matrix of input points on the diagonals and 0 elsewhere (excluding first and last points)
 // w is the weights vector, excluding first and last weights
-// R is column vector of m - 1 elements, each element multiple coordinates of the control points
+// R is column vector of m - 1 elements, each element multiple coordinates of the input points
 // ie, a matrix of m - 1 rows and control point dims columns
 template <typename T>
 void
@@ -810,24 +836,26 @@ CtrlCurve(MatrixX<T>& N,          // basis functions for current dimension
     // TODO: avoid copying into Q by passing temp_ctrl0, temp_ctrl1, co, cs to Weights()
     // TODO: check that this is right, using co and cs for copying control points and domain points
     MatrixX<T> Q;
+    Q.resize(mfa.ndom_pts(k), mfa.domain.cols());
     if (k == 0)
     {
-        Q.resize(mfa.ndom_pts(k), mfa.domain.cols());
         for (auto i = 0; i < mfa.ndom_pts(k); i++)
             Q.row(i) = mfa.domain.row(co + i * cs);
     }
     else if (k % 2)
     {
-        Q.resize(mfa.ctrl_pts(k), mfa.ctrl_pts.cols());
-        for (auto i = 0; i < mfa.nctrl_pts(k); i++)
+        for (auto i = 0; i < mfa.ndom_pts(k); i++)
             Q.row(i) = temp_ctrl0.row(co + i * cs);
     }
     else
     {
-        Q.resize(mfa.ctrl_pts(k), mfa.ctrl_pts.cols());
-        for (auto i = 0; i < mfa.nctrl_pts(k); i++)
+        for (auto i = 0; i < mfa.ndom_pts(k); i++)
             Q.row(i) = temp_ctrl1.row(co + i * cs);
     }
+
+    // debug
+//     cerr << "k=" << k << " Q:\n" << Q << endl;
+
     Weights(Q, N, Nt, NtN, NtNi);
 
     // compute R
