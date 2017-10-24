@@ -115,6 +115,9 @@ MFA(VectorXi&   p_,             // polynomial degree in each dimension
     UniformKnots();                         // knots spaced uniformly
 #endif
 
+    // debug
+//     cerr << "Knots:\n" << knots << endl;
+
     // offsets for curve starting (domain) points in each dimension
     co.resize(p.size());
     for (auto k = 0; k < p.size(); k++)

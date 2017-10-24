@@ -87,7 +87,7 @@ AdaptiveEncode(
     Encode();
 }
 
-#if 1
+#if 0
 
 // TBB version
 // ~2X faster than serial, still expensive to compute curve offsets
@@ -373,6 +373,8 @@ Encode()
 
         // debug
 //         cerr << "k " << k << " N:\n" << N << endl;
+//         for (auto i = 0; i < N.rows(); i++)
+//             cerr << "row " << i << " sum (should be 1.0): " << N.row(i).sum() << endl;
 
         // compute the product Nt x N
         // TODO: NtN is going to be very sparse when it is large: switch to sparse representation
