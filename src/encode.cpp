@@ -147,9 +147,9 @@ Weights(
         exit(0);
     }
     // debug
-//     cerr << "M:\n"            << M                          << endl;
-//     cerr << "Eigenvalues:\n"  << eigensolver.eigenvalues()  << endl;
-//     cerr << "Eigenvectors:\n" << eigensolver.eigenvectors() << endl;
+    cerr << "M:\n"            << M                          << endl;
+    cerr << "Eigenvalues:\n"  << eigensolver.eigenvalues()  << endl;
+    cerr << "Eigenvectors:\n" << eigensolver.eigenvectors() << endl;
 }
 
 #if 1
