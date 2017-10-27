@@ -40,30 +40,57 @@ namespace mfa
 
         void Weights(
                 MatrixX<T>& Q,              // input points
-                MatrixX<T>& N,               // basis function coefficients (B in M&K)
-                MatrixX<T>& Nt,              // transpose of N
-                MatrixX<T>& NtN,             // Nt * N
-                MatrixX<T>& NtNi);           // inverse of NtN
+                MatrixX<T>& N,              // basis function coefficients (B in M&K)
+                MatrixX<T>& Nt,             // transpose of N
+                MatrixX<T>& NtN,            // Nt * N
+                MatrixX<T>& NtNi,           // inverse of NtN
+                VectorX<T>& weights);       // output weights
 
+        // P&T with default domain
         void RHS(
                 int         cur_dim,  // current dimension
                 MatrixX<T>& N,        // matrix of basis function coefficients
                 MatrixX<T>& R,        // (output) residual matrix allocated by caller
                 VectorX<T>& weights,  // precomputed weights for n + 1 control points on this curve
-                int         ko = 0,   // optional index of starting knot
-                int         po = 0,   // optional index of starting parameter
-                int         co = 0);  // optional index of starting domain pt in current curve
+                int         ko,       // index of starting knot
+                int         po,       // index of starting parameter
+                int         co);      // index of starting domain pt in current curve
 
+        // P&T with new input points
         void RHS(
                 int         cur_dim,  // current dimension
                 MatrixX<T>& in_pts,   // input points (not the default domain stored in the mfa)
                 MatrixX<T>& N,        // matrix of basis function coefficients
                 MatrixX<T>& R,        // (output) residual matrix allocated by caller
                 VectorX<T>& weights,  // precomputed weights for n + 1 control points on this curve
-                int         ko = 0,   // optional index of starting knot
-                int         po = 0,   // optional index of starting parameter
-                int         co = 0,   // optional index of starting input pt in current curve
-                int         cs = 1);  // optional stride of input pts in current curve
+                int         ko,       // index of starting knot
+                int         po,       // index of starting parameter
+                int         co,       // index of starting input pt in current curve
+                int         cs);      // stride of input pts in current curve
+
+        // M&K with default domain
+        void RHS(
+                int         cur_dim,  // current dimension
+                MatrixX<T>& N,        // matrix of basis function coefficients
+                MatrixX<T>& Nt,       // transpose of N
+                MatrixX<T>& R,        // (output) residual matrix allocated by caller
+                VectorX<T>& weights,  // precomputed weights for n + 1 control points on this curve
+                int         ko,       // index of starting knot
+                int         po,       // index of starting parameter
+                int         co);      // index of starting domain pt in current curve
+
+        // M&K with new input points
+        void RHS(
+                int         cur_dim,  // current dimension
+                MatrixX<T>& in_pts,   // input points (not the default domain stored in the mfa)
+                MatrixX<T>& N,        // matrix of basis function coefficients
+                MatrixX<T>& Nt,       // transpose of N
+                MatrixX<T>& R,        // (output) residual matrix allocated by caller
+                VectorX<T>& weights,  // precomputed weights for n + 1 control points on this curve
+                int         ko,       // index of starting knot
+                int         po,       // index of starting parameter
+                int         co,       // index of starting input pt in current curve
+                int         cs);      // stride of input pts in current curve
 
         void Quants(
                 VectorXi& n,          // (output) number of control point spans in each dim
@@ -76,18 +103,15 @@ namespace mfa
                 MatrixX<T>& NtNi,        // inverse of NtN
                 MatrixX<T>& R,           // residual matrix for current dimension and curve
                 MatrixX<T>& P,           // solved points for current dimension and curve
-                VectorXi&   n,           // number of control point spans in each dimension
                 size_t      k,           // current dimension
                 size_t      co,          // starting ofst for reading domain pts
                 size_t      cs,          // stride for reading domain points
                 size_t      to,          // starting ofst for writing control pts
                 MatrixX<T>& temp_ctrl0,  // first temporary control points buffer
-                MatrixX<T>& temp_ctrl1,  // second temporary control points buffer
-                VectorX<T>& weights);    // precomputed weights for control points on this curve
+                MatrixX<T>& temp_ctrl1); // second temporary control points buffer
 
         void CopyCtrl(
                 MatrixX<T>& P,          // solved points for current dimension and curve
-                VectorXi&   n,          // number of control point spans in each dimension
                 int         k,          // current dimension
                 size_t      co,         // starting offset for reading domain points
                 size_t      cs,         // stride for reading domain points
@@ -97,7 +121,6 @@ namespace mfa
 
         void CopyCtrl(
                 MatrixX<T>& P,          // solved points for current dimension and curve
-                VectorXi&   n,          // number of control point spans in each dimension
                 int         k,          // current dimension
                 size_t      co,         // starting offset for reading domain points
                 MatrixX<T>& temp_ctrl); // temporary control points buffer

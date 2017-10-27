@@ -160,7 +160,7 @@ NewKnots_curve1(
                 // append points from P to control points
                 // TODO: any way to avoid this?
                 MatrixX<T> temp_ctrl = MatrixX<T>::Zero(mfa.nctrl_pts(k), mfa.domain.cols());   // temporary control points for one curve
-                encoder.CopyCtrl(P, n, k, mfa.co[k][j * s], temp_ctrl);
+                encoder.CopyCtrl(P, k, mfa.co[k][j * s], temp_ctrl);
 
                 // compute the error on the curve (number of input points with error > err_limit)
                 nerrs[j] = encoder.ErrorCurve(k, mfa.co[k][j * s], temp_ctrl, temp_weights, err_limit);
@@ -213,7 +213,7 @@ NewKnots_curve1(
         // append points from P to control points
         // TODO: any way to avoid this?
         MatrixX<T> temp_ctrl = MatrixX<T>::Zero(mfa.nctrl_pts(k), mfa.domain.cols());   // temporary control points for one curve
-        encoder.CopyCtrl(P, n, k, mfa.co[k][worst_curve_idx], temp_ctrl);
+        encoder.CopyCtrl(P, k, mfa.co[k][worst_curve_idx], temp_ctrl);
 
         // --- TODO: end of recomputing worst curve ---
 
@@ -350,7 +350,7 @@ NewKnots_curve(
 
                     // append points from P to control points
                     // TODO: any way to avoid this?
-                    encoder.CopyCtrl(P, n, k, mfa.co[k][j], temp_ctrl);
+                    encoder.CopyCtrl(P, k, mfa.co[k][j], temp_ctrl);
 
                     // compute the error on the curve (number of input points with error > err_limit)
                     size_t nerr = encoder.ErrorCurve(k, mfa.co[k][j], temp_ctrl, temp_weights, err_spans, err_limit);
@@ -513,7 +513,7 @@ NewKnots_curve(
                 // append points from P to control points
                 // TODO: any way to avoid this?
                 MatrixX<T> temp_ctrl = MatrixX<T>::Zero(mfa.nctrl_pts(k), mfa.domain.cols());   // temporary control points for one curve
-                CopyCtrl(P, n, k, mfa.co[k][j * s], temp_ctrl);
+                CopyCtrl(P, k, mfa.co[k][j * s], temp_ctrl);
 
                 // compute the error on the curve (number of input points with error > err_limit)
                 nerrs[j] = ErrorCurve(k, mfa.co[k][j * s], temp_ctrl, err_limit);
@@ -566,7 +566,7 @@ NewKnots_curve(
         // append points from P to control points
         // TODO: any way to avoid this?
         MatrixX<T> temp_ctrl = MatrixX<T>::Zero(mfa.nctrl_pts(k), mfa.domain.cols());   // temporary control points for one curve
-        CopyCtrl(P, n, k, mfa.co[k][worst_curve_idx], temp_ctrl);
+        CopyCtrl(P, k, mfa.co[k][worst_curve_idx], temp_ctrl);
 
         // --- TODO: end of recomputing worst curve ---
 

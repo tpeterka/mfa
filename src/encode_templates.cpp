@@ -33,7 +33,8 @@ Weights(
         MatrixXf& N,               // basis function coefficients (B in M&K)
         MatrixXf& Nt,              // transpose of N
         MatrixXf& NtN,             // Nt * N
-        MatrixXf& NtNi);           // inverse of NtN
+        MatrixXf& NtNi,            // inverse of NtN
+        VectorXf& weights);        // output weights
 
 template
 void
@@ -44,9 +45,9 @@ RHS(
         MatrixXf& N,        // matrix of basis function coefficients
         MatrixXf& R,        // (output) residual matrix allocated by caller
         VectorXf& weights,  // precomputed weights for n + 1 control points on this curve
-        int       ko = 0,   // optional index of starting knot
-        int       po = 0,   // optional index of starting parameter
-        int       co = 0);  // optional index of starting domain pt in current curve
+        int       ko,       // index of starting knot
+        int       po,       // index of starting parameter
+        int       co);      // index of starting domain pt in current curve
 
 template
 void
@@ -58,10 +59,40 @@ RHS(
         MatrixXf& N,        // matrix of basis function coefficients
         MatrixXf& R,        // (output) residual matrix allocated by caller
         VectorXf& weights,  // precomputed weights for n + 1 control points on this curve
-        int       ko = 0,   // optional index of starting knot
-        int       po = 0,   // optional index of starting parameter
-        int       co = 0,   // optional index of starting input pt in current curve
-        int       cs = 1);  // optional stride of input pts in current curve
+        int       ko,       // index of starting knot
+        int       po,       // index of starting parameter
+        int       co,       // index of starting input pt in current curve
+        int       cs);      // stride of input pts in current curve
+
+template
+void
+mfa::
+Encoder<float>::
+RHS(
+        int       cur_dim,  // current dimension
+        MatrixXf& N,        // matrix of basis function coefficients
+        MatrixXf& Nt,       // transpose of N
+        MatrixXf& R,        // (output) residual matrix allocated by caller
+        VectorXf& weights,  // precomputed weights for n + 1 control points on this curve
+        int       ko,       // index of starting knot
+        int       po,       // index of starting parameter
+        int       co);      // index of starting domain pt in current curve
+
+template
+void
+mfa::
+Encoder<float>::
+RHS(
+        int       cur_dim,  // current dimension
+        MatrixXf& in_pts,   // input points (not the default domain stored in the mfa)
+        MatrixXf& N,        // matrix of basis function coefficients
+        MatrixXf& Nt,       // transpose of N
+        MatrixXf& R,        // (output) residual matrix allocated by caller
+        VectorXf& weights,  // precomputed weights for n + 1 control points on this curve
+        int       ko,       // index of starting knot
+        int       po,       // index of starting parameter
+        int       co,       // index of starting input pt in current curve
+        int       cs);      // stride of input pts in current curve
 
 template
 void
@@ -82,14 +113,12 @@ CtrlCurve(
         MatrixXf& NtNi,        // inverse of NtN
         MatrixXf& R,           // residual matrix for current dimension and curve
         MatrixXf& P,           // solved points for current dimension and curve
-        VectorXi& n,           // number of control point spans in each dimension
         size_t    k,           // current dimension
         size_t    co,          // starting ofst for reading domain pts
         size_t    cs,          // stride for reading domain points
         size_t    to,          // starting ofst for writing control pts
         MatrixXf& temp_ctrl0,  // first temporary control points buffer
-        MatrixXf& temp_ctrl1,  // second temporary control points buffer
-        VectorXf& weights);    // precomputed weights for control points on this curve
+        MatrixXf& temp_ctrl1); // second temporary control points buffer
 
 template
 void
@@ -97,7 +126,6 @@ mfa::
 Encoder<float>::
 CopyCtrl(
         MatrixXf& P,          // solved points for current dimension and curve
-        VectorXi& n,          // number of control point spans in each dimension
         int       k,          // current dimension
         size_t    co,         // starting offset for reading domain points
         size_t    cs,         // stride for reading domain points
@@ -111,7 +139,6 @@ mfa::
 Encoder<float>::
 CopyCtrl(
         MatrixXf& P,          // solved points for current dimension and curve
-        VectorXi& n,          // number of control point spans in each dimension
         int       k,          // current dimension
         size_t    co,         // starting offset for reading domain points
         MatrixXf& temp_ctrl); // temporary control points buffer
@@ -208,7 +235,8 @@ Weights(
         MatrixXd& N,               // basis function coefficients (B in M&K)
         MatrixXd& Nt,              // transpose of N
         MatrixXd& NtN,             // Nt * N
-        MatrixXd& NtNi);           // inverse of NtN
+        MatrixXd& NtNi,            // inverse of NtN
+        VectorXd& weights);        // output weights
 
 template
 void
@@ -219,9 +247,9 @@ RHS(
         MatrixXd& N,        // matrix of basis function coefficients
         MatrixXd& R,        // (output) residual matrix allocated by caller
         VectorXd& weights,  // precomputed weights for n + 1 control points on this curve
-        int       ko = 0,   // optional index of starting knot
-        int       po = 0,   // optional index of starting parameter
-        int       co = 0);  // optional index of starting domain pt in current curve
+        int       ko,       // index of starting knot
+        int       po,       // index of starting parameter
+        int       co);      // index of starting domain pt in current curve
 
 template
 void
@@ -233,10 +261,40 @@ RHS(
         MatrixXd& N,        // matrix of basis function coefficients
         MatrixXd& R,        // (output) residual matrix allocated by caller
         VectorXd& weights,  // precomputed weights for n + 1 control points on this curve
-        int       ko = 0,   // optional index of starting knot
-        int       po = 0,   // optional index of starting parameter
-        int       co = 0,   // optional index of starting input pt in current curve
-        int       cs = 1);  // optional stride of input pts in current curve
+        int       ko,       // index of starting knot
+        int       po,       // index of starting parameter
+        int       co,       // index of starting input pt in current curve
+        int       cs);      // stride of input pts in current curve
+
+template
+void
+mfa::
+Encoder<double>::
+RHS(
+        int       cur_dim,  // current dimension
+        MatrixXd& N,        // matrix of basis function coefficients
+        MatrixXd& Nt,       // transpose of N
+        MatrixXd& R,        // (output) residual matrix allocated by caller
+        VectorXd& weights,  // precomputed weights for n + 1 control points on this curve
+        int       ko,       // index of starting knot
+        int       po,       // index of starting parameter
+        int       co);      // index of starting domain pt in current curve
+
+template
+void
+mfa::
+Encoder<double>::
+RHS(
+        int       cur_dim,  // current dimension
+        MatrixXd& in_pts,   // input points (not the default domain stored in the mfa)
+        MatrixXd& N,        // matrix of basis function coefficients
+        MatrixXd& Nt,       // transpose of N
+        MatrixXd& R,        // (output) residual matrix allocated by caller
+        VectorXd& weights,  // precomputed weights for n + 1 control points on this curve
+        int       ko,       // index of starting knot
+        int       po,       // index of starting parameter
+        int       co,       // index of starting input pt in current curve
+        int       cs);      // stride of input pts in current curve
 
 template
 void
@@ -257,14 +315,12 @@ CtrlCurve(
         MatrixXd& NtNi,        // inverse of NtN
         MatrixXd& R,           // residual matrix for current dimension and curve
         MatrixXd& P,           // solved points for current dimension and curve
-        VectorXi& n,           // number of control point spans in each dimension
         size_t    k,           // current dimension
         size_t    co,          // starting ofst for reading domain pts
         size_t    cs,          // stride for reading domain points
         size_t    to,          // starting ofst for writing control pts
         MatrixXd& temp_ctrl0,  // first temporary control points buffer
-        MatrixXd& temp_ctrl1,  // second temporary control points buffer
-        VectorXd& weights);    // precomputed weights for control points on this curve
+        MatrixXd& temp_ctrl1); // second temporary control points buffer
 
 template
 void
@@ -272,7 +328,6 @@ mfa::
 Encoder<double>::
 CopyCtrl(
         MatrixXd& P,          // solved points for current dimension and curve
-        VectorXi& n,          // number of control point spans in each dimension
         int       k,          // current dimension
         size_t    co,         // starting offset for reading domain points
         size_t    cs,         // stride for reading domain points
@@ -286,7 +341,6 @@ mfa::
 Encoder<double>::
 CopyCtrl(
         MatrixXd& P,          // solved points for current dimension and curve
-        VectorXi& n,          // number of control point spans in each dimension
         int       k,          // current dimension
         size_t    co,         // starting offset for reading domain points
         MatrixXd& temp_ctrl); // temporary control points buffer

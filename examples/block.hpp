@@ -1155,10 +1155,6 @@ struct Block
             nctrl_pts(i) =  a->nctrl_pts[i];
         mfa = new mfa::MFA<T>(p, ndom_pts, domain, ctrl_pts, nctrl_pts, weights, knots);
         mfa->FixedEncode(nctrl_pts);
-
-        // debug: play with weights
-//         weights(4) = 1.1;
-//         cerr << "weights: " << weights.transpose() << endl;
     }
 
     // adaptively encode block to desired error limit
