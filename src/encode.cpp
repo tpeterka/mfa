@@ -784,7 +784,7 @@ CopyCtrl(MatrixX<T>& P,          // solved points for current dimension and curv
         mfa.ctrl_pts.row(to) = mfa.domain.row(co);
         for (int i = 1; i < P.rows() + 1; i++)
             mfa.ctrl_pts.row(to + i * cs) = P.row(i - 1);
-        mfa.ctrl_pts.row(to + P.rows() + 1 * cs) = mfa.domain.row(co + mfa.ndom_pts(k) - 1);
+        mfa.ctrl_pts.row(to + (P.rows() + 1) * cs) = mfa.domain.row(co + mfa.ndom_pts(k) - 1);
     }
     // first dim copied from domain to temp_ctrl0
     else if (k == 0)
@@ -792,7 +792,7 @@ CopyCtrl(MatrixX<T>& P,          // solved points for current dimension and curv
         temp_ctrl0.row(to) = mfa.domain.row(co);
         for (int i = 1; i < P.rows() + 1; i++)
             temp_ctrl0.row(to + i * cs) = P.row(i - 1);
-        temp_ctrl0.row(to + P.rows() + 1 * cs) = mfa.domain.row(co + mfa.ndom_pts(k) - 1);
+        temp_ctrl0.row(to + (P.rows() + 1) * cs) = mfa.domain.row(co + mfa.ndom_pts(k) - 1);
     }
     // even numbered dims (but not the last one) copied from temp_ctrl1 to temp_ctrl0
     else if (k % 2 == 0 && k < ndims - 1)
@@ -800,7 +800,7 @@ CopyCtrl(MatrixX<T>& P,          // solved points for current dimension and curv
         temp_ctrl0.row(to) = temp_ctrl1.row(co);
         for (int i = 1; i < P.rows() + 1; i++)
             temp_ctrl0.row(to + i * cs) = P.row(i - 1);
-        temp_ctrl0.row(to + P.rows() + 1 * cs) = temp_ctrl1.row(co + (mfa.ndom_pts(k) - 1) * cs);
+        temp_ctrl0.row(to + (P.rows() + 1) * cs) = temp_ctrl1.row(co + (mfa.ndom_pts(k) - 1) * cs);
     }
     // odd numbered dims (but not the last one) copied from temp_ctrl0 to temp_ctrl1
     else if (k % 2 == 1 && k < ndims - 1)
@@ -808,7 +808,7 @@ CopyCtrl(MatrixX<T>& P,          // solved points for current dimension and curv
         temp_ctrl1.row(to) = temp_ctrl0.row(co);
         for (int i = 1; i < P.rows() + 1; i++)
             temp_ctrl1.row(to + i * cs) = P.row(i - 1);
-        temp_ctrl1.row(to + P.rows() + 1 * cs) = temp_ctrl0.row(co + (mfa.ndom_pts(k) - 1) * cs);
+        temp_ctrl1.row(to + (P.rows() + 1) * cs) = temp_ctrl0.row(co + (mfa.ndom_pts(k) - 1) * cs);
     }
     // final dim if even is copied from temp_ctrl1 to ctrl_pts
     else if (k == ndims - 1 && k % 2 == 0)
@@ -816,7 +816,7 @@ CopyCtrl(MatrixX<T>& P,          // solved points for current dimension and curv
         mfa.ctrl_pts.row(to) = temp_ctrl1.row(co);
         for (int i = 1; i < P.rows() + 1; i++)
             mfa.ctrl_pts.row(to + i * cs) = P.row(i - 1);
-        mfa.ctrl_pts.row(to + P.rows() + 1 * cs) = temp_ctrl1.row(co + (mfa.ndom_pts(k) - 1) * cs);
+        mfa.ctrl_pts.row(to + (P.rows() + 1) * cs) = temp_ctrl1.row(co + (mfa.ndom_pts(k) - 1) * cs);
     }
     // final dim if odd is copied from temp_ctrl0 to ctrl_pts
     else if (k == ndims - 1 && k % 2 == 1)
@@ -824,7 +824,7 @@ CopyCtrl(MatrixX<T>& P,          // solved points for current dimension and curv
         mfa.ctrl_pts.row(to) = temp_ctrl0.row(co);
         for (int i = 1; i < P.rows() + 1; i++)
             mfa.ctrl_pts.row(to + i * cs) = P.row(i - 1);
-        mfa.ctrl_pts.row(to + P.rows() + 1 * cs) = temp_ctrl0.row(co + (mfa.ndom_pts(k) - 1) * cs);
+        mfa.ctrl_pts.row(to + (P.rows() + 1) * cs) = temp_ctrl0.row(co + (mfa.ndom_pts(k) - 1) * cs);
     }
 }
 
@@ -955,26 +955,25 @@ CtrlCurve(MatrixX<T>& N,          // basis functions for current dimension
 
     // "rationalize" N and Nt
     // ie, convert their basis function coefficients to rational ones with weights
-//     MatrixX<T> N_rat = N;                       // need a copy because N, Nt will be reused for other curves
-//     MatrixX<T> Nt_rat = Nt;
-//     MatrixX<T> NtN_rat = NtN;
-//     for (auto i = 0; i < N.cols(); i++)
-//         N_rat.col(i) *= weights(i + 1);
-//     for (auto j = 0; j < N.rows(); j++)
-//         N_rat.row(j) /= denom(j);
-//     for (auto i = 0; i < Nt.rows(); i++)
-//         Nt_rat.row(i) *= weights(i + 1);
-//     for (auto j = 0; j < Nt.cols(); j++)
-//         Nt_rat.col(j) /= denom(j);
-//     NtN_rat = Nt_rat * N_rat;
+    MatrixX<T> N_rat = N;                       // need a copy because N, Nt will be reused for other curves
+    MatrixX<T> Nt_rat = Nt;
+    MatrixX<T> NtN_rat = NtN;
+    for (auto i = 0; i < N.cols(); i++)
+        N_rat.col(i) *= weights(i + 1);
+    for (auto j = 0; j < N.rows(); j++)
+        N_rat.row(j) /= denom(j);
+    for (auto i = 0; i < Nt.rows(); i++)
+        Nt_rat.row(i) *= weights(i + 1);
+    for (auto j = 0; j < Nt.cols(); j++)
+        Nt_rat.col(j) /= denom(j);
+    NtN_rat = Nt_rat * N_rat;
 
     // debug
     //         cerr << "k " << k << " NtN:\n" << NtN << endl;
     //         cerr << " NtN_rat:\n" << NtN_rat << endl;
 
     // solve for P
-    P = NtN.ldlt().solve(R);
-//     P = NtN_rat.ldlt().solve(R);
+    P = NtN_rat.ldlt().solve(R);
 
     // append points from P to control points
     // TODO: any way to avoid this?
