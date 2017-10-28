@@ -148,9 +148,39 @@ Weights(
         exit(0);
     }
     // debug
-//     cerr << "M:\n"            << M                          << endl;
-//     cerr << "Eigenvalues:\n"  << eigensolver.eigenvalues()  << endl;
-//     cerr << "Eigenvectors:\n" << eigensolver.eigenvectors() << endl;
+    cerr << "M:\n"            << M                          << endl;
+    cerr << "Eigenvalues:\n"  << eigensolver.eigenvalues()  << endl;
+    cerr << "Eigenvectors:\n" << eigensolver.eigenvectors() << endl;
+
+    VectorX<T> ew(weights.size() - 2);                          // weights from eigenspace
+    const MatrixX<T>& EV = eigensolver.eigenvectors();          // typing shortcut
+    assert(ew.size() == EV.rows());                             // sanity
+
+    // if smallest eigenvector is all positive or all negative, those are the weights
+    if ( (EV.col(0).array() > 0.0).all() )
+        ew = EV.col(0);
+    else if ( (EV.col(0).array() < 0.0).all() )
+        ew = -EV.col(0);
+
+    // if smallest eigenvector is mixed sign, then expand eigen space
+    else
+    {
+        // TODO
+    }
+
+    cerr << "orig ew:\n" << ew << endl;
+    ew.normalize();
+    cerr << "normalized ew\n" << ew << endl;
+    ew *= VectorX<T>::Ones(ew.size()).norm();                   // scaled to norm of a 1's vector
+    cerr << "scaled normalized ew\n" << ew << endl;
+    weights(0) = 1.0;
+    weights(weights.size() - 1) = 1.0;
+    for (auto i = 1; i < weights.size() - 1; i++)
+        weights(i) = ew(i - 1);
+
+    // debug
+    cerr << "Weights:\n" << weights << endl;
+    cerr << "Weights norm = " << weights.norm() << endl;
 }
 
 #if 1
@@ -937,40 +967,6 @@ CtrlCurve(MatrixX<T>& N,          // basis functions for current dimension
         RHS(k, temp_ctrl1, N, Nt,  R, weights, mfa.ko[k], mfa.po[k], co, cs); // input points = temp_ctrl1
 
 #endif
-
-//     // compute rational denominators for input points
-//     // rational denominator requires all n + 1 basis functions and weights, not skipping first and last
-//     VectorX<T> denom(m - 1);            // rational denomoninator for param of each input point excl. ends
-//     MatrixX<T> Nk(1, n + 1);            // basis function coeffs for one parameter value (all coeffs, not skipping first and last)
-//     for (int j = 1; j < m; j++)
-//     {
-//         int span = mfa.FindSpan(k, mfa.params(mfa.po[k] + j), mfa.ko[k]) - mfa.ko[k];   // relative to ko
-//         assert(span <= n);                   // sanity
-//         Nk = MatrixX<T>::Zero(1, n + 1);     // basis coefficients for Rk[j]
-//         mfa.BasisFuns(k, mfa.params(mfa.po[k] + j), span, Nk, 0, n, 0);
-//         denom(j - 1) = (Nk.row(0).cwiseProduct(weights.transpose())).sum();
-//     }
-// 
-//     //         cerr << "denom:\n" << denom << endl;
-// 
-//     // "rationalize" N and Nt
-//     // ie, convert their basis function coefficients to rational ones with weights
-//     MatrixX<T> N_rat = N;                       // need a copy because N, Nt will be reused for other curves
-//     MatrixX<T> Nt_rat = Nt;
-//     MatrixX<T> NtN_rat = NtN;
-//     for (auto i = 0; i < N.cols(); i++)
-//         N_rat.col(i) *= weights(i + 1);
-//     for (auto j = 0; j < N.rows(); j++)
-//         N_rat.row(j) /= denom(j);
-//     for (auto i = 0; i < Nt.rows(); i++)
-//         Nt_rat.row(i) *= weights(i + 1);
-//     for (auto j = 0; j < Nt.cols(); j++)
-//         Nt_rat.col(j) /= denom(j);
-//     NtN_rat = Nt_rat * N_rat;
-
-    // debug
-    //         cerr << "k " << k << " NtN:\n" << NtN << endl;
-    //         cerr << " NtN_rat:\n" << NtN_rat << endl;
 
     // rationalize NtN, ie, weight the basis function coefficients
     MatrixX<T> NtN_rat = NtN;

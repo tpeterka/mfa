@@ -91,9 +91,6 @@ NewKnots_curve1(
         // maximum number of domain points with error greater than err_limit
         size_t max_nerr     =  0;
 
-        // hard-coded weights all equal to 1 for now
-        VectorX<T> temp_weights = VectorX<T>::Ones(mfa.nctrl_pts(k));
-
         // compute the matrix N, eq. 9.66 in P&T
         // N is a matrix of (m - 1) x (n - 1) scalars that are the basis function coefficients
         //  _                                _
@@ -169,7 +166,7 @@ NewKnots_curve1(
                 encoder.CopyCtrl(P, k, mfa.co[k][j * s], temp_ctrl);
 
                 // compute the error on the curve (number of input points with error > err_limit)
-                nerrs[j] = encoder.ErrorCurve(k, mfa.co[k][j * s], temp_ctrl, temp_weights, err_limit);
+                nerrs[j] = encoder.ErrorCurve(k, mfa.co[k][j * s], temp_ctrl, weights, err_limit);
 
             });                                               // parallel for over curves in this dimension
 
@@ -229,7 +226,7 @@ NewKnots_curve1(
         // --- TODO: end of recomputing worst curve ---
 
         // compute the new knots on the worst curve in this dimension
-        encoder.ErrorCurve(k, mfa.co[k][worst_curve_idx], temp_ctrl, temp_weights, nnew_knots, new_knots, err_limit);
+        encoder.ErrorCurve(k, mfa.co[k][worst_curve_idx], temp_ctrl, weights, nnew_knots, new_knots, err_limit);
 
         // free R, NtN, and P
         R.resize(0, 0);
@@ -295,9 +292,6 @@ NewKnots_curve(
         // maximum number of domain points with error greater than err_limit and their curves
         size_t max_nerr     =  0;
 
-        // hard-coded weights all equal to 1 for now
-        VectorX<T> temp_weights = VectorX<T>::Ones(mfa.nctrl_pts(k));
-
         // compute the matrix N, eq. 9.66 in P&T
         // N is a matrix of (m - 1) x (n - 1) scalars that are the basis function coefficients
         //  _                                _
@@ -359,7 +353,7 @@ NewKnots_curve(
 
                     // rationalize NtN
                     MatrixX<T> NtN_rat(NtN.rows(), NtN.cols());
-                    mfa.Rationalize(k, temp_weights, N, Nt, NtN_rat);
+                    mfa.Rationalize(k, weights, N, Nt, NtN_rat);
 
                     // solve for P for one curve of control points
 //                   P = NtN.ldlt().solve(R);
@@ -370,7 +364,7 @@ NewKnots_curve(
                     encoder.CopyCtrl(P, k, mfa.co[k][j], temp_ctrl);
 
                     // compute the error on the curve (number of input points with error > err_limit)
-                    size_t nerr = encoder.ErrorCurve(k, mfa.co[k][j], temp_ctrl, temp_weights, err_spans, err_limit);
+                    size_t nerr = encoder.ErrorCurve(k, mfa.co[k][j], temp_ctrl, weights, err_spans, err_limit);
 
                     if (nerr > max_nerr)
                     {
