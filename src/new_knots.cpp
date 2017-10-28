@@ -115,8 +115,9 @@ NewKnots_curve1(
         // compute the product Nt x N
         // TODO: NtN is going to be very sparse when it is large: switch to sparse representation
         // NtN has semibandwidth < p + 1 nonzero entries across diagonal
+        MatrixX<T> Nt = N.transpose();
         MatrixX<T> NtN(n(k) - 1, n(k) - 1);
-        NtN = N.transpose() * N;
+        NtN = Nt * N;
 
         // debug
         //         cerr << "k " << k << " NtN:\n" << NtN << endl;
@@ -154,8 +155,13 @@ NewKnots_curve1(
                 // compute R from input domain points
                 encoder.RHS(k, N, R, weights, mfa.ko[k], mfa.po[k], mfa.co[k][j * s]);
 
+                // rationalize NtN
+                MatrixX<T> NtN_rat(NtN.rows(), NtN.cols());
+                mfa.Rationalize(k, weights, N, Nt, NtN_rat);
+
                 // solve for P for one curve of control points
-                P = NtN.ldlt().solve(R);
+//                 P = NtN.ldlt().solve(R);
+                P = NtN_rat.ldlt().solve(R);
 
                 // append points from P to control points
                 // TODO: any way to avoid this?
@@ -207,8 +213,13 @@ NewKnots_curve1(
         // compute R from input domain points
         encoder.RHS(k, N, R, weights, mfa.ko[k], mfa.po[k], mfa.co[k][worst_curve_idx]);
 
+        // rationalize NtN
+        MatrixX<T> NtN_rat(NtN.rows(), NtN.cols());
+        mfa.Rationalize(k, weights, N, Nt, NtN_rat);
+
         // solve for P for one curve of control points
-        P = NtN.ldlt().solve(R);
+//         P = NtN.ldlt().solve(R);
+        P = NtN_rat.ldlt().solve(R);
 
         // append points from P to control points
         // TODO: any way to avoid this?
@@ -308,8 +319,9 @@ NewKnots_curve(
         // compute the product Nt x N
         // TODO: NtN is going to be very sparse when it is large: switch to sparse representation
         // NtN has semibandwidth < p + 1 nonzero entries across diagonal
+        MatrixX<T> Nt = N.transpose();
         MatrixX<T> NtN(n(k) - 1, n(k) - 1);
-        NtN = N.transpose() * N;
+        NtN = Nt * N;
 
         // R is the right hand side needed for solving NtN * P = R
         MatrixX<T> R(n(k) - 1, mfa.domain.cols());
@@ -345,8 +357,13 @@ NewKnots_curve(
                     // compute R from input domain points
                     encoder.RHS(k, N, R, weights, mfa.ko[k], mfa.po[k], mfa.co[k][j]);
 
+                    // rationalize NtN
+                    MatrixX<T> NtN_rat(NtN.rows(), NtN.cols());
+                    mfa.Rationalize(k, temp_weights, N, Nt, NtN_rat);
+
                     // solve for P for one curve of control points
-                    P = NtN.ldlt().solve(R);
+//                   P = NtN.ldlt().solve(R);
+                    P = NtN_rat.ldlt().solve(R);
 
                     // append points from P to control points
                     // TODO: any way to avoid this?
@@ -507,8 +524,13 @@ NewKnots_curve(
                 // compute R from input domain points
                 RHS(k, N, R, weights, mfa.ko[k], mfa.po[k], mfa.co[k][j * s]);
 
+                // rationalize NtN
+                MatrixX<T> NtN_rat(NtN.rows(), NtN.cols());
+                mfa.Rationalize(k, weights, N, Nt, NtN_rat);
+
                 // solve for P for one curve of control points
-                P = NtN.ldlt().solve(R);
+//                 P = NtN.ldlt().solve(R);
+                P = NtN_rat.ldlt().solve(R);
 
                 // append points from P to control points
                 // TODO: any way to avoid this?
@@ -560,8 +582,13 @@ NewKnots_curve(
         // compute R from input domain points
         RHS(k, N, R, weights, mfa.ko[k], mfa.po[k], mfa.co[k][worst_curve_idx]);
 
+        // rationalize NtN
+        MatrixX<T> NtN_rat(NtN.rows(), NtN.cols());
+        mfa.Rationalize(k, weights, N, Nt, NtN_rat);
+
         // solve for P for one curve of control points
-        P = NtN.ldlt().solve(R);
+//        P = NtN.ldlt().solve(R);
+        P = NtN_rat.ldlt().solve(R);
 
         // append points from P to control points
         // TODO: any way to avoid this?

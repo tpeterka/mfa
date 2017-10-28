@@ -176,6 +176,17 @@ ijk2idx(
         VectorXi&  ijk,             // i,j,k,... indices to all dimensions
         size_t&    idx);            // (output) linear index
 
+template
+void
+mfa::
+MFA<float>::
+Rationalize(
+        int         k,              // current dimension
+        VectorXf&   weights,        // weights of control points
+        MatrixXf&   N,              // basis function coefficients
+        MatrixXf&   Nt,             // transpose of N
+        MatrixXf&   NtN_rat);       // (output) rationalized Nt * N
+
 // double versions of function declarations
 
 template
@@ -354,4 +365,14 @@ ijk2idx(
         VectorXi&  ijk,             // i,j,k,... indices to all dimensions
         size_t&    idx);            // (output) linear index
 
+template
+void
+mfa::
+MFA<double>::
+Rationalize(
+        int         k,              // current dimension
+        VectorXd&   weights,        // weights of control points
+        MatrixXd&   N,              // basis function coefficients
+        MatrixXd&   Nt,             // transpose of N
+        MatrixXd&   NtN_rat);       // (output) rationalized Nt * N
 

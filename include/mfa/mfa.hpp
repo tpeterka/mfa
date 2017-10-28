@@ -107,6 +107,12 @@ namespace mfa
                 VectorXi& span_mins,        // minimum domain points of all knot spans
                 VectorXi& span_maxs);       // maximum domain points of all knot spans
 
+        void Rationalize(
+                int         k,              // current dimension
+                VectorX<T>& weights,        // weights of control points
+                MatrixX<T>& N,              // basis function coefficients
+                MatrixX<T>& Nt,             // transpose of N
+                MatrixX<T>& NtN_rat);       // (output) rationalized Nt * N
     private:
 
         int FindSpan(
