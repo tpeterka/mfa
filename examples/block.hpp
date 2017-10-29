@@ -1377,7 +1377,8 @@ struct Block
     {
 //         cerr << "domain\n" << domain << endl;
 //         cerr << "nctrl_pts:\n" << nctrl_pts << endl;
-//         cerr << ctrl_pts.rows() << " final control points\n" << ctrl_pts << endl;
+        cerr << ctrl_pts.rows() << " final control points\n" << ctrl_pts << endl;
+        cerr << weights.size()  << " final weights\n" << weights << endl;
 //         cerr << knots.size() << " knots\n" << knots << endl;
 //         cerr << approx.rows() << " approximated points\n" << approx << endl;
         fprintf(stderr, "range extent          = %e\n", mfa->range_extent);

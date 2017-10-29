@@ -329,13 +329,10 @@ mfa::
 MFA<T>::
 FixedEncode(VectorXi &nctrl_pts_)           // (output) number of control points in each dim
 {
+    weights = VectorX<T>::Ones(tot_nctrl);
     mfa::Encoder<T> encoder(*this);
     encoder.Encode();
-
     nctrl_pts_ = nctrl_pts;
-
-    // for now, set weights to 1.0
-    weights = VectorX<T>::Ones(ctrl_pts.rows());
 }
 
 // adaptive encode
@@ -348,13 +345,10 @@ AdaptiveEncode(
         VectorXi& nctrl_pts_,                // (output) number of control points in each dim
         int       max_rounds)                // optional maximum number of rounds
 {
+    weights = VectorX<T>::Ones(tot_nctrl);
     mfa::Encoder<T> encoder(*this);
     encoder.AdaptiveEncode(err_limit, max_rounds);
-
     nctrl_pts_ = nctrl_pts;
-
-    // for now, set weights to 1.0
-    weights = VectorX<T>::Ones(ctrl_pts.rows());
 }
 
 // nonlinear encode

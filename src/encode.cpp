@@ -165,7 +165,9 @@ Weights(
     // if smallest eigenvector is mixed sign, then expand eigen space
     else
     {
-        // TODO
+        // TODO: expand eigenspace
+        // for now punt and leave weights all 1s
+        ew = VectorX<T>::Ones(weights.size() - 2);
     }
 
     cerr << "orig ew:\n" << ew << endl;
@@ -978,6 +980,13 @@ CtrlCurve(MatrixX<T>& N,          // basis functions for current dimension
     // append points from P to control points
     // TODO: any way to avoid this?
     CopyCtrl(P, k, co, cs, to, temp_ctrl0, temp_ctrl1);
+
+    // copy weights of final dimension to mfa
+    if (k == mfa.p.size() - 1)
+    {
+        for (auto i = 0; i < weights.size(); i++)
+            mfa.weights(to + i * cs) = weights(i);
+    }
 }
 
 // returns number of points in a curve that have error greater than err_limit
