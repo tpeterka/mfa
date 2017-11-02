@@ -40,6 +40,15 @@ template
 void
 mfa::
 Encoder<float>::
+Weights(
+        int       k,               // current dimension
+        MatrixXf& Q,               // input points
+        VectorXf& weights);        // output weights
+
+template
+void
+mfa::
+Encoder<float>::
 RHS(
         int       cur_dim,  // current dimension
         MatrixXf& N,        // matrix of basis function coefficients
@@ -236,6 +245,15 @@ Weights(
         MatrixXd& Nt,              // transpose of N
         MatrixXd& NtN,             // Nt * N
         MatrixXd& NtNi,            // inverse of NtN
+        VectorXd& weights);        // output weights
+
+template
+void
+mfa::
+Encoder<double>::
+Weights(
+        int       k,               // current dimension
+        MatrixXd& Q,               // input points
         VectorXd& weights);        // output weights
 
 template

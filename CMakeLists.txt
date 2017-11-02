@@ -72,17 +72,25 @@ endif                       (NOT diy_thread)
 # DIY
 find_path                   (DIY_INCLUDE_DIRS diy/types.h)
 
+# coin-or and rehearse
+link_directories            (${COIN_OR_LIB_DIRS})
+find_path                   (COIN_OR_INCLUDE_DIRS   RehearseConfig.h)
+find_library                (COIN_OR_LIBS NAMES     rehearse)
+
 # Include dirs
 set                         (CMAKE_INCLUDE_SYSTEM_FLAG_CXX "-isystem")
 include_directories         (${CMAKE_CURRENT_SOURCE_DIR}/include
                             ${DIY_INCLUDE_DIRS}
                             ${EIGEN_INCLUDE_DIRS}
+                            ${COIN_OR_INCLUDE_DIRS}
                              SYSTEM ${MPI_INCLUDE_PATH}
                             )
 
 # Libraries
 set                         (libraries
                              ${libraries}
+                             ${COIN_OR_LIB1}
+                             ${COIN_OR_LIB2}
                              ${CMAKE_THREAD_LIBS_INIT})
 
 # Subdirectories

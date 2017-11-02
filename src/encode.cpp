@@ -14,6 +14,17 @@
 #include <iostream>
 #include <set>
 
+// rehearse and coin-or (linear program) headers
+#include <coin/CelModel.h>
+#include <coin/CelNumVar.h>
+#include <coin/CelIntVar.h>
+#include <coin/CelBoolVar.h>
+#include <coin/CelNumVarArray.h>
+#include <coin/CelBoolVarArray.h>
+#include "coin/CbcModel.hpp"
+#include "coin/OsiClpSolverInterface.hpp"
+#include "coin/OsiCbcSolverInterface.hpp"
+
 template <typename T>                                           // float or double
 mfa::
 Encoder<T>::
@@ -87,7 +98,9 @@ AdaptiveEncode(
     Encode();
 }
 
+// DEPRECATE once it is assured that solving for full weights is more accurate (appears to be)
 // linear solution of weights according to Ma and Kruth 1995 (M&K95)
+// solves for interior weights only
 // our N is M&K's B
 // our Q is M&K's X_bar
 // However, we skip end points that are pinned, so we solve a smaller system by 2 points in each dimension
@@ -170,6 +183,10 @@ Weights(
         ew = VectorX<T>::Ones(weights.size() - 2);
     }
 
+//     cerr << "sum of 1st 2 eigenvectors multiplied by eigenvalues:\n" << endl;
+//     VectorX<T> evals = eigensolver.eigenvalues();
+//     cerr << evals(0) * EV.col(0) + evals(1) * EV.col(1) << endl;
+
     cerr << "orig ew:\n" << ew << endl;
     ew.normalize();
     cerr << "normalized ew\n" << ew << endl;
@@ -183,6 +200,190 @@ Weights(
     // debug
     cerr << "Weights:\n" << weights << endl;
     cerr << "Weights norm = " << weights.norm() << endl;
+
+    // test of coin-or
+    fprintf(stderr, "\nTesting coin-or linear solver\n");
+    using namespace rehearse;
+
+    OsiClpSolverInterface *solver = new OsiClpSolverInterface();
+    CelModel model(*solver);
+
+    CelNumVar x1("x1");
+    CelNumVar x2("x2");
+
+    model.setObjective (       7 * x1 + 9 * x2 );
+
+    model.addConstraint(       1 * x1 +     x2 == 18  );
+    model.addConstraint(                    x2 <= 14  );
+    model.addConstraint(       2 * x1 + 3 * x2 <= 50  );
+
+    solver->setObjSense(-1.0);
+    model.builderToSolver();
+    solver->setLogLevel(0);
+    solver->initialSolve();
+
+    fprintf(stderr, "Solution for x1 : %g\n", model.getSolutionValue(x1));
+    fprintf(stderr, "Solution for x2 : %g\n", model.getSolutionValue(x2));
+    fprintf(stderr, "Solution objvalue = : %g\n", solver->getObjValue());
+
+    assert(fabs(4 - model.getSolutionValue(x1)) < 0.00000001);
+    assert(fabs(14 - model.getSolutionValue(x2)) < 0.00000001);
+    assert(fabs(18 - (model.getSolutionValue(x1) + model.getSolutionValue(x2)) ) < 0.00000001);
+    assert(fabs(154 - solver->getObjValue()) < 0.00000001);
+
+    delete solver;
+    fprintf(stderr, "Coin-or linear solver passed\n\n");
+}
+
+// linear solution of weights according to Ma and Kruth 1995 (M&K95)
+// solves for all weights, not just interior
+// our N is M&K's B
+// our Q is M&K's X_bar
+// However, we skip end points that are pinned, so we solve a smaller system by 2 points in each dimension
+template <typename T>
+void
+mfa::
+Encoder<T>::
+Weights(
+        int         k,              // current dimension
+        MatrixX<T>& Q,              // input points
+        VectorX<T>& weights)        // output weights
+{
+    // compute matrix N of all basis functions (including end points)
+    MatrixX<T> N = MatrixX<T>::Zero(mfa.ndom_pts(k), mfa.nctrl_pts(k)); // coefficients matrix
+    for (auto i = 0; i < N.rows(); i++)
+    {
+        int span = mfa.FindSpan(k, mfa.params(mfa.po[k] + i), mfa.ko[k]) - mfa.ko[k];   // relative to ko
+        assert(span <= mfa.nctrl_pts(k) - 1);            // sanity
+        mfa.BasisFuns(k, mfa.params(mfa.po[k] + i), span, N, 0, mfa.nctrl_pts(k) - 1, i);
+    }
+
+    // debug
+//     cerr << "full N:\n" << N << endl;
+//     for (auto i = 0; i < N.rows(); i++)
+//         cerr << "row " << i << " sum = " << N.row(i).sum() << endl;
+
+    // Nt, NtN, NtNi
+    MatrixX<T> Nt   = N.transpose();
+    MatrixX<T> NtN  = Nt * N;                   // TODO: NtN does not need to be kept; strictly temporary
+    MatrixX<T> NtNi = NtN.partialPivLu().inverse();
+
+    // debug
+//     cerr << "NtN:\n" << NtN << endl;
+//     cerr << "NtNi:\n" << NtNi << endl;
+
+    // TODO: decide if I need to represent all dims or only 2 dims for current curve
+    // ie, we are finding weights of high-d points for a 2-d curve
+    int pt_dim = mfa.domain.cols();             // dimensionality of input and control points (domain and range)
+    vector<MatrixX<T>> NtQ2(pt_dim);            // temp. matrices N^T x Q^2 for each dim of points (TODO: any way to avoid?)
+    vector<MatrixX<T>> NtQ2N(pt_dim);           // matrices N^T x Q^2 x N for each dim of points
+    vector<MatrixX<T>> NtQ(pt_dim);             // temp. matrices N^T x Q  for each dim of points (TODO: any way to avoid?)
+    vector<MatrixX<T>> NtQN(pt_dim);            // matrices N^T x Q x N for each dim of points
+
+    // allocate matrices of NtQ, NtQ2, NtQ2N, and NtQN
+    for (auto j = 0; j < pt_dim; j++)
+    {
+        NtQ2[j]  = MatrixX<T>::Zero(Nt.rows(),   Nt.cols());
+        NtQ[j]   = MatrixX<T>::Zero(Nt.rows(),   Nt.cols());
+        NtQ2N[j] = MatrixX<T>::Zero(NtN.rows(),  NtN.cols());
+        NtQN[j]  = MatrixX<T>::Zero(NtN.rows(),  NtN.cols());
+    }
+
+    // compute NtQN and NtQ2N
+    for (auto j = 0; j < pt_dim; j++)           // for all point dims
+    {
+        // temporary matrices NtQ and NtQ2
+        for (auto i = 0; i < Nt.cols(); i++)
+        {
+            T dom_pt_coord = Q(i, j);      // current coordinate of current input point
+            NtQ[j].col(i)  = Nt.col(i) * dom_pt_coord;
+            NtQ2[j].col(i) = Nt.col(i) * dom_pt_coord * dom_pt_coord;
+        }
+        // final matrices NtQN and NtQ2N
+        NtQN[j]  = NtQ[j] * N;
+        NtQ2N[j] = NtQ2[j] * N;
+
+        // debug
+//         cerr << "j=" << j << "\n" << endl;
+//         cerr << "NtQN[j]:\n" << NtQN[j] << endl;
+//         cerr << "NtQ2N[j]:\n" << NtQ2N[j] << endl;
+//         cerr << "NtQN[j] * NtNi * NtQN[j]:\n" << NtQN[j] * NtNi * NtQN[j] << endl;
+//         cerr << "M[j]:\n" << NtQ2N[j] - NtQN[j] * NtNi * NtQN[j] << endl;
+    }
+
+    // compute the matrix M according to eq.3 and eq. 4 of M&K95
+    MatrixX<T> M = MatrixX<T>::Zero(NtN.rows(), NtN.cols());
+    for (auto j = 0; j < pt_dim; j++)           // for all point dims
+        M += NtQ2N[j] - NtQN[j] * NtNi * NtQN[j];
+
+    // compute the eigenvalues and eigenvectors of M (eq. 9 of M&K95)
+    Eigen::SelfAdjointEigenSolver<MatrixX<T>> eigensolver(M);
+    if (eigensolver.info() != Eigen::Success)
+    {
+        fprintf(stderr, "Error: Encoder::Weights(), computing eigenvalues of M failed, perhaps M is not self-adjoint?\n");
+        exit(0);
+    }
+    // debug
+    cerr << "M:\n"            << M                          << endl;
+    cerr << "Eigenvalues:\n"  << eigensolver.eigenvalues()  << endl;
+    cerr << "Eigenvectors:\n" << eigensolver.eigenvectors() << endl;
+
+    const MatrixX<T>& EV = eigensolver.eigenvectors();          // typing shortcut
+
+    // if smallest eigenvector is all positive or all negative, those are the weights
+    if ( (EV.col(0).array() > 0.0).all() )
+        weights = EV.col(0);
+    else if ( (EV.col(0).array() < 0.0).all() )
+        weights = -EV.col(0);
+
+    // if smallest eigenvector is mixed sign, then expand eigen space
+    else
+    {
+        // TODO: expand eigenspace
+        // for now punt and leave weights all 1s
+        weights = VectorX<T>::Ones(weights.size());
+    }
+
+    // debug
+//     VectorX<T> evals = eigensolver.eigenvalues();
+//     cerr << "sum of 1st 2 eigenvectors multiplied by eigenvalues:\n" <<
+//         evals(0) * EV.col(0) + evals(1) * EV.col(1) << "\n" << endl;
+
+    // debug
+    cerr << "Weights:\n" << weights << endl;
+
+    // test of coin-or
+    fprintf(stderr, "\nTesting coin-or linear solver\n");
+    using namespace rehearse;
+
+    OsiClpSolverInterface *solver = new OsiClpSolverInterface();
+    CelModel model(*solver);
+
+    CelNumVar x1("x1");
+    CelNumVar x2("x2");
+
+    model.setObjective (       7 * x1 + 9 * x2 );
+
+    model.addConstraint(       1 * x1 +     x2 == 18  );
+    model.addConstraint(                    x2 <= 14  );
+    model.addConstraint(       2 * x1 + 3 * x2 <= 50  );
+
+    solver->setObjSense(-1.0);
+    model.builderToSolver();
+    solver->setLogLevel(0);
+    solver->initialSolve();
+
+    fprintf(stderr, "Solution for x1 : %g\n", model.getSolutionValue(x1));
+    fprintf(stderr, "Solution for x2 : %g\n", model.getSolutionValue(x2));
+    fprintf(stderr, "Solution objvalue = : %g\n", solver->getObjValue());
+
+    assert(fabs(4 - model.getSolutionValue(x1)) < 0.00000001);
+    assert(fabs(14 - model.getSolutionValue(x2)) < 0.00000001);
+    assert(fabs(18 - (model.getSolutionValue(x1) + model.getSolutionValue(x2)) ) < 0.00000001);
+    assert(fabs(154 - solver->getObjValue()) < 0.00000001);
+
+    delete solver;
+    fprintf(stderr, "Coin-or linear solver passed\n\n");
 }
 
 #if 1
@@ -939,10 +1140,12 @@ CtrlCurve(MatrixX<T>& N,          // basis functions for current dimension
 
     // debug
 //     cerr << "k=" << k << " Q:\n" << Q << endl;
+//     cer; << "N:\n" << N << endl;
 
     // solve for weights
     VectorX<T> weights = VectorX<T>::Ones(n + 1);    // weights for control points on this curve
-    Weights(Q, N, Nt, NtN, NtNi, weights);
+//     Weights(Q, N, Nt, NtN, NtNi, weights);       // solve for interior weights
+    Weights(k, Q, weights);                         // solve for all weights, including end points
 
     // compute R
     // first dimension reads from domain

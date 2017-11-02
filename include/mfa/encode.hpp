@@ -46,6 +46,11 @@ namespace mfa
                 MatrixX<T>& NtNi,           // inverse of NtN
                 VectorX<T>& weights);       // output weights
 
+        void Weights(
+                int         k,              // current dimension
+                MatrixX<T>& Q,              // input points
+                VectorX<T>& weights);       // output weights
+
         // P&T with default domain
         void RHS(
                 int         cur_dim,  // current dimension
