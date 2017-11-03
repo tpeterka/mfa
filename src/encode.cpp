@@ -98,109 +98,109 @@ AdaptiveEncode(
     Encode();
 }
 
-// DEPRECATE once it is assured that solving for full weights is more accurate (appears to be)
+// DEPRECATED
 // linear solution of weights according to Ma and Kruth 1995 (M&K95)
 // solves for interior weights only
 // our N is M&K's B
 // our Q is M&K's X_bar
 // However, we skip end points that are pinned, so we solve a smaller system by 2 points in each dimension
-template <typename T>
-void
-mfa::
-Encoder<T>::
-Weights(
-        MatrixX<T>& Q,              // input points
-        MatrixX<T>& N,              // basis function coefficients (B in M&K)
-        MatrixX<T>& Nt,             // transpose of N
-        MatrixX<T>& NtN,            // Nt * N
-        MatrixX<T>& NtNi,           // inverse of NtN
-        VectorX<T>& weights)        // output weights
-{
-    // TODO: decide if I need to represent all dims or only 2 dims for current curve
-    // ie, we are finding weights of high-d points for a 2-d curve
-    int pt_dim = mfa.domain.cols();             // dimensionality of input and control points (domain and range)
-    vector<MatrixX<T>> NtQ2(pt_dim);            // temp. matrices N^T x Q^2 for each dim of points (TODO: any way to avoid?)
-    vector<MatrixX<T>> NtQ2N(pt_dim);           // matrices N^T x Q^2 x N for each dim of points
-    vector<MatrixX<T>> NtQ(pt_dim);             // temp. matrices N^T x Q  for each dim of points (TODO: any way to avoid?)
-    vector<MatrixX<T>> NtQN(pt_dim);            // matrices N^T x Q x N for each dim of points
-
-    // allocate matrices of NtQ, NtQ2, NtQ2N, and NtQN
-    for (auto k = 0; k < pt_dim; k++)
-    {
-        NtQ2[k]  = MatrixX<T>::Zero(Nt.rows(),  Nt.cols());
-        NtQ[k]   = MatrixX<T>::Zero(Nt.rows(),  Nt.cols());
-        NtQ2N[k] = MatrixX<T>::Zero(NtN.rows(), NtN.cols());
-        NtQN[k]  = MatrixX<T>::Zero(NtN.rows(), NtN.cols());
-    }
-
-    // compute NtQN and NtQ2N
-    for (auto k = 0; k < pt_dim; k++)           // for all point dims
-    {
-        // temporary matrices NtQ and NtQ2
-        for (auto i = 0; i < Nt.cols(); i++)
-        {
-            T dom_pt_coord = Q(i + 1, k);      // current coordinate of current input point
-            NtQ[k].col(i)  = Nt.col(i) * dom_pt_coord;
-            NtQ2[k].col(i) = Nt.col(i) * dom_pt_coord * dom_pt_coord;
-        }
-        // final matrices NtQN and NtQ2N
-        NtQN[k]  = NtQ[k] * N;
-        NtQ2N[k] = NtQ2[k] * N;
-    }
-
-    // compute the matrix M according to eq.3 and eq. 4 of M&K95
-    MatrixX<T> M = MatrixX<T>::Zero(NtN.rows(), NtN.cols());
-    for (auto k = 0; k < pt_dim; k++)           // for all point dims
-        M += NtQ2N[k] - NtQN[k] * NtNi * NtQN[k];
-
-    // compute the eigenvalues and eigenvectors of M (eq. 9 of M&K95)
-    Eigen::SelfAdjointEigenSolver<MatrixX<T>> eigensolver(M);
-    if (eigensolver.info() != Eigen::Success)
-    {
-        fprintf(stderr, "Error: Encoder::Weights(), computing eigenvalues of M failed, perhaps M is not self-adjoint?\n");
-        exit(0);
-    }
-    // debug
-    cerr << "M:\n"            << M                          << endl;
-    cerr << "Eigenvalues:\n"  << eigensolver.eigenvalues()  << endl;
-    cerr << "Eigenvectors:\n" << eigensolver.eigenvectors() << endl;
-
-    VectorX<T> ew(weights.size() - 2);                          // weights from eigenspace
-    const MatrixX<T>& EV = eigensolver.eigenvectors();          // typing shortcut
-    assert(ew.size() == EV.rows());                             // sanity
-
-    // if smallest eigenvector is all positive or all negative, those are the weights
-    if ( (EV.col(0).array() > 0.0).all() )
-        ew = EV.col(0);
-    else if ( (EV.col(0).array() < 0.0).all() )
-        ew = -EV.col(0);
-
-    // if smallest eigenvector is mixed sign, then expand eigen space
-    else
-    {
-        // TODO: expand eigenspace
-        // for now punt and leave weights all 1s
-        ew = VectorX<T>::Ones(weights.size() - 2);
-    }
-
-//     cerr << "sum of 1st 2 eigenvectors multiplied by eigenvalues:\n" << endl;
-//     VectorX<T> evals = eigensolver.eigenvalues();
-//     cerr << evals(0) * EV.col(0) + evals(1) * EV.col(1) << endl;
-
-    cerr << "orig ew:\n" << ew << endl;
-    ew.normalize();
-    cerr << "normalized ew\n" << ew << endl;
-    ew *= VectorX<T>::Ones(ew.size()).norm();                   // scaled to norm of a 1's vector
-    cerr << "scaled normalized ew\n" << ew << endl;
-    weights(0) = 1.0;
-    weights(weights.size() - 1) = 1.0;
-    for (auto i = 1; i < weights.size() - 1; i++)
-        weights(i) = ew(i - 1);
-
-    // debug
-    cerr << "Weights:\n" << weights << endl;
-    cerr << "Weights norm = " << weights.norm() << endl;
-}
+// template <typename T>
+// void
+// mfa::
+// Encoder<T>::
+// Weights(
+//         MatrixX<T>& Q,              // input points
+//         MatrixX<T>& N,              // basis function coefficients (B in M&K)
+//         MatrixX<T>& Nt,             // transpose of N
+//         MatrixX<T>& NtN,            // Nt * N
+//         MatrixX<T>& NtNi,           // inverse of NtN
+//         VectorX<T>& weights)        // output weights
+// {
+//     // TODO: decide if I need to represent all dims or only 2 dims for current curve
+//     // ie, we are finding weights of high-d points for a 2-d curve
+//     int pt_dim = mfa.domain.cols();             // dimensionality of input and control points (domain and range)
+//     vector<MatrixX<T>> NtQ2(pt_dim);            // temp. matrices N^T x Q^2 for each dim of points (TODO: any way to avoid?)
+//     vector<MatrixX<T>> NtQ2N(pt_dim);           // matrices N^T x Q^2 x N for each dim of points
+//     vector<MatrixX<T>> NtQ(pt_dim);             // temp. matrices N^T x Q  for each dim of points (TODO: any way to avoid?)
+//     vector<MatrixX<T>> NtQN(pt_dim);            // matrices N^T x Q x N for each dim of points
+// 
+//     // allocate matrices of NtQ, NtQ2, NtQ2N, and NtQN
+//     for (auto k = 0; k < pt_dim; k++)
+//     {
+//         NtQ2[k]  = MatrixX<T>::Zero(Nt.rows(),  Nt.cols());
+//         NtQ[k]   = MatrixX<T>::Zero(Nt.rows(),  Nt.cols());
+//         NtQ2N[k] = MatrixX<T>::Zero(NtN.rows(), NtN.cols());
+//         NtQN[k]  = MatrixX<T>::Zero(NtN.rows(), NtN.cols());
+//     }
+// 
+//     // compute NtQN and NtQ2N
+//     for (auto k = 0; k < pt_dim; k++)           // for all point dims
+//     {
+//         // temporary matrices NtQ and NtQ2
+//         for (auto i = 0; i < Nt.cols(); i++)
+//         {
+//             T dom_pt_coord = Q(i + 1, k);      // current coordinate of current input point
+//             NtQ[k].col(i)  = Nt.col(i) * dom_pt_coord;
+//             NtQ2[k].col(i) = Nt.col(i) * dom_pt_coord * dom_pt_coord;
+//         }
+//         // final matrices NtQN and NtQ2N
+//         NtQN[k]  = NtQ[k] * N;
+//         NtQ2N[k] = NtQ2[k] * N;
+//     }
+// 
+//     // compute the matrix M according to eq.3 and eq. 4 of M&K95
+//     MatrixX<T> M = MatrixX<T>::Zero(NtN.rows(), NtN.cols());
+//     for (auto k = 0; k < pt_dim; k++)           // for all point dims
+//         M += NtQ2N[k] - NtQN[k] * NtNi * NtQN[k];
+// 
+//     // compute the eigenvalues and eigenvectors of M (eq. 9 of M&K95)
+//     Eigen::SelfAdjointEigenSolver<MatrixX<T>> eigensolver(M);
+//     if (eigensolver.info() != Eigen::Success)
+//     {
+//         fprintf(stderr, "Error: Encoder::Weights(), computing eigenvalues of M failed, perhaps M is not self-adjoint?\n");
+//         exit(0);
+//     }
+//     // debug
+//     cerr << "M:\n"            << M                          << endl;
+//     cerr << "Eigenvalues:\n"  << eigensolver.eigenvalues()  << endl;
+//     cerr << "Eigenvectors:\n" << eigensolver.eigenvectors() << endl;
+// 
+//     VectorX<T> ew(weights.size() - 2);                          // weights from eigenspace
+//     const MatrixX<T>& EV = eigensolver.eigenvectors();          // typing shortcut
+//     assert(ew.size() == EV.rows());                             // sanity
+// 
+//     // if smallest eigenvector is all positive or all negative, those are the weights
+//     if ( (EV.col(0).array() > 0.0).all() )
+//         ew = EV.col(0);
+//     else if ( (EV.col(0).array() < 0.0).all() )
+//         ew = -EV.col(0);
+// 
+//     // if smallest eigenvector is mixed sign, then expand eigen space
+//     else
+//     {
+//         // TODO: expand eigenspace
+//         // for now punt and leave weights all 1s
+//         ew = VectorX<T>::Ones(weights.size() - 2);
+//     }
+// 
+// //     cerr << "sum of 1st 2 eigenvectors multiplied by eigenvalues:\n" << endl;
+// //     VectorX<T> evals = eigensolver.eigenvalues();
+// //     cerr << evals(0) * EV.col(0) + evals(1) * EV.col(1) << endl;
+// 
+//     cerr << "orig ew:\n" << ew << endl;
+//     ew.normalize();
+//     cerr << "normalized ew\n" << ew << endl;
+//     ew *= VectorX<T>::Ones(ew.size()).norm();                   // scaled to norm of a 1's vector
+//     cerr << "scaled normalized ew\n" << ew << endl;
+//     weights(0) = 1.0;
+//     weights(weights.size() - 1) = 1.0;
+//     for (auto i = 1; i < weights.size() - 1; i++)
+//         weights(i) = ew(i - 1);
+// 
+//     // debug
+//     cerr << "Weights:\n" << weights << endl;
+//     cerr << "Weights norm = " << weights.norm() << endl;
+// }
 
 // linear solution of weights according to Ma and Kruth 1995 (M&K95)
 // solves for all weights, not just interior

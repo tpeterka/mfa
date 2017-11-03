@@ -38,13 +38,14 @@ namespace mfa
 
    private:
 
-        void Weights(
-                MatrixX<T>& Q,              // input points
-                MatrixX<T>& N,              // basis function coefficients (B in M&K)
-                MatrixX<T>& Nt,             // transpose of N
-                MatrixX<T>& NtN,            // Nt * N
-                MatrixX<T>& NtNi,           // inverse of NtN
-                VectorX<T>& weights);       // output weights
+        // DEPRECATED
+//         void Weights(
+//                 MatrixX<T>& Q,              // input points
+//                 MatrixX<T>& N,              // basis function coefficients (B in M&K)
+//                 MatrixX<T>& Nt,             // transpose of N
+//                 MatrixX<T>& NtN,            // Nt * N
+//                 MatrixX<T>& NtNi,           // inverse of NtN
+//                 VectorX<T>& weights);       // output weights
 
         void Weights(
                 int         k,              // current dimension

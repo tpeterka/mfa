@@ -24,17 +24,18 @@ AdaptiveEncode(
         float err_limit,               // maximum allowable normalized error
         int max_rounds);               // (optional) maximum number of rounds
 
-template
-void
-mfa::
-Encoder<float>::
-Weights(
-        MatrixXf& Q,               // input points
-        MatrixXf& N,               // basis function coefficients (B in M&K)
-        MatrixXf& Nt,              // transpose of N
-        MatrixXf& NtN,             // Nt * N
-        MatrixXf& NtNi,            // inverse of NtN
-        VectorXf& weights);        // output weights
+// DEPRECATED
+// template
+// void
+// mfa::
+// Encoder<float>::
+// Weights(
+//         MatrixXf& Q,               // input points
+//         MatrixXf& N,               // basis function coefficients (B in M&K)
+//         MatrixXf& Nt,              // transpose of N
+//         MatrixXf& NtN,             // Nt * N
+//         MatrixXf& NtNi,            // inverse of NtN
+//         VectorXf& weights);        // output weights
 
 template
 void
@@ -235,17 +236,18 @@ AdaptiveEncode(
         double err_limit,              // maximum allowable normalized error
         int max_rounds);               // (optional) maximum number of rounds
 
-template
-void
-mfa::
-Encoder<double>::
-Weights(
-        MatrixXd& Q,               // input points
-        MatrixXd& N,               // basis function coefficients (B in M&K)
-        MatrixXd& Nt,              // transpose of N
-        MatrixXd& NtN,             // Nt * N
-        MatrixXd& NtNi,            // inverse of NtN
-        VectorXd& weights);        // output weights
+// DEPRECATED
+// template
+// void
+// mfa::
+// Encoder<double>::
+// Weights(
+//         MatrixXd& Q,               // input points
+//         MatrixXd& N,               // basis function coefficients (B in M&K)
+//         MatrixXd& Nt,              // transpose of N
+//         MatrixXd& NtN,             // Nt * N
+//         MatrixXd& NtNi,            // inverse of NtN
+//         VectorXd& weights);        // output weights
 
 template
 void
