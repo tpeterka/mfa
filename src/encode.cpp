@@ -200,39 +200,6 @@ Weights(
     // debug
     cerr << "Weights:\n" << weights << endl;
     cerr << "Weights norm = " << weights.norm() << endl;
-
-    // test of coin-or
-    fprintf(stderr, "\nTesting coin-or linear solver\n");
-    using namespace rehearse;
-
-    OsiClpSolverInterface *solver = new OsiClpSolverInterface();
-    CelModel model(*solver);
-
-    CelNumVar x1("x1");
-    CelNumVar x2("x2");
-
-    model.setObjective (       7 * x1 + 9 * x2 );
-
-    model.addConstraint(       1 * x1 +     x2 == 18  );
-    model.addConstraint(                    x2 <= 14  );
-    model.addConstraint(       2 * x1 + 3 * x2 <= 50  );
-
-    solver->setObjSense(-1.0);
-    model.builderToSolver();
-    solver->setLogLevel(0);
-    solver->initialSolve();
-
-    fprintf(stderr, "Solution for x1 : %g\n", model.getSolutionValue(x1));
-    fprintf(stderr, "Solution for x2 : %g\n", model.getSolutionValue(x2));
-    fprintf(stderr, "Solution objvalue = : %g\n", solver->getObjValue());
-
-    assert(fabs(4 - model.getSolutionValue(x1)) < 0.00000001);
-    assert(fabs(14 - model.getSolutionValue(x2)) < 0.00000001);
-    assert(fabs(18 - (model.getSolutionValue(x1) + model.getSolutionValue(x2)) ) < 0.00000001);
-    assert(fabs(154 - solver->getObjValue()) < 0.00000001);
-
-    delete solver;
-    fprintf(stderr, "Coin-or linear solver passed\n\n");
 }
 
 // linear solution of weights according to Ma and Kruth 1995 (M&K95)
@@ -328,62 +295,108 @@ Weights(
     cerr << "Eigenvalues:\n"  << eigensolver.eigenvalues()  << endl;
     cerr << "Eigenvectors:\n" << eigensolver.eigenvectors() << endl;
 
-    const MatrixX<T>& EV = eigensolver.eigenvectors();          // typing shortcut
+    const MatrixX<T>& EV    = eigensolver.eigenvectors();          // typing shortcut
+    const VectorX<T>& evals = eigensolver.eigenvalues();           // typing shortcut
+
+    // eigenvalues should be positive and distinct
+    for (auto i = 0; i < evals.size() - 1; i++)
+        if (evals(i) == 0.0 || evals(i) == evals(i + 1))
+        {
+            fprintf(stderr, "Warning: Weights(): eigenvalues should be positive and distinct.\n");
+            fprintf(stderr, "Aborting weights calculation\n");
+            return;
+        }
+
 
     // if smallest eigenvector is all positive or all negative, those are the weights
     if ( (EV.col(0).array() > 0.0).all() )
+    {
         weights = EV.col(0);
+        weights *= (1.0 / weights.maxCoeff());  // scale to max weight = 1
+    }
     else if ( (EV.col(0).array() < 0.0).all() )
+    {
         weights = -EV.col(0);
+        weights *= (1.0 / weights.maxCoeff());  // scale to max weight = 1
+    }
 
     // if smallest eigenvector is mixed sign, then expand eigen space
     else
     {
-        // TODO: expand eigenspace
-        // for now punt and leave weights all 1s
-        weights = VectorX<T>::Ones(weights.size());
-    }
+        fprintf(stderr, "\nExpanding eigenspace using linear solver\n");
+        bool success = false;
+        using namespace rehearse;
+
+        for (auto i = 2; i <= EV.cols(); i++)        // expand from 2 eigenvectors to all, one at a time
+        {
+            fprintf(stderr, "Trying linear combinations of %d eigenvectors\n", i);
+            OsiClpSolverInterface *solver = new OsiClpSolverInterface();
+            CelModel model(*solver);
+
+            CelNumVarArray a;
+            a.multiDimensionResize(1, i);
+
+            // add the constraints that the sum of elements is positive
+            T epsilon = 0.01;
+            for (auto j = 0; j < weights.size(); j++)   // for all rows in the eigenvectors
+            {
+                CelExpression expr;
+                for (auto k = 0; k < i; k++)            // for current number of eigenvectors
+                    expr += a[k] * EV(j, k);
+                model.addConstraint(epsilon <= expr);
+            }
+
+            // solve
+            solver->setObjSense(1.0);
+            model.builderToSolver();
+            solver->setLogLevel(0);
+            solver->initialSolve();
+
+            // check
+            VectorX<T> solved_weights = VectorX<T>::Zero(weights.size());
+            for (auto k = 0; k < i; k++)                 // for current number of eigenvectors
+                solved_weights += model.getSolutionValue(a[k]) * EV.col(k);
+
+            // debug
+//             cerr << "solved_weights:\n" << solved_weights << endl;
+            fprintf(stderr, "eigenvector coefficients:\n");
+            for (auto k = 0; k < i; k++)
+                fprintf(stderr, "%g ", model.getSolutionValue(a[k]));
+            fprintf(stderr, "\n");
+
+            delete solver;
+
+            if ( (solved_weights.array() > 0.0).all() )
+            {
+                weights = solved_weights;
+                weights *= (1.0 / weights.maxCoeff());  // scale to max weight = 1
+                success = true;
+                break;
+            }
+            else if ( (solved_weights.array() < 0.0).all() )
+            {
+                weights = -solved_weights;
+                weights *= (1.0 / weights.maxCoeff());  // scale to max weight = 1
+                success = true;
+                break;
+            }
+        }                                               // increasing number of eigenvectors
+
+        if (!success)
+        {
+            weights = VectorX<T>::Ones(weights.size());
+            fprintf(stderr, "linear solver could not find positive weights; setting to 1\n");
+        }
+        else
+            cerr << "successful linear solve for weights:\n" << weights << endl;
+    }                                                   // need to expand eigenspace
 
     // debug
-//     VectorX<T> evals = eigensolver.eigenvalues();
 //     cerr << "sum of 1st 2 eigenvectors multiplied by eigenvalues:\n" <<
 //         evals(0) * EV.col(0) + evals(1) * EV.col(1) << "\n" << endl;
 
     // debug
     cerr << "Weights:\n" << weights << endl;
-
-    // test of coin-or
-    fprintf(stderr, "\nTesting coin-or linear solver\n");
-    using namespace rehearse;
-
-    OsiClpSolverInterface *solver = new OsiClpSolverInterface();
-    CelModel model(*solver);
-
-    CelNumVar x1("x1");
-    CelNumVar x2("x2");
-
-    model.setObjective (       7 * x1 + 9 * x2 );
-
-    model.addConstraint(       1 * x1 +     x2 == 18  );
-    model.addConstraint(                    x2 <= 14  );
-    model.addConstraint(       2 * x1 + 3 * x2 <= 50  );
-
-    solver->setObjSense(-1.0);
-    model.builderToSolver();
-    solver->setLogLevel(0);
-    solver->initialSolve();
-
-    fprintf(stderr, "Solution for x1 : %g\n", model.getSolutionValue(x1));
-    fprintf(stderr, "Solution for x2 : %g\n", model.getSolutionValue(x2));
-    fprintf(stderr, "Solution objvalue = : %g\n", solver->getObjValue());
-
-    assert(fabs(4 - model.getSolutionValue(x1)) < 0.00000001);
-    assert(fabs(14 - model.getSolutionValue(x2)) < 0.00000001);
-    assert(fabs(18 - (model.getSolutionValue(x1) + model.getSolutionValue(x2)) ) < 0.00000001);
-    assert(fabs(154 - solver->getObjValue()) < 0.00000001);
-
-    delete solver;
-    fprintf(stderr, "Coin-or linear solver passed\n\n");
 }
 
 #if 1

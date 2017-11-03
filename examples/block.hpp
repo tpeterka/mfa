@@ -450,7 +450,7 @@ struct Block
 
         // assign values to the domain (geometry)
         int cs = 1;                           // stride of a coordinate in this dim
-        real_t eps = 1.0e-5;                   // real_ting point roundoff error
+        real_t eps = 1.0e-5;                  // floating point roundoff error
         for (int i = 0; i < a->dom_dim; i++)  // all dimensions in the domain
         {
             real_t d = (a->max[i] - a->min[i]) / (ndom_pts(i) - 1);
