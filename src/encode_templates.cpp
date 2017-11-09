@@ -78,36 +78,6 @@ template
 void
 mfa::
 Encoder<float>::
-RHS(
-        int       cur_dim,  // current dimension
-        MatrixXf& N,        // matrix of basis function coefficients
-        MatrixXf& Nt,       // transpose of N
-        MatrixXf& R,        // (output) residual matrix allocated by caller
-        VectorXf& weights,  // precomputed weights for n + 1 control points on this curve
-        int       ko,       // index of starting knot
-        int       po,       // index of starting parameter
-        int       co);      // index of starting domain pt in current curve
-
-template
-void
-mfa::
-Encoder<float>::
-RHS(
-        int       cur_dim,  // current dimension
-        MatrixXf& in_pts,   // input points (not the default domain stored in the mfa)
-        MatrixXf& N,        // matrix of basis function coefficients
-        MatrixXf& Nt,       // transpose of N
-        MatrixXf& R,        // (output) residual matrix allocated by caller
-        VectorXf& weights,  // precomputed weights for n + 1 control points on this curve
-        int       ko,       // index of starting knot
-        int       po,       // index of starting parameter
-        int       co,       // index of starting input pt in current curve
-        int       cs);      // stride of input pts in current curve
-
-template
-void
-mfa::
-Encoder<float>::
 Quants(
         VectorXi& n,          // (output) number of control point spans in each dim
         VectorXi& m);         // (output) number of input data point spans in each dim
@@ -279,36 +249,6 @@ RHS(
         int       cur_dim,  // current dimension
         MatrixXd& in_pts,   // input points (not the default domain stored in the mfa)
         MatrixXd& N,        // matrix of basis function coefficients
-        MatrixXd& R,        // (output) residual matrix allocated by caller
-        VectorXd& weights,  // precomputed weights for n + 1 control points on this curve
-        int       ko,       // index of starting knot
-        int       po,       // index of starting parameter
-        int       co,       // index of starting input pt in current curve
-        int       cs);      // stride of input pts in current curve
-
-template
-void
-mfa::
-Encoder<double>::
-RHS(
-        int       cur_dim,  // current dimension
-        MatrixXd& N,        // matrix of basis function coefficients
-        MatrixXd& Nt,       // transpose of N
-        MatrixXd& R,        // (output) residual matrix allocated by caller
-        VectorXd& weights,  // precomputed weights for n + 1 control points on this curve
-        int       ko,       // index of starting knot
-        int       po,       // index of starting parameter
-        int       co);      // index of starting domain pt in current curve
-
-template
-void
-mfa::
-Encoder<double>::
-RHS(
-        int       cur_dim,  // current dimension
-        MatrixXd& in_pts,   // input points (not the default domain stored in the mfa)
-        MatrixXd& N,        // matrix of basis function coefficients
-        MatrixXd& Nt,       // transpose of N
         MatrixXd& R,        // (output) residual matrix allocated by caller
         VectorXd& weights,  // precomputed weights for n + 1 control points on this curve
         int       ko,       // index of starting knot

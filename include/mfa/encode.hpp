@@ -38,21 +38,12 @@ namespace mfa
 
    private:
 
-        // DEPRECATED
-//         void Weights(
-//                 MatrixX<T>& Q,              // input points
-//                 MatrixX<T>& N,              // basis function coefficients (B in M&K)
-//                 MatrixX<T>& Nt,             // transpose of N
-//                 MatrixX<T>& NtN,            // Nt * N
-//                 MatrixX<T>& NtNi,           // inverse of NtN
-//                 VectorX<T>& weights);       // output weights
-
         void Weights(
                 int         k,              // current dimension
                 MatrixX<T>& Q,              // input points
                 VectorX<T>& weights);       // output weights
 
-        // P&T with default domain
+        // default domain
         void RHS(
                 int         cur_dim,  // current dimension
                 MatrixX<T>& N,        // matrix of basis function coefficients
@@ -62,35 +53,11 @@ namespace mfa
                 int         po,       // index of starting parameter
                 int         co);      // index of starting domain pt in current curve
 
-        // P&T with new input points
+        //new input points
         void RHS(
                 int         cur_dim,  // current dimension
                 MatrixX<T>& in_pts,   // input points (not the default domain stored in the mfa)
                 MatrixX<T>& N,        // matrix of basis function coefficients
-                MatrixX<T>& R,        // (output) residual matrix allocated by caller
-                VectorX<T>& weights,  // precomputed weights for n + 1 control points on this curve
-                int         ko,       // index of starting knot
-                int         po,       // index of starting parameter
-                int         co,       // index of starting input pt in current curve
-                int         cs);      // stride of input pts in current curve
-
-        // M&K with default domain
-        void RHS(
-                int         cur_dim,  // current dimension
-                MatrixX<T>& N,        // matrix of basis function coefficients
-                MatrixX<T>& Nt,       // transpose of N
-                MatrixX<T>& R,        // (output) residual matrix allocated by caller
-                VectorX<T>& weights,  // precomputed weights for n + 1 control points on this curve
-                int         ko,       // index of starting knot
-                int         po,       // index of starting parameter
-                int         co);      // index of starting domain pt in current curve
-
-        // M&K with new input points
-        void RHS(
-                int         cur_dim,  // current dimension
-                MatrixX<T>& in_pts,   // input points (not the default domain stored in the mfa)
-                MatrixX<T>& N,        // matrix of basis function coefficients
-                MatrixX<T>& Nt,       // transpose of N
                 MatrixX<T>& R,        // (output) residual matrix allocated by caller
                 VectorX<T>& weights,  // precomputed weights for n + 1 control points on this curve
                 int         ko,       // index of starting knot
