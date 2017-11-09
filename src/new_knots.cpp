@@ -112,9 +112,7 @@ NewKnots_curve1(
         // compute the product Nt x N
         // TODO: NtN is going to be very sparse when it is large: switch to sparse representation
         // NtN has semibandwidth < p + 1 nonzero entries across diagonal
-        MatrixX<T> Nt = N.transpose();
-        MatrixX<T> NtN(n(k) - 1, n(k) - 1);
-        NtN = Nt * N;
+        MatrixX<T> NtN = N.transpose() * N;
 
         // debug
         //         cerr << "k " << k << " NtN:\n" << NtN << endl;
@@ -154,7 +152,7 @@ NewKnots_curve1(
 
                 // rationalize NtN
                 MatrixX<T> NtN_rat(NtN.rows(), NtN.cols());
-                mfa.Rationalize(k, weights, N, Nt, NtN_rat);
+                mfa.Rationalize(k, weights, N, NtN_rat);
 
                 // solve for P for one curve of control points
 //                 P = NtN.ldlt().solve(R);
@@ -212,7 +210,7 @@ NewKnots_curve1(
 
         // rationalize NtN
         MatrixX<T> NtN_rat(NtN.rows(), NtN.cols());
-        mfa.Rationalize(k, weights, N, Nt, NtN_rat);
+        mfa.Rationalize(k, weights, N, NtN_rat);
 
         // solve for P for one curve of control points
 //         P = NtN.ldlt().solve(R);
@@ -313,9 +311,7 @@ NewKnots_curve(
         // compute the product Nt x N
         // TODO: NtN is going to be very sparse when it is large: switch to sparse representation
         // NtN has semibandwidth < p + 1 nonzero entries across diagonal
-        MatrixX<T> Nt = N.transpose();
-        MatrixX<T> NtN(n(k) - 1, n(k) - 1);
-        NtN = Nt * N;
+        MatrixX<T> NtN = N.transpose() * N;
 
         // R is the right hand side needed for solving NtN * P = R
         MatrixX<T> R(n(k) - 1, mfa.domain.cols());
@@ -353,7 +349,7 @@ NewKnots_curve(
 
                     // rationalize NtN
                     MatrixX<T> NtN_rat(NtN.rows(), NtN.cols());
-                    mfa.Rationalize(k, weights, N, Nt, NtN_rat);
+                    mfa.Rationalize(k, weights, N, NtN_rat);
 
                     // solve for P for one curve of control points
 //                   P = NtN.ldlt().solve(R);
@@ -479,8 +475,7 @@ NewKnots_curve(
         // compute the product Nt x N
         // TODO: NtN is going to be very sparse when it is large: switch to sparse representation
         // NtN has semibandwidth < p + 1 nonzero entries across diagonal
-        MatrixX<T> NtN(n(k) - 1, n(k) - 1);
-        NtN = N.transpose() * N;
+        MatrixX<T> NtN = N.transpose() * N;
 
         // debug
         //         cerr << "k " << k << " NtN:\n" << NtN << endl;
@@ -520,7 +515,7 @@ NewKnots_curve(
 
                 // rationalize NtN
                 MatrixX<T> NtN_rat(NtN.rows(), NtN.cols());
-                mfa.Rationalize(k, weights, N, Nt, NtN_rat);
+                mfa.Rationalize(k, weights, N, NtN_rat);
 
                 // solve for P for one curve of control points
 //                 P = NtN.ldlt().solve(R);
@@ -578,7 +573,7 @@ NewKnots_curve(
 
         // rationalize NtN
         MatrixX<T> NtN_rat(NtN.rows(), NtN.cols());
-        mfa.Rationalize(k, weights, N, Nt, NtN_rat);
+        mfa.Rationalize(k, weights, N, NtN_rat);
 
         // solve for P for one curve of control points
 //        P = NtN.ldlt().solve(R);

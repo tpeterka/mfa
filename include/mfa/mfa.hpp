@@ -111,7 +111,6 @@ namespace mfa
                 int         k,              // current dimension
                 VectorX<T>& weights,        // weights of control points
                 MatrixX<T>& N,              // basis function coefficients
-                MatrixX<T>& Nt,             // transpose of N
                 MatrixX<T>& NtN_rat);       // (output) rationalized Nt * N
     private:
 

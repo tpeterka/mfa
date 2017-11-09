@@ -71,9 +71,7 @@ namespace mfa
 
         void CtrlCurve(
                 MatrixX<T>& N,           // basis functions for current dimension
-                MatrixX<T>& Nt,          // transpose of N
                 MatrixX<T>& NtN,         // Nt * N
-                MatrixX<T>& NtNi,        // inverse of NtN
                 MatrixX<T>& R,           // residual matrix for current dimension and curve
                 MatrixX<T>& P,           // solved points for current dimension and curve
                 size_t      k,           // current dimension

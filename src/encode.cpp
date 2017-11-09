@@ -187,9 +187,9 @@ Weights(
         exit(0);
     }
     // debug
-    cerr << "M:\n"            << M                          << endl;
-    cerr << "Eigenvalues:\n"  << eigensolver.eigenvalues()  << endl;
-    cerr << "Eigenvectors:\n" << eigensolver.eigenvectors() << endl;
+//     cerr << "M:\n"            << M                          << endl;
+//     cerr << "Eigenvalues:\n"  << eigensolver.eigenvalues()  << endl;
+//     cerr << "Eigenvectors:\n" << eigensolver.eigenvectors() << endl;
 
     const MatrixX<T>& EV    = eigensolver.eigenvectors();          // typing shortcut
     const VectorX<T>& evals = eigensolver.eigenvalues();           // typing shortcut
@@ -209,11 +209,13 @@ Weights(
     {
         weights = EV.col(0);
         weights *= (1.0 / weights.maxCoeff());  // scale to max weight = 1
+        cerr << "successfully found weights from an all-positive first eigenvector:\n" << weights << "\n" << endl;
     }
     else if ( (EV.col(0).array() < 0.0).all() )
     {
         weights = -EV.col(0);
         weights *= (1.0 / weights.maxCoeff());  // scale to max weight = 1
+        cerr << "successfully found weights from an all-negative first eigenvector:\n" << weights << "\n" << endl;
     }
 
     // if smallest eigenvector is mixed sign, then expand eigen space
@@ -233,13 +235,21 @@ Weights(
             a.multiDimensionResize(1, i);
 
             // add the constraints that the sum of elements is positive
-            T epsilon = 0.01;
+
+            // Need epsilon because the only inequality constraints allowed by rehearse are <=, not <
+            // However, the smaller the epsilon, the smaller the weights found by the solver.
+            // Even though I normalize weights to max 1.0, we don't want roundoff error from
+            // multiplying very small numbers. The epsilon below seems reasonable for now.
+            T epsilon = 1.0e-4;
             for (auto j = 0; j < weights.size(); j++)   // for all rows in the eigenvectors
             {
                 CelExpression expr;
                 for (auto k = 0; k < i; k++)            // for current number of eigenvectors
                     expr += a[k] * EV(j, k);
                 model.addConstraint(epsilon <= expr);
+
+                // NB: adding more constraints on norm of a's, eg sum(a[k]) = 1 or on individual
+                // vaues of a[k], eg a[k] <= 1 produce a worse solution, fewer constraints is better
             }
 
             // solve
@@ -267,6 +277,7 @@ Weights(
                 weights = solved_weights;
                 weights *= (1.0 / weights.maxCoeff());  // scale to max weight = 1
                 success = true;
+                cerr << "successful linear solve for weights from linear combination of " << i << " eigenvectors:\n" << weights << "\n" <<endl;
                 break;
             }
             else if ( (solved_weights.array() < 0.0).all() )
@@ -274,6 +285,7 @@ Weights(
                 weights = -solved_weights;
                 weights *= (1.0 / weights.maxCoeff());  // scale to max weight = 1
                 success = true;
+                cerr << "successful linear solve for weights from linear combination of " << i << " eigenvectors:\n" << weights << "\n" << endl;
                 break;
             }
         }                                               // increasing number of eigenvectors
@@ -281,10 +293,8 @@ Weights(
         if (!success)
         {
             weights = VectorX<T>::Ones(weights.size());
-            fprintf(stderr, "linear solver could not find positive weights; setting to 1\n");
+            fprintf(stderr, "linear solver could not find positive weights; setting to 1\n\n");
         }
-        else
-            cerr << "successful linear solve for weights:\n" << weights << endl;
     }                                                   // need to expand eigenspace
 
     // debug
@@ -292,7 +302,7 @@ Weights(
 //         evals(0) * EV.col(0) + evals(1) * EV.col(1) << "\n" << endl;
 
     // debug
-    cerr << "Weights:\n" << weights << endl;
+//     cerr << "Weights:\n" << weights << endl;
 }
 
 #if 1
@@ -420,9 +430,7 @@ Encode()
         // TODO: NtN is going to be very sparse when it is large: switch to sparse representation
         // NtN has semibandwidth < p + 1 nonzero entries across diagonal
         // TODO: I don't think I need to give the sizes, automatically allocated by the assignment
-        MatrixX<T> Nt   = N.transpose();
-        MatrixX<T> NtN  = Nt * N;;
-        MatrixX<T> NtNi = NtN.partialPivLu().inverse();
+        MatrixX<T> NtN  = N.transpose() * N;;
 
         parallel_for (size_t(0), ncurves, [&] (size_t j)      // for all the curves in this dimension
         {
@@ -438,7 +446,7 @@ Encode()
             MatrixX<T> P(n(k) - 1, mfa.domain.cols());
 
             // compute the one curve of control points
-            CtrlCurve(N, Nt, NtN, NtNi, R, P, k, co[j], cs, to[j], temp_ctrl0, temp_ctrl1);
+            CtrlCurve(N, NtN, R, P, k, co[j], cs, to[j], temp_ctrl0, temp_ctrl1);
         });                                                  // curves in this dimension
 
         // adjust offsets and strides for next dimension
@@ -587,10 +595,7 @@ Encode()
         // compute various other matrices from N
         // TODO: NtN is going to be very sparse when it is large: switch to sparse representation
         // NtN has semibandwidth < p + 1 nonzero entries across diagonal
-        // TODO: I don't think I need to give the sizes, automatically allocated by the assignment
-        MatrixX<T> Nt   = N.transpose();
-        MatrixX<T> NtN  = Nt * N;;
-        MatrixX<T> NtNi = NtN.partialPivLu().inverse();
+        MatrixX<T> NtN  = N.transpose() * N;;
 
         // R is the residual matrix needed for solving NtN * P = R
         MatrixX<T> R(n(k) - 1, mfa.domain.cols());
@@ -609,7 +614,7 @@ Encode()
                         k, (T)j / (T)ncurves * 100, j, ncurves);
 
             // compute the one curve of control points
-            CtrlCurve(N, Nt, NtN, NtNi, R, P, k, co[j], cs, to[j], temp_ctrl0, temp_ctrl1);
+            CtrlCurve(N, NtN, R, P, k, co[j], cs, to[j], temp_ctrl0, temp_ctrl1);
         }
 
         // adjust offsets and strides for next dimension
@@ -904,9 +909,7 @@ void
 mfa::
 Encoder<T>::
 CtrlCurve(MatrixX<T>& N,          // basis functions for current dimension
-          MatrixX<T>& Nt,         // transpose of N
           MatrixX<T>& NtN,        // Nt * N
-          MatrixX<T>& NtNi,       // inverse of NtN
           MatrixX<T>& R,          // residual matrix for current dimension and curve
           MatrixX<T>& P,          // solved points for current dimension and curve
           size_t      k,          // current dimension
@@ -963,7 +966,7 @@ CtrlCurve(MatrixX<T>& N,          // basis functions for current dimension
 
     // rationalize NtN, ie, weight the basis function coefficients
     MatrixX<T> NtN_rat = NtN;
-    mfa.Rationalize(k, weights, N, Nt, NtN_rat);
+    mfa.Rationalize(k, weights, N, NtN_rat);
 
     // solve for P
     P = NtN_rat.ldlt().solve(R);

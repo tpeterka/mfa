@@ -1117,31 +1117,30 @@ RangeError(size_t idx)               // index of domain point
     return err;
 }
 
-// "rationalize" NtN
+// compute rational (weighted) NtN from nonrational (unweighted) N
 // ie, convert basis function coefficients to rational ones with weights
 template <typename T>
 void
 mfa::
 MFA<T>::
 Rationalize(
-        int         k,              // current dimension
-        VectorX<T>& weights,        // weights of control points
-        MatrixX<T>& N,              // basis function coefficients
-        MatrixX<T>& Nt,             // transpose of N
-        MatrixX<T>& NtN_rat)        // (output) rationalized Nt * N
+        int         k,                      // current dimension
+        VectorX<T>& weights,                // weights of control points
+        MatrixX<T>& N,                      // basis function coefficients
+        MatrixX<T>& NtN_rat)                // (output) rationalized Nt * N
 {
-    int n = N.cols() + 1;               // number of control point spans
-    int m = N.rows() + 1;               // number of input point spans
+    int n = N.cols() + 1;                   // number of control point spans
+    int m = N.rows() + 1;                   // number of input point spans
 
     // compute rational denominators for input points
     // rational denominator requires all n + 1 basis functions and weights, not skipping first and last
-    VectorX<T> denom(m - 1);            // rational denomoninator for param of each input point excl. ends
-    MatrixX<T> Nk(1, n + 1);            // basis function coeffs for one parameter value (all coeffs, not skipping first and last)
+    VectorX<T> denom(m - 1);                // rational denomoninator for param of each input point excl. ends
+    MatrixX<T> Nk(1, n + 1);                // basis function coeffs for one parameter value (all coeffs, not skipping first and last)
     for (int j = 1; j < m; j++)
     {
         int span = FindSpan(k, params(po[k] + j), ko[k]) - ko[k];   // relative to ko
-        assert(span <= n);                   // sanity
-        Nk = MatrixX<T>::Zero(1, n + 1);     // basis coefficients for Rk[j]
+        assert(span <= n);                  // sanity
+        Nk = MatrixX<T>::Zero(1, n + 1);    // basis coefficients for Rk[j]
         BasisFuns(k, params(po[k] + j), span, Nk, 0, n, 0);
         denom(j - 1) = (Nk.row(0).cwiseProduct(weights.transpose())).sum();
     }
@@ -1150,19 +1149,14 @@ Rationalize(
 
     // "rationalize" N and Nt
     // ie, convert their basis function coefficients to rational ones with weights
-    MatrixX<T> N_rat = N;                       // need a copy because N, Nt will be reused for other curves
-    MatrixX<T> Nt_rat = Nt;
+    MatrixX<T> N_rat = N;                   // need a copy because N, will be reused for other curves
     for (auto i = 0; i < N.cols(); i++)
         N_rat.col(i) *= weights(i + 1);
     for (auto j = 0; j < N.rows(); j++)
         N_rat.row(j) /= denom(j);
-    for (auto i = 0; i < Nt.rows(); i++)
-        Nt_rat.row(i) *= weights(i + 1);
-    for (auto j = 0; j < Nt.cols(); j++)
-        Nt_rat.col(j) /= denom(j);
 
     // multiply rationalized Nt and N
-    NtN_rat = Nt_rat * N_rat;
+    NtN_rat = N_rat.transpose() * N_rat;
 
     // debug
     //         cerr << "k " << k << " NtN:\n" << NtN << endl;
