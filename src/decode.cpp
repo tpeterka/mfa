@@ -276,9 +276,6 @@ CurvePt(
     // (rows in this case), otherwise eigen cannot multiply them
     T denom = (N.row(0).cwiseProduct(temp_weights.transpose())).sum();
     out_pt /= denom;
-
-    // debug
-//     fprintf(stderr, "2: denom=%.3f\n", denom);
 }
 
 // compute a point from a NURBS n-d volume at a given parameter value
@@ -343,10 +340,9 @@ VolPt(VectorX<T>& param,                       // parameter value in each dim. o
             }
         }
     }
-    T denom = temp_denom(mfa.p.size() - 1);
 
-    out_pt = temp[mfa.p.size() - 1];
-    out_pt /= denom;
+    T denom = temp_denom(mfa.p.size() - 1);
+    out_pt = temp[mfa.p.size() - 1] / denom;
 
     // DEPRECATED
 #if 0
