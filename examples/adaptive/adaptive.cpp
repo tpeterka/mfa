@@ -47,6 +47,7 @@ int main(int argc, char** argv)
     int    ndomp          = 100;                      // input number of domain points (same for all dims)
     string input          = "sinc";                   // input dataset
     int    max_rounds     = 0;                        // max. number of rounds (0 = no maximum)
+    bool   weighted       = true;                     // solve for and use weights
 
     // get command line arguments
     using namespace opts;
@@ -58,6 +59,7 @@ int main(int argc, char** argv)
     ops >> Option('n', "ndomp",   ndomp,          " number of input points in each dimension of domain");
     ops >> Option('i', "input",   input,          " input dataset");
     ops >> Option('r', "rounds",  max_rounds,     " maximum number of iterations");
+    ops >> Option('w', "weights", weighted,       " solve for and use weights");
 
     if (ops >> Present('h', "help", "show help"))
     {
@@ -69,9 +71,10 @@ int main(int argc, char** argv)
     // echo args
     fprintf(stderr, "\n--------- Input arguments ----------\n");
     cerr <<
-        "error = "    << norm_err_limit << " pt_dim = "      << pt_dim << " dom_dim = " << dom_dim <<
-        "\ndegree = " << degree         << " input pts = "   << ndomp  <<
-        "\ninput = "  << input          << " max. rounds = " << max_rounds << endl;
+        "error = "      << norm_err_limit << " pt_dim = "      << pt_dim << " dom_dim = " << dom_dim <<
+        "\ndegree = "   << degree         << " input pts = "   << ndomp  <<
+        "\ninput = "    << input          << " max. rounds = " << max_rounds <<
+        "\nweighted = " << weighted       << endl;
 #ifdef CURVE_PARAMS
     cerr << "parameterization method = curve" << endl;
 #else
@@ -97,6 +100,7 @@ int main(int argc, char** argv)
     // set default args for diy foreach callback functions
     d_args.pt_dim       = pt_dim;
     d_args.dom_dim      = dom_dim;
+    d_args.weighted     = weighted;
     for (int i = 0; i < MAX_DIM; i++)
     {
         d_args.p[i]         = degree;

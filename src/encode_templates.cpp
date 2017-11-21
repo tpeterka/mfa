@@ -14,7 +14,7 @@ template
 void
 mfa::
 Encoder<float>::
-Encode();
+Encode(bool weighted);              // solve for and use weights
 
 template
 void
@@ -83,7 +83,8 @@ CtrlCurve(
         size_t    cs,          // stride for reading domain points
         size_t    to,          // starting ofst for writing control pts
         MatrixXf& temp_ctrl0,  // first temporary control points buffer
-        MatrixXf& temp_ctrl1); // second temporary control points buffer
+        MatrixXf& temp_ctrl1,  // second temporary control points buffer
+        bool      weighted = true);   // solve for and use weights
 
 template
 void
@@ -181,7 +182,7 @@ template
 void
 mfa::
 Encoder<double>::
-Encode();
+Encode(bool weighted);              // solve for and use weights
 
 template
 void
@@ -250,7 +251,8 @@ CtrlCurve(
         size_t    cs,          // stride for reading domain points
         size_t    to,          // starting ofst for writing control pts
         MatrixXd& temp_ctrl0,  // first temporary control points buffer
-        MatrixXd& temp_ctrl1); // second temporary control points buffer
+        MatrixXd& temp_ctrl1,  // second temporary control points buffer
+        bool      weighted = true);   // solve for and use weights
 
 template
 void

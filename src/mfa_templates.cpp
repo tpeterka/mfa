@@ -28,7 +28,9 @@ template
 void
 mfa::
 MFA<float>::
-FixedEncode(VectorXi& nctrl_pts_); // (output) number of control points in each dim
+FixedEncode(
+        VectorXi& nctrl_pts_,       // (output) number of control points in each dim
+        bool      weighted = true); // solve for and use weights
 
 template
 void
@@ -216,7 +218,9 @@ template
 void
 mfa::
 MFA<double>::
-FixedEncode(VectorXi& nctrl_pts_); // (output) number of control points in each dim
+FixedEncode(
+        VectorXi& nctrl_pts_,       // (output) number of control points in each dim
+        bool      weighted = true); // solve for and use weights
 
 template
 void

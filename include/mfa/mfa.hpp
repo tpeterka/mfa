@@ -16,6 +16,10 @@
 // low-d is the default if no method is specified
 // #define HIGH_D
 
+// comment out the following line for applying weights to only the range dimension
+// weighing the range coordinate only is the default if no method is specified
+// #define WEIGH_ALL_DIMS
+
 #include <Eigen/Dense>
 #include <vector>
 #include <list>
@@ -77,7 +81,9 @@ namespace mfa
 
         void Encode();
 
-        void FixedEncode(VectorXi& nctrl_pts_); // (output) number of control points in each dim
+        void FixedEncode(
+                VectorXi& nctrl_pts_,       // (output) number of control points in each dim
+                bool      weighted = true); // solve for and use weights
 
         void AdaptiveEncode(
                 T         err_limit,        // maximum allowable normalized error

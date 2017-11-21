@@ -549,7 +549,7 @@ template <typename T>
 void
 mfa::
 Encoder<T>::
-Encode()
+Encode(bool weighted)                      // solve for and use weights
 {
     // TODO: some of these quantities mirror this in the mfa
 
@@ -670,7 +670,7 @@ Encode()
             MatrixX<T> P(n(k) - 1, mfa.domain.cols());
 
             // compute the one curve of control points
-            CtrlCurve(N, NtN, R, P, k, co[j], cs, to[j], temp_ctrl0, temp_ctrl1);
+            CtrlCurve(N, NtN, R, P, k, co[j], cs, to[j], temp_ctrl0, temp_ctrl1, weighted);
         });                                                  // curves in this dimension
 
         // adjust offsets and strides for next dimension
@@ -709,7 +709,7 @@ template <typename T>
 void
 mfa::
 Encoder<T>::
-Encode()
+Encode(bool weighted)                           // solve for and use weights
 {
     // check and assign main quantities
     VectorXi n;                                 // number of control point spans in each domain dim
@@ -838,7 +838,7 @@ Encode()
                         k, (T)j / (T)ncurves * 100, j, ncurves);
 
             // compute the one curve of control points
-            CtrlCurve(N, NtN, R, P, k, co[j], cs, to[j], temp_ctrl0, temp_ctrl1);
+            CtrlCurve(N, NtN, R, P, k, co[j], cs, to[j], temp_ctrl0, temp_ctrl1, weighted);
         }
 
         // adjust offsets and strides for next dimension
@@ -862,8 +862,6 @@ Encode()
 }
 
 #endif
-
-#if 1                       // RHS for 2d curve of one domain dimension and range value
 
 // computes right hand side vector of P&T eq. 9.63 and 9.67, p. 411-412 for a curve from the
 // original input domain points
@@ -907,16 +905,25 @@ RHS(
 
         denom(k - 1) = (Nk.row(0).cwiseProduct(weights.transpose())).sum();
 
+#ifdef WEIGH_ALL_DIMS                                   // weigh all dimensions
         Rk(k - 1, 0) =
             mfa.domain(co + k * mfa.ds[cur_dim], cur_dim) -
             Nk(0, 0) * weights(0) / denom(k - 1) * mfa.domain(co, cur_dim) -
             Nk(0, n) * weights(0) / denom(k - 1) * mfa.domain(co + m * mfa.ds[cur_dim], cur_dim);
+#else                                                   // don't weigh domain coordinate (only range)
+        Rk(k - 1, 0) =
+            mfa.domain(co + k * mfa.ds[cur_dim], cur_dim) -
+            Nk(0, 0) * mfa.domain(co, cur_dim) -
+            Nk(0, n) * mfa.domain(co + m * mfa.ds[cur_dim], cur_dim);
+#endif
+
         Rk(k - 1, 1) =
             mfa.domain(co + k * mfa.ds[cur_dim], last) -
             Nk(0, 0) * weights(0) / denom(k - 1) * mfa.domain(co, last) -
             Nk(0, n) * weights(0) / denom(k - 1) * mfa.domain(co + m * mfa.ds[cur_dim], last);
     }
 
+#ifdef WEIGH_ALL_DIMS                                   // weigh all dimensions
     // compute the matrix R (one row for each control point except ends)
     // 2 columns: 1 domain dimension and 1 range value
     for (int i = 1; i < n; i++)
@@ -926,6 +933,21 @@ RHS(
                 (N.col(i - 1).array() *             // ith basis functions for input pts
                  weights(i) / denom.array() *       // rationalized
                  Rk.col(j).array()).sum();          // input points
+#else                                               // don't weigh domain coordinate (only range)
+    // compute the matrix R (one row for each control point except ends)
+    // 2 columns: 1 domain dimension and 1 range value
+    for (int i = 1; i < n; i++)
+    {
+        // using array() for element-wise multiplication, which is what we want (not matrix mult.)
+        R(i - 1, 0) =
+            (N.col(i - 1).array() *             // ith basis functions for input pts
+             Rk.col(0).array()).sum();          // input points
+        R(i - 1, 1) =
+            (N.col(i - 1).array() *             // ith basis functions for input pts
+             weights(i) / denom.array() *       // rationalized
+             Rk.col(1).array()).sum();          // input points
+    }
+#endif
 
     // debug
 //     cerr << "R:\n" << R << endl;
@@ -975,149 +997,52 @@ RHS(
 
         denom(k - 1) = (Nk.row(0).cwiseProduct(weights.transpose())).sum();
 
+#ifdef WEIGH_ALL_DIMS                                   // weigh all dimensions
         Rk(k - 1, 0) =
             in_pts(co + k * cs, cur_dim) -
             Nk(0, 0) * weights(0) / denom(k - 1) * in_pts(co, cur_dim) -
             Nk(0, n) * weights(0) / denom(k - 1) * in_pts(co + m * cs, cur_dim);
+#else                                                   // don't weigh domain coordinate (only range)
+        Rk(k - 1, 0) =
+            in_pts(co + k * cs, cur_dim) -
+            Nk(0, 0) * in_pts(co, cur_dim) -
+            Nk(0, n) * in_pts(co + m * cs, cur_dim);
+#endif
+
         Rk(k - 1, 1) =
             in_pts(co + k * cs, last) -
             Nk(0, 0) * weights(0) / denom(k - 1) * in_pts(co, last) -
             Nk(0, n) * weights(0) / denom(k - 1) * in_pts(co + m * cs, last);
     }
 
+#ifdef WEIGH_ALL_DIMS                                   // weigh all dimensions
     // compute the matrix R (one row for each control point except ends)
     // 2 columns: 1 domain dimension and 1 range value
     for (int i = 1; i < n; i++)
         for (int j = 0; j < 2; j++)
             R(i - 1, j) =
-                (N.col(i - 1).array() *             // ith basis functions for input pts
-                 weights(i) / denom.array() *       // rationalized
-                 Rk.col(j).array()).sum();          // input points
-
-    // debug
-//     cerr << "R:\n" << R << endl;
-}
-
-#else                   // RHS for all dimensions
-
-// computes right hand side vector of P&T eq. 9.63 and 9.67, p. 411-412 for a curve from the
-// original input domain points
-//
-// includes multiplication by weights, so that R = (N^TQ)Nw
-// where:
-// N is the matrix of basis function coefficients
-// Q is a diagonal matrix of input points on the diagonals and 0 elsewhere (excluding first and last points)
-// w is the weights vector, excluding first and last weights
-// R is column vector of n - 1 elements, each element multiple coordinates of the input points
-// ie, a matrix of n - 1 rows and control point dims columns
-template <typename T>
-void
-mfa::
-Encoder<T>::
-RHS(
-        int         cur_dim,             // current dimension
-        MatrixX<T>& N,                   // matrix of basis function coefficients
-        MatrixX<T>& R,                   // (output) residual matrix allocated by caller
-        VectorX<T>& weights,             // precomputed weights for n + 1 control points on this curve
-        int         ko,                  // index of starting knot
-        int         po,                  // index of starting parameter
-        int         co)                  // index of starting domain pt in current curve
-{
-    int n      = N.cols() + 1;               // number of control point spans
-    int m      = N.rows() + 1;               // number of input data point spans
-
-    // compute the matrix Rk for eq. 9.63 of P&T, p. 411
-    MatrixX<T> Rk(m - 1, mfa.domain.cols());   // eigen frees MatrixX when leaving scope
-    MatrixX<T> Nk;                             // basis coefficients for Rk[i]
-    VectorX<T> denom(m - 1);                   // rational denomoninator for param of each input point excl. ends
-
-    for (int k = 1; k < m; k++)
-    {
-        int span = mfa.FindSpan(cur_dim, mfa.params(po + k), ko) - ko;     // relative to ko
-        Nk = MatrixX<T>::Zero(1, n + 1);      // basis coefficients for Rk[i]
-        mfa.BasisFuns(cur_dim, mfa.params(po + k), span, Nk, 0, n, 0);
-
-        denom(k - 1) = (Nk.row(0).cwiseProduct(weights.transpose())).sum();
-
-        Rk.row(k - 1) =
-            mfa.domain.row(co + k * mfa.ds[cur_dim]) -
-            Nk(0, 0) * weights(0) / denom(k - 1) * mfa.domain.row(co) -
-            Nk(0, n) * weights(0) / denom(k - 1) * mfa.domain.row(co + m * mfa.ds[cur_dim]);
-    }
-
-    // compute the matrix R
+                (N.col(i - 1).array() *                 // ith basis functions for input pts
+                 weights(i) / denom.array() *           // rationalized
+                 Rk.col(j).array()).sum();              // input points
+#else                                                   // don't weigh domain coordinate (only range)
+    // compute the matrix R (one row for each control point except ends)
+    // 2 columns: 1 domain dimension and 1 range value
     for (int i = 1; i < n; i++)
-        for (int j = 0; j < Rk.cols(); j++)
-            // using array() for element-wise multiplication, which is what we want (not matrix mult.)
-            R(i - 1, j) =
-                (N.col(i - 1).array() *             // ith basis functions for input pts
-                 weights(i) / denom.array() *       // rationalized
-                 Rk.col(j).array()).sum();          // input points
-
-    // debug
-//     cerr << "R:\n" << R << endl;
-}
-
-// computes right hand side vector of P&T eq. 9.63 and 9.67, p. 411-412 for a curve from a
-// new set of input points, not the default input domain
-//
-// includes multiplication by weights, so that R = (N^TQ)Nw
-// where:
-// N is the matrix of basis function coefficients
-// Q is a diagonal matrix of input points on the diagonals and 0 elsewhere (excluding first and last points)
-// w is the weights vector, excluding first and last weights
-// R is column vector of n - 1 elements, each element multiple coordinates of the input points
-// ie, a matrix of n - 1 rows and control point dims columns
-template <typename T>
-void
-mfa::
-Encoder<T>::
-RHS(
-        int         cur_dim,             // current dimension
-        MatrixX<T>& in_pts,              // input points (not the default domain stored in the mfa)
-        MatrixX<T>& N,                   // matrix of basis function coefficients
-        MatrixX<T>& R,                   // (output) residual matrix allocated by caller
-        VectorX<T>& weights,             // precomputed weights for n + 1 control points on this curve
-        int         ko,                  // index of starting knot
-        int         po,                  // index of starting parameter
-        int         co,                  // index of starting input pt in current curve
-        int         cs)                  // stride of input pts in current curve
-{
-    int n      = N.cols() + 1;               // number of control point spans
-    int m      = N.rows() + 1;               // number of input data point spans
-
-    // compute the matrix Rk for eq. 9.63 of P&T, p. 411
-    MatrixX<T> Rk(m - 1, in_pts.cols());       // eigen frees MatrixX when leaving scope
-    MatrixX<T> Nk;                             // basis coefficients for Rk[i]
-    VectorX<T> denom(m - 1);                   // rational denomoninator for param of each input point excl. ends
-
-    for (int k = 1; k < m; k++)
     {
-        int span = mfa.FindSpan(cur_dim, mfa.params(po + k), ko) - ko;
-        Nk = MatrixX<T>::Zero(1, n + 1);      // basis coefficients for Rk[i]
-        mfa.BasisFuns(cur_dim, mfa.params(po + k), span, Nk, 0, n, 0);
-
-        denom(k - 1) = (Nk.row(0).cwiseProduct(weights.transpose())).sum();
-
-        Rk.row(k - 1) =
-            in_pts.row(co + k * cs) -
-            Nk(0, 0) * weights(0) / denom(k - 1) * in_pts.row(co) -
-            Nk(0, n) * weights(0) / denom(k - 1) * in_pts.row(co + m * cs);
+        // using array() for element-wise multiplication, which is what we want (not matrix mult.)
+        R(i - 1, 0) =
+            (N.col(i - 1).array() *                     // ith basis functions for input pts
+             Rk.col(0).array()).sum();                  // input points
+        R(i - 1, 1) =
+            (N.col(i - 1).array() *                     // ith basis functions for input pts
+             weights(i) / denom.array() *               // rationalized
+             Rk.col(1).array()).sum();                  // input points
     }
-
-    // compute the matrix R
-    for (int i = 1; i < n; i++)
-        for (int j = 0; j < Rk.cols(); j++)
-            R(i - 1, j) =
-                (N.col(i - 1).array() *             // ith basis functions for input pts
-                 weights(i) / denom.array() *       // rationalized
-                 Rk.col(j).array()).sum();          // input points
-
-    // debug
-//     cerr << "R:\n" << R << endl;
-}
-
 #endif
+
+    // debug
+//     cerr << "R:\n" << R << endl;
+}
 
 // Checks quantities needed for approximation
 template <typename T>
@@ -1280,7 +1205,8 @@ CtrlCurve(MatrixX<T>& N,          // basis functions for current dimension
           size_t      cs,         // stride for reading domain points
           size_t      to,         // starting ofst for writing control pts
           MatrixX<T>& temp_ctrl0, // first temporary control points buffer
-          MatrixX<T>& temp_ctrl1) // second temporary control points buffer
+          MatrixX<T>& temp_ctrl1, // second temporary control points buffer
+          bool        weighted)   // solve for and use weights (default = true)
 {
     int n = N.cols() + 1;               // number of control point spans
     int m = N.rows() + 1;               // number of input point spans
@@ -1310,11 +1236,11 @@ CtrlCurve(MatrixX<T>& N,          // basis functions for current dimension
 //     cerr << "k=" << k << " Q:\n" << Q << endl;
 //     cer; << "N:\n" << N << endl;
 
-    // solve for weights
-    VectorX<T> weights = VectorX<T>::Ones(n + 1);    // weights for control points on this curve
-    if (k == mfa.p.size() - 1)                          // only in the last dimension
-//     if (k == 0)
-        Weights(k, Q, weights);                         // solve for all weights, including end points
+    // solve for weights in the last domain dimension only
+    VectorX<T> weights = VectorX<T>::Ones(n + 1);
+    if (weighted)
+        if (k == mfa.p.size() - 1)
+            Weights(k, Q, weights);
 
     // compute R
     // first dimension reads from domain
@@ -1335,8 +1261,7 @@ CtrlCurve(MatrixX<T>& N,          // basis functions for current dimension
 
     // solve for P
 
-#if 1       // solve 2 dimensions of control points and copy rest of dimensions from input points
-
+#ifdef WEIGH_ALL_DIMS                                   // weigh all dimensions
     MatrixX<T> P2(P.rows(), 2);
     P2 = NtN_rat.ldlt().solve(R);
     for (auto i = 0; i < P.rows(); i++)
@@ -1345,11 +1270,15 @@ CtrlCurve(MatrixX<T>& N,          // basis functions for current dimension
                 P(i, j) = (j == k ? P2(i, 0) : Q(i, j));
         P(i, P.cols() - 1) = P2(i, 1);
     }
-
-#else      // solve for all dimensions
-
-    P = NtN_rat.ldlt().solve(R);
-
+#else                                                   // don't weigh domain coordinate (only range)
+    MatrixX<T> P2(P.rows(), 2);
+    P2 = NtN.ldlt().solve(R);                           // nonrational domain coordinates
+    for (auto i = 0; i < P.rows(); i++)
+        for (auto j = 0; j < P.cols() - 1; j++)
+                P(i, j) = (j == k ? P2(i, 0) : Q(i, j));
+    P2 = NtN_rat.ldlt().solve(R);                       // rational range coordinate
+    for (auto i = 0; i < P.rows(); i++)
+        P(i, P.cols() - 1) = P2(i, 1);
 #endif
 
     // append points from P to control points

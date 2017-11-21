@@ -327,11 +327,13 @@ template <typename T>
 void
 mfa::
 MFA<T>::
-FixedEncode(VectorXi &nctrl_pts_)           // (output) number of control points in each dim
+FixedEncode(
+        VectorXi &nctrl_pts_,               // (output) number of control points in each dim
+        bool     weighted)                  // solve for and use weights (default = true)
 {
     weights = VectorX<T>::Ones(tot_nctrl);
     mfa::Encoder<T> encoder(*this);
-    encoder.Encode();
+    encoder.Encode(weighted);
     nctrl_pts_ = nctrl_pts;
 }
 

@@ -54,7 +54,8 @@ struct DomainArgs
     real_t    min[MAX_DIM];                      // minimum corner of domain
     real_t    max[MAX_DIM];                      // maximum corner of domain
     real_t    s;                                 // scaling factor or any other usage
-    char      infile[256];                        // input filename
+    char      infile[256];                       // input filename
+    bool      weighted;                          // solve for and use weights (default = true)
 };
 
 struct ErrArgs
@@ -1154,7 +1155,7 @@ struct Block
         for (int i = 0; i < a->dom_dim; i++)
             nctrl_pts(i) =  a->nctrl_pts[i];
         mfa = new mfa::MFA<T>(p, ndom_pts, domain, ctrl_pts, nctrl_pts, weights, knots);
-        mfa->FixedEncode(nctrl_pts);
+        mfa->FixedEncode(nctrl_pts, a->weighted);
     }
 
     // adaptively encode block to desired error limit

@@ -31,7 +31,8 @@ namespace mfa
 
         Encoder(MFA<T>& mfa_);
         ~Encoder() {}
-        void Encode();
+        void Encode(
+                bool weighted = true);      // solve for and use weights
         void AdaptiveEncode(
                 T   err_limit,              // maximum allowable normalized error
                 int max_rounds = 0);        // optional maximum number of rounds
@@ -79,7 +80,8 @@ namespace mfa
                 size_t      cs,          // stride for reading domain points
                 size_t      to,          // starting ofst for writing control pts
                 MatrixX<T>& temp_ctrl0,  // first temporary control points buffer
-                MatrixX<T>& temp_ctrl1); // second temporary control points buffer
+                MatrixX<T>& temp_ctrl1,  // second temporary control points buffer
+                bool        weighted = true);   // solve for and use weights
 
         void CopyCtrl(
                 MatrixX<T>& P,          // solved points for current dimension and curve

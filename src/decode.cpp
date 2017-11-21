@@ -321,7 +321,16 @@ VolPt(VectorX<T>& param,                       // parameter value in each dim. o
         // always compute the point in the first dimension
         ctrl_pt = mfa.ctrl_pts.row(ctrl_idx);
         T w            = mfa.weights(ctrl_idx);
+
+#ifdef WEIGH_ALL_DIMS                               // weigh all dimensions
         temp[0]       += (N[0])(0, iter[0] + span[0] - mfa.p(0)) * ctrl_pt * w;
+#else                                               // weigh only range dimension
+        int last = mfa.ctrl_pts.cols() - 1;
+        for (auto j = 0; j < last; j++)
+            (temp[0])(j) += (N[0])(0, iter[0] + span[0] - mfa.p(0)) * ctrl_pt(j);
+        (temp[0])(last) += (N[0])(0, iter[0] + span[0] - mfa.p(0)) * ctrl_pt(last) * w;
+#endif
+
         temp_denom(0) += w * N[0](0, iter[0] + span[0] - mfa.p(0));
         iter[0]++;
 
@@ -342,42 +351,15 @@ VolPt(VectorX<T>& param,                       // parameter value in each dim. o
     }
 
     T denom = temp_denom(mfa.p.size() - 1);
-    out_pt = temp[mfa.p.size() - 1] / denom;
 
-    // DEPRECATED
-#if 0
-    // compute rational NURBS denominator the slow way
-    T old_denom       = 0.0;                            // denominator for dividing point coordinates
-    VectorXi ijk      = VectorXi::Zero(mfa.p.size());   // i,j,k,... coords of basis function and weight
-    VectorXi next_ijk = ijk;                            // i,j,k,... for next iteration
-    for (auto i = 0; i < mfa.weights.size(); i++)       // for all weights
-    {
-        next_ijk   = ijk;
-        T temp     = mfa.weights(i);
-        bool stop  = false;
-        for (auto k = 0; k < mfa.p.size(); k++)
-        {
-            temp *= N[k](ijk(k));
-            // ijk for next iteration
-            if (!stop)
-            {
-                if (ijk(k) == mfa.nctrl_pts(k) - 1)
-                    next_ijk(k) = 0;
-                else
-                {
-                    next_ijk(k)++;
-                    stop = true;
-                }
-            }
-        }
-        old_denom += temp;
-        ijk        = next_ijk;
-    }
-    // debug
-    if (fabs(old_denom - denom) > 1e-13)
-        fprintf(stderr, "Error: old_denom = %.3f but denom = %.3f. These should match but differ by %e.\n", 
-                old_denom, denom, old_denom - denom);
+#ifdef WEIGH_ALL_DIMS                           // weigh all dimensions
+    out_pt = temp[mfa.p.size() - 1] / denom;
+#else                                           // weigh only range dimension
+    out_pt   = temp[mfa.p.size() - 1];
+    int last = mfa.ctrl_pts.cols() - 1;
+    out_pt(last) /= denom;
 #endif
+
 }
 
 #include    "decode_templates.cpp"
