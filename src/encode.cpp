@@ -188,7 +188,8 @@ Weights(
 
     // compute the matrix M according to eq.3 and eq. 4 of M&K95
     MatrixX<T> M = MatrixX<T>::Zero(NtN.rows(), NtN.cols());
-    for (auto j = 0; j < 2; j++)           // for all point dims
+//     for (auto j = 0; j < 2; j++)           // for all point dims
+    for (auto j = 1; j < 2; j++)           // only the range dim
         M += NtQ2N[j] - NtQN[j] * NtNi * NtQN[j];
 
     // compute the eigenvalues and eigenvectors of M (eq. 9 of M&K95)
@@ -220,13 +221,13 @@ Weights(
     {
         weights = EV.col(0);
         weights *= (1.0 / weights.maxCoeff());  // scale to max weight = 1
-        cerr << "successfully found weights from an all-positive first eigenvector:\n" << weights << "\n" << endl;
+        cerr << "successfully found weights from an all-positive first eigenvector" << endl;
     }
     else if ( (EV.col(0).array() < 0.0).all() )
     {
         weights = -EV.col(0);
         weights *= (1.0 / weights.maxCoeff());  // scale to max weight = 1
-        cerr << "successfully found weights from an all-negative first eigenvector:\n" << weights << "\n" << endl;
+        cerr << "successfully found weights from an all-negative first eigenvector" << endl;
     }
 
     // if smallest eigenvector is mixed sign, then expand eigen space
@@ -529,7 +530,7 @@ Weights(
 
 #endif
 
-#if 0
+#if 1
 
 // TBB version
 // ~2X faster than serial, still expensive to compute curve offsets
