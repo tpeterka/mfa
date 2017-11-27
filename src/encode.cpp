@@ -87,7 +87,7 @@ AdaptiveEncode(
     Encode();
 }
 
-#if 0
+#if 1
 
 // TBB version
 // ~2X faster than serial, still expensive to compute curve offsets
