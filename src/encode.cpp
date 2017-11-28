@@ -179,54 +179,36 @@ Weights(
     {
         weights = EV.col(0);
         weights *= (1.0 / weights.maxCoeff());  // scale to max weight = 1
-        // debug
-//         cerr << "successfully found weights from an all-positive first eigenvector" << endl;
     }
     else if ( (EV.col(0).array() < 0.0).all() )
     {
         weights = -EV.col(0);
         weights *= (1.0 / weights.maxCoeff());  // scale to max weight = 1
-        // debug
-//         cerr << "successfully found weights from an all-negative first eigenvector" << endl;
     }
 
     // if smallest eigenvector is mixed sign, then expand eigen space
     else
     {
         fprintf(stderr, "\nExpanding eigenspace using linear solver\n");
-        // need epsilon because inequality constraints allowed by the rehearse interface to coin-or are <=, not <
-        // TODO: final result is quite sensitive to the choice of epsilon, need a better way
-//         T epsilon    = 1.0e-5;
-        T min_weight = 1.0e-4;                      // best so far
+        T min_weight = 1.0e-4;                      // best choice so far; TODO: sensitive
         T max_weight = 1.0;
         bool success = false;
         using namespace rehearse;
 
         for (auto i = 2; i <= EV.cols(); i++)        // expand from 2 eigenvectors to all, one at a time
         {
-//             fprintf(stderr, "Trying linear combinations of %d eigenvectors\n", i);
             OsiClpSolverInterface *solver = new OsiClpSolverInterface();
             CelModel model(*solver);
 
             CelNumVarArray a;                               // solution variables
             a.multiDimensionResize(1, i);
 
-//             CelExpression obj_expr;                         // objective function
-//             for (auto k = 0; k < i; k++)
-//                 obj_expr += a[k] * EV.col(k).sum();
-//             model.setObjective(obj_expr);
-// 
-//             // add constraints on the objective function
-//             model.addConstraint(epsilon <= obj_expr);
-//             model.addConstraint(obj_expr <= 1.0 / epsilon);
-// 
             // add the constraints that the sum of elements (resulting weight) is positive
             for (auto j = 0; j < weights.size(); j++)   // for all rows in the eigenvectors
             {
                 CelExpression expr;
                 for (auto k = 0; k < i; k++)            // for current number of eigenvectors
                     expr += a[k] * EV(j, k);
-//                 model.addConstraint(epsilon <= expr);
                 model.addConstraint(min_weight <= expr);
                 model.addConstraint(expr <= max_weight);
             }
