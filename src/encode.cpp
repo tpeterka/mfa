@@ -39,13 +39,17 @@ void
 mfa::
 Encoder<T>::
 AdaptiveEncode(
-        T   err_limit,                                          // maximum allowed normalized error
-        int max_rounds)                                         // (optional) maximum number of rounds
+        T    err_limit,                                         // maximum allowed normalized error
+        bool weighted,                                          // solve for and use weights
+        int  max_rounds)                                        // (optional) maximum number of rounds
 {
     VectorXi  nnew_knots = VectorXi::Zero(mfa.p.size());        // number of new knots in each dim
     vector<T> new_knots;                                        // new knots (1st dim changes fastest)
 
     mfa::NewKnots<T> nk(mfa);
+
+    // TODO: use weights for knot insertion
+    // for now, weights are only used for final full encode
 
     // loop until no change in knots
     for (int iter = 0; ; iter++)
@@ -95,7 +99,7 @@ AdaptiveEncode(
 
     // final full encoding needed after last knot insertion above
     fprintf(stderr, "Encoding in full %ldD\n", mfa.p.size());
-    Encode();
+    Encode(weighted);
 }
 
 #if 1               // 1d weights for range coordinate only
@@ -157,6 +161,7 @@ Weights(
         fprintf(stderr, "Error: Encoder::Weights(), computing eigenvalues of M failed, perhaps M is not self-adjoint?\n");
         exit(0);
     }
+
     const MatrixX<T>& EV    = eigensolver.eigenvectors();          // typing shortcut
     const VectorX<T>& evals = eigensolver.eigenvalues();           // typing shortcut
 
@@ -174,82 +179,79 @@ Weights(
     {
         weights = EV.col(0);
         weights *= (1.0 / weights.maxCoeff());  // scale to max weight = 1
-        cerr << "successfully found weights from an all-positive first eigenvector" << endl;
+        // debug
+//         cerr << "successfully found weights from an all-positive first eigenvector" << endl;
     }
     else if ( (EV.col(0).array() < 0.0).all() )
     {
         weights = -EV.col(0);
         weights *= (1.0 / weights.maxCoeff());  // scale to max weight = 1
-        cerr << "successfully found weights from an all-negative first eigenvector" << endl;
+        // debug
+//         cerr << "successfully found weights from an all-negative first eigenvector" << endl;
     }
 
     // if smallest eigenvector is mixed sign, then expand eigen space
     else
     {
         fprintf(stderr, "\nExpanding eigenspace using linear solver\n");
+        // need epsilon because inequality constraints allowed by the rehearse interface to coin-or are <=, not <
+        // TODO: final result is quite sensitive to the choice of epsilon, need a better way
+//         T epsilon    = 1.0e-5;
+        T min_weight = 1.0e-4;                      // best so far
+        T max_weight = 1.0;
         bool success = false;
         using namespace rehearse;
 
         for (auto i = 2; i <= EV.cols(); i++)        // expand from 2 eigenvectors to all, one at a time
         {
-            fprintf(stderr, "Trying linear combinations of %d eigenvectors\n", i);
+//             fprintf(stderr, "Trying linear combinations of %d eigenvectors\n", i);
             OsiClpSolverInterface *solver = new OsiClpSolverInterface();
             CelModel model(*solver);
 
-            CelNumVarArray a;
+            CelNumVarArray a;                               // solution variables
             a.multiDimensionResize(1, i);
 
-            // add the constraints that the sum of elements is positive
-
-            // Need epsilon because the only inequality constraints allowed by rehearse are <=, not <
-            // However, the smaller the epsilon, the smaller the weights found by the solver.
-            // Even though I normalize weights to max 1.0, we don't want roundoff error from
-            // multiplying very small numbers. The epsilon below seems reasonable for now.
-            T epsilon = 1.0e-4;
+//             CelExpression obj_expr;                         // objective function
+//             for (auto k = 0; k < i; k++)
+//                 obj_expr += a[k] * EV.col(k).sum();
+//             model.setObjective(obj_expr);
+// 
+//             // add constraints on the objective function
+//             model.addConstraint(epsilon <= obj_expr);
+//             model.addConstraint(obj_expr <= 1.0 / epsilon);
+// 
+            // add the constraints that the sum of elements (resulting weight) is positive
             for (auto j = 0; j < weights.size(); j++)   // for all rows in the eigenvectors
             {
                 CelExpression expr;
                 for (auto k = 0; k < i; k++)            // for current number of eigenvectors
                     expr += a[k] * EV(j, k);
-                model.addConstraint(epsilon <= expr);
-
-                // NB: adding more constraints on norm of a's, eg sum(a[k]) = 1 or on individual
-                // vaues of a[k], eg a[k] <= 1 produce a worse solution, fewer constraints is better
+//                 model.addConstraint(epsilon <= expr);
+                model.addConstraint(min_weight <= expr);
+                model.addConstraint(expr <= max_weight);
             }
 
             // solve
-            solver->setObjSense(1.0);
+            solver->setObjSense(-1.0);
             model.builderToSolver();
             solver->setLogLevel(0);
             solver->initialSolve();
 
-            // check
+            // copy out the solution and delete the solver
             VectorX<T> solved_weights = VectorX<T>::Zero(weights.size());
             for (auto k = 0; k < i; k++)                 // for current number of eigenvectors
                 solved_weights += model.getSolutionValue(a[k]) * EV.col(k);
-
-            // debug
-//             fprintf(stderr, "eigenvector coefficients:\n");
-//             for (auto k = 0; k < i; k++)
-//                 fprintf(stderr, "%g ", model.getSolutionValue(a[k]));
-//             fprintf(stderr, "\n");
-
             delete solver;
 
-            if ( (solved_weights.array() > 0.0).all() )
+            // check if the solution was found successfully
+            // expand the min and max weights for the check by min_weight/2 to eliminate roundoff error
+            if ( (solved_weights.array() >= min_weight - min_weight / 2.0).all() &&
+                   (solved_weights.array() <= max_weight + min_weight / 2.0).all() )
             {
                 weights = solved_weights;
                 weights *= (1.0 / weights.maxCoeff());  // scale to max weight = 1
                 success = true;
-                cerr << "successful linear solve for weights from linear combination of " << i << " eigenvectors:\n" << weights << "\n" <<endl;
-                break;
-            }
-            else if ( (solved_weights.array() < 0.0).all() )
-            {
-                weights = -solved_weights;
-                weights *= (1.0 / weights.maxCoeff());  // scale to max weight = 1
-                success = true;
-                cerr << "successful linear solve for weights from linear combination of " << i << " eigenvectors:\n" << weights << "\n" << endl;
+                cerr << "successful linear solve from linear combination of " << i << " eigenvectors:\n" << weights << "\n" <<endl;
                 break;
             }
         }                                               // increasing number of eigenvectors
@@ -1436,7 +1438,7 @@ CtrlCurve(MatrixX<T>& N,          // basis functions for current dimension
     for (auto i = 0; i < P.rows(); i++)
     {
         for (auto j = 0; j < P.cols() - 1; j++)
-                P(i, j) = (j == k ? P2(i, 0) : Q(i, j));
+                P(i, j) = (j == k ? P2(i, 0) : Q(i + 1, j));
         P(i, P.cols() - 1) = P2(i, 1);
     }
 #else                                                   // don't weigh domain coordinate (only range)
@@ -1444,7 +1446,7 @@ CtrlCurve(MatrixX<T>& N,          // basis functions for current dimension
     P2 = NtN.ldlt().solve(R);                           // nonrational domain coordinates
     for (auto i = 0; i < P.rows(); i++)
         for (auto j = 0; j < P.cols() - 1; j++)
-                P(i, j) = (j == k ? P2(i, 0) : Q(i, j));
+                P(i, j) = (j == k ? P2(i, 0) : Q(i + 1, j));
     P2 = NtN_rat.ldlt().solve(R);                       // rational range coordinate
     for (auto i = 0; i < P.rows(); i++)
         P(i, P.cols() - 1) = P2(i, 1);

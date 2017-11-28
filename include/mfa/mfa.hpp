@@ -88,6 +88,7 @@ namespace mfa
         void AdaptiveEncode(
                 T         err_limit,        // maximum allowable normalized error
                 VectorXi& nctrl_pts_,       // (output) number of control points in each dim
+                bool      weighted = true,  // solve for and use weights
                 int       max_rounds = 0);  // optional maximum number of rounds
 
         void NonlinearEncode(

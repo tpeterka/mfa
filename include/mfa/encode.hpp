@@ -34,8 +34,9 @@ namespace mfa
         void Encode(
                 bool weighted = true);      // solve for and use weights
         void AdaptiveEncode(
-                T   err_limit,              // maximum allowable normalized error
-                int max_rounds = 0);        // optional maximum number of rounds
+                T    err_limit,             // maximum allowable normalized error
+                bool weighted,              // solve for and use weights
+                int  max_rounds = 0);       // optional maximum number of rounds
 
    private:
 

@@ -217,7 +217,7 @@ int main(int argc, char** argv)
     fprintf(stderr, "\nStarting adaptive encoding...\n\n");
     double encode_time = MPI_Wtime();
     master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-            { b->adaptive_encode_block(cp, norm_err_limit, max_rounds); });
+            { b->adaptive_encode_block(cp, norm_err_limit, max_rounds, d_args); });
     encode_time = MPI_Wtime() - encode_time;
     fprintf(stderr, "\nAdaptive encoding done.\n");
 
@@ -232,6 +232,11 @@ int main(int argc, char** argv)
             { b->range_error(cp, true); });
 #endif
     decode_time = MPI_Wtime() - decode_time;
+
+    // debug: write original and approximated data for reading into z-checker
+    // only for one block (one file name used, ie, last block will overwrite earlier ones)
+    master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
+            { b->write_raw(cp); });
 
     // debug: save knot span domains for comparing error with location in knot span
     master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)

@@ -179,6 +179,11 @@ int main(int argc, char** argv)
 #endif
     decode_time = MPI_Wtime() - decode_time;
 
+    // debug: write original and approximated data for reading into z-checker
+    // only for one block (one file name used, ie, last block will overwrite earlier ones)
+    master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
+            { b->write_raw(cp); });
+
     // debug: save knot span domains for comparing error with location in knot span
     master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
             { b->knot_span_domains(cp); });

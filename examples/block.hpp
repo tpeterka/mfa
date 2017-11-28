@@ -1162,11 +1162,13 @@ struct Block
     void adaptive_encode_block(
             const diy::Master::ProxyWithLink& cp,
             real_t                            err_limit,
-            int                               max_rounds)
+            int                               max_rounds,
+            DomainArgs&                       args)
     {
         VectorXi unused;
+        DomainArgs* a = &args;
         mfa = new mfa::MFA<T>(p, ndom_pts, domain, ctrl_pts, unused, weights, knots);
-        mfa->AdaptiveEncode(err_limit, nctrl_pts, max_rounds);
+        mfa->AdaptiveEncode(err_limit, nctrl_pts, a->weighted, max_rounds);
     }
 
     // nonlinear encoding of block to desired error limit
@@ -1378,8 +1380,8 @@ struct Block
     {
 //         cerr << "domain\n" << domain << endl;
 //         cerr << "nctrl_pts:\n" << nctrl_pts << endl;
-        cerr << ctrl_pts.rows() << " final control points\n" << ctrl_pts << endl;
-        cerr << weights.size()  << " final weights\n" << weights << endl;
+//         cerr << ctrl_pts.rows() << " final control points\n" << ctrl_pts << endl;
+//         cerr << weights.size()  << " final weights\n" << weights << endl;
 //         cerr << knots.size() << " knots\n" << knots << endl;
 //         cerr << approx.rows() << " approximated points\n" << approx << endl;
         fprintf(stderr, "range extent          = %e\n", mfa->range_extent);
@@ -1393,6 +1395,55 @@ struct Block
         fprintf(stderr, "# output knots        = %ld\n",knots.size());
         fprintf(stderr, "compression ratio     = %.2f\n",
                 (real_t)(domain.rows()) / (ctrl_pts.rows() + knots.size() / ctrl_pts.cols()));
+    }
+
+    // write original and approximated data in raw format
+    // only for one block (one file name used, ie, last block will overwrite earlier ones)
+    void write_raw(const diy::Master::ProxyWithLink& cp)
+    {
+        int last = domain.cols() - 1;           // last column in domain points
+
+        // write original points
+        ofstream domain_outfile;
+        domain_outfile.open("orig.raw", ios::binary);
+        vector<T> out_domain(domain.rows());
+        for (auto i = 0; i < domain.rows(); i++)
+            out_domain[i] = domain(i, last);
+        domain_outfile.write((char*)(&out_domain[0]), domain.rows() * sizeof(T));
+        domain_outfile.close();
+
+#if 0
+        // debug: read back original points
+        ifstream domain_infile;
+        vector<T> in_domain(domain.rows());
+        domain_infile.open("orig.raw", ios::binary);
+        domain_infile.read((char*)(&in_domain[0]), domain.rows() * sizeof(T));
+        domain_infile.close();
+        for (auto i = 0; i < domain.rows(); i++)
+            if (in_domain[i] != domain(i, last))
+                fprintf(stderr, "Error writing raw data: original data does match writen/read back data\n");
+#endif
+
+        // write approximated points
+        ofstream approx_outfile;
+        approx_outfile.open("approx.raw", ios::binary);
+        vector<T> out_approx(approx.rows());
+        for (auto i = 0; i < approx.rows(); i++)
+            out_approx[i] = approx(i, last);
+        approx_outfile.write((char*)(&out_approx[0]), approx.rows() * sizeof(T));
+        approx_outfile.close();
+
+#if 0
+        // debug: read back original points
+        ifstream approx_infile;
+        vector<T> in_approx(approx.rows());
+        approx_infile.open("approx.raw", ios::binary);
+        approx_infile.read((char*)(&in_approx[0]), approx.rows() * sizeof(T));
+        approx_infile.close();
+        for (auto i = 0; i < approx.rows(); i++)
+            if (in_approx[i] != approx(i, last))
+                fprintf(stderr, "Error writing raw data: approximated data does match writen/read back data\n");
+#endif
     }
 
     VectorXi   ndom_pts;                       // number of domain points in each dimension

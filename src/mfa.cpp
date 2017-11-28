@@ -345,11 +345,12 @@ MFA<T>::
 AdaptiveEncode(
         T         err_limit,                 // maximum allowable normalized error
         VectorXi& nctrl_pts_,                // (output) number of control points in each dim
+        bool      weighted,                  // solve for and use weights (default = true)
         int       max_rounds)                // optional maximum number of rounds
 {
     weights = VectorX<T>::Ones(tot_nctrl);
     mfa::Encoder<T> encoder(*this);
-    encoder.AdaptiveEncode(err_limit, max_rounds);
+    encoder.AdaptiveEncode(err_limit, weighted, max_rounds);
     nctrl_pts_ = nctrl_pts;
 }
 

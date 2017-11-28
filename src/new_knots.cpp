@@ -154,9 +154,26 @@ NewKnots_curve1(
                 MatrixX<T> NtN_rat(NtN.rows(), NtN.cols());
                 mfa.Rationalize(k, weights, N, NtN_rat);
 
-                // solve for P for one curve of control points
-//                 P = NtN.ldlt().solve(R);
-                P = NtN_rat.ldlt().solve(R);
+                // solve for P
+#ifdef WEIGH_ALL_DIMS                                           // weigh all dimensions
+                    MatrixX<T> P2(P.rows(), 2);
+                    P2 = NtN_rat.ldlt().solve(R);
+                    for (auto i = 0; i < P.rows(); i++)
+                    {
+                        for (auto j = 0; j < P.cols() - 1; j++)
+                            P(i, j) = (j == k ? P2(i, 0) : mfa.domain((mfa.co[k][j] + i + 1) * mfa.ds[k], j));
+                        P(i, P.cols() - 1) = P2(i, 1);
+                    }
+#else                                                           // don't weigh domain coordinate (only range)
+                    MatrixX<T> P2(P.rows(), 2);
+                    P2 = NtN.ldlt().solve(R);                   // nonrational domain coordinates
+                    for (auto i = 0; i < P.rows(); i++)
+                        for (auto j = 0; j < P.cols() - 1; j++)
+                            P(i, j) = (j == k ? P2(i, 0) : mfa.domain((mfa.co[k][j] + i + 1) * mfa.ds[k], j));
+                    P2 = NtN_rat.ldlt().solve(R);               // rational range coordinate
+                    for (auto i = 0; i < P.rows(); i++)
+                        P(i, P.cols() - 1) = P2(i, 1);
+#endif
 
                 // append points from P to control points
                 // TODO: any way to avoid this?
@@ -212,9 +229,26 @@ NewKnots_curve1(
         MatrixX<T> NtN_rat(NtN.rows(), NtN.cols());
         mfa.Rationalize(k, weights, N, NtN_rat);
 
-        // solve for P for one curve of control points
-//         P = NtN.ldlt().solve(R);
-        P = NtN_rat.ldlt().solve(R);
+        // solve for P
+#ifdef WEIGH_ALL_DIMS                                           // weigh all dimensions
+        MatrixX<T> P2(P.rows(), 2);
+        P2 = NtN_rat.ldlt().solve(R);
+        for (auto i = 0; i < P.rows(); i++)
+        {
+            for (auto j = 0; j < P.cols() - 1; j++)
+                P(i, j) = (j == k ? P2(i, 0) : mfa.domain((mfa.co[k][j] + i + 1) * mfa.ds[k], j));
+            P(i, P.cols() - 1) = P2(i, 1);
+        }
+#else                                                           // don't weigh domain coordinate (only range)
+        MatrixX<T> P2(P.rows(), 2);
+        P2 = NtN.ldlt().solve(R);                   // nonrational domain coordinates
+        for (auto i = 0; i < P.rows(); i++)
+            for (auto j = 0; j < P.cols() - 1; j++)
+                P(i, j) = (j == k ? P2(i, 0) : mfa.domain((mfa.co[k][j] + i + 1) * mfa.ds[k], j));
+        P2 = NtN_rat.ldlt().solve(R);               // rational range coordinate
+        for (auto i = 0; i < P.rows(); i++)
+            P(i, P.cols() - 1) = P2(i, 1);
+#endif
 
         // append points from P to control points
         // TODO: any way to avoid this?
@@ -351,9 +385,26 @@ NewKnots_curve(
                     MatrixX<T> NtN_rat(NtN.rows(), NtN.cols());
                     mfa.Rationalize(k, weights, N, NtN_rat);
 
-                    // solve for P for one curve of control points
-//                   P = NtN.ldlt().solve(R);
-                    P = NtN_rat.ldlt().solve(R);
+                    // solve for P
+#ifdef WEIGH_ALL_DIMS                                           // weigh all dimensions
+                    MatrixX<T> P2(P.rows(), 2);
+                    P2 = NtN_rat.ldlt().solve(R);
+                    for (auto i = 0; i < P.rows(); i++)
+                    {
+                        for (auto j = 0; j < P.cols() - 1; j++)
+                            P(i, j) = (j == k ? P2(i, 0) : mfa.domain((mfa.co[k][j] + i + 1) * mfa.ds[k], j));
+                        P(i, P.cols() - 1) = P2(i, 1);
+                    }
+#else                                                           // don't weigh domain coordinate (only range)
+                    MatrixX<T> P2(P.rows(), 2);
+                    P2 = NtN.ldlt().solve(R);                   // nonrational domain coordinates
+                    for (auto i = 0; i < P.rows(); i++)
+                        for (auto j = 0; j < P.cols() - 1; j++)
+                            P(i, j) = (j == k ? P2(i, 0) : mfa.domain((mfa.co[k][j] + i + 1) * mfa.ds[k], j));
+                    P2 = NtN_rat.ldlt().solve(R);               // rational range coordinate
+                    for (auto i = 0; i < P.rows(); i++)
+                        P(i, P.cols() - 1) = P2(i, 1);
+#endif
 
                     // append points from P to control points
                     // TODO: any way to avoid this?
@@ -517,9 +568,26 @@ NewKnots_curve(
                 MatrixX<T> NtN_rat(NtN.rows(), NtN.cols());
                 mfa.Rationalize(k, weights, N, NtN_rat);
 
-                // solve for P for one curve of control points
-//                 P = NtN.ldlt().solve(R);
-                P = NtN_rat.ldlt().solve(R);
+                // solve for P
+#ifdef WEIGH_ALL_DIMS                                           // weigh all dimensions
+                MatrixX<T> P2(P.rows(), 2);
+                P2 = NtN_rat.ldlt().solve(R);
+                for (auto i = 0; i < P.rows(); i++)
+                {
+                    for (auto j = 0; j < P.cols() - 1; j++)
+                        P(i, j) = (j == k ? P2(i, 0) : mfa.domain((mfa.co[k][j] + i + 1) * mfa.ds[k], j));
+                    P(i, P.cols() - 1) = P2(i, 1);
+                }
+#else                                                           // don't weigh domain coordinate (only range)
+                MatrixX<T> P2(P.rows(), 2);
+                P2 = NtN.ldlt().solve(R);                   // nonrational domain coordinates
+                for (auto i = 0; i < P.rows(); i++)
+                    for (auto j = 0; j < P.cols() - 1; j++)
+                        P(i, j) = (j == k ? P2(i, 0) : mfa.domain((mfa.co[k][j] + i + 1) * mfa.ds[k], j));
+                P2 = NtN_rat.ldlt().solve(R);               // rational range coordinate
+                for (auto i = 0; i < P.rows(); i++)
+                    P(i, P.cols() - 1) = P2(i, 1);
+#endif
 
                 // append points from P to control points
                 // TODO: any way to avoid this?
@@ -575,9 +643,26 @@ NewKnots_curve(
         MatrixX<T> NtN_rat(NtN.rows(), NtN.cols());
         mfa.Rationalize(k, weights, N, NtN_rat);
 
-        // solve for P for one curve of control points
-//        P = NtN.ldlt().solve(R);
-        P = NtN_rat.ldlt().solve(R);
+        // solve for P
+#ifdef WEIGH_ALL_DIMS                                           // weigh all dimensions
+        MatrixX<T> P2(P.rows(), 2);
+        P2 = NtN_rat.ldlt().solve(R);
+        for (auto i = 0; i < P.rows(); i++)
+        {
+            for (auto j = 0; j < P.cols() - 1; j++)
+                P(i, j) = (j == k ? P2(i, 0) : mfa.domain((mfa.co[k][j] + i + 1) * mfa.ds[k], j));
+            P(i, P.cols() - 1) = P2(i, 1);
+        }
+#else                                                           // don't weigh domain coordinate (only range)
+        MatrixX<T> P2(P.rows(), 2);
+        P2 = NtN.ldlt().solve(R);                   // nonrational domain coordinates
+        for (auto i = 0; i < P.rows(); i++)
+            for (auto j = 0; j < P.cols() - 1; j++)
+                P(i, j) = (j == k ? P2(i, 0) : mfa.domain((mfa.co[k][j] + i + 1) * mfa.ds[k], j));
+        P2 = NtN_rat.ldlt().solve(R);               // rational range coordinate
+        for (auto i = 0; i < P.rows(); i++)
+            P(i, P.cols() - 1) = P2(i, 1);
+#endif
 
         // append points from P to control points
         // TODO: any way to avoid this?
