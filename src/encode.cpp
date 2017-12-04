@@ -204,17 +204,11 @@ Encode()
             mfa.BasisFuns(k, mfa.params(mfa.po[k] + i), span, N, 1, n(k) - 1, i - 1);
         }
 
-        // debug
-//         cerr << "k " << k << " N:\n" << N << endl;
-
         // compute the product Nt x N
         // TODO: NtN is going to be very sparse when it is large: switch to sparse representation
         // NtN has semibandwidth < p + 1 nonzero entries across diagonal
         MatrixX<T> NtN(n(k) - 1, n(k) - 1);
         NtN = N.transpose() * N;
-
-        // debug
-//         cerr << "k " << k << " NtN:\n" << NtN << endl;
 
         parallel_for (size_t(0), ncurves, [&] (size_t j)      // for all the curves in this dimension
         {
@@ -245,9 +239,6 @@ Encode()
     }                                                      // domain dimensions
 
     fprintf(stderr,"\n");
-
-    // debug
-//     cerr << "ctrl_pts:\n" << mfa.ctrl_pts << endl;
 }
 
 #else
@@ -569,97 +560,49 @@ CopyCtrl(MatrixX<T>& P,          // solved points for current dimension and curv
     // if there is only one dim, copy straight to output
     if (ndims == 1)
     {
-        // debug
-        // fprintf(stderr, "t[%ld] = d[%ld]\n", to, co);
         mfa.ctrl_pts.row(to) = mfa.domain.row(co);
         for (int i = 1; i < n(k); i++)
-        {
-            // debug
-            // fprintf(stderr, "t[%ld] = p[%d]\n", to + i * cs, i - 1);
             mfa.ctrl_pts.row(to + i * cs) = P.row(i - 1);
-        }
-        // debug
-        // fprintf(stderr, "t[%ld] = d[%ld]\n", to + n(k) * cs, co + mfa.ndom_pts(k) - 1);
         mfa.ctrl_pts.row(to + n(k) * cs) = mfa.domain.row(co + mfa.ndom_pts(k) - 1);
     }
     // first dim copied from domain to temp_ctrl0
     else if (k == 0)
     {
-        // debug
-        // fprintf(stderr, "t[%ld] = d[%ld]\n", to, co);
         temp_ctrl0.row(to) = mfa.domain.row(co);
         for (int i = 1; i < n(k); i++)
-        {
-            // debug
-            // fprintf(stderr, "t[%ld] = p[%d]\n", to + i * cs, i - 1);
             temp_ctrl0.row(to + i * cs) = P.row(i - 1);
-        }
-        // debug
-        // fprintf(stderr, "t[%ld] = d[%ld]\n", to + n(k) * cs, co + mfa.ndom_pts(k) - 1);
         temp_ctrl0.row(to + n(k) * cs) = mfa.domain.row(co + mfa.ndom_pts(k) - 1);
     }
     // even numbered dims (but not the last one) copied from temp_ctrl1 to temp_ctrl0
     else if (k % 2 == 0 && k < ndims - 1)
     {
-        // debug
-        // fprintf(stderr, "t[%ld] = d[%ld]\n", to, co);
         temp_ctrl0.row(to) = temp_ctrl1.row(co);
         for (int i = 1; i < n(k); i++)
-        {
-            // debug
-            // fprintf(stderr, "t[%ld] = p[%d]\n", to + i * cs, i - 1);
             temp_ctrl0.row(to + i * cs) = P.row(i - 1);
-        }
-        // debug
-        // fprintf(stderr, "t[%ld] = d[%ld]\n", to + n(k) * cs, co + (mfa.ndom_pts(k) - 1) * cs);
         temp_ctrl0.row(to + n(k) * cs) = temp_ctrl1.row(co + (mfa.ndom_pts(k) - 1) * cs);
     }
     // odd numbered dims (but not the last one) copied from temp_ctrl0 to temp_ctrl1
     else if (k % 2 == 1 && k < ndims - 1)
     {
-        // debug
-        // fprintf(stderr, "t[%ld] = d[%ld]\n", to, co);
         temp_ctrl1.row(to) = temp_ctrl0.row(co);
         for (int i = 1; i < n(k); i++)
-        {
-            // debug
-            // fprintf(stderr, "t[%ld] = p[%d]\n", to + i * cs, i - 1);
             temp_ctrl1.row(to + i * cs) = P.row(i - 1);
-        }
-        // debug
-        // fprintf(stderr, "t[%ld] = d[%ld]\n", to + n(k) * cs, co + (mfa.ndom_pts(k) - 1) * cs);
         temp_ctrl1.row(to + n(k) * cs) = temp_ctrl0.row(co + (mfa.ndom_pts(k) - 1) * cs);
     }
     // final dim if even is copied from temp_ctrl1 to ctrl_pts
     else if (k == ndims - 1 && k % 2 == 0)
     {
-        // debug
-        // fprintf(stderr, "t[%ld] = d[%ld]\n", to, co);
         mfa.ctrl_pts.row(to) = temp_ctrl1.row(co);
         for (int i = 1; i < n(k); i++)
-        {
-            // debug
-            // fprintf(stderr, "t[%ld] = p[%d]\n", to + i * cs, i - 1);
             mfa.ctrl_pts.row(to + i * cs) = P.row(i - 1);
-        }
-        // debug
-        // fprintf(stderr, "t[%ld] = d[%ld]\n", to + n(k) * cs, co + (mfa.ndom_pts(k) - 1) * cs);
         mfa.ctrl_pts.row(to + n(k) * cs) = temp_ctrl1.row(co + (mfa.ndom_pts(k) - 1) * cs);
     }
     // final dim if odd is copied from temp_ctrl0 to ctrl_pts
     else if (k == ndims - 1 && k % 2 == 1)
     {
-        // debug
-        // fprintf(stderr, "t_start[%ld] = d[%ld]\n", to, co);
         mfa.ctrl_pts.row(to) = temp_ctrl0.row(co);
         for (int i = 1; i < n(k); i++)
-        {
-            // debug
-            // fprintf(stderr, "t[%ld] = p[%d]\n", to + i * cs, i - 1);
             mfa.ctrl_pts.row(to + i * cs) = P.row(i - 1);
-        }
-        // debug
-        // fprintf(stderr, "t_end[%ld] = d[%ld]\n", to + n(k) * cs, co + (mfa.ndom_pts(k) - 1) * cs);
         mfa.ctrl_pts.row(to + n(k) * cs) = temp_ctrl0.row(co + (mfa.ndom_pts(k) - 1) * cs);
     }
 }
@@ -717,20 +660,23 @@ CtrlCurve(MatrixX<T>& N,          // basis functions for current dimension
           MatrixX<T>& temp_ctrl0, // first temporary control points buffer
           MatrixX<T>& temp_ctrl1) // second temporary control points buffer
 {
-    // compute R
-    // first dimension reads from domain
-    // subsequent dims alternate reading temp_ctrl0 and temp_ctrl1
-    // even dim reads temp_ctrl1, odd dim reads temp_ctrl0; opposite of writing order
-    // because what was written in the previous dimension is read in the current one
-    if (k == 0)
-        RHS(k, N, R, mfa.ko[k], mfa.po[k], co);                 // input points = default domain
-    else if (k % 2)
-        RHS(k, temp_ctrl0, N, R, mfa.ko[k], mfa.po[k], co, cs); // input points = temp_ctrl0
-    else
-        RHS(k, temp_ctrl1, N, R, mfa.ko[k], mfa.po[k], co, cs); // input points = temp_ctrl1
+    if (N.cols())
+    {
+        // compute R
+        // first dimension reads from domain
+        // subsequent dims alternate reading temp_ctrl0 and temp_ctrl1
+        // even dim reads temp_ctrl1, odd dim reads temp_ctrl0; opposite of writing order
+        // because what was written in the previous dimension is read in the current one
+        if (k == 0)
+            RHS(k, N, R, mfa.ko[k], mfa.po[k], co);                 // input points = default domain
+        else if (k % 2)
+            RHS(k, temp_ctrl0, N, R, mfa.ko[k], mfa.po[k], co, cs); // input points = temp_ctrl0
+        else
+            RHS(k, temp_ctrl1, N, R, mfa.ko[k], mfa.po[k], co, cs); // input points = temp_ctrl1
 
-    // solve for P
-    P = NtN.ldlt().solve(R);
+        // solve for P
+        P = NtN.ldlt().solve(R);
+    }
 
     // append points from P to control points
     // TODO: any way to avoid this?

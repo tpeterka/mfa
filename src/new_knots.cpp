@@ -147,11 +147,14 @@ NewKnots_curve1(
                 // TODO: use a common representation for P and ctrl_pts to avoid copying
                 MatrixX<T> P(n(k) - 1, mfa.domain.cols());
 
-                // compute R from input domain points
-                encoder.RHS(k, N, R, mfa.ko[k], mfa.po[k], mfa.co[k][j * s]);
+                if (N.cols())
+                {
+                    // compute R from input domain points
+                    encoder.RHS(k, N, R, mfa.ko[k], mfa.po[k], mfa.co[k][j * s]);
 
-                // solve for P for one curve of control points
-                P = NtN.ldlt().solve(R);
+                    // solve for P for one curve of control points
+                    P = NtN.ldlt().solve(R);
+                }
 
                 // append points from P to control points
                 // TODO: any way to avoid this?
@@ -200,11 +203,14 @@ NewKnots_curve1(
         // TODO: use a common representation for P and ctrl_pts to avoid copying
         MatrixX<T> P(n(k) - 1, mfa.domain.cols());
 
-        // compute R from input domain points
-        encoder.RHS(k, N, R, mfa.ko[k], mfa.po[k], mfa.co[k][worst_curve_idx]);
+        if (N.cols())
+        {
+            // compute R from input domain points
+            encoder.RHS(k, N, R, mfa.ko[k], mfa.po[k], mfa.co[k][worst_curve_idx]);
 
-        // solve for P for one curve of control points
-        P = NtN.ldlt().solve(R);
+            // solve for P for one curve of control points
+            P = NtN.ldlt().solve(R);
+        }
 
         // append points from P to control points
         // TODO: any way to avoid this?
@@ -334,11 +340,14 @@ NewKnots_curve(
                 // n_step-sizes below)
                 if (j >= n_step_sizes && (j - n_step_sizes) % s == 0)   // this is one of the s-th curves; compute it
                 {
-                    // compute R from input domain points
-                    encoder.RHS(k, N, R, mfa.ko[k], mfa.po[k], mfa.co[k][j]);
+                    if (N.cols())
+                    {
+                        // compute R from input domain points
+                        encoder.RHS(k, N, R, mfa.ko[k], mfa.po[k], mfa.co[k][j]);
 
-                    // solve for P for one curve of control points
-                    P = NtN.ldlt().solve(R);
+                        // solve for P for one curve of control points
+                        P = NtN.ldlt().solve(R);
+                    }
 
                     // append points from P to control points
                     // TODO: any way to avoid this?
@@ -492,11 +501,14 @@ NewKnots_curve(
                 // TODO: use a common representation for P and ctrl_pts to avoid copying
                 MatrixX<T> P(n(k) - 1, mfa.domain.cols());
 
-                // compute R from input domain points
-                RHS(k, N, R, mfa.ko[k], mfa.po[k], mfa.co[k][j * s]);
+                if (N.cols())
+                {
+                    // compute R from input domain points
+                    RHS(k, N, R, mfa.ko[k], mfa.po[k], mfa.co[k][j * s]);
 
-                // solve for P for one curve of control points
-                P = NtN.ldlt().solve(R);
+                    // solve for P for one curve of control points
+                    P = NtN.ldlt().solve(R);
+                }
 
                 // append points from P to control points
                 // TODO: any way to avoid this?
@@ -545,11 +557,14 @@ NewKnots_curve(
         // TODO: use a common representation for P and ctrl_pts to avoid copying
         MatrixX<T> P(n(k) - 1, mfa.domain.cols());
 
-        // compute R from input domain points
-        RHS(k, N, R, mfa.ko[k], mfa.po[k], mfa.co[k][worst_curve_idx]);
+        if (N.cols())
+        {
+            // compute R from input domain points
+            RHS(k, N, R, mfa.ko[k], mfa.po[k], mfa.co[k][worst_curve_idx]);
 
-        // solve for P for one curve of control points
-        P = NtN.ldlt().solve(R);
+            // solve for P for one curve of control points
+            P = NtN.ldlt().solve(R);
+        }
 
         // append points from P to control points
         // TODO: any way to avoid this?
