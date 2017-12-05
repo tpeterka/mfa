@@ -375,8 +375,12 @@ Weights(
         }
 
     // debug: allow negative weights, just copy out and return
+    // result is lower quality, more noise, higher max error, do not use
+    // DEPRECATE
 //     weights = EV.col(0);
 //     weights *= (1.0 / weights.maxCoeff());  // scale to max weight = 1
+//     weights(0) = 1.0;                       // fix first and last weights to 1
+//     weights(weights.size() - 1) = 1.0;
 //     return;
 
     // if smallest eigenvector is all positive or all negative, those are the weights
@@ -400,6 +404,9 @@ Weights(
         bool success = false;
         using namespace rehearse;
 
+        // set a maximum size of the eigenspace
+//         int max_cols = EV.cols() > 35 ? 35 : EV.cols();
+//         for (auto i = 2; i < max_cols; i++)
         for (auto i = 2; i <= EV.cols(); i++)        // expand from 2 eigenvectors to all, one at a time
         {
             OsiClpSolverInterface *solver = new OsiClpSolverInterface();
@@ -438,7 +445,8 @@ Weights(
                 weights = solved_weights;
                 weights *= (1.0 / weights.maxCoeff());  // scale to max weight = 1
                 success = true;
-                cerr << "successful linear solve from linear combination of " << i << " eigenvectors:\n" << weights << "\n" <<endl;
+//                 cerr << "successful linear solve from linear combination of " << i << " eigenvectors:\n" << weights << "\n" << endl;
+                cerr << "successful linear solve from linear combination of " << i << " eigenvectors:" << endl;
                 break;
             }
         }                                               // increasing number of eigenvectors
@@ -449,6 +457,10 @@ Weights(
             fprintf(stderr, "linear solver could not find positive weights; setting to 1\n\n");
         }
     }                                                   // need to expand eigenspace
+
+    // set first and last weights to 1.0
+    weights(0) = 1.0;
+    weights(weights.size() - 1) = 1.0;
 }
 
 #endif

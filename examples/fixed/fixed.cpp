@@ -139,6 +139,7 @@ int main(int argc, char** argv)
         d_args.ndom_pts[1]  = 540;
         d_args.ndom_pts[2]  = 550;
         d_args.nctrl_pts[0] = 140;
+//         d_args.nctrl_pts[0] = 280;       // debug
         d_args.nctrl_pts[1] = 108;
         d_args.nctrl_pts[2] = 110;
         strncpy(d_args.infile, "/Users/tpeterka/datasets/flame/6_small.xyz", sizeof(d_args.infile));

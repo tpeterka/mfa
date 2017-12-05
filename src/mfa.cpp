@@ -1148,7 +1148,7 @@ Rationalize(
         denom(j - 1) = (Nk.row(0).cwiseProduct(weights.transpose())).sum();
     }
 
-    //         cerr << "denom:\n" << denom << endl;
+//     cerr << "denom:\n" << denom << endl;
 
     // "rationalize" N and Nt
     // ie, convert their basis function coefficients to rational ones with weights
