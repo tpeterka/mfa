@@ -21,16 +21,18 @@
 struct vec3d
 {
     float x, y, z;
-    float mag() { return sqrt(x*x+y*y+z*z) ;}
+    float mag() { return sqrt(x*x + y*y + z*z); }
 };
 
 // package rendering data
 void PrepRenderingData(
         vector<int>&   nraw_pts,
         vector<vec3d>& raw_pts,
+        vector<float>& raw_data,
         vector<int>&   nctrl_pts,
         vector<vec3d>& ctrl_pts,
         vector<vec3d>& approx_pts,
+        vector<float>& approx_data,
         vector<vec3d>& err_pts,
         vector<int>&   nknot_pts,
         vector<vec3d>& knot_pts,
@@ -51,11 +53,14 @@ void PrepRenderingData(
         // raw points
         for (size_t j = 0; j < (size_t)(block->domain.rows()); j++)
         {
-            p.x = block->domain(j, 0);
+            p.x = block->domain(j, 0);                      // first 3 dims stored as mesh geometry
             p.y = block->domain(j, 1);
             p.z = block->domain.cols() > 2 ?
                 block->domain(j, 2) : 0.0;
             raw_pts.push_back(p);
+
+            if (block->domain.cols() > 3)                   // 4th dim stored as mesh data
+                raw_data.push_back(block->domain(j, 3));
         }
 
         // number of control points
@@ -75,11 +80,14 @@ void PrepRenderingData(
         // approximated points
         for (size_t j = 0; j < (size_t)(block->approx.rows()); j++)
         {
-            p.x = block->approx(j, 0);
+            p.x = block->approx(j, 0);                      // first 3 dims stored as mesh geometry
             p.y = block->approx(j, 1);
             p.z = block->approx.cols() > 2 ?
                 block->approx(j, 2) : 0.0;
             approx_pts.push_back(p);
+
+            if (block->approx.cols() > 3)                   // 4th dim stored as mesh data
+                approx_data.push_back(block->approx(j, 3));
         }
 
         // error points
@@ -212,10 +220,12 @@ int main(int argc, char ** argv)
 
 
     vector<int>   nraw_pts;                       // number of input points in each dim.
-    vector<vec3d> raw_pts;                        // input raw data points
+    vector<vec3d> raw_pts;                        // input raw data points (<= 3d)
+    vector<float> raw_data;                       // input raw data values (4d)
     vector<int>   nctrl_pts;                      // number of control pts in each dim.
-    vector<vec3d> ctrl_pts;                       // control points
-    vector<vec3d> approx_pts;                     // aproximated data points
+    vector<vec3d> ctrl_pts;                       // control points (<= 3d)
+    vector<vec3d> approx_pts;                     // aproximated data points (<= 3d)
+    vector<float> approx_data;                    // approximated data values (4d)
     vector<vec3d> err_pts;                        // abs value error field
     vector<int>   nknot_pts;                      // number of knot span points in each dim.
     vector<vec3d> knot_pts;                       // knot span points
@@ -237,9 +247,11 @@ int main(int argc, char ** argv)
     // package rendering data
     PrepRenderingData(nraw_pts,
             raw_pts,
+            raw_data,
             nctrl_pts,
             ctrl_pts,
             approx_pts,
+            approx_data,
             err_pts,
             nknot_pts,
             knot_pts,
@@ -257,74 +269,113 @@ int main(int argc, char ** argv)
         nknot_pts.push_back(1);
     }
 
-    // write first control points
-    write_curvilinear_mesh(
-            /* const char *filename */ "control_points.vtk",
-            /* int useBinary */ 0,
-            /* int *dims */ &nctrl_pts[0],
-            /* float *pts */ &(ctrl_pts[0].x),
-            /* int nvars */ 0,
-            /* int *vardim */ NULL,
-            /* int *centering */ NULL,
-            /* const char * const *varnames */NULL,
-            /* float **vars */ NULL);
-
-    // write error as a new variable (z dimension, or maybe magnitude?)
-    std::vector<float> errm(err_pts.size());
+    // copy error as a new variable (z dimension, or maybe magnitude?)
+    vector<float> errm(err_pts.size());
     for (size_t i=0; i<err_pts.size(); i++)
-    {
         errm[i] = err_pts[i].z;
+
+    float *vars;
+    int vardim     = 1;
+    int centering  = 1;
+
+    // write control points
+    write_curvilinear_mesh(
+            /* const char *filename */                      "control_points.vtk",
+            /* int useBinary */                             0,
+            /* int *dims */                                 &nctrl_pts[0],
+            /* float *pts */                                &(ctrl_pts[0].x),
+            /* int nvars */                                 0,
+            /* int *vardim */                               NULL,
+            /* int *centering */                            NULL,
+            /* const char * const *varnames */              NULL,
+            /* float **vars */                              NULL);
+
+    // write raw original points
+    if (raw_data.size())
+    {
+        vars = &raw_data[0];
+        const char* name_raw_data = "raw_data";
+        write_curvilinear_mesh(
+                /* const char *filename */                  "initial_points.vtk",
+                /* int useBinary */                         0,
+                /* int *dims */                             &nraw_pts[0],
+                /* float *pts */                            &(raw_pts[0].x),
+                /* int nvars */                             1,
+                /* int *vardim */                           &vardim,
+                /* int *centering */                        &centering,
+                /* const char * const *varnames */          &name_raw_data,
+                /* float **vars */                          &vars);
     }
-    const char * name_err ="error";
+    else
+    {
+        vars = &errm[0];
+        const char* name_err ="error";
+        write_curvilinear_mesh(
+                /* const char *filename */                  "initial_points.vtk",
+                /* int useBinary */                         0,
+                /* int *dims */                             &nraw_pts[0],
+                /* float *pts */                            &(raw_pts[0].x),
+                /* int nvars */                             1,
+                /* int *vardim */                           &vardim,
+                /* int *centering */                        &centering,
+                /* const char * const *varnames */          &name_err,
+                /* float **vars */                          &vars);
+    }
 
+    // write approx points
+    if (approx_data.size())
+    {
+        vars = &approx_data[0];
+        const char* name_approx_data ="approx_data";
+        write_curvilinear_mesh(
+                /* const char *filename */                  "approx_points.vtk",
+                /* int useBinary */                         0,
+                /* int *dims */                             &nraw_pts[0],
+                /* float *pts */                            &(approx_pts[0].x),
+                /* int nvars */                             1,
+                /* int *vardim */                           &vardim,
+                /* int *centering */                        &centering,
+                /* const char * const *varnames */          &name_approx_data,
+                /* float **vars */                          &vars);
 
-    int centering[1] = {1}; // so it is point data
+    }
+    else
+    {
+        write_curvilinear_mesh(
+                /* const char *filename */                  "approx_points.vtk",
+                /* int useBinary */                         0,
+                /* int *dims */                             &nraw_pts[0],
+                /* float *pts */                            &(approx_pts[0].x),
+                /* int nvars */                             0,
+                /* int *vardim */                           NULL,
+                /* int *centering */                        NULL,
+                /* const char * const *varnames */          NULL,
+                /* float **vars */                          NULL);
+    }
 
-    // write then raw original points
-    int vardim[1] = {1};
-    float * pval[1] =  { &errm[0] };
-
-    write_curvilinear_mesh(/* const char *filename */ "initial_points.vtk",
-            /* int useBinary */ 0,
-            /* int *dims */ &nraw_pts[0],
-            /* float *pts */ &(raw_pts[0].x),
-            /* int nvars */ 1,
-            /* int *vardim */ vardim,
-            /* int *centering */ centering,
-            /* const char * const *varnames */ &name_err,
-            /* float **vars */ pval);
-
-    // write then approx points
-    write_curvilinear_mesh(/* const char *filename */ "approx_points.vtk",
-            /* int useBinary */ 0,
-            /* int *dims */ &nraw_pts[0],
-            /* float *pts */ &(approx_pts[0].x),
-            /* int nvars */ 0,
-            /* int *vardim */ NULL,
-            /* int *centering */ NULL,
-            /* const char * const *varnames */NULL,
-            /* float **vars */ NULL);
-
-    // write then error
-    write_curvilinear_mesh(/* const char *filename */ "error.vtk",
-            /* int useBinary */ 0,
-            /* int *dims */ &nraw_pts[0],
-            /* float *pts */ &(err_pts[0].x),
-            /* int nvars */ 1,
-            /* int *vardim */ vardim,
-            /* int *centering */ centering,
-            /* const char * const *varnames */ &name_err,
-            /* float **vars */ pval);
+    // write error
+    vars = &errm[0];
+    const char* name_err ="error";
+    write_curvilinear_mesh(
+            /* const char *filename */                      "error.vtk",
+            /* int useBinary */                             0,
+            /* int *dims */                                 &nraw_pts[0],
+            /* float *pts */                                &(err_pts[0].x),
+            /* int nvars */                                 1,
+            /* int *vardim */                               &vardim,
+            /* int *centering */                            &centering,
+            /* const char * const *varnames */              &name_err,
+            /* float **vars */                              &vars);
 
     // write knot points
     write_curvilinear_mesh(
-            "knots.vtk",                            // filename
-            0,                                      // binary
-            &nknot_pts[0],                          // dims
-            &(knot_pts[0].x),                       // points
-            0,                                      // nvars
-            NULL,                                   // vardim
-            NULL,                                   // centering
-            NULL,                                   // varnames
-            NULL);                                  // vars
+            /* const char *filename */                      "knots.vtk",
+            /* int useBinary */                             0,
+            /* int *dims */                                 &nknot_pts[0],
+            /* float *pts */                                &(knot_pts[0].x),
+            /* int nvars */                                 0,
+            /* int *vardim */                               NULL,
+            /* int *centering */                            NULL,
+            /* const char * const *varnames */              NULL,
+            /* float **vars */                              NULL);
 }

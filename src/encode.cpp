@@ -535,9 +535,6 @@ Encode(bool weighted)                      // solve for and use weights
             mfa.BasisFuns(k, mfa.params(mfa.po[k] + i), span, N, i);
         }
 
-        // debug
-//         cerr << "k " << k << " N:\n" << N << endl;
-
         // TODO: NtN is going to be very sparse when it is large: switch to sparse representation
         // NtN has semibandwidth < p + 1 nonzero entries across diagonal
         MatrixX<T> NtN  = N.transpose() * N;;
@@ -571,9 +568,6 @@ Encode(bool weighted)                      // solve for and use weights
     }                                                      // domain dimensions
 
     fprintf(stderr,"\n");
-
-    // debug
-//     cerr << "ctrl_pts:\n" << mfa.ctrl_pts << endl;
 }
 
 #else
@@ -686,6 +680,8 @@ Encode(bool weighted)                           // solve for and use weights
 
         // debug
 //         cerr << "k " << k << " N:\n" << N << endl;
+//         for (auto i = 0; i < N.rows(); i++)
+//             cerr << "row " << i << " sum (should be 1.0): " << N.row(i).sum() << endl;
 
         // compute various other matrices from N
         // TODO: NtN is going to be very sparse when it is large: switch to sparse representation
@@ -995,9 +991,6 @@ CtrlCurve(MatrixX<T>& N,          // basis functions for current dimension
           MatrixX<T>& temp_ctrl1, // second temporary control points buffer
           bool        weighted)   // solve for and use weights (default = true)
 {
-//     int n = N.cols() - 1;               // number of control point spans
-//     int m = N.rows() - 1;               // number of input point spans
-
     // solve for weights
     // TODO: avoid copying into Q by passing temp_ctrl0, temp_ctrl1, co, cs to Weights()
     // TODO: check that this is right, using co and cs for copying control points and domain points
@@ -1019,54 +1012,53 @@ CtrlCurve(MatrixX<T>& N,          // basis functions for current dimension
             Q.row(i) = temp_ctrl1.row(co + i * cs);
     }
 
-    // debug
-//     cerr << "k=" << k << " Q:\n" << Q << endl;
-//     cer; << "N:\n" << N << endl;
-
     // solve for weights in the last domain dimension only
     VectorX<T> weights = VectorX<T>::Ones(N.cols());
     if (weighted)
         if (k == mfa.p.size() - 1)
             Weights(k, Q, N, NtN, weights);
 
-    // compute R
-    // first dimension reads from domain
-    // subsequent dims alternate reading temp_ctrl0 and temp_ctrl1
-    // even dim reads temp_ctrl1, odd dim reads temp_ctrl0; opposite of writing order
-    // because what was written in the previous dimension is read in the current one
+    if (N.cols())
+    {
+        // compute R
+        // first dimension reads from domain
+        // subsequent dims alternate reading temp_ctrl0 and temp_ctrl1
+        // even dim reads temp_ctrl1, odd dim reads temp_ctrl0; opposite of writing order
+        // because what was written in the previous dimension is read in the current one
 
-    if (k == 0)
-        RHS(k, N, R, weights, mfa.ko[k], mfa.po[k], co);                 // input points = default domain
-    else if (k % 2)
-        RHS(k, temp_ctrl0, N, R, weights, mfa.ko[k], mfa.po[k], co, cs); // input points = temp_ctrl0
-    else
-        RHS(k, temp_ctrl1, N, R, weights, mfa.ko[k], mfa.po[k], co, cs); // input points = temp_ctrl1
+        if (k == 0)
+            RHS(k, N, R, weights, mfa.ko[k], mfa.po[k], co);                 // input points = default domain
+        else if (k % 2)
+            RHS(k, temp_ctrl0, N, R, weights, mfa.ko[k], mfa.po[k], co, cs); // input points = temp_ctrl0
+        else
+            RHS(k, temp_ctrl1, N, R, weights, mfa.ko[k], mfa.po[k], co, cs); // input points = temp_ctrl1
 
-    // rationalize NtN, ie, weigh the basis function coefficients
-    MatrixX<T> NtN_rat = NtN;
-    mfa.Rationalize(k, weights, N, NtN_rat);
+        // rationalize NtN, ie, weigh the basis function coefficients
+        MatrixX<T> NtN_rat = NtN;
+        mfa.Rationalize(k, weights, N, NtN_rat);
 
-    // solve for P
+        // solve for P
 
 #ifdef WEIGH_ALL_DIMS                                   // weigh all dimensions
-    MatrixX<T> P2(P.rows(), 2);
-    P2 = NtN_rat.ldlt().solve(R);
-    for (auto i = 0; i < P.rows(); i++)
-    {
-        for (auto j = 0; j < P.cols() - 1; j++)
+        MatrixX<T> P2(P.rows(), 2);
+        P2 = NtN_rat.ldlt().solve(R);
+        for (auto i = 0; i < P.rows(); i++)
+        {
+            for (auto j = 0; j < P.cols() - 1; j++)
                 P(i, j) = (j == k ? P2(i, 0) : Q(i, j));
-        P(i, P.cols() - 1) = P2(i, 1);
-    }
+            P(i, P.cols() - 1) = P2(i, 1);
+        }
 #else                                                   // don't weigh domain coordinate (only range)
-    MatrixX<T> P2(P.rows(), 2);
-    P2 = NtN.ldlt().solve(R);                           // nonrational domain coordinates
-    for (auto i = 0; i < P.rows(); i++)
-        for (auto j = 0; j < P.cols() - 1; j++)
+        MatrixX<T> P2(P.rows(), 2);
+        P2 = NtN.ldlt().solve(R);                           // nonrational domain coordinates
+        for (auto i = 0; i < P.rows(); i++)
+            for (auto j = 0; j < P.cols() - 1; j++)
                 P(i, j) = (j == k ? P2(i, 0) : Q(i, j));
-    P2 = NtN_rat.ldlt().solve(R);                       // rational range coordinate
-    for (auto i = 0; i < P.rows(); i++)
-        P(i, P.cols() - 1) = P2(i, 1);
+        P2 = NtN_rat.ldlt().solve(R);                       // rational range coordinate
+        for (auto i = 0; i < P.rows(); i++)
+            P(i, P.cols() - 1) = P2(i, 1);
 #endif
+    }
 
     // append points from P to control points
     // TODO: any way to avoid this?

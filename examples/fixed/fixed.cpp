@@ -189,6 +189,10 @@ int main(int argc, char** argv)
     master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
             { b->knot_span_domains(cp); });
 
+    // debug: write raw original and approximated points (good for one block only)
+//     master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
+//             { b->write_raw(cp); });
+
     // print results
     fprintf(stderr, "\n------- Final block results --------\n");
     master.foreach(&Block<real_t>::print_block);
