@@ -170,11 +170,11 @@ CurvePt(
         size_t      to,                                   // offset to start of control points for this curve
         VectorX<T>& out_pt)                               // (output) point
 {
-    int n      = (int)mfa.nctrl_pts(cur_dim) - 1;          // number of control point spans
+//     int n      = (int)mfa.nctrl_pts(cur_dim) - 1;          // number of control point spans
     int span   = mfa.FindSpan(cur_dim, param, mfa.ko[cur_dim]) - mfa.ko[cur_dim];    // relative to ko[cur_dim]
-    out_pt     = VectorX<T>::Zero(mfa.ctrl_pts.cols());   // initializes and resizes
-    MatrixX<T> N = MatrixX<T>::Zero(1, n + 1);              // basis coefficients
-    mfa.BasisFuns(cur_dim, param, span, N, 0, n, 0);
+    out_pt     = VectorX<T>::Zero(mfa.ctrl_pts.cols());
+    MatrixX<T> N = MatrixX<T>::Zero(1, mfa.nctrl_pts(cur_dim)); // basis coefficients
+    mfa.BasisFuns(cur_dim, param, span, N, 0);
 
     for (int j = 0; j <= mfa.p(cur_dim); j++)
     {
@@ -203,41 +203,6 @@ CurvePt(
 //     fprintf(stderr, "1: denom=%.3f\n", denom);
 }
 
-// DEPRECATED
-#if 0
-// compute a point from a NURBS curve at a given parameter value
-// this version takes a temporary set of control points for one curve only rather than
-// reading full n-d set of control points from the mfa
-// algorithm 4.1, Piegl & Tiller (P&T) p.124
-// this version assumes weights = 1; no division by weight is done
-template <typename T>
-void
-mfa::
-Decoder<T>::
-CurvePt(
-        int         cur_dim,                     // current dimension
-        T           param,                       // parameter value of desired point
-        MatrixX<T>& temp_ctrl,                   // temporary control points
-        VectorX<T>& out_pt,                      // (output) point
-        int         ko)                          // starting knot offset (default = 0)
-{
-    int n      = (int)temp_ctrl.rows() - 1;     // number of control point spans
-    int span   = mfa.FindSpan(cur_dim, param, ko) - ko;         // relative to ko
-    MatrixX<T> N = MatrixX<T>::Zero(1, n + 1);     // basis coefficients
-    mfa.BasisFuns(cur_dim, param, span, N, 0, n, 0);
-    out_pt = VectorX<T>::Zero(temp_ctrl.cols());  // initializes and resizes
-
-    for (int j = 0; j <= mfa.p(cur_dim); j++)
-        out_pt += N(0, j + span - mfa.p(cur_dim)) * temp_ctrl.row(span - mfa.p(cur_dim) + j);
-
-    // clamp dimensions other than cur_dim to same value as first control point
-    // eliminates any wiggles in other dimensions due to numerical precision errors
-    for (auto j = 0; j < mfa.p.size(); j++)
-        if (j != cur_dim)
-            out_pt(j) = temp_ctrl(0, j);
-}
-#endif
-
 // compute a point from a NURBS curve at a given parameter value
 // this version takes a temporary set of control points for one curve only rather than
 // reading full n-d set of control points from the mfa
@@ -254,10 +219,10 @@ CurvePt(
         VectorX<T>& out_pt,                       // (output) point
         int         ko)                           // starting knot offset (default = 0)
 {
-    int n      = (int)temp_ctrl.rows() - 1;     // number of control point spans
+//     int n      = (int)temp_ctrl.rows() - 1;     // number of control point spans
     int span   = mfa.FindSpan(cur_dim, param, ko) - ko;         // relative to ko
-    MatrixX<T> N = MatrixX<T>::Zero(1, n + 1);      // basis coefficients
-    mfa.BasisFuns(cur_dim, param, span, N, 0, n, 0);
+    MatrixX<T> N = MatrixX<T>::Zero(1, temp_ctrl.rows());      // basis coefficients
+    mfa.BasisFuns(cur_dim, param, span, N, 0);
     out_pt = VectorX<T>::Zero(temp_ctrl.cols());  // initializes and resizes
 
     for (int j = 0; j <= mfa.p(cur_dim); j++)
@@ -305,10 +270,10 @@ VolPt(VectorX<T>& param,                       // parameter value in each dim. o
     {
         temp[i]    = VectorX<T>::Zero(mfa.ctrl_pts.cols());
         iter[i]    = 0;
-        n[i]       = (int)mfa.nctrl_pts(i) - 1;
+//         n[i]       = (int)mfa.nctrl_pts(i) - 1;
         span[i]    = mfa.FindSpan(i, param(i), mfa.ko[i]) - mfa.ko[i];  // relative to ko
-        N[i]       = MatrixX<T>::Zero(1, n[i] + 1);
-        mfa.BasisFuns(i, param(i), span[i], N[i], 0, n[i], 0);
+        N[i]       = MatrixX<T>::Zero(1, mfa.nctrl_pts(i));
+        mfa.BasisFuns(i, param(i), span[i], N[i], 0);
     }
 
     for (int i = 0; i < tot_iters; i++)             // 1-d flattening all n-d nested loop computations

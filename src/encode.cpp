@@ -106,10 +106,8 @@ AdaptiveEncode(
 #ifdef WEIGH_ALL_DIMS               // 2d curves in any current dimension (TODO: DEPRECATE)
 
 // linear solution of weights according to Ma and Kruth 1995 (M&K95)
-// solves for all weights, not just interior
 // our N is M&K's B
 // our Q is M&K's X_bar
-// However, we skip end points that are pinned, so we solve a smaller system by 2 points in each dimension
 template <typename T>
 void
 mfa::
@@ -117,31 +115,14 @@ Encoder<T>::
 Weights(
         int         k,              // current dimension
         MatrixX<T>& Q,              // input points
+        MatrixX<T>& N,              // basis functions
+        MatrixX<T>& NtN,            // N^T * N
         VectorX<T>& weights)        // output weights
 {
-    // compute matrix N of all basis functions (including end points)
-    MatrixX<T> N = MatrixX<T>::Zero(mfa.ndom_pts(k), mfa.nctrl_pts(k)); // coefficients matrix
-    for (auto i = 0; i < N.rows(); i++)
-    {
-        int span = mfa.FindSpan(k, mfa.params(mfa.po[k] + i), mfa.ko[k]) - mfa.ko[k];   // relative to ko
-        assert(span <= mfa.nctrl_pts(k) - 1);            // sanity
-        mfa.BasisFuns(k, mfa.params(mfa.po[k] + i), span, N, 0, mfa.nctrl_pts(k) - 1, i);
-    }
-
-    // debug
-//     cerr << "full N:\n" << N << endl;
-//     for (auto i = 0; i < N.rows(); i++)
-//         cerr << "row " << i << " sum = " << N.row(i).sum() << endl;
-
-    // Nt, NtN, NtNi
+    // Nt, NtNi
     // TODO: offer option of saving time or space by comuting Nt and NtN each time it is needed?
     MatrixX<T> Nt   = N.transpose();
-    MatrixX<T> NtN  = Nt * N;                   // TODO: NtN does not need to be kept; strictly temporary
     MatrixX<T> NtNi = NtN.partialPivLu().inverse();
-
-    // debug
-//     cerr << "NtN:\n" << NtN << endl;
-//     cerr << "NtNi:\n" << NtNi << endl;
 
     int pt_dim = mfa.domain.cols();             // dimensionality of input and control points (domain and range)
     vector<MatrixX<T>> NtQ2(2);                 // temp. matrices N^T x Q^2 for each dim of points
@@ -175,21 +156,6 @@ Weights(
     NtQN[1]  = NtQ[1] * N;
     NtQ2N[0] = NtQ2[0] * N;
     NtQ2N[1] = NtQ2[1] * N;
-
-    // debug
-//     cerr << "NtQ[0]:\n" << NtQ[0] << endl;
-//     cerr << "NtQ2[0]:\n" << NtQ2[0] << endl;
-//     cerr << "NtQN[0]:\n" << NtQN[0] << endl;
-//     cerr << "NtQ2N[0]:\n" << NtQ2N[0] << endl;
-//     cerr << "NtQN[0] * NtNi * NtQN[0]:\n" << NtQN[0] * NtNi * NtQN[0] << endl;
-//     cerr << "M[0]:\n" << NtQ2N[0] - NtQN[0] * NtNi * NtQN[0] << endl;
-
-//     cerr << "NtQ[1]:\n" << NtQ[1] << endl;
-//     cerr << "NtQ2[1]:\n" << NtQ2[1] << endl;
-//     cerr << "NtQN[1]:\n" << NtQN[1] << endl;
-//     cerr << "NtQ2N[1]:\n" << NtQ2N[1] << endl;
-//     cerr << "NtQN[1] * NtNi * NtQN[1]:\n" << NtQN[1] * NtNi * NtQN[1] << endl;
-//     cerr << "M[1]:\n" << NtQ2N[1] - NtQN[1] * NtNi * NtQN[1] << endl;
 
     // compute the matrix M according to eq.3 and eq. 4 of M&K95
     MatrixX<T> M = MatrixX<T>::Zero(NtN.rows(), NtN.cols());
@@ -298,10 +264,8 @@ Weights(
 #else               // 1d weights for range coordinate only
 
 // linear solution of weights according to Ma and Kruth 1995 (M&K95)
-// solves for all weights, not just interior
 // our N is M&K's B
 // our Q is M&K's X_bar
-// However, we skip end points that are pinned, so we solve a smaller system by 2 points in each dimension
 template <typename T>
 void
 mfa::
@@ -309,21 +273,13 @@ Encoder<T>::
 Weights(
         int         k,              // current dimension
         MatrixX<T>& Q,              // input points
+        MatrixX<T>& N,              // basis functions
+        MatrixX<T>& NtN,            // N^T * N
         VectorX<T>& weights)        // output weights
 {
-    // compute matrix N of all basis functions (including end points)
-    MatrixX<T> N = MatrixX<T>::Zero(mfa.ndom_pts(k), mfa.nctrl_pts(k)); // coefficients matrix
-    for (auto i = 0; i < N.rows(); i++)
-    {
-        int span = mfa.FindSpan(k, mfa.params(mfa.po[k] + i), mfa.ko[k]) - mfa.ko[k];   // relative to ko
-        assert(span <= mfa.nctrl_pts(k) - 1);            // sanity
-        mfa.BasisFuns(k, mfa.params(mfa.po[k] + i), span, N, 0, mfa.nctrl_pts(k) - 1, i);
-    }
-
-    // Nt, NtN, NtNi
+    // Nt, NtNi
     // TODO: offer option of saving time or space by comuting Nt and NtN each time it is needed?
     MatrixX<T> Nt   = N.transpose();
-    MatrixX<T> NtN  = Nt * N;                   // TODO: NtN does not need to be kept; strictly temporary
     MatrixX<T> NtNi = NtN.partialPivLu().inverse();
 
     int pt_dim = mfa.domain.cols();             // dimensionality of input and control points (domain and range)
@@ -445,7 +401,6 @@ Weights(
                 weights = solved_weights;
                 weights *= (1.0 / weights.maxCoeff());  // scale to max weight = 1
                 success = true;
-//                 cerr << "successful linear solve from linear combination of " << i << " eigenvectors:\n" << weights << "\n" << endl;
                 cerr << "successful linear solve from linear combination of " << i << " eigenvectors:" << endl;
                 break;
             }
@@ -458,222 +413,10 @@ Weights(
         }
     }                                                   // need to expand eigenspace
 
-    // set first and last weights to 1.0
-    weights(0) = 1.0;
-    weights(weights.size() - 1) = 1.0;
-}
-
-#endif
-
-#if 0                 // full number of dimensions (TODO: DEPRECATE)
-
-// linear solution of weights according to Ma and Kruth 1995 (M&K95)
-// solves for all weights, not just interior
-// our N is M&K's B
-// our Q is M&K's X_bar
-// However, we skip end points that are pinned, so we solve a smaller system by 2 points in each dimension
-template <typename T>
-void
-mfa::
-Encoder<T>::
-Weights(
-        int         k,              // current dimension
-        MatrixX<T>& Q,              // input points
-        VectorX<T>& weights)        // output weights
-{
-    // compute matrix N of all basis functions (including end points)
-    MatrixX<T> N = MatrixX<T>::Zero(mfa.ndom_pts(k), mfa.nctrl_pts(k)); // coefficients matrix
-    for (auto i = 0; i < N.rows(); i++)
-    {
-        int span = mfa.FindSpan(k, mfa.params(mfa.po[k] + i), mfa.ko[k]) - mfa.ko[k];   // relative to ko
-        assert(span <= mfa.nctrl_pts(k) - 1);            // sanity
-        mfa.BasisFuns(k, mfa.params(mfa.po[k] + i), span, N, 0, mfa.nctrl_pts(k) - 1, i);
-    }
-
-    // debug
-//     cerr << "full N:\n" << N << endl;
-//     for (auto i = 0; i < N.rows(); i++)
-//         cerr << "row " << i << " sum = " << N.row(i).sum() << endl;
-
-    // Nt, NtN, NtNi
-    MatrixX<T> Nt   = N.transpose();
-    MatrixX<T> NtN  = Nt * N;                   // TODO: NtN does not need to be kept; strictly temporary
-    MatrixX<T> NtNi = NtN.partialPivLu().inverse();
-
-    // debug
-//     cerr << "NtN:\n" << NtN << endl;
-//     cerr << "NtNi:\n" << NtNi << endl;
-
-    // TODO: decide if I need to represent all dims or only 2 dims for current curve
-    // ie, we are finding weights of high-d points for a 2-d curve
-    int pt_dim = mfa.domain.cols();             // dimensionality of input and control points (domain and range)
-    vector<MatrixX<T>> NtQ2(pt_dim);            // temp. matrices N^T x Q^2 for each dim of points (TODO: any way to avoid?)
-    vector<MatrixX<T>> NtQ2N(pt_dim);           // matrices N^T x Q^2 x N for each dim of points
-    vector<MatrixX<T>> NtQ(pt_dim);             // temp. matrices N^T x Q  for each dim of points (TODO: any way to avoid?)
-    vector<MatrixX<T>> NtQN(pt_dim);            // matrices N^T x Q x N for each dim of points
-
-    // allocate matrices of NtQ, NtQ2, NtQ2N, and NtQN
-    for (auto j = 0; j < pt_dim; j++)
-    {
-        NtQ2[j]  = MatrixX<T>::Zero(Nt.rows(),   Nt.cols());
-        NtQ[j]   = MatrixX<T>::Zero(Nt.rows(),   Nt.cols());
-        NtQ2N[j] = MatrixX<T>::Zero(NtN.rows(),  NtN.cols());
-        NtQN[j]  = MatrixX<T>::Zero(NtN.rows(),  NtN.cols());
-    }
-
-    // compute NtQN and NtQ2N
-    for (auto j = 0; j < pt_dim; j++)           // for all point dims
-    {
-        // temporary matrices NtQ and NtQ2
-        for (auto i = 0; i < Nt.cols(); i++)
-        {
-            T dom_pt_coord = Q(i, j);      // current coordinate of current input point
-            NtQ[j].col(i)  = Nt.col(i) * dom_pt_coord;
-            NtQ2[j].col(i) = Nt.col(i) * dom_pt_coord * dom_pt_coord;
-        }
-        // final matrices NtQN and NtQ2N
-        NtQN[j]  = NtQ[j] * N;
-        NtQ2N[j] = NtQ2[j] * N;
-
-        // debug
-//         cerr << "j=" << j << "\n" << endl;
-//         cerr << "NtQ[j]:\n" << NtQ[j] << endl;
-//         cerr << "NtQ2[j]:\n" << NtQ2[j] << endl;
-//         cerr << "NtQN[j]:\n" << NtQN[j] << endl;
-//         cerr << "NtQ2N[j]:\n" << NtQ2N[j] << endl;
-//         cerr << "NtQN[j] * NtNi * NtQN[j]:\n" << NtQN[j] * NtNi * NtQN[j] << endl;
-//         cerr << "M[j]:\n" << NtQ2N[j] - NtQN[j] * NtNi * NtQN[j] << endl;
-    }
-
-    // compute the matrix M according to eq.3 and eq. 4 of M&K95
-    MatrixX<T> M = MatrixX<T>::Zero(NtN.rows(), NtN.cols());
-    for (auto j = 0; j < pt_dim; j++)           // for all point dims
-        M += NtQ2N[j] - NtQN[j] * NtNi * NtQN[j];
-
-    // compute the eigenvalues and eigenvectors of M (eq. 9 of M&K95)
-    Eigen::SelfAdjointEigenSolver<MatrixX<T>> eigensolver(M);
-    if (eigensolver.info() != Eigen::Success)
-    {
-        fprintf(stderr, "Error: Encoder::Weights(), computing eigenvalues of M failed, perhaps M is not self-adjoint?\n");
-        exit(0);
-    }
-    // debug
-//     cerr << "M:\n"            << M                          << endl;
-//     cerr << "Eigenvalues:\n"  << eigensolver.eigenvalues()  << endl;
-//     cerr << "Eigenvectors:\n" << eigensolver.eigenvectors() << endl;
-
-    const MatrixX<T>& EV    = eigensolver.eigenvectors();          // typing shortcut
-    const VectorX<T>& evals = eigensolver.eigenvalues();           // typing shortcut
-
-    // eigenvalues should be positive and distinct
-    for (auto i = 0; i < evals.size() - 1; i++)
-        if (evals(i) == 0.0 || evals(i) == evals(i + 1))
-        {
-            fprintf(stderr, "Warning: Weights(): eigenvalues should be positive and distinct.\n");
-            fprintf(stderr, "Aborting weights calculation\n");
-            return;
-        }
-
-
-    // if smallest eigenvector is all positive or all negative, those are the weights
-    if ( (EV.col(0).array() > 0.0).all() )
-    {
-        weights = EV.col(0);
-        weights *= (1.0 / weights.maxCoeff());  // scale to max weight = 1
-        cerr << "successfully found weights from an all-positive first eigenvector:\n" << weights << "\n" << endl;
-    }
-    else if ( (EV.col(0).array() < 0.0).all() )
-    {
-        weights = -EV.col(0);
-        weights *= (1.0 / weights.maxCoeff());  // scale to max weight = 1
-        cerr << "successfully found weights from an all-negative first eigenvector:\n" << weights << "\n" << endl;
-    }
-
-    // if smallest eigenvector is mixed sign, then expand eigen space
-    else
-    {
-        fprintf(stderr, "\nExpanding eigenspace using linear solver\n");
-        bool success = false;
-        using namespace rehearse;
-
-        for (auto i = 2; i <= EV.cols(); i++)        // expand from 2 eigenvectors to all, one at a time
-        {
-            fprintf(stderr, "Trying linear combinations of %d eigenvectors\n", i);
-            OsiClpSolverInterface *solver = new OsiClpSolverInterface();
-            CelModel model(*solver);
-
-            CelNumVarArray a;
-            a.multiDimensionResize(1, i);
-
-            // add the constraints that the sum of elements is positive
-
-            // Need epsilon because the only inequality constraints allowed by rehearse are <=, not <
-            // However, the smaller the epsilon, the smaller the weights found by the solver.
-            // Even though I normalize weights to max 1.0, we don't want roundoff error from
-            // multiplying very small numbers. The epsilon below seems reasonable for now.
-            T epsilon = 1.0e-4;
-            for (auto j = 0; j < weights.size(); j++)   // for all rows in the eigenvectors
-            {
-                CelExpression expr;
-                for (auto k = 0; k < i; k++)            // for current number of eigenvectors
-                    expr += a[k] * EV(j, k);
-                model.addConstraint(epsilon <= expr);
-
-                // NB: adding more constraints on norm of a's, eg sum(a[k]) = 1 or on individual
-                // vaues of a[k], eg a[k] <= 1 produce a worse solution, fewer constraints is better
-            }
-
-            // solve
-            solver->setObjSense(1.0);
-            model.builderToSolver();
-            solver->setLogLevel(0);
-            solver->initialSolve();
-
-            // check
-            VectorX<T> solved_weights = VectorX<T>::Zero(weights.size());
-            for (auto k = 0; k < i; k++)                 // for current number of eigenvectors
-                solved_weights += model.getSolutionValue(a[k]) * EV.col(k);
-
-            // debug
-//             cerr << "solved_weights:\n" << solved_weights << endl;
-            fprintf(stderr, "eigenvector coefficients:\n");
-            for (auto k = 0; k < i; k++)
-                fprintf(stderr, "%g ", model.getSolutionValue(a[k]));
-            fprintf(stderr, "\n");
-
-            delete solver;
-
-            if ( (solved_weights.array() > 0.0).all() )
-            {
-                weights = solved_weights;
-                weights *= (1.0 / weights.maxCoeff());  // scale to max weight = 1
-                success = true;
-                cerr << "successful linear solve for weights from linear combination of " << i << " eigenvectors:\n" << weights << "\n" <<endl;
-                break;
-            }
-            else if ( (solved_weights.array() < 0.0).all() )
-            {
-                weights = -solved_weights;
-                weights *= (1.0 / weights.maxCoeff());  // scale to max weight = 1
-                success = true;
-                cerr << "successful linear solve for weights from linear combination of " << i << " eigenvectors:\n" << weights << "\n" << endl;
-                break;
-            }
-        }                                               // increasing number of eigenvectors
-
-        if (!success)
-        {
-            weights = VectorX<T>::Ones(weights.size());
-            fprintf(stderr, "linear solver could not find positive weights; setting to 1\n\n");
-        }
-    }                                                   // need to expand eigenspace
-
-    // debug
-//     cerr << "sum of 1st 2 eigenvectors multiplied by eigenvalues:\n" <<
-//         evals(0) * EV.col(0) + evals(1) * EV.col(1) << "\n" << endl;
-
-    // debug
-//     cerr << "Weights:\n" << weights << endl;
+    // set first and last weights to 1.0 in an attempt to eliminate wiggles at far end
+    // may not be a problem anymore, remove if no longer needed
+//     weights(0) = 1.0;
+//     weights(weights.size() - 1) = 1.0;
 }
 
 #endif
@@ -765,8 +508,6 @@ Encode(bool weighted)                      // solve for and use weights
                 to[j] = too + cs * mfa.nctrl_pts(k);
                 too   = to[j];
             }
-            // debug
-            //             fprintf(stderr, "co[%d][%d]=%ld\n", k, j, cok[j]);
         }
 
         // TODO:
@@ -778,31 +519,27 @@ Encode(bool weighted)                      // solve for and use weights
         // params and knots for the new input points
         // (moot when using domain decomposition)
 
-        // compute the matrix N, eq. 9.66 in P&T
-        // N is a matrix of (m - 1) x (n - 1) scalars that are the basis function coefficients
-        //  _                                _
-        // |  N_1(u[1])   ... N_{n-1}(u[1])   |
-        // |     ...      ...      ...        |
-        // |  N_1(u[m-1]) ... N_{n-1}(u[m-1]) |
-        //  -                                -
+        // N is a matrix of (m + 1) x (n + 1) scalars that are the basis function coefficients
+        //  _                          _
+        // |  N_0(u[0])   ... N_n(u[0]) |
+        // |     ...      ...      ...  |
+        // |  N_0(u[m])   ... N_n(u[m]) |
+        //  -                          -
         // TODO: N is going to be very sparse when it is large: switch to sparse representation
         // N has semibandwidth < p  nonzero entries across diagonal
-        MatrixX<T> N = MatrixX<T>::Zero(m(k) - 1, n(k) - 1); // coefficients matrix
+        MatrixX<T> N = MatrixX<T>::Zero(m(k) + 1, n(k) + 1); // coefficients matrix
 
-        for (int i = 1; i < m(k); i++)            // the rows of N
+        for (int i = 0; i < N.rows(); i++)            // the rows of N
         {
             int span = mfa.FindSpan(k, mfa.params(mfa.po[k] + i), mfa.ko[k]) - mfa.ko[k];   // relative to ko
-            assert(span <= n(k));            // sanity
-            mfa.BasisFuns(k, mfa.params(mfa.po[k] + i), span, N, 1, n(k) - 1, i - 1);
+            mfa.BasisFuns(k, mfa.params(mfa.po[k] + i), span, N, i);
         }
 
         // debug
 //         cerr << "k " << k << " N:\n" << N << endl;
 
-        // compute various other matrices from N
         // TODO: NtN is going to be very sparse when it is large: switch to sparse representation
         // NtN has semibandwidth < p + 1 nonzero entries across diagonal
-        // TODO: I don't think I need to give the sizes, automatically allocated by the assignment
         MatrixX<T> NtN  = N.transpose() * N;;
 
         parallel_for (size_t(0), ncurves, [&] (size_t j)      // for all the curves in this dimension
@@ -811,12 +548,12 @@ Encode(bool weighted)                      // solve for and use weights
             // fprintf(stderr, "j=%ld curve\n", j);
 
             // R is the right hand side needed for solving NtN * P = R
-            MatrixX<T> R(n(k) - 1, mfa.domain.cols());
+            MatrixX<T> R(N.cols(), mfa.domain.cols());
 
-            // P are the unknown interior control points and the solution to NtN * P = R
+            // P are the unknown control points and the solution to NtN * P = R
             // NtN is positive definite -> do not need pivoting
             // TODO: use a common representation for P and ctrl_pts to avoid copying
-            MatrixX<T> P(n(k) - 1, mfa.domain.cols());
+            MatrixX<T> P(N.cols(), mfa.domain.cols());
 
             // compute the one curve of control points
             CtrlCurve(N, NtN, R, P, k, co[j], cs, to[j], temp_ctrl0, temp_ctrl1, weighted);
@@ -899,15 +636,6 @@ Encode(bool weighted)                           // solve for and use weights
             // NB: current dimension contributes no curves, hence no i == k case
         }
 
-        // debug
-        // cerr << "k: " << k << " ncurves: " << ncurves << endl;
-        // cerr << "ndom_pts:\n" << mfa.ndom_pts << endl;
-        // cerr << "ntemp_ctrl:\n" << ntemp_ctrl << endl;
-        // if (k > 0 && k % 2 == 1) // input to odd dims is temp_ctrl0
-        //     cerr << "temp_ctrl0:\n" << temp_ctrl0 << endl;
-        // if (k > 0 && k % 2 == 0) // input to even dims is temp_ctrl1
-        //     cerr << "temp_ctrl1:\n" << temp_ctrl1 << endl;
-
         // compute local version of co
         vector<size_t> co(ncurves);                     // starting curve points in current dim.
         vector<size_t> to(ncurves);                     // starting control points in current dim.
@@ -930,8 +658,6 @@ Encode(bool weighted)                           // solve for and use weights
                 to[j] = too + cs * mfa.nctrl_pts(k);
                 too   = to[j];
             }
-            // debug
-            //             fprintf(stderr, "co[%d][%d]=%ld\n", k, j, cok[j]);
         }
 
         // TODO:
@@ -942,41 +668,37 @@ Encode(bool weighted)                           // solve for and use weights
         // the prior dim. Need to determine how much difference it would make to recompute
         // params and knots for the new input points
 
-        // compute the matrix N, eq. 9.66 in P&T
-        // N is a matrix of (m - 1) x (n - 1) scalars that are the basis function coefficients
-        //  _                                _
-        // |  N_1(u[1])   ... N_{n-1}(u[1])   |
-        // |     ...      ...      ...        |
-        // |  N_1(u[m-1]) ... N_{n-1}(u[m-1]) |
-        //  -                                -
+        // N is a matrix of (m + 1) x (n + 1) scalars that are the basis function coefficients
+        //  _                          _
+        // |  N_0(u[0])   ... N_n(u[0]) |
+        // |     ...      ...      ...  |
+        // |  N_0(u[m])   ... N_n(u[m]) |
+        //  -                          -
         // TODO: N is going to be very sparse when it is large: switch to sparse representation
         // N has semibandwidth < p  nonzero entries across diagonal
-        MatrixX<T> N = MatrixX<T>::Zero(m(k) - 1, n(k) - 1); // coefficients matrix
+        MatrixX<T> N = MatrixX<T>::Zero(m(k) + 1, n(k) + 1); // coefficients matrix
 
-        for (int i = 1; i < m(k); i++)            // the rows of N
+        for (int i = 0; i < N.rows(); i++)            // the rows of N
         {
             int span = mfa.FindSpan(k, mfa.params(mfa.po[k] + i), mfa.ko[k]) - mfa.ko[k];  // relative to ko
-            assert(span <= n(k));            // sanity
-            mfa.BasisFuns(k, mfa.params(mfa.po[k] + i), span, N, 1, n(k) - 1, i - 1);
+            mfa.BasisFuns(k, mfa.params(mfa.po[k] + i), span, N, i);
         }
 
         // debug
 //         cerr << "k " << k << " N:\n" << N << endl;
-//         for (auto i = 0; i < N.rows(); i++)
-//             cerr << "row " << i << " sum (should be 1.0): " << N.row(i).sum() << endl;
 
         // compute various other matrices from N
         // TODO: NtN is going to be very sparse when it is large: switch to sparse representation
         // NtN has semibandwidth < p + 1 nonzero entries across diagonal
         MatrixX<T> NtN  = N.transpose() * N;;
 
-        // R is the residual matrix needed for solving NtN * P = R
-        MatrixX<T> R(n(k) - 1, mfa.domain.cols());
+        // R is the right hand side needed for solving NtN * P = R
+        MatrixX<T> R(N.cols(), mfa.domain.cols());
 
-        // P are the unknown interior control points and the solution to NtN * P = R
+        // P are the unknown control points and the solution to NtN * P = R
         // NtN is positive definite -> do not need pivoting
         // TODO: use a common representation for P and ctrl_pts to avoid copying
-        MatrixX<T> P(n(k) - 1, mfa.domain.cols());
+        MatrixX<T> P(N.cols(), mfa.domain.cols());
 
         // encode curves in this dimension
         for (size_t j = 0; j < ncurves; j++)
@@ -1014,14 +736,8 @@ Encode(bool weighted)                           // solve for and use weights
 
 // computes right hand side vector of P&T eq. 9.63 and 9.67, p. 411-412 for a curve from the
 // original input domain points
-//
-// includes multiplication by weights, so that R = (N^TQ)Nw
-// where:
-// N is the matrix of basis function coefficients
-// Q is a diagonal matrix of input points on the diagonals and 0 elsewhere (excluding first and last points)
-// w is the weights vector, excluding first and last weights
-// R is column vector of n - 1 elements, each element multiple coordinates of the input points
-// ie, a matrix of n - 1 rows and control point dims columns
+// includes multiplication by weights
+// R is column vector of n + 1 elements, each element multiple coordinates of the input points
 template <typename T>
 void
 mfa::
@@ -1035,66 +751,40 @@ RHS(
         int         po,                  // index of starting parameter
         int         co)                  // index of starting domain pt in current curve
 {
-    int n      = N.cols() + 1;                  // number of control point spans
-    int m      = N.rows() + 1;                  // number of input data point spans
-    int last   = mfa.domain.cols() - 1;         // column of range value
+    int last   = mfa.domain.cols() - 1;             // column of range value
+    MatrixX<T> Rk(N.rows(), 2);                     // one row for each input point x 2 columns: 1 domain dimension and 1 range value
+    VectorX<T> denom(N.rows());                     // rational denomoninator for param of each input point
 
-    // compute the matrix Rk for eq. 9.63 of P&T, p. 411
-    // one row for each input point except ends
-    // 2 columns: 1 domain dimension and 1 range value
-    MatrixX<T> Rk(m - 1, 2);                    // eigen frees MatrixX when leaving scope
-    MatrixX<T> Nk;                              // basis coefficients for Rk[i]
-    VectorX<T> denom(m - 1);                    // rational denomoninator for param of each input point excl. ends
-
-    for (int k = 1; k < m; k++)
+    for (int k = 0; k < N.rows(); k++)              // for all input points
     {
-        int span = mfa.FindSpan(cur_dim, mfa.params(po + k), ko) - ko;     // relative to ko
-        Nk = MatrixX<T>::Zero(1, n + 1);        // basis coefficients for Rk[i]
-        mfa.BasisFuns(cur_dim, mfa.params(po + k), span, Nk, 0, n, 0);
-
-        denom(k - 1) = (Nk.row(0).cwiseProduct(weights.transpose())).sum();
-
-#ifdef WEIGH_ALL_DIMS                                   // weigh all dimensions
-        Rk(k - 1, 0) =
-            mfa.domain(co + k * mfa.ds[cur_dim], cur_dim) -
-            Nk(0, 0) * weights(0) / denom(k - 1) * mfa.domain(co, cur_dim) -
-            Nk(0, n) * weights(0) / denom(k - 1) * mfa.domain(co + m * mfa.ds[cur_dim], cur_dim);
-#else                                                   // don't weigh domain coordinate (only range)
-        Rk(k - 1, 0) =
-            mfa.domain(co + k * mfa.ds[cur_dim], cur_dim) -
-            Nk(0, 0) * mfa.domain(co, cur_dim) -
-            Nk(0, n) * mfa.domain(co + m * mfa.ds[cur_dim], cur_dim);
-#endif
-
-        Rk(k - 1, 1) =
-            mfa.domain(co + k * mfa.ds[cur_dim], last) -
-            Nk(0, 0) * weights(0) / denom(k - 1) * mfa.domain(co, last) -
-            Nk(0, n) * weights(0) / denom(k - 1) * mfa.domain(co + m * mfa.ds[cur_dim], last);
+        denom(k) = (N.row(k).cwiseProduct(weights.transpose())).sum();
+        Rk(k, 0) = mfa.domain(co + k * mfa.ds[cur_dim], cur_dim);
+        Rk(k, 1) = mfa.domain(co + k * mfa.ds[cur_dim], last);
     }
 
-#ifdef WEIGH_ALL_DIMS                                   // weigh all dimensions
-    // compute the matrix R (one row for each control point except ends)
+#ifdef WEIGH_ALL_DIMS                               // weigh all dimensions
+    // compute the matrix R (one row for each control point)
     // 2 columns: 1 domain dimension and 1 range value
-    for (int i = 1; i < n; i++)
+    for (int i = 0; i < N.cols(); i++)
         for (int j = 0; j < 2; j++)
             // using array() for element-wise multiplication, which is what we want (not matrix mult.)
-            R(i - 1, j) =
-                (N.col(i - 1).array() *             // ith basis functions for input pts
+            R(i, j) =
+                (N.col(i).array() *                 // ith basis functions for input pts
                  weights(i) / denom.array() *       // rationalized
                  Rk.col(j).array()).sum();          // input points
 #else                                               // don't weigh domain coordinate (only range)
-    // compute the matrix R (one row for each control point except ends)
+    // compute the matrix R (one row for each control point)
     // 2 columns: 1 domain dimension and 1 range value
-    for (int i = 1; i < n; i++)
+    for (int i = 0; i < N.cols(); i++)
     {
         // using array() for element-wise multiplication, which is what we want (not matrix mult.)
-        R(i - 1, 0) =
-            (N.col(i - 1).array() *             // ith basis functions for input pts
-             Rk.col(0).array()).sum();          // input points
-        R(i - 1, 1) =
-            (N.col(i - 1).array() *             // ith basis functions for input pts
-             weights(i) / denom.array() *       // rationalized
-             Rk.col(1).array()).sum();          // input points
+        R(i, 0) =
+            (N.col(i).array() *                     // ith basis functions for input pts
+             Rk.col(0).array()).sum();              // input points
+        R(i, 1) =
+            (N.col(i).array() *                     // ith basis functions for input pts
+             weights(i) / denom.array() *           // rationalized
+             Rk.col(1).array()).sum();              // input points
     }
 #endif
 
@@ -1104,14 +794,8 @@ RHS(
 
 // computes right hand side vector of P&T eq. 9.63 and 9.67, p. 411-412 for a curve from a
 // new set of input points, not the default input domain
-//
-// includes multiplication by weights, so that R = (N^TQ)Nw
-// where:
-// N is the matrix of basis function coefficients
-// Q is a diagonal matrix of input points on the diagonals and 0 elsewhere (excluding first and last points)
-// w is the weights vector, excluding first and last weights
-// R is column vector of n - 1 elements, each element multiple coordinates of the input points
-// ie, a matrix of n - 1 rows and control point dims columns
+// includes multiplication by weights
+// R is column vector of n + 1 elements, each element multiple coordinates of the input points
 template <typename T>
 void
 mfa::
@@ -1127,65 +811,40 @@ RHS(
         int         co,                  // index of starting input pt in current curve
         int         cs)                  // stride of input pts in current curve
 {
-    int n      = N.cols() + 1;                  // number of control point spans
-    int m      = N.rows() + 1;                  // number of input data point spans
-    int last   = mfa.domain.cols() - 1;         // column of range value
+    int last   = mfa.domain.cols() - 1;             // column of range value
+    MatrixX<T> Rk(N.rows(), 2);                     // one row for each input point x 2 columns: 1 domain dimension and 1 range value
+    VectorX<T> denom(N.rows());                     // rational denomoninator for param of each input point
 
-    // compute the matrix Rk for eq. 9.63 of P&T, p. 411
-    // one row for each input point except ends
-    // 2 columns: 1 domain dimension and 1 range value
-    MatrixX<T> Rk(m - 1, 2);                    // eigen frees MatrixX when leaving scope
-    MatrixX<T> Nk;                              // basis coefficients for Rk[i]
-    VectorX<T> denom(m - 1);                    // rational denomoninator for param of each input point excl. ends
-
-    for (int k = 1; k < m; k++)
+    for (int k = 0; k < N.rows(); k++)
     {
-        int span = mfa.FindSpan(cur_dim, mfa.params(po + k), ko) - ko;
-        Nk = MatrixX<T>::Zero(1, n + 1);      // basis coefficients for Rk[i]
-        mfa.BasisFuns(cur_dim, mfa.params(po + k), span, Nk, 0, n, 0);
-
-        denom(k - 1) = (Nk.row(0).cwiseProduct(weights.transpose())).sum();
-
-#ifdef WEIGH_ALL_DIMS                                   // weigh all dimensions
-        Rk(k - 1, 0) =
-            in_pts(co + k * cs, cur_dim) -
-            Nk(0, 0) * weights(0) / denom(k - 1) * in_pts(co, cur_dim) -
-            Nk(0, n) * weights(0) / denom(k - 1) * in_pts(co + m * cs, cur_dim);
-#else                                                   // don't weigh domain coordinate (only range)
-        Rk(k - 1, 0) =
-            in_pts(co + k * cs, cur_dim) -
-            Nk(0, 0) * in_pts(co, cur_dim) -
-            Nk(0, n) * in_pts(co + m * cs, cur_dim);
-#endif
-
-        Rk(k - 1, 1) =
-            in_pts(co + k * cs, last) -
-            Nk(0, 0) * weights(0) / denom(k - 1) * in_pts(co, last) -
-            Nk(0, n) * weights(0) / denom(k - 1) * in_pts(co + m * cs, last);
+        denom(k) = (N.row(k).cwiseProduct(weights.transpose())).sum();
+        Rk(k, 0) = in_pts(co + k * cs, cur_dim);
+        Rk(k, 1) = in_pts(co + k * cs, last);
     }
 
-#ifdef WEIGH_ALL_DIMS                                   // weigh all dimensions
-    // compute the matrix R (one row for each control point except ends)
+#ifdef WEIGH_ALL_DIMS                               // weigh all dimensions
+    // compute the matrix R (one row for each control point)
     // 2 columns: 1 domain dimension and 1 range value
-    for (int i = 1; i < n; i++)
+    for (int i = 0; i < N.cols(); i++)
         for (int j = 0; j < 2; j++)
-            R(i - 1, j) =
-                (N.col(i - 1).array() *                 // ith basis functions for input pts
-                 weights(i) / denom.array() *           // rationalized
-                 Rk.col(j).array()).sum();              // input points
-#else                                                   // don't weigh domain coordinate (only range)
-    // compute the matrix R (one row for each control point except ends)
+            // using array() for element-wise multiplication, which is what we want (not matrix mult.)
+            R(i, j) =
+                (N.col(i).array() *                 // ith basis functions for input pts
+                 weights(i) / denom.array() *       // rationalized
+                 Rk.col(j).array()).sum();          // input points
+#else                                               // don't weigh domain coordinate (only range)
+    // compute the matrix R (one row for each control point)
     // 2 columns: 1 domain dimension and 1 range value
-    for (int i = 1; i < n; i++)
+    for (int i = 0; i < N.cols(); i++)
     {
         // using array() for element-wise multiplication, which is what we want (not matrix mult.)
-        R(i - 1, 0) =
-            (N.col(i - 1).array() *                     // ith basis functions for input pts
-             Rk.col(0).array()).sum();                  // input points
-        R(i - 1, 1) =
-            (N.col(i - 1).array() *                     // ith basis functions for input pts
-             weights(i) / denom.array() *               // rationalized
-             Rk.col(1).array()).sum();                  // input points
+        R(i, 0) =
+            (N.col(i).array() *                     // ith basis functions for input pts
+             Rk.col(0).array()).sum();              // input points
+        R(i, 1) =
+            (N.col(i).array() *                     // ith basis functions for input pts
+             weights(i) / denom.array() *           // rationalized
+             Rk.col(1).array()).sum();              // input points
     }
 #endif
 
@@ -1236,8 +895,7 @@ Quants(
     }
 }
 
-// append points from P to temporary control points
-// init first and last control points and copy rest from solution P
+// copy points from P to temporary control points
 // TODO: any way to avoid this copy?
 // last dimension gets copied to final control points
 // previous dimensions get copied to alternating double buffers
@@ -1258,55 +916,42 @@ CopyCtrl(MatrixX<T>& P,          // solved points for current dimension and curv
     // if there is only one dim, copy straight to output
     if (ndims == 1)
     {
-        mfa.ctrl_pts.row(to) = mfa.domain.row(co);
-        for (int i = 1; i < P.rows() + 1; i++)
-            mfa.ctrl_pts.row(to + i * cs) = P.row(i - 1);
-        mfa.ctrl_pts.row(to + (P.rows() + 1) * cs) = mfa.domain.row(co + mfa.ndom_pts(k) - 1);
+        for (int i = 0; i < P.rows(); i++)
+            mfa.ctrl_pts.row(to + i * cs) = P.row(i);
     }
     // first dim copied from domain to temp_ctrl0
     else if (k == 0)
     {
-        temp_ctrl0.row(to) = mfa.domain.row(co);
-        for (int i = 1; i < P.rows() + 1; i++)
-            temp_ctrl0.row(to + i * cs) = P.row(i - 1);
-        temp_ctrl0.row(to + (P.rows() + 1) * cs) = mfa.domain.row(co + mfa.ndom_pts(k) - 1);
+        for (int i = 0; i < P.rows(); i++)
+            temp_ctrl0.row(to + i * cs) = P.row(i);
     }
     // even numbered dims (but not the last one) copied from temp_ctrl1 to temp_ctrl0
     else if (k % 2 == 0 && k < ndims - 1)
     {
-        temp_ctrl0.row(to) = temp_ctrl1.row(co);
-        for (int i = 1; i < P.rows() + 1; i++)
-            temp_ctrl0.row(to + i * cs) = P.row(i - 1);
-        temp_ctrl0.row(to + (P.rows() + 1) * cs) = temp_ctrl1.row(co + (mfa.ndom_pts(k) - 1) * cs);
+        for (int i = 0; i < P.rows(); i++)
+            temp_ctrl0.row(to + i * cs) = P.row(i);
     }
     // odd numbered dims (but not the last one) copied from temp_ctrl0 to temp_ctrl1
     else if (k % 2 == 1 && k < ndims - 1)
     {
-        temp_ctrl1.row(to) = temp_ctrl0.row(co);
-        for (int i = 1; i < P.rows() + 1; i++)
-            temp_ctrl1.row(to + i * cs) = P.row(i - 1);
-        temp_ctrl1.row(to + (P.rows() + 1) * cs) = temp_ctrl0.row(co + (mfa.ndom_pts(k) - 1) * cs);
+        for (int i = 0; i < P.rows(); i++)
+            temp_ctrl1.row(to + i * cs) = P.row(i);
     }
     // final dim if even is copied from temp_ctrl1 to ctrl_pts
     else if (k == ndims - 1 && k % 2 == 0)
     {
-        mfa.ctrl_pts.row(to) = temp_ctrl1.row(co);
-        for (int i = 1; i < P.rows() + 1; i++)
-            mfa.ctrl_pts.row(to + i * cs) = P.row(i - 1);
-        mfa.ctrl_pts.row(to + (P.rows() + 1) * cs) = temp_ctrl1.row(co + (mfa.ndom_pts(k) - 1) * cs);
+        for (int i = 0; i < P.rows(); i++)
+            mfa.ctrl_pts.row(to + i * cs) = P.row(i);
     }
     // final dim if odd is copied from temp_ctrl0 to ctrl_pts
     else if (k == ndims - 1 && k % 2 == 1)
     {
-        mfa.ctrl_pts.row(to) = temp_ctrl0.row(co);
-        for (int i = 1; i < P.rows() + 1; i++)
-            mfa.ctrl_pts.row(to + i * cs) = P.row(i - 1);
-        mfa.ctrl_pts.row(to + (P.rows() + 1) * cs) = temp_ctrl0.row(co + (mfa.ndom_pts(k) - 1) * cs);
+        for (int i = 0; i < P.rows(); i++)
+            mfa.ctrl_pts.row(to + i * cs) = P.row(i);
     }
 }
 
 // append points from P to temporary control points
-// init first and last control points and copy rest from solution P
 // TODO: any way to avoid this copy?
 // just simple copy to one temporary buffer, no alternating double buffers
 // nor copy to final control points
@@ -1319,25 +964,18 @@ CopyCtrl(MatrixX<T>& P,          // solved points for current dimension and curv
          size_t      co,         // starting offset for reading domain points
          MatrixX<T>& temp_ctrl)  // temporary control points buffer
 {
-    // copy first point straight from domain
-    temp_ctrl.row(0) = mfa.domain.row(co);
-
-    // copy intermediate points
     // clamp all dimensions other than k to the same as the domain points
     // this eliminates any wiggles in other dimensions from the computation of P (typically ~10^-5)
-    for (int i = 1; i < P.rows() + 1; i++)
+    for (int i = 0; i < P.rows(); i++)
     {
         for (auto j = 0; j < mfa.domain.cols(); j++)
         {
             if (j < mfa.p.size() && j != k)
                 temp_ctrl(i, j) = mfa.domain(co, j);
             else
-                temp_ctrl(i, j) = P(i - 1, j);
+                temp_ctrl(i, j) = P(i, j);
         }
     }
-
-    // copy last point straight from domain
-    temp_ctrl.row(P.rows() + 1) = mfa.domain.row(co + (mfa.ndom_pts(k) - 1) * mfa.ds[k]);
 }
 
 // solves for one curve of control points
@@ -1357,8 +995,8 @@ CtrlCurve(MatrixX<T>& N,          // basis functions for current dimension
           MatrixX<T>& temp_ctrl1, // second temporary control points buffer
           bool        weighted)   // solve for and use weights (default = true)
 {
-    int n = N.cols() + 1;               // number of control point spans
-    int m = N.rows() + 1;               // number of input point spans
+//     int n = N.cols() - 1;               // number of control point spans
+//     int m = N.rows() - 1;               // number of input point spans
 
     // solve for weights
     // TODO: avoid copying into Q by passing temp_ctrl0, temp_ctrl1, co, cs to Weights()
@@ -1386,10 +1024,10 @@ CtrlCurve(MatrixX<T>& N,          // basis functions for current dimension
 //     cer; << "N:\n" << N << endl;
 
     // solve for weights in the last domain dimension only
-    VectorX<T> weights = VectorX<T>::Ones(n + 1);
+    VectorX<T> weights = VectorX<T>::Ones(N.cols());
     if (weighted)
         if (k == mfa.p.size() - 1)
-            Weights(k, Q, weights);
+            Weights(k, Q, N, NtN, weights);
 
     // compute R
     // first dimension reads from domain
@@ -1404,7 +1042,7 @@ CtrlCurve(MatrixX<T>& N,          // basis functions for current dimension
     else
         RHS(k, temp_ctrl1, N, R, weights, mfa.ko[k], mfa.po[k], co, cs); // input points = temp_ctrl1
 
-    // rationalize NtN, ie, weight the basis function coefficients
+    // rationalize NtN, ie, weigh the basis function coefficients
     MatrixX<T> NtN_rat = NtN;
     mfa.Rationalize(k, weights, N, NtN_rat);
 
@@ -1416,7 +1054,7 @@ CtrlCurve(MatrixX<T>& N,          // basis functions for current dimension
     for (auto i = 0; i < P.rows(); i++)
     {
         for (auto j = 0; j < P.cols() - 1; j++)
-                P(i, j) = (j == k ? P2(i, 0) : Q(i + 1, j));
+                P(i, j) = (j == k ? P2(i, 0) : Q(i, j));
         P(i, P.cols() - 1) = P2(i, 1);
     }
 #else                                                   // don't weigh domain coordinate (only range)
@@ -1424,7 +1062,7 @@ CtrlCurve(MatrixX<T>& N,          // basis functions for current dimension
     P2 = NtN.ldlt().solve(R);                           // nonrational domain coordinates
     for (auto i = 0; i < P.rows(); i++)
         for (auto j = 0; j < P.cols() - 1; j++)
-                P(i, j) = (j == k ? P2(i, 0) : Q(i + 1, j));
+                P(i, j) = (j == k ? P2(i, 0) : Q(i, j));
     P2 = NtN_rat.ldlt().solve(R);                       // rational range coordinate
     for (auto i = 0; i < P.rows(); i++)
         P(i, P.cols() - 1) = P2(i, 1);

@@ -91,31 +91,25 @@ NewKnots_curve1(
         // maximum number of domain points with error greater than err_limit
         size_t max_nerr     =  0;
 
-        // compute the matrix N, eq. 9.66 in P&T
-        // N is a matrix of (m - 1) x (n - 1) scalars that are the basis function coefficients
-        //  _                                _
-        // |  N_1(u[1])   ... N_{n-1}(u[1])   |
-        // |     ...      ...      ...        |
-        // |  N_1(u[m-1]) ... N_{n-1}(u[m-1]) |
-        //  -                                -
+        // N is a matrix of (m + 1) x (n + 1) scalars that are the basis function coefficients
+        //  _                          _
+        // |  N_0(u[0])   ... N_n(u[0]) |
+        // |     ...      ...      ...  |
+        // |  N_0(u[m])   ... N_n(u[m]) |
+        //  -                          -
         // TODO: N is going to be very sparse when it is large: switch to sparse representation
         // N has semibandwidth < p  nonzero entries across diagonal
-        MatrixX<T> N = MatrixX<T>::Zero(m(k) - 1, n(k) - 1); // coefficients matrix
+        MatrixX<T> N = MatrixX<T>::Zero(m(k) + 1, n(k) + 1); // coefficients matrix
 
-        for (int i = 1; i < m(k); i++)                  // the rows of N
+        for (int i = 0; i < N.rows(); i++)            // the rows of N
         {
             int span = mfa.FindSpan(k, mfa.params(mfa.po[k] + i), mfa.ko[k]) - mfa.ko[k];   // relative to ko
-            assert(span <= n(k));            // sanity
-            mfa.BasisFuns(k, mfa.params(mfa.po[k] + i), span, N, 1, n(k) - 1, i - 1);
+            mfa.BasisFuns(k, mfa.params(mfa.po[k] + i), span, N, i);
         }
 
-        // compute the product Nt x N
         // TODO: NtN is going to be very sparse when it is large: switch to sparse representation
         // NtN has semibandwidth < p + 1 nonzero entries across diagonal
         MatrixX<T> NtN = N.transpose() * N;
-
-        // debug
-        //         cerr << "k " << k << " NtN:\n" << NtN << endl;
 
         size_t ncurves         = mfa.domain.rows() / mfa.ndom_pts(k);   // number of curves in this dimension
         int nsame_steps        = 0;                                     // number of steps with same number of erroneous points
@@ -140,18 +134,18 @@ NewKnots_curve1(
             parallel_for (size_t (0), ncurves_s, [&] (size_t j) // for all the curves in this dimension (given the curve step)
             {
                 // R is the right hand side needed for solving NtN * P = R
-                MatrixX<T> R(n(k) - 1, mfa.domain.cols());
+                MatrixX<T> R(N.cols(), mfa.domain.cols());
 
                 // P are the unknown interior control points and the solution to NtN * P = R
                 // NtN is positive definite -> do not need pivoting
                 // TODO: use a common representation for P and ctrl_pts to avoid copying
-                MatrixX<T> P(n(k) - 1, mfa.domain.cols());
+                MatrixX<T> P(N.cols(), mfa.domain.cols());
 
                 // compute R from input domain points
                 encoder.RHS(k, N, R, weights, mfa.ko[k], mfa.po[k], mfa.co[k][j * s]);
 
                 // rationalize NtN
-                MatrixX<T> NtN_rat(NtN.rows(), NtN.cols());
+                MatrixX<T> NtN_rat = NtN;
                 mfa.Rationalize(k, weights, N, NtN_rat);
 
                 // solve for P
@@ -161,7 +155,7 @@ NewKnots_curve1(
                     for (auto i = 0; i < P.rows(); i++)
                     {
                         for (auto j = 0; j < P.cols() - 1; j++)
-                            P(i, j) = (j == k ? P2(i, 0) : mfa.domain((mfa.co[k][j] + i + 1) * mfa.ds[k], j));
+                            P(i, j) = (j == k ? P2(i, 0) : mfa.domain((mfa.co[k][j] + i) * mfa.ds[k], j));
                         P(i, P.cols() - 1) = P2(i, 1);
                     }
 #else                                                           // don't weigh domain coordinate (only range)
@@ -169,7 +163,7 @@ NewKnots_curve1(
                     P2 = NtN.ldlt().solve(R);                   // nonrational domain coordinates
                     for (auto i = 0; i < P.rows(); i++)
                         for (auto j = 0; j < P.cols() - 1; j++)
-                            P(i, j) = (j == k ? P2(i, 0) : mfa.domain((mfa.co[k][j] + i + 1) * mfa.ds[k], j));
+                            P(i, j) = (j == k ? P2(i, 0) : mfa.domain((mfa.co[k][j] + i) * mfa.ds[k], j));
                     P2 = NtN_rat.ldlt().solve(R);               // rational range coordinate
                     for (auto i = 0; i < P.rows(); i++)
                         P(i, P.cols() - 1) = P2(i, 1);
@@ -215,18 +209,18 @@ NewKnots_curve1(
         fprintf(stderr, "k=%ld worst_curve_idx=%ld co=%ld\n", k, worst_curve_idx, mfa.co[k][worst_curve_idx]);
 
         // R is the right hand side needed for solving NtN * P = R
-        MatrixX<T> R(n(k) - 1, mfa.domain.cols());
+        MatrixX<T> R(N.cols(), mfa.domain.cols());
 
         // P are the unknown interior control points and the solution to NtN * P = R
         // NtN is positive definite -> do not need pivoting
         // TODO: use a common representation for P and ctrl_pts to avoid copying
-        MatrixX<T> P(n(k) - 1, mfa.domain.cols());
+        MatrixX<T> P(N.cols(), mfa.domain.cols());
 
         // compute R from input domain points
         encoder.RHS(k, N, R, weights, mfa.ko[k], mfa.po[k], mfa.co[k][worst_curve_idx]);
 
         // rationalize NtN
-        MatrixX<T> NtN_rat(NtN.rows(), NtN.cols());
+        MatrixX<T> NtN_rat = NtN;
         mfa.Rationalize(k, weights, N, NtN_rat);
 
         // solve for P
@@ -236,7 +230,7 @@ NewKnots_curve1(
         for (auto i = 0; i < P.rows(); i++)
         {
             for (auto j = 0; j < P.cols() - 1; j++)
-                P(i, j) = (j == k ? P2(i, 0) : mfa.domain((mfa.co[k][j] + i + 1) * mfa.ds[k], j));
+                P(i, j) = (j == k ? P2(i, 0) : mfa.domain((mfa.co[k][j] + i) * mfa.ds[k], j));
             P(i, P.cols() - 1) = P2(i, 1);
         }
 #else                                                           // don't weigh domain coordinate (only range)
@@ -244,7 +238,7 @@ NewKnots_curve1(
         P2 = NtN.ldlt().solve(R);                   // nonrational domain coordinates
         for (auto i = 0; i < P.rows(); i++)
             for (auto j = 0; j < P.cols() - 1; j++)
-                P(i, j) = (j == k ? P2(i, 0) : mfa.domain((mfa.co[k][j] + i + 1) * mfa.ds[k], j));
+                P(i, j) = (j == k ? P2(i, 0) : mfa.domain((mfa.co[k][j] + i) * mfa.ds[k], j));
         P2 = NtN_rat.ldlt().solve(R);               // rational range coordinate
         for (auto i = 0; i < P.rows(); i++)
             P(i, P.cols() - 1) = P2(i, 1);
@@ -324,36 +318,33 @@ NewKnots_curve(
         // maximum number of domain points with error greater than err_limit and their curves
         size_t max_nerr     =  0;
 
-        // compute the matrix N, eq. 9.66 in P&T
-        // N is a matrix of (m - 1) x (n - 1) scalars that are the basis function coefficients
-        //  _                                _
-        // |  N_1(u[1])   ... N_{n-1}(u[1])   |
-        // |     ...      ...      ...        |
-        // |  N_1(u[m-1]) ... N_{n-1}(u[m-1]) |
-        //  -                                -
+        // N is a matrix of (m + 1) x (n + 1) scalars that are the basis function coefficients
+        //  _                          _
+        // |  N_0(u[0])   ... N_n(u[0]) |
+        // |     ...      ...      ...  |
+        // |  N_0(u[m])   ... N_n(u[m]) |
+        //  -                          -
         // TODO: N is going to be very sparse when it is large: switch to sparse representation
         // N has semibandwidth < p  nonzero entries across diagonal
-        MatrixX<T> N = MatrixX<T>::Zero(m(k) - 1, n(k) - 1); // coefficients matrix
+        MatrixX<T> N = MatrixX<T>::Zero(m(k) + 1, n(k) + 1); // coefficients matrix
 
-        for (int i = 1; i < m(k); i++)                  // the rows of N
+        for (int i = 0; i < N.rows(); i++)            // the rows of N
         {
             int span = mfa.FindSpan(k, mfa.params(mfa.po[k] + i), mfa.ko[k]) - mfa.ko[k];   // relative to ko
-            assert(span <= n(k));            // sanity
-            mfa.BasisFuns(k, mfa.params(mfa.po[k] + i), span, N, 1, n(k) - 1, i - 1);
+            mfa.BasisFuns(k, mfa.params(mfa.po[k] + i), span, N, i);
         }
 
-        // compute the product Nt x N
         // TODO: NtN is going to be very sparse when it is large: switch to sparse representation
         // NtN has semibandwidth < p + 1 nonzero entries across diagonal
         MatrixX<T> NtN = N.transpose() * N;
 
         // R is the right hand side needed for solving NtN * P = R
-        MatrixX<T> R(n(k) - 1, mfa.domain.cols());
+        MatrixX<T> R(N.cols(), mfa.domain.cols());
 
         // P are the unknown interior control points and the solution to NtN * P = R
         // NtN is positive definite -> do not need pivoting
         // TODO: use a common representation for P and ctrl_pts to avoid copying
-        MatrixX<T> P(n(k) - 1, mfa.domain.cols());
+        MatrixX<T> P(N.cols(), mfa.domain.cols());
 
         size_t ncurves   = mfa.domain.rows() / mfa.ndom_pts(k); // number of curves in this dimension
         int nsame_steps  = 0;                                   // number of steps with same number of erroneous points
@@ -382,7 +373,7 @@ NewKnots_curve(
                     encoder.RHS(k, N, R, weights, mfa.ko[k], mfa.po[k], mfa.co[k][j]);
 
                     // rationalize NtN
-                    MatrixX<T> NtN_rat(NtN.rows(), NtN.cols());
+                    MatrixX<T> NtN_rat = NtN;
                     mfa.Rationalize(k, weights, N, NtN_rat);
 
                     // solve for P
@@ -392,7 +383,7 @@ NewKnots_curve(
                     for (auto i = 0; i < P.rows(); i++)
                     {
                         for (auto j = 0; j < P.cols() - 1; j++)
-                            P(i, j) = (j == k ? P2(i, 0) : mfa.domain((mfa.co[k][j] + i + 1) * mfa.ds[k], j));
+                            P(i, j) = (j == k ? P2(i, 0) : mfa.domain((mfa.co[k][j] + i) * mfa.ds[k], j));
                         P(i, P.cols() - 1) = P2(i, 1);
                     }
 #else                                                           // don't weigh domain coordinate (only range)
@@ -400,7 +391,7 @@ NewKnots_curve(
                     P2 = NtN.ldlt().solve(R);                   // nonrational domain coordinates
                     for (auto i = 0; i < P.rows(); i++)
                         for (auto j = 0; j < P.cols() - 1; j++)
-                            P(i, j) = (j == k ? P2(i, 0) : mfa.domain((mfa.co[k][j] + i + 1) * mfa.ds[k], j));
+                            P(i, j) = (j == k ? P2(i, 0) : mfa.domain((mfa.co[k][j] + i) * mfa.ds[k], j));
                     P2 = NtN_rat.ldlt().solve(R);               // rational range coordinate
                     for (auto i = 0; i < P.rows(); i++)
                         P(i, P.cols() - 1) = P2(i, 1);
@@ -505,25 +496,22 @@ NewKnots_curve(
         // maximum number of domain points with error greater than err_limit
         size_t max_nerr     =  0;
 
-        // compute the matrix N, eq. 9.66 in P&T
-        // N is a matrix of (m - 1) x (n - 1) scalars that are the basis function coefficients
-        //  _                                _
-        // |  N_1(u[1])   ... N_{n-1}(u[1])   |
-        // |     ...      ...      ...        |
-        // |  N_1(u[m-1]) ... N_{n-1}(u[m-1]) |
-        //  -                                -
+        // N is a matrix of (m + 1) x (n + 1) scalars that are the basis function coefficients
+        //  _                          _
+        // |  N_0(u[0])   ... N_n(u[0]) |
+        // |     ...      ...      ...  |
+        // |  N_0(u[m])   ... N_n(u[m]) |
+        //  -                          -
         // TODO: N is going to be very sparse when it is large: switch to sparse representation
         // N has semibandwidth < p  nonzero entries across diagonal
-        MatrixX<T> N = MatrixX<T>::Zero(m(k) - 1, n(k) - 1); // coefficients matrix
+        MatrixX<T> N = MatrixX<T>::Zero(m(k) + 1, n(k) + 1); // coefficients matrix
 
-        for (int i = 1; i < m(k); i++)                  // the rows of N
+        for (int i = 0; i < N.rows(); i++)            // the rows of N
         {
             int span = mfa.FindSpan(k, mfa.params(mfa.po[k] + i), mfa.ko[k]) - mfa.ko[k];   // relative to ko
-            assert(span <= n(k));            // sanity
-            mfa.BasisFuns(k, mfa.params(mfa.po[k] + i), span, N, 1, n(k) - 1, i - 1);
+            mfa.BasisFuns(k, mfa.params(mfa.po[k] + i), span, N, i);
         }
 
-        // compute the product Nt x N
         // TODO: NtN is going to be very sparse when it is large: switch to sparse representation
         // NtN has semibandwidth < p + 1 nonzero entries across diagonal
         MatrixX<T> NtN = N.transpose() * N;
@@ -554,18 +542,18 @@ NewKnots_curve(
             parallel_for (size_t (0), ncurves_s, [&] (size_t j) // for all the curves in this dimension (given the curve step)
             {
                 // R is the right hand side needed for solving NtN * P = R
-                MatrixX<T> R(n(k) - 1, mfa.domain.cols());
+                MatrixX<T> R(N.cols(), mfa.domain.cols());
 
                 // P are the unknown interior control points and the solution to NtN * P = R
                 // NtN is positive definite -> do not need pivoting
                 // TODO: use a common representation for P and ctrl_pts to avoid copying
-                MatrixX<T> P(n(k) - 1, mfa.domain.cols());
+                MatrixX<T> P(N.cols(), mfa.domain.cols());
 
                 // compute R from input domain points
                 RHS(k, N, R, weights, mfa.ko[k], mfa.po[k], mfa.co[k][j * s]);
 
                 // rationalize NtN
-                MatrixX<T> NtN_rat(NtN.rows(), NtN.cols());
+                MatrixX<T> NtN_rat = NtN;
                 mfa.Rationalize(k, weights, N, NtN_rat);
 
                 // solve for P
@@ -575,7 +563,7 @@ NewKnots_curve(
                 for (auto i = 0; i < P.rows(); i++)
                 {
                     for (auto j = 0; j < P.cols() - 1; j++)
-                        P(i, j) = (j == k ? P2(i, 0) : mfa.domain((mfa.co[k][j] + i + 1) * mfa.ds[k], j));
+                        P(i, j) = (j == k ? P2(i, 0) : mfa.domain((mfa.co[k][j] + i) * mfa.ds[k], j));
                     P(i, P.cols() - 1) = P2(i, 1);
                 }
 #else                                                           // don't weigh domain coordinate (only range)
@@ -583,7 +571,7 @@ NewKnots_curve(
                 P2 = NtN.ldlt().solve(R);                   // nonrational domain coordinates
                 for (auto i = 0; i < P.rows(); i++)
                     for (auto j = 0; j < P.cols() - 1; j++)
-                        P(i, j) = (j == k ? P2(i, 0) : mfa.domain((mfa.co[k][j] + i + 1) * mfa.ds[k], j));
+                        P(i, j) = (j == k ? P2(i, 0) : mfa.domain((mfa.co[k][j] + i) * mfa.ds[k], j));
                 P2 = NtN_rat.ldlt().solve(R);               // rational range coordinate
                 for (auto i = 0; i < P.rows(); i++)
                     P(i, P.cols() - 1) = P2(i, 1);
@@ -629,18 +617,18 @@ NewKnots_curve(
 //         fprintf(stderr, "k=%ld worst_curve_idx=%ld co=%ld\n", k, worst_curve_idx, co);
 
         // R is the right hand side needed for solving NtN * P = R
-        MatrixX<T> R(n(k) - 1, mfa.domain.cols());
+        MatrixX<T> R(N.cols(), mfa.domain.cols());
 
         // P are the unknown interior control points and the solution to NtN * P = R
         // NtN is positive definite -> do not need pivoting
         // TODO: use a common representation for P and ctrl_pts to avoid copying
-        MatrixX<T> P(n(k) - 1, mfa.domain.cols());
+        MatrixX<T> P(N.cols(), mfa.domain.cols());
 
         // compute R from input domain points
         RHS(k, N, R, weights, mfa.ko[k], mfa.po[k], mfa.co[k][worst_curve_idx]);
 
         // rationalize NtN
-        MatrixX<T> NtN_rat(NtN.rows(), NtN.cols());
+        MatrixX<T> NtN_rat = NtN;
         mfa.Rationalize(k, weights, N, NtN_rat);
 
         // solve for P
@@ -650,7 +638,7 @@ NewKnots_curve(
         for (auto i = 0; i < P.rows(); i++)
         {
             for (auto j = 0; j < P.cols() - 1; j++)
-                P(i, j) = (j == k ? P2(i, 0) : mfa.domain((mfa.co[k][j] + i + 1) * mfa.ds[k], j));
+                P(i, j) = (j == k ? P2(i, 0) : mfa.domain((mfa.co[k][j] + i) * mfa.ds[k], j));
             P(i, P.cols() - 1) = P2(i, 1);
         }
 #else                                                           // don't weigh domain coordinate (only range)
@@ -658,7 +646,7 @@ NewKnots_curve(
         P2 = NtN.ldlt().solve(R);                   // nonrational domain coordinates
         for (auto i = 0; i < P.rows(); i++)
             for (auto j = 0; j < P.cols() - 1; j++)
-                P(i, j) = (j == k ? P2(i, 0) : mfa.domain((mfa.co[k][j] + i + 1) * mfa.ds[k], j));
+                P(i, j) = (j == k ? P2(i, 0) : mfa.domain((mfa.co[k][j] + i) * mfa.ds[k], j));
         P2 = NtN_rat.ldlt().solve(R);               // rational range coordinate
         for (auto i = 0; i < P.rows(); i++)
             P(i, P.cols() - 1) = P2(i, 1);

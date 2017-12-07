@@ -43,6 +43,8 @@ namespace mfa
         void Weights(
                 int         k,              // current dimension
                 MatrixX<T>& Q,              // input points
+                MatrixX<T>& N,              // basis functions
+                MatrixX<T>& NtN,            // N^T * N
                 VectorX<T>& weights);       // output weights
 
         // default domain
@@ -55,7 +57,7 @@ namespace mfa
                 int         po,       // index of starting parameter
                 int         co);      // index of starting domain pt in current curve
 
-        //new input points
+        // new input points
         void RHS(
                 int         cur_dim,  // current dimension
                 MatrixX<T>& in_pts,   // input points (not the default domain stored in the mfa)

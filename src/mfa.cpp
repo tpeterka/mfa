@@ -431,8 +431,6 @@ BasisFuns(int         cur_dim,            // current dimension
           T           u,                  // parameter value
           int         span,               // index of span in the knots vector containing u, relative to ko
           MatrixX<T>& N,                  // matrix of (output) basis function values
-          int         start_n,            // starting basis function N_{start_n} to compute
-          int         end_n,              // ending basis function N_{end_n} to compute
           int         row)                // starting row index in N of result
 {
     // init
@@ -459,18 +457,7 @@ BasisFuns(int         cur_dim,            // current dimension
 
     // copy scratch to N
     for (int j = 0; j < p(cur_dim) + 1; j++)
-    {
-        int n_i = span - p(cur_dim) + j;              // index of basis function N_{n_i}
-        if (n_i >= start_n && n_i <= end_n)
-        {
-            int col = n_i - start_n;         // column in N where to write result
-            if (col >= 0 && col < N.cols())
-                N(row, col) = scratch[j];
-            else
-                cerr << "Note(1): BasisFuns() truncating N_" << n_i << " = " << scratch[j] <<
-                    " at (" << row << ", " << col << ")" << endl;
-        }
-    }
+        N(row, span - p(cur_dim) + j) = scratch[j];
 }
 
 // precompute curve parameters for input data points using the chord-length method
@@ -1132,29 +1119,18 @@ Rationalize(
         MatrixX<T>& N,                      // basis function coefficients
         MatrixX<T>& NtN_rat)                // (output) rationalized Nt * N
 {
-    int n = N.cols() + 1;                   // number of control point spans
-    int m = N.rows() + 1;                   // number of input point spans
-
     // compute rational denominators for input points
-    // rational denominator requires all n + 1 basis functions and weights, not skipping first and last
-    VectorX<T> denom(m - 1);                // rational denomoninator for param of each input point excl. ends
-    MatrixX<T> Nk(1, n + 1);                // basis function coeffs for one parameter value (all coeffs, not skipping first and last)
-    for (int j = 1; j < m; j++)
-    {
-        int span = FindSpan(k, params(po[k] + j), ko[k]) - ko[k];   // relative to ko
-        assert(span <= n);                  // sanity
-        Nk = MatrixX<T>::Zero(1, n + 1);    // basis coefficients for Rk[j]
-        BasisFuns(k, params(po[k] + j), span, Nk, 0, n, 0);
-        denom(j - 1) = (Nk.row(0).cwiseProduct(weights.transpose())).sum();
-    }
+    VectorX<T> denom(N.rows());             // rational denomoninator for param of each input point
+    for (int j = 0; j < N.rows(); j++)
+        denom(j) = (N.row(j).cwiseProduct(weights.transpose())).sum();
 
 //     cerr << "denom:\n" << denom << endl;
 
     // "rationalize" N and Nt
     // ie, convert their basis function coefficients to rational ones with weights
-    MatrixX<T> N_rat = N;                   // need a copy because N, will be reused for other curves
+    MatrixX<T> N_rat = N;                   // need a copy because N will be reused for other curves
     for (auto i = 0; i < N.cols(); i++)
-        N_rat.col(i) *= weights(i + 1);
+        N_rat.col(i) *= weights(i);
     for (auto j = 0; j < N.rows(); j++)
         N_rat.row(j) /= denom(j);
 

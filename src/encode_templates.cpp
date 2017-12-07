@@ -30,9 +30,11 @@ void
 mfa::
 Encoder<float>::
 Weights(
-        int       k,               // current dimension
-        MatrixXf& Q,               // input points
-        VectorXf& weights);        // output weights
+        int       k,                // current dimension
+        MatrixXf& Q,                // input points
+        MatrixXf& N,                // basis functions
+        MatrixXf& NtN,              // N^T * N
+        VectorXf& weights);         // output weights
 
 template
 void
@@ -199,9 +201,11 @@ void
 mfa::
 Encoder<double>::
 Weights(
-        int       k,               // current dimension
-        MatrixXd& Q,               // input points
-        VectorXd& weights);        // output weights
+        int       k,                // current dimension
+        MatrixXd& Q,                // input points
+        MatrixXd& N,                // basis functions
+        MatrixXd& NtN,              // N^T * N
+        VectorXd& weights);         // output weights
 
 template
 void

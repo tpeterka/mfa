@@ -111,8 +111,6 @@ BasisFuns(
         float     u,                // parameter value
         int       span,             // index of span in the knots vector containing u, relative to ko
         MatrixXf& N,                // matrix of (output) basis function values
-        int       start_n,          // starting basis function N_{start_n} to compute
-        int       end_n,            // ending basis function N_{end_n} to compute
         int       row);             // starting row index in N of result
 
 template
@@ -302,8 +300,6 @@ BasisFuns(
         double     u,                // parameter value
         int       span,             // index of span in the knots vector containing u, relative to ko
         MatrixXd& N,                // matrix of (output) basis function values
-        int       start_n,          // starting basis function N_{start_n} to compute
-        int       end_n,            // ending basis function N_{end_n} to compute
         int       row);             // starting row index in N of result
 
 template
