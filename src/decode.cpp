@@ -219,7 +219,6 @@ CurvePt(
         VectorX<T>& out_pt,                       // (output) point
         int         ko)                           // starting knot offset (default = 0)
 {
-//     int n      = (int)temp_ctrl.rows() - 1;     // number of control point spans
     int span   = mfa.FindSpan(cur_dim, param, ko) - ko;         // relative to ko
     MatrixX<T> N = MatrixX<T>::Zero(1, temp_ctrl.rows());      // basis coefficients
     mfa.BasisFuns(cur_dim, param, span, N, 0);
@@ -270,7 +269,6 @@ VolPt(VectorX<T>& param,                       // parameter value in each dim. o
     {
         temp[i]    = VectorX<T>::Zero(mfa.ctrl_pts.cols());
         iter[i]    = 0;
-//         n[i]       = (int)mfa.nctrl_pts(i) - 1;
         span[i]    = mfa.FindSpan(i, param(i), mfa.ko[i]) - mfa.ko[i];  // relative to ko
         N[i]       = MatrixX<T>::Zero(1, mfa.nctrl_pts(i));
         mfa.BasisFuns(i, param(i), span[i], N[i], 0);

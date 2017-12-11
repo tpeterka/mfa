@@ -26,7 +26,7 @@ AdaptiveEncode(
         int   max_rounds);              // (optional) maximum number of rounds
 
 template
-void
+bool
 mfa::
 Encoder<float>::
 Weights(
@@ -197,7 +197,7 @@ AdaptiveEncode(
         int    max_rounds);         // (optional) maximum number of rounds
 
 template
-void
+bool
 mfa::
 Encoder<double>::
 Weights(

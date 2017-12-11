@@ -40,7 +40,7 @@ namespace mfa
 
    private:
 
-        void Weights(
+        bool Weights(
                 int         k,              // current dimension
                 MatrixX<T>& Q,              // input points
                 MatrixX<T>& N,              // basis functions

@@ -108,8 +108,9 @@ AdaptiveEncode(
 // linear solution of weights according to Ma and Kruth 1995 (M&K95)
 // our N is M&K's B
 // our Q is M&K's X_bar
+// returns true if weights were found successfully, otherwise false
 template <typename T>
-void
+bool
 mfa::
 Encoder<T>::
 Weights(
@@ -119,6 +120,8 @@ Weights(
         MatrixX<T>& NtN,            // N^T * N
         VectorX<T>& weights)        // output weights
 {
+    bool success;
+
     // Nt, NtNi
     // TODO: offer option of saving time or space by comuting Nt and NtN each time it is needed?
     MatrixX<T> Nt   = N.transpose();
@@ -168,7 +171,7 @@ Weights(
     if (eigensolver.info() != Eigen::Success)
     {
         fprintf(stderr, "Error: Encoder::Weights(), computing eigenvalues of M failed, perhaps M is not self-adjoint?\n");
-        exit(0);
+        return false;
     }
     // debug
 //     cerr << "M:\n"            << M                          << endl;
@@ -184,7 +187,7 @@ Weights(
         {
             fprintf(stderr, "Warning: Weights(): eigenvalues should be positive and distinct.\n");
             fprintf(stderr, "Aborting weights calculation\n");
-            return;
+            return false;
         }
 
     // if smallest eigenvector is all positive or all negative, those are the weights
@@ -193,12 +196,14 @@ Weights(
         weights = EV.col(0);
         weights *= (1.0 / weights.maxCoeff());  // scale to max weight = 1
         cerr << "successfully found weights from an all-positive first eigenvector" << endl;
+        success = true;
     }
     else if ( (EV.col(0).array() < 0.0).all() )
     {
         weights = -EV.col(0);
         weights *= (1.0 / weights.maxCoeff());  // scale to max weight = 1
         cerr << "successfully found weights from an all-negative first eigenvector" << endl;
+        success = true;
     }
 
     // if smallest eigenvector is mixed sign, then expand eigen space
@@ -207,7 +212,7 @@ Weights(
         fprintf(stderr, "\nExpanding eigenspace using linear solver\n");
         T min_weight = 1.0;
         T max_weight = 1.0e4;
-        bool success = false;
+        success = false;
         using namespace rehearse;
 
         for (auto i = 2; i <= EV.cols(); i++)        // expand from 2 eigenvectors to all, one at a time
@@ -259,6 +264,7 @@ Weights(
             fprintf(stderr, "linear solver could not find positive weights; setting to 1\n\n");
         }
     }                                                   // need to expand eigenspace
+    return success;
 }
 
 #else               // 1d weights for range coordinate only
@@ -266,8 +272,9 @@ Weights(
 // linear solution of weights according to Ma and Kruth 1995 (M&K95)
 // our N is M&K's B
 // our Q is M&K's X_bar
+// returns true if weights were found successfully, otherwise false
 template <typename T>
-void
+bool
 mfa::
 Encoder<T>::
 Weights(
@@ -277,6 +284,8 @@ Weights(
         MatrixX<T>& NtN,            // N^T * N
         VectorX<T>& weights)        // output weights
 {
+    bool success;
+
     // Nt, NtNi
     // TODO: offer option of saving time or space by comuting Nt and NtN each time it is needed?
     MatrixX<T> Nt   = N.transpose();
@@ -315,7 +324,7 @@ Weights(
     if (eigensolver.info() != Eigen::Success)
     {
         fprintf(stderr, "Error: Encoder::Weights(), computing eigenvalues of M failed, perhaps M is not self-adjoint?\n");
-        exit(0);
+        return false;
     }
 
     const MatrixX<T>& EV    = eigensolver.eigenvectors();          // typing shortcut
@@ -327,28 +336,21 @@ Weights(
         {
             fprintf(stderr, "Warning: Weights(): eigenvalues should be positive and distinct.\n");
             fprintf(stderr, "Aborting weights calculation\n");
-            return;
+            return false;
         }
-
-    // debug: allow negative weights, just copy out and return
-    // result is lower quality, more noise, higher max error, do not use
-    // DEPRECATE
-//     weights = EV.col(0);
-//     weights *= (1.0 / weights.maxCoeff());  // scale to max weight = 1
-//     weights(0) = 1.0;                       // fix first and last weights to 1
-//     weights(weights.size() - 1) = 1.0;
-//     return;
 
     // if smallest eigenvector is all positive or all negative, those are the weights
     if ( (EV.col(0).array() > 0.0).all() )
     {
         weights = EV.col(0);
         weights *= (1.0 / weights.maxCoeff());  // scale to max weight = 1
+        success = true;
     }
     else if ( (EV.col(0).array() < 0.0).all() )
     {
         weights = -EV.col(0);
         weights *= (1.0 / weights.maxCoeff());  // scale to max weight = 1
+        success = true;
     }
 
     // if smallest eigenvector is mixed sign, then expand eigen space
@@ -357,12 +359,9 @@ Weights(
         fprintf(stderr, "\nExpanding eigenspace using linear solver\n");
         T min_weight = 1.0;
         T max_weight = 1.0e4;
-        bool success = false;
+        success = false;
         using namespace rehearse;
 
-        // set a maximum size of the eigenspace
-//         int max_cols = EV.cols() > 35 ? 35 : EV.cols();
-//         for (auto i = 2; i < max_cols; i++)
         for (auto i = 2; i <= EV.cols(); i++)        // expand from 2 eigenvectors to all, one at a time
         {
             OsiClpSolverInterface *solver = new OsiClpSolverInterface();
@@ -382,9 +381,9 @@ Weights(
             }
 
             // solve
-            solver->setObjSense(-1.0);
             model.builderToSolver();
             solver->setLogLevel(0);
+            solver->setIntParam(OsiMaxNumIteration, 100);
             solver->initialSolve();
 
             // copy out the solution and delete the solver
@@ -394,9 +393,7 @@ Weights(
             delete solver;
 
             // check if the solution was found successfully
-            // expand the min and max weights for the check by min_weight/2 to eliminate roundoff error
-            if ( (solved_weights.array() >= min_weight - min_weight / 2.0).all() &&
-                   (solved_weights.array() <= max_weight + min_weight / 2.0).all() )
+            if ( (solved_weights.array() > 0.0).all() )
             {
                 weights = solved_weights;
                 weights *= (1.0 / weights.maxCoeff());  // scale to max weight = 1
@@ -412,16 +409,12 @@ Weights(
             fprintf(stderr, "linear solver could not find positive weights; setting to 1\n\n");
         }
     }                                                   // need to expand eigenspace
-
-    // set first and last weights to 1.0 in an attempt to eliminate wiggles at far end
-    // may not be a problem anymore, remove if no longer needed
-//     weights(0) = 1.0;
-//     weights(weights.size() - 1) = 1.0;
+    return success;
 }
 
 #endif
 
-#if 1
+#if 0
 
 // TBB version
 // ~2X faster than serial, still expensive to compute curve offsets
@@ -703,6 +696,10 @@ Encode(bool weighted)                           // solve for and use weights
             if (j > 0 && j > 100 && j % (ncurves / 100) == 0)
                 fprintf(stderr, "\r dimension %ld: %.0f %% encoded (%ld out of %ld curves)",
                         k, (T)j / (T)ncurves * 100, j, ncurves);
+
+            // debug
+            if (k == ndims - 1)
+                cerr << "curve # " << j << endl;
 
             // compute the one curve of control points
             CtrlCurve(N, NtN, R, P, k, co[j], cs, to[j], temp_ctrl0, temp_ctrl1, weighted);
@@ -1015,8 +1012,21 @@ CtrlCurve(MatrixX<T>& N,          // basis functions for current dimension
     // solve for weights in the last domain dimension only
     VectorX<T> weights = VectorX<T>::Ones(N.cols());
     if (weighted)
-        if (k == mfa.p.size() - 1)
-            Weights(k, Q, N, NtN, weights);
+    {
+        if (k == mfa.p.size() - 1)                  // last dimension
+        {
+            if (!Weights(k, Q, N, NtN, weights))    // solve for weights
+            {
+                // if weights not found, copy from previous curve, written to the mfa already
+                // TODO: cheap hack; need a more robust way to make the weights similar across curves
+                if (to)                             // not the first curve
+                {
+//                     for (auto i = 0; i < weights.size(); i++)
+//                         weights(i) = mfa.weights(to - 1 + i * cs);
+                }
+            }
+        }
+    }
 
     // compute R
     // first dimension reads from domain

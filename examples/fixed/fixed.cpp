@@ -159,6 +159,53 @@ int main(int argc, char** argv)
         }
     }
 
+    // nek5000 dataset
+    if (input == "nek")
+    {
+        d_args.ndom_pts[0]  = 200;
+        d_args.ndom_pts[1]  = 200;
+        d_args.ndom_pts[2]  = 200;
+        d_args.nctrl_pts[0] = 50;
+        d_args.nctrl_pts[1] = 50;
+        d_args.nctrl_pts[2] = 50;
+        strncpy(d_args.infile, "/Users/tpeterka/datasets/flame/6_small.xyz", sizeof(d_args.infile));
+        if (dom_dim == 1)
+            master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
+                    { b->read_1d_slice_3d_vector_data(cp, d_args); });
+        else if (dom_dim == 2)
+            master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
+                    { b->read_2d_slice_3d_vector_data(cp, d_args); });
+        else if (dom_dim == 3)
+            master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
+                    { b->read_3d_vector_data(cp, d_args); });
+        else
+        {
+            fprintf(stderr, "S3D data only available in 2 or 3d domain\n");
+            exit(0);
+        }
+    }
+
+    // nek5000 dataset
+    if (input == "nek")
+    {
+        d_args.ndom_pts[0]  = 200;
+        d_args.ndom_pts[1]  = 200;
+        d_args.ndom_pts[2]  = 200;
+        strncpy(d_args.infile, "/Users/tpeterka/datasets/nek5000/200x200x200/0.xyz", sizeof(d_args.infile));
+        strncpy(d_args.infile, "/Users/tpeterka/datasets/nek5000/200x200x200/0.xyz", sizeof(d_args.infile));
+        if (dom_dim == 2)
+            master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
+                    { b->read_2d_slice_3d_vector_data(cp, d_args); });
+        else if (dom_dim == 3)
+            master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
+                    { b->read_3d_vector_data(cp, d_args); });
+        else
+        {
+            fprintf(stderr, "nek5000 data only available in 2 or 3d domain\n");
+            exit(0);
+        }
+    }
+
     // compute the MFA
 
     fprintf(stderr, "\nStarting fixed encoding...\n\n");
