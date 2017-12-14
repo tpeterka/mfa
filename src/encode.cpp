@@ -356,10 +356,50 @@ Weights(
     // if smallest eigenvector is mixed sign, then expand eigen space
     else
     {
+        success = false;
+
+#if 0                                   // debug: read a linear program from an input file
+
+        fprintf(stderr, "\nDebug mode: solving a linear program from a file\n");
+        OsiClpSolverInterface *solver = new OsiClpSolverInterface();
+        int status = solver->readMps("linear_program");
+
+        if (!status)                    // no errors reading the model
+        {
+            // solve
+            solver->setLogLevel(0);
+            solver->setIntParam(OsiMaxNumIteration, 100);
+            solver->initialSolve();
+
+            // copy out the solution
+            VectorX<T> solved_weights = VectorX<T>::Zero(weights.size());
+            int nrows = solver->getNumRows();
+            int ncols = solver->getNumCols();
+            cerr << "nrows=" << nrows << " ncols=" << ncols << endl;
+
+            // TODO: rewrite for Osi
+//             for (auto k = 0; k < i; k++)                 // for current number of eigenvectors
+//                 solved_weights += model.getSolutionValue(a[k]) * EV.col(k);
+
+            // check if the solution was found successfully
+            if ( (solved_weights.array() > 0.0).all() )
+            {
+                weights = solved_weights;
+                weights *= (1.0 / weights.maxCoeff());  // scale to max weight = 1
+                success = true;
+                cerr << "successful linear solve from file input" << endl;
+            }
+        }
+        else
+            cerr << "Error: unable to read MPS file" << endl;
+
+        delete solver;
+
+#else                                   // set up the linear program from the expanding eigenvectors
+
         fprintf(stderr, "\nExpanding eigenspace using linear solver\n");
         T min_weight = 1.0;
         T max_weight = 1.0e4;
-        success = false;
         using namespace rehearse;
 
         for (auto i = 2; i <= EV.cols(); i++)        // expand from 2 eigenvectors to all, one at a time
@@ -386,11 +426,10 @@ Weights(
             solver->setIntParam(OsiMaxNumIteration, 100);
             solver->initialSolve();
 
-            // copy out the solution and delete the solver
+            // copy out the solution
             VectorX<T> solved_weights = VectorX<T>::Zero(weights.size());
             for (auto k = 0; k < i; k++)                 // for current number of eigenvectors
                 solved_weights += model.getSolutionValue(a[k]) * EV.col(k);
-            delete solver;
 
             // check if the solution was found successfully
             if ( (solved_weights.array() > 0.0).all() )
@@ -399,9 +438,17 @@ Weights(
                 weights *= (1.0 / weights.maxCoeff());  // scale to max weight = 1
                 success = true;
                 cerr << "successful linear solve from linear combination of " << i << " eigenvectors:" << endl;
-                break;
+                // debug: save the input problem in MPS format
+                solver->writeMps("linear_program");
             }
+
+            delete solver;
+
+            if (success)
+                break;
         }                                               // increasing number of eigenvectors
+
+#endif
 
         if (!success)
         {
