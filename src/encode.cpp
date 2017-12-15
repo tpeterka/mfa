@@ -358,7 +358,7 @@ Weights(
     {
         success = false;
 
-#if 1                                   // debug: read a linear program from an input file
+#if 0                                   // debug: read a linear program from an input file
 
         // The solution will be different because the input problem is slightly different
         // Coin-or truncated very small values to 0 upon reading in the MPS file.
