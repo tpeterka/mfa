@@ -358,7 +358,10 @@ Weights(
     {
         success = false;
 
-#if 0                                   // debug: read a linear program from an input file
+#if 1                                   // debug: read a linear program from an input file
+
+        // The solution will be different because the input problem is slightly different
+        // Coin-or truncated very small values to 0 upon reading in the MPS file.
 
         fprintf(stderr, "\nDebug mode: solving a linear program from a file\n");
         OsiClpSolverInterface *solver = new OsiClpSolverInterface();
@@ -368,18 +371,26 @@ Weights(
         {
             // solve
             solver->setLogLevel(0);
-            solver->setIntParam(OsiMaxNumIteration, 100);
             solver->initialSolve();
+
+            // check
+            cerr << "optimal = " << solver->isProvenOptimal() << " infeasible = "
+                << solver->isProvenPrimalInfeasible() << " iteration limit reached = "
+                << solver->isIterationLimitReached() << endl;
 
             // copy out the solution
             VectorX<T> solved_weights = VectorX<T>::Zero(weights.size());
-            int nrows = solver->getNumRows();
             int ncols = solver->getNumCols();
-            cerr << "nrows=" << nrows << " ncols=" << ncols << endl;
+            const double* colSol = solver->getColSolution();
+            // columns were written by rehearse into the solver in opposite order
+            for (auto k = 0; k < ncols; k++)
+                solved_weights += colSol[ncols - 1 - k] * EV.col(k);
 
-            // TODO: rewrite for Osi
-//             for (auto k = 0; k < i; k++)                 // for current number of eigenvectors
-//                 solved_weights += model.getSolutionValue(a[k]) * EV.col(k);
+            // debug: solution
+//             cerr << "solution:" << endl;
+//             for (auto k = 0; k < ncols; k++)
+//                 cerr << colSol[ncols - 1 - k] << endl;
+//             cerr << "solved_weights:\n" << solved_weights << endl;
 
             // check if the solution was found successfully
             if ( (solved_weights.array() > 0.0).all() )
@@ -420,8 +431,14 @@ Weights(
                 model.addConstraint(expr <= max_weight);
             }
 
-            // solve
+            // convert rehearse model to coin-or solver
             model.builderToSolver();
+
+            // debug: save the input problem in MPS format
+            if (i == 124)
+                solver->writeMps("linear_program");
+
+            // solve
             solver->setLogLevel(0);
             solver->setIntParam(OsiMaxNumIteration, 100);
             solver->initialSolve();
@@ -438,8 +455,6 @@ Weights(
                 weights *= (1.0 / weights.maxCoeff());  // scale to max weight = 1
                 success = true;
                 cerr << "successful linear solve from linear combination of " << i << " eigenvectors:" << endl;
-                // debug: save the input problem in MPS format
-                solver->writeMps("linear_program");
             }
 
             delete solver;
