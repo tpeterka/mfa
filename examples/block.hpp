@@ -56,6 +56,7 @@ struct DomainArgs
     real_t    s;                                 // scaling factor or any other usage
     char      infile[256];                       // input filename
     bool      weighted;                          // solve for and use weights (default = true)
+    bool      multiblock;                        // multiblock domain, get bounds from block
 };
 
 struct ErrArgs
@@ -70,23 +71,54 @@ struct ErrArgs
 template <typename T>
 struct Block
 {
-    Block(int point_dim)
+    Block() {}
+
+    Block(
+            int           dom_dim,
+            int           pt_dim,
+            const Bounds& bounds)
     {
-        domain_mins.resize(point_dim);
-        domain_maxs.resize(point_dim);
+        domain_mins.resize(pt_dim);
+        domain_maxs.resize(pt_dim);
+        for (int i = 0; i < dom_dim; i++)
+        {
+            domain_mins(i) = bounds.min[i];
+            domain_maxs(i) = bounds.max[i];
+        }
     }
+
     static
         void* create()
         {
-            return new Block(2);
+            return new Block;
         }
+
+    static
+        void add(                               // add the block to the decomposition
+            int              gid,               // block global id
+            const Bounds&    core,              // block bounds without any ghost added
+            const Bounds&    bounds,            // block bounds including any ghost region added
+            const Bounds&    domain,            // global data bounds
+            const diy::Link& link,              // neighborhood
+            diy::Master&     master,            // diy master
+            int              dom_dim,           // domain dimensionality
+            int              pt_dim)            // point dimensionality
+    {
+        Block*          b   = new Block(dom_dim, pt_dim, core);
+        diy::Link*      l   = new diy::Link(link);
+        diy::Master&    m   = const_cast<diy::Master&>(master);
+        m.add(gid, b, l);
+    }
+
     static
         void destroy(void* b)
         {
             delete static_cast<Block*>(b);
         }
     static
-        void save(const void* b_, diy::BinaryBuffer& bb)
+        void save(
+                const void*        b_,
+                diy::BinaryBuffer& bb)
         {
             Block* b = (Block*)b_;
 
@@ -105,7 +137,9 @@ struct Block
             diy::save(bb, b->span_maxs);
         }
     static
-        void load(void* b_, diy::BinaryBuffer& bb)
+        void load(
+                void*              b_,
+                diy::BinaryBuffer& bb)
         {
             Block* b = (Block*)b_;
 
@@ -438,8 +472,6 @@ struct Block
         int tot_ndom_pts = 1;
         p.resize(a->dom_dim);
         ndom_pts.resize(a->dom_dim);
-        domain_mins.resize(a->pt_dim);
-        domain_maxs.resize(a->pt_dim);
         for (int i = 0; i < a->dom_dim; i++)
         {
             p(i)         =  a->p[i];
@@ -449,19 +481,33 @@ struct Block
         domain.resize(tot_ndom_pts, a->pt_dim);
         s = a->s;
 
+        // get local block bounds
+        // if single block, they are passed in args
+        // if multiblock, they were decomposed by diy and are already in the block's domain_mins, maxs
+        if (!a->multiblock)
+        {
+            domain_mins.resize(a->pt_dim);
+            domain_maxs.resize(a->pt_dim);
+            for (int i = 0; i < a->dom_dim; i++)
+            {
+                domain_mins(i) = a->min[i];
+                domain_maxs(i) = a->max[i];
+            }
+        }
+
         // assign values to the domain (geometry)
         int cs = 1;                           // stride of a coordinate in this dim
         real_t eps = 1.0e-5;                  // floating point roundoff error
         for (int i = 0; i < a->dom_dim; i++)  // all dimensions in the domain
         {
-            real_t d = (a->max[i] - a->min[i]) / (ndom_pts(i) - 1);
+            real_t d = (domain_maxs(i) - domain_mins(i)) / (ndom_pts(i) - 1);
             int k = 0;
             int co = 0;                       // j index of start of a new coordinate value
             for (int j = 0; j < tot_ndom_pts; j++)
             {
-                if (a->min[i] + k * d > a->max[i] + eps)
+                if (domain_mins(i) + k * d > domain_maxs(i) + eps)
                     k = 0;
-                domain(j, i) = a->min[i] + k * d;
+                domain(j, i) = domain_mins(i) + k * d;
                 if (j + 1 - co >= cs)
                 {
                     k++;
@@ -492,16 +538,11 @@ struct Block
         }
 
         // extents
-        for (int i = 0; i < a->dom_dim; i++)
-        {
-            domain_mins(i) = a->min[i];
-            domain_maxs(i) = a->max[i];
-        }
         domain_mins(a->pt_dim - 1) = min;
         domain_maxs(a->pt_dim - 1) = max;
-
+        fprintf(stderr, "gid = %d\n", cp.gid());
         cerr << "domain_mins:\n" << domain_mins << endl;
-        cerr << "domain_maxs:\n" << domain_maxs << endl;
+        cerr << "domain_maxs:\n" << domain_maxs << "\n" << endl;
 
         //             cerr << "domain:\n" << domain << endl;
     }
@@ -515,8 +556,6 @@ struct Block
         int tot_ndom_pts = 1;
         p.resize(a->dom_dim);
         ndom_pts.resize(a->dom_dim);
-        domain_mins.resize(a->pt_dim);
-        domain_maxs.resize(a->pt_dim);
         for (int i = 0; i < a->dom_dim; i++)
         {
             p(i)         =  a->p[i];
@@ -526,19 +565,33 @@ struct Block
         domain.resize(tot_ndom_pts, a->pt_dim);
         s = a->s;
 
+        // get local block bounds
+        // if single block, they are passed in args
+        // if multiblock, they were decomposed by diy and are already in the block's domain_mins, maxs
+        if (!a->multiblock)
+        {
+            domain_mins.resize(a->pt_dim);
+            domain_maxs.resize(a->pt_dim);
+            for (int i = 0; i < a->dom_dim; i++)
+            {
+                domain_mins(i) = a->min[i];
+                domain_maxs(i) = a->max[i];
+            }
+        }
+
         // assign values to the domain (geometry)
         int cs = 1;                           // stride of a coordinate in this dim
         real_t eps = 1.0e-5;                   // real_ting point roundoff error
         for (int i = 0; i < a->dom_dim; i++)  // all dimensions in the domain
         {
-            real_t d = (a->max[i] - a->min[i]) / (ndom_pts(i) - 1);
+            real_t d = (domain_maxs(i) - domain_mins(i)) / (ndom_pts(i) - 1);
             int k = 0;
             int co = 0;                       // j index of start of a new coordinate value
             for (int j = 0; j < tot_ndom_pts; j++)
             {
-                if (a->min[i] + k * d > a->max[i] + eps)
+                if (domain_mins(i) + k * d > domain_maxs(i) + eps)
                     k = 0;
-                domain(j, i) = a->min[i] + k * d;
+                domain(j, i) = domain_mins(i) + k * d;
                 if (j + 1 - co >= cs)
                 {
                     k++;
@@ -572,16 +625,11 @@ struct Block
         }
 
         // extents
-        for (int i = 0; i < a->dom_dim; i++)
-        {
-            domain_mins(i) = a->min[i];
-            domain_maxs(i) = a->max[i];
-        }
         domain_mins(a->pt_dim - 1) = min;
         domain_maxs(a->pt_dim - 1) = max;
-
+        fprintf(stderr, "gid = %d\n", cp.gid());
         cerr << "domain_mins:\n" << domain_mins << endl;
-        cerr << "domain_maxs:\n" << domain_maxs << endl;
+        cerr << "domain_maxs:\n" << domain_maxs << "\n" << endl;
 
         //             cerr << "domain:\n" << domain << endl;
     }
@@ -1378,6 +1426,7 @@ struct Block
 
     void print_block(const diy::Master::ProxyWithLink& cp)
     {
+        fprintf(stderr, "gid = %d\n", cp.gid());
 //         cerr << "domain\n" << domain << endl;
 //         cerr << "nctrl_pts:\n" << nctrl_pts << endl;
 //         cerr << ctrl_pts.rows() << " final control points\n" << ctrl_pts << endl;
@@ -1395,6 +1444,7 @@ struct Block
         fprintf(stderr, "# output knots        = %ld\n",knots.size());
         fprintf(stderr, "compression ratio     = %.2f\n",
                 (real_t)(domain.rows()) / (ctrl_pts.rows() + knots.size() / ctrl_pts.cols()));
+        fprintf(stderr, "\n");
     }
 
     // write original and approximated data in raw format

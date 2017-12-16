@@ -101,6 +101,7 @@ int main(int argc, char** argv)
     d_args.pt_dim       = pt_dim;
     d_args.dom_dim      = dom_dim;
     d_args.weighted     = weighted;
+    d_args.multiblock   = false;
     for (int i = 0; i < MAX_DIM; i++)
     {
         d_args.p[i]         = degree;
@@ -241,10 +242,6 @@ int main(int argc, char** argv)
     // debug: save knot span domains for comparing error with location in knot span
     master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
             { b->knot_span_domains(cp); });
-
-    // debug: write raw original and approximated points (good for one block only)
-//     master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-//             { b->write_raw(cp); });
 
     // print results
     fprintf(stderr, "\n------- Final block results --------\n");
