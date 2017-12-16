@@ -45,6 +45,7 @@ namespace mfa
                 MatrixX<T>& Q,              // input points
                 MatrixX<T>& N,              // basis functions
                 MatrixX<T>& NtN,            // N^T * N
+                int         curve_id,       // debugging
                 VectorX<T>& weights);       // output weights
 
         // default domain
@@ -84,6 +85,7 @@ namespace mfa
                 size_t      to,          // starting ofst for writing control pts
                 MatrixX<T>& temp_ctrl0,  // first temporary control points buffer
                 MatrixX<T>& temp_ctrl1,  // second temporary control points buffer
+                int         curve_id,    // debugging
                 bool        weighted = true);   // solve for and use weights
 
         void CopyCtrl(

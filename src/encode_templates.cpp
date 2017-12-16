@@ -34,6 +34,7 @@ Weights(
         MatrixXf& Q,                // input points
         MatrixXf& N,                // basis functions
         MatrixXf& NtN,              // N^T * N
+        int       curve_id,         // debugging
         VectorXf& weights);         // output weights
 
 template
@@ -87,6 +88,7 @@ CtrlCurve(
         size_t    to,          // starting ofst for writing control pts
         MatrixXf& temp_ctrl0,  // first temporary control points buffer
         MatrixXf& temp_ctrl1,  // second temporary control points buffer
+        int       curve_id,    // debugging
         bool      weighted = true);   // solve for and use weights
 
 template
@@ -205,6 +207,7 @@ Weights(
         MatrixXd& Q,                // input points
         MatrixXd& N,                // basis functions
         MatrixXd& NtN,              // N^T * N
+        int       curve_id,         // debugging
         VectorXd& weights);         // output weights
 
 template
@@ -258,6 +261,7 @@ CtrlCurve(
         size_t    to,          // starting ofst for writing control pts
         MatrixXd& temp_ctrl0,  // first temporary control points buffer
         MatrixXd& temp_ctrl1,  // second temporary control points buffer
+        int       curve_id,    // debugging
         bool      weighted = true);   // solve for and use weights
 
 template

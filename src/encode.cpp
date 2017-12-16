@@ -103,9 +103,8 @@ AdaptiveEncode(
     Encode(weighted);
 }
 
-#ifdef WEIGH_ALL_DIMS               // 2d curves in any current dimension (TODO: DEPRECATE)
-
 // linear solution of weights according to Ma and Kruth 1995 (M&K95)
+// 1d weights for range coordinate only
 // our N is M&K's B
 // our Q is M&K's X_bar
 // returns true if weights were found successfully, otherwise false
@@ -118,170 +117,7 @@ Weights(
         MatrixX<T>& Q,              // input points
         MatrixX<T>& N,              // basis functions
         MatrixX<T>& NtN,            // N^T * N
-        VectorX<T>& weights)        // output weights
-{
-    bool success;
-
-    // Nt, NtNi
-    // TODO: offer option of saving time or space by comuting Nt and NtN each time it is needed?
-    MatrixX<T> Nt   = N.transpose();
-    MatrixX<T> NtNi = NtN.partialPivLu().inverse();
-
-    int pt_dim = mfa.domain.cols();             // dimensionality of input and control points (domain and range)
-    vector<MatrixX<T>> NtQ2(2);                 // temp. matrices N^T x Q^2 for each dim of points
-    vector<MatrixX<T>> NtQ2N(2);                // matrices N^T x Q^2 x N for each dim of points
-    vector<MatrixX<T>> NtQ(2);                  // temp. matrices N^T x Q  for each dim of points
-    vector<MatrixX<T>> NtQN(2);                 // matrices N^T x Q x N for each dim of points
-
-    // allocate matrices of NtQ, NtQ2, NtQ2N, and NtQN
-    for (auto j = 0; j < 2; j++)
-    {
-        NtQ2[j]  = MatrixX<T>::Zero(Nt.rows(),   Nt.cols());
-        NtQ[j]   = MatrixX<T>::Zero(Nt.rows(),   Nt.cols());
-        NtQ2N[j] = MatrixX<T>::Zero(NtN.rows(),  NtN.cols());
-        NtQN[j]  = MatrixX<T>::Zero(NtN.rows(),  NtN.cols());
-    }
-
-    // temporary matrices NtQ and NtQ2
-    for (auto i = 0; i < Nt.cols(); i++)
-    {
-        T dom_pt_coord = Q(i, k);      // current coordinate of current input point
-        NtQ[0].col(i)  = Nt.col(i) * dom_pt_coord;
-        NtQ2[0].col(i) = Nt.col(i) * dom_pt_coord * dom_pt_coord;
-
-        dom_pt_coord   = Q(i, pt_dim - 1);      // current coordinate of current input point
-        NtQ[1].col(i)  = Nt.col(i) * dom_pt_coord;
-        NtQ2[1].col(i) = Nt.col(i) * dom_pt_coord * dom_pt_coord;
-    }
-
-    // final matrices NtQN and NtQ2N
-    NtQN[0]  = NtQ[0] * N;
-    NtQN[1]  = NtQ[1] * N;
-    NtQ2N[0] = NtQ2[0] * N;
-    NtQ2N[1] = NtQ2[1] * N;
-
-    // compute the matrix M according to eq.3 and eq. 4 of M&K95
-    MatrixX<T> M = MatrixX<T>::Zero(NtN.rows(), NtN.cols());
-//     for (auto j = 0; j < 2; j++)           // for all point dims
-    for (auto j = 1; j < 2; j++)           // only the range dim
-        M += NtQ2N[j] - NtQN[j] * NtNi * NtQN[j];
-
-    // compute the eigenvalues and eigenvectors of M (eq. 9 of M&K95)
-    Eigen::SelfAdjointEigenSolver<MatrixX<T>> eigensolver(M);
-    if (eigensolver.info() != Eigen::Success)
-    {
-        fprintf(stderr, "Error: Encoder::Weights(), computing eigenvalues of M failed, perhaps M is not self-adjoint?\n");
-        return false;
-    }
-    // debug
-//     cerr << "M:\n"            << M                          << endl;
-//     cerr << "Eigenvalues:\n"  << eigensolver.eigenvalues()  << endl;
-//     cerr << "Eigenvectors:\n" << eigensolver.eigenvectors() << endl;
-
-    const MatrixX<T>& EV    = eigensolver.eigenvectors();          // typing shortcut
-    const VectorX<T>& evals = eigensolver.eigenvalues();           // typing shortcut
-
-    // eigenvalues should be positive and distinct
-    for (auto i = 0; i < evals.size() - 1; i++)
-        if (evals(i) == 0.0 || evals(i) == evals(i + 1))
-        {
-            fprintf(stderr, "Warning: Weights(): eigenvalues should be positive and distinct.\n");
-            fprintf(stderr, "Aborting weights calculation\n");
-            return false;
-        }
-
-    // if smallest eigenvector is all positive or all negative, those are the weights
-    if ( (EV.col(0).array() > 0.0).all() )
-    {
-        weights = EV.col(0);
-        weights *= (1.0 / weights.maxCoeff());  // scale to max weight = 1
-        cerr << "successfully found weights from an all-positive first eigenvector" << endl;
-        success = true;
-    }
-    else if ( (EV.col(0).array() < 0.0).all() )
-    {
-        weights = -EV.col(0);
-        weights *= (1.0 / weights.maxCoeff());  // scale to max weight = 1
-        cerr << "successfully found weights from an all-negative first eigenvector" << endl;
-        success = true;
-    }
-
-    // if smallest eigenvector is mixed sign, then expand eigen space
-    else
-    {
-        fprintf(stderr, "\nExpanding eigenspace using linear solver\n");
-        T min_weight = 1.0;
-        T max_weight = 1.0e4;
-        success = false;
-        using namespace rehearse;
-
-        for (auto i = 2; i <= EV.cols(); i++)        // expand from 2 eigenvectors to all, one at a time
-        {
-            OsiClpSolverInterface *solver = new OsiClpSolverInterface();
-            CelModel model(*solver);
-
-            CelNumVarArray a;                               // solution variables
-            a.multiDimensionResize(1, i);
-
-            // add the constraints that the sum of elements (resulting weight) is positive
-            for (auto j = 0; j < weights.size(); j++)   // for all rows in the eigenvectors
-            {
-                CelExpression expr;
-                for (auto k = 0; k < i; k++)            // for current number of eigenvectors
-                    expr += a[k] * EV(j, k);
-                model.addConstraint(min_weight <= expr);
-                model.addConstraint(expr <= max_weight);
-            }
-
-            // solve
-            solver->setObjSense(-1.0);
-            model.builderToSolver();
-            solver->setLogLevel(0);
-            solver->initialSolve();
-
-            // copy out the solution and delete the solver
-            VectorX<T> solved_weights = VectorX<T>::Zero(weights.size());
-            for (auto k = 0; k < i; k++)                 // for current number of eigenvectors
-                solved_weights += model.getSolutionValue(a[k]) * EV.col(k);
-            delete solver;
-
-            // check if the solution was found successfully
-            // expand the min and max weights for the check by min_weight/2 to eliminate roundoff error
-            if ( (solved_weights.array() >= min_weight - min_weight / 2.0).all() &&
-                   (solved_weights.array() <= max_weight + min_weight / 2.0).all() )
-            {
-                weights = solved_weights;
-                weights *= (1.0 / weights.maxCoeff());  // scale to max weight = 1
-                success = true;
-                cerr << "successful linear solve from linear combination of " << i << " eigenvectors:\n" << weights << "\n" <<endl;
-                break;
-            }
-        }                                               // increasing number of eigenvectors
-
-        if (!success)
-        {
-            weights = VectorX<T>::Ones(weights.size());
-            fprintf(stderr, "linear solver could not find positive weights; setting to 1\n\n");
-        }
-    }                                                   // need to expand eigenspace
-    return success;
-}
-
-#else               // 1d weights for range coordinate only
-
-// linear solution of weights according to Ma and Kruth 1995 (M&K95)
-// our N is M&K's B
-// our Q is M&K's X_bar
-// returns true if weights were found successfully, otherwise false
-template <typename T>
-bool
-mfa::
-Encoder<T>::
-Weights(
-        int         k,              // current dimension
-        MatrixX<T>& Q,              // input points
-        MatrixX<T>& N,              // basis functions
-        MatrixX<T>& NtN,            // N^T * N
+        int         curve_id,       // debugging
         VectorX<T>& weights)        // output weights
 {
     bool success;
@@ -358,6 +194,7 @@ Weights(
     {
         success = false;
 
+
 #if 0                                   // debug: read a linear program from an input file
 
         // The solution will be different because the input problem is slightly different
@@ -365,7 +202,7 @@ Weights(
 
         fprintf(stderr, "\nDebug mode: solving a linear program from a file\n");
         OsiClpSolverInterface *solver = new OsiClpSolverInterface();
-        int status = solver->readMps("linear_program");
+        int status = solver->readMps("bad_linear_program");
 
         if (!status)                    // no errors reading the model
         {
@@ -411,10 +248,15 @@ Weights(
         fprintf(stderr, "\nExpanding eigenspace using linear solver\n");
         T min_weight = 1.0;
         T max_weight = 1.0e4;
+        // minimum eigenvector element, if less, clamp to 0.0
+        // between 1e-5 and 1e-12 seems to work
+        T min_ev_val = 1.0e-5;
         using namespace rehearse;
 
         for (auto i = 2; i <= EV.cols(); i++)        // expand from 2 eigenvectors to all, one at a time
         {
+//             cerr << "i = " << i << endl;
+
             OsiClpSolverInterface *solver = new OsiClpSolverInterface();
             CelModel model(*solver);
 
@@ -426,7 +268,10 @@ Weights(
             {
                 CelExpression expr;
                 for (auto k = 0; k < i; k++)            // for current number of eigenvectors
-                    expr += a[k] * EV(j, k);
+                {
+                    T coeff = fabs(EV(j, k)) < min_ev_val ? 0.0 : EV(j, k);
+                    expr += a[k] * coeff;
+                }
                 model.addConstraint(min_weight <= expr);
                 model.addConstraint(expr <= max_weight);
             }
@@ -435,26 +280,30 @@ Weights(
             model.builderToSolver();
 
             // debug: save the input problem in MPS format
-            if (i == 124)
-                solver->writeMps("linear_program");
+//             if (curve_id == 25 && i == 88)
+//                 solver->writeMps("good_linear_program");
+//             if (curve_id == 26 && i == 90)
+//                 solver->writeMps("bad_linear_program");
 
             // solve
             solver->setLogLevel(0);
-            solver->setIntParam(OsiMaxNumIteration, 100);
             solver->initialSolve();
 
-            // copy out the solution
-            VectorX<T> solved_weights = VectorX<T>::Zero(weights.size());
-            for (auto k = 0; k < i; k++)                 // for current number of eigenvectors
-                solved_weights += model.getSolutionValue(a[k]) * EV.col(k);
-
-            // check if the solution was found successfully
-            if ( (solved_weights.array() > 0.0).all() )
+            if (!solver->isProvenPrimalInfeasible() && !solver->isIterationLimitReached())
             {
-                weights = solved_weights;
-                weights *= (1.0 / weights.maxCoeff());  // scale to max weight = 1
-                success = true;
-                cerr << "successful linear solve from linear combination of " << i << " eigenvectors:" << endl;
+                // copy out the solution
+                VectorX<T> solved_weights = VectorX<T>::Zero(weights.size());
+                for (auto k = 0; k < i; k++)                 // for current number of eigenvectors
+                    solved_weights += model.getSolutionValue(a[k]) * EV.col(k);
+
+                // check if the solution was found successfully
+                if ( (solved_weights.array() > 0.0).all() )
+                {
+                    weights = solved_weights;
+                    weights *= (1.0 / weights.maxCoeff());  // scale to max weight = 1
+                    success = true;
+                    cerr << "successful linear solve from linear combination of " << i << " eigenvectors:" << endl;
+                }
             }
 
             delete solver;
@@ -473,8 +322,6 @@ Weights(
     }                                                   // need to expand eigenspace
     return success;
 }
-
-#endif
 
 #if 0
 
@@ -608,7 +455,7 @@ Encode(bool weighted)                      // solve for and use weights
             MatrixX<T> P(N.cols(), mfa.domain.cols());
 
             // compute the one curve of control points
-            CtrlCurve(N, NtN, R, P, k, co[j], cs, to[j], temp_ctrl0, temp_ctrl1, weighted);
+            CtrlCurve(N, NtN, R, P, k, co[j], cs, to[j], temp_ctrl0, temp_ctrl1, -1, weighted);
         });                                                  // curves in this dimension
 
         // adjust offsets and strides for next dimension
@@ -764,7 +611,7 @@ Encode(bool weighted)                           // solve for and use weights
                 cerr << "curve # " << j << endl;
 
             // compute the one curve of control points
-            CtrlCurve(N, NtN, R, P, k, co[j], cs, to[j], temp_ctrl0, temp_ctrl1, weighted);
+            CtrlCurve(N, NtN, R, P, k, co[j], cs, to[j], temp_ctrl0, temp_ctrl1, j, weighted);
         }
 
         // adjust offsets and strides for next dimension
@@ -1048,6 +895,7 @@ CtrlCurve(MatrixX<T>& N,          // basis functions for current dimension
           size_t      to,         // starting ofst for writing control pts
           MatrixX<T>& temp_ctrl0, // first temporary control points buffer
           MatrixX<T>& temp_ctrl1, // second temporary control points buffer
+          int         curve_id,   // debugging
           bool        weighted)   // solve for and use weights (default = true)
 {
     // solve for weights
@@ -1077,7 +925,7 @@ CtrlCurve(MatrixX<T>& N,          // basis functions for current dimension
     {
         if (k == mfa.p.size() - 1)                  // last dimension
         {
-            if (!Weights(k, Q, N, NtN, weights))    // solve for weights
+            if (!Weights(k, Q, N, NtN, curve_id, weights))    // solve for weights
             {
                 // if weights not found, copy from previous curve, written to the mfa already
                 // TODO: cheap hack; need a more robust way to make the weights similar across curves
