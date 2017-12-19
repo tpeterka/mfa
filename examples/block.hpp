@@ -71,27 +71,11 @@ struct ErrArgs
 template <typename T>
 struct Block
 {
-    Block() {}
-
-    Block(
-            int           dom_dim,
-            int           pt_dim,
-            const Bounds& bounds)
-    {
-        domain_mins.resize(pt_dim);
-        domain_maxs.resize(pt_dim);
-        for (int i = 0; i < dom_dim; i++)
-        {
-            domain_mins(i) = bounds.min[i];
-            domain_maxs(i) = bounds.max[i];
-        }
-    }
+    static
+        void* create()          { return new Block; }
 
     static
-        void* create()
-        {
-            return new Block;
-        }
+        void destroy(void* b)   { delete static_cast<Block*>(b); }
 
     static
         void add(                               // add the block to the decomposition
@@ -104,17 +88,20 @@ struct Block
             int              dom_dim,           // domain dimensionality
             int              pt_dim)            // point dimensionality
     {
-        Block*          b   = new Block(dom_dim, pt_dim, core);
+        Block*          b   = new Block;
         diy::Link*      l   = new diy::Link(link);
         diy::Master&    m   = const_cast<diy::Master&>(master);
         m.add(gid, b, l);
+
+        b->domain_mins.resize(pt_dim);
+        b->domain_maxs.resize(pt_dim);
+        for (int i = 0; i < dom_dim; i++)
+        {
+            b->domain_mins(i) = core.min[i];
+            b->domain_maxs(i) = core.max[i];
+        }
     }
 
-    static
-        void destroy(void* b)
-        {
-            delete static_cast<Block*>(b);
-        }
     static
         void save(
                 const void*        b_,

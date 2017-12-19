@@ -166,6 +166,10 @@ Weights(
     const MatrixX<T>& EV    = eigensolver.eigenvectors();          // typing shortcut
     const VectorX<T>& evals = eigensolver.eigenvalues();           // typing shortcut
 
+    // debug
+//     if (curve_id == 26)
+//         cerr << "eigenvalues:\n" << evals << endl;
+
     // eigenvalues should be positive and distinct
     for (auto i = 0; i < evals.size() - 1; i++)
         if (evals(i) == 0.0 || evals(i) == evals(i + 1))
