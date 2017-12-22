@@ -7,25 +7,13 @@
 // tpeterka@mcs.anl.gov
 //--------------------------------------------------------------
 
-#include <mfa/mfa.hpp>
-#include <mfa/encode.hpp>
-#include <mfa/decode.hpp>
-#include <mfa/new_knots.hpp>
-#include <iostream>
-#include <fstream>
-#include <set>
-
-// // rehearse and coin-or (linear program) headers
-// #include <coin/CelModel.h>
-// #include <coin/CelNumVar.h>
-// #include <coin/CelIntVar.h>
-// #include <coin/CelBoolVar.h>
-// #include <coin/CelNumVarArray.h>
-// #include <coin/CelBoolVarArray.h>
-// #include "coin/CbcModel.hpp"
-// #include "coin/OsiClpSolverInterface.hpp"
-// #include "coin/OsiCbcSolverInterface.hpp"
-
+#include    <mfa/mfa.hpp>
+#include    <mfa/encode.hpp>
+#include    <mfa/decode.hpp>
+#include    <mfa/new_knots.hpp>
+#include    <iostream>
+#include    <fstream>
+#include    <set>
 #include    "coin/ClpSimplex.hpp"
 #include    "coin/ClpInterior.hpp"
 
@@ -169,10 +157,6 @@ Weights(
     const MatrixX<T>& EV    = eigensolver.eigenvectors();          // typing shortcut
     const VectorX<T>& evals = eigensolver.eigenvalues();           // typing shortcut
 
-    // debug
-//     if (curve_id == 26)
-//         cerr << "eigenvalues:\n" << evals << endl;
-
     // eigenvalues should be positive and distinct
     for (auto i = 0; i < evals.size() - 1; i++)
         if (evals(i) == 0.0 || evals(i) == evals(i + 1))
@@ -199,230 +183,12 @@ Weights(
     // if smallest eigenvector is mixed sign, then expand eigen space
     else
     {
-        success = false;
-
-
-#if 0                                   // debug: read a linear program from an input file
-
-        // The solution will be different because the input problem is slightly different
-        // Coin-or truncated very small values to 0 upon reading in the MPS file.
-
-        fprintf(stderr, "\nDebug mode: solving a linear program from a file\n");
-        OsiClpSolverInterface *solver = new OsiClpSolverInterface();
-        int status = solver->readMps("bad_linear_program");
-
-        if (!status)                    // no errors reading the model
-        {
-            // solve
-            solver->setLogLevel(0);
-            solver->initialSolve();
-
-            // check
-            cerr << "optimal = " << solver->isProvenOptimal() << " infeasible = "
-                << solver->isProvenPrimalInfeasible() << " iteration limit reached = "
-                << solver->isIterationLimitReached() << endl;
-
-            // copy out the solution
-            VectorX<T> solved_weights = VectorX<T>::Zero(weights.size());
-            int ncols = solver->getNumCols();
-            const double* colSol = solver->getColSolution();
-            // columns were written by rehearse into the solver in opposite order
-            for (auto k = 0; k < ncols; k++)
-                solved_weights += colSol[ncols - 1 - k] * EV.col(k);
-
-            // debug: solution
-//             cerr << "solution:" << endl;
-//             for (auto k = 0; k < ncols; k++)
-//                 cerr << colSol[ncols - 1 - k] << endl;
-//             cerr << "solved_weights:\n" << solved_weights << endl;
-
-            // check if the solution was found successfully
-            if ( (solved_weights.array() > 0.0).all() )
-            {
-                weights = solved_weights;
-                weights *= (1.0 / weights.maxCoeff());  // scale to max weight = 1
-                success = true;
-                cerr << "successful linear solve from file input" << endl;
-            }
-        }
-        else
-            cerr << "Error: unable to read MPS file" << endl;
-
-        delete solver;
-
-#endif
-
-#if 0           // set up the linear program from the expanding eigenvectors using the rehearse interface
-
-        fprintf(stderr, "\nExpanding eigenspace using linear solver\n");
+//         fprintf(stderr, "\nExpanding eigenspace using linear solver\n");
+        success      = false;
         T min_weight = 1.0;
         T max_weight = 1.0e4;
-        // minimum eigenvector element, if less, clamp to 0.0
-        // between 1e-5 and 1e-12 seems to work
-        T min_ev_val = 1.0e-10;
-        using namespace rehearse;
-
-        for (auto i = 2; i <= EV.cols(); i++)        // expand from 2 eigenvectors to all, one at a time
-        {
-//             cerr << "i = " << i << endl;
-
-            OsiClpSolverInterface *solver = new OsiClpSolverInterface();
-            CelModel model(*solver);
-
-            CelNumVarArray a;                               // solution variables
-            a.multiDimensionResize(1, i);
-
-            // add the constraints that the sum of elements (resulting weight) is positive
-            for (auto j = 0; j < weights.size(); j++)   // for all rows in the eigenvectors
-            {
-                CelExpression expr;
-                for (auto k = 0; k < i; k++)            // for current number of eigenvectors
-                {
-                    T coeff = fabs(EV(j, k)) < min_ev_val ? 0.0 : EV(j, k);
-                    expr += a[k] * coeff;
-                }
-                model.addConstraint(min_weight <= expr);
-                model.addConstraint(expr <= max_weight);
-            }
-
-            // convert rehearse model to coin-or solver
-            model.builderToSolver();
-
-            // debug: save the input problem in MPS format
-//             if (curve_id == 25 && i == 88)
-//                 solver->writeMps("good_linear_program");
-//             if (curve_id == 26 && i == 90)
-//                 solver->writeMps("bad_linear_program");
-            if (i == 2)
-                solver->writeMps("debug_rehearse");
-
-            // solve
-            solver->setLogLevel(0);
-            solver->initialSolve();
-
-            if (!solver->isProvenPrimalInfeasible() && !solver->isIterationLimitReached())
-            {
-                // copy out the solution
-                VectorX<T> solved_weights = VectorX<T>::Zero(weights.size());
-                for (auto k = 0; k < i; k++)                 // for current number of eigenvectors
-                    solved_weights += model.getSolutionValue(a[k]) * EV.col(k);
-
-                // check if the solution was found successfully
-                if ( (solved_weights.array() > 0.0).all() )
-                {
-                    weights = solved_weights;
-                    weights *= (1.0 / weights.maxCoeff());  // scale to max weight = 1
-                    success = true;
-                    cerr << "successful linear solve from linear combination of " << i << " eigenvectors:" << endl;
-                }
-            }
-
-            delete solver;
-
-            if (success)
-                break;
-        }                                               // increasing number of eigenvectors
-
-#endif
-
-#if 0               // set up the linear program from the expanding eigenvectors using the OSI interface
-
-        fprintf(stderr, "\nExpanding eigenspace using linear solver\n");
-        T min_weight = 1.0;
-        T max_weight = 1.0e4;
-        T max_colvar = 1.0e30;                      // max value of column variable
-        // minimum eigenvector element, if less, clamp to 0.0
-        // between 1e-5 and 1e-12 seems to work
-        T min_ev_val = 1.0e-10;
-
-        // linear program RHS upper bound
-        vector<double> ub(2 * weights.size());
-        for (auto i = 0; i < weights.size(); i++)
-        {
-            ub[2 * i]     = -min_weight;
-            ub[2 * i + 1] = max_weight;
-        }
-
-        // linear program column bounds (for the max. number of columns)
-        vector<double> col_ub(EV.cols(), max_colvar);
-        vector<double> col_lb(EV.cols(), -max_colvar);
-
-        OsiClpSolverInterface *solver = new OsiClpSolverInterface();
-        CoinPackedMatrix a;                     // constraint matrix
-
-        for (auto i = 2; i <= EV.cols(); i++)        // expand from 2 eigenvectors to all, one at a time
-        {
-//             cerr << "i = " << i << endl;
-
-            // build the problem
-            // TODO: slowest way, element by element, copy entire rows or matrices instead
-//             CoinPackedMatrix a;                     // constraint matrix
-            a.setDimensions(2 * weights.size(), i);
-            for (auto j = 0; j < weights.size(); j++)   // for all rows in the eigenvectors
-            {
-                for (auto k = 0; k < i; k++)            // for current number of eigenvectors
-                {
-                    // order of eigenvector columns reversed to match coin-or rehearse interface
-                    // seems to work better with this column order, don't know why (TODO)
-                    T coeff = fabs(EV(j, i - k - 1)) < min_ev_val ? 0.0 : EV(j, i - k - 1);
-                    a.modifyCoefficient(2 * j,     k, -coeff);
-                    a.modifyCoefficient(2 * j + 1, k, coeff);
-                }
-            }
-
-            // load the problem
-            solver->loadProblem(a, &col_lb[0], &col_ub[0], 0, 0, &ub[0]);
-
-            // debug: save the input problem in MPS format
-//             if (curve_id == 25 && i == 88)
-//                 solver->writeMps("good_linear_program");
-//             if (curve_id == 26 && i == 90)
-//                 solver->writeMps("bad_linear_program");
-            if (i == 2)
-                solver->writeMps("debug_osi");
-
-            // solve
-            solver->setLogLevel(0);
-            solver->initialSolve();
-
-            if (!solver->isProvenPrimalInfeasible() && !solver->isIterationLimitReached())
-            {
-//                 fprintf(stderr, "feasible solution\n");
-
-                // copy out the solution
-                VectorX<T>    solved_weights = VectorX<T>::Zero(weights.size());
-                int           ncols          = solver->getNumCols();
-                const double* colSol         = solver->getColSolution();
-                // order of eigenvector columns reversed to match coin-or rehearse interface
-                // seems to work better with this column order, don't know why (TODO)
-                for (auto k = 0; k < ncols; k++)
-                    solved_weights += colSol[k] * EV.col(i - k - 1);
-
-                // check if the solution was found successfully
-                if ( (solved_weights.array() > 0.0).all() )
-                {
-                    weights = solved_weights;
-                    weights *= (1.0 / weights.maxCoeff());  // scale to max weight = 1
-                    success = true;
-                    cerr << "successful linear solve from linear combination of " << i << " eigenvectors:" << endl;
-                }
-            }
-
-            if (success)
-                break;
-        }                                               // increasing number of eigenvectors
-
-        delete solver;
-
-#endif
-
-#if 1               // set up the linear program from the expanding eigenvectors using the coin native interface
-
-        fprintf(stderr, "\nExpanding eigenspace using linear solver\n");
-        T min_weight = 1.0;
-        T max_weight = 1.0e4;
-        // minimum eigenvector element, if less, clamp to 0.0 (between 1e-5 and 1e-12 seems to work)
-        T min_ev_val = 1.0e-10;
+        // minimum eigenvector element, if less, clamp to 0.0 (between 1e-6 and 1e-12 seems to help)
+        T min_ev_val = 1.0e-12;
 
         auto nweights = weights.size();
 
@@ -446,42 +212,20 @@ Weights(
         vector<double> newcol(nweights * 2);
         for (auto j = 0; j < nweights; j++)
         {
-            if (fabs(EV(j, 0)) < min_ev_val)
-            {
-                newcol[j]            = 0.0;
-                newcol[nweights + j] = 0.0;
-            }
-            else
-            {
-                newcol[j]            =  EV(j, 0);
-                newcol[nweights + j] = -EV(j, 0);
-            }
+            newcol[j]            = fabs(EV(j, 0)) < min_ev_val ? 0.0 : EV(j, 0);
+            newcol[nweights + j] = -newcol[j];
         }
         model.addColumn(2 * nweights, &col_idx[0], &newcol[0], -COIN_DBL_MAX, COIN_DBL_MAX);
 
         for (auto i = 2; i <= EV.cols(); i++)        // expand from 2 eigenvectors to all, one at a time
         {
-//             cerr << "i = " << i << endl;
-
             // add another column
             for (auto j = 0; j < nweights; j++)
             {
-                if (fabs(EV(j, i - 1)) < min_ev_val)
-                {
-                    newcol[j]            = 0.0;
-                    newcol[nweights + j] = 0.0;
-                }
-                else
-                {
-                    newcol[j]            =  EV(j, i - 1);
-                    newcol[nweights + j] = -EV(j, i - 1);
-                }
+                newcol[j]            = fabs(EV(j, i - 1)) < min_ev_val ? 0.0 : EV(j, i - 1);
+                newcol[nweights + j] = -newcol[j];
             }
             model.addColumn(2 * nweights, &col_idx[0], &newcol[0], -COIN_DBL_MAX, COIN_DBL_MAX);
-
-            // debug: save the input problem in MPS format
-//             if (i == 2)
-//                 model.writeMps("debug_coin");
 
             // solve
             model.setLogLevel(0);
@@ -490,8 +234,6 @@ Weights(
 
             if (!model.isProvenPrimalInfeasible() && !model.isIterationLimitReached())
             {
-//                 fprintf(stderr, "feasible solution\n");
-
                 // copy out the solution
                 VectorX<T>    solved_weights = VectorX<T>::Zero(nweights);
                 int           ncols          = model.getNumCols();
@@ -505,7 +247,7 @@ Weights(
                     weights = solved_weights;
                     weights *= (1.0 / weights.maxCoeff());  // scale to max weight = 1
                     success = true;
-                    cerr << "successful linear solve from linear combination of " << i << " eigenvectors:" << endl;
+                    fprintf(stderr, "curve %d: successful linear solve from %d eigenvectors\n", curve_id, i);
                 }
             }
 
@@ -513,14 +255,12 @@ Weights(
                 break;
         }                                               // increasing number of eigenvectors
 
-#endif
-
         if (!success)
         {
             weights = VectorX<T>::Ones(nweights);
-            fprintf(stderr, "linear solver could not find positive weights; setting to 1\n\n");
+            fprintf(stderr, "curve %d: linear solver could not find positive weights; setting to 1\n", curve_id);
         }
-    }                                                   // need to expand eigenspace
+    }                                                   // else need to expand eigenspace
 
     return success;
 }
@@ -807,10 +547,6 @@ Encode(bool weighted)                           // solve for and use weights
             if (j > 0 && j > 100 && j % (ncurves / 100) == 0)
                 fprintf(stderr, "\r dimension %ld: %.0f %% encoded (%ld out of %ld curves)",
                         k, (T)j / (T)ncurves * 100, j, ncurves);
-
-            // debug
-            if (k == ndims - 1)
-                cerr << "curve # " << j << endl;
 
             // compute the one curve of control points
             CtrlCurve(N, NtN, R, P, k, co[j], cs, to[j], temp_ctrl0, temp_ctrl1, j, weighted);
