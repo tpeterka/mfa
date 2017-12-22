@@ -25,18 +25,24 @@ Build dependencies
 - [eigen](http://eigen.tuxfamily.org)
 - [MPI](http://www.mpich.org)
 - [TBB](https://www.threadingbuildingblocks.org)
+- [COIN-OR CLP](https://projects.coin-or.org/Clp)
 
 Build mfa
 
 ```
 git clone https://bitbucket.org/tpeterka1/mfa
+cd mfa
+mkdir build
+cd build
 
 cmake .. \
 -DCMAKE_CXX_COMPILER=mpicxx \
 -DCMAKE_INSTALL_PREFIX=/path/to/mfa/install \
 -DDIY_INCLUDE_DIRS=/path/to/diy/include \
 -DEIGEN_INCLUDE_DIRS=/path/to/eigen3 \
--DTBB_INCLUDE_DIR=/path/to/tbb/include
+-DTBB_INCLUDE_DIR=/path/to/tbb/include \
+-DCLP_INCLUDE_DIRS=/path/to/Clp/include \
+-DCLP_LIB=/path/to/Clp/lib/libClp.a # or libClp.so or libClp.dylib
 
 make
 make install
