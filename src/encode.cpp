@@ -15,16 +15,16 @@
 #include <fstream>
 #include <set>
 
-// rehearse and coin-or (linear program) headers
-#include <coin/CelModel.h>
-#include <coin/CelNumVar.h>
-#include <coin/CelIntVar.h>
-#include <coin/CelBoolVar.h>
-#include <coin/CelNumVarArray.h>
-#include <coin/CelBoolVarArray.h>
-#include "coin/CbcModel.hpp"
-#include "coin/OsiClpSolverInterface.hpp"
-#include "coin/OsiCbcSolverInterface.hpp"
+// // rehearse and coin-or (linear program) headers
+// #include <coin/CelModel.h>
+// #include <coin/CelNumVar.h>
+// #include <coin/CelIntVar.h>
+// #include <coin/CelBoolVar.h>
+// #include <coin/CelNumVarArray.h>
+// #include <coin/CelBoolVarArray.h>
+// #include "coin/CbcModel.hpp"
+// #include "coin/OsiClpSolverInterface.hpp"
+// #include "coin/OsiCbcSolverInterface.hpp"
 
 #include    "coin/ClpSimplex.hpp"
 #include    "coin/ClpInterior.hpp"
@@ -421,52 +421,67 @@ Weights(
         fprintf(stderr, "\nExpanding eigenspace using linear solver\n");
         T min_weight = 1.0;
         T max_weight = 1.0e4;
-        T max_colvar = 1.0e30;                      // max value of column variable
-        // minimum eigenvector element, if less, clamp to 0.0
-        // between 1e-5 and 1e-12 seems to work
+        // minimum eigenvector element, if less, clamp to 0.0 (between 1e-5 and 1e-12 seems to work)
         T min_ev_val = 1.0e-10;
 
-        // linear program RHS upper bound
-        vector<double> ub(2 * weights.size());
-        for (auto i = 0; i < weights.size(); i++)
-        {
-            ub[2 * i]     = -min_weight;
-            ub[2 * i + 1] = max_weight;
-        }
+        auto nweights = weights.size();
 
-        // linear program column bounds (for the max. number of columns)
-        vector<double> col_ub(EV.cols(), max_colvar);
-        vector<double> col_lb(EV.cols(), -max_colvar);
+        // column indices
+        vector<int> col_idx(2 * nweights);
+        for (auto j = 0; j < 2 * nweights; j++)
+            col_idx[j] = j;
 
         ClpSimplex model;                           // simplex method, ~10X faster than interior point
 //         ClpInterior model;                          // interior point method
-        CoinPackedMatrix a;                         // constraint matrix
+        model.resize(2 * nweights, 0);              // all the rows and no columns (columns are added incrementally)
+
+        // row upper bounds
+        for (auto i = 0; i < nweights; i++)
+        {
+            model.setRowUpper(i, max_weight);
+            model.setRowUpper(nweights + i, -min_weight);
+        }
+
+        // first column of the matrix
+        vector<double> newcol(nweights * 2);
+        for (auto j = 0; j < nweights; j++)
+        {
+            if (fabs(EV(j, 0)) < min_ev_val)
+            {
+                newcol[j]            = 0.0;
+                newcol[nweights + j] = 0.0;
+            }
+            else
+            {
+                newcol[j]            =  EV(j, 0);
+                newcol[nweights + j] = -EV(j, 0);
+            }
+        }
+        model.addColumn(2 * nweights, &col_idx[0], &newcol[0], -COIN_DBL_MAX, COIN_DBL_MAX);
 
         for (auto i = 2; i <= EV.cols(); i++)        // expand from 2 eigenvectors to all, one at a time
         {
 //             cerr << "i = " << i << endl;
 
-            // build the problem
-            // TODO: slowest way, element by element, copy entire rows or matrices instead
-            a.setDimensions(2 * weights.size(), i);
-            for (auto j = 0; j < weights.size(); j++)   // for all rows in the eigenvectors
+            // add another column
+            for (auto j = 0; j < nweights; j++)
             {
-                for (auto k = 0; k < i; k++)            // for current number of eigenvectors
+                if (fabs(EV(j, i - 1)) < min_ev_val)
                 {
-                    // order of eigenvector columns reversed to match coin-or rehearse interface
-                    // seems to work better with this column order, don't know why (TODO)
-                    T coeff = fabs(EV(j, i - k - 1)) < min_ev_val ? 0.0 : EV(j, i - k - 1);
-                    a.modifyCoefficient(2 * j,     k, -coeff);
-                    a.modifyCoefficient(2 * j + 1, k, coeff);
+                    newcol[j]            = 0.0;
+                    newcol[nweights + j] = 0.0;
+                }
+                else
+                {
+                    newcol[j]            =  EV(j, i - 1);
+                    newcol[nweights + j] = -EV(j, i - 1);
                 }
             }
-
-            // load the problem
-            model.loadProblem(a, &col_lb[0], &col_ub[0], 0, 0, &ub[0]);
+            model.addColumn(2 * nweights, &col_idx[0], &newcol[0], -COIN_DBL_MAX, COIN_DBL_MAX);
 
             // debug: save the input problem in MPS format
-            if (i == 2)
-                model.writeMps("debug_coin");
+//             if (i == 2)
+//                 model.writeMps("debug_coin");
 
             // solve
             model.setLogLevel(0);
@@ -478,13 +493,11 @@ Weights(
 //                 fprintf(stderr, "feasible solution\n");
 
                 // copy out the solution
-                VectorX<T>    solved_weights = VectorX<T>::Zero(weights.size());
+                VectorX<T>    solved_weights = VectorX<T>::Zero(nweights);
                 int           ncols          = model.getNumCols();
                 const double* colSol         = model.getColSolution();
-                // order of eigenvector columns reversed to match coin-or rehearse interface
-                // seems to work better with this column order, don't know why (TODO)
                 for (auto k = 0; k < ncols; k++)
-                    solved_weights += colSol[k] * EV.col(i - k - 1);
+                    solved_weights += colSol[k] * EV.col(k);
 
                 // check if the solution was found successfully
                 if ( (solved_weights.array() > 0.0).all() )
@@ -504,7 +517,7 @@ Weights(
 
         if (!success)
         {
-            weights = VectorX<T>::Ones(weights.size());
+            weights = VectorX<T>::Ones(nweights);
             fprintf(stderr, "linear solver could not find positive weights; setting to 1\n\n");
         }
     }                                                   // need to expand eigenspace
