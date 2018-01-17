@@ -140,6 +140,7 @@ Weights(
     MatrixX<T> M = NtQ2N - NtQN * NtNi * NtQN;
 
     // debug: output the matrix M
+//     cerr << M << endl;
 //     Eigen::IOFormat OctaveFmt(Eigen::StreamPrecision, 0, ", ", ";\n", "", "", "[", "]");
 //     ofstream M_out;
 //     M_out.open("M.txt");
@@ -147,6 +148,8 @@ Weights(
 //     M_out.close();
 
     // compute the eigenvalues and eigenvectors of M (eq. 9 of M&K95)
+    // NB: M is self-adjoint (ie, real and symmetric)
+    // Eigen's SelfAdjointEigenSolver is faster than its normal EigenSolver in this case
     Eigen::SelfAdjointEigenSolver<MatrixX<T>> eigensolver(M);
     if (eigensolver.info() != Eigen::Success)
     {

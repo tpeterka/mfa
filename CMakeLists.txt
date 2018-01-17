@@ -90,6 +90,7 @@ include_directories         (${CMAKE_CURRENT_SOURCE_DIR}/include
 set                         (libraries
                              ${libraries}
                              ${CLP_LIB}
+                             ${COIN_UTILS_LIB}
                              ${CMAKE_THREAD_LIBS_INIT})
 
 # Subdirectories
