@@ -54,6 +54,7 @@ struct DomainArgs
     real_t    min[MAX_DIM];                      // minimum corner of domain
     real_t    max[MAX_DIM];                      // maximum corner of domain
     real_t    s;                                 // scaling factor or any other usage
+    real_t    r;                                 // x-y rotation or any other usage
     char      infile[256];                       // input filename
     bool      weighted;                          // solve for and use weights (default = true)
     bool      multiblock;                        // multiblock domain, get bounds from block
@@ -568,7 +569,7 @@ struct Block
 
         // assign values to the domain (geometry)
         int cs = 1;                           // stride of a coordinate in this dim
-        real_t eps = 1.0e-5;                   // real_ting point roundoff error
+        real_t eps = 1.0e-5;                   // roundoff error
         for (int i = 0; i < a->dom_dim; i++)  // all dimensions in the domain
         {
             real_t d = (domain_maxs(i) - domain_mins(i)) / (ndom_pts(i) - 1);
@@ -609,6 +610,26 @@ struct Block
                 max = res;
             if (j == 0 || res < min)
                 min = res;
+        }
+
+        // optional rotation of the domain
+        if (a->r)
+        {
+            for (auto j = 0; j < tot_ndom_pts; j++)
+            {
+                real_t x = domain(j, 0);
+                real_t y = domain(j, 1);
+                domain(j, 0) = x * cos(a->r) - y * sin(a->r);
+                domain(j, 1) = x * sin(a->r) + y * cos(a->r);
+                if (j == 0 || domain(j, 0) < domain_mins(0))
+                    domain_mins(0) = domain(j, 0);
+                if (j == 0 || domain(j, 1) < domain_mins(1))
+                    domain_mins(1) = domain(j, 1);
+                if (j == 0 || domain(j, 0) > domain_maxs(0))
+                    domain_maxs(0) = domain(j, 0);
+                if (j == 0 || domain(j, 1) > domain_maxs(1))
+                    domain_maxs(1) = domain(j, 1);
+            }
         }
 
         // extents

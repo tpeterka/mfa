@@ -268,7 +268,7 @@ Weights(
     return success;
 }
 
-#if 0
+#if 1
 
 // TBB version
 // ~2X faster than serial, still expensive to compute curve offsets
@@ -595,21 +595,19 @@ RHS(
         int         co)                  // index of starting domain pt in current curve
 {
     int last   = mfa.domain.cols() - 1;             // column of range value
-    MatrixX<T> Rk(N.rows(), 2);                     // one row for each input point x 2 columns: 1 domain dimension and 1 range value
+    MatrixX<T> Rk(N.rows(), mfa.domain.cols());     // one row for each input point
     VectorX<T> denom(N.rows());                     // rational denomoninator for param of each input point
 
     for (int k = 0; k < N.rows(); k++)              // for all input points
     {
         denom(k) = (N.row(k).cwiseProduct(weights.transpose())).sum();
-        Rk(k, 0) = mfa.domain(co + k * mfa.ds[cur_dim], cur_dim);
-        Rk(k, 1) = mfa.domain(co + k * mfa.ds[cur_dim], last);
+        Rk.row(k) = mfa.domain.row(co + k * mfa.ds[cur_dim]);
     }
 
 #ifdef WEIGH_ALL_DIMS                               // weigh all dimensions
     // compute the matrix R (one row for each control point)
-    // 2 columns: 1 domain dimension and 1 range value
     for (int i = 0; i < N.cols(); i++)
-        for (int j = 0; j < 2; j++)
+        for (int j = 0; j < R.cols(); j++)
             // using array() for element-wise multiplication, which is what we want (not matrix mult.)
             R(i, j) =
                 (N.col(i).array() *                 // ith basis functions for input pts
@@ -617,17 +615,17 @@ RHS(
                  Rk.col(j).array()).sum();          // input points
 #else                                               // don't weigh domain coordinate (only range)
     // compute the matrix R (one row for each control point)
-    // 2 columns: 1 domain dimension and 1 range value
     for (int i = 0; i < N.cols(); i++)
     {
         // using array() for element-wise multiplication, which is what we want (not matrix mult.)
-        R(i, 0) =
-            (N.col(i).array() *                     // ith basis functions for input pts
-             Rk.col(0).array()).sum();              // input points
-        R(i, 1) =
+        for (int j = 0; j < R.cols() - 1; j++)
+            R(i, j) =
+                (N.col(i).array() *                 // ith basis functions for input pts
+                 Rk.col(j).array()).sum();          // input points
+        R(i, last) =
             (N.col(i).array() *                     // ith basis functions for input pts
              weights(i) / denom.array() *           // rationalized
-             Rk.col(1).array()).sum();              // input points
+             Rk.col(last).array()).sum();           // input points
     }
 #endif
 
@@ -655,21 +653,19 @@ RHS(
         int         cs)                  // stride of input pts in current curve
 {
     int last   = mfa.domain.cols() - 1;             // column of range value
-    MatrixX<T> Rk(N.rows(), 2);                     // one row for each input point x 2 columns: 1 domain dimension and 1 range value
+    MatrixX<T> Rk(N.rows(), mfa.domain.cols());     // one row for each input point
     VectorX<T> denom(N.rows());                     // rational denomoninator for param of each input point
 
     for (int k = 0; k < N.rows(); k++)
     {
         denom(k) = (N.row(k).cwiseProduct(weights.transpose())).sum();
-        Rk(k, 0) = in_pts(co + k * cs, cur_dim);
-        Rk(k, 1) = in_pts(co + k * cs, last);
+        Rk.row(k) = in_pts.row(co + k * cs);
     }
 
 #ifdef WEIGH_ALL_DIMS                               // weigh all dimensions
     // compute the matrix R (one row for each control point)
-    // 2 columns: 1 domain dimension and 1 range value
     for (int i = 0; i < N.cols(); i++)
-        for (int j = 0; j < 2; j++)
+        for (int j = 0; j < R.cols(); j++)
             // using array() for element-wise multiplication, which is what we want (not matrix mult.)
             R(i, j) =
                 (N.col(i).array() *                 // ith basis functions for input pts
@@ -677,17 +673,17 @@ RHS(
                  Rk.col(j).array()).sum();          // input points
 #else                                               // don't weigh domain coordinate (only range)
     // compute the matrix R (one row for each control point)
-    // 2 columns: 1 domain dimension and 1 range value
     for (int i = 0; i < N.cols(); i++)
     {
         // using array() for element-wise multiplication, which is what we want (not matrix mult.)
-        R(i, 0) =
-            (N.col(i).array() *                     // ith basis functions for input pts
-             Rk.col(0).array()).sum();              // input points
-        R(i, 1) =
+        for (int j = 0; j < R.cols() - 1; j++)
+            R(i, j) =
+                (N.col(i).array() *                 // ith basis functions for input pts
+                 Rk.col(j).array()).sum();          // input points
+        R(i, last) =
             (N.col(i).array() *                     // ith basis functions for input pts
              weights(i) / denom.array() *           // rationalized
-             Rk.col(1).array()).sum();              // input points
+             Rk.col(last).array()).sum();           // input points
     }
 #endif
 
@@ -897,33 +893,20 @@ CtrlCurve(MatrixX<T>& N,          // basis functions for current dimension
     mfa.Rationalize(k, weights, N, NtN_rat);
 
     // solve for P
-
 #ifdef WEIGH_ALL_DIMS                                   // weigh all dimensions
-    MatrixX<T> P2(P.rows(), 2);
-    P2 = NtN_rat.ldlt().solve(R);
-    for (auto i = 0; i < P.rows(); i++)
-    {
-        for (auto j = 0; j < P.cols() - 1; j++)
-            P(i, j) = (j == k ? P2(i, 0) : Q(i, j));
-        P(i, P.cols() - 1) = P2(i, 1);
-    }
+    P = NtN_rat.ldlt().solve(R);
 #else                                                   // don't weigh domain coordinate (only range)
-    MatrixX<T> P2(P.rows(), 2);
-    P2 = NtN.ldlt().solve(R);                           // nonrational domain coordinates
-    for (auto i = 0; i < P.rows(); i++)
-        for (auto j = 0; j < P.cols() - 1; j++)
-            P(i, j) = (j == k ? P2(i, 0) : Q(i, j));
+    // TODO: avoid 2 solves?
+    MatrixX<T> P2(P.rows(), P.cols());
+    P = NtN.ldlt().solve(R);                            // nonrational domain coordinates
     P2 = NtN_rat.ldlt().solve(R);                       // rational range coordinate
     for (auto i = 0; i < P.rows(); i++)
-        P(i, P.cols() - 1) = P2(i, 1);
+        P(i, P.cols() - 1) = P2(i, P.cols() - 1);
 #endif
 
     // append points from P to control points
     // TODO: any way to avoid this?
     CopyCtrl(P, k, co, cs, to, temp_ctrl0, temp_ctrl1);
-
-//     cerr << "P:\n" << P << endl;
-//     cerr << "temp_ctrl0:\n" << temp_ctrl0 << endl;
 
     // copy weights of final dimension to mfa
     if (k == mfa.p.size() - 1)

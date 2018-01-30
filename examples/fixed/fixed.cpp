@@ -46,6 +46,7 @@ int main(int argc, char** argv)
     int    nctrl     = 11;                       // input number of control points (same for all dims)
     string input     = "sine";                   // input dataset
     bool   weighted  = true;                     // solve for and use weights
+    real_t rot       = 0.0;                      // rotation angle in degrees
 
     // get command line arguments
     using namespace opts;
@@ -57,6 +58,7 @@ int main(int argc, char** argv)
     ops >> Option('c', "nctrl",   nctrl,    " number of control points in each dimension");
     ops >> Option('i', "input",   input,    " input dataset");
     ops >> Option('w', "weights", weighted, " solve for and use weights");
+    ops >> Option('r', "rotate",  rot,      " rotation angle of domain in degrees");
 
     if (ops >> Present('h', "help", "show help"))
     {
@@ -130,6 +132,7 @@ int main(int argc, char** argv)
             d_args.nctrl_pts[i] = nctrl;
         }
         d_args.s            = 10.0;              // scaling factor on range
+        d_args.r            = rot * M_PI / 180.0;  // domain rotation angle in rads
         master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
                 { b->generate_sinc_data(cp, d_args); });
     }
