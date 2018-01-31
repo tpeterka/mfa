@@ -756,6 +756,8 @@ InsertKnots(
     // increase number of control points (vector component-wise addition)
     nctrl_pts += nnew_knots;
     tot_nctrl =  nctrl_pts.prod();
+    weights.resize(tot_nctrl);
+    weights =  VectorX<T>::Ones(tot_nctrl);
 
     // update knot offsets
     for (size_t i = 1; i < p.size(); i++)

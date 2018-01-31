@@ -150,23 +150,14 @@ NewKnots_curve1(
 
                 // solve for P
 #ifdef WEIGH_ALL_DIMS                                           // weigh all dimensions
-                MatrixX<T> P2(P.rows(), 2);
-                P2 = NtN_rat.ldlt().solve(R);
-                for (auto i = 0; i < P.rows(); i++)
-                {
-                    for (auto j = 0; j < P.cols() - 1; j++)
-                        P(i, j) = (j == k ? P2(i, 0) : mfa.domain((mfa.co[k][j] + i) * mfa.ds[k], j));
-                    P(i, P.cols() - 1) = P2(i, 1);
-                }
+                P = NtN_rat.ldlt().solve(R);
 #else                                                           // don't weigh domain coordinate (only range)
-                MatrixX<T> P2(P.rows(), 2);
-                P2 = NtN.ldlt().solve(R);                   // nonrational domain coordinates
+                // TODO: avoid 2 solves?
+                MatrixX<T> P2(P.rows(), P.cols());
+                P = NtN.ldlt().solve(R);                            // nonrational domain coordinates
+                P2 = NtN_rat.ldlt().solve(R);                       // rational range coordinate
                 for (auto i = 0; i < P.rows(); i++)
-                    for (auto j = 0; j < P.cols() - 1; j++)
-                        P(i, j) = (j == k ? P2(i, 0) : mfa.domain((mfa.co[k][j] + i) * mfa.ds[k], j));
-                P2 = NtN_rat.ldlt().solve(R);               // rational range coordinate
-                for (auto i = 0; i < P.rows(); i++)
-                    P(i, P.cols() - 1) = P2(i, 1);
+                    P(i, P.cols() - 1) = P2(i, P.cols() - 1);
 #endif
 
                 // append points from P to control points
@@ -225,23 +216,14 @@ NewKnots_curve1(
 
         // solve for P
 #ifdef WEIGH_ALL_DIMS                                           // weigh all dimensions
-        MatrixX<T> P2(P.rows(), 2);
-        P2 = NtN_rat.ldlt().solve(R);
-        for (auto i = 0; i < P.rows(); i++)
-        {
-            for (auto j = 0; j < P.cols() - 1; j++)
-                P(i, j) = (j == k ? P2(i, 0) : mfa.domain((mfa.co[k][j] + i) * mfa.ds[k], j));
-            P(i, P.cols() - 1) = P2(i, 1);
-        }
+        P = NtN_rat.ldlt().solve(R);
 #else                                                           // don't weigh domain coordinate (only range)
-        MatrixX<T> P2(P.rows(), 2);
-        P2 = NtN.ldlt().solve(R);                   // nonrational domain coordinates
+        // TODO: avoid 2 solves?
+        MatrixX<T> P2(P.rows(), P.cols());
+        P = NtN.ldlt().solve(R);                            // nonrational domain coordinates
+        P2 = NtN_rat.ldlt().solve(R);                       // rational range coordinate
         for (auto i = 0; i < P.rows(); i++)
-            for (auto j = 0; j < P.cols() - 1; j++)
-                P(i, j) = (j == k ? P2(i, 0) : mfa.domain((mfa.co[k][j] + i) * mfa.ds[k], j));
-        P2 = NtN_rat.ldlt().solve(R);               // rational range coordinate
-        for (auto i = 0; i < P.rows(); i++)
-            P(i, P.cols() - 1) = P2(i, 1);
+            P(i, P.cols() - 1) = P2(i, P.cols() - 1);
 #endif
 
         // append points from P to control points
@@ -378,23 +360,14 @@ NewKnots_curve(
 
                     // solve for P
 #ifdef WEIGH_ALL_DIMS                                           // weigh all dimensions
-                    MatrixX<T> P2(P.rows(), 2);
-                    P2 = NtN_rat.ldlt().solve(R);
-                    for (auto i = 0; i < P.rows(); i++)
-                    {
-                        for (auto j = 0; j < P.cols() - 1; j++)
-                            P(i, j) = (j == k ? P2(i, 0) : mfa.domain((mfa.co[k][j] + i) * mfa.ds[k], j));
-                        P(i, P.cols() - 1) = P2(i, 1);
-                    }
+                    P = NtN_rat.ldlt().solve(R);
 #else                                                           // don't weigh domain coordinate (only range)
-                    MatrixX<T> P2(P.rows(), 2);
-                    P2 = NtN.ldlt().solve(R);               // nonrational domain coordinates
+                    // TODO: avoid 2 solves?
+                    MatrixX<T> P2(P.rows(), P.cols());
+                    P = NtN.ldlt().solve(R);                            // nonrational domain coordinates
+                    P2 = NtN_rat.ldlt().solve(R);                       // rational range coordinate
                     for (auto i = 0; i < P.rows(); i++)
-                        for (auto j = 0; j < P.cols() - 1; j++)
-                            P(i, j) = (j == k ? P2(i, 0) : mfa.domain((mfa.co[k][j] + i) * mfa.ds[k], j));
-                    P2 = NtN_rat.ldlt().solve(R);           // rational range coordinate
-                    for (auto i = 0; i < P.rows(); i++)
-                        P(i, P.cols() - 1) = P2(i, 1);
+                        P(i, P.cols() - 1) = P2(i, P.cols() - 1);
 #endif
 
                     // append points from P to control points
@@ -558,23 +531,14 @@ NewKnots_curve(
 
                 // solve for P
 #ifdef WEIGH_ALL_DIMS                                           // weigh all dimensions
-                MatrixX<T> P2(P.rows(), 2);
-                P2 = NtN_rat.ldlt().solve(R);
-                for (auto i = 0; i < P.rows(); i++)
-                {
-                    for (auto j = 0; j < P.cols() - 1; j++)
-                        P(i, j) = (j == k ? P2(i, 0) : mfa.domain((mfa.co[k][j] + i) * mfa.ds[k], j));
-                    P(i, P.cols() - 1) = P2(i, 1);
-                }
+                P = NtN_rat.ldlt().solve(R);
 #else                                                           // don't weigh domain coordinate (only range)
-                MatrixX<T> P2(P.rows(), 2);
-                P2 = NtN.ldlt().solve(R);                   // nonrational domain coordinates
+                // TODO: avoid 2 solves?
+                MatrixX<T> P2(P.rows(), P.cols());
+                P = NtN.ldlt().solve(R);                            // nonrational domain coordinates
+                P2 = NtN_rat.ldlt().solve(R);                       // rational range coordinate
                 for (auto i = 0; i < P.rows(); i++)
-                    for (auto j = 0; j < P.cols() - 1; j++)
-                        P(i, j) = (j == k ? P2(i, 0) : mfa.domain((mfa.co[k][j] + i) * mfa.ds[k], j));
-                P2 = NtN_rat.ldlt().solve(R);               // rational range coordinate
-                for (auto i = 0; i < P.rows(); i++)
-                    P(i, P.cols() - 1) = P2(i, 1);
+                    P(i, P.cols() - 1) = P2(i, P.cols() - 1);
 #endif
 
                 // append points from P to control points
@@ -633,23 +597,14 @@ NewKnots_curve(
 
         // solve for P
 #ifdef WEIGH_ALL_DIMS                                           // weigh all dimensions
-        MatrixX<T> P2(P.rows(), 2);
-        P2 = NtN_rat.ldlt().solve(R);
-        for (auto i = 0; i < P.rows(); i++)
-        {
-            for (auto j = 0; j < P.cols() - 1; j++)
-                P(i, j) = (j == k ? P2(i, 0) : mfa.domain((mfa.co[k][j] + i) * mfa.ds[k], j));
-            P(i, P.cols() - 1) = P2(i, 1);
-        }
+        P = NtN_rat.ldlt().solve(R);
 #else                                                           // don't weigh domain coordinate (only range)
-        MatrixX<T> P2(P.rows(), 2);
-        P2 = NtN.ldlt().solve(R);                   // nonrational domain coordinates
+        // TODO: avoid 2 solves?
+        MatrixX<T> P2(P.rows(), P.cols());
+        P = NtN.ldlt().solve(R);                            // nonrational domain coordinates
+        P2 = NtN_rat.ldlt().solve(R);                       // rational range coordinate
         for (auto i = 0; i < P.rows(); i++)
-            for (auto j = 0; j < P.cols() - 1; j++)
-                P(i, j) = (j == k ? P2(i, 0) : mfa.domain((mfa.co[k][j] + i) * mfa.ds[k], j));
-        P2 = NtN_rat.ldlt().solve(R);               // rational range coordinate
-        for (auto i = 0; i < P.rows(); i++)
-            P(i, P.cols() - 1) = P2(i, 1);
+            P(i, P.cols() - 1) = P2(i, P.cols() - 1);
 #endif
 
         // append points from P to control points

@@ -48,6 +48,7 @@ int main(int argc, char** argv)
     string input          = "sinc";                   // input dataset
     int    max_rounds     = 0;                        // max. number of rounds (0 = no maximum)
     bool   weighted       = true;                     // solve for and use weights
+    real_t rot            = 0.0;                      // rotation angle in degrees
 
     // get command line arguments
     using namespace opts;
@@ -60,6 +61,7 @@ int main(int argc, char** argv)
     ops >> Option('i', "input",   input,          " input dataset");
     ops >> Option('r', "rounds",  max_rounds,     " maximum number of iterations");
     ops >> Option('w', "weights", weighted,       " solve for and use weights");
+    ops >> Option('r', "rotate",  rot,            " rotation angle of domain in degrees");
 
     if (ops >> Present('h', "help", "show help"))
     {
@@ -130,6 +132,7 @@ int main(int argc, char** argv)
             d_args.max[i]       = 4.0  * M_PI;
         }
         d_args.s            = 10.0;              // scaling factor on range
+        d_args.r            = rot * M_PI / 180.0;  // domain rotation angle in rads
         master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
                 { b->generate_sinc_data(cp, d_args); });
     }
