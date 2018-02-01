@@ -47,6 +47,7 @@ int main(int argc, char** argv)
     string input     = "sine";                   // input dataset
     bool   weighted  = true;                     // solve for and use weights
     real_t rot       = 0.0;                      // rotation angle in degrees
+    real_t twist     = 0.0;                      // twist (waviness) of domain (0.0-1.0)
 
     // get command line arguments
     using namespace opts;
@@ -59,6 +60,7 @@ int main(int argc, char** argv)
     ops >> Option('i', "input",   input,    " input dataset");
     ops >> Option('w', "weights", weighted, " solve for and use weights");
     ops >> Option('r', "rotate",  rot,      " rotation angle of domain in degrees");
+    ops >> Option('t', "twist",   twist,    " twist (waviness) of domain (0.0-1.0)");
 
     if (ops >> Present('h', "help", "show help"))
     {
@@ -131,8 +133,9 @@ int main(int argc, char** argv)
             d_args.max[i]       = 4.0  * M_PI;
             d_args.nctrl_pts[i] = nctrl;
         }
-        d_args.s            = 10.0;              // scaling factor on range
-        d_args.r            = rot * M_PI / 180.0;  // domain rotation angle in rads
+        d_args.s            = 10.0;                 // scaling factor on range
+        d_args.r            = rot * M_PI / 180.0;   // domain rotation angle in rads
+        d_args.t            = twist;                // twist (waviness) of domain
         master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
                 { b->generate_sinc_data(cp, d_args); });
     }

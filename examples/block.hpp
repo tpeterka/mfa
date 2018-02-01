@@ -54,7 +54,8 @@ struct DomainArgs
     real_t    min[MAX_DIM];                      // minimum corner of domain
     real_t    max[MAX_DIM];                      // maximum corner of domain
     real_t    s;                                 // scaling factor or any other usage
-    real_t    r;                                 // x-y rotation or any other usage
+    real_t    r;                                 // x-y rotation of domain or any other usage
+    real_t    t;                                 // waviness of domain edges or any other usage
     char      infile[256];                       // input filename
     bool      weighted;                          // solve for and use weights (default = true)
     bool      multiblock;                        // multiblock domain, get bounds from block
@@ -535,7 +536,7 @@ struct Block
         //             cerr << "domain:\n" << domain << endl;
     }
 
-    // y = sine(x)/x
+    // f(x,y,...) = sine(x)/x * sine(y)/y * ...
     void generate_sinc_data(
             const       diy::Master::ProxyWithLink& cp,
             DomainArgs& args)
@@ -612,8 +613,28 @@ struct Block
                 min = res;
         }
 
+        // optional wavy domain
+        if (a->t && a->dom_dim >= 2)
+        {
+            for (auto j = 0; j < tot_ndom_pts; j++)
+            {
+                real_t x = domain(j, 0);
+                real_t y = domain(j, 1);
+                domain(j, 0) += a->t * sin(y);
+                domain(j, 1) += a->t * sin(x);
+                if (j == 0 || domain(j, 0) < domain_mins(0))
+                    domain_mins(0) = domain(j, 0);
+                if (j == 0 || domain(j, 1) < domain_mins(1))
+                    domain_mins(1) = domain(j, 1);
+                if (j == 0 || domain(j, 0) > domain_maxs(0))
+                    domain_maxs(0) = domain(j, 0);
+                if (j == 0 || domain(j, 1) > domain_maxs(1))
+                    domain_maxs(1) = domain(j, 1);
+            }
+        }
+
         // optional rotation of the domain
-        if (a->r)
+        if (a->r && a->dom_dim >= 2)
         {
             for (auto j = 0; j < tot_ndom_pts; j++)
             {
@@ -1435,12 +1456,12 @@ struct Block
     void print_block(const diy::Master::ProxyWithLink& cp)
     {
         fprintf(stderr, "gid = %d\n", cp.gid());
-//         cerr << "domain\n" << domain << endl;
+        cerr << "domain\n" << domain << endl;
 //         cerr << "nctrl_pts:\n" << nctrl_pts << endl;
 //         cerr << ctrl_pts.rows() << " final control points\n" << ctrl_pts << endl;
 //         cerr << weights.size()  << " final weights\n" << weights << endl;
 //         cerr << knots.size() << " knots\n" << knots << endl;
-//         cerr << approx.rows() << " approximated points\n" << approx << endl;
+        cerr << approx.rows() << " approximated points\n" << approx << endl;
         fprintf(stderr, "range extent          = %e\n", mfa->range_extent);
         fprintf(stderr, "|max_err|             = %e\n", mfa->max_err);
         fprintf(stderr, "|normalized max_err|  = %e\n", mfa->max_err / mfa->range_extent);
