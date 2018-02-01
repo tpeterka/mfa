@@ -147,7 +147,7 @@ void PrepRenderingData(
             }
         }
         // add one more row of knot points for max
-        if (block->domain.cols() > 2)
+        if (block->ndom_pts.size() > 1)             // domain (not point) dimensionality
         {
             // so = starting span of last row of spans
             size_t so = (block->nctrl_pts(0) - block->p(0)) * (block->nctrl_pts(1) - block->p(1) - 1);

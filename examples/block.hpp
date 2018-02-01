@@ -146,311 +146,313 @@ struct Block
             diy::load(bb, b->span_mins);
             diy::load(bb, b->span_maxs);
         }
-    // f(x,y,z,...) = 1
-    void generate_constant_data(
-            const       diy::Master::ProxyWithLink& cp,
-            DomainArgs& args)
-    {
-        DomainArgs* a = &args;
-        int tot_ndom_pts = 1;
-        p.resize(a->dom_dim);
-        ndom_pts.resize(a->dom_dim);
-        nctrl_pts.resize(a->dom_dim);
-        domain_mins.resize(a->pt_dim);
-        domain_maxs.resize(a->pt_dim);
-        for (int i = 0; i < a->dom_dim; i++)
-        {
-            p(i)         =  a->p[i];
-            ndom_pts(i)  =  a->ndom_pts[i];
-            nctrl_pts(i) =  a->nctrl_pts[i];
-            tot_ndom_pts *= ndom_pts(i);
-        }
-        domain.resize(tot_ndom_pts, a->pt_dim);
 
-        // assign values to the domain (geometry)
-        int cs = 1;                  // stride of a coordinate in this dim
-        for (int i = 0; i < a->dom_dim; i++) // all dimensions in the domain
-        {
-            real_t d = (a->max[i] - a->min[i]) / (ndom_pts(i) - 1);
-            int k = 0;
-            int co = 0;                  // j index of start of a new coordinate value
-            for (int j = 0; j < tot_ndom_pts; j++)
-            {
-                if (a->min[i] + k * d > a->max[i])
-                    k = 0;
-                domain(j, i) = a->min[i] + k * d;
-                if (j + 1 - co >= cs)
-                {
-                    k++;
-                    co = j + 1;
-                }
-            }
-            cs *= ndom_pts(i);
-        }
-
-        // assign values to the range (physics attributes)
-        for (int i = a->dom_dim; i < a->pt_dim; i++)
-        {
-            // the simplest constant function
-            for (int j = 0; j < tot_ndom_pts; j++)
-                domain(j, i) = 1.0;
-        }
-
-        // extents
-        for (int i = 0; i < a->pt_dim; i++)
-        {
-            domain_mins(i) = a->min[i];
-            domain_maxs(i) = a->max[i];
-        }
-    }
-
-    // f(x,y,z,...) = x
-    void generate_ramp_data(
-            const       diy::Master::ProxyWithLink& cp,
-            DomainArgs& args)
-    {
-        DomainArgs* a = &args;
-        int tot_ndom_pts = 1;
-        p.resize(a->dom_dim);
-        ndom_pts.resize(a->dom_dim);
-        nctrl_pts.resize(a->dom_dim);
-        domain_mins.resize(a->pt_dim);
-        domain_maxs.resize(a->pt_dim);
-        for (int i = 0; i < a->dom_dim; i++)
-        {
-            p(i)         =  a->p[i];
-            ndom_pts(i)  =  a->ndom_pts[i];
-            nctrl_pts(i) =  a->nctrl_pts[i];
-            tot_ndom_pts *= ndom_pts(i);
-        }
-        domain.resize(tot_ndom_pts, a->pt_dim);
-
-        // assign values to the domain (geometry)
-        int cs = 1;                  // stride of a coordinate in this dim
-        for (int i = 0; i < a->dom_dim; i++) // all dimensions in the domain
-        {
-            real_t d = (a->max[i] - a->min[i]) / (ndom_pts(i) - 1);
-            int k = 0;
-            int co = 0;                  // j index of start of a new coordinate value
-            for (int j = 0; j < tot_ndom_pts; j++)
-            {
-                if (a->min[i] + k * d > a->max[i])
-                    k = 0;
-                domain(j, i) = a->min[i] + k * d;
-                if (j + 1 - co >= cs)
-                {
-                    k++;
-                    co = j + 1;
-                }
-            }
-            cs *= ndom_pts(i);
-        }
-
-        // assign values to the range (physics attributes)
-        for (int i = a->dom_dim; i < a->pt_dim; i++)
-        {
-            for (int j = 0; j < tot_ndom_pts; j++)
-                domain(j, i) = domain(j, 0);
-        }
-
-        // extents
-        for (int i = 0; i < a->pt_dim; i++)
-        {
-            domain_mins(i) = a->min[i];
-            domain_maxs(i) = a->max[i];
-        }
-    }
-
-    // f(x,y,z,...) = x^2
-    void generate_quadratic_data(
-            const       diy::Master::ProxyWithLink& cp,
-            DomainArgs& args)
-    {
-        DomainArgs* a = &args;
-        int tot_ndom_pts = 1;
-        p.resize(a->dom_dim);
-        ndom_pts.resize(a->dom_dim);
-        nctrl_pts.resize(a->dom_dim);
-        domain_mins.resize(a->pt_dim);
-        domain_maxs.resize(a->pt_dim);
-        for (int i = 0; i < a->dom_dim; i++)
-        {
-            p(i)         =  a->p[i];
-            ndom_pts(i)  =  a->ndom_pts[i];
-            nctrl_pts(i) =  a->nctrl_pts[i];
-            tot_ndom_pts *= ndom_pts(i);
-        }
-        domain.resize(tot_ndom_pts, a->pt_dim);
-
-        // assign values to the domain (geometry)
-        int cs = 1;                  // stride of a coordinate in this dim
-        for (int i = 0; i < a->dom_dim; i++) // all dimensions in the domain
-        {
-            real_t d = (a->max[i] - a->min[i]) / (ndom_pts(i) - 1);
-            int k = 0;
-            int co = 0;                  // j index of start of a new coordinate value
-            for (int j = 0; j < tot_ndom_pts; j++)
-            {
-                if (a->min[i] + k * d > a->max[i])
-                    k = 0;
-                domain(j, i) = a->min[i] + k * d;
-                if (j + 1 - co >= cs)
-                {
-                    k++;
-                    co = j + 1;
-                }
-            }
-            cs *= ndom_pts(i);
-        }
-
-        // assign values to the range (physics attributes)
-        for (int i = a->dom_dim; i < a->pt_dim; i++)
-        {
-            for (int j = 0; j < tot_ndom_pts; j++)
-                domain(j, i) = domain(j, 0) * domain(j, 0);
-        }
-
-        // extents
-        for (int i = 0; i < a->pt_dim; i++)
-        {
-            domain_mins(i) = a->min[i];
-            domain_maxs(i) = a->max[i];
-        }
-    }
-
-    // f(x,y,z,...) = sqrt(x^2 + y^2 + z^2 + ...^2)
-    void generate_magnitude_data(
-            const       diy::Master::ProxyWithLink& cp,
-            DomainArgs& args)
-    {
-        DomainArgs* a = &args;
-        int tot_ndom_pts = 1;
-        p.resize(a->dom_dim);
-        ndom_pts.resize(a->dom_dim);
-        nctrl_pts.resize(a->dom_dim);
-        domain_mins.resize(a->pt_dim);
-        domain_maxs.resize(a->pt_dim);
-        for (int i = 0; i < a->dom_dim; i++)
-        {
-            p(i)         =  a->p[i];
-            ndom_pts(i)  =  a->ndom_pts[i];
-            nctrl_pts(i) =  a->nctrl_pts[i];
-            tot_ndom_pts *= ndom_pts(i);
-        }
-        domain.resize(tot_ndom_pts, a->pt_dim);
-
-        // assign values to the domain (geometry)
-        int cs = 1;                  // stride of a coordinate in this dim
-        for (int i = 0; i < a->dom_dim; i++) // all dimensions in the domain
-        {
-            real_t d = (a->max[i] - a->min[i]) / (ndom_pts(i) - 1);
-            int k = 0;
-            int co = 0;                  // j index of start of a new coordinate value
-            for (int j = 0; j < tot_ndom_pts; j++)
-            {
-                if (a->min[i] + k * d > a->max[i])
-                    k = 0;
-                domain(j, i) = a->min[i] + k * d;
-                if (j + 1 - co >= cs)
-                {
-                    k++;
-                    co = j + 1;
-                }
-            }
-            cs *= ndom_pts(i);
-        }
-
-        // assign values to the range (physics attributes)
-        for (int i = a->dom_dim; i < a->pt_dim; i++)
-        {
-            // magnitude function
-            for (int j = 0; j < tot_ndom_pts; j++)
-            {
-                VectorX<T> one_pt = domain.block(j, 0, 1, a->dom_dim).row(0);
-                domain(j, i) = one_pt.norm();
-            }
-        }
-
-        // extents
-        for (int i = 0; i < a->pt_dim; i++)
-        {
-            domain_mins(i) = a->min[i];
-            domain_maxs(i) = a->max[i];
-        }
-        domain_mins(a->pt_dim - 1) = domain(0               , a->pt_dim - 1);
-        domain_maxs(a->pt_dim - 1) = domain(tot_ndom_pts - 1, a->pt_dim - 1);
-        // cerr << "domain_maxs:\n" << domain_maxs << endl;
-    }
-
-    // f(x,y,z,...) = sqrt(r^2 - x^2 - y^2 - z^2 - ...^2)
-    void generate_sphere_data(
-            const       diy::Master::ProxyWithLink& cp,
-            DomainArgs& args)
-    {
-        DomainArgs* a = &args;
-        int tot_ndom_pts = 1;
-        p.resize(a->dom_dim);
-        ndom_pts.resize(a->dom_dim);
-        nctrl_pts.resize(a->dom_dim);
-        domain_mins.resize(a->pt_dim);
-        domain_maxs.resize(a->pt_dim);
-        for (int i = 0; i < a->dom_dim; i++)
-        {
-            p(i)         =  a->p[i];
-            ndom_pts(i)  =  a->ndom_pts[i];
-            nctrl_pts(i) =  a->nctrl_pts[i];
-            tot_ndom_pts *= ndom_pts(i);
-        }
-        domain.resize(tot_ndom_pts, a->pt_dim);
-
-        // assign values to the domain (geometry)
-        int cs = 1;                  // stride of a coordinate in this dim
-        for (int i = 0; i < a->dom_dim; i++) // all dimensions in the domain
-        {
-            real_t d = (a->max[i] - a->min[i]) / (ndom_pts(i) - 1);
-            int k = 0;
-            int co = 0;                  // j index of start of a new coordinate value
-            for (int j = 0; j < tot_ndom_pts; j++)
-            {
-                if (a->min[i] + k * d > a->max[i])
-                    k = 0;
-                domain(j, i) = a->min[i] + k * d;
-                if (j + 1 - co >= cs)
-                {
-                    k++;
-                    co = j + 1;
-                }
-            }
-            cs *= ndom_pts(i);
-        }
-
-        // assign values to the range (physics attributes)
-        for (int i = a->dom_dim; i < a->pt_dim; i++)
-        {
-            // sphere function
-            for (int j = 0; j < tot_ndom_pts; j++)
-            {
-                VectorX<T> one_pt = domain.block(j, 0, 1, a->dom_dim).row(0);
-                real_t r = a->s;           // shere radius
-                if (r * r - one_pt.squaredNorm() < 0)
-                {
-                    fprintf(stderr, "Error: radius is not large enough for domain points\n");
-                    exit(0);
-                }
-                domain(j, i) = sqrt(r * r - one_pt.squaredNorm());
-            }
-        }
-
-        // extents
-        for (int i = 0; i < a->pt_dim; i++)
-        {
-            domain_mins(i) = a->min[i];
-            domain_maxs(i) = a->max[i];
-        }
-        domain_mins(a->pt_dim - 1) = domain(0               , a->pt_dim - 1);
-        domain_maxs(a->pt_dim - 1) = domain(tot_ndom_pts - 1, a->pt_dim - 1);
-        // cerr << "domain_maxs:\n" << domain_maxs << endl;
-    }
+    // DEPRECATED
+//     // f(x,y,z,...) = 1
+//     void generate_constant_data(
+//             const       diy::Master::ProxyWithLink& cp,
+//             DomainArgs& args)
+//     {
+//         DomainArgs* a = &args;
+//         int tot_ndom_pts = 1;
+//         p.resize(a->dom_dim);
+//         ndom_pts.resize(a->dom_dim);
+//         nctrl_pts.resize(a->dom_dim);
+//         domain_mins.resize(a->pt_dim);
+//         domain_maxs.resize(a->pt_dim);
+//         for (int i = 0; i < a->dom_dim; i++)
+//         {
+//             p(i)         =  a->p[i];
+//             ndom_pts(i)  =  a->ndom_pts[i];
+//             nctrl_pts(i) =  a->nctrl_pts[i];
+//             tot_ndom_pts *= ndom_pts(i);
+//         }
+//         domain.resize(tot_ndom_pts, a->pt_dim);
+// 
+//         // assign values to the domain (geometry)
+//         int cs = 1;                  // stride of a coordinate in this dim
+//         for (int i = 0; i < a->dom_dim; i++) // all dimensions in the domain
+//         {
+//             real_t d = (a->max[i] - a->min[i]) / (ndom_pts(i) - 1);
+//             int k = 0;
+//             int co = 0;                  // j index of start of a new coordinate value
+//             for (int j = 0; j < tot_ndom_pts; j++)
+//             {
+//                 if (a->min[i] + k * d > a->max[i])
+//                     k = 0;
+//                 domain(j, i) = a->min[i] + k * d;
+//                 if (j + 1 - co >= cs)
+//                 {
+//                     k++;
+//                     co = j + 1;
+//                 }
+//             }
+//             cs *= ndom_pts(i);
+//         }
+// 
+//         // assign values to the range (physics attributes)
+//         for (int i = a->dom_dim; i < a->pt_dim; i++)
+//         {
+//             // the simplest constant function
+//             for (int j = 0; j < tot_ndom_pts; j++)
+//                 domain(j, i) = 1.0;
+//         }
+// 
+//         // extents
+//         for (int i = 0; i < a->pt_dim; i++)
+//         {
+//             domain_mins(i) = a->min[i];
+//             domain_maxs(i) = a->max[i];
+//         }
+//     }
+// 
+//     // f(x,y,z,...) = x
+//     void generate_ramp_data(
+//             const       diy::Master::ProxyWithLink& cp,
+//             DomainArgs& args)
+//     {
+//         DomainArgs* a = &args;
+//         int tot_ndom_pts = 1;
+//         p.resize(a->dom_dim);
+//         ndom_pts.resize(a->dom_dim);
+//         nctrl_pts.resize(a->dom_dim);
+//         domain_mins.resize(a->pt_dim);
+//         domain_maxs.resize(a->pt_dim);
+//         for (int i = 0; i < a->dom_dim; i++)
+//         {
+//             p(i)         =  a->p[i];
+//             ndom_pts(i)  =  a->ndom_pts[i];
+//             nctrl_pts(i) =  a->nctrl_pts[i];
+//             tot_ndom_pts *= ndom_pts(i);
+//         }
+//         domain.resize(tot_ndom_pts, a->pt_dim);
+// 
+//         // assign values to the domain (geometry)
+//         int cs = 1;                  // stride of a coordinate in this dim
+//         for (int i = 0; i < a->dom_dim; i++) // all dimensions in the domain
+//         {
+//             real_t d = (a->max[i] - a->min[i]) / (ndom_pts(i) - 1);
+//             int k = 0;
+//             int co = 0;                  // j index of start of a new coordinate value
+//             for (int j = 0; j < tot_ndom_pts; j++)
+//             {
+//                 if (a->min[i] + k * d > a->max[i])
+//                     k = 0;
+//                 domain(j, i) = a->min[i] + k * d;
+//                 if (j + 1 - co >= cs)
+//                 {
+//                     k++;
+//                     co = j + 1;
+//                 }
+//             }
+//             cs *= ndom_pts(i);
+//         }
+// 
+//         // assign values to the range (physics attributes)
+//         for (int i = a->dom_dim; i < a->pt_dim; i++)
+//         {
+//             for (int j = 0; j < tot_ndom_pts; j++)
+//                 domain(j, i) = domain(j, 0);
+//         }
+// 
+//         // extents
+//         for (int i = 0; i < a->pt_dim; i++)
+//         {
+//             domain_mins(i) = a->min[i];
+//             domain_maxs(i) = a->max[i];
+//         }
+//     }
+// 
+//     // f(x,y,z,...) = x^2
+//     void generate_quadratic_data(
+//             const       diy::Master::ProxyWithLink& cp,
+//             DomainArgs& args)
+//     {
+//         DomainArgs* a = &args;
+//         int tot_ndom_pts = 1;
+//         p.resize(a->dom_dim);
+//         ndom_pts.resize(a->dom_dim);
+//         nctrl_pts.resize(a->dom_dim);
+//         domain_mins.resize(a->pt_dim);
+//         domain_maxs.resize(a->pt_dim);
+//         for (int i = 0; i < a->dom_dim; i++)
+//         {
+//             p(i)         =  a->p[i];
+//             ndom_pts(i)  =  a->ndom_pts[i];
+//             nctrl_pts(i) =  a->nctrl_pts[i];
+//             tot_ndom_pts *= ndom_pts(i);
+//         }
+//         domain.resize(tot_ndom_pts, a->pt_dim);
+// 
+//         // assign values to the domain (geometry)
+//         int cs = 1;                  // stride of a coordinate in this dim
+//         for (int i = 0; i < a->dom_dim; i++) // all dimensions in the domain
+//         {
+//             real_t d = (a->max[i] - a->min[i]) / (ndom_pts(i) - 1);
+//             int k = 0;
+//             int co = 0;                  // j index of start of a new coordinate value
+//             for (int j = 0; j < tot_ndom_pts; j++)
+//             {
+//                 if (a->min[i] + k * d > a->max[i])
+//                     k = 0;
+//                 domain(j, i) = a->min[i] + k * d;
+//                 if (j + 1 - co >= cs)
+//                 {
+//                     k++;
+//                     co = j + 1;
+//                 }
+//             }
+//             cs *= ndom_pts(i);
+//         }
+// 
+//         // assign values to the range (physics attributes)
+//         for (int i = a->dom_dim; i < a->pt_dim; i++)
+//         {
+//             for (int j = 0; j < tot_ndom_pts; j++)
+//                 domain(j, i) = domain(j, 0) * domain(j, 0);
+//         }
+// 
+//         // extents
+//         for (int i = 0; i < a->pt_dim; i++)
+//         {
+//             domain_mins(i) = a->min[i];
+//             domain_maxs(i) = a->max[i];
+//         }
+//     }
+// 
+//     // f(x,y,z,...) = sqrt(x^2 + y^2 + z^2 + ...^2)
+//     void generate_magnitude_data(
+//             const       diy::Master::ProxyWithLink& cp,
+//             DomainArgs& args)
+//     {
+//         DomainArgs* a = &args;
+//         int tot_ndom_pts = 1;
+//         p.resize(a->dom_dim);
+//         ndom_pts.resize(a->dom_dim);
+//         nctrl_pts.resize(a->dom_dim);
+//         domain_mins.resize(a->pt_dim);
+//         domain_maxs.resize(a->pt_dim);
+//         for (int i = 0; i < a->dom_dim; i++)
+//         {
+//             p(i)         =  a->p[i];
+//             ndom_pts(i)  =  a->ndom_pts[i];
+//             nctrl_pts(i) =  a->nctrl_pts[i];
+//             tot_ndom_pts *= ndom_pts(i);
+//         }
+//         domain.resize(tot_ndom_pts, a->pt_dim);
+// 
+//         // assign values to the domain (geometry)
+//         int cs = 1;                  // stride of a coordinate in this dim
+//         for (int i = 0; i < a->dom_dim; i++) // all dimensions in the domain
+//         {
+//             real_t d = (a->max[i] - a->min[i]) / (ndom_pts(i) - 1);
+//             int k = 0;
+//             int co = 0;                  // j index of start of a new coordinate value
+//             for (int j = 0; j < tot_ndom_pts; j++)
+//             {
+//                 if (a->min[i] + k * d > a->max[i])
+//                     k = 0;
+//                 domain(j, i) = a->min[i] + k * d;
+//                 if (j + 1 - co >= cs)
+//                 {
+//                     k++;
+//                     co = j + 1;
+//                 }
+//             }
+//             cs *= ndom_pts(i);
+//         }
+// 
+//         // assign values to the range (physics attributes)
+//         for (int i = a->dom_dim; i < a->pt_dim; i++)
+//         {
+//             // magnitude function
+//             for (int j = 0; j < tot_ndom_pts; j++)
+//             {
+//                 VectorX<T> one_pt = domain.block(j, 0, 1, a->dom_dim).row(0);
+//                 domain(j, i) = one_pt.norm();
+//             }
+//         }
+// 
+//         // extents
+//         for (int i = 0; i < a->pt_dim; i++)
+//         {
+//             domain_mins(i) = a->min[i];
+//             domain_maxs(i) = a->max[i];
+//         }
+//         domain_mins(a->pt_dim - 1) = domain(0               , a->pt_dim - 1);
+//         domain_maxs(a->pt_dim - 1) = domain(tot_ndom_pts - 1, a->pt_dim - 1);
+//         // cerr << "domain_maxs:\n" << domain_maxs << endl;
+//     }
+// 
+//     // f(x,y,z,...) = sqrt(r^2 - x^2 - y^2 - z^2 - ...^2)
+//     void generate_sphere_data(
+//             const       diy::Master::ProxyWithLink& cp,
+//             DomainArgs& args)
+//     {
+//         DomainArgs* a = &args;
+//         int tot_ndom_pts = 1;
+//         p.resize(a->dom_dim);
+//         ndom_pts.resize(a->dom_dim);
+//         nctrl_pts.resize(a->dom_dim);
+//         domain_mins.resize(a->pt_dim);
+//         domain_maxs.resize(a->pt_dim);
+//         for (int i = 0; i < a->dom_dim; i++)
+//         {
+//             p(i)         =  a->p[i];
+//             ndom_pts(i)  =  a->ndom_pts[i];
+//             nctrl_pts(i) =  a->nctrl_pts[i];
+//             tot_ndom_pts *= ndom_pts(i);
+//         }
+//         domain.resize(tot_ndom_pts, a->pt_dim);
+// 
+//         // assign values to the domain (geometry)
+//         int cs = 1;                  // stride of a coordinate in this dim
+//         for (int i = 0; i < a->dom_dim; i++) // all dimensions in the domain
+//         {
+//             real_t d = (a->max[i] - a->min[i]) / (ndom_pts(i) - 1);
+//             int k = 0;
+//             int co = 0;                  // j index of start of a new coordinate value
+//             for (int j = 0; j < tot_ndom_pts; j++)
+//             {
+//                 if (a->min[i] + k * d > a->max[i])
+//                     k = 0;
+//                 domain(j, i) = a->min[i] + k * d;
+//                 if (j + 1 - co >= cs)
+//                 {
+//                     k++;
+//                     co = j + 1;
+//                 }
+//             }
+//             cs *= ndom_pts(i);
+//         }
+// 
+//         // assign values to the range (physics attributes)
+//         for (int i = a->dom_dim; i < a->pt_dim; i++)
+//         {
+//             // sphere function
+//             for (int j = 0; j < tot_ndom_pts; j++)
+//             {
+//                 VectorX<T> one_pt = domain.block(j, 0, 1, a->dom_dim).row(0);
+//                 real_t r = a->s;           // shere radius
+//                 if (r * r - one_pt.squaredNorm() < 0)
+//                 {
+//                     fprintf(stderr, "Error: radius is not large enough for domain points\n");
+//                     exit(0);
+//                 }
+//                 domain(j, i) = sqrt(r * r - one_pt.squaredNorm());
+//             }
+//         }
+// 
+//         // extents
+//         for (int i = 0; i < a->pt_dim; i++)
+//         {
+//             domain_mins(i) = a->min[i];
+//             domain_maxs(i) = a->max[i];
+//         }
+//         domain_mins(a->pt_dim - 1) = domain(0               , a->pt_dim - 1);
+//         domain_maxs(a->pt_dim - 1) = domain(tot_ndom_pts - 1, a->pt_dim - 1);
+//         // cerr << "domain_maxs:\n" << domain_maxs << endl;
+//     }
 
     // y = sine(x)
     void generate_sine_data(
@@ -516,9 +518,7 @@ struct Block
             for (int i = 0; i < a->dom_dim; i++)
                     res *= sin(domain(j, i));
             res *= a->s;
-
-            for (int i = a->dom_dim; i < a->pt_dim; i++)
-                domain(j, i) = res;
+            domain(j, a->pt_dim - 1) = res;
 
             if (j == 0 || res > max)
                 max = res;
@@ -603,9 +603,7 @@ struct Block
                     res *= (sin(domain(j, i)) / domain(j, i));
             }
             res *= a->s;
-
-            for (int i = a->dom_dim; i < a->pt_dim; i++)
-                domain(j, i) = res;
+            domain(j, a->pt_dim - 1) = res;
 
             if (j == 0 || res > max)
                 max = res;
@@ -614,7 +612,7 @@ struct Block
         }
 
         // optional wavy domain
-        if (a->t && a->dom_dim >= 2)
+        if (a->t && a->pt_dim >= 3)
         {
             for (auto j = 0; j < tot_ndom_pts; j++)
             {
@@ -634,7 +632,7 @@ struct Block
         }
 
         // optional rotation of the domain
-        if (a->r && a->dom_dim >= 2)
+        if (a->r && a->pt_dim >= 3)
         {
             for (auto j = 0; j < tot_ndom_pts; j++)
             {
@@ -1456,12 +1454,12 @@ struct Block
     void print_block(const diy::Master::ProxyWithLink& cp)
     {
         fprintf(stderr, "gid = %d\n", cp.gid());
-        cerr << "domain\n" << domain << endl;
+//         cerr << "domain\n" << domain << endl;
 //         cerr << "nctrl_pts:\n" << nctrl_pts << endl;
 //         cerr << ctrl_pts.rows() << " final control points\n" << ctrl_pts << endl;
 //         cerr << weights.size()  << " final weights\n" << weights << endl;
 //         cerr << knots.size() << " knots\n" << knots << endl;
-        cerr << approx.rows() << " approximated points\n" << approx << endl;
+//         cerr << approx.rows() << " approximated points\n" << approx << endl;
         fprintf(stderr, "range extent          = %e\n", mfa->range_extent);
         fprintf(stderr, "|max_err|             = %e\n", mfa->max_err);
         fprintf(stderr, "|normalized max_err|  = %e\n", mfa->max_err / mfa->range_extent);
