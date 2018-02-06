@@ -466,48 +466,6 @@ BasisFuns(
         N(row, span - p(cur_dim) + j) = scratch[j];
 }
 
-// DEPRECATE
-// computes one row of basis function values for a given parameter value and given degree
-// (not the default degree stored in the mfa)
-// algorithm 2.2 of P&T, p. 70
-// assumes N has been allocated by caller
-template <typename T>
-void
-mfa::
-MFA<T>::
-BasisFuns(
-        int         cur_dim,            // current dimension
-        T           u,                  // parameter value
-        int         span,               // index of span in the knots vector containing u, relative to ko
-        int         p,                  // degree of basis functions
-        VectorX<T>& N)                  // one row of (output) basis function values
-{
-    // init
-    N[span - p] = 1.0;
-
-    // temporary recurrence results
-    // left(j)  = u - knots(span + 1 - j)
-    // right(j) = knots(span + j) - u
-    vector<T> left(p + 1);
-    vector<T> right(p + 1);
-
-    // fill N
-    for (int j = 1; j <= p; j++)
-    {
-        left[j]  = u - knots(span + ko[cur_dim] + 1 - j);
-        right[j] = knots(span + ko[cur_dim] + j) - u;
-
-        T saved = 0.0;
-        for (int r = 0; r < j; r++)
-        {
-            T temp = N[span - p + r] / (right[r + 1] + left[j - r]);
-            N[span - p + r] = saved + right[r + 1] * temp;
-            saved = left[j - r] * temp;
-        }
-        N[span - p + j] = saved;
-    }
-}
-
 // computes first k derivatives of one row of basis function values for a given parameter value
 // output is ders, with nders + 1 rows, one for each derivative (N, N', N'', ...)
 // including origin basis functions (0-th derivatives)

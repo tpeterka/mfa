@@ -133,14 +133,6 @@ namespace mfa
                 MatrixX<T>& N,              // matrix of (output) basis function values
                 int         row);           // row in N of result
 
-        // DEPRECATE
-        void BasisFuns(
-                int         cur_dim,        // current dimension
-                T           u,              // parameter value
-                int         span,           // index of span in the knots vector containing u, relative to ko
-                int         p,              // degree of basis functions
-                VectorX<T>& N);             // one row of (output) basis function values
-
         void DerBasisFuns(
                 int         cur_dim,        // current dimension
                 T           u,              // parameter value

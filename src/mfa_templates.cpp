@@ -113,18 +113,6 @@ BasisFuns(
         MatrixXf& N,                // matrix of (output) basis function values
         int       row);             // row in N of result
 
-// DEPRECATE
-template
-void
-mfa::
-MFA<float>::
-BasisFuns(
-        int         cur_dim,        // current dimension
-        float       u,              // parameter value
-        int         span,           // index of span in the knots vector containing u, relative to ko
-        int         p,              // degree of basis functions
-        VectorXf&   N);             // one row of (output) basis function values
-
 template
 void
 mfa::
@@ -324,18 +312,6 @@ BasisFuns(
         int       span,             // index of span in the knots vector containing u, relative to ko
         MatrixXd& N,                // matrix of (output) basis function values
         int       row);             // starting row index in N of result
-
-// DEPRECATE
-template
-void
-mfa::
-MFA<double>::
-BasisFuns(
-        int         cur_dim,        // current dimension
-        double      u,              // parameter value
-        int         span,           // index of span in the knots vector containing u, relative to ko
-        int         p,              // degree of basis functions
-        VectorXd&   N);             // one row of (output) basis function values
 
 template
 void
