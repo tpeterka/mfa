@@ -420,32 +420,35 @@ FindSpan(int       cur_dim,              // current dimension
     return ko + mid;
 }
 
-// computes p + 1 nonvanishing basis function values [N_{span - p}, N_{span}]
-// of the given parameter value
-// keeps only those in the range [N_{start_n}, N_{end_n}]
-// writes results in a subset of a row of N starting at index N(start_row, start_col)
+// computes one row of basis function values for a given parameter value
+// writes results in a row of N
 // algorithm 2.2 of P&T, p. 70
 // assumes N has been allocated by caller
 template <typename T>
 void
 mfa::
 MFA<T>::
-BasisFuns(int         cur_dim,            // current dimension
-          T           u,                  // parameter value
-          int         span,               // index of span in the knots vector containing u, relative to ko
-          MatrixX<T>& N,                  // matrix of (output) basis function values
-          int         row)                // starting row index in N of result
+BasisFuns(
+        int         cur_dim,            // current dimension
+        T           u,                  // parameter value
+        int         span,               // index of span in the knots vector containing u, relative to ko
+        MatrixX<T>& N,                  // matrix of (output) basis function values
+        int         row)                // row in N of result
 {
     // init
     vector<T> scratch(p(cur_dim) + 1);                  // scratchpad, same as N in P&T p. 70
     scratch[0] = 1.0;
-    vector<T> left(p(cur_dim) + 1);                     // temporary recurrence results
+
+    // temporary recurrence results
+    // left(j)  = u - knots(span + 1 - j)
+    // right(j) = knots(span + j) - u
+    vector<T> left(p(cur_dim) + 1);
     vector<T> right(p(cur_dim) + 1);
 
     // fill N
     for (int j = 1; j <= p(cur_dim); j++)
     {
-        left[j]  = u - knots(span + ko[cur_dim]+ 1 - j);
+        left[j]  = u - knots(span + ko[cur_dim] + 1 - j);
         right[j] = knots(span + ko[cur_dim] + j) - u;
 
         T saved = 0.0;
@@ -461,6 +464,168 @@ BasisFuns(int         cur_dim,            // current dimension
     // copy scratch to N
     for (int j = 0; j < p(cur_dim) + 1; j++)
         N(row, span - p(cur_dim) + j) = scratch[j];
+}
+
+// DEPRECATE
+// computes one row of basis function values for a given parameter value and given degree
+// (not the default degree stored in the mfa)
+// algorithm 2.2 of P&T, p. 70
+// assumes N has been allocated by caller
+template <typename T>
+void
+mfa::
+MFA<T>::
+BasisFuns(
+        int         cur_dim,            // current dimension
+        T           u,                  // parameter value
+        int         span,               // index of span in the knots vector containing u, relative to ko
+        int         p,                  // degree of basis functions
+        VectorX<T>& N)                  // one row of (output) basis function values
+{
+    // init
+    N[span - p] = 1.0;
+
+    // temporary recurrence results
+    // left(j)  = u - knots(span + 1 - j)
+    // right(j) = knots(span + j) - u
+    vector<T> left(p + 1);
+    vector<T> right(p + 1);
+
+    // fill N
+    for (int j = 1; j <= p; j++)
+    {
+        left[j]  = u - knots(span + ko[cur_dim] + 1 - j);
+        right[j] = knots(span + ko[cur_dim] + j) - u;
+
+        T saved = 0.0;
+        for (int r = 0; r < j; r++)
+        {
+            T temp = N[span - p + r] / (right[r + 1] + left[j - r]);
+            N[span - p + r] = saved + right[r + 1] * temp;
+            saved = left[j - r] * temp;
+        }
+        N[span - p + j] = saved;
+    }
+}
+
+// computes first k derivatives of one row of basis function values for a given parameter value
+// output is ders, with nders + 1 rows, one for each derivative (N, N', N'', ...)
+// including origin basis functions (0-th derivatives)
+// assumes ders has been allocated by caller (nders + 1 rows, # control points cols)
+// Alg. 2.3, p. 72 of P&T
+template <typename T>
+void
+mfa::
+MFA<T>::
+DerBasisFuns(
+        int         cur_dim,            // current dimension
+        T           u,                  // parameter value
+        int         span,               // index of span in the knots vector containing u, relative to ko
+        int         nders,              // number of derivatives
+        MatrixX<T>& ders)               // output basis function derivatives
+{
+    // matrix from p. 70 of P&T
+    // upper triangle is basis functions
+    // lower triangle is knot differences
+    MatrixX<T> ndu(p(cur_dim) + 1, p(cur_dim) + 1);
+    ndu(0, 0) = 1.0;
+
+    // temporary recurrence results
+    // left(j)  = u - knots(span + 1 - j)
+    // right(j) = knots(span + j) - u
+    VectorX<T> left(p(cur_dim) + 1);
+    VectorX<T> right(p(cur_dim) + 1);
+
+    // fill ndu
+    for (int j = 1; j <= p(cur_dim); j++)
+    {
+        left(j)  = u - knots(span + ko[cur_dim] + 1 - j);
+        right(j) = knots(span + ko[cur_dim] + j) - u;
+
+        T saved = 0.0;
+        for (int r = 0; r < j; r++)
+        {
+            // lower triangle
+            ndu(j, r) = right(r + 1) + left(j - r);
+            T temp = ndu(r, j - 1) / ndu(j, r);
+            // upper triangle
+            ndu(r, j) = saved + right(r + 1) * temp;
+            saved = left(j - r) * temp;
+        }
+        ndu(j, j) = saved;
+    }
+
+    // debug: match example in book
+    ndu(0, 0) = 1.0; ndu(0, 1) = 0.5; ndu(0, 2) = 0.125;
+    ndu(1, 0) = 1.0; ndu(1, 1) = 0.5; ndu(1, 2) = 0.75;
+    ndu(2, 0) = 2.0; ndu(2, 1) = 2.0; ndu(2, 2) = 0.125;
+    cerr << "ndu:\n" << ndu << endl;
+
+    // two most recently computed rows a_{k,j} and a_{k-1,j}
+    MatrixX<T> a(2, p(cur_dim) + 1);
+
+    // initialize ders and set 0-th row with the basis functions = 0-th derivatives
+    ders = MatrixX<T>::Zero(ders.rows(), ders.cols());
+    for (int j = 0; j <= p(cur_dim); j++)
+        ders(0, span - p(cur_dim) + j) = ndu(j, p(cur_dim));
+
+    // compute derivatives according to eq. 2.10
+    // 1st row = first derivative, 2nd row = 2nd derivative, ...
+    for (int r = 0; r <= p(cur_dim); r++)
+    {
+        int s1, s2;                             // alternate rows in array a
+        s1      = 0;
+        s2      = 1;
+        a(0, 0) = 1.0;
+
+        for (int k = 1; k <= nders; k++)        // over all the derivatives up to the d_th one
+        {
+            T d    = 0.0;
+            int rk = r - k;
+            int pk = p(cur_dim) - k;
+
+            if (r >= k)
+            {
+                a(s2, 0) = a(s1, 0) / ndu(pk + 1, rk);
+                d        = a(s2, 0) * ndu(rk, pk);
+            }
+
+            int j1, j2;
+            if (rk >= -1)
+                j1 = 1;
+            else
+                j1 = -rk;
+            if (r - 1 <= pk)
+                j2 = k - 1;
+            else
+                j2 = p(cur_dim) - r;
+
+            for (int j = j1; j <= j2; j++)
+            {
+                a(s2, j) = (a(s1, j) - a(s1, j - 1)) / ndu(pk + 1, rk + j);
+                d += a(s2, j) * ndu(rk + j, pk);
+            }
+
+            if (r <= pk)
+            {
+                a(s2, k) = -a(s1, k - 1) / ndu(pk + 1, r);
+                d += a(s2, k) * ndu(r, pk);
+            }
+
+            ders(k, span - p(cur_dim) + r) = d;
+            swap(s1, s2);
+        }                                       // for k
+    }                                           // for r
+
+    // multiply through by the correct factors in eq. 2.10
+    int r = p(cur_dim);
+    for (int k = 1; k <= nders; k++)
+    {
+        // debug
+//         cerr << "k = " << k << " r = " << r << endl;
+        ders.row(k) *= r;
+        r *= (p(cur_dim) - k);
+    }
 }
 
 // precompute curve parameters for input data points using the chord-length method

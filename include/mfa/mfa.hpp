@@ -124,14 +124,29 @@ namespace mfa
         int FindSpan(
                 int   cur_dim,              // current dimension
                 T     u,                    // parameter value
-                int   ko    = 0);           // optional index of starting knot
+                int   ko);                  // index of starting knot
 
         void BasisFuns(
                 int         cur_dim,        // current dimension
                 T           u,              // parameter value
                 int         span,           // index of span in the knots vector containing u, relative to ko
                 MatrixX<T>& N,              // matrix of (output) basis function values
-                int         row);           // starting row index in N of result
+                int         row);           // row in N of result
+
+        // DEPRECATE
+        void BasisFuns(
+                int         cur_dim,        // current dimension
+                T           u,              // parameter value
+                int         span,           // index of span in the knots vector containing u, relative to ko
+                int         p,              // degree of basis functions
+                VectorX<T>& N);             // one row of (output) basis function values
+
+        void DerBasisFuns(
+                int         cur_dim,        // current dimension
+                T           u,              // parameter value
+                int         span,           // index of span in the knots vector containing u, relative to ko
+                int         nders,          // number of derivatives
+                MatrixX<T>& ders);          // output basis function derivatives
 
         void Params();
         void DomainParams();

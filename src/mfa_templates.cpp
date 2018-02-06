@@ -100,7 +100,7 @@ MFA<float>::
 FindSpan(
         int   cur_dim,              // current dimension
         float u,                    // parameter value
-        int   ko    = 0);           // optional index of starting knot
+        int   ko);                  // index of starting knot
 
 template
 void
@@ -111,7 +111,30 @@ BasisFuns(
         float     u,                // parameter value
         int       span,             // index of span in the knots vector containing u, relative to ko
         MatrixXf& N,                // matrix of (output) basis function values
-        int       row);             // starting row index in N of result
+        int       row);             // row in N of result
+
+// DEPRECATE
+template
+void
+mfa::
+MFA<float>::
+BasisFuns(
+        int         cur_dim,        // current dimension
+        float       u,              // parameter value
+        int         span,           // index of span in the knots vector containing u, relative to ko
+        int         p,              // degree of basis functions
+        VectorXf&   N);             // one row of (output) basis function values
+
+template
+void
+mfa::
+MFA<float>::
+DerBasisFuns(
+        int         cur_dim,        // current dimension
+        float       u,              // parameter value
+        int         span,           // index of span in the knots vector containing u, relative to ko
+        int         nders,          // number of derivatives
+        MatrixXf&   ders);         // output basis function derivatives
 
 template
 void
@@ -287,9 +310,9 @@ int
 mfa::
 MFA<double>::
 FindSpan(
-        int   cur_dim,              // current dimension
+        int    cur_dim,              // current dimension
         double u,                    // parameter value
-        int   ko    = 0);           // optional index of starting knot
+        int    ko);                  // index of starting knot
 
 template
 void
@@ -301,6 +324,29 @@ BasisFuns(
         int       span,             // index of span in the knots vector containing u, relative to ko
         MatrixXd& N,                // matrix of (output) basis function values
         int       row);             // starting row index in N of result
+
+// DEPRECATE
+template
+void
+mfa::
+MFA<double>::
+BasisFuns(
+        int         cur_dim,        // current dimension
+        double      u,              // parameter value
+        int         span,           // index of span in the knots vector containing u, relative to ko
+        int         p,              // degree of basis functions
+        VectorXd&   N);             // one row of (output) basis function values
+
+template
+void
+mfa::
+MFA<double>::
+DerBasisFuns(
+        int         cur_dim,        // current dimension
+        double      u,              // parameter value
+        int         span,           // index of span in the knots vector containing u, relative to ko
+        int         nders,          // number of derivatives
+        MatrixXd&   ders);         // output basis function derivatives
 
 template
 void
