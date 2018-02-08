@@ -377,14 +377,15 @@ Encode(bool weighted)                      // solve for and use weights
         MatrixX<T> N = MatrixX<T>::Zero(m(k) + 1, n(k) + 1); // coefficients matrix
 
         // debug: test derivatives of basis functions
-//         mfa.knots(3) = 0.2; mfa.knots(4) = 0.4; mfa.knots(5) = 0.6; mfa.knots(6) = 0.8; mfa.knots(7) = 0.8;
-        int i = 5;
-        int nders = 2;
-        MatrixX<T> Nders = MatrixX<T>::Zero(nders + 1, N.cols());
-        int span = mfa.FindSpan(k, mfa.params(mfa.po[k] + i), mfa.ko[k]) - mfa.ko[k];   // relative to ko
-        mfa.DerBasisFuns(k, mfa.params(mfa.po[k] + i), span, nders, Nders);
-//         cerr << "Knots:\n" << mfa.knots << endl;
-        cerr << "u: 0.5" << " span: " << span << " Nders:\n" << Nders << endl;
+//         int nders = 3;
+//         cerr << nders << "-th derivatives of N:" << endl;
+//         for (int i = 5; i < 6; i++)
+//         {
+//             MatrixX<T> Nders = MatrixX<T>::Zero(nders + 1, N.cols());
+//             int span = mfa.FindSpan(k, mfa.params(mfa.po[k] + i), mfa.ko[k]) - mfa.ko[k];   // relative to ko
+//             mfa.DerBasisFuns(k, mfa.params(mfa.po[k] + i), span, nders, Nders);
+//             cerr << "i: " << i << " span: " << span << " Nders:\n" << Nders << endl;
+//         }
 
         for (int i = 0; i < N.rows(); i++)            // the rows of N
         {
@@ -393,7 +394,7 @@ Encode(bool weighted)                      // solve for and use weights
         }
 
         // debug
-        cerr << "N:\n" << N << endl;
+//         cerr << "N:\n" << N << endl;
 
         // TODO: NtN is going to be very sparse when it is large: switch to sparse representation
         // NtN has semibandwidth < p + 1 nonzero entries across diagonal
