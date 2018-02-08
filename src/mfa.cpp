@@ -513,12 +513,6 @@ DerBasisFuns(
         ndu(j, j) = saved;
     }
 
-    // debug: match example in book
-//     ndu(0, 0) = 1.0; ndu(0, 1) = 0.5; ndu(0, 2) = 0.125;
-//     ndu(1, 0) = 1.0; ndu(1, 1) = 0.5; ndu(1, 2) = 0.75;
-//     ndu(2, 0) = 2.0; ndu(2, 1) = 2.0; ndu(2, 2) = 0.125;
-//     cerr << "ndu:\n" << ndu << endl;
-
     // two most recently computed rows a_{k,j} and a_{k-1,j}
     MatrixX<T> a(2, p(cur_dim) + 1);
 
@@ -526,10 +520,6 @@ DerBasisFuns(
     ders = MatrixX<T>::Zero(ders.rows(), ders.cols());
     for (int j = 0; j <= p(cur_dim); j++)
         ders(0, span - p(cur_dim) + j) = ndu(j, p(cur_dim));
-
-    // debug
-//     if (nders == 0)
-//         cerr << ders.row(0) << endl;
 
     // compute derivatives according to eq. 2.10
     // 1st row = first derivative, 2nd row = 2nd derivative, ...
@@ -583,14 +573,8 @@ DerBasisFuns(
     int r = p(cur_dim);
     for (int k = 1; k <= nders; k++)
     {
-        // debug
-//         cerr << "k = " << k << " r = " << r << endl;
         ders.row(k) *= r;
         r *= (p(cur_dim) - k);
-
-        // debug
-//         if (k == nders)
-//             cerr << ders.row(k) << endl;
     }
 }
 
