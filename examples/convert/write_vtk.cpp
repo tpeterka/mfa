@@ -233,13 +233,16 @@ int main(int argc, char ** argv)
     vector<vec3d> block_maxs;                     // block maxs
     string infile(argv[1]);
 
-    diy::Master               master(world,
+    diy::FileStorage storage("./DIY.XXXXXX");     // used for blocks to be moved out of core
+    diy::Master      master(world,
             -1,
             -1,
             &Block<real_t>::create,
-            &Block<real_t>::destroy);
-    diy::ContiguousAssigner   assigner(world.size(),
-            -1);                                  // number of blocks set by read_blocks()
+            &Block<real_t>::destroy,
+            &storage,
+            &Block<real_t>::save,
+            &Block<real_t>::load);
+    diy::ContiguousAssigner   assigner(world.size(), -1); // number of blocks set by read_blocks()
     diy::io::read_blocks(infile.c_str(), world, assigner, master, &Block<real_t>::load);
     nblocks = master.size();
     std::cout << nblocks << " blocks read from file "<< infile << "\n";

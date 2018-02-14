@@ -54,7 +54,7 @@ MFA(VectorXi&   p_,             // polynomial degree in each dimension
     MatrixX<T>& ctrl_pts_,      // (output, optional input) control points (1st dim changes fastest) (can be initialized by caller)
     VectorXi&   nctrl_pts_,     // (output, optional input) number of control points in each dim
     VectorX<T>& weights_,       // (output, optional input) weights associated with control points
-    VectorX<T>& knots_,         // (output) knots (1st dim changes fastest)
+    VectorX<T>& knots_,         // (output, optional input) knots (1st dim changes fastest)
     T           eps_) :         // minimum difference considered significant
     p(p_),
     ndom_pts(ndom_pts_),
@@ -89,6 +89,11 @@ MFA(VectorXi&   p_,             // polynomial degree in each dimension
     tot_nknots = 0;
     for (size_t i = 0; i < p.size(); i++)
         tot_nknots  += (nctrl_pts(i) + p(i) + 1);
+    if (knots.size() && knots.size() != tot_nknots)
+    {
+        fprintf(stderr, "MFA constructor: Error: number of knots is nonzero and does not match number of control points + p + 1\n");
+        exit(0);
+    }
 
     // total number of control points = product of control points over all dimensions
     tot_nctrl = nctrl_pts.prod();
@@ -106,13 +111,16 @@ MFA(VectorXi&   p_,             // polynomial degree in each dimension
 
     // precompute curve parameters and knots for input points
     params.resize(tot_nparams);
-    knots.resize(tot_nknots);
+    if (!knots.size())
+        knots.resize(tot_nknots);
 #ifdef CURVE_PARAMS
     Params();                               // params space according to the curve length (per P&T)
-    Knots();                                // knots spaced according to parameters (per P&T)
+    if (!knots.size())
+        Knots();                            // knots spaced according to parameters (per P&T)
 #else
     DomainParams();                         // params spaced according to domain spacing
-    UniformKnots();                         // knots spaced uniformly
+    if (!knots.size())
+        UniformKnots();                     // knots spaced uniformly
 #endif
 
     // debug
@@ -380,10 +388,12 @@ template <typename T>
 void
 mfa::
 MFA<T>::
-Decode(MatrixX<T>& approx)
+Decode(
+        MatrixX<T>& approx,                 // decoded points
+        int         deriv)                  // optional derivative (0 = value, 1 = 1st deriv, 2 = 2nd deriv, ...)
 {
     mfa::Decoder<T> decoder(*this);
-    decoder.Decode(approx);
+    decoder.Decode(approx, deriv);
 }
 
 // binary search to find the span in the knots vector containing a given parameter value

@@ -363,22 +363,17 @@ int main(int argc, char ** argv)
     diy::mpi::environment  env(argc, argv);       // equivalent of MPI_Init(argc, argv)/MPI_Finalize()
     diy::mpi::communicator world;                 // equivalent of MPI_COMM_WORLD
 
-    int nblocks     = 1;                          // number of local blocks
-    int tot_blocks  = nblocks * world.size();
-    int mem_blocks  = -1;                         // everything in core for now
-    int num_threads = 1;                          // needed in order to do timing
-
     string infile(argv[1]);                       // diy input file
 
-    diy::Master               master(world,
+    diy::Master master(world,
             -1,
             -1,
             &Block<real_t>::create,
             &Block<real_t>::destroy);
-    diy::ContiguousAssigner   assigner(world.size(),
-            -1);                                  // number of blocks set by read_blocks()
+    diy::ContiguousAssigner   assigner(world.size(), -1);   // number of blocks set by read_blocks()
+
     diy::io::read_blocks(infile.c_str(), world, assigner, master, &Block<real_t>::load);
-    nblocks = master.size();
+    int nblocks = master.size();                            // number of local blocks
     std::cout << nblocks << " blocks read from file "<< infile << "\n";
 
     master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)

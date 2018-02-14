@@ -74,7 +74,9 @@ template <typename T>
 void
 mfa::
 Decoder<T>::
-Decode(MatrixX<T>& approx)                 // pts in approximated volume (1st dim. changes fastest)
+Decode(
+        MatrixX<T>& approx,                 // pts in approximated volume (1st dim. changes fastest)
+        int         deriv)                  // optional derivative to take (0 = value, 1 = 1st deriv, 2 = 2nd deriv, ...)
 {
     vector<size_t> iter(mfa.p.size(), 0);    // parameter index (iteration count) in current dim.
     vector<size_t> ofst(mfa.p.size(), 0);    // start of current dim in linearized params
@@ -95,7 +97,7 @@ Decode(MatrixX<T>& approx)                 // pts in approximated volume (1st di
 
         // compute approximated point for this parameter vector
         VectorX<T> cpt(mfa.ctrl_pts.cols());       // approximated point
-        VolPt(param, cpt);
+        VolPt(param, cpt, deriv);
 
         approx.row(i) = cpt;
     });
@@ -113,7 +115,9 @@ template <typename T>
 void
 mfa::
 Decoder<T>::
-Decode(MatrixX<T>& approx)                 // pts in approximated volume (1st dim. changes fastest)
+Decode(
+        MatrixX<T>& approx,                 // pts in approximated volume (1st dim. changes fastest)
+        int         deriv)                  // optional derivative to take (0 = value, 1 = 1st deriv, 2 = 2nd deriv, ...)
 {
     vector<size_t> iter(mfa.p.size(), 0);    // parameter index (iteration count) in current dim.
     vector<size_t> ofst(mfa.p.size(), 0);    // start of current dim in linearized params
@@ -133,7 +137,7 @@ Decode(MatrixX<T>& approx)                 // pts in approximated volume (1st di
             param(j) = mfa.params(iter[j] + ofst[j]);
 
         // compute approximated point for this parameter vector
-        VolPt(param, cpt);
+        VolPt(param, cpt, deriv);
 
         // update the indices in the linearized vector of all params for next input point
         for (size_t j = 0; j < mfa.p.size(); j++)
@@ -248,8 +252,10 @@ template <typename T>
 void
 mfa::
 Decoder<T>::
-VolPt(VectorX<T>& param,                       // parameter value in each dim. of desired point
-      VectorX<T>& out_pt)                      // (output) point
+VolPt(
+        VectorX<T>& param,                      // parameter value in each dim. of desired point
+        VectorX<T>& out_pt,                     // (output) point
+        int         deriv)                      // optional derivative to take (0 = value, 1 = 1st deriv, 2 = 2nd deriv, ...)
 {
     // check dimensionality for sanity
     assert(mfa.p.size() < mfa.ctrl_pts.cols());
@@ -271,7 +277,18 @@ VolPt(VectorX<T>& param,                       // parameter value in each dim. o
         iter[i]    = 0;
         span[i]    = mfa.FindSpan(i, param(i), mfa.ko[i]) - mfa.ko[i];  // relative to ko
         N[i]       = MatrixX<T>::Zero(1, mfa.nctrl_pts(i));
-        mfa.BasisFuns(i, param(i), span[i], N[i], 0);
+        if (deriv)
+        {
+            MatrixX<T> Ders = MatrixX<T>::Zero(deriv + 1, mfa.nctrl_pts(i));
+            mfa.DerBasisFuns(i, param(i), span[i], deriv, Ders);
+            N[i].row(0) = Ders.row(deriv);
+            // debug
+//             cerr << "Ders:\n" << Ders << endl;
+        }
+        else
+            mfa.BasisFuns(i, param(i), span[i], N[i], 0);
+        // debug
+//         cerr << "N[" << i << "]:\n" << N[i] << endl;
     }
 
     for (int i = 0; i < tot_iters; i++)             // 1-d flattening all n-d nested loop computations

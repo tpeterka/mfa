@@ -95,7 +95,9 @@ namespace mfa
                 T         err_limit,        // maximum allowable normalized error
                 VectorXi& nctrl_pts_);      // (output) number of control points in each dim
 
-        void Decode(MatrixX<T>& approx);    // decode points
+        void Decode(                        // decode points
+                MatrixX<T>& approx,         // decoded points
+                int         deriv = 0);     // optional derivative (0 = value, 1 = first deriv, 2 = 2nd deriv, ...)
 
         T Error(size_t idx);                // index of domain point where to compute error of mfa
 

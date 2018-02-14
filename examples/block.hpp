@@ -1297,6 +1297,16 @@ struct Block
         mfa->Decode(approx);
     }
 
+    // differentiate entire block
+    void differentiate_block(
+            const diy::Master::ProxyWithLink& cp,
+            int deriv)                  // which derivative to take (1 = 1st, 2 = 2nd, ...)
+    {
+        approx.resize(domain.rows(), domain.cols());
+        mfa = new mfa::MFA<T>(p, ndom_pts, domain, ctrl_pts, nctrl_pts, weights, knots);
+        mfa->Decode(approx, deriv);
+    }
+
     // compute error field and maximum error in the block
     // uses normal distance to the curve, surface, etc.
     void error(
@@ -1454,12 +1464,12 @@ struct Block
     void print_block(const diy::Master::ProxyWithLink& cp)
     {
         fprintf(stderr, "gid = %d\n", cp.gid());
-//         cerr << "domain\n" << domain << endl;
-//         cerr << "nctrl_pts:\n" << nctrl_pts << endl;
-//         cerr << ctrl_pts.rows() << " final control points\n" << ctrl_pts << endl;
-//         cerr << weights.size()  << " final weights\n" << weights << endl;
-//         cerr << knots.size() << " knots\n" << knots << endl;
-//         cerr << approx.rows() << " approximated points\n" << approx << endl;
+        cerr << "domain\n" << domain << endl;
+        cerr << "nctrl_pts:\n" << nctrl_pts << endl;
+        cerr << ctrl_pts.rows() << " final control points\n" << ctrl_pts << endl;
+        cerr << weights.size()  << " final weights\n" << weights << endl;
+        cerr << knots.size() << " knots\n" << knots << endl;
+        cerr << approx.rows() << " approximated points\n" << approx << endl;
         fprintf(stderr, "range extent          = %e\n", mfa->range_extent);
         fprintf(stderr, "|max_err|             = %e\n", mfa->max_err);
         fprintf(stderr, "|normalized max_err|  = %e\n", mfa->max_err / mfa->range_extent);
@@ -1471,6 +1481,14 @@ struct Block
         fprintf(stderr, "# output knots        = %ld\n",knots.size());
         fprintf(stderr, "compression ratio     = %.2f\n",
                 (real_t)(domain.rows()) / (ctrl_pts.rows() + knots.size() / ctrl_pts.cols()));
+        fprintf(stderr, "\n");
+    }
+
+    void print_deriv(const diy::Master::ProxyWithLink& cp)
+    {
+        fprintf(stderr, "gid = %d\n", cp.gid());
+//         cerr << "domain\n" << domain << endl;
+        cerr << approx.rows() << " derivatives\n" << approx << endl;
         fprintf(stderr, "\n");
     }
 

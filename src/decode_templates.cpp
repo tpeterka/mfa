@@ -14,14 +14,18 @@ template
 void
 mfa::
 Decoder<float>::
-Decode(MatrixXf& approx);         // (output) points (1st dim changes fastest)
+Decode(
+        MatrixXf& approx,               // (output) points (1st dim changes fastest)
+        int       deriv = 0);           // optional derivative to take (0 = value, 1 = 1st deriv, 2 = 2nd deriv, ...)
 
 template
 void
 mfa::
 Decoder<float>::
-VolPt(VectorXf& param,            // parameter value in each dim. of desired point
-        VectorXf& out_pt);          // (output) point
+VolPt(
+        VectorXf& param,            // parameter value in each dim. of desired point
+        VectorXf& out_pt,           // (output) point
+        int       deriv = 0);       // optional derivative to take (0 = value, 1 = 1st deriv, 2 = 2nd deriv, ...)
 
 template
 void
@@ -75,14 +79,18 @@ template
 void
 mfa::
 Decoder<double>::
-Decode(MatrixXd& approx);         // (output) points (1st dim changes fastest)
+Decode(
+        MatrixXd& approx,               // (output) points (1st dim changes fastest)
+        int       deriv = 0);           // optional derivative to take (0 = value, 1 = 1st deriv, 2 = 2nd deriv, ...)
 
 template
 void
 mfa::
 Decoder<double>::
-VolPt(VectorXd& param,            // parameter value in each dim. of desired point
-        VectorXd& out_pt);          // (output) point
+VolPt(
+        VectorXd& param,            // parameter value in each dim. of desired point
+        VectorXd& out_pt,           // (output) point
+        int       deriv = 0);       // optional derivative to take (0 = value, 1 = 1st deriv, 2 = 2nd deriv, ...)
 
 template
 void

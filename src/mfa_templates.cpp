@@ -54,7 +54,9 @@ template
 void
 mfa::
 MFA<float>::
-Decode(MatrixXf& approx);      // decode points
+Decode(
+        MatrixXf& approx,                   // decoded points
+        int       deriv);                   // optional derivative (0 = value, 1 = 1st deriv, 2 = 2nd deriv, ...)
 
 template
 float
@@ -254,7 +256,9 @@ template
 void
 mfa::
 MFA<double>::
-Decode(MatrixXd& approx);      // decode points
+Decode(
+        MatrixXd& approx,                   // decoded points
+        int       deriv);                   // optional derivative (0 = value, 1 = 1st deriv, 2 = 2nd deriv, ...)
 
 template
 double
