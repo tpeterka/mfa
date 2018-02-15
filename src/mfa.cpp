@@ -111,16 +111,21 @@ MFA(VectorXi&   p_,             // polynomial degree in each dimension
 
     // precompute curve parameters and knots for input points
     params.resize(tot_nparams);
-    if (!knots.size())
-        knots.resize(tot_nknots);
+
 #ifdef CURVE_PARAMS
     Params();                               // params space according to the curve length (per P&T)
     if (!knots.size())
+    {
+        knots.resize(tot_nknots);
         Knots();                            // knots spaced according to parameters (per P&T)
+    }
 #else
     DomainParams();                         // params spaced according to domain spacing
     if (!knots.size())
+    {
+        knots.resize(tot_nknots);
         UniformKnots();                     // knots spaced uniformly
+    }
 #endif
 
     // debug
