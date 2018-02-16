@@ -78,8 +78,9 @@ Decode(
         MatrixX<T>& approx,                 // pts in approximated volume (1st dim. changes fastest)
         int         deriv)                  // optional derivative to take (0 = value, 1 = 1st deriv, 2 = 2nd deriv, ...)
 {
-    vector<size_t> iter(mfa.p.size(), 0);    // parameter index (iteration count) in current dim.
-    vector<size_t> ofst(mfa.p.size(), 0);    // start of current dim in linearized params
+    vector<size_t> iter(mfa.p.size(), 0);   // parameter index (iteration count) in current dim.
+    vector<size_t> ofst(mfa.p.size(), 0);   // start of current dim in linearized params
+    int last = mfa.ctrl_pts.cols() - 1;     // last coordinate of control point
 
     for (size_t i = 0; i < mfa.p.size() - 1; i++)
         ofst[i + 1] = ofst[i] + mfa.ndom_pts(i);
@@ -96,10 +97,19 @@ Decode(
             param(i) = mfa.params(ijk(i) + mfa.po[i]);
 
         // compute approximated point for this parameter vector
-        VectorX<T> cpt(mfa.ctrl_pts.cols());       // approximated point
-        VolPt(param, cpt, deriv);
+        VectorX<T> cpt0(mfa.ctrl_pts.cols());       // evaluated point
+        VectorX<T> cpt1(mfa.ctrl_pts.cols());       // evaluated derivative
+        VolPt(param, cpt0, 0);
+        if (deriv)
+        {
+            VolPt(param, cpt1, deriv);
+            // divide by extent of domain
+            // TODO: rough hack, not the right way to do this
+            // TODO: only for 1d for now
+            cpt0(last) = cpt1(last) / (mfa.ctrl_pts(mfa.tot_nctrl - 1, 0) - mfa.ctrl_pts(0, 0));
+        }
 
-        approx.row(i) = cpt;
+        approx.row(i) = cpt0;
     });
     fprintf(stderr, "100 %% decoded\n");
 }
@@ -119,17 +129,17 @@ Decode(
         MatrixX<T>& approx,                 // pts in approximated volume (1st dim. changes fastest)
         int         deriv)                  // optional derivative to take (0 = value, 1 = 1st deriv, 2 = 2nd deriv, ...)
 {
-    vector<size_t> iter(mfa.p.size(), 0);    // parameter index (iteration count) in current dim.
-    vector<size_t> ofst(mfa.p.size(), 0);    // start of current dim in linearized params
+    vector<size_t> iter(mfa.p.size(), 0);   // parameter index (iteration count) in current dim.
+    vector<size_t> ofst(mfa.p.size(), 0);   // start of current dim in linearized params
+    int last = mfa.ctrl_pts.cols() - 1;     // last coordinate of control point
 
     for (size_t i = 0; i < mfa.p.size() - 1; i++)
         ofst[i + 1] = ofst[i] + mfa.ndom_pts(i);
 
-    // eigen frees following temp vectors when leaving scope
-    VectorX<T> dpt(mfa.domain.cols());         // original data point
-    VectorX<T> cpt(mfa.ctrl_pts.cols());       // approximated point
-    VectorX<T> d(mfa.domain.cols());           // apt - dpt
-    VectorX<T> param(mfa.p.size());            // parameters for one point
+    VectorX<T> cpt0(mfa.ctrl_pts.cols());   // evaluated point
+    VectorX<T> cpt1(mfa.ctrl_pts.cols());   // evaluated derivative
+    VectorX<T> param(mfa.p.size());         // parameters for one point
+
     for (size_t i = 0; i < mfa.domain.rows(); i++)
     {
         // extract parameter vector for one input point from the linearized vector of all params
@@ -137,7 +147,15 @@ Decode(
             param(j) = mfa.params(iter[j] + ofst[j]);
 
         // compute approximated point for this parameter vector
-        VolPt(param, cpt, deriv);
+        VolPt(param, cpt0, 0);
+        if (deriv)
+        {
+            VolPt(param, cpt1, deriv);
+            // divide by extent of domain
+            // TODO: rough hack, not the right way to do this
+            // TODO: only for 1d for now
+            cpt0(last) = cpt1(last) / (mfa.ctrl_pts(mfa.tot_nctrl - 1, 0) - mfa.ctrl_pts(0, 0));
+        }
 
         // update the indices in the linearized vector of all params for next input point
         for (size_t j = 0; j < mfa.p.size(); j++)
@@ -151,7 +169,7 @@ Decode(
                 iter[j] = 0;
         }
 
-        approx.row(i) = cpt;
+        approx.row(i) = cpt0;
 
         // print progress
         if (i > 0 && mfa.domain.rows() >= 100 && i % (mfa.domain.rows() / 100) == 0)
@@ -282,13 +300,9 @@ VolPt(
             MatrixX<T> Ders = MatrixX<T>::Zero(deriv + 1, mfa.nctrl_pts(i));
             mfa.DerBasisFuns(i, param(i), span[i], deriv, Ders);
             N[i].row(0) = Ders.row(deriv);
-            // debug
-//             cerr << "Ders:\n" << Ders << endl;
         }
         else
             mfa.BasisFuns(i, param(i), span[i], N[i], 0);
-        // debug
-//         cerr << "N[" << i << "]:\n" << N[i] << endl;
     }
 
     for (int i = 0; i < tot_iters; i++)             // 1-d flattening all n-d nested loop computations
@@ -300,7 +314,7 @@ VolPt(
 
         // always compute the point in the first dimension
         ctrl_pt = mfa.ctrl_pts.row(ctrl_idx);
-        T w            = mfa.weights(ctrl_idx);
+        T w     = mfa.weights(ctrl_idx);
 
 #ifdef WEIGH_ALL_DIMS                               // weigh all dimensions
         temp[0]       += (N[0])(0, iter[0] + span[0] - mfa.p(0)) * ctrl_pt * w;
@@ -330,7 +344,11 @@ VolPt(
         }
     }
 
-    T denom = temp_denom(mfa.p.size() - 1);
+    T denom;                                // rational denominator
+    if (deriv)
+        denom = 1.0;                        // TODO: weights for derivatives not implemented yet
+    else
+        denom = temp_denom(mfa.p.size() - 1);
 
 #ifdef WEIGH_ALL_DIMS                           // weigh all dimensions
     out_pt = temp[mfa.p.size() - 1] / denom;
