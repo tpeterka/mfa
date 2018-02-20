@@ -3,6 +3,8 @@ add_executable              (write_vtk_multiblock   write_vtk_multiblock.cpp wri
 target_link_libraries       (write_vtk              mfa ${libraries})
 target_link_libraries       (write_vtk_multiblock   mfa ${libraries})
 
+set_property 				(TARGET write_vtk 				PROPERTY INSTALL_RPATH_USE_LINK_PATH TRUE)
+set_property 				(TARGET write_vtk_multiblock 	PROPERTY INSTALL_RPATH_USE_LINK_PATH TRUE)
 install                     (TARGETS write_vtk write_vtk_multiblock
     DESTINATION ${CMAKE_INSTALL_PREFIX}/examples/convert/
     PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE

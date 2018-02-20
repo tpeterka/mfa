@@ -3,6 +3,8 @@ add_executable              (fixed_multiblock   fixed_multiblock.cpp)
 target_link_libraries       (fixed              mfa ${libraries})
 target_link_libraries       (fixed_multiblock   mfa ${libraries})
 
+set_property 				(TARGET fixed 				PROPERTY INSTALL_RPATH_USE_LINK_PATH TRUE)
+set_property 				(TARGET fixed_multiblock 	PROPERTY INSTALL_RPATH_USE_LINK_PATH TRUE)
 install                     (TARGETS fixed fixed_multiblock
     DESTINATION ${CMAKE_INSTALL_PREFIX}/examples/fixed/
     PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE

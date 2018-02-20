@@ -1,6 +1,7 @@
 add_executable              (nonlinear   nonlinear.cpp)
 target_link_libraries       (nonlinear   mfa ${libraries})
 
+set_property 				(TARGET  nonlinear PROPERTY INSTALL_RPATH_USE_LINK_PATH TRUE)
 install                     (TARGETS nonlinear
     DESTINATION ${CMAKE_INSTALL_PREFIX}/examples/nonlinear/
     PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE

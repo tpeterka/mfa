@@ -44,7 +44,7 @@ endif                       (NOT bgq)
 
 # TBB
 find_package                (TBB QUIET)
-find_path                   (TBB_INCLUDE_DIR        tbb.h)
+find_path                   (TBB_INCLUDE_DIR        tbb/tbb.h)
 find_library                (TBB_LIBRARY NAMES      tbb)
 if                          (TBB_INCLUDE_DIR AND TBB_LIBRARY)
   include_directories       ("${TBB_INCLUDE_DIR}")
@@ -74,7 +74,7 @@ find_path                   (DIY_INCLUDE_DIRS diy/types.h)
 
 # Coin-OR CLP
 find_path                   (CLP_INCLUDE_DIRS   ClpSimplex.hpp)
-find_library                (CLP_LIBS NAMES     Clp)
+find_library                (CLP_LIB NAMES     Clp)
 
 # Include dirs
 set                         (CMAKE_INCLUDE_SYSTEM_FLAG_CXX "-isystem")
