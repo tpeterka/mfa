@@ -651,6 +651,9 @@ NewKnots_curve(
 
 #endif
 
+// DEPRECATED
+#if 0
+
 // encodes at full dimensionality and decodes in 1d curves
 // decodes 1d curves at control points and adds knot spans from all curves in all directions (into a set)
 // returns true if done, ie, no knots are inserted
@@ -736,6 +739,8 @@ NewKnots_hybrid(
 
     return(nnew_knots.sum() ? 0 : 1);
 }
+
+#endif
 
 #if 1
 

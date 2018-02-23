@@ -1126,6 +1126,9 @@ ErrorCurve(
     return nerr;
 }
 
+// DEPRECATED
+#if 0
+
 // returns number of points in a curve that have error greater than err_limit
 // fills err_spans with the span indices of spans that have at least one point with such error
 //  and that have at least one inut point in each half of the span (assuming eventually
@@ -1322,5 +1325,7 @@ ErrorCtrlCurve(
 
     return nerr;
 }
+
+#endif
 
 #include    "encode_templates.cpp"

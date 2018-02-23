@@ -1300,11 +1300,37 @@ struct Block
     // differentiate entire block
     void differentiate_block(
             const diy::Master::ProxyWithLink& cp,
-            int deriv)                  // which derivative to take (1 = 1st, 2 = 2nd, ...)
+            int                               deriv,    // which derivative to take (1 = 1st, 2 = 2nd, ...) in each domain dim.
+            int                               partial)  // limit to partial derivative in just this dimension (-1 = no limit)
     {
         approx.resize(domain.rows(), domain.cols());
         mfa = new mfa::MFA<T>(p, ndom_pts, domain, ctrl_pts, nctrl_pts, weights, knots);
-        mfa->Decode(approx, deriv);
+        VectorXi derivs(p.size());
+        for (auto i = 0; i < derivs.size(); i++)
+            derivs(i) = deriv;
+
+        // optional limit to one partial derivative
+        if (deriv && p.size() > 1 && partial >= 0)
+        {
+            for (auto i = 0; i < p.size(); i++)
+            {
+                if (i != partial)
+                    derivs(i) = 0;
+            }
+        }
+
+        mfa->Decode(approx, derivs);
+
+        // the derivative is a vector of same dimensionality as domain
+        // derivative needs to be scaled by domain extent because u,v,... are in [0.0, 1.0]
+        if (deriv && p.size() > 1)
+            for (auto j = 0; j < approx.cols(); j++)
+                approx.col(j) /= (domain_maxs(j) - domain_mins(j));
+
+        // for plotting, set all but the last dimension to be the same as the input domain
+        if (deriv)
+            for (auto i = 0; i < p.size(); i++)
+                approx.col(i) = domain.col(i);
     }
 
     // compute error field and maximum error in the block
@@ -1488,7 +1514,7 @@ struct Block
     {
         fprintf(stderr, "gid = %d\n", cp.gid());
 //         cerr << "domain\n" << domain << endl;
-        cerr << approx.rows() << " derivatives\n" << approx << endl;
+//         cerr << approx.rows() << " derivatives\n" << approx << endl;
         fprintf(stderr, "\n");
     }
 

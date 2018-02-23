@@ -40,6 +40,9 @@ NewKnots_curve(
         float          err_limit,                   // max allowable error
         int            iter);                       // iteration number of caller (for debugging)
 
+// DEPRECATED
+#if 0
+
 template
 bool
 mfa::
@@ -49,6 +52,8 @@ NewKnots_hybrid(
         vector<float>& new_knots,                   // new knots (1st dim changes fastest)
         float          err_limit,                   // max allowable error
         int            iter);                       // iteration number of caller (for debugging)
+
+#endif
 
 template
 bool
@@ -113,6 +118,9 @@ NewKnots_curve(
         double          err_limit,                   // max allowable error
         int            iter);                       // iteration number of caller (for debugging)
 
+// DEPRECATED
+#if 0
+
 template
 bool
 mfa::
@@ -122,6 +130,8 @@ NewKnots_hybrid(
         vector<double>& new_knots,                   // new knots (1st dim changes fastest)
         double          err_limit,                   // max allowable error
         int            iter);                       // iteration number of caller (for debugging)
+
+#endif
 
 template
 bool

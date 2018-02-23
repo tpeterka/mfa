@@ -55,8 +55,16 @@ void
 mfa::
 MFA<float>::
 Decode(
+        MatrixXf& approx);                  // decoded points
+
+template
+void
+mfa::
+MFA<float>::
+Decode(
         MatrixXf& approx,                   // decoded points
-        int       deriv);                   // optional derivative (0 = value, 1 = 1st deriv, 2 = 2nd deriv, ...)
+        VectorXi& derivs);                  // derivative to take in each domain dim. (0 = value, 1 = 1st deriv, 2 = 2nd deriv, ...)
+                                            // pass size-0 vector if unused
 
 template
 float
@@ -257,9 +265,16 @@ void
 mfa::
 MFA<double>::
 Decode(
-        MatrixXd& approx,                   // decoded points
-        int       deriv);                   // optional derivative (0 = value, 1 = 1st deriv, 2 = 2nd deriv, ...)
+        MatrixXd& approx);                  // decoded points
 
+template
+void
+mfa::
+MFA<double>::
+Decode(
+        MatrixXd& approx,                   // decoded points
+        VectorXi& derivs);                  // derivative to take in each domain dim. (0 = value, 1 = 1st deriv, 2 = 2nd deriv, ...)
+                                            // pass size-0 vector if unused
 template
 double
 mfa::

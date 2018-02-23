@@ -36,12 +36,14 @@ int main(int argc, char** argv)
 
     // default command line arguments
     int  deriv     = 1;                         // which derivative to take (1st, 2nd, ...)
+    int  partial   = -1;                        // limit derivatives to one partial in this dimension
 
     // get command line arguments
     using namespace opts;
     Options ops(argc, argv);
-    ops >> Option('d', "deriv",  deriv,   " which derivative to take (1 = 1st, 2 = 2nd, ...)");
-    ops >> Option('i', "infile", infile,  " diy input file name");
+    ops >> Option('d', "deriv",   deriv,   " which derivative to take (1 = 1st, 2 = 2nd, ...)");
+    ops >> Option('i', "infile",  infile,  " diy input file name");
+    ops >> Option('a', "partial", partial, " dimension of 1 partial derivative only");
 
     if (ops >> Present('h', "help", "show help"))
     {
@@ -77,7 +79,7 @@ int main(int argc, char** argv)
     fprintf(stderr, "\nComputing derivative...\n");
     double decode_time = MPI_Wtime();
     master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-            { b->differentiate_block(cp, deriv); });
+            { b->differentiate_block(cp, deriv, partial); });
     decode_time = MPI_Wtime() - decode_time;
 
     // print results

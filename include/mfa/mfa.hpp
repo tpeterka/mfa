@@ -20,10 +20,10 @@
 // weighing the range coordinate only is the default if no method is specified
 // #define WEIGH_ALL_DIMS
 
-#include <Eigen/Dense>
-#include <vector>
-#include <list>
-#include <tbb/tbb.h>
+#include    <Eigen/Dense>
+#include    <vector>
+#include    <list>
+#include    <tbb/tbb.h>
 
 typedef Eigen::MatrixXf MatrixXf;
 typedef Eigen::VectorXf VectorXf;
@@ -96,8 +96,12 @@ namespace mfa
                 VectorXi& nctrl_pts_);      // (output) number of control points in each dim
 
         void Decode(                        // decode points
-                MatrixX<T>& approx,         // decoded points
-                int         deriv = 0);     // optional derivative (0 = value, 1 = first deriv, 2 = 2nd deriv, ...)
+                MatrixX<T>& approx);        // decoded points
+
+        void Decode(                        // decode derivatives
+                MatrixX<T>& approx,         // decoded derivatives
+                VectorXi&   derivs);        // derivative to take in each domain dim. (0 = value, 1 = 1st deriv, 2 = 2nd deriv, ...)
+                                            // pass size-0 vector if unused
 
         T Error(size_t idx);                // index of domain point where to compute error of mfa
 

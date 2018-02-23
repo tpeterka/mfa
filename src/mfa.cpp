@@ -388,17 +388,30 @@ NonlinearEncode(
     weights = VectorX<T>::Ones(ctrl_pts.rows());
 }
 
-// decode
+// decode points
 template <typename T>
 void
 mfa::
 MFA<T>::
 Decode(
-        MatrixX<T>& approx,                 // decoded points
-        int         deriv)                  // optional derivative (0 = value, 1 = 1st deriv, 2 = 2nd deriv, ...)
+        MatrixX<T>& approx)         // decoded points
+{
+    VectorXi no_derivs;             // size-0 means no derivatives
+    Decode(approx, no_derivs);
+}
+
+// decode derivatives
+template <typename T>
+void
+mfa::
+MFA<T>::
+Decode(
+        MatrixX<T>& approx,         // decoded derivatives
+        VectorXi&   derivs)         // derivative to take in each domain dim. (0 = value, 1 = 1st deriv, 2 = 2nd deriv, ...)
+                                    // pass size-0 vector if unused
 {
     mfa::Decoder<T> decoder(*this);
-    decoder.Decode(approx, deriv);
+    decoder.Decode(approx, derivs);
 }
 
 // binary search to find the span in the knots vector containing a given parameter value

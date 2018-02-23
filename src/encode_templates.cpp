@@ -150,6 +150,9 @@ ErrorCurve(
         vector<float>& new_knots,   // new knots
         float          err_limit);  // max allowable error
 
+// DEPRECATED
+#if 0
+
 template
 int
 mfa::
@@ -170,6 +173,8 @@ ErrorCtrlCurve(
         size_t       to,            // starting ofst for reading control pts
         set<int>&    err_spans,     // spans with error greater than err_limit
         float        err_limit);    // max allowable error
+
+#endif
 
 // double version of function declarations
 
@@ -323,6 +328,9 @@ ErrorCurve(
         vector<double>& new_knots,   // new knots
         double          err_limit);  // max allowable error
 
+//DEPRECATED
+#if 0
+
 template
 int
 mfa::
@@ -344,4 +352,4 @@ ErrorCtrlCurve(
         set<int>&    err_spans,     // spans with error greater than err_limit
         double        err_limit);    // max allowable error
 
-
+#endif

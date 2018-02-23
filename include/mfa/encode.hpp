@@ -134,6 +134,9 @@ namespace mfa
                 vector<T>&       new_knots,   // new knots
                 T                err_limit);  // max allowable error
 
+        // DEPRERCATED
+#if 0
+
         // in addition to returning number of erroneous input domain points
         // this version inserts erroneous spans into a set
         // allowing the same span to be inserted multiple times w/o duplicates
@@ -151,6 +154,7 @@ namespace mfa
                 size_t       to,            // starting ofst for reading control pts
                 set<int>&    err_spans,     // spans with error greater than err_limit
                 T            err_limit);    // max allowable error
+#endif
 
         template <typename>
         friend class NewKnots;
