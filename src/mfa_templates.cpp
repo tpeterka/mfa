@@ -11,7 +11,7 @@ MFA(
         VectorXi& nctrl_pts_,     // (output, optional input) number of control points in each dim
         VectorXf& weights_,       // (output, optional input) weights associated with control points
         VectorXf& knots_,         // (output) knots (1st dim changes fastest)
-        float     eps_ = 1.0e-6); // minimum difference considered significant
+        float     eps_);          // minimum difference considered significant
 
 template
 mfa::
@@ -30,7 +30,7 @@ mfa::
 MFA<float>::
 FixedEncode(
         VectorXi& nctrl_pts_,       // (output) number of control points in each dim
-        bool      weighted = true); // solve for and use weights
+        bool      weighted);        // solve for and use weights
 
 template
 void
@@ -39,8 +39,8 @@ MFA<float>::
 AdaptiveEncode(
         float     err_limit,        // maximum allowable normalized error
         VectorXi& nctrl_pts_,       // (output) number of control points in each dim
-        bool      weighted = true,  // solve for and use weights
-        int       max_rounds = 0);  // optional maximum number of rounds
+        bool      weighted,         // solve for and use weights
+        int       max_rounds);      // optional maximum number of rounds
 
 template
 void
@@ -221,7 +221,7 @@ MFA(
         VectorXi& nctrl_pts_,     // (output, optional input) number of control points in each dim
         VectorXd& weights_,       // (output, optional input) weights associated with control points
         VectorXd& knots_,         // (output) knots (1st dim changes fastest)
-        double     eps_ = 1.0e-6); // minimum difference considered significant
+        double     eps_);         // minimum difference considered significant
 
 template
 mfa::
@@ -240,7 +240,7 @@ mfa::
 MFA<double>::
 FixedEncode(
         VectorXi& nctrl_pts_,       // (output) number of control points in each dim
-        bool      weighted = true); // solve for and use weights
+        bool      weighted);        // solve for and use weights
 
 template
 void
@@ -249,8 +249,8 @@ MFA<double>::
 AdaptiveEncode(
         double     err_limit,       // maximum allowable normalized error
         VectorXi& nctrl_pts_,       // (output) number of control points in each dim
-        bool      weighted = true,  // solve for and use weights
-        int       max_rounds = 0);  // optional maximum number of rounds
+        bool      weighted,         // solve for and use weights
+        int       max_rounds);      // optional maximum number of rounds
 
 template
 void

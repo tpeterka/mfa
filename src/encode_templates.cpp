@@ -89,7 +89,7 @@ CtrlCurve(
         MatrixXf& temp_ctrl0,  // first temporary control points buffer
         MatrixXf& temp_ctrl1,  // second temporary control points buffer
         int       curve_id,    // debugging
-        bool      weighted = true);   // solve for and use weights
+        bool      weighted);   // solve for and use weights
 
 template
 void
@@ -267,7 +267,7 @@ CtrlCurve(
         MatrixXd& temp_ctrl0,  // first temporary control points buffer
         MatrixXd& temp_ctrl1,  // second temporary control points buffer
         int       curve_id,    // debugging
-        bool      weighted = true);   // solve for and use weights
+        bool      weighted);   // solve for and use weights
 
 template
 void
