@@ -42,13 +42,14 @@ cmake .. \
 -DEIGEN_INCLUDE_DIRS=/path/to/eigen3 \
 -DTBB_INCLUDE_DIR=/path/to/tbb/include \
 -DTBB_LIBRARY=/path/to/tbb/library \
--DCLP_INCLUDE_DIRS=/path/to/Clp/include \
--DCLP_LIB=/path/to/Clp/lib/libClp.a # or libClp.so or libClp.dylib
+-DCLP_INCLUDE_DIRS=/path/to/Clp/include \                       # optional, only needed for weights
+-DCLP_LIB=/path/to/Clp/lib/libClp.a (.so, .dylib) \             # optional, only needed for weights
+-DCOIN_UTILS_LIB=/path/to/Clp/lib/libCoinUtils.a (.so, .dylib)  # optional, only needed for weights
 
 make
 make install
 ```
-# Run example
+# Run examples
 
 Many command-line options are available for the examples. Invoke any example with the
 -h flag to see the available choices. Minimal defaults are included below.

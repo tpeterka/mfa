@@ -26,18 +26,6 @@ AdaptiveEncode(
         int   max_rounds);              // (optional) maximum number of rounds
 
 template
-bool
-mfa::
-Encoder<float>::
-Weights(
-        int       k,                // current dimension
-        MatrixXf& Q,                // input points
-        MatrixXf& N,                // basis functions
-        MatrixXf& NtN,              // N^T * N
-        int       curve_id,         // debugging
-        VectorXf& weights);         // output weights
-
-template
 void
 mfa::
 Encoder<float>::
@@ -202,18 +190,6 @@ AdaptiveEncode(
         double err_limit,           // maximum allowable normalized error
         bool   weighted,            // solve for and use weights
         int    max_rounds);         // (optional) maximum number of rounds
-
-template
-bool
-mfa::
-Encoder<double>::
-Weights(
-        int       k,                // current dimension
-        MatrixXd& Q,                // input points
-        MatrixXd& N,                // basis functions
-        MatrixXd& NtN,              // N^T * N
-        int       curve_id,         // debugging
-        VectorXd& weights);         // output weights
 
 template
 void

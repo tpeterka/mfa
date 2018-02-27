@@ -1,12 +1,8 @@
 project                     (mfa)
 cmake_minimum_required      (VERSION 2.8)
 
-option                      (bgq            "Build on BG/Q"                        OFF)
-option                      (diy_thread     "Enable diy threading"                 OFF)
-
-if                          (bgq)
-    add_definitions         (-DBGQ)
-endif                       (bgq)
+option                      (wrapped_mpi    "MPI compiler wrapper requires no further MPI libs"     OFF)
+option                      (diy_thread     "Enable diy threading"                                  OFF)
 
 # C++11
 set                         (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
@@ -37,10 +33,10 @@ if                          (${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
 endif                       (${CMAKE_SYSTEM_NAME} MATCHES      "Darwin")
 
  # MPI
-find_package                (MPI REQUIRED)
-if                          (NOT bgq)
-    set                     (libraries ${libraries} ${MPI_C_LIBRARIES} ${MPI_CXX_LIBRARIES})
-endif                       (NOT bgq)
+ if                         (NOT wrapped_mpi)
+     find_package           (MPI REQUIRED)
+     set                    (libraries ${libraries} ${MPI_C_LIBRARIES} ${MPI_CXX_LIBRARIES})
+ endif                      ()
 
 # TBB
 find_package                (TBB QUIET)
@@ -74,7 +70,16 @@ find_path                   (DIY_INCLUDE_DIRS diy/types.h)
 
 # Coin-OR CLP
 find_path                   (CLP_INCLUDE_DIRS   ClpSimplex.hpp)
-find_library                (CLP_LIB NAMES     Clp)
+find_library                (CLP_LIB NAMES      Clp)
+if                          (NOT CLP_LIB OR NOT CLP_INCLUDE_DIRS)
+    message                 ("Coin-OR CLP not found; weights are disabled")
+    set                     (CLP_INCLUDE_DIRS   "")
+    set                     (CLP_LIB            "")
+    set                     (COIN_UTILS_LIB     "")
+    add_definitions         (-DMFA_NO_WEIGHTS)
+else                        ()
+    message                 ("Coin-OR CLP found; weights are enabled")
+endif                       ()
 
 # Include dirs
 set                         (CMAKE_INCLUDE_SYSTEM_FLAG_CXX "-isystem")
@@ -82,9 +87,11 @@ include_directories         (${CMAKE_CURRENT_SOURCE_DIR}/include
                             ${DIY_INCLUDE_DIRS}
                             ${EIGEN_INCLUDE_DIRS}
                             SYSTEM
-                            ${CLP_INCLUDE_DIRS}
                             ${MPI_INCLUDE_PATH}
                             )
+if                          (NOT "${CLP_INCLUDE_DIRS}" STREQUAL "")
+    include_directories     (${CLP_INCLUDE_DIRS})
+endif                       ()
 
 # Libraries
 set                         (libraries
