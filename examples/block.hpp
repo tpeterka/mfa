@@ -514,7 +514,7 @@ struct Block
         // f(x,y,z,...) = sine(x) * sine(y) * sine(z) * ...
         for (int j = 0; j < tot_ndom_pts; j++)
         {
-            real_t res = 1.0;                  // product of the sinc functions
+            real_t res = 1.0;                  // product of the sine functions
             for (int i = 0; i < a->dom_dim; i++)
                     res *= sin(domain(j, i));
             res *= a->s;
