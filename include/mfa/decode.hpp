@@ -109,7 +109,7 @@ namespace mfa
                 VolPt(param, cpt, derivs);
                 approx.row(i) = cpt;
             });
-            fprintf(stderr, "100 %% decoded\n");
+//             fprintf(stderr, "100 %% decoded\n");
 
 #else                                               // serial version
 
@@ -150,7 +150,7 @@ namespace mfa
                 if (i > 0 && mfa.domain.rows() >= 100 && i % (mfa.domain.rows() / 100) == 0)
                     fprintf(stderr, "\r%.0f %% decoded", (T)i / (T)(mfa.domain.rows()) * 100);
             }
-            fprintf(stderr, "\r100 %% decoded\n");
+//             fprintf(stderr, "\r100 %% decoded\n");
 
 #endif
 

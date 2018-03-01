@@ -655,9 +655,9 @@ struct Block
         // extents
         domain_mins(a->pt_dim - 1) = min;
         domain_maxs(a->pt_dim - 1) = max;
-        fprintf(stderr, "gid = %d\n", cp.gid());
-        cerr << "domain_mins:\n" << domain_mins << endl;
-        cerr << "domain_maxs:\n" << domain_maxs << "\n" << endl;
+//         fprintf(stderr, "gid = %d\n", cp.gid());
+//         cerr << "domain_mins:\n" << domain_mins << endl;
+//         cerr << "domain_maxs:\n" << domain_maxs << "\n" << endl;
 
         //             cerr << "domain:\n" << domain << endl;
     }
@@ -1521,8 +1521,8 @@ struct Block
     void print_deriv(const diy::Master::ProxyWithLink& cp)
     {
         fprintf(stderr, "gid = %d\n", cp.gid());
-        cerr << "domain\n" << domain << endl;
-        cerr << approx.rows() << " derivatives\n" << approx << endl;
+//         cerr << "domain\n" << domain << endl;
+//         cerr << approx.rows() << " derivatives\n" << approx << endl;
         fprintf(stderr, "\n");
     }
 

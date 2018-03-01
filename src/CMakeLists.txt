@@ -1,6 +1,6 @@
 # Buld mfa library
 
-set                     (MFA_SOURCES mfa.cpp encode.cpp new_knots.cpp nl_encode.cpp)
+set                     (MFA_SOURCES mfa.cpp new_knots.cpp nl_encode.cpp)
 
 add_library             (mfa ${MFA_SOURCES})
 target_link_libraries   (mfa ${libraries})

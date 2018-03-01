@@ -66,17 +66,20 @@ int main(int argc, char** argv)
     }
 
     // echo args
-    fprintf(stderr, "\n--------- Input arguments ----------\n");
-    cerr <<
-        "pt_dim = "    << pt_dim << " dom_dim = "    << dom_dim  <<
-        "\ndegree = " << degree  << " input pts = "  << ndomp    << " ctrl pts = " << nctrl   <<
-        "\ninput = "  << input   << " weighted = "   << weighted << " tot_blocks = " << tot_blocks << endl;
+    if (world.rank() == 0)
+    {
+        fprintf(stderr, "\n--------- Input arguments ----------\n");
+        cerr <<
+            "pt_dim = "    << pt_dim << " dom_dim = "    << dom_dim  <<
+            "\ndegree = " << degree  << " input pts = "  << ndomp    << " ctrl pts = " << nctrl   <<
+            "\ninput = "  << input   << " weighted = "   << weighted << " tot_blocks = " << tot_blocks << endl;
 #ifdef CURVE_PARAMS
-    cerr << "parameterization method = curve" << endl;
+        cerr << "parameterization method = curve" << endl;
 #else
-    cerr << "parameterization method = domain" << endl;
+        cerr << "parameterization method = domain" << endl;
 #endif
-    fprintf(stderr, "-------------------------------------\n\n");
+        fprintf(stderr, "-------------------------------------\n\n");
+    }
 
     // initialize DIY
     diy::FileStorage          storage("./DIY.XXXXXX"); // used for blocks to be moved out of core
@@ -140,16 +143,20 @@ int main(int argc, char** argv)
     }
 
     // compute the MFA
-
-    fprintf(stderr, "\nStarting fixed encoding...\n\n");
+    if (world.rank() == 0)
+        fprintf(stderr, "\nStarting fixed encoding...\n\n");
+    world.barrier();                     // to synchronize timing
     double encode_time = MPI_Wtime();
     master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
             { b->fixed_encode_block(cp, d_args); });
+    world.barrier();                     // to synchronize timing
     encode_time = MPI_Wtime() - encode_time;
-    fprintf(stderr, "\n\nFixed encoding done.\n\n");
+    if (world.rank() == 0)
+        fprintf(stderr, "\n\nFixed encoding done.\n\n");
 
     // debug: compute error field for visualization and max error to verify that it is below the threshold
-    fprintf(stderr, "\nFinal decoding and computing max. error...\n");
+    if (world.rank() == 0)
+        fprintf(stderr, "\nFinal decoding and computing max. error...\n");
     double decode_time = MPI_Wtime();
 #ifdef CURVE_PARAMS     // normal distance
     master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
@@ -160,16 +167,16 @@ int main(int argc, char** argv)
 #endif
     decode_time = MPI_Wtime() - decode_time;
 
-    // debug: save knot span domains for comparing error with location in knot span
-    master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-            { b->knot_span_domains(cp); });
-
     // print results
     fprintf(stderr, "\n------- Final block results --------\n");
     master.foreach(&Block<real_t>::print_block);
     fprintf(stderr, "encoding time         = %.3lf s.\n", encode_time);
     fprintf(stderr, "decoding time         = %.3lf s.\n", decode_time);
     fprintf(stderr, "-------------------------------------\n\n");
+
+    // print overall timing results
+    if (world.rank() == 0)
+        fprintf(stderr, "overall encoding time = %.3lf s.\n", encode_time);
 
     // save the results in diy format
     diy::io::write_blocks("approx.out", world, master);
