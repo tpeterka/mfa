@@ -52,6 +52,8 @@ NewKnots_full(
     return done;
 }
 
+#ifndef MFA_NO_TBB
+
 // TBB version
 //
 // 1d encoding and 1d decoding
@@ -254,182 +256,10 @@ NewKnots_curve1(
     return(nnew_knots.sum() ? 0 : 1);
 }
 
-#if 1
-
-// single thread version
-//
-// 1d encoding and 1d decoding
-// adds knots error spans from all curves in all directions (into a set)
-// adds knots in middles of spans that have error higher than the limit
-// returns true if done, ie, no knots are inserted
-template <typename T>
-bool
-mfa::
-NewKnots<T>::
-NewKnots_curve(
-        VectorXi&      nnew_knots,                       // number of new knots in each dim
-        vector<T>&     new_knots,                        // new knots (1st dim changes fastest)
-        T              err_limit,                        // max allowable error
-        int            iter)                             // iteration number of caller (for debugging)
-{
-    mfa::Encoder<T> encoder(mfa);
-
-    // check and assign main quantities
-    int  ndims = mfa.ndom_pts.size();                   // number of domain dimensions
-    VectorXi n = mfa.nctrl_pts - VectorXi::Ones(ndims); // number of control point spans in each domain dim
-    VectorXi m = mfa.ndom_pts  - VectorXi::Ones(ndims); // number of input data point spans in each domain dim
-    nnew_knots = VectorXi::Zero(mfa.p.size());
-    new_knots.resize(0);
-
-    // resize control points and weights
-    mfa.ctrl_pts.resize(mfa.tot_nctrl, mfa.domain.cols());
-    mfa.weights = VectorX<T>::Ones(mfa.ctrl_pts.rows());
-
-    for (size_t k = 0; k < ndims; k++)              // for all domain dimensions
-    {
-        // for now set weights to 1, TODO: get weights from elsewhere
-        // NB: weights are for all n + 1 control points, not just the n -1 interior ones
-        VectorX<T> weights = VectorX<T>::Ones(n(k) + 1);
-
-        // temporary control points for one curve
-        MatrixX<T> temp_ctrl = MatrixX<T>::Zero(mfa.nctrl_pts(k), mfa.domain.cols());
-
-        // error spans for one curve and for worst curve
-        set<int> err_spans;
-
-        // maximum number of domain points with error greater than err_limit and their curves
-        size_t max_nerr     =  0;
-
-        // N is a matrix of (m + 1) x (n + 1) scalars that are the basis function coefficients
-        //  _                          _
-        // |  N_0(u[0])   ... N_n(u[0]) |
-        // |     ...      ...      ...  |
-        // |  N_0(u[m])   ... N_n(u[m]) |
-        //  -                          -
-        // TODO: N is going to be very sparse when it is large: switch to sparse representation
-        // N has semibandwidth < p  nonzero entries across diagonal
-        MatrixX<T> N = MatrixX<T>::Zero(m(k) + 1, n(k) + 1); // coefficients matrix
-
-        for (int i = 0; i < N.rows(); i++)            // the rows of N
-        {
-            int span = mfa.FindSpan(k, mfa.params(mfa.po[k] + i), mfa.ko[k]) - mfa.ko[k];   // relative to ko
-            mfa.BasisFuns(k, mfa.params(mfa.po[k] + i), span, N, i);
-        }
-
-        // TODO: NtN is going to be very sparse when it is large: switch to sparse representation
-        // NtN has semibandwidth < p + 1 nonzero entries across diagonal
-        MatrixX<T> NtN = N.transpose() * N;
-
-        // R is the right hand side needed for solving NtN * P = R
-        MatrixX<T> R(N.cols(), mfa.domain.cols());
-
-        // P are the unknown interior control points and the solution to NtN * P = R
-        // NtN is positive definite -> do not need pivoting
-        // TODO: use a common representation for P and ctrl_pts to avoid copying
-        MatrixX<T> P(N.cols(), mfa.domain.cols());
-
-        size_t ncurves   = mfa.domain.rows() / mfa.ndom_pts(k); // number of curves in this dimension
-        int nsame_steps  = 0;                                   // number of steps with same number of erroneous points
-        int n_step_sizes = 0;                                   // number of step sizes so far
-
-        // starting step size over curves
-        size_t s0 = ncurves / 2 > 0 ? ncurves / 2 : 1;
-
-        // debug, only one step size s=1
-//         s0 = 1;
-
-        for (size_t s = s0; s >= 1 && ncurves / s < max_num_curves; s /= 2)        // for all step sizes over curves
-        {
-            // debug
-//             fprintf(stderr, "k=%ld s=%ld\n", k, s);
-
-            bool new_max_nerr = false;                      // this step size changed the max_nerr
-
-            for (size_t j = 0; j < ncurves; j++)            // for all the curves in this dimension
-            {
-                // each time the step changes, shift start of s-th curves by one (by subtracting
-                // n_step-sizes below)
-                if (j >= n_step_sizes && (j - n_step_sizes) % s == 0)   // this is one of the s-th curves; compute it
-                {
-                    // compute R from input domain points
-                    encoder.RHS(k, N, R, weights, mfa.ko[k], mfa.po[k], mfa.co[k][j]);
-
-                    // rationalize NtN
-                    MatrixX<T> NtN_rat = NtN;
-                    mfa.Rationalize(k, weights, N, NtN_rat);
-
-                    // solve for P
-#ifdef WEIGH_ALL_DIMS                                           // weigh all dimensions
-                    P = NtN_rat.ldlt().solve(R);
-#else                                                           // don't weigh domain coordinate (only range)
-                    // TODO: avoid 2 solves?
-                    MatrixX<T> P2(P.rows(), P.cols());
-                    P = NtN.ldlt().solve(R);                            // nonrational domain coordinates
-                    P2 = NtN_rat.ldlt().solve(R);                       // rational range coordinate
-                    for (auto i = 0; i < P.rows(); i++)
-                        P(i, P.cols() - 1) = P2(i, P.cols() - 1);
 #endif
 
-                    // append points from P to control points
-                    // TODO: any way to avoid this?
-                    encoder.CopyCtrl(P, k, mfa.co[k][j], temp_ctrl);
+#ifndef MFA_NO_TBB                                      // TBB version
 
-                    // compute the error on the curve (number of input points with error > err_limit)
-                    size_t nerr = encoder.ErrorCurve(k, mfa.co[k][j], temp_ctrl, weights, err_spans, err_limit);
-
-                    if (nerr > max_nerr)
-                    {
-                        max_nerr     = nerr;
-                        new_max_nerr = true;
-                    }
-                }
-            }                                               // curves in this dimension
-
-            // stop refining step if no change
-            if (max_nerr && !new_max_nerr)
-                nsame_steps++;
-            if (nsame_steps == 2)
-                break;
-
-            n_step_sizes++;
-        }                                                   // step sizes over curves
-
-        // free R, NtN, and P
-        R.resize(0, 0);
-        NtN.resize(0, 0);
-        P.resize(0, 0);
-
-        // add new knots in the middle of spans with errors
-        nnew_knots(k) = err_spans.size();
-        auto old_size = new_knots.size();
-        new_knots.resize(old_size + err_spans.size());      // existing values are preserved
-        size_t i = 0;                                       // index into new_knots
-        for (set<int>::iterator it = err_spans.begin(); it != err_spans.end(); ++it)
-        {
-            // debug
-            assert(*it < mfa.nctrl_pts[k]);                          // not trying to go beyond the last span
-
-            new_knots[old_size + i] = (mfa.knots(mfa.ko[k] + *it) + mfa.knots(mfa.ko[k] + *it + 1)) / 2.0;
-            i++;
-        }
-
-        // print progress
-//         fprintf(stderr, "\rdimension %ld of %d encoded\n", k + 1, ndims);
-    }                                                      // domain dimensions
-
-    mfa.InsertKnots(nnew_knots, new_knots);
-
-    // debug
-//     cerr << "\nnnew_knots:\n" << nnew_knots << endl;
-//     cerr << "new_knots:\n"  << new_knots  << endl;
-
-    return(nnew_knots.sum() ? 0 : 1);
-}
-
-#else
-
-// TBB version
-//
 // 1d encoding and 1d decoding
 // for each dimension, finds worst curve for new knots (not new knots from all curves)
 // this is less accurate than inserting all new knots from all curves into a set (as in the serial
@@ -649,22 +479,17 @@ NewKnots_curve(
     return(nnew_knots.sum() ? 0 : 1);
 }
 
-#endif
+#else                                                   // single thread version
 
-// DEPRECATED
-#if 0
-
-// encodes at full dimensionality and decodes in 1d curves
-// decodes 1d curves at control points and adds knot spans from all curves in all directions (into a set)
+// 1d encoding and 1d decoding
+// adds knots error spans from all curves in all directions (into a set)
+// adds knots in middles of spans that have error higher than the limit
 // returns true if done, ie, no knots are inserted
-//
-// this version produces an excessive number of knots and control points and is not recommended
-// remove eventually
 template <typename T>
 bool
 mfa::
 NewKnots<T>::
-NewKnots_hybrid(
+NewKnots_curve(
         VectorXi&      nnew_knots,                       // number of new knots in each dim
         vector<T>&     new_knots,                        // new knots (1st dim changes fastest)
         T              err_limit,                        // max allowable error
@@ -672,64 +497,148 @@ NewKnots_hybrid(
 {
     mfa::Encoder<T> encoder(mfa);
 
+    // check and assign main quantities
+    int  ndims = mfa.ndom_pts.size();                   // number of domain dimensions
+    VectorXi n = mfa.nctrl_pts - VectorXi::Ones(ndims); // number of control point spans in each domain dim
+    VectorXi m = mfa.ndom_pts  - VectorXi::Ones(ndims); // number of input data point spans in each domain dim
+    nnew_knots = VectorXi::Zero(mfa.p.size());
+    new_knots.resize(0);
+
     // resize control points and weights
     mfa.ctrl_pts.resize(mfa.tot_nctrl, mfa.domain.cols());
     mfa.weights = VectorX<T>::Ones(mfa.ctrl_pts.rows());
 
-    // full n-d encoding
-    encoder.Encode();
-
-    size_t ts = 1;                                              // control point stride
-
-    // find new knots
-    nnew_knots = VectorXi::Zero(mfa.p.size());
-    new_knots.resize(0);
-    for (size_t k = 0; k < mfa.p.size(); k++)                   // for all domain dimensions
+    for (size_t k = 0; k < ndims; k++)              // for all domain dimensions
     {
-        set<int> err_spans;                                     // all error spans so far in this dim.
-        size_t ncurves = mfa.ctrl_pts.rows() / mfa.nctrl_pts(k);    // number of curves in this dimension
+        // for now set weights to 1, TODO: get weights from elsewhere
+        // NB: weights are for all n + 1 control points, not just the n -1 interior ones
+        VectorX<T> weights = VectorX<T>::Ones(n(k) + 1);
 
-        // offsets for starting control point for each curve in this dimension
-        vector<size_t> to(ncurves);
-        size_t too     = 0;                                     // to at start of contiguous sequence
-        to[0]          = 0;
+        // temporary control points for one curve
+        MatrixX<T> temp_ctrl = MatrixX<T>::Zero(mfa.nctrl_pts(k), mfa.domain.cols());
 
-        for (auto j = 1; j < ncurves; j++)
+        // error spans for one curve and for worst curve
+        set<int> err_spans;
+
+        // maximum number of domain points with error greater than err_limit and their curves
+        size_t max_nerr     =  0;
+
+        // N is a matrix of (m + 1) x (n + 1) scalars that are the basis function coefficients
+        //  _                          _
+        // |  N_0(u[0])   ... N_n(u[0]) |
+        // |     ...      ...      ...  |
+        // |  N_0(u[m])   ... N_n(u[m]) |
+        //  -                          -
+        // TODO: N is going to be very sparse when it is large: switch to sparse representation
+        // N has semibandwidth < p  nonzero entries across diagonal
+        MatrixX<T> N = MatrixX<T>::Zero(m(k) + 1, n(k) + 1); // coefficients matrix
+
+        for (int i = 0; i < N.rows(); i++)            // the rows of N
         {
-            // adjust offsets for the next curve
-            if (j % ts)
-                to[j] = to[j - 1] + 1;
-            else
-            {
-                to[j] = too + ts * mfa.nctrl_pts(k);
-                too   = to[j];
-            }
+            int span = mfa.FindSpan(k, mfa.params(mfa.po[k] + i), mfa.ko[k]) - mfa.ko[k];   // relative to ko
+            mfa.BasisFuns(k, mfa.params(mfa.po[k] + i), span, N, i);
         }
 
-        // find spans with error > err_limit
-        for (size_t j = 0; j < ncurves; j++)
-            size_t nerr = encoder.ErrorCtrlCurve(k, to[j], err_spans, err_limit);
+        // TODO: NtN is going to be very sparse when it is large: switch to sparse representation
+        // NtN has semibandwidth < p + 1 nonzero entries across diagonal
+        MatrixX<T> NtN = N.transpose() * N;
+
+        // R is the right hand side needed for solving NtN * P = R
+        MatrixX<T> R(N.cols(), mfa.domain.cols());
+
+        // P are the unknown interior control points and the solution to NtN * P = R
+        // NtN is positive definite -> do not need pivoting
+        // TODO: use a common representation for P and ctrl_pts to avoid copying
+        MatrixX<T> P(N.cols(), mfa.domain.cols());
+
+        size_t ncurves   = mfa.domain.rows() / mfa.ndom_pts(k); // number of curves in this dimension
+        int nsame_steps  = 0;                                   // number of steps with same number of erroneous points
+        int n_step_sizes = 0;                                   // number of step sizes so far
+
+        // starting step size over curves
+        size_t s0 = ncurves / 2 > 0 ? ncurves / 2 : 1;
+
+        // debug, only one step size s=1
+//         s0 = 1;
+
+        for (size_t s = s0; s >= 1 && ncurves / s < max_num_curves; s /= 2)        // for all step sizes over curves
+        {
+            // debug
+//             fprintf(stderr, "k=%ld s=%ld\n", k, s);
+
+            bool new_max_nerr = false;                      // this step size changed the max_nerr
+
+            for (size_t j = 0; j < ncurves; j++)            // for all the curves in this dimension
+            {
+                // each time the step changes, shift start of s-th curves by one (by subtracting
+                // n_step-sizes below)
+                if (j >= n_step_sizes && (j - n_step_sizes) % s == 0)   // this is one of the s-th curves; compute it
+                {
+                    // compute R from input domain points
+                    encoder.RHS(k, N, R, weights, mfa.ko[k], mfa.po[k], mfa.co[k][j]);
+
+                    // rationalize NtN
+                    MatrixX<T> NtN_rat = NtN;
+                    mfa.Rationalize(k, weights, N, NtN_rat);
+
+                    // solve for P
+#ifdef WEIGH_ALL_DIMS                                           // weigh all dimensions
+                    P = NtN_rat.ldlt().solve(R);
+#else                                                           // don't weigh domain coordinate (only range)
+                    // TODO: avoid 2 solves?
+                    MatrixX<T> P2(P.rows(), P.cols());
+                    P = NtN.ldlt().solve(R);                            // nonrational domain coordinates
+                    P2 = NtN_rat.ldlt().solve(R);                       // rational range coordinate
+                    for (auto i = 0; i < P.rows(); i++)
+                        P(i, P.cols() - 1) = P2(i, P.cols() - 1);
+#endif
+
+                    // append points from P to control points
+                    // TODO: any way to avoid this?
+                    encoder.CopyCtrl(P, k, mfa.co[k][j], temp_ctrl);
+
+                    // compute the error on the curve (number of input points with error > err_limit)
+                    size_t nerr = encoder.ErrorCurve(k, mfa.co[k][j], temp_ctrl, weights, err_spans, err_limit);
+
+                    if (nerr > max_nerr)
+                    {
+                        max_nerr     = nerr;
+                        new_max_nerr = true;
+                    }
+                }
+            }                                               // curves in this dimension
+
+            // stop refining step if no change
+            if (max_nerr && !new_max_nerr)
+                nsame_steps++;
+            if (nsame_steps == 2)
+                break;
+
+            n_step_sizes++;
+        }                                                   // step sizes over curves
+
+        // free R, NtN, and P
+        R.resize(0, 0);
+        NtN.resize(0, 0);
+        P.resize(0, 0);
 
         // add new knots in the middle of spans with errors
         nnew_knots(k) = err_spans.size();
         auto old_size = new_knots.size();
-        new_knots.resize(old_size + err_spans.size());    // existing values are preserved
-        size_t i = 0;                                           // index into new_knots
+        new_knots.resize(old_size + err_spans.size());      // existing values are preserved
+        size_t i = 0;                                       // index into new_knots
         for (set<int>::iterator it = err_spans.begin(); it != err_spans.end(); ++it)
         {
             // debug
-            assert(*it < mfa.nctrl_pts[k]);                     // not trying to go beyond the last span
+            assert(*it < mfa.nctrl_pts[k]);                          // not trying to go beyond the last span
 
             new_knots[old_size + i] = (mfa.knots(mfa.ko[k] + *it) + mfa.knots(mfa.ko[k] + *it + 1)) / 2.0;
             i++;
         }
 
         // print progress
-        fprintf(stderr, "found total %d new knots after dimension %ld of %ld\n", nnew_knots.sum(), k + 1, mfa.p.size());
-
-        ts *= mfa.nctrl_pts(k);
-    }                                                          // domain dimensions
-    fprintf(stderr, "\n");
+//         fprintf(stderr, "\rdimension %ld of %d encoded\n", k + 1, ndims);
+    }                                                      // domain dimensions
 
     mfa.InsertKnots(nnew_knots, new_knots);
 
@@ -742,9 +651,8 @@ NewKnots_hybrid(
 
 #endif
 
-#if 1
+#ifndef MFA_NO_TBB                                          // TBB version
 
-// TBB version
 // computes error in knot spans
 // marks the knot spans that are done (error <= max_error in the entire span)
 // assumes caller allocated new_knots to number of spans and nnew_knots to domain dimensions
@@ -785,9 +693,6 @@ ErrorSpans(
             // (error likely to be higher in the center of the span?)
             for (auto j = 0; j < nspan_pts; j++)                    // parameters in the span
             {
-                // debug
-//                 fprintf(stderr, "ErrorSpans(): span %ld point %d\n", i, j);
-
                 for (auto k = 0; k < mfa.p.size(); k++)
                 param(k) = mfa.params(mfa.po[k] + p_ijk(k));
 
@@ -837,9 +742,6 @@ ErrorSpans(
             {
                 new_knot_found = true;
                 mfa.InsertKnots(nnew_knots, new_knots);
-
-                // debug
-//             cerr << "inserting nnew_knots:\n" << nnew_knots << endl;
             }
         }
     }
@@ -863,9 +765,9 @@ ErrorSpans(
     return !nnew_knots.sum();
 }
 
-#else
+#else                                                       // single-thread version
 
-// computes error in knot spans, single-threaded version
+// computes error in knot spans
 // marks the knot spans that are done (error <= max_error in the entire span)
 // assumes caller allocated new_knots to number of spans and nnew_knots to domain dimensions
 // (does no resizing of new_knots and nnew_knots) and zeroed nnew_knots
@@ -880,7 +782,7 @@ ErrorSpans(
         T              err_limit,                           // max allowable error
         int            iter)                                // iteration number
 {
-    mfa::Decoder decoder(mfa);
+    mfa::Decoder<T> decoder(mfa);
 
     // initialize all knot spans to not done
     for (auto i = 0; i < mfa.knot_spans.size(); i++)
@@ -911,7 +813,7 @@ ErrorSpans(
             mfa.ijk2idx(p_ijk, idx);
             VectorX<T> cpt(mfa.ctrl_pts.cols());                      // approximated point
             decoder.VolPt(param, cpt);
-            T err = fabs(mfa.NormalDistance(cpt, idx)) / mfa.dom_range;     // normalized by data range
+            T err = fabs(mfa.NormalDistance(cpt, idx)) / mfa.range_extent;     // normalized by data range
 
             // span is not done
             if (err > err_limit)
@@ -936,14 +838,6 @@ ErrorSpans(
         if (span_done)
             mfa.knot_spans[i].done = true;
     }                                                               // knot spans
-
-    // debug
-//     fprintf(stderr, "\nspans to be split:\n-----\n");
-//     for (auto i = 0; i < mfa.knot_spans.size(); i++)                  // knot spans
-//         if (!mfa.knot_spans[i].done && !split_spans[i])
-//             fprintf(stderr, "i=%d min_knot=[%.3f %.3f] max_knot=[%.3f %.3f]\n", i,
-//                     mfa.knot_spans[i].min_knot(0), mfa.knot_spans[i].min_knot(1),
-//                     mfa.knot_spans[i].max_knot(0), mfa.knot_spans[i].max_knot(1));
 
     // split spans that are not done
     auto norig_spans = mfa.knot_spans.size();

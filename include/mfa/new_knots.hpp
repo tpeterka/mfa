@@ -46,17 +46,6 @@ namespace mfa
                 vector<T>&     new_knots,                   // new knots (1st dim changes fastest)
                 T              err_limit,                   // max allowable error
                 int            iter);                       // iteration number of caller (for debugging)
-        // DEPRECATED
-#if 0
-
-        bool NewKnots_hybrid(
-                VectorXi&      nnew_knots,                  // number of new knots in each dim
-                vector<T>&     new_knots,                   // new knots (1st dim changes fastest)
-                T              err_limit,                   // max allowable error
-                int            iter);                       // iteration number of caller (for debugging)
-
-#endif
-
     private:
 
         bool ErrorSpans(

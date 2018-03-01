@@ -112,6 +112,7 @@ int main(int argc, char** argv)
     d_args.dom_dim      = dom_dim;
     d_args.weighted     = weighted;
     d_args.multiblock   = true;
+    d_args.f            = 1.0;
     for (int i = 0; i < MAX_DIM; i++)
     {
         d_args.p[i]         = degree;
@@ -132,7 +133,8 @@ int main(int argc, char** argv)
     // sinc function f(x) = sin(x)/x, f(x,y) = sinc(x)sinc(y), ...
     if (input == "sinc")
     {
-        d_args.s = 10.0;              // scaling factor on range
+        d_args.s = 20.0;              // scaling factor on range
+        d_args.f = 1.0;               // frequency multiplier
         master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
                 { b->generate_sinc_data(cp, d_args); });
     }

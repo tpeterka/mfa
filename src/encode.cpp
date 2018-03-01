@@ -97,7 +97,7 @@ AdaptiveEncode(
     Encode(weighted);
 }
 
-#if 1
+#ifndef MFA_NO_TBB
 
 // TBB version
 // ~2X faster than serial, still expensive to compute curve offsets

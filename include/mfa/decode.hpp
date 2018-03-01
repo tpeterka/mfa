@@ -84,7 +84,7 @@ namespace mfa
                                                     // pass size-0 vector if unused
         {
 
-#if 1                                               // TBB version, faster (~3X) than serial
+#ifndef MFA_NO_TBB                                  // TBB version, faster (~3X) than serial
 
             vector<size_t> iter(mfa.p.size(), 0);   // parameter index (iteration count) in current dim.
             vector<size_t> ofst(mfa.p.size(), 0);   // start of current dim in linearized params

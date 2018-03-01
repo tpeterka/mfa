@@ -20,6 +20,8 @@ NewKnots_full(
         float          err_limit,                   // max allowable error
         int            iter);                       // iteration number of caller (for debugging)
 
+#ifndef MFA_NO_TBB
+
 template
 bool
 mfa::
@@ -30,6 +32,8 @@ NewKnots_curve1(
         float          err_limit,                   // max allowable error
         int            iter);                       // iteration number of caller (for debugging)
 
+#endif
+
 template
 bool
 mfa::
@@ -39,21 +43,6 @@ NewKnots_curve(
         vector<float>& new_knots,                   // new knots (1st dim changes fastest)
         float          err_limit,                   // max allowable error
         int            iter);                       // iteration number of caller (for debugging)
-
-// DEPRECATED
-#if 0
-
-template
-bool
-mfa::
-NewKnots<float>::
-NewKnots_hybrid(
-        VectorXi&      nnew_knots,                  // number of new knots in each dim
-        vector<float>& new_knots,                   // new knots (1st dim changes fastest)
-        float          err_limit,                   // max allowable error
-        int            iter);                       // iteration number of caller (for debugging)
-
-#endif
 
 template
 bool
@@ -98,6 +87,8 @@ NewKnots_full(
         double          err_limit,                   // max allowable error
         int            iter);                       // iteration number of caller (for debugging)
 
+#ifndef MFA_NO_TBB
+
 template
 bool
 mfa::
@@ -108,6 +99,8 @@ NewKnots_curve1(
         double          err_limit,                   // max allowable error
         int            iter);                       // iteration number of caller (for debugging)
 
+#endif
+
 template
 bool
 mfa::
@@ -117,21 +110,6 @@ NewKnots_curve(
         vector<double>& new_knots,                   // new knots (1st dim changes fastest)
         double          err_limit,                   // max allowable error
         int            iter);                       // iteration number of caller (for debugging)
-
-// DEPRECATED
-#if 0
-
-template
-bool
-mfa::
-NewKnots<double>::
-NewKnots_hybrid(
-        VectorXi&      nnew_knots,                  // number of new knots in each dim
-        vector<double>& new_knots,                   // new knots (1st dim changes fastest)
-        double          err_limit,                   // max allowable error
-        int            iter);                       // iteration number of caller (for debugging)
-
-#endif
 
 template
 bool

@@ -55,6 +55,7 @@ struct DomainArgs
     real_t    max[MAX_DIM];                      // maximum corner of domain
     real_t    s;                                 // scaling factor or any other usage
     real_t    r;                                 // x-y rotation of domain or any other usage
+    real_t    f;                                 // frequency multiplier for sinc or any other usage
     real_t    t;                                 // waviness of domain edges or any other usage
     char      infile[256];                       // input filename
     bool      weighted;                          // solve for and use weights (default = true)
@@ -600,7 +601,7 @@ struct Block
             for (int i = 0; i < a->dom_dim; i++)
             {
                 if (domain(j, i) != 0.0)
-                    res *= (sin(domain(j, i)) / domain(j, i));
+                    res *= (sin(domain(j, i) * a->f ) / domain(j, i));
             }
             res *= a->s;
             domain(j, a->pt_dim - 1) = res;
@@ -1348,7 +1349,7 @@ struct Block
             mfa->Decode(approx);
         }
 
-#if 1                                               // TBB version
+#ifndef MFA_NO_TBB                                          // TBB version
 
         // distance computation
         size_t max_idx;
@@ -1424,7 +1425,7 @@ struct Block
             mfa->Decode(approx);
         }
 
-#if 1                                               // TBB version
+#ifndef MFA_NO_TBB                                          // TBB version
 
         // distance computation
         size_t max_idx;

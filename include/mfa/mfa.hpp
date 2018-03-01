@@ -23,7 +23,13 @@
 #include    <Eigen/Dense>
 #include    <vector>
 #include    <list>
+
+#ifndef MFA_NO_TBB
+
 #include    <tbb/tbb.h>
+using namespace tbb;
+
+#endif
 
 typedef Eigen::MatrixXf MatrixXf;
 typedef Eigen::VectorXf VectorXf;
@@ -43,7 +49,6 @@ template <typename T>
 using ArrayX   = Eigen::Array<T, Eigen::Dynamic, 1>;
 
 using namespace std;
-using namespace tbb;
 
 template <typename T>                       // float or double
 struct KnotSpan

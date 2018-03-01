@@ -106,6 +106,7 @@ int main(int argc, char** argv)
     d_args.dom_dim      = dom_dim;
     d_args.weighted     = weighted;
     d_args.multiblock   = false;
+    d_args.f            = 1.0;
     for (int i = 0; i < MAX_DIM; i++)
     {
         d_args.p[i]         = degree;
