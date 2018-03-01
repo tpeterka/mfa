@@ -1324,9 +1324,16 @@ struct Block
 
         // the derivative is a vector of same dimensionality as domain
         // derivative needs to be scaled by domain extent because u,v,... are in [0.0, 1.0]
-        if (deriv && p.size() > 1)
-            for (auto j = 0; j < approx.cols(); j++)
-                approx.col(j) /= (domain_maxs(j) - domain_mins(j));
+        if (deriv)
+        {
+            if (p.size() == 1 || partial >= 0) // TODO: not for mixed partials
+            {
+                if (p.size() == 1)
+                    partial = 0;
+                for (auto j = 0; j < approx.cols(); j++)
+                    approx.col(j) /= (domain_maxs(partial) - domain_mins(partial));
+            }
+        }
 
         // for plotting, set all but the last dimension to be the same as the input domain
         if (deriv)
@@ -1514,8 +1521,8 @@ struct Block
     void print_deriv(const diy::Master::ProxyWithLink& cp)
     {
         fprintf(stderr, "gid = %d\n", cp.gid());
-//         cerr << "domain\n" << domain << endl;
-//         cerr << approx.rows() << " derivatives\n" << approx << endl;
+        cerr << "domain\n" << domain << endl;
+        cerr << approx.rows() << " derivatives\n" << approx << endl;
         fprintf(stderr, "\n");
     }
 

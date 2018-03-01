@@ -40,8 +40,8 @@ cmake .. \
 -DCMAKE_INSTALL_PREFIX=/path/to/mfa/install \
 -DDIY_INCLUDE_DIRS=/path/to/diy/include \
 -DEIGEN_INCLUDE_DIRS=/path/to/eigen3 \
--DTBB_INCLUDE_DIR=/path/to/tbb/include \
--DTBB_LIBRARY=/path/to/tbb/library \
+-DTBB_INCLUDE_DIR=/path/to/tbb/include \                        # optional
+-DTBB_LIBRARY=/path/to/tbb/library \                            # optional
 -DCLP_INCLUDE_DIRS=/path/to/Clp/include \                       # optional, only needed for weights
 -DCLP_LIB=/path/to/Clp/lib/libClp.a (.so, .dylib) \             # optional, only needed for weights
 -DCOIN_UTILS_LIB=/path/to/Clp/lib/libCoinUtils.a (.so, .dylib)  # optional, only needed for weights
