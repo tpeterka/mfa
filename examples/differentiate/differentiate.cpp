@@ -56,6 +56,11 @@ int main(int argc, char** argv)
     fprintf(stderr, "\n--------- Input arguments ----------\n");
     cerr <<
         "deriv = "    << deriv << endl;
+#ifdef MFA_NO_TBB
+    cerr << "TBB: off" << endl;
+#else
+    cerr << "TBB: on" << endl;
+#endif
     fprintf(stderr, "-------------------------------------\n\n");
 
     // initialize DIY
@@ -79,7 +84,7 @@ int main(int argc, char** argv)
     fprintf(stderr, "\nComputing derivative...\n");
     double decode_time = MPI_Wtime();
     master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-            { b->differentiate_block(cp, deriv, partial); });
+            { b->differentiate_block(cp, 1, deriv, partial); });
     decode_time = MPI_Wtime() - decode_time;
 
     // print results

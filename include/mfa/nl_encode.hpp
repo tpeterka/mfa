@@ -71,7 +71,7 @@ namespace mfa
                     T max_err = 0.0;
                     for (size_t i = 0; i < (size_t)mfa.domain.rows(); i++)
                     {
-                        T err = mfa.Error(i);
+                        T err = mfa.Error(i, 1);
                         if (i == 0 || err > max_err)
                             max_err = err;
                     }

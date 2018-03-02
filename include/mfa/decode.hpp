@@ -22,7 +22,10 @@ namespace mfa
     {
     public:
 
-        Decoder(MFA<T>& mfa_) : mfa(mfa_)
+        Decoder(
+                MFA<T>& mfa_,                       // MFA object
+                int     verbose_)                   // output level
+            : mfa(mfa_), verbose(verbose_)
         {
             // ensure that encoding was already done
             if (!mfa.p.size()         ||
@@ -109,7 +112,8 @@ namespace mfa
                 VolPt(param, cpt, derivs);
                 approx.row(i) = cpt;
             });
-//             fprintf(stderr, "100 %% decoded\n");
+            if (verbose)
+                fprintf(stderr, "100 %% decoded\n");
 
 #else                                               // serial version
 
@@ -147,10 +151,10 @@ namespace mfa
                 approx.row(i) = cpt;
 
                 // print progress
-                if (i > 0 && mfa.domain.rows() >= 100 && i % (mfa.domain.rows() / 100) == 0)
-                    fprintf(stderr, "\r%.0f %% decoded", (T)i / (T)(mfa.domain.rows()) * 100);
+                if (verbose)
+                    if (i > 0 && mfa.domain.rows() >= 100 && i % (mfa.domain.rows() / 100) == 0)
+                        fprintf(stderr, "\r%.0f %% decoded", (T)i / (T)(mfa.domain.rows()) * 100);
             }
-//             fprintf(stderr, "\r100 %% decoded\n");
 
 #endif
 
@@ -317,15 +321,13 @@ namespace mfa
 
     private:
 
-        int tot_iters;                          // total iterations in flattened decoding of all dimensions
-
-        MatrixXi  ct;                           // coordinates of first control point of curve for given iteration
-                                                // of decoding loop, relative to start of box of
-                                                // control points
-
-        vector<size_t>  cs;                     // control point stride (only in decoder, not mfa)
-
-        MFA<T>& mfa;                            // the mfa object
+        int             tot_iters;                      // total iterations in flattened decoding of all dimensions
+        MatrixXi        ct;                             // coordinates of first control point of curve for given iteration
+                                                        // of decoding loop, relative to start of box of
+                                                        // control points
+        vector<size_t>  cs;                             // control point stride (only in decoder, not mfa)
+        int             verbose;                        // output level
+        MFA<T>&         mfa;                            // the mfa object
     };
 }
 

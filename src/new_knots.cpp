@@ -35,7 +35,7 @@ NewKnots_full(
         T              err_limit,                   // max allowable error
         int            iter)                        // iteration number of caller (for debugging)
 {
-    mfa::Encoder<T> encoder(mfa);
+    mfa::Encoder<T> encoder(mfa, 1);
 
     // resize control points and weights
     mfa.ctrl_pts.resize(mfa.tot_nctrl, mfa.domain.cols());
@@ -71,7 +71,7 @@ NewKnots_curve1(
         T              err_limit,                        // max allowable error
         int            iter)                             // iteration number of caller (for debugging)
 {
-    mfa::Encoder<T> encoder(mfa);
+    mfa::Encoder<T> encoder(mfa, 1);
 
     // check and assign main quantities
     int  ndims = mfa.ndom_pts.size();                   // number of domain dimensions
@@ -277,7 +277,7 @@ NewKnots_curve(
         T              err_limit,                        // max allowable error
         int            iter)                             // iteration number of caller (for debugging)
 {
-    mfa::Encoder<T> encoder(mfa);
+    mfa::Encoder<T> encoder(mfa, 1);
 
     // check and assign main quantities
     int  ndims = mfa.ndom_pts.size();                   // number of domain dimensions
@@ -495,7 +495,7 @@ NewKnots_curve(
         T              err_limit,                        // max allowable error
         int            iter)                             // iteration number of caller (for debugging)
 {
-    mfa::Encoder<T> encoder(mfa);
+    mfa::Encoder<T> encoder(mfa, 1);
 
     // check and assign main quantities
     int  ndims = mfa.ndom_pts.size();                   // number of domain dimensions
@@ -668,7 +668,7 @@ ErrorSpans(
         T              err_limit,                           // max allowable error
         int            iter)                                // iteration number
 {
-    mfa::Decoder<T> decoder(mfa);
+    mfa::Decoder<T> decoder(mfa, 1);
 
     // initialize all knot spans to not done
     for (auto i = 0; i < mfa.knot_spans.size(); i++)
@@ -782,7 +782,7 @@ ErrorSpans(
         T              err_limit,                           // max allowable error
         int            iter)                                // iteration number
 {
-    mfa::Decoder<T> decoder(mfa);
+    mfa::Decoder<T> decoder(mfa, 1);
 
     // initialize all knot spans to not done
     for (auto i = 0; i < mfa.knot_spans.size(); i++)

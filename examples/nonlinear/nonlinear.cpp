@@ -124,10 +124,10 @@ int main(int argc, char** argv)
     fprintf(stderr, "\nFinal decoding and computing max. error...\n");
 #ifdef CURVE_PARAMS     // normal distance
     master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-            { b->error(cp, true); });
+            { b->error(cp, 1, true); });
 #else                   // range coordinate difference
     master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-            { b->range_error(cp, true); });
+            { b->range_error(cp, 1, true); });
 #endif
 
     // debug: save knot span domains for comparing error with location in knot span

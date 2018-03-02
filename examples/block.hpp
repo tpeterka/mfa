@@ -60,6 +60,7 @@ struct DomainArgs
     char      infile[256];                       // input filename
     bool      weighted;                          // solve for and use weights (default = true)
     bool      multiblock;                        // multiblock domain, get bounds from block
+    int       verbose;                           // output level
 };
 
 struct ErrArgs
@@ -1231,7 +1232,7 @@ struct Block
         for (int i = 0; i < a->dom_dim; i++)
             nctrl_pts(i) =  a->nctrl_pts[i];
         mfa = new mfa::MFA<T>(p, ndom_pts, domain, ctrl_pts, nctrl_pts, weights, knots);
-        mfa->FixedEncode(nctrl_pts, a->weighted);
+        mfa->FixedEncode(nctrl_pts, a->verbose, a->weighted);
     }
 
     // adaptively encode block to desired error limit
@@ -1301,6 +1302,7 @@ struct Block
     // differentiate entire block
     void differentiate_block(
             const diy::Master::ProxyWithLink& cp,
+            int                               verbose,  // output level
             int                               deriv,    // which derivative to take (1 = 1st, 2 = 2nd, ...) in each domain dim.
             int                               partial)  // limit to partial derivative in just this dimension (-1 = no limit)
     {
@@ -1320,7 +1322,7 @@ struct Block
             }
         }
 
-        mfa->Decode(approx, derivs);
+        mfa->Decode(approx, verbose, derivs);
 
         // the derivative is a vector of same dimensionality as domain
         // derivative needs to be scaled by domain extent because u,v,... are in [0.0, 1.0]
@@ -1345,6 +1347,7 @@ struct Block
     // uses normal distance to the curve, surface, etc.
     void error(
             const   diy::Master::ProxyWithLink& cp,
+            int     verbose,                                 // output level
             bool    decode_block)                            // decode entire block first
     {
         errs.resize(domain.rows(), domain.cols());
@@ -1372,7 +1375,7 @@ struct Block
         {
             parallel_for (size_t(0), (size_t)domain.rows(), [&] (size_t i)
                     {
-                    errs(i, errs.cols() - 1) = mfa->Error(i);
+                    errs(i, errs.cols() - 1) = mfa->Error(i, verbose);
                     });
         }
         sum_sq_err = 0.0;
@@ -1398,7 +1401,7 @@ struct Block
                 errs(i, errs.cols() - 1) = fabs(mfa->NormalDistance(cpt, i));
             }
             else
-                errs(i, errs.cols() - 1) = mfa->Error(i);
+                errs(i, errs.cols() - 1) = mfa->Error(i, verbose);
             if (i == 0 || fabs(errs(i, errs.cols() - 1)) > fabs(max_err))
             {
                 max_err = errs(i, errs.cols() - 1);
@@ -1415,6 +1418,7 @@ struct Block
     // uses difference between range values
     void range_error(
             const   diy::Master::ProxyWithLink& cp,
+            int     verbose,                                 // output level
             bool    decode_block)                            // decode entire block first
     {
         errs.resize(domain.rows(), domain.cols());
@@ -1429,7 +1433,7 @@ struct Block
 //                 mfa->weights(i) += i * .01;
 //             cerr << "weights:\n" << mfa->weights << endl;
 
-            mfa->Decode(approx);
+            mfa->Decode(verbose, approx);
         }
 
 #ifndef MFA_NO_TBB                                          // TBB version
@@ -1449,7 +1453,7 @@ struct Block
         {
             parallel_for (size_t(0), (size_t)domain.rows(), [&] (size_t i)
                     {
-                    errs(i, last) = mfa->RangeError(i);
+                    errs(i, last) = mfa->RangeError(i, verbose);
                     });
         }
         sum_sq_err = 0.0;
@@ -1467,7 +1471,8 @@ struct Block
 
         // distance computation
         size_t max_idx;
-        int last = errs.cols() - 1;                 // range coordinate
+        int last   = errs.cols() - 1;               // range coordinate
+        sum_sq_err = 0.0;
         for (size_t i = 0; i < (size_t)domain.rows(); i++)
         {
             if (decode_block)
@@ -1476,7 +1481,8 @@ struct Block
                 errs(i, last) = fabs(cpt(last) - domain(i, last));
             }
             else
-                errs(i, last) = mfa->RangeError(i);
+                errs(i, last) = mfa->RangeError(i, verbose);
+            sum_sq_err += (errs(i, last) * errs(i, last));
             if (i == 0 || errs(i, last) > max_err)
             {
                 max_err = errs(i, last);

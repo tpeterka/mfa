@@ -74,11 +74,21 @@ int main(int argc, char** argv)
     cerr <<
         "pt_dim = "    << pt_dim << " dom_dim = "    << dom_dim  <<
         "\ndegree = " << degree  << " input pts = "  << ndomp    << " ctrl pts = " << nctrl   <<
-        "\ninput = "  << input   << " weighted = "   << weighted << endl;
+        "\ninput = "  << input   << endl;
 #ifdef CURVE_PARAMS
     cerr << "parameterization method = curve" << endl;
 #else
     cerr << "parameterization method = domain" << endl;
+#endif
+#ifdef MFA_NO_TBB
+    cerr << "TBB: off" << endl;
+#else
+    cerr << "TBB: on" << endl;
+#endif
+#ifdef MFA_NO_WEIGHTS
+    cerr << "weighted = 0" << endl;
+#else
+    cerr << "weighted = " << weighted << endl;
 #endif
     fprintf(stderr, "-------------------------------------\n\n");
 
@@ -103,6 +113,7 @@ int main(int argc, char** argv)
     d_args.weighted     = weighted;
     d_args.multiblock   = false;
     d_args.f            = 1.0;
+    d_args.verbose      = 1;
     for (int i = 0; i < MAX_DIM; i++)
     {
         d_args.p[i]         = degree;
@@ -228,10 +239,10 @@ int main(int argc, char** argv)
     double decode_time = MPI_Wtime();
 #ifdef CURVE_PARAMS     // normal distance
     master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-            { b->error(cp, true); });
+            { b->error(cp, 1, true); });
 #else                   // range coordinate difference
     master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-            { b->range_error(cp, true); });
+            { b->range_error(cp, 1, true); });
 #endif
     decode_time = MPI_Wtime() - decode_time;
 

@@ -51,6 +51,15 @@ using ArrayX   = Eigen::Array<T, Eigen::Dynamic, 1>;
 using namespace std;
 
 template <typename T>                       // float or double
+class Encoder;
+
+template <typename T>                       // float or double
+class NL_Encoder;
+
+template <typename T>                       // float or double
+class Decoder;
+
+template <typename T>                       // float or double
 struct KnotSpan
 {
     VectorX<T> min_knot;                  // parameter vector of min knot in this span
@@ -84,33 +93,47 @@ namespace mfa
 
         ~MFA() {}
 
-        void Encode();
+        // encode
+        void Encode(int verbose);           // output level
 
+        // fixed number of control points encode
         void FixedEncode(
                 VectorXi& nctrl_pts_,       // (output) number of control points in each dim
+                int       verbose,          // output level
                 bool      weighted = true); // solve for and use weights
 
+        // adaptive encode
         void AdaptiveEncode(
                 T         err_limit,        // maximum allowable normalized error
                 VectorXi& nctrl_pts_,       // (output) number of control points in each dim
+                int       verbose,          // output level
                 bool      weighted = true,  // solve for and use weights
                 int       max_rounds = 0);  // optional maximum number of rounds
 
+        // nonlinear encode
         void NonlinearEncode(
                 T         err_limit,        // maximum allowable normalized error
                 VectorXi& nctrl_pts_);      // (output) number of control points in each dim
 
+        // decode points
         void Decode(                        // decode points
+                int         verbose,        // output level
                 MatrixX<T>& approx);        // decoded points
 
+        // decode derivatives
         void Decode(                        // decode derivatives
                 MatrixX<T>& approx,         // decoded derivatives
+                int         verbose,        // output level
                 VectorXi&   derivs);        // derivative to take in each domain dim. (0 = value, 1 = 1st deriv, 2 = 2nd deriv, ...)
                                             // pass size-0 vector if unused
 
-        T Error(size_t idx);                // index of domain point where to compute error of mfa
+        T Error(
+                size_t idx,                 // index of domain point where to compute error of mfa
+                int    verbose);            // output level
 
-        T RangeError(size_t idx);           // index of domain point where to compute error of mfa
+        T RangeError(
+                size_t idx,                 // index of domain point where to compute error of mfa
+                int    verbose);            // output level
 
         T NormalDistance(
                 VectorX<T>& pt,             // point whose distance from domain is desired

@@ -72,11 +72,21 @@ int main(int argc, char** argv)
         cerr <<
             "pt_dim = "    << pt_dim << " dom_dim = "    << dom_dim  <<
             "\ndegree = " << degree  << " input pts = "  << ndomp    << " ctrl pts = " << nctrl   <<
-            "\ninput = "  << input   << " weighted = "   << weighted << " tot_blocks = " << tot_blocks << endl;
+            "\ninput = "  << input   << " tot_blocks = " << tot_blocks << endl;
 #ifdef CURVE_PARAMS
         cerr << "parameterization method = curve" << endl;
 #else
         cerr << "parameterization method = domain" << endl;
+#endif
+#ifdef MFA_NO_TBB
+    cerr << "TBB: off" << endl;
+#else
+    cerr << "TBB: on" << endl;
+#endif
+#ifdef MFA_NO_WEIGHTS
+    cerr << "weighted = 0" << endl;
+#else
+    cerr << "weighted = " << weighted << endl;
 #endif
         fprintf(stderr, "-------------------------------------\n\n");
     }
@@ -107,6 +117,8 @@ int main(int argc, char** argv)
                          assigner,
                          [&](int gid, const Bounds& core, const Bounds& bounds, const Bounds& domain, const diy::Link& link)
                          { Block<real_t>::add(gid, core, bounds, domain, link, master, dom_dim, pt_dim); });
+    vector<int> divs(dom_dim);                          // number of blocks in each dimension
+    decomposer.fill_divisions(divs);
 
     DomainArgs d_args;
 
@@ -116,11 +128,12 @@ int main(int argc, char** argv)
     d_args.weighted     = weighted;
     d_args.multiblock   = true;
     d_args.f            = 1.0;
-    for (int i = 0; i < MAX_DIM; i++)
+    d_args.verbose      = 0;
+    for (int i = 0; i < dom_dim; i++)
     {
         d_args.p[i]         = degree;
         d_args.ndom_pts[i]  = ndomp;
-        d_args.nctrl_pts[i] = nctrl;
+        d_args.nctrl_pts[i] = nctrl / divs[i];
     }
 
     // initilize input data
@@ -160,14 +173,14 @@ int main(int argc, char** argv)
     double decode_time = MPI_Wtime();
 #ifdef CURVE_PARAMS     // normal distance
     master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-            { b->error(cp, true); });
+            { b->error(cp, 0, true); });
 #else                   // range coordinate difference
     master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-            { b->range_error(cp, true); });
+            { b->range_error(cp, 0, true); });
 #endif
     decode_time = MPI_Wtime() - decode_time;
 
-    // print results
+    // print block results
     fprintf(stderr, "\n------- Final block results --------\n");
     master.foreach(&Block<real_t>::print_block);
     fprintf(stderr, "encoding time         = %.3lf s.\n", encode_time);
@@ -176,7 +189,7 @@ int main(int argc, char** argv)
 
     // print overall timing results
     if (world.rank() == 0)
-        fprintf(stderr, "overall encoding time = %.3lf s.\n", encode_time);
+        fprintf(stderr, "\noverall encoding time = %.3lf s.\n", encode_time);
 
     // save the results in diy format
     diy::io::write_blocks("approx.out", world, master);

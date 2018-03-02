@@ -332,9 +332,9 @@ template <typename T>
 void
 mfa::
 MFA<T>::
-Encode()
+Encode(int verbose)                         // output level
 {
-    mfa::Encoder<T> encoder(*this);
+    mfa::Encoder<T> encoder(*this, verbose);
     encoder.Encode();
 }
 
@@ -345,10 +345,11 @@ mfa::
 MFA<T>::
 FixedEncode(
         VectorXi &nctrl_pts_,               // (output) number of control points in each dim
+        int      verbose,                   // output level
         bool     weighted)                  // solve for and use weights (default = true)
 {
     weights = VectorX<T>::Ones(tot_nctrl);
-    mfa::Encoder<T> encoder(*this);
+    mfa::Encoder<T> encoder(*this, verbose);
     encoder.Encode(weighted);
     nctrl_pts_ = nctrl_pts;
 }
@@ -361,11 +362,12 @@ MFA<T>::
 AdaptiveEncode(
         T         err_limit,                 // maximum allowable normalized error
         VectorXi& nctrl_pts_,                // (output) number of control points in each dim
+        int       verbose,                   // output level
         bool      weighted,                  // solve for and use weights (default = true)
         int       max_rounds)                // optional maximum number of rounds
 {
     weights = VectorX<T>::Ones(tot_nctrl);
-    mfa::Encoder<T> encoder(*this);
+    mfa::Encoder<T> encoder(*this, verbose);
     encoder.AdaptiveEncode(err_limit, weighted, max_rounds);
     nctrl_pts_ = nctrl_pts;
 }
@@ -394,10 +396,11 @@ void
 mfa::
 MFA<T>::
 Decode(
-        MatrixX<T>& approx)         // decoded points
+        int         verbose,                // output level
+        MatrixX<T>& approx)                 // decoded points
 {
-    VectorXi no_derivs;             // size-0 means no derivatives
-    Decode(approx, no_derivs);
+    VectorXi no_derivs;                     // size-0 means no derivatives
+    Decode(approx, verbose, no_derivs);
 }
 
 // decode derivatives
@@ -406,11 +409,12 @@ void
 mfa::
 MFA<T>::
 Decode(
-        MatrixX<T>& approx,         // decoded derivatives
-        VectorXi&   derivs)         // derivative to take in each domain dim. (0 = value, 1 = 1st deriv, 2 = 2nd deriv, ...)
-                                    // pass size-0 vector if unused
+        MatrixX<T>& approx,                 // decoded derivatives
+        int         verbose,                // output level
+        VectorXi&   derivs)                 // derivative to take in each domain dim. (0 = value, 1 = 1st deriv, 2 = 2nd deriv, ...)
+                                            // pass size-0 vector if unused
 {
-    mfa::Decoder<T> decoder(*this);
+    mfa::Decoder<T> decoder(*this, verbose);
     decoder.Decode(approx, derivs);
 }
 
@@ -1188,7 +1192,9 @@ template <typename T>
 T
 mfa::
 MFA<T>::
-Error(size_t idx)               // index of domain point
+Error(
+        size_t idx,               // index of domain point
+        int    verbose)           // output level
 {
     // convert linear idx to multidim. i,j,k... indices in each domain dimension
     VectorXi ijk(p.size());
@@ -1204,7 +1210,7 @@ Error(size_t idx)               // index of domain point
 
     // approximated value
     VectorX<T> cpt(ctrl_pts.cols());          // approximated point
-    Decoder<T> decoder(*this);
+    Decoder<T> decoder(*this, verbose);
     decoder.VolPt(param, cpt);
 
      // debug
@@ -1224,7 +1230,9 @@ template <typename T>
 T
 mfa::
 MFA<T>::
-RangeError(size_t idx)               // index of domain point
+RangeError(
+        size_t idx,               // index of domain point
+        int    verbose)           // output level
 {
     // convert linear idx to multidim. i,j,k... indices in each domain dimension
     VectorXi ijk(p.size());
@@ -1240,7 +1248,7 @@ RangeError(size_t idx)               // index of domain point
 
     // approximated value
     VectorX<T> cpt(ctrl_pts.cols());          // approximated point
-    Decoder<T> decoder(*this);
+    Decoder<T> decoder(*this, verbose);
     decoder.VolPt(param, cpt);
 
      // debug

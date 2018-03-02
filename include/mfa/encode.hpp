@@ -38,7 +38,10 @@ namespace mfa
     {
     public:
 
-        Encoder(MFA<T>& mfa_) : mfa(mfa_) {}
+        Encoder(
+                MFA<T>& mfa_,               // MFA object
+                int     verbose_)           // output level
+            : mfa(mfa_), verbose(verbose_) {}
 
         ~Encoder() {}
 
@@ -181,9 +184,12 @@ namespace mfa
                 for (size_t j = 0; j < ncurves; j++)
                 {
                     // print progress
-                    if (j > 0 && j > 100 && j % (ncurves / 100) == 0)
-                        fprintf(stderr, "\r dimension %ld: %.0f %% encoded (%ld out of %ld curves)",
-                                k, (T)j / (T)ncurves * 100, j, ncurves);
+                    if (verbose)
+                    {
+                        if (j > 0 && j > 100 && j % (ncurves / 100) == 0)
+                            fprintf(stderr, "\r dimension %ld: %.0f %% encoded (%ld out of %ld curves)",
+                                    k, (T)j / (T)ncurves * 100, j, ncurves);
+                    }
 
                     // compute the one curve of control points
                     CtrlCurve(N, NtN, R, P, k, co[j], cs, to[j], temp_ctrl0, temp_ctrl1, j, weighted);
@@ -197,7 +203,8 @@ namespace mfa
                 NtN.resize(0, 0);                           // free NtN
 
                 // print progress
-                fprintf(stderr, "\rdimension %ld of %d encoded", k + 1, ndims);
+                if (verbose)
+                    fprintf(stderr, "\ndimension %ld of %d encoded\n", k + 1, ndims);
 
             }                                                      // domain dimensions
         }
@@ -222,7 +229,8 @@ namespace mfa
                 if (max_rounds > 0 && iter >= max_rounds)               // optional cap on number of rounds
                     break;
 
-                fprintf(stderr, "Iteration %d...\n", iter);
+                if (verbose)
+                    fprintf(stderr, "Iteration %d...\n", iter);
 
 #ifdef HIGH_D           // high-d w/ splitting spans in the middle
 
@@ -243,7 +251,8 @@ namespace mfa
                 // no new knots to be added
                 if (done)
                 {
-                    fprintf(stderr, "\nKnot insertion done after %d iterations; no new knots added.\n\n", iter + 1);
+                    if (verbose)
+                        fprintf(stderr, "\nKnot insertion done after %d iterations; no new knots added.\n\n", iter + 1);
                     break;
                 }
 
@@ -257,13 +266,15 @@ namespace mfa
                     }
                 if (done)
                 {
-                    fprintf(stderr, "\nKnot insertion done after %d iterations; control points would outnumber input points.\n", iter + 1);
+                    if (verbose)
+                        fprintf(stderr, "\nKnot insertion done after %d iterations; control points would outnumber input points.\n", iter + 1);
                     break;
                 }
             }
 
             // final full encoding needed after last knot insertion above
-            fprintf(stderr, "Encoding in full %ldD\n", mfa.p.size());
+            if (verbose)
+                fprintf(stderr, "Encoding in full %ldD\n", mfa.p.size());
             Encode(weighted);
         }
 
@@ -418,7 +429,8 @@ namespace mfa
                             weights = solved_weights;
                             weights *= (1.0 / weights.maxCoeff());  // scale to max weight = 1
                             success = true;
-                            fprintf(stderr, "curve %d: successful linear solve from %d eigenvectors\n", curve_id, i);
+                            if (verbose)
+                                fprintf(stderr, "curve %d: successful linear solve from %d eigenvectors\n", curve_id, i);
                         }
                     }
 
@@ -429,7 +441,8 @@ namespace mfa
                 if (!success)
                 {
                     weights = VectorX<T>::Ones(nweights);
-                    fprintf(stderr, "curve %d: linear solver could not find positive weights; setting to 1\n", curve_id);
+                    if (verbose)
+                        fprintf(stderr, "curve %d: linear solver could not find positive weights; setting to 1\n", curve_id);
                 }
             }                                                   // else need to expand eigenspace
 
@@ -803,7 +816,7 @@ namespace mfa
                 set<int>&      err_spans,     // spans with error greater than err_limit
                 T              err_limit)     // max allowable error
         {
-            mfa::Decoder<T> decoder(mfa);
+            mfa::Decoder<T> decoder(mfa, verbose);
             VectorX<T> cpt(mfa.domain.cols());            // decoded curve point
             int nerr = 0;                               // number of points with error greater than err_limit
             int span = mfa.p[k];                        // current knot span of the domain point being checked
@@ -942,6 +955,7 @@ namespace mfa
         friend class NewKnots;
 
         MFA<T>& mfa;                           // the mfa object
+        int     verbose;                       // output level
     };
 }
 

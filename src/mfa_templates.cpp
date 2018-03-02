@@ -22,7 +22,7 @@ template
 void
 mfa::
 MFA<float>::
-Encode();
+Encode(int verbose);                // output level
 
 template
 void
@@ -30,6 +30,7 @@ mfa::
 MFA<float>::
 FixedEncode(
         VectorXi& nctrl_pts_,       // (output) number of control points in each dim
+        int       verbose,          // output level
         bool      weighted);        // solve for and use weights
 
 template
@@ -39,6 +40,7 @@ MFA<float>::
 AdaptiveEncode(
         float     err_limit,        // maximum allowable normalized error
         VectorXi& nctrl_pts_,       // (output) number of control points in each dim
+        int      verbose,                   // output level
         bool      weighted,         // solve for and use weights
         int       max_rounds);      // optional maximum number of rounds
 
@@ -55,6 +57,7 @@ void
 mfa::
 MFA<float>::
 Decode(
+        int      verbose,                   // output level
         MatrixXf& approx);                  // decoded points
 
 template
@@ -63,6 +66,7 @@ mfa::
 MFA<float>::
 Decode(
         MatrixXf& approx,                   // decoded points
+        int      verbose,                   // output level
         VectorXi& derivs);                  // derivative to take in each domain dim. (0 = value, 1 = 1st deriv, 2 = 2nd deriv, ...)
                                             // pass size-0 vector if unused
 
@@ -70,13 +74,17 @@ template
 float
 mfa::
 MFA<float>::
-Error(size_t idx);            // index of domain point where to compute error of mfa
+Error(
+        size_t idx,                         // index of domain point where to compute error of mfa
+        int    verbose);                    // output level
 
 template
 float
 mfa::
 MFA<float>::
-RangeError(size_t idx);       // index of domain point where to compute error of mfa
+RangeError(
+        size_t idx,                         // index of domain point where to compute error of mfa
+        int    verbose);                    // output level
 
 template
 float
@@ -232,7 +240,7 @@ template
 void
 mfa::
 MFA<double>::
-Encode();
+Encode(int verbose);                // output level
 
 template
 void
@@ -240,6 +248,7 @@ mfa::
 MFA<double>::
 FixedEncode(
         VectorXi& nctrl_pts_,       // (output) number of control points in each dim
+        int       verbose,          // output level
         bool      weighted);        // solve for and use weights
 
 template
@@ -249,6 +258,7 @@ MFA<double>::
 AdaptiveEncode(
         double     err_limit,       // maximum allowable normalized error
         VectorXi& nctrl_pts_,       // (output) number of control points in each dim
+        int      verbose,                   // output level
         bool      weighted,         // solve for and use weights
         int       max_rounds);      // optional maximum number of rounds
 
@@ -265,6 +275,7 @@ void
 mfa::
 MFA<double>::
 Decode(
+        int      verbose,                   // output level
         MatrixXd& approx);                  // decoded points
 
 template
@@ -273,19 +284,24 @@ mfa::
 MFA<double>::
 Decode(
         MatrixXd& approx,                   // decoded points
+        int      verbose,                   // output level
         VectorXi& derivs);                  // derivative to take in each domain dim. (0 = value, 1 = 1st deriv, 2 = 2nd deriv, ...)
                                             // pass size-0 vector if unused
 template
 double
 mfa::
 MFA<double>::
-Error(size_t idx);            // index of domain point where to compute error of mfa
+Error(
+        size_t idx,                         // index of domain point where to compute error of mfa
+        int    verbose);                    // output level
 
 template
 double
 mfa::
 MFA<double>::
-RangeError(size_t idx);       // index of domain point where to compute error of mfa
+RangeError(
+        size_t idx,                         // index of domain point where to compute error of mfa
+        int    verbose);                    // output level
 
 template
 double
