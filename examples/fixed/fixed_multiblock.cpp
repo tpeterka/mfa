@@ -45,18 +45,20 @@ int main(int argc, char** argv)
     int    nctrl     = 11;                       // input number of control points (same for all dims)
     string input     = "sine";                   // input dataset
     bool   weighted  = true;                     // solve for and use weights
+    bool   strong_sc = true;                     // strong scaling (false = weak scaling)
 
     // get command line arguments
     using namespace opts;
     Options ops(argc, argv);
-    ops >> Option('d', "pt_dim",     pt_dim,   " dimension of points");
-    ops >> Option('m', "dom_dim",    dom_dim,  " dimension of domain");
-    ops >> Option('p', "degree",     degree,   " degree in each dimension of domain");
-    ops >> Option('n', "ndomp",      ndomp,    " number of input points in each dimension of domain");
-    ops >> Option('c', "nctrl",      nctrl,    " number of control points in each dimension");
-    ops >> Option('i', "input",      input,    " input dataset");
-    ops >> Option('w', "weights",    weighted, " solve for and use weights");
-    ops >> Option('b', "tot_blocks", tot_blocks, "total number of blocks");
+    ops >> Option('d', "pt_dim",     pt_dim,     " dimension of points");
+    ops >> Option('m', "dom_dim",    dom_dim,    " dimension of domain");
+    ops >> Option('p', "degree",     degree,     " degree in each dimension of domain");
+    ops >> Option('n', "ndomp",      ndomp,      " number of input points in each dimension of domain");
+    ops >> Option('c', "nctrl",      nctrl,      " number of control points in each dimension");
+    ops >> Option('i', "input",      input,      " input dataset");
+    ops >> Option('w', "weights",    weighted,   " solve for and use weights");
+    ops >> Option('b', "tot_blocks", tot_blocks, " total number of blocks");
+    ops >> Option('t', "strong_sc",  strong_sc,  " strong scaling (1 = strong, 0 = weak)");
 
     if (ops >> Present('h', "help", "show help"))
     {
@@ -70,9 +72,9 @@ int main(int argc, char** argv)
     {
         fprintf(stderr, "\n--------- Input arguments ----------\n");
         cerr <<
-            "pt_dim = "    << pt_dim << " dom_dim = "    << dom_dim  <<
-            "\ndegree = " << degree  << " input pts = "  << ndomp    << " ctrl pts = " << nctrl   <<
-            "\ninput = "  << input   << " tot_blocks = " << tot_blocks << endl;
+            "pt_dim = "   << pt_dim  << " dom_dim = "    << dom_dim    <<
+            "\ndegree = " << degree  << " input pts = "  << ndomp      << " ctrl pts = " << nctrl   <<
+            "\ninput = "  << input   << " tot_blocks = " << tot_blocks << " strong scaling = " << strong_sc << endl;
 #ifdef CURVE_PARAMS
         cerr << "parameterization method = curve" << endl;
 #else
@@ -132,8 +134,15 @@ int main(int argc, char** argv)
     for (int i = 0; i < dom_dim; i++)
     {
         d_args.p[i]         = degree;
-        d_args.ndom_pts[i]  = ndomp;
-        d_args.nctrl_pts[i] = nctrl / divs[i];
+        if (strong_sc)                          // strong scaling, reduced number of points per block
+        {
+            d_args.ndom_pts[i]  = ndomp / divs[i];
+            d_args.nctrl_pts[i] = nctrl / divs[i];
+        } else                                  // weak scaling, same number of points per block
+        {
+            d_args.ndom_pts[i]  = ndomp;
+            d_args.nctrl_pts[i] = nctrl;
+        }
     }
 
     // initilize input data

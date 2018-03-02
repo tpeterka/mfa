@@ -34,8 +34,6 @@ void PrepRenderingData(
         vector<vec3d>& approx_pts,
         vector<float>& approx_data,
         vector<vec3d>& err_pts,
-        vector<int>&   nknot_pts,
-        vector<vec3d>& knot_pts,
         vector<vec3d>& block_mins,
         vector<vec3d>& block_maxs,
         int            nblocks,
@@ -106,88 +104,6 @@ void PrepRenderingData(
                 max_err = p.y;
         }
 
-        // number of knot points
-        for (size_t j = 0; j < (size_t)(block->p.size()); j++)
-            nknot_pts.push_back(block->nctrl_pts(j) - block->p(j) + 1);
-        nknot_pts.push_back(2);                         // 2 layers of points
-
-        // knot points
-        // range values go from just below 0 to just above the max error
-        // NB: only for 1d and 2d domains
-        for (size_t j = 0; j < (size_t)(block->span_mins.rows()); j++)
-        {
-            p.x = block->domain(block->span_mins(j), 0);
-            if (block->domain.cols() > 2)
-            {
-                p.y = block->domain(block->span_mins(j), 1);
-                p.z = -max_err * 0.1;
-            }
-            else
-            {
-                p.y = -max_err * 0.1;
-                p.z = 0.0;
-            }
-            knot_pts.push_back(p);
-
-            // if end of row is reached, add one knot point for max
-            if ((j + 1) % (block->nctrl_pts(0) - block->p(0)) == 0)
-            {
-                p.x = block->domain(block->span_maxs(j), 0);
-                if (block->domain.cols() > 2)
-                {
-                    p.y = block->domain(block->span_mins(j), 1);
-                    p.z = -max_err * 0.1;
-                }
-                else
-                {
-                    p.y = -max_err * 0.1;
-                    p.z = 0.0;
-                }
-                knot_pts.push_back(p);
-            }
-        }
-        // add one more row of knot points for max
-        if (block->ndom_pts.size() > 1)             // domain (not point) dimensionality
-        {
-            // so = starting span of last row of spans
-            size_t so = (block->nctrl_pts(0) - block->p(0)) * (block->nctrl_pts(1) - block->p(1) - 1);
-            for (size_t j = 0; j < (size_t)(block->nctrl_pts(0) - block->p(0) + 1); j++)
-            {
-                if (j < block->nctrl_pts(0) - block->p(0))
-                        p.x = block->domain(block->span_mins(so + j), 0);
-                else
-                        p.x = block->domain(block->span_maxs(so + j - 1), 0);
-                if (block->domain.cols() > 2)
-                {
-                    p.y = block->domain(block->span_maxs(so), 1);
-                    p.z = -max_err * 0.1;
-                }
-                else
-                {
-                    p.y = -max_err * 0.1;
-                    p.z = 0.0;
-                }
-                knot_pts.push_back(p);
-            }
-        }
-        // add an upper layer of points just above the max error
-        size_t nknots = knot_pts.size();
-        for (size_t j = 0; j < nknots; j++)
-        {
-            p.x = knot_pts[j].x;
-            if (block->domain.cols() > 2)
-            {
-                p.y = knot_pts[j].y;
-                p.z = max_err * 1.1;
-            }
-            else
-            {
-                p.y = max_err * 1.1;
-                p.z = 0;
-            }
-            knot_pts.push_back(p);
-        }
-
         // block mins
         p.x = block->domain_mins(0);
         p.y = block->domain_mins(1);
@@ -227,8 +143,6 @@ int main(int argc, char ** argv)
     vector<vec3d> approx_pts;                     // aproximated data points (<= 3d)
     vector<float> approx_data;                    // approximated data values (4d)
     vector<vec3d> err_pts;                        // abs value error field
-    vector<int>   nknot_pts;                      // number of knot span points in each dim.
-    vector<vec3d> knot_pts;                       // knot span points
     vector<vec3d> block_mins;                     // block mins
     vector<vec3d> block_maxs;                     // block maxs
     string infile(argv[1]);
@@ -256,8 +170,6 @@ int main(int argc, char ** argv)
             approx_pts,
             approx_data,
             err_pts,
-            nknot_pts,
-            knot_pts,
             block_mins,
             block_maxs,
             nblocks,
@@ -269,7 +181,6 @@ int main(int argc, char ** argv)
     {
         nctrl_pts.push_back(1);
         nraw_pts.push_back(1);
-        nknot_pts.push_back(1);
     }
 
     // copy error as a new variable (z dimension, or maybe magnitude?)
@@ -369,16 +280,4 @@ int main(int argc, char ** argv)
             /* int *centering */                            &centering,
             /* const char * const *varnames */              &name_err,
             /* float **vars */                              &vars);
-
-    // write knot points
-    write_curvilinear_mesh(
-            /* const char *filename */                      "knots.vtk",
-            /* int useBinary */                             0,
-            /* int *dims */                                 &nknot_pts[0],
-            /* float *pts */                                &(knot_pts[0].x),
-            /* int nvars */                                 0,
-            /* int *vardim */                               NULL,
-            /* int *centering */                            NULL,
-            /* const char * const *varnames */              NULL,
-            /* float **vars */                              NULL);
 }
