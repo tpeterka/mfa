@@ -258,7 +258,7 @@ NewKnots_curve1(
 
 #endif
 
-#ifndef MFA_NO_TBB                                      // TBB version
+#if 0                                      // TBB version, currently not used
 
 // 1d encoding and 1d decoding
 // for each dimension, finds worst curve for new knots (not new knots from all curves)
@@ -277,7 +277,7 @@ NewKnots_curve(
         T              err_limit,                        // max allowable error
         int            iter)                             // iteration number of caller (for debugging)
 {
-    mfa::Encoder encoder(mfa);
+    mfa::Encoder<T> encoder(mfa);
 
     // check and assign main quantities
     int  ndims = mfa.ndom_pts.size();                   // number of domain dimensions
@@ -353,7 +353,7 @@ NewKnots_curve(
                 MatrixX<T> P(N.cols(), mfa.domain.cols());
 
                 // compute R from input domain points
-                RHS(k, N, R, weights, mfa.ko[k], mfa.po[k], mfa.co[k][j * s]);
+                encoder.RHS(k, N, R, weights, mfa.ko[k], mfa.po[k], mfa.co[k][j * s]);
 
                 // rationalize NtN
                 MatrixX<T> NtN_rat = NtN;
@@ -374,10 +374,10 @@ NewKnots_curve(
                 // append points from P to control points
                 // TODO: any way to avoid this?
                 MatrixX<T> temp_ctrl = MatrixX<T>::Zero(mfa.nctrl_pts(k), mfa.domain.cols());   // temporary control points for one curve
-                CopyCtrl(P, k, mfa.co[k][j * s], temp_ctrl);
+                encoder.CopyCtrl(P, k, mfa.co[k][j * s], temp_ctrl);
 
                 // compute the error on the curve (number of input points with error > err_limit)
-                nerrs[j] = ErrorCurve(k, mfa.co[k][j * s], temp_ctrl, err_limit);
+                nerrs[j] = encoder.ErrorCurve(k, mfa.co[k][j * s], temp_ctrl, err_limit);
 
             });                                               // parallel for over curves in this dimension
 

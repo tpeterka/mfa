@@ -56,11 +56,6 @@ namespace mfa
         void Encode(
                 bool weighted = true)       // solve for and use weights
         {
-
-#ifndef MFA_NO_TBB                          // TBB version
-
-            // TODO: some of these quantities mirror this in the mfa
-
             // check and assign main quantities
             VectorXi n;                             // number of control point spans in each domain dim
             VectorXi m;                             // number of input data point spans in each domain dim
@@ -85,8 +80,6 @@ namespace mfa
             MatrixX<T> temp_ctrl1 = MatrixX<T>::Zero(tot_ntemp_ctrl, mfa.domain.cols());
 
             VectorXi ntemp_ctrl = mfa.ndom_pts;     // current num of temp control pts in each dim
-
-            T  max_err_val;                     // maximum solution error in final dim of all curves
 
             for (size_t k = 0; k < ndims; k++)      // for all domain dimensions
             {
@@ -155,6 +148,8 @@ namespace mfa
                 // NtN has semibandwidth < p + 1 nonzero entries across diagonal
                 MatrixX<T> NtN  = N.transpose() * N;;
 
+#ifndef MFA_NO_TBB                                  // TBB version
+
                 parallel_for (size_t(0), ncurves, [&] (size_t j)      // for all the curves in this dimension
                         {
                         // debug
@@ -172,117 +167,7 @@ namespace mfa
                         CtrlCurve(N, NtN, R, P, k, co[j], cs, to[j], temp_ctrl0, temp_ctrl1, -1, weighted);
                         });                                                  // curves in this dimension
 
-                // adjust offsets and strides for next dimension
-                ntemp_ctrl(k) = mfa.nctrl_pts(k);
-                cs *= ntemp_ctrl(k);
-
-                NtN.resize(0, 0);                           // free NtN
-
-                // print progress
-                fprintf(stderr, "\rdimension %ld of %d encoded", k + 1, ndims);
-
-            }                                                      // domain dimensions
-
-            fprintf(stderr,"\n");
-
 #else                                       // serial vesion
-
-            // check and assign main quantities
-            VectorXi n;                                 // number of control point spans in each domain dim
-            VectorXi m;                                 // number of input data point spans in each domain dim
-            int      ndims = mfa.ndom_pts.size();       // number of domain dimensions
-            size_t   cs    = 1;                         // stride for domain points in curve in cur. dim
-
-            Quants(n, m);
-
-            // control points
-            mfa.ctrl_pts.resize(mfa.tot_nctrl, mfa.domain.cols());
-
-            // 2 buffers of temporary control points
-            // double buffer needed to write output curves of current dim without changing its input pts
-            // temporary control points need to begin with size as many as the input domain points
-            // except for the first dimension, which can be the correct number of control points
-            // because the input domain points are converted to control points one dimension at a time
-            // TODO: need to find a more space-efficient way
-            size_t tot_ntemp_ctrl = 1;
-            for (size_t k = 0; k < ndims; k++)
-                tot_ntemp_ctrl *= (k == 0 ? mfa.nctrl_pts(k) : mfa.ndom_pts(k));
-            MatrixX<T> temp_ctrl0 = MatrixX<T>::Zero(tot_ntemp_ctrl, mfa.domain.cols());
-            MatrixX<T> temp_ctrl1 = MatrixX<T>::Zero(tot_ntemp_ctrl, mfa.domain.cols());
-
-            VectorXi ntemp_ctrl = mfa.ndom_pts;         // current num of temp control pts in each dim
-
-            for (size_t k = 0; k < ndims; k++)          // for all domain dimensions
-            {
-                // number of curves in this dimension
-                size_t ncurves;
-                ncurves = 1;
-                for (int i = 0; i < ndims; i++)
-                {
-                    if (i < k)
-                        ncurves *= mfa.nctrl_pts(i);
-                    else if (i > k)
-                        ncurves *= mfa.ndom_pts(i);
-                    // NB: current dimension contributes no curves, hence no i == k case
-                }
-
-                // compute local version of co
-                vector<size_t> co(ncurves);                     // starting curve points in current dim.
-                vector<size_t> to(ncurves);                     // starting control points in current dim.
-                co[0]      = 0;
-                to[0]      = 0;
-                size_t coo = 0;                                 // co at start of contiguous sequence
-                size_t too = 0;                                 // to at start of contiguous sequence
-
-                for (auto j = 1; j < ncurves; j++)
-                {
-                    if (j % cs)
-                    {
-                        co[j] = co[j - 1] + 1;
-                        to[j] = to[j - 1] + 1;
-                    }
-                    else
-                    {
-                        co[j] = coo + cs * ntemp_ctrl(k);
-                        coo   = co[j];
-                        to[j] = too + cs * mfa.nctrl_pts(k);
-                        too   = to[j];
-                    }
-                }
-
-                // TODO:
-                // Investigate whether in later dimensions, when input data points are replaced by
-                // control points, need new knots and params computed.
-                // In the next dimension, the coordinates of the dimension didn't change,
-                // but the chord length did, as control points moved away from the data points in
-                // the prior dim. Need to determine how much difference it would make to recompute
-                // params and knots for the new input points
-
-                // N is a matrix of (m + 1) x (n + 1) scalars that are the basis function coefficients
-                //  _                          _
-                // |  N_0(u[0])   ... N_n(u[0]) |
-                // |     ...      ...      ...  |
-                // |  N_0(u[m])   ... N_n(u[m]) |
-                //  -                          -
-                // TODO: N is going to be very sparse when it is large: switch to sparse representation
-                // N has semibandwidth < p  nonzero entries across diagonal
-                MatrixX<T> N = MatrixX<T>::Zero(m(k) + 1, n(k) + 1); // coefficients matrix
-
-                for (int i = 0; i < N.rows(); i++)            // the rows of N
-                {
-                    int span = mfa.FindSpan(k, mfa.params(mfa.po[k] + i), mfa.ko[k]) - mfa.ko[k];  // relative to ko
-                    mfa.BasisFuns(k, mfa.params(mfa.po[k] + i), span, N, i);
-                }
-
-                // debug
-                //         cerr << "k " << k << " N:\n" << N << endl;
-                //         for (auto i = 0; i < N.rows(); i++)
-                //             cerr << "row " << i << " sum (should be 1.0): " << N.row(i).sum() << endl;
-
-                // compute various other matrices from N
-                // TODO: NtN is going to be very sparse when it is large: switch to sparse representation
-                // NtN has semibandwidth < p + 1 nonzero entries across diagonal
-                MatrixX<T> NtN  = N.transpose() * N;;
 
                 // R is the right hand side needed for solving NtN * P = R
                 MatrixX<T> R(N.cols(), mfa.domain.cols());
@@ -304,24 +189,17 @@ namespace mfa
                     CtrlCurve(N, NtN, R, P, k, co[j], cs, to[j], temp_ctrl0, temp_ctrl1, j, weighted);
                 }
 
+#endif
                 // adjust offsets and strides for next dimension
                 ntemp_ctrl(k) = mfa.nctrl_pts(k);
                 cs *= ntemp_ctrl(k);
 
-                // free R, NtN, and P
-                R.resize(0, 0);
-                NtN.resize(0, 0);
-                P.resize(0, 0);
+                NtN.resize(0, 0);                           // free NtN
 
                 // print progress
-                fprintf(stderr, "\33[2K\rdimension %ld of %d encoded\n", k + 1, ndims);
+                fprintf(stderr, "\rdimension %ld of %d encoded", k + 1, ndims);
 
             }                                                      // domain dimensions
-
-            fprintf(stderr,"\n");
-
-#endif
-
         }
 
         // adaptive encoding
