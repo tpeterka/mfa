@@ -1245,7 +1245,7 @@ struct Block
         VectorXi unused;
         DomainArgs* a = &args;
         mfa = new mfa::MFA<T>(p, ndom_pts, domain, ctrl_pts, unused, weights, knots);
-        mfa->AdaptiveEncode(err_limit, nctrl_pts, a->weighted, max_rounds);
+        mfa->AdaptiveEncode(err_limit, nctrl_pts, a->verbose, a->weighted, max_rounds);
     }
 
     // nonlinear encoding of block to desired error limit

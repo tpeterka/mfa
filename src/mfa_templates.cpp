@@ -40,7 +40,7 @@ MFA<float>::
 AdaptiveEncode(
         float     err_limit,        // maximum allowable normalized error
         VectorXi& nctrl_pts_,       // (output) number of control points in each dim
-        int      verbose,                   // output level
+        int       verbose,          // output level
         bool      weighted,         // solve for and use weights
         int       max_rounds);      // optional maximum number of rounds
 
@@ -256,9 +256,9 @@ void
 mfa::
 MFA<double>::
 AdaptiveEncode(
-        double     err_limit,       // maximum allowable normalized error
+        double    err_limit,        // maximum allowable normalized error
         VectorXi& nctrl_pts_,       // (output) number of control points in each dim
-        int      verbose,                   // output level
+        int       verbose,          // output level
         bool      weighted,         // solve for and use weights
         int       max_rounds);      // optional maximum number of rounds
 
