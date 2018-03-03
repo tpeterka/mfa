@@ -163,6 +163,7 @@ void write_vtk_files(
 
     // write control points
     sprintf(filename, "control_points_gid_%d.vtk", cp.gid());
+
     write_curvilinear_mesh(
             /* const char *filename */                      filename,
             /* int useBinary */                             0,
@@ -264,7 +265,7 @@ int main(int argc, char ** argv)
     string infile(argv[1]);                       // diy input file
 
     diy::Master master(world,
-            -1,
+            1,
             -1,
             &Block<real_t>::create,
             &Block<real_t>::destroy);

@@ -117,6 +117,8 @@ int main(int argc, char** argv)
     d_args.multiblock   = false;
     d_args.f            = 1.0;
     d_args.verbose      = 1;
+    d_args.r            = 0.0;
+    d_args.t            = 0.0;
     for (int i = 0; i < MAX_DIM; i++)
     {
         d_args.p[i]         = degree;

@@ -127,14 +127,6 @@ int main(int argc, char ** argv)
     diy::mpi::environment  env(argc, argv);       // equivalent of MPI_Init(argc, argv)/MPI_Finalize()
     diy::mpi::communicator world;                 // equivalent of MPI_COMM_WORLD
 
-    int nblocks     = 1;                          // number of local blocks
-    int tot_blocks  = nblocks * world.size();
-    int mem_blocks  = -1;                         // everything in core for now
-    int num_threads = 1;                          // needed in order to do timing
-
-    float norm_err_limit = 1.0;                   // maximum normalized errro limit
-
-
     vector<int>   nraw_pts;                       // number of input points in each dim.
     vector<vec3d> raw_pts;                        // input raw data points (<= 3d)
     vector<float> raw_data;                       // input raw data values (4d)
@@ -149,16 +141,14 @@ int main(int argc, char ** argv)
 
     diy::FileStorage storage("./DIY.XXXXXX");     // used for blocks to be moved out of core
     diy::Master      master(world,
-            -1,
+            1,
             -1,
             &Block<real_t>::create,
-            &Block<real_t>::destroy,
-            &storage,
-            &Block<real_t>::save,
-            &Block<real_t>::load);
+            &Block<real_t>::destroy);
     diy::ContiguousAssigner   assigner(world.size(), -1); // number of blocks set by read_blocks()
+
     diy::io::read_blocks(infile.c_str(), world, assigner, master, &Block<real_t>::load);
-    nblocks = master.size();
+    int nblocks = master.size();
     std::cout << nblocks << " blocks read from file "<< infile << "\n";
 
     // package rendering data
