@@ -24,8 +24,8 @@ Build dependencies
 - [diy](https://github.com/diatomic/diy)
 - [eigen](http://eigen.tuxfamily.org)
 - [MPI](http://www.mpich.org)
-- [TBB](https://www.threadingbuildingblocks.org)
-- [COIN-OR CLP](https://projects.coin-or.org/Clp)
+- [TBB (optional)](https://www.threadingbuildingblocks.org)
+- [COIN-OR CLP (optional)](https://projects.coin-or.org/Clp)
 
 Build mfa
 

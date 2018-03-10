@@ -1511,11 +1511,12 @@ struct Block
 //         cerr << knots.size() << " knots\n" << knots << endl;
 //         cerr << approx.rows() << " approximated points\n" << approx << endl;
         fprintf(stderr, "range extent          = %e\n", mfa->range_extent);
-        fprintf(stderr, "|max_err|             = %e\n", mfa->max_err);
-        fprintf(stderr, "|normalized max_err|  = %e\n", mfa->max_err / mfa->range_extent);
+        fprintf(stderr, "max_err               = %e\n", mfa->max_err);
+        fprintf(stderr, "normalized max_err    = %e\n", mfa->max_err / mfa->range_extent);
         fprintf(stderr, "sum of squared errors = %e\n", sum_sq_err);
         fprintf(stderr, "L2 error              = %e\n", sqrt(sum_sq_err /nctrl_pts.rows()));
         fprintf(stderr, "RMS error             = %e\n", sqrt(sum_sq_err /domain.rows()));
+        fprintf(stderr, "normalized RMS error  = %e\n", sqrt(sum_sq_err /domain.rows()) / mfa->range_extent);
         fprintf(stderr, "# input points        = %ld\n", domain.rows());
         fprintf(stderr, "# output ctrl pts     = %ld\n", ctrl_pts.rows());
         fprintf(stderr, "# output knots        = %ld\n",knots.size());
