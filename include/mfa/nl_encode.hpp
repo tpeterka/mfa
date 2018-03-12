@@ -9,14 +9,14 @@
 #ifndef _NL_ENCODE_HPP
 #define _NL_ENCODE_HPP
 
-#include <mfa/mfa.hpp>
-// #include <mfa/encode.hpp>
+#include    <mfa/data_model.hpp>
+#include    <mfa/mfa.hpp>
 
-#include <cppoptlib/problem.h>
-#include <cppoptlib/boundedproblem.h>
-#include <Eigen/Dense>
-#include <vector>
-#include <set>
+#include    <cppoptlib/problem.h>
+#include    <cppoptlib/boundedproblem.h>
+#include    <Eigen/Dense>
+#include    <vector>
+#include    <set>
 
 typedef Eigen::MatrixXf MatrixXf;
 typedef Eigen::MatrixXi MatrixXi;
@@ -33,7 +33,7 @@ namespace mfa
 //         class MaxDist : public BoundedProblem<T> {
             public:
 
-                MaxDist(MFA<T>& mfa_,
+                MaxDist(MFA_Data<T>& mfa_,
                         T err_limit_) :
                     mfa(mfa_),
                     err_limit(err_limit_),
@@ -97,11 +97,11 @@ namespace mfa
 
             private:
 
-                MFA<T>&    mfa;                 // the mfa object
-                size_t     niter;               // number of iterations performed
-                T          err_limit;           // user error limit
-                bool       done;                // achieved user error limit; stop computing objective
-                MatrixX<T> opt_ctrl_pts;        // control points found by optimization
+                MFA_Data<T>& mfa;                 // the mfa object
+                size_t       niter;               // number of iterations performed
+                T            err_limit;           // user error limit
+                bool         done;                // achieved user error limit; stop computing objective
+                MatrixX<T>   opt_ctrl_pts;        // control points found by optimization
         };
 
     template <typename T>                       // float or double
@@ -109,12 +109,15 @@ namespace mfa
     {
     public:
 
-        NL_Encoder(MFA<T>& mfa_);
+        NL_Encoder(MFA_Data<T>& mfa_) :
+            mfa(mfa_)
+        {
+        }
         ~NL_Encoder() {}
         void Encode(T err_limit);               // maximum allowable normalized error
 
     private:
-        MFA<T>& mfa;                           // the mfa object
+        MFA_Data<T>& mfa;                       // the mfa object
     };
 }
 

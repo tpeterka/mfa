@@ -9,7 +9,9 @@
 #ifndef _NEW_KNOTS_HPP
 #define _NEW_KNOTS_HPP
 
+#include    <mfa/data_model.hpp>
 #include    <mfa/mfa.hpp>
+#include    <mfa/encode.hpp>
 #include    <mfa/decode.hpp>
 
 #include    <Eigen/Dense>
@@ -30,32 +32,82 @@ namespace mfa
     {
     public:
 
-        NewKnots(MFA<T>& mfa_) :
-            mfa(mfa_),
-            max_num_curves(1.0e4)                           // max num. curves to check in one dimension of curve version
-        {
-        }
+        NewKnots(MFA_Data<T>& mfa_) : mfa(mfa_) {}
 
         ~NewKnots() {}
 
-        // encodes at full dimensionality and decodes at full dimensionality
-        // decodes full-d points in each knot span and adds new knot spans where error > err_limit
-        // returns true if done, ie, no knots are inserted
-        bool NewKnots_full(
-                VectorXi&      nnew_knots,                  // number of new knots in each dim
-                vector<T>&     new_knots,                   // new knots (1st dim changes fastest)
-                T              err_limit,                   // max allowable error
-                int            iter);                       // iteration number of caller (for debugging)
+        // inserts a set of knots (in all dimensions) into the original knot set
+        // also increases the numbers of control points (in all dimensions) that will result
+        //
+        // original, inserted, and resulting new knots are same for all curves and
+        // stored once for each dimension in row-major order (1st dim changes fastest)
+        void
+            InsertKnots(
+                    VectorXi&  nnew_knots,          // number of new knots in each dim
+                    vector<T>& new_knots)           // new knots (1st dim changes fastest)
+            {
+                VectorX<T> temp_knots(mfa.knots.size() + nnew_knots.sum());
+                VectorXi nold_knots = VectorXi::Zero(nnew_knots.size());
 
-        // 1d encoding and 1d decoding
-        // adds knots error spans from all curves in all directions (into a set)
-        // adds knots in middles of spans that have error higher than the limit
-        // returns true if done, ie, no knots are inserted
-        bool NewKnots_curve(
-                VectorXi&      nnew_knots,                  // number of new knots in each dim
-                vector<T>&     new_knots,                   // new knots (1st dim changes fastest)
-                T              err_limit,                   // max allowable error
-                int            iter);                       // iteration number of caller (for debugging)
+                size_t ntemp = 0;                             // current number of temp_knots
+                size_t n     = 0;                             // counter into knots
+                size_t m     = 0;                             // counter into new_knots
+                size_t nk    = 0;                             // current number of old knots copied in cur. dim
+                size_t mk    = 0;                             // current number of new knots copied in cur. dim
+
+                // copy knots to temp_knots, inserting new_knots along the way
+                for (size_t k = 0; k < nnew_knots.size(); k++) // for each domain dimension i
+                {
+                    nold_knots(k) = mfa.nctrl_pts(k) + mfa.p(k) + 1;  // old number of knots in current dim
+
+                    // TODO: in the following, ensure knots are not duplicated (to within epsilon difference?)
+
+                    // walk the old knots and insert new ones
+                    nk = 0;
+                    while (nk < nold_knots(k))
+                    {
+                        if (mk < nnew_knots(k) && new_knots[m] < mfa.knots(n))
+                        {
+                            // debug
+                            // fprintf(stderr, "ntemp+1=%d m+1=%d\n", ntemp + 1, m + 1);
+                            temp_knots(ntemp++) = new_knots[m++];
+                            mk++;
+                        }
+                        else
+                        {
+                            temp_knots(ntemp++) = mfa.knots(n++);
+                            nk++;
+                        }
+                    }
+
+                    mk = 0;
+                }
+
+                // debug
+                //     cerr << "nknots before insertion:\n" << nold_knots << endl;
+                //     cerr << "knots before insertion:\n" << knots << endl;
+                //     cerr << "nctrl_pts before insertion:\n" << mfa.nctrl_pts << endl;
+
+                // copy temp_knots back to knots and increase total number of knots
+                mfa.knots.resize(temp_knots.size());
+                mfa.knots      =  temp_knots;
+                mfa.tot_nknots += nnew_knots.sum();
+
+                // increase number of control points (vector component-wise addition)
+                mfa.nctrl_pts += nnew_knots;
+                mfa.tot_nctrl =  mfa.nctrl_pts.prod();
+                mfa.weights.resize(mfa.tot_nctrl);
+                mfa.weights =  VectorX<T>::Ones(mfa.tot_nctrl);
+
+                // update knot offsets
+                for (size_t i = 1; i < mfa.p.size(); i++)
+                    mfa.ko[i] = mfa.ko[i - 1] + mfa.nctrl_pts[i - 1] + mfa.p[i - 1] + 1;
+
+                // debug
+                //     cerr << "nnew_knots:\n" << nnew_knots << endl;
+                //     cerr << "knots after insertion:\n" << knots << endl;
+                //     cerr << "MFA nctrl_pts after insertion:\n" << mfa.nctrl_pts << endl;
+            }
 
     private:
 
@@ -146,7 +198,7 @@ namespace mfa
                     if (nnew_knots.sum())
                     {
                         new_knot_found = true;
-                        mfa.InsertKnots(nnew_knots, new_knots);
+                        InsertKnots(nnew_knots, new_knots);
                     }
                 }
             }
@@ -241,7 +293,7 @@ namespace mfa
                     if (nnew_knots.sum())
                     {
                         new_knot_found = true;
-                        mfa.InsertKnots(nnew_knots, new_knots);
+                        InsertKnots(nnew_knots, new_knots);
                     }
                 }
             }
@@ -353,8 +405,7 @@ namespace mfa
             //     fprintf(stderr, "inserted new knot value=%.3f dim=%d\n", new_knot, sd);
         }
 
-        size_t  max_num_curves;                             // max num. curves per dimension to check in curve version
-        MFA<T>& mfa;                                        // the mfa object
+        MFA_Data<T>& mfa;                                   // the mfa data
     };
 }
 

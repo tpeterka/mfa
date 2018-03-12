@@ -8,17 +8,9 @@
 #ifndef _MFA_HPP
 #define _MFA_HPP
 
-// comment out the following line for domain parameterization
-// domain parameterization is the default method if no method is specified
-// #define CURVE_PARAMS
-
-// comment out the following line for low-d knot insertion
-// low-d is the default if no method is specified
-// #define HIGH_D
-
-// comment out the following line for applying weights to only the range dimension
-// weighing the range coordinate only is the default if no method is specified
-// #define WEIGH_ALL_DIMS
+#include    <mfa/data_model.hpp>
+#include    <mfa/decode.hpp>
+#include    <mfa/encode.hpp>
 
 #include    <Eigen/Dense>
 #include    <vector>
@@ -54,25 +46,7 @@ template <typename T>                       // float or double
 class Encoder;
 
 template <typename T>                       // float or double
-class NL_Encoder;
-
-template <typename T>                       // float or double
 class Decoder;
-
-template <typename T>                       // float or double
-struct KnotSpan
-{
-    VectorX<T> min_knot;                  // parameter vector of min knot in this span
-    VectorX<T> max_knot;                  // parameter vector of max knot in this span
-    VectorXi   min_knot_ijk;              // i,j,k indices of minimum knot in this span
-    VectorXi   max_knot_ijk;              // i,j,k indices of maximum knot in this span
-    VectorX<T> min_param;                 // parameter vector of minimum domain point in this span
-    VectorX<T> max_param;                 // parameter vector of maximum domain point in this span
-    VectorXi   min_param_ijk;             // i,j,k indices of minimum domain point in this span
-    VectorXi   max_param_ijk;             // i,j,k indices of maximum domain point in this span
-    int        last_split_dim;            // last dimension in which this span was subdivided
-    bool       done;                      // whether the span has converged (<= error_limit everywhere)
-};
 
 namespace mfa
 {
@@ -89,150 +63,130 @@ namespace mfa
                 VectorXi&   nctrl_pts_,     // (output, optional input) number of control points in each dim
                 VectorX<T>& weights_,       // (output, optional input) weights associated with control points
                 VectorX<T>& knots_,         // (output) knots (1st dim changes fastest)
-                T           eps_ = 1.0e-6); // minimum difference considered significant
+                T           eps_ = 1.0e-6)  // minimum difference considered significant
+        {
+            mfa = new MFA_Data<T>(p_, ndom_pts_, domain_, ctrl_pts_, nctrl_pts_, weights_, knots_, eps_);
+        }
 
-        ~MFA() {}
+        ~MFA()
+        {
+            delete mfa;
+        }
 
         // encode
-        void Encode(int verbose);           // output level
+        void Encode(int verbose)                         // output level
+        {
+            Encoder<T> encoder(*mfa, verbose);
+            encoder.Encode();
+        }
 
         // fixed number of control points encode
         void FixedEncode(
-                VectorXi& nctrl_pts_,       // (output) number of control points in each dim
-                int       verbose,          // output level
-                bool      weighted = true); // solve for and use weights
+                VectorXi &nctrl_pts_,               // (output) number of control points in each dim
+                int      verbose,                   // output level
+                bool     weighted)                  // solve for and use weights (default = true)
+        {
+            mfa->weights = VectorX<T>::Ones(mfa->tot_nctrl);
+            Encoder<T> encoder(*mfa, verbose);
+            encoder.Encode(weighted);
+            nctrl_pts_ = mfa->nctrl_pts;
+        }
 
         // adaptive encode
         void AdaptiveEncode(
-                T         err_limit,        // maximum allowable normalized error
-                VectorXi& nctrl_pts_,       // (output) number of control points in each dim
-                int       verbose,          // output level
-                bool      weighted = true,  // solve for and use weights
-                int       max_rounds = 0);  // optional maximum number of rounds
-
-        // nonlinear encode
-        void NonlinearEncode(
-                T         err_limit,        // maximum allowable normalized error
-                VectorXi& nctrl_pts_);      // (output) number of control points in each dim
+                T         err_limit,                 // maximum allowable normalized error
+                VectorXi& nctrl_pts_,                // (output) number of control points in each dim
+                int       verbose,                   // output level
+                bool      weighted,                  // solve for and use weights (default = true)
+                int       max_rounds)                // optional maximum number of rounds
+        {
+            mfa->weights = VectorX<T>::Ones(mfa->tot_nctrl);
+            Encoder<T> encoder(*mfa, verbose);
+            encoder.AdaptiveEncode(err_limit, weighted, max_rounds);
+            nctrl_pts_ = mfa->nctrl_pts;
+        }
 
         // decode points
-        void Decode(                        // decode points
-                int         verbose,        // output level
-                MatrixX<T>& approx);        // decoded points
+        void Decode(
+                int         verbose,                // output level
+                MatrixX<T>& approx)                 // decoded points
+        {
+            VectorXi no_derivs;                     // size-0 means no derivatives
+            Decode(approx, verbose, no_derivs);
+        }
 
         // decode derivatives
-        void Decode(                        // decode derivatives
-                MatrixX<T>& approx,         // decoded derivatives
-                int         verbose,        // output level
-                VectorXi&   derivs);        // derivative to take in each domain dim. (0 = value, 1 = 1st deriv, 2 = 2nd deriv, ...)
-                                            // pass size-0 vector if unused
+        void Decode(
+                MatrixX<T>& approx,                 // decoded derivatives
+                int         verbose,                // output level
+                VectorXi&   derivs)                 // derivative to take in each domain dim. (0 = value, 1 = 1st deriv, 2 = 2nd deriv, ...)
+            // pass size-0 vector if unused
+        {
+            mfa::Decoder<T> decoder(*mfa, verbose);
+            decoder.Decode(approx, derivs);
+        }
 
+        // compute the error (absolute value of distance in normal direction) of the mfa at a domain point
+        // error is not normalized by the data range (absolute, not relative error)
         T Error(
-                size_t idx,                 // index of domain point where to compute error of mfa
-                int    verbose);            // output level
+                size_t idx,               // index of domain point
+                int    verbose)           // output level
+        {
+            // convert linear idx to multidim. i,j,k... indices in each domain dimension
+            VectorXi ijk(mfa->p.size());
+            mfa->idx2ijk(idx, ijk);
 
+            // compute parameters for the vertices of the cell
+            VectorX<T> param(mfa->p.size());
+            for (int i = 0; i < mfa->p.size(); i++)
+                param(i) = mfa->params(ijk(i) + mfa->po[i]);
+
+            // approximated value
+            VectorX<T> cpt(mfa->ctrl_pts.cols());          // approximated point
+            Decoder<T> decoder(*mfa, verbose);
+            decoder.VolPt(param, cpt);
+
+            T err = fabs(mfa->NormalDistance(cpt, idx));
+
+            return err;
+        }
+
+        // compute the error (absolute value of difference of range coordinates) of the mfa at a domain point
+        // error is not normalized by the data range (absolute, not relative error)
         T RangeError(
-                size_t idx,                 // index of domain point where to compute error of mfa
-                int    verbose);            // output level
+                size_t idx,               // index of domain point
+                int    verbose)           // output level
+        {
+            // convert linear idx to multidim. i,j,k... indices in each domain dimension
+            VectorXi ijk(mfa->p.size());
+            mfa->idx2ijk(idx, ijk);
+
+            // compute parameters for the vertices of the cell
+            VectorX<T> param(mfa->p.size());
+            for (int i = 0; i < mfa->p.size(); i++)
+                param(i) = mfa->params(ijk(i) + mfa->po[i]);
+
+            // approximated value
+            VectorX<T> cpt(mfa->ctrl_pts.cols());          // approximated point
+            Decoder<T> decoder(*mfa, verbose);
+            decoder.VolPt(param, cpt);
+
+            int last = mfa->domain.cols() - 1;           // range coordinate
+            T err = fabs(cpt(last) - mfa->domain(idx, last));
+
+            return err;
+        }
 
         T NormalDistance(
                 VectorX<T>& pt,             // point whose distance from domain is desired
-                size_t      cell_idx);      // index of min. corner of cell in the domain
+                size_t      cell_idx)       // index of min. corner of cell in the domain
+        {
+            return mfa->NormalDistance(pt, cell_idx);
+        }
 
-        T CurveDistance(
-                int         k,              // current dimension in direction of curve
-                VectorX<T>& pt,             // point whose distance from domain is desired
-                size_t      cell_idx);      // index of min. corner of cell in the domain
-
-        void KnotSpanDomains(
-                VectorXi& span_mins,        // minimum domain points of all knot spans
-                VectorXi& span_maxs);       // maximum domain points of all knot spans
-
-        void Rationalize(
-                int         k,              // current dimension
-                VectorX<T>& weights,        // weights of control points
-                MatrixX<T>& N,              // basis function coefficients
-                MatrixX<T>& NtN_rat);       // (output) rationalized Nt * N
     private:
 
-        int FindSpan(
-                int   cur_dim,              // current dimension
-                T     u,                    // parameter value
-                int   ko);                  // index of starting knot
-
-        void BasisFuns(
-                int         cur_dim,        // current dimension
-                T           u,              // parameter value
-                int         span,           // index of span in the knots vector containing u, relative to ko
-                MatrixX<T>& N,              // matrix of (output) basis function values
-                int         row);           // row in N of result
-
-        void DerBasisFuns(
-                int         cur_dim,        // current dimension
-                T           u,              // parameter value
-                int         span,           // index of span in the knots vector containing u, relative to ko
-                int         nders,          // number of derivatives
-                MatrixX<T>& ders);          // output basis function derivatives
-
-        void Params();
-        void DomainParams();
-
-        void Knots();
-        void UniformKnots();
-
-        void KnotSpanIndex();
-
-        void InsertKnots(
-                VectorXi&  nnew_knots,      // number of new knots in each dim
-                vector<T>& new_knots);      // new knots (1st dim changes fastest)
-
-        T InterpolateParams(
-                int       cur_dim,          // curent dimension
-                size_t    po,               // starting offset for params in cur. dim.
-                size_t    ds,               // stride for domain pts in cuve in cur. dim.
-                T         coord);           // target coordinate
-
-        void idx2ijk(
-                size_t     idx,             // linear index
-                VectorXi&  ijk);            // i,j,k,... indices in all dimensions
-        void ijk2idx(
-                VectorXi&  ijk,             // i,j,k,... indices to all dimensions
-                size_t&    idx);            // (output) linear index
-
-        template <typename>
-            friend class Encoder;
-        template <typename>
-            friend class NL_Encoder;
-        template <typename>
-            friend class Decoder;
-        template <typename>
-            friend class NewKnots;
-       // TODO: I don't understand why MaxDist can't be a friend of MFA
-//        friend class MaxDist;
-
-       // TODO: these members are public until I figure out why MaxDist can't be a friend of MFA
-    public:
-
-       VectorXi&                 p;             // polynomial degree in each dimension
-       VectorXi&                 ndom_pts;      // number of input data points in each dim
-       VectorXi                  nctrl_pts;     // number of control points in each dim
-       MatrixX<T>&               domain;        // input data points (row-major order: 1st dim changes fastest)
-       VectorX<T>                params;        // parameters for input points (single coords: 1st dim params, 2nd dim, ...)
-       MatrixX<T>&               ctrl_pts;      // (output) control pts (row-major order: 1st dim changes fastest)
-       VectorX<T>&               weights;       // (output) weights associated with control points
-       VectorX<T>&               knots;         // (output) knots (single coords: 1st dim knots, 2nd dim, ...)
-       T                         range_extent;  // extent of range value of input data points
-       vector<size_t>            po;            // starting offset for params in each dim
-       vector< vector <size_t> > co;            // starting offset for curves in each dim
-       vector<size_t>            ko;            // starting offset for knots in each dim
-       vector<size_t>            ds;            // stride for domain points in each dim
-       size_t                    tot_nparams;   // total number of params = sum of ndom_pts over all dims
-                                                // not the total number of data pts, which would be the prod.
-       size_t                    tot_nknots;    // total nmbr of knots = sum of nmbr of knots over all dims
-       size_t                    tot_nctrl;     // total nmbr of control points = product of control points over all dims
-       T                         eps;           // minimum difference considered significant
-       T                         max_err;       // unnormalized absolute value of maximum error
-       vector<KnotSpan <T> >     knot_spans;    // knot spans
+        MFA_Data<T>* mfa;                           // the mfa data model
     };
 
 }

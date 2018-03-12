@@ -96,7 +96,6 @@ set                         (libraries
 
 # Subdirectories
 if                          (DIY_INCLUDE_DIRS AND EIGEN_INCLUDE_DIRS)
-    add_subdirectory        (src)
     add_subdirectory        (examples)
 else                        ()
     message                 (ERROR "Need diy2 and eigen in order to build mfa")

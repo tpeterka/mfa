@@ -9,9 +9,10 @@
 #ifndef _DECODE_HPP
 #define _DECODE_HPP
 
-#include <mfa/mfa.hpp>
+#include    <mfa/data_model.hpp>
+#include    <mfa/mfa.hpp>
 
-#include <Eigen/Dense>
+#include    <Eigen/Dense>
 
 typedef Eigen::MatrixXi MatrixXi;
 
@@ -23,8 +24,8 @@ namespace mfa
     public:
 
         Decoder(
-                MFA<T>& mfa_,                       // MFA object
-                int     verbose_)                   // output level
+                MFA_Data<T>& mfa_,                          // MFA data model
+                int          verbose_)                      // output level
             : mfa(mfa_), verbose(verbose_)
         {
             // ensure that encoding was already done
@@ -275,15 +276,6 @@ namespace mfa
 
         }
 
-        // DEPRECATED
-#if 0
-        void CurvePt(
-                int         cur_dim,            // current dimension
-                T           param,              // parameter value of desired point
-                size_t      co,                 // offset to start of control points for this curve
-                VectorX<T>& out_pt);            // (output) point
-#endif
-
         // compute a point from a NURBS curve at a given parameter value
         // this version takes a temporary set of control points for one curve only rather than
         // reading full n-d set of control points from the mfa
@@ -327,7 +319,7 @@ namespace mfa
                                                         // control points
         vector<size_t>  cs;                             // control point stride (only in decoder, not mfa)
         int             verbose;                        // output level
-        MFA<T>&         mfa;                            // the mfa object
+        MFA_Data<T>&    mfa;                            // the mfa object
     };
 }
 

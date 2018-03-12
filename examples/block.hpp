@@ -1411,7 +1411,7 @@ struct Block
 
 #endif
 
-        mfa->max_err = max_err;
+//         mfa->max_err = max_err;
     }
 
     // compute error field and maximum error in the block
@@ -1492,7 +1492,7 @@ struct Block
 
 #endif
 
-        mfa->max_err = max_err;
+//         mfa->max_err = max_err;
     }
 
     // save knot span domains for later comparison with error field
@@ -1503,6 +1503,10 @@ struct Block
 
     void print_block(const diy::Master::ProxyWithLink& cp)
     {
+        // max extent of input data points
+        int last            = domain.cols() - 1;
+        real_t range_extent = domain.col(last).maxCoeff() - domain.col(last).minCoeff();
+
 //         fprintf(stderr, "gid = %d\n", cp.gid());
 //         cerr << "domain\n" << domain << endl;
 //         cerr << "nctrl_pts:\n" << nctrl_pts << endl;
@@ -1510,16 +1514,16 @@ struct Block
 //         cerr << weights.size()  << " final weights\n" << weights << endl;
 //         cerr << knots.size() << " knots\n" << knots << endl;
 //         cerr << approx.rows() << " approximated points\n" << approx << endl;
-        fprintf(stderr, "range extent          = %e\n", mfa->range_extent);
-        fprintf(stderr, "max_err               = %e\n", mfa->max_err);
-        fprintf(stderr, "normalized max_err    = %e\n", mfa->max_err / mfa->range_extent);
-        fprintf(stderr, "sum of squared errors = %e\n", sum_sq_err);
-        fprintf(stderr, "L2 error              = %e\n", sqrt(sum_sq_err /nctrl_pts.rows()));
-        fprintf(stderr, "RMS error             = %e\n", sqrt(sum_sq_err /domain.rows()));
-        fprintf(stderr, "normalized RMS error  = %e\n", sqrt(sum_sq_err /domain.rows()) / mfa->range_extent);
+        fprintf(stderr, "range extent          = %e\n",  range_extent);
+        fprintf(stderr, "max_err               = %e\n",  max_err);
+        fprintf(stderr, "normalized max_err    = %e\n",  max_err / range_extent);
+        fprintf(stderr, "sum of squared errors = %e\n",  sum_sq_err);
+        fprintf(stderr, "L2 error              = %e\n",  sqrt(sum_sq_err /nctrl_pts.rows()));
+        fprintf(stderr, "RMS error             = %e\n",  sqrt(sum_sq_err /domain.rows()));
+        fprintf(stderr, "normalized RMS error  = %e\n",  sqrt(sum_sq_err /domain.rows()) / range_extent);
         fprintf(stderr, "# input points        = %ld\n", domain.rows());
         fprintf(stderr, "# output ctrl pts     = %ld\n", ctrl_pts.rows());
-        fprintf(stderr, "# output knots        = %ld\n",knots.size());
+        fprintf(stderr, "# output knots        = %ld\n", knots.size());
         fprintf(stderr, "compression ratio     = %.2f\n",
                 (real_t)(domain.rows()) / (ctrl_pts.rows() + knots.size() / ctrl_pts.cols()));
         fprintf(stderr, "\n");
@@ -1599,8 +1603,8 @@ struct Block
     real_t     sum_sq_err;                     // sum of squared errors
     MatrixX<T> errs;                           // error field (abs. value, not normalized by data range)
 
-    real_t      s;                              // scaling factor on range values (for error checking)
-    mfa::MFA<T> *mfa;                           // MFA object
+    real_t      s;                             // scaling factor on range values (for error checking)
+    mfa::MFA<T> *mfa;                          // MFA object
 };
 
 namespace diy
