@@ -1,9 +1,0 @@
-#!/bin/bash
-
-CC=mpicc \
-CXX=mpicxx \
-CXXFLAGS='-fexceptions -DBUILD_GYP -std=c++11 -stdlib=libc++ -mmacosx-version-min=10.9' \
-LDFLAGS='-mmacosx-version-min=10.9' \
-node-gyp \
-rebuild
-
