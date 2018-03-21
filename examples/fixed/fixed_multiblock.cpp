@@ -48,19 +48,18 @@ int main(int argc, char** argv)
     bool   strong_sc = true;                     // strong scaling (false = weak scaling)
 
     // get command line arguments
-    using namespace opts;
-    Options ops(argc, argv);
-    ops >> Option('d', "pt_dim",     pt_dim,     " dimension of points");
-    ops >> Option('m', "dom_dim",    dom_dim,    " dimension of domain");
-    ops >> Option('p', "degree",     degree,     " degree in each dimension of domain");
-    ops >> Option('n', "ndomp",      ndomp,      " number of input points in each dimension of domain");
-    ops >> Option('c', "nctrl",      nctrl,      " number of control points in each dimension");
-    ops >> Option('i', "input",      input,      " input dataset");
-    ops >> Option('w', "weights",    weighted,   " solve for and use weights");
-    ops >> Option('b', "tot_blocks", tot_blocks, " total number of blocks");
-    ops >> Option('t', "strong_sc",  strong_sc,  " strong scaling (1 = strong, 0 = weak)");
+    opts::Options ops(argc, argv);
+    ops >> opts::Option('d', "pt_dim",     pt_dim,     " dimension of points");
+    ops >> opts::Option('m', "dom_dim",    dom_dim,    " dimension of domain");
+    ops >> opts::Option('p', "degree",     degree,     " degree in each dimension of domain");
+    ops >> opts::Option('n', "ndomp",      ndomp,      " number of input points in each dimension of domain");
+    ops >> opts::Option('c', "nctrl",      nctrl,      " number of control points in each dimension");
+    ops >> opts::Option('i', "input",      input,      " input dataset");
+    ops >> opts::Option('w', "weights",    weighted,   " solve for and use weights");
+    ops >> opts::Option('b', "tot_blocks", tot_blocks, " total number of blocks");
+    ops >> opts::Option('t', "strong_sc",  strong_sc,  " strong scaling (1 = strong, 0 = weak)");
 
-    if (ops >> Present('h', "help", "show help"))
+    if (ops >> opts::Present('h', "help", "show help"))
     {
         if (world.rank() == 0)
             std::cout << ops;

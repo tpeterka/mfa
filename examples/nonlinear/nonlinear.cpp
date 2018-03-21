@@ -45,16 +45,15 @@ int main(int argc, char** argv)
     string input          = "sinc";              // input dataset
 
     // get command line arguments
-    using namespace opts;
-    Options ops(argc, argv);
-    ops >> Option('e', "error",   norm_err_limit, " maximum normalized error limit");
-    ops >> Option('d', "pt_dim",  pt_dim,         " dimension of points");
-    ops >> Option('m', "dom_dim", dom_dim,        " dimension of domain");
-    ops >> Option('p', "degree",  degree,         " degree in each dimension of domain");
-    ops >> Option('n', "ndomp",   ndomp,          " number of input points in each dimension of domain");
-    ops >> Option('i', "input",   input,          " input dataset");
+    opts::Options ops(argc, argv);
+    ops >> opts::Option('e', "error",   norm_err_limit, " maximum normalized error limit");
+    ops >> opts::Option('d', "pt_dim",  pt_dim,         " dimension of points");
+    ops >> opts::Option('m', "dom_dim", dom_dim,        " dimension of domain");
+    ops >> opts::Option('p', "degree",  degree,         " degree in each dimension of domain");
+    ops >> opts::Option('n', "ndomp",   ndomp,          " number of input points in each dimension of domain");
+    ops >> opts::Option('i', "input",   input,          " input dataset");
 
-    if (ops >> Present('h', "help", "show help"))
+    if (ops >> opts::Present('h', "help", "show help"))
     {
         if (world.rank() == 0)
             std::cout << ops;

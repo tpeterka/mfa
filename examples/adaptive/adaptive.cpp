@@ -52,20 +52,19 @@ int main(int argc, char** argv)
     real_t twist          = 0.0;                      // twist (waviness) of domain (0.0-1.0)
 
     // get command line arguments
-    using namespace opts;
-    Options ops(argc, argv);
-    ops >> Option('e', "error",   norm_err_limit, " maximum normalized error limit");
-    ops >> Option('d', "pt_dim",  pt_dim,         " dimension of points");
-    ops >> Option('m', "dom_dim", dom_dim,        " dimension of domain");
-    ops >> Option('p', "degree",  degree,         " degree in each dimension of domain");
-    ops >> Option('n', "ndomp",   ndomp,          " number of input points in each dimension of domain");
-    ops >> Option('i', "input",   input,          " input dataset");
-    ops >> Option('r', "rounds",  max_rounds,     " maximum number of iterations");
-    ops >> Option('w', "weights", weighted,       " solve for and use weights");
-    ops >> Option('r', "rotate",  rot,            " rotation angle of domain in degrees");
-    ops >> Option('t', "twist",   twist,          " twist (waviness) of domain (0.0-1.0)");
+    opts::Options ops(argc, argv);
+    ops >> opts::Option('e', "error",   norm_err_limit, " maximum normalized error limit");
+    ops >> opts::Option('d', "pt_dim",  pt_dim,         " dimension of points");
+    ops >> opts::Option('m', "dom_dim", dom_dim,        " dimension of domain");
+    ops >> opts::Option('p', "degree",  degree,         " degree in each dimension of domain");
+    ops >> opts::Option('n', "ndomp",   ndomp,          " number of input points in each dimension of domain");
+    ops >> opts::Option('i', "input",   input,          " input dataset");
+    ops >> opts::Option('r', "rounds",  max_rounds,     " maximum number of iterations");
+    ops >> opts::Option('w', "weights", weighted,       " solve for and use weights");
+    ops >> opts::Option('r', "rotate",  rot,            " rotation angle of domain in degrees");
+    ops >> opts::Option('t', "twist",   twist,          " twist (waviness) of domain (0.0-1.0)");
 
-    if (ops >> Present('h', "help", "show help"))
+    if (ops >> opts::Present('h', "help", "show help"))
     {
         if (world.rank() == 0)
             std::cout << ops;

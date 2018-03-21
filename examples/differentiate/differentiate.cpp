@@ -39,13 +39,12 @@ int main(int argc, char** argv)
     int  partial   = -1;                        // limit derivatives to one partial in this dimension
 
     // get command line arguments
-    using namespace opts;
-    Options ops(argc, argv);
-    ops >> Option('d', "deriv",   deriv,   " which derivative to take (1 = 1st, 2 = 2nd, ...)");
-    ops >> Option('i', "infile",  infile,  " diy input file name");
-    ops >> Option('a', "partial", partial, " dimension of 1 partial derivative only");
+    opts::Options ops(argc, argv);
+    ops >> opts::Option('d', "deriv",   deriv,   " which derivative to take (1 = 1st, 2 = 2nd, ...)");
+    ops >> opts::Option('i', "infile",  infile,  " diy input file name");
+    ops >> opts::Option('a', "partial", partial, " dimension of 1 partial derivative only");
 
-    if (ops >> Present('h', "help", "show help"))
+    if (ops >> opts::Present('h', "help", "show help"))
     {
         if (world.rank() == 0)
             std::cout << ops;
