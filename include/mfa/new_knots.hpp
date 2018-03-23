@@ -158,7 +158,12 @@ namespace mfa
                     mfa.ijk2idx(p_ijk, idx);
                     VectorX<T> cpt(mfa.ctrl_pts.cols());       // approximated point
                     decoder.VolPt(param, cpt);
-                    T err = fabs(mfa.NormalDistance(cpt, idx)) / mfa.range_extent;     // normalized by data range
+
+//                     T err = fabs(mfa.NormalDistance(cpt, idx)) / mfa.range_extent;     // normalized by data range
+
+                    // range error
+                    int last = mfa.domain.cols() - 1;           // range coordinate
+                    T err = fabs(cpt(last) - mfa.domain(i, last)) / mfa.range_extent;
 
                     // span is not done
                     if (err > err_limit)
@@ -254,7 +259,12 @@ namespace mfa
                     mfa.ijk2idx(p_ijk, idx);
                     VectorX<T> cpt(mfa.ctrl_pts.cols());                      // approximated point
                     decoder.VolPt(param, cpt);
-                    T err = fabs(mfa.NormalDistance(cpt, idx)) / mfa.range_extent;     // normalized by data range
+
+//                     T err = fabs(mfa.NormalDistance(cpt, idx)) / mfa.range_extent;     // normalized by data range
+
+                    // range error
+                    int last = mfa.domain.cols() - 1;           // range coordinate
+                    T err = fabs(cpt(last) - mfa.domain(i, last)) / mfa.range_extent;
 
                     // span is not done
                     if (err > err_limit)
