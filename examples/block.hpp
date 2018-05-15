@@ -1339,7 +1339,7 @@ struct Block
 
         // for plotting, set all but the last dimension to be the same as the input domain
         if (deriv)
-            for (auto i = 0; i < p.size(); i++)
+            for (auto i = 0; i < domain.cols() - 1; i++)
                 approx.col(i) = domain.col(i);
     }
 
@@ -1532,8 +1532,8 @@ struct Block
     void print_deriv(const diy::Master::ProxyWithLink& cp)
     {
         fprintf(stderr, "gid = %d\n", cp.gid());
-//         cerr << "domain\n" << domain << endl;
-//         cerr << approx.rows() << " derivatives\n" << approx << endl;
+        cerr << "domain\n" << domain << endl;
+        cerr << approx.rows() << " derivatives\n" << approx << endl;
         fprintf(stderr, "\n");
     }
 
