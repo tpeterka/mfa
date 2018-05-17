@@ -112,6 +112,7 @@ namespace mfa
             ndom_pts(ndom_pts_),
             domain(domain_),
             ctrl_pts(ctrl_pts_),
+            nctrl_pts(nctrl_pts_),
             weights(weights_),
             knots(knots_),
             eps(eps_)
