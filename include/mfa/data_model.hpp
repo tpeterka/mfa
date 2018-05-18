@@ -878,7 +878,7 @@ namespace mfa
 
        VectorXi&                 p;             // polynomial degree in each dimension
        VectorXi&                 ndom_pts;      // number of input data points in each dim
-       VectorXi                  nctrl_pts;     // number of control points in each dim
+       VectorXi&                 nctrl_pts;     // number of control points in each dim
        MatrixX<T>&               domain;        // input data points (row-major order: 1st dim changes fastest)
        VectorX<T>                params;        // parameters for input points (single coords: 1st dim params, 2nd dim, ...)
        MatrixX<T>&               ctrl_pts;      // (output) control pts (row-major order: 1st dim changes fastest)
