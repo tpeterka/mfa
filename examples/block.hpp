@@ -1333,7 +1333,9 @@ struct Block
                 if (p.size() == 1)
                     partial = 0;
                 for (auto j = 0; j < approx.cols(); j++)
-                    approx.col(j) /= (domain_maxs(partial) - domain_mins(partial));
+                    // scale once for each derivative
+                    for (auto i = 0; i < deriv; i++)
+                        approx.col(j) /= (domain_maxs(partial) - domain_mins(partial));
             }
         }
 
