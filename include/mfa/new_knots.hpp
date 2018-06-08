@@ -17,6 +17,7 @@
 #include    <Eigen/Dense>
 #include    <vector>
 #include    <set>
+#include    <iostream>
 
 typedef Eigen::MatrixXf MatrixXf;
 typedef Eigen::MatrixXi MatrixXi;
@@ -84,9 +85,9 @@ namespace mfa
                 }
 
                 // debug
-                //     cerr << "nknots before insertion:\n" << nold_knots << endl;
-                //     cerr << "knots before insertion:\n" << knots << endl;
-                //     cerr << "nctrl_pts before insertion:\n" << mfa.nctrl_pts << endl;
+//                 cerr << "nknots before insertion:\n" << nold_knots << endl;
+//                 cerr << "knots before insertion:\n" << knots << endl;
+//                 cerr << "nctrl_pts before insertion:\n" << mfa.nctrl_pts << endl;
 
                 // copy temp_knots back to knots and increase total number of knots
                 mfa.knots.resize(temp_knots.size());
@@ -104,9 +105,9 @@ namespace mfa
                     mfa.ko[i] = mfa.ko[i - 1] + mfa.nctrl_pts[i - 1] + mfa.p[i - 1] + 1;
 
                 // debug
-                //     cerr << "nnew_knots:\n" << nnew_knots << endl;
-                //     cerr << "knots after insertion:\n" << knots << endl;
-                //     cerr << "MFA nctrl_pts after insertion:\n" << mfa.nctrl_pts << endl;
+//                 cerr << "nnew_knots:\n" << nnew_knots << endl;
+//                 cerr << "knots after insertion:\n" << knots << endl;
+//                 cerr << "MFA nctrl_pts after insertion:\n" << mfa.nctrl_pts << endl;
             }
 
     private:

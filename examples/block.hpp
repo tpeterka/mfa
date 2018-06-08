@@ -1242,9 +1242,9 @@ struct Block
             int                               max_rounds,
             DomainArgs&                       args)
     {
-        VectorXi unused;
         DomainArgs* a = &args;
-        mfa = new mfa::MFA<T>(p, ndom_pts, domain, ctrl_pts, unused, weights, knots);
+        nctrl_pts.resize(0);            // 0 size means MFA will initialize to minimum p+1
+        mfa = new mfa::MFA<T>(p, ndom_pts, domain, ctrl_pts, nctrl_pts, weights, knots);
         mfa->AdaptiveEncode(err_limit, nctrl_pts, a->verbose, a->weighted, max_rounds);
     }
 
@@ -1515,7 +1515,7 @@ struct Block
 //         cerr << ctrl_pts.rows() << " final control points\n" << ctrl_pts << endl;
 //         cerr << weights.size()  << " final weights\n" << weights << endl;
 //         cerr << knots.size() << " knots\n" << knots << endl;
-//         cerr << approx.rows() << " approximated points\n" << approx << endl;
+// //         cerr << approx.rows() << " approximated points\n" << approx << endl;
         fprintf(stderr, "range extent          = %e\n",  range_extent);
         fprintf(stderr, "max_err               = %e\n",  max_err);
         fprintf(stderr, "normalized max_err    = %e\n",  max_err / range_extent);
