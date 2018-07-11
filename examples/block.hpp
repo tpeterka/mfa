@@ -1510,12 +1510,12 @@ struct Block
         real_t range_extent = domain.col(last).maxCoeff() - domain.col(last).minCoeff();
 
 //         fprintf(stderr, "gid = %d\n", cp.gid());
-//         cerr << "domain\n" << domain << endl;
-//         cerr << "nctrl_pts:\n" << nctrl_pts << endl;
-//         cerr << ctrl_pts.rows() << " final control points\n" << ctrl_pts << endl;
-//         cerr << weights.size()  << " final weights\n" << weights << endl;
-//         cerr << knots.size() << " knots\n" << knots << endl;
-// //         cerr << approx.rows() << " approximated points\n" << approx << endl;
+        cerr << "domain\n" << domain << endl;
+        cerr << "nctrl_pts:\n" << nctrl_pts << endl;
+        cerr << ctrl_pts.rows() << " final control points\n" << ctrl_pts << endl;
+        cerr << weights.size()  << " final weights\n" << weights << endl;
+        cerr << knots.size() << " knots\n" << knots << endl;
+        cerr << approx.rows() << " approximated points\n" << approx << endl;
         fprintf(stderr, "range extent          = %e\n",  range_extent);
         fprintf(stderr, "max_err               = %e\n",  max_err);
         fprintf(stderr, "normalized max_err    = %e\n",  max_err / range_extent);

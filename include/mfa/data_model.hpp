@@ -8,6 +8,10 @@
 #ifndef _DATA_MODEL_HPP
 #define _DATA_MODEL_HPP
 
+// comment out the following line for unclamped knots (single knot at each end of knot vector)
+// clamped knots (repeated at ends) is the default method if no method is specified
+// #define UNCLAMPED_KNOTS
+
 // comment out the following line for domain parameterization
 // domain parameterization is the default method if no method is specified
 // #define CURVE_PARAMS
@@ -23,6 +27,7 @@
 #include    <Eigen/Dense>
 #include    <vector>
 #include    <list>
+#include    <iostream>
 
 #ifndef MFA_NO_TBB
 
@@ -107,6 +112,8 @@ namespace mfa
                 VectorXi&   nctrl_pts_,     // (output, optional input) number of control points in each dim
                 VectorX<T>& weights_,       // (output, optional input) weights associated with control points
                 VectorX<T>& knots_,         // (output) knots (1st dim changes fastest)
+                int         min_dim_,       // starting coordinate for input data
+                int         max_dim_,       // ending coordinate for input data
                 T           eps_ = 1.0e-6) :// minimum difference considered significant
             p(p_),
             ndom_pts(ndom_pts_),
@@ -115,6 +122,8 @@ namespace mfa
             nctrl_pts(nctrl_pts_),
             weights(weights_),
             knots(knots_),
+            min_dim(min_dim_),
+            max_dim(max_dim_),
             eps(eps_)
         {
             // check dimensionality for sanity
@@ -177,12 +186,17 @@ namespace mfa
             if (!knots.size())
             {
                 knots.resize(tot_nknots);
+#ifndef UNCLAMPED_KNOTS
                 UniformKnots();                     // knots spaced uniformly
+#else
+                UniformSingleKnots();                     // knots spaced uniformly with single knots at ends
+#endif
             }
 #endif
 
             // debug
-            //     cerr << "Knots:\n" << knots << endl;
+            cerr << "Params:\n" << params << endl;
+            cerr << "Knots:\n" << knots << endl;
 
             // offsets for curve starting (domain) points in each dimension
             co.resize(p.size());
@@ -250,6 +264,8 @@ namespace mfa
                 stride *= ndom_pts(i);
             }
         }
+
+#ifndef UNCLAMPED_KNOTS       // repeated knots at ends
 
         // binary search to find the span in the knots vector containing a given parameter value
         // returns span index i s.t. u is in [ knots[i], knots[i + 1] )
@@ -324,6 +340,109 @@ namespace mfa
                 N(row, span - p(cur_dim) + j) = scratch[j];
         }
 
+# else      // single knots at ends
+
+        // binary search to find the span in the knots vector containing a given parameter value
+        // returns span index i s.t. u is in [ knots[i], knots[i + 1] )
+        // NB closed interval at left and open interval at right
+        //
+        // i will be in the range [p, n], where n = number of control points - 1 because there are
+        // p + 1 repeated knots at start and end of knot vector
+        // algorithm 2.1, P&T, p. 68
+        int FindSpan(
+                int   cur_dim,              // current dimension
+                T     u,                    // parameter value
+                int   ko)                   // index of starting knot
+        {
+//             if (u == knots(ko + nctrl_pts(cur_dim)))
+//                 return ko + nctrl_pts(cur_dim) - 1;
+
+            if (u == knots(ko + nctrl_pts(cur_dim) + p(cur_dim)))
+                return ko + nctrl_pts(cur_dim) + p(cur_dim) - 1;
+
+            // binary search
+            int low  = 0;
+            int high = nctrl_pts(cur_dim) + p(cur_dim);
+            int mid = (low + high) / 2;
+            while (u < knots(ko + mid) || u >= knots(ko + mid + 1))
+            {
+                if (u < knots(ko + mid))
+                    high = mid;
+                else
+                    low = mid;
+                mid = (low + high) / 2;
+            }
+
+            return ko + mid;
+        }
+
+        // computes one row of basis function values for a given parameter value
+        // writes results in a row of N
+        // algorithm 2.2 of P&T, p. 70
+        // assumes N has been allocated by caller
+        void BasisFuns(
+                int         cur_dim,        // current dimension
+                T           u,              // parameter value
+                int         span,           // index of span in the knots vector containing u, relative to ko
+                MatrixX<T>& N,              // matrix of (output) basis function values
+                int         row)            // row in N of result
+        {
+            // init
+            vector<T> scratch(p(cur_dim) + 1);                  // scratchpad, same as N in P&T p. 70
+            scratch[0] = 1.0;
+
+            // temporary recurrence results
+            // left(j)  = u - knots(span + 1 - j)
+            // right(j) = knots(span + j) - u
+            vector<T> left(p(cur_dim) + 1);
+            vector<T> right(p(cur_dim) + 1);
+
+            // fill N
+            for (int j = 1; j <= p(cur_dim); j++)
+            {
+                if (span + 1 - j < 0)
+                    left[j] = 0.0;      // TODO: set to 0 or wrap around from other end (periodic)?
+                else
+                    left[j]  = u - knots(span + ko[cur_dim] + 1 - j);
+                if (span + j >= nctrl_pts(cur_dim) + p(cur_dim) + 1)
+                    right[j] = 0.0;     // TODO: set to 0 or wrap around from other end (periodic)?
+                else
+                    right[j] = knots(span + ko[cur_dim] + j) - u;
+
+                T saved = 0.0;
+                for (int r = 0; r < j; r++)
+                {
+                    T temp;
+                    if (right[r + 1] + left[j - r] == 0.0)
+                    {
+                        if (scratch[r] != 0.0)
+                            fprintf(stderr, "Error in BasisFuns: dividing by 0 w/ nonzero numerator\n");
+                        assert(scratch[r] == 0.0);
+                        temp = 0.0;     // 0/0 = 0 by definition
+                    }
+                    else
+                        temp = scratch[r] / (right[r + 1] + left[j - r]);
+                    scratch[r] = saved + right[r + 1] * temp;
+                    saved = left[j - r] * temp;
+                }
+                scratch[j] = saved;
+            }
+
+            // copy scratch to N
+            if (span - p(cur_dim) >= 0 && span + 2 * p(cur_dim) < N.cols())
+                for (int j = 0; j < p(cur_dim) + 1; j++)
+                    N(row, span + j) = scratch[j];
+//             else
+//                 cerr << "skipping copy of scratch to row " << row << endl;
+
+            // debug
+//             cerr << "N(row=" << row << "):\n" << N.row(row) << endl;
+        }
+
+#endif
+
+        // computes one row of basis function values for a given parameter value
+        // writes results in a row of N
         // computes first k derivatives of one row of basis function values for a given parameter value
         // output is ders, with nders + 1 rows, one for each derivative (N, N', N'', ...)
         // including origin basis functions (0-th derivatives)
@@ -748,6 +867,41 @@ namespace mfa
             }
         }
 
+        // compute knots
+        // n-d version of uniform spacing and single knots at ends
+        //
+        // nknots = nctrl_pts + p + 1
+        // eg, for p = 3 and nctrl_pts = 7, nknots = 11
+        // let knots = {0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1}
+        // there are no external knot spans, and there are nctrl_pts + p internal knot spans
+        //
+        // resulting knots are same for all curves and stored once for each dimension (1st dim knots, 2nd dim, ...)
+        // total number of knots is the sum of number of knots over the dimensions, much less than the product
+        // assumes knots were allocated by caller
+        void UniformSingleKnots()
+        {
+            // following are counters for slicing domain and params into curves in different dimensions
+            size_t po = 0;                                // starting offset for params in current dim
+            size_t ko = 0;                                // starting offset for knots in current dim
+
+            for (size_t k = 0; k < p.size(); k++)         // for all domain dimensions
+            {
+                int nknots = nctrl_pts(k) + p(k) + 1;    // number of knots in current dim
+
+                // set 1 external knot at each end
+                knots(ko)               = 0.0;
+                knots(ko + nknots - 1)  = 1.0;
+
+                // compute remaining n + p internal knots
+                T step = 1.0 / (nctrl_pts(k) + p(k));               // size of internal knot span
+                for (int j = 1; j <= nctrl_pts(k) + p(k) - 1; j++)
+                    knots(ko + j) = knots(ko + j - 1) + step;
+
+                po += ndom_pts(k);
+                ko += nknots;
+            }
+        }
+
         // initialize knot span index
         void KnotSpanIndex()
         {
@@ -876,8 +1030,8 @@ namespace mfa
 
     public:                                     // TODO: restrict access
 
-       VectorXi&                 p;             // polynomial degree in each dimension
-       VectorXi&                 ndom_pts;      // number of input data points in each dim
+       VectorXi&                 p;             // polynomial degree in each domain dimension
+       VectorXi&                 ndom_pts;      // number of input data points in each domain dim
        VectorXi&                 nctrl_pts;     // number of control points in each dim
        MatrixX<T>&               domain;        // input data points (row-major order: 1st dim changes fastest)
        VectorX<T>                params;        // parameters for input points (single coords: 1st dim params, 2nd dim, ...)
@@ -896,6 +1050,8 @@ namespace mfa
        T                         eps;           // minimum difference considered significant
        T                         max_err;       // unnormalized absolute value of maximum error
        vector<KnotSpan <T> >     knot_spans;    // knot spans
+       int                       min_dim;       // starting coordinate for range data
+       int                       max_dim;       // ending coordinate for range data
     };
 
 }

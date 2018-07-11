@@ -63,9 +63,16 @@ namespace mfa
                 VectorXi&   nctrl_pts_,     // (output, optional input) number of control points in each dim
                 VectorX<T>& weights_,       // (output, optional input) weights associated with control points
                 VectorX<T>& knots_,         // (output) knots (1st dim changes fastest)
+                int         min_dim_ = -1,  // starting coordinate for input data; -1 = use all coordinates
+                int         max_dim_ = -1,  // ending coordinate for input data; -1 = use all coordinates
                 T           eps_ = 1.0e-6)  // minimum difference considered significant
         {
-            mfa = new MFA_Data<T>(p_, ndom_pts_, domain_, ctrl_pts_, nctrl_pts_, weights_, knots_, eps_);
+            if (min_dim_ == -1)
+                min_dim_ = 0;
+            if (max_dim_ == -1)
+                max_dim_ = domain_.cols() - 1;
+            mfa = new MFA_Data<T>(p_, ndom_pts_, domain_, ctrl_pts_, nctrl_pts_, weights_,
+                    knots_, min_dim_, max_dim_, eps_);
         }
 
         ~MFA()
@@ -109,21 +116,25 @@ namespace mfa
         // decode points
         void Decode(
                 int         verbose,                // output level
-                MatrixX<T>& approx)                 // decoded points
+                MatrixX<T>& approx,                 // decoded points
+                int         min_dim,                // first dimension to decode
+                int         max_dim)                // last dimension to decode
         {
             VectorXi no_derivs;                     // size-0 means no derivatives
-            Decode(approx, verbose, no_derivs);
+            Decode(verbose, approx, min_dim, max_dim, no_derivs);
         }
 
         // decode derivatives
         void Decode(
-                MatrixX<T>& approx,                 // decoded derivatives
                 int         verbose,                // output level
+                MatrixX<T>& approx,                 // decoded derivatives
+                int         min_dim,                // first dimension to decode
+                int         max_dim,                // last dimension to decode
                 VectorXi&   derivs)                 // derivative to take in each domain dim. (0 = value, 1 = 1st deriv, 2 = 2nd deriv, ...)
-            // pass size-0 vector if unused
+                                                    // pass size-0 vector if unused
         {
             mfa::Decoder<T> decoder(*mfa, verbose);
-            decoder.Decode(approx, derivs);
+            decoder.Decode(approx, min_dim, max_dim, derivs);
         }
 
         // compute the error (absolute value of distance in normal direction) of the mfa at a domain point

@@ -77,7 +77,7 @@ namespace mfa
             Quants(n, m);
 
             // control points
-            mfa.ctrl_pts.resize(mfa.tot_nctrl, mfa.domain.cols());
+            mfa.ctrl_pts.resize(mfa.tot_nctrl, mfa.max_dim - mfa.min_dim + 1);
 
             // 2 buffers of temporary control points
             // double buffer needed to write output curves of current dim without changing its input pts
@@ -88,8 +88,8 @@ namespace mfa
             size_t tot_ntemp_ctrl = 1;
             for (size_t k = 0; k < ndims; k++)
                 tot_ntemp_ctrl *= (k == 0 ? mfa.nctrl_pts(k) : mfa.ndom_pts(k));
-            MatrixX<T> temp_ctrl0 = MatrixX<T>::Zero(tot_ntemp_ctrl, mfa.domain.cols());
-            MatrixX<T> temp_ctrl1 = MatrixX<T>::Zero(tot_ntemp_ctrl, mfa.domain.cols());
+            MatrixX<T> temp_ctrl0 = MatrixX<T>::Zero(tot_ntemp_ctrl, mfa.ctrl_pts.cols());
+            MatrixX<T> temp_ctrl1 = MatrixX<T>::Zero(tot_ntemp_ctrl, mfa.ctrl_pts.cols());
 
             VectorXi ntemp_ctrl = mfa.ndom_pts;     // current num of temp control pts in each dim
 
@@ -156,9 +156,15 @@ namespace mfa
                     mfa.BasisFuns(k, mfa.params(mfa.po[k] + i), span, N, i);
                 }
 
+                // debug
+                cerr << "N:\n" << N << endl;
+
                 // TODO: NtN is going to be very sparse when it is large: switch to sparse representation
                 // NtN has semibandwidth < p + 1 nonzero entries across diagonal
-                MatrixX<T> NtN  = N.transpose() * N;;
+                MatrixX<T> NtN  = N.transpose() * N;
+
+                // debug
+                cerr << "NtN:\n" << NtN << endl;
 
 #ifndef MFA_NO_TBB                                  // TBB version
 
@@ -168,12 +174,12 @@ namespace mfa
                         // fprintf(stderr, "j=%ld curve\n", j);
 
                         // R is the right hand side needed for solving NtN * P = R
-                        MatrixX<T> R(N.cols(), mfa.domain.cols());
+                        MatrixX<T> R(N.cols(), mfa.ctrl_pts.cols());
 
                         // P are the unknown control points and the solution to NtN * P = R
                         // NtN is positive definite -> do not need pivoting
                         // TODO: use a common representation for P and ctrl_pts to avoid copying
-                        MatrixX<T> P(N.cols(), mfa.domain.cols());
+                        MatrixX<T> P(N.cols(), mfa.ctrl_pts.cols());
 
                         // compute the one curve of control points
                         CtrlCurve(N, NtN, R, P, k, co[j], cs, to[j], temp_ctrl0, temp_ctrl1, -1, weighted);
@@ -182,12 +188,12 @@ namespace mfa
 #else                                       // serial vesion
 
                 // R is the right hand side needed for solving NtN * P = R
-                MatrixX<T> R(N.cols(), mfa.domain.cols());
+                MatrixX<T> R(N.cols(), mfa.ctrl_pts.cols());
 
                 // P are the unknown control points and the solution to NtN * P = R
                 // NtN is positive definite -> do not need pivoting
                 // TODO: use a common representation for P and ctrl_pts to avoid copying
-                MatrixX<T> P(N.cols(), mfa.domain.cols());
+                MatrixX<T> P(N.cols(), mfa.ctrl_pts.cols());
 
                 // encode curves in this dimension
                 for (size_t j = 0; j < ncurves; j++)
@@ -304,7 +310,7 @@ namespace mfa
             MatrixX<T> Nt   = N.transpose();
             MatrixX<T> NtNi = NtN.partialPivLu().inverse();
 
-            int pt_dim = mfa.domain.cols();             // dimensionality of input and control points (domain and range)
+            int pt_dim = mfa.max_dim - mfa.min_dim + 1;                     // dimensionality of input and control points (domain and range)
 
             MatrixX<T> NtQ2  = MatrixX<T>::Zero(Nt.rows(),   Nt.cols());    // N^T * Q^2
             MatrixX<T> NtQ   = MatrixX<T>::Zero(Nt.rows(),   Nt.cols());    // N^T * Q
@@ -471,14 +477,18 @@ namespace mfa
                 int         po,       // index of starting parameter
                 int         co)       // index of starting domain pt in current curve
         {
-            int last   = mfa.domain.cols() - 1;             // column of range value
-            MatrixX<T> Rk(N.rows(), mfa.domain.cols());     // one row for each input point
-            VectorX<T> denom(N.rows());                     // rational denomoninator for param of each input point
+            int last   = R.cols() - 1;                                  // column of range value TODO: weighing only the last column does not make much sense in the split model
+            MatrixX<T> Rk(N.rows(), mfa.max_dim - mfa.min_dim + 1);     // one row for each input point
+            VectorX<T> denom(N.rows());                                 // rational denomoninator for param of each input point
 
-            for (int k = 0; k < N.rows(); k++)              // for all input points
+            for (int k = 0; k < N.rows(); k++)                          // for all input points
             {
                 denom(k) = (N.row(k).cwiseProduct(weights.transpose())).sum();
-                Rk.row(k) = mfa.domain.row(co + k * mfa.ds[cur_dim]);
+#ifdef UNCLAMPED_KNOTS
+                if (denom(k) == 0.0)
+                    denom(k) = 1.0;
+#endif
+                Rk.row(k) = mfa.domain.block(co + k * mfa.ds[cur_dim], mfa.min_dim, 1, mfa.max_dim - mfa.min_dim + 1);
             }
 
 #ifdef WEIGH_ALL_DIMS                               // weigh all dimensions
@@ -491,6 +501,11 @@ namespace mfa
                          weights(i) / denom.array() *       // rationalized
                          Rk.col(j).array()).sum();          // input points
 #else                                               // don't weigh domain coordinate (only range)
+            // debug
+//             cerr << "N in RHS:\n" << N << endl;
+//             cerr << "weights in RHS:\n" << weights << endl;
+//             cerr << "denom in RHS:\n" << denom << endl;
+
             // compute the matrix R (one row for each control point)
             for (int i = 0; i < N.cols(); i++)
             {
@@ -507,7 +522,7 @@ namespace mfa
 #endif
 
             // debug
-//             cerr << "R:\n" << R << endl;
+            cerr << "R:\n" << R << endl;
         }
 
 
@@ -526,14 +541,14 @@ namespace mfa
                 int         co,       // index of starting input pt in current curve
                 int         cs)       // stride of input pts in current curve
         {
-            int last   = mfa.domain.cols() - 1;             // column of range value
-            MatrixX<T> Rk(N.rows(), mfa.domain.cols());     // one row for each input point
-            VectorX<T> denom(N.rows());                     // rational denomoninator for param of each input point
+            int last   = R.cols() - 1;                                  // column of range value TODO: weighing only the last column does not make much sense in the split model
+            MatrixX<T> Rk(N.rows(), mfa.max_dim - mfa.min_dim + 1);     // one row for each input point
+            VectorX<T> denom(N.rows());                                 // rational denomoninator for param of each input point
 
             for (int k = 0; k < N.rows(); k++)
             {
                 denom(k) = (N.row(k).cwiseProduct(weights.transpose())).sum();
-                Rk.row(k) = in_pts.row(co + k * cs);
+                Rk.row(k) = in_pts.block(co + k * cs, mfa.min_dim, 1, mfa.max_dim - mfa.min_dim + 1);
             }
 
 #ifdef WEIGH_ALL_DIMS                               // weigh all dimensions
@@ -622,11 +637,11 @@ namespace mfa
             // TODO: avoid copying into Q by passing temp_ctrl0, temp_ctrl1, co, cs to Weights()
             // TODO: check that this is right, using co and cs for copying control points and domain points
             MatrixX<T> Q;
-            Q.resize(mfa.ndom_pts(k), mfa.domain.cols());
+            Q.resize(mfa.ndom_pts(k), mfa.ctrl_pts.cols());
             if (k == 0)
             {
                 for (auto i = 0; i < mfa.ndom_pts(k); i++)
-                    Q.row(i) = mfa.domain.row(co + i * cs);
+                    Q.row(i) = mfa.domain.block(co + i * cs, mfa.min_dim, 1, mfa.max_dim - mfa.min_dim + 1);
             }
             else if (k % 2)
             {
@@ -772,7 +787,7 @@ namespace mfa
             // this eliminates any wiggles in other dimensions from the computation of P (typically ~10^-5)
             for (int i = 0; i < P.rows(); i++)
             {
-                for (auto j = 0; j < mfa.domain.cols(); j++)
+                for (auto j = 0; j < mfa.ctrl_pts.cols(); j++)
                 {
                     if (j < mfa.p.size() && j != k)
                         temp_ctrl(i, j) = mfa.domain(co, j);
@@ -796,9 +811,9 @@ namespace mfa
                 T              err_limit)     // max allowable error
         {
             mfa::Decoder<T> decoder(mfa, verbose);
-            VectorX<T> cpt(mfa.domain.cols());            // decoded curve point
-            int nerr = 0;                               // number of points with error greater than err_limit
-            int span = mfa.p[k];                        // current knot span of the domain point being checked
+            VectorX<T> cpt(mfa.ctrl_pts.cols());            // decoded curve point
+            int nerr = 0;                                   // number of points with error greater than err_limit
+            int span = mfa.p[k];                            // current knot span of the domain point being checked
 
             for (auto i = 0; i < mfa.ndom_pts[k]; i++)      // all domain points in the curve
             {
@@ -810,7 +825,7 @@ namespace mfa
 //                 T err = fabs(mfa.NormalDistance(cpt, co + i * mfa.ds[k])) / mfa.range_extent;       // normalized by data range
 
                 // range error
-                int last = mfa.domain.cols() - 1;           // range coordinate
+                int last = mfa.max_dim;                     // range coordinate TODO: last doesn't make much sense in the split model
                 T err = fabs(cpt(last) - mfa.domain(co + i * mfa.ds[k], last)) / mfa.range_extent;
 
                 if (err > err_limit)
@@ -859,7 +874,7 @@ namespace mfa
                 int            iter)                        // iteration number of caller (for debugging)
         {
             // resize control points and weights
-            mfa.ctrl_pts.resize(mfa.tot_nctrl, mfa.domain.cols());
+            mfa.ctrl_pts.resize(mfa.tot_nctrl, mfa.ctrl_pts.cols());
             mfa.weights = VectorX<T>::Ones(mfa.ctrl_pts.rows());
 
             // full n-d encoding
@@ -892,7 +907,7 @@ namespace mfa
             new_knots.resize(0);
 
             // resize control points and weights
-            mfa.ctrl_pts.resize(mfa.tot_nctrl, mfa.domain.cols());
+            mfa.ctrl_pts.resize(mfa.tot_nctrl, mfa.ctrl_pts.cols());
             mfa.weights = VectorX<T>::Ones(mfa.ctrl_pts.rows());
 
             for (size_t k = 0; k < ndims; k++)              // for all domain dimensions
@@ -902,7 +917,7 @@ namespace mfa
                 VectorX<T> weights = VectorX<T>::Ones(n(k) + 1);
 
                 // temporary control points for one curve
-                MatrixX<T> temp_ctrl = MatrixX<T>::Zero(mfa.nctrl_pts(k), mfa.domain.cols());
+                MatrixX<T> temp_ctrl = MatrixX<T>::Zero(mfa.nctrl_pts(k), mfa.ctrl_pts.cols());
 
                 // error spans for one curve and for worst curve
                 set<int> err_spans;
@@ -931,12 +946,12 @@ namespace mfa
                 MatrixX<T> NtN = N.transpose() * N;
 
                 // R is the right hand side needed for solving NtN * P = R
-                MatrixX<T> R(N.cols(), mfa.domain.cols());
+                MatrixX<T> R(N.cols(), mfa.ctrl_pts.cols());
 
                 // P are the unknown interior control points and the solution to NtN * P = R
                 // NtN is positive definite -> do not need pivoting
                 // TODO: use a common representation for P and ctrl_pts to avoid copying
-                MatrixX<T> P(N.cols(), mfa.domain.cols());
+                MatrixX<T> P(N.cols(), mfa.ctrl_pts.cols());
 
                 size_t ncurves   = mfa.domain.rows() / mfa.ndom_pts(k); // number of curves in this dimension
                 int nsame_steps  = 0;                                   // number of steps with same number of erroneous points

@@ -9,7 +9,7 @@
 //--------------------------------------------------------------
 
 #include "mfa/mfa.hpp"
-#include "../block.hpp"
+#include "../split_block.hpp"
 #include <iostream>
 
 #include <diy/master.hpp>
@@ -26,17 +26,20 @@ struct vec3d
 
 // package rendering data
 void PrepRenderingData(
-        vector<int>&   nraw_pts,
-        vector<vec3d>& raw_pts,
-        vector<float>& raw_data,
-        vector<int>&   nctrl_pts,
-        vector<vec3d>& ctrl_pts,
-        vector<vec3d>& approx_pts,
-        vector<float>& approx_data,
-        vector<vec3d>& err_pts,
-        vector<vec3d>& block_mins,
-        vector<vec3d>& block_maxs,
-        Block<real_t>* block)
+        vector<int>&                nraw_pts,
+        vector<vec3d>&              raw_pts,
+        vector<float>&              raw_data,
+        int&                        nvars,
+        vector<int>&                geom_nctrl_pts,
+        vector< vector <int> >&     vars_nctrl_pts,
+        vector<vec3d>&              geom_ctrl_pts,
+        vector< vector <vec3d> >&   vars_ctrl_pts,
+        vector<vec3d>&              approx_pts,
+        vector<float>&              approx_data,
+        vector<vec3d>&              err_pts,
+        vector<vec3d>&              block_mins,
+        vector<vec3d>&              block_maxs,
+        Block<real_t>*              block)
 {
     vec3d p;
 
@@ -57,19 +60,42 @@ void PrepRenderingData(
             raw_data.push_back(block->domain(j, 3));
     }
 
-    // number of control points
-    for (size_t j = 0; j < (size_t)(block->nctrl_pts.size()); j++)
-        nctrl_pts.push_back(block->nctrl_pts(j));
+    // number of science variables
+    nvars = block->vars.size();
 
-    // control points
-    for (size_t j = 0; j < (size_t)(block->ctrl_pts.rows()); j++)
+    // number of geometry control points
+    for (size_t j = 0; j < (size_t)(block->geometry.nctrl_pts.size()); j++)
+        geom_nctrl_pts.push_back(block->geometry.nctrl_pts(j));
+
+    // number of science variable control points
+    vars_nctrl_pts.resize(nvars);
+    for (size_t i = 0; i < nvars; i++)
+        for (size_t j = 0; j < (size_t)(block->vars[i].nctrl_pts.size()); j++)
+            vars_nctrl_pts[i].push_back(block->vars[i].nctrl_pts(j));
+
+    // geometry control points
+    for (size_t j = 0; j < (size_t)(block->geometry.ctrl_pts.rows()); j++)
     {
-        p.x = block->ctrl_pts(j, 0);
-        p.y = block->ctrl_pts(j, 1);
-        p.z = block->ctrl_pts.cols() > 2 ?
-            block->ctrl_pts(j, 2) : 0.0;
-        ctrl_pts.push_back(p);
+        p.x = block->geometry.ctrl_pts(j, 0);
+        p.y = block->geometry.ctrl_pts.cols() > 2 ?
+            block->geometry.ctrl_pts(j, 1) : 0.0;
+        p.z = block->geometry.ctrl_pts.cols() > 2 ?
+            block->geometry.ctrl_pts(j, 2) : 0.0;
+        geom_ctrl_pts.push_back(p);
     }
+
+    // science variable control points
+    vars_ctrl_pts.resize(nvars);
+    for (size_t i = 0; i < nvars; i++)
+        for (size_t j = 0; j < (size_t)(block->vars[i].ctrl_pts.rows()); j++)
+        {
+            p.x = block->vars[i].ctrl_pts(j, 0);
+            p.y = block->vars[i].ctrl_pts.cols() > 2 ?
+                block->vars[i].ctrl_pts(j, 1) : 0.0;
+            p.z = block->vars[i].ctrl_pts.cols() > 2 ?
+                block->vars[i].ctrl_pts(j, 2) : 0.0;
+            vars_ctrl_pts[i].push_back(p);
+        }
 
     // approximated points
     for (size_t j = 0; j < (size_t)(block->approx.rows()); j++)
@@ -119,23 +145,29 @@ void write_vtk_files(
         Block<real_t>* b,
         const          diy::Master::ProxyWithLink& cp)
 {
-    vector<int>   nraw_pts;                       // number of input points in each dim.
-    vector<vec3d> raw_pts;                        // input raw data points (<= 3d)
-    vector<float> raw_data;                       // input raw data values (4d)
-    vector<int>   nctrl_pts;                      // number of control pts in each dim.
-    vector<vec3d> ctrl_pts;                       // control points (<= 3d)
-    vector<vec3d> approx_pts;                     // aproximated data points (<= 3d)
-    vector<float> approx_data;                    // approximated data values (4d)
-    vector<vec3d> err_pts;                        // abs value error field
-    vector<vec3d> block_mins;                     // block mins
-    vector<vec3d> block_maxs;                     // block maxs
+    int                         nvars;              // number of science variables (excluding geometry)
+    vector<int>                 nraw_pts;           // number of input points in each dim.
+    vector<vec3d>               raw_pts;            // input raw data points (<= 3d)
+    vector<float>               raw_data;           // input raw data values (4d)
+    vector <int>                geom_nctrl_pts;     // number of control pts in each dim of geometry
+    vector < vector <int> >     vars_nctrl_pts;     // number of control pts in each dim. of each science variable
+    vector<vec3d>               geom_ctrl_pts;      // control points (<= 3d) in geometry
+    vector < vector <vec3d> >   vars_ctrl_pts;      // control points (<= 3d) in science variables
+    vector<vec3d>               approx_pts;         // aproximated data points (<= 3d)
+    vector<float>               approx_data;        // approximated data values (4d)
+    vector<vec3d>               err_pts;            // abs value error field
+    vector<vec3d>               block_mins;         // block mins
+    vector<vec3d>               block_maxs;         // block maxs
 
     // package rendering data
     PrepRenderingData(nraw_pts,
             raw_pts,
             raw_data,
-            nctrl_pts,
-            ctrl_pts,
+            nvars,
+            geom_nctrl_pts,
+            vars_nctrl_pts,
+            geom_ctrl_pts,
+            vars_ctrl_pts,
             approx_pts,
             approx_data,
             err_pts,
@@ -144,11 +176,18 @@ void write_vtk_files(
             b);
 
     // pad dimensions up to 3
-    size_t dom_dims = nctrl_pts.size();
+    size_t dom_dims = geom_nctrl_pts.size();
     for (auto i = 0; i < 3 - dom_dims; i++)
     {
-        nctrl_pts.push_back(1);
+        geom_nctrl_pts.push_back(1);
         nraw_pts.push_back(1);
+    }
+
+    for (size_t j = 0; j < nvars; j++)
+    {
+        dom_dims = vars_nctrl_pts[j].size();
+        for (auto i = 0; i < 3 - dom_dims; i++)
+            vars_nctrl_pts[j].push_back(1);
     }
 
     // copy error as a new variable (z dimension, or maybe magnitude?)
@@ -161,19 +200,35 @@ void write_vtk_files(
     int vardim     = 1;
     int centering  = 1;
 
-    // write control points
-    sprintf(filename, "control_points_gid_%d.vtk", cp.gid());
+    // write geometry control points
+    sprintf(filename, "geom_control_points_gid_%d.vtk", cp.gid());
 
     write_curvilinear_mesh(
             /* const char *filename */                      filename,
             /* int useBinary */                             0,
-            /* int *dims */                                 &nctrl_pts[0],
-            /* float *pts */                                &(ctrl_pts[0].x),
+            /* int *dims */                                 &geom_nctrl_pts[0],
+            /* float *pts */                                &(geom_ctrl_pts[0].x),
             /* int nvars */                                 0,
             /* int *vardim */                               NULL,
             /* int *centering */                            NULL,
             /* const char * const *varnames */              NULL,
             /* float **vars */                              NULL);
+
+    // write science variables control points
+    for (auto i = 0; i < nvars; i++)
+    {
+        sprintf(filename, "var%d_control_points_gid_%d.vtk", i, cp.gid());
+        write_curvilinear_mesh(
+            /* const char *filename */                      filename,
+            /* int useBinary */                             0,
+            /* int *dims */                                 &vars_nctrl_pts[i][0],
+            /* float *pts */                                &(vars_ctrl_pts[i][0].x),
+            /* int nvars */                                 0,
+            /* int *vardim */                               NULL,
+            /* int *centering */                            NULL,
+            /* const char * const *varnames */              NULL,
+            /* float **vars */                              NULL);
+    }
 
     // write raw original points
     sprintf(filename, "initial_points_gid_%d.vtk", cp.gid());

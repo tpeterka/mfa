@@ -73,10 +73,12 @@ namespace mfa
         // P&T eq. 9.77, p. 424
         // assumes all vectors have been correctly resized by the caller
         void Decode(
-                MatrixX<T>& approx)                 // (output) points (1st dim changes fastest)
+                MatrixX<T>& approx,                 // (output) points (1st dim changes fastest)
+                int         min_dim,                // first dimension to decode
+                int         max_dim)                // last dimension to decode
         {
             VectorXi no_ders;                       // size 0 means no derivatives
-            Decode(approx, no_ders);
+            Decode(approx, min_dim, max_dim, no_ders);
         }
 
         // computes approximated points from a given set of domain points and an n-d NURBS volume
@@ -84,6 +86,8 @@ namespace mfa
         // assumes all vectors have been correctly resized by the caller
         void Decode(
                 MatrixX<T>& approx,                 // (output) points (1st dim changes fastest)
+                int         min_dim,                // first dimension to decode
+                int         max_dim,                // last dimension to decode
                 VectorXi&   derivs)                 // derivative to take in each domain dim. (0 = value, 1 = 1st deriv, 2 = 2nd deriv, ...)
                                                     // pass size-0 vector if unused
         {
@@ -111,7 +115,7 @@ namespace mfa
                 // compute approximated point for this parameter vector
                 VectorX<T> cpt(mfa.ctrl_pts.cols());        // evaluated point
                 VolPt(param, cpt, derivs);
-                approx.row(i) = cpt;
+                approx.block(i, min_dim, 1, max_dim - min_dim + 1) = cpt;
             });
             if (verbose)
                 fprintf(stderr, "100 %% decoded\n");
@@ -149,7 +153,7 @@ namespace mfa
                         iter[j] = 0;
                 }
 
-                approx.row(i) = cpt;
+                approx.block(i, min_dim, 1, max_dim - min_dim + 1) = cpt;
 
                 // print progress
                 if (verbose)
@@ -171,6 +175,8 @@ namespace mfa
             VolPt(param, out_pt, no_ders);
         }
 
+#ifndef UNCLAMPED_KNOTS       // repeated knots at ends
+
         // compute a point from a NURBS n-d volume at a given parameter value
         // algorithm 4.3, Piegl & Tiller (P&T) p.134
         void VolPt(
@@ -179,8 +185,6 @@ namespace mfa
                 VectorXi&   derivs)             // derivative to take in each domain dim. (0 = value, 1 = 1st deriv, 2 = 2nd deriv, ...)
                                                 // pass size-0 vector if unused
         {
-            // check dimensionality for sanity
-            assert(mfa.p.size() < mfa.ctrl_pts.cols());
             if (derivs.size())                  // extra check for derivatives, won't slow down normal point evaluation
             {
                 if (derivs.size() != mfa.p.size())
@@ -275,6 +279,123 @@ namespace mfa
 #endif
 
         }
+
+#else                           // single knots at ends
+
+        // compute a point from a NURBS n-d volume at a given parameter value
+        // algorithm 4.3, Piegl & Tiller (P&T) p.134
+        void VolPt(
+                VectorX<T>& param,              // parameter value in each dim. of desired point
+                VectorX<T>& out_pt,             // (output) point
+                VectorXi&   derivs)             // derivative to take in each domain dim. (0 = value, 1 = 1st deriv, 2 = 2nd deriv, ...)
+                                                // pass size-0 vector if unused
+        {
+            // check dimensionality for sanity
+            assert(mfa.p.size() < mfa.ctrl_pts.cols());
+            if (derivs.size())                  // extra check for derivatives, won't slow down normal point evaluation
+            {
+                if (derivs.size() != mfa.p.size())
+                {
+                    fprintf(stderr, "Error: size of derivatives vector is not the same as the number of domain dimensions\n");
+                    exit(0);
+                }
+                for (auto i = 0; i < mfa.p.size(); i++)
+                    if (derivs(i) > mfa.p(i))
+                        fprintf(stderr, "Warning: In dimension %d, trying to take derivative %d of an MFA with degree %d will result in 0. This may not be what you want",
+                                i, derivs(i), mfa.p(i));
+            }
+
+            out_pt = VectorX<T>::Zero(mfa.ctrl_pts.cols());   // initializes and resizes
+            vector <MatrixX<T>> N(mfa.p.size());              // basis functions in each dim.
+            vector<VectorX<T>>  temp(mfa.p.size());           // temporary point in each dim.
+            vector<int>         span(mfa.p.size());           // span in each dim.
+            vector<int>         n(mfa.p.size());              // number of control point spans in each dim
+            vector<int>         iter(mfa.p.size());           // iteration number in each dim.
+            VectorX<T>          ctrl_pt(mfa.ctrl_pts.cols()); // one control point
+            int                 ctrl_idx;                     // control point linear ordering index
+            VectorX<T>          temp_denom = VectorX<T>::Zero(mfa.p.size());     // temporary rational NURBS denominator in each dim
+
+            // init
+            for (size_t i = 0; i < mfa.p.size(); i++)       // for all dims
+            {
+                temp[i]    = VectorX<T>::Zero(mfa.ctrl_pts.cols());
+                iter[i]    = 0;
+                span[i]    = mfa.FindSpan(i, param(i), mfa.ko[i]) - mfa.ko[i];  // relative to ko
+                N[i]       = MatrixX<T>::Zero(1, mfa.nctrl_pts(i));
+                if (derivs.size() && derivs(i))
+                {
+                    MatrixX<T> Ders = MatrixX<T>::Zero(derivs(i) + 1, mfa.nctrl_pts(i));
+                    mfa.DerBasisFuns(i, param(i), span[i], derivs(i), Ders);
+                    N[i].row(0) = Ders.row(derivs(i));
+                }
+                else
+                    mfa.BasisFuns(i, param(i), span[i], N[i], 0);
+            }
+
+            for (int j = 0; j < mfa.p.size(); j++)
+            {
+                // TODO: need some way to indicate invalid point
+                // currently returns, leaving out_pt unchanged
+                if (span[j] - mfa.p(j) < 0 || span[j] + 2 * mfa.p(j) >= mfa.nctrl_pts(j))
+                    return;
+            }
+
+            for (int i = 0; i < tot_iters; i++)             // 1-d flattening all n-d nested loop computations
+            {
+                // control point linear order index
+                ctrl_idx = 0;
+                for (int j = 0; j < mfa.p.size(); j++)
+                    ctrl_idx += (span[j] + ct(i, j)) * cs[j];
+
+                // always compute the point in the first dimension
+                ctrl_pt = mfa.ctrl_pts.row(ctrl_idx);
+                T w     = mfa.weights(ctrl_idx);
+
+#ifdef WEIGH_ALL_DIMS                               // weigh all dimensions
+                temp[0] += (N[0])(0, iter[0] + span[0]) * ctrl_pt * w;
+#else                                               // weigh only range dimension
+                int last = mfa.ctrl_pts.cols() - 1;
+                for (auto j = 0; j < last; j++)
+                    (temp[0])(j) += (N[0])(0, iter[0] + span[0]) * ctrl_pt(j);
+                (temp[0])(last) += (N[0])(0, iter[0] + span[0]) * ctrl_pt(last) * w;
+#endif
+
+                temp_denom(0) += w * N[0](0, iter[0] + span[0]);
+                iter[0]++;
+
+                // for all dimensions except last, check if span is finished
+                for (size_t k = 0; k < mfa.p.size() - 1; k++)
+                {
+                    if (iter[k] - 1 == mfa.p(k))
+                    {
+                        // compute point in next higher dimension and reset computation for current dim
+                        temp[k + 1]        += (N[k + 1])(0, iter[k + 1] + span[k + 1]) * temp[k];
+                        temp_denom(k + 1)  += temp_denom(k) * N[k + 1](0, iter[k + 1] + span[k + 1]);
+                        temp_denom(k)       = 0.0;
+                        temp[k]             = VectorX<T>::Zero(mfa.ctrl_pts.cols());
+                        iter[k]             = 0;
+                        iter[k + 1]++;
+                    }
+                }
+            }
+
+            T denom;                                // rational denominator
+            if (derivs.size() && derivs.sum())
+                denom = 1.0;                        // TODO: weights for derivatives not implemented yet
+            else
+                denom = temp_denom(mfa.p.size() - 1);
+
+#ifdef WEIGH_ALL_DIMS                           // weigh all dimensions
+            out_pt = temp[mfa.p.size() - 1] / denom;
+#else                                           // weigh only range dimension
+            out_pt   = temp[mfa.p.size() - 1];
+            int last = mfa.ctrl_pts.cols() - 1;
+            out_pt(last) /= denom;
+#endif
+
+        }
+
+#endif
 
         // compute a point from a NURBS curve at a given parameter value
         // this version takes a temporary set of control points for one curve only rather than
