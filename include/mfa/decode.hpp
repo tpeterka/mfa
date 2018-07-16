@@ -115,7 +115,7 @@ namespace mfa
                 // compute approximated point for this parameter vector
                 VectorX<T> cpt(mfa.ctrl_pts.cols());        // evaluated point
                 VolPt(param, cpt, derivs);
-                approx.block(i, min_dim, 1, max_dim - min_dim + 1) = cpt;
+                approx.block(i, min_dim, 1, max_dim - min_dim + 1) = cpt.transpose();
             });
             if (verbose)
                 fprintf(stderr, "100 %% decoded\n");
@@ -153,7 +153,7 @@ namespace mfa
                         iter[j] = 0;
                 }
 
-                approx.block(i, min_dim, 1, max_dim - min_dim + 1) = cpt;
+                approx.block(i, min_dim, 1, max_dim - min_dim + 1) = cpt.transpose();
 
                 // print progress
                 if (verbose)

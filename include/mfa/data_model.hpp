@@ -195,8 +195,8 @@ namespace mfa
 #endif
 
             // debug
-            cerr << "Params:\n" << params << endl;
-            cerr << "Knots:\n" << knots << endl;
+//             cerr << "Params:\n" << params << endl;
+//             cerr << "Knots:\n" << knots << endl;
 
             // offsets for curve starting (domain) points in each dimension
             co.resize(p.size());

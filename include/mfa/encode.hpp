@@ -157,14 +157,14 @@ namespace mfa
                 }
 
                 // debug
-                cerr << "N:\n" << N << endl;
+//                 cerr << "N:\n" << N << endl;
 
                 // TODO: NtN is going to be very sparse when it is large: switch to sparse representation
                 // NtN has semibandwidth < p + 1 nonzero entries across diagonal
                 MatrixX<T> NtN  = N.transpose() * N;
 
                 // debug
-                cerr << "NtN:\n" << NtN << endl;
+//                 cerr << "NtN:\n" << NtN << endl;
 
 #ifndef MFA_NO_TBB                                  // TBB version
 
@@ -522,7 +522,7 @@ namespace mfa
 #endif
 
             // debug
-            cerr << "R:\n" << R << endl;
+//             cerr << "R:\n" << R << endl;
         }
 
 
@@ -548,7 +548,7 @@ namespace mfa
             for (int k = 0; k < N.rows(); k++)
             {
                 denom(k) = (N.row(k).cwiseProduct(weights.transpose())).sum();
-                Rk.row(k) = in_pts.block(co + k * cs, mfa.min_dim, 1, mfa.max_dim - mfa.min_dim + 1);
+                Rk.row(k) = in_pts.row(co + k * cs);
             }
 
 #ifdef WEIGH_ALL_DIMS                               // weigh all dimensions
