@@ -9,7 +9,7 @@
 //--------------------------------------------------------------
 
 #include "mfa/mfa.hpp"
-#include "../split_block.hpp"
+#include "../block.hpp"
 #include <iostream>
 
 #include <diy/master.hpp>
@@ -327,8 +327,7 @@ int main(int argc, char ** argv)
     diy::ContiguousAssigner   assigner(world.size(), -1);   // number of blocks set by read_blocks()
 
     diy::io::read_blocks(infile.c_str(), world, assigner, master, &Block<real_t>::load);
-    int nblocks = master.size();                            // number of local blocks
-    std::cout << nblocks << " blocks read from file "<< infile << "\n";
+    std::cout << master.size() << " blocks read from file "<< infile << "\n";
 
     master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
             { write_vtk_files(b, cp); });

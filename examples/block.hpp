@@ -46,16 +46,18 @@ struct DomainArgs
 {
     int       pt_dim;                            // dimension of points
     int       dom_dim;                           // dimension of domain (<= pt_dim)
-    int       p[MAX_DIM];                        // degree in each dimension of domain
+    int       geom_p[MAX_DIM];                   // degree in each dimension of geometry
+    int       vars_p[MAX_DIM];                   // degree in each dimension of science variables
     int       starts[MAX_DIM];                   // starting offsets of ndom_pts (optional, usually assumed 0)
     int       ndom_pts[MAX_DIM];                 // number of input points in each dimension of domain
     int       full_dom_pts[MAX_DIM];             // number of points in full domain in case a subset is taken
-    int       nctrl_pts[MAX_DIM];                // number of input points in each dimension of domain
+    int       geom_nctrl_pts[MAX_DIM];           // number of input points in each dimension of geometry
+    int       vars_nctrl_pts[MAX_DIM];           // number of input points in each dimension of all science variables
     real_t    min[MAX_DIM];                      // minimum corner of domain
     real_t    max[MAX_DIM];                      // maximum corner of domain
-    real_t    s;                                 // scaling factor or any other usage
+    real_t    s[MAX_DIM];                        // scaling factor for each variable or any other usage
     real_t    r;                                 // x-y rotation of domain or any other usage
-    real_t    f;                                 // frequency multiplier for sinc or any other usage
+    real_t    f[MAX_DIM];                        // frequency multiplier for each variable or any other usage
     real_t    t;                                 // waviness of domain edges or any other usage
     char      infile[256];                       // input filename
     bool      weighted;                          // solve for and use weights (default = true)
@@ -65,10 +67,23 @@ struct DomainArgs
 
 struct ErrArgs
 {
-    int    max_niter;                         // max num iterations to search for nearest curve pt
-    real_t err_bound;                         // desired error bound (stop searching if less)
-    int    search_rad;                        // number of parameter steps to search path on either
-    // side of parameter value of input point
+    int    max_niter;                           // max num iterations to search for nearest curve pt
+    real_t err_bound;                           // desired error bound (stop searching if less)
+    int    search_rad;                          // number of parameter steps to search path on either
+                                                // side of parameter value of input point
+};
+
+// a solved and stored MFA model (geometry or science variable or both)
+template <typename T>
+struct Model
+{
+    VectorXi    p;                              // degree in each dimension
+    VectorXi    nctrl_pts;                      // number of control points in each dimension
+    MatrixX<T>  ctrl_pts;                       // NURBS control points (1st dim changes fastest)
+    VectorX<T>  weights;                        // weights associated with control points
+    VectorX<T>  knots;                          // NURBS knots (1st dim changes fastest)
+    mfa::MFA<T> *mfa;                           // MFA object
+
 };
 
 // block
@@ -117,11 +132,25 @@ struct Block
             diy::save(bb, b->domain);
             diy::save(bb, b->domain_mins);
             diy::save(bb, b->domain_maxs);
-            diy::save(bb, b->p);
-            diy::save(bb, b->nctrl_pts);
-            diy::save(bb, b->ctrl_pts);
-            diy::save(bb, b->weights);
-            diy::save(bb, b->knots);
+
+            // geometry
+            diy::save(bb, b->geometry.p);
+            diy::save(bb, b->geometry.nctrl_pts);
+            diy::save(bb, b->geometry.ctrl_pts);
+            diy::save(bb, b->geometry.weights);
+            diy::save(bb, b->geometry.knots);
+
+            // science variables
+            diy::save(bb, b->vars.size());
+            for (auto i = 0; i < b->vars.size(); i++)
+            {
+                diy::save(bb, b->vars[i].p);
+                diy::save(bb, b->vars[i].nctrl_pts);
+                diy::save(bb, b->vars[i].ctrl_pts);
+                diy::save(bb, b->vars[i].weights);
+                diy::save(bb, b->vars[i].knots);
+            }
+
             diy::save(bb, b->approx);
             diy::save(bb, b->errs);
             diy::save(bb, b->span_mins);
@@ -138,423 +167,56 @@ struct Block
             diy::load(bb, b->domain);
             diy::load(bb, b->domain_mins);
             diy::load(bb, b->domain_maxs);
-            diy::load(bb, b->p);
-            diy::load(bb, b->nctrl_pts);
-            diy::load(bb, b->ctrl_pts);
-            diy::load(bb, b->weights);
-            diy::load(bb, b->knots);
+
+            // geometry
+            diy::load(bb, b->geometry.p);
+            diy::load(bb, b->geometry.nctrl_pts);
+            diy::load(bb, b->geometry.ctrl_pts);
+            diy::load(bb, b->geometry.weights);
+            diy::load(bb, b->geometry.knots);
+
+            // science variables
+            size_t nvars;
+            diy::load(bb, nvars);
+            b->vars.resize(nvars);
+            for (auto i = 0; i < b->vars.size(); i++)
+            {
+                diy::load(bb, b->vars[i].p);
+                diy::load(bb, b->vars[i].nctrl_pts);
+                diy::load(bb, b->vars[i].ctrl_pts);
+                diy::load(bb, b->vars[i].weights);
+                diy::load(bb, b->vars[i].knots);
+            }
+
             diy::load(bb, b->approx);
             diy::load(bb, b->errs);
             diy::load(bb, b->span_mins);
             diy::load(bb, b->span_maxs);
         }
 
-    // DEPRECATED
-//     // f(x,y,z,...) = 1
-//     void generate_constant_data(
-//             const       diy::Master::ProxyWithLink& cp,
-//             DomainArgs& args)
-//     {
-//         DomainArgs* a = &args;
-//         int tot_ndom_pts = 1;
-//         p.resize(a->dom_dim);
-//         ndom_pts.resize(a->dom_dim);
-//         nctrl_pts.resize(a->dom_dim);
-//         domain_mins.resize(a->pt_dim);
-//         domain_maxs.resize(a->pt_dim);
-//         for (int i = 0; i < a->dom_dim; i++)
-//         {
-//             p(i)         =  a->p[i];
-//             ndom_pts(i)  =  a->ndom_pts[i];
-//             nctrl_pts(i) =  a->nctrl_pts[i];
-//             tot_ndom_pts *= ndom_pts(i);
-//         }
-//         domain.resize(tot_ndom_pts, a->pt_dim);
-// 
-//         // assign values to the domain (geometry)
-//         int cs = 1;                  // stride of a coordinate in this dim
-//         for (int i = 0; i < a->dom_dim; i++) // all dimensions in the domain
-//         {
-//             real_t d = (a->max[i] - a->min[i]) / (ndom_pts(i) - 1);
-//             int k = 0;
-//             int co = 0;                  // j index of start of a new coordinate value
-//             for (int j = 0; j < tot_ndom_pts; j++)
-//             {
-//                 if (a->min[i] + k * d > a->max[i])
-//                     k = 0;
-//                 domain(j, i) = a->min[i] + k * d;
-//                 if (j + 1 - co >= cs)
-//                 {
-//                     k++;
-//                     co = j + 1;
-//                 }
-//             }
-//             cs *= ndom_pts(i);
-//         }
-// 
-//         // assign values to the range (physics attributes)
-//         for (int i = a->dom_dim; i < a->pt_dim; i++)
-//         {
-//             // the simplest constant function
-//             for (int j = 0; j < tot_ndom_pts; j++)
-//                 domain(j, i) = 1.0;
-//         }
-// 
-//         // extents
-//         for (int i = 0; i < a->pt_dim; i++)
-//         {
-//             domain_mins(i) = a->min[i];
-//             domain_maxs(i) = a->max[i];
-//         }
-//     }
-// 
-//     // f(x,y,z,...) = x
-//     void generate_ramp_data(
-//             const       diy::Master::ProxyWithLink& cp,
-//             DomainArgs& args)
-//     {
-//         DomainArgs* a = &args;
-//         int tot_ndom_pts = 1;
-//         p.resize(a->dom_dim);
-//         ndom_pts.resize(a->dom_dim);
-//         nctrl_pts.resize(a->dom_dim);
-//         domain_mins.resize(a->pt_dim);
-//         domain_maxs.resize(a->pt_dim);
-//         for (int i = 0; i < a->dom_dim; i++)
-//         {
-//             p(i)         =  a->p[i];
-//             ndom_pts(i)  =  a->ndom_pts[i];
-//             nctrl_pts(i) =  a->nctrl_pts[i];
-//             tot_ndom_pts *= ndom_pts(i);
-//         }
-//         domain.resize(tot_ndom_pts, a->pt_dim);
-// 
-//         // assign values to the domain (geometry)
-//         int cs = 1;                  // stride of a coordinate in this dim
-//         for (int i = 0; i < a->dom_dim; i++) // all dimensions in the domain
-//         {
-//             real_t d = (a->max[i] - a->min[i]) / (ndom_pts(i) - 1);
-//             int k = 0;
-//             int co = 0;                  // j index of start of a new coordinate value
-//             for (int j = 0; j < tot_ndom_pts; j++)
-//             {
-//                 if (a->min[i] + k * d > a->max[i])
-//                     k = 0;
-//                 domain(j, i) = a->min[i] + k * d;
-//                 if (j + 1 - co >= cs)
-//                 {
-//                     k++;
-//                     co = j + 1;
-//                 }
-//             }
-//             cs *= ndom_pts(i);
-//         }
-// 
-//         // assign values to the range (physics attributes)
-//         for (int i = a->dom_dim; i < a->pt_dim; i++)
-//         {
-//             for (int j = 0; j < tot_ndom_pts; j++)
-//                 domain(j, i) = domain(j, 0);
-//         }
-// 
-//         // extents
-//         for (int i = 0; i < a->pt_dim; i++)
-//         {
-//             domain_mins(i) = a->min[i];
-//             domain_maxs(i) = a->max[i];
-//         }
-//     }
-// 
-//     // f(x,y,z,...) = x^2
-//     void generate_quadratic_data(
-//             const       diy::Master::ProxyWithLink& cp,
-//             DomainArgs& args)
-//     {
-//         DomainArgs* a = &args;
-//         int tot_ndom_pts = 1;
-//         p.resize(a->dom_dim);
-//         ndom_pts.resize(a->dom_dim);
-//         nctrl_pts.resize(a->dom_dim);
-//         domain_mins.resize(a->pt_dim);
-//         domain_maxs.resize(a->pt_dim);
-//         for (int i = 0; i < a->dom_dim; i++)
-//         {
-//             p(i)         =  a->p[i];
-//             ndom_pts(i)  =  a->ndom_pts[i];
-//             nctrl_pts(i) =  a->nctrl_pts[i];
-//             tot_ndom_pts *= ndom_pts(i);
-//         }
-//         domain.resize(tot_ndom_pts, a->pt_dim);
-// 
-//         // assign values to the domain (geometry)
-//         int cs = 1;                  // stride of a coordinate in this dim
-//         for (int i = 0; i < a->dom_dim; i++) // all dimensions in the domain
-//         {
-//             real_t d = (a->max[i] - a->min[i]) / (ndom_pts(i) - 1);
-//             int k = 0;
-//             int co = 0;                  // j index of start of a new coordinate value
-//             for (int j = 0; j < tot_ndom_pts; j++)
-//             {
-//                 if (a->min[i] + k * d > a->max[i])
-//                     k = 0;
-//                 domain(j, i) = a->min[i] + k * d;
-//                 if (j + 1 - co >= cs)
-//                 {
-//                     k++;
-//                     co = j + 1;
-//                 }
-//             }
-//             cs *= ndom_pts(i);
-//         }
-// 
-//         // assign values to the range (physics attributes)
-//         for (int i = a->dom_dim; i < a->pt_dim; i++)
-//         {
-//             for (int j = 0; j < tot_ndom_pts; j++)
-//                 domain(j, i) = domain(j, 0) * domain(j, 0);
-//         }
-// 
-//         // extents
-//         for (int i = 0; i < a->pt_dim; i++)
-//         {
-//             domain_mins(i) = a->min[i];
-//             domain_maxs(i) = a->max[i];
-//         }
-//     }
-// 
-//     // f(x,y,z,...) = sqrt(x^2 + y^2 + z^2 + ...^2)
-//     void generate_magnitude_data(
-//             const       diy::Master::ProxyWithLink& cp,
-//             DomainArgs& args)
-//     {
-//         DomainArgs* a = &args;
-//         int tot_ndom_pts = 1;
-//         p.resize(a->dom_dim);
-//         ndom_pts.resize(a->dom_dim);
-//         nctrl_pts.resize(a->dom_dim);
-//         domain_mins.resize(a->pt_dim);
-//         domain_maxs.resize(a->pt_dim);
-//         for (int i = 0; i < a->dom_dim; i++)
-//         {
-//             p(i)         =  a->p[i];
-//             ndom_pts(i)  =  a->ndom_pts[i];
-//             nctrl_pts(i) =  a->nctrl_pts[i];
-//             tot_ndom_pts *= ndom_pts(i);
-//         }
-//         domain.resize(tot_ndom_pts, a->pt_dim);
-// 
-//         // assign values to the domain (geometry)
-//         int cs = 1;                  // stride of a coordinate in this dim
-//         for (int i = 0; i < a->dom_dim; i++) // all dimensions in the domain
-//         {
-//             real_t d = (a->max[i] - a->min[i]) / (ndom_pts(i) - 1);
-//             int k = 0;
-//             int co = 0;                  // j index of start of a new coordinate value
-//             for (int j = 0; j < tot_ndom_pts; j++)
-//             {
-//                 if (a->min[i] + k * d > a->max[i])
-//                     k = 0;
-//                 domain(j, i) = a->min[i] + k * d;
-//                 if (j + 1 - co >= cs)
-//                 {
-//                     k++;
-//                     co = j + 1;
-//                 }
-//             }
-//             cs *= ndom_pts(i);
-//         }
-// 
-//         // assign values to the range (physics attributes)
-//         for (int i = a->dom_dim; i < a->pt_dim; i++)
-//         {
-//             // magnitude function
-//             for (int j = 0; j < tot_ndom_pts; j++)
-//             {
-//                 VectorX<T> one_pt = domain.block(j, 0, 1, a->dom_dim).row(0);
-//                 domain(j, i) = one_pt.norm();
-//             }
-//         }
-// 
-//         // extents
-//         for (int i = 0; i < a->pt_dim; i++)
-//         {
-//             domain_mins(i) = a->min[i];
-//             domain_maxs(i) = a->max[i];
-//         }
-//         domain_mins(a->pt_dim - 1) = domain(0               , a->pt_dim - 1);
-//         domain_maxs(a->pt_dim - 1) = domain(tot_ndom_pts - 1, a->pt_dim - 1);
-//         // cerr << "domain_maxs:\n" << domain_maxs << endl;
-//     }
-// 
-//     // f(x,y,z,...) = sqrt(r^2 - x^2 - y^2 - z^2 - ...^2)
-//     void generate_sphere_data(
-//             const       diy::Master::ProxyWithLink& cp,
-//             DomainArgs& args)
-//     {
-//         DomainArgs* a = &args;
-//         int tot_ndom_pts = 1;
-//         p.resize(a->dom_dim);
-//         ndom_pts.resize(a->dom_dim);
-//         nctrl_pts.resize(a->dom_dim);
-//         domain_mins.resize(a->pt_dim);
-//         domain_maxs.resize(a->pt_dim);
-//         for (int i = 0; i < a->dom_dim; i++)
-//         {
-//             p(i)         =  a->p[i];
-//             ndom_pts(i)  =  a->ndom_pts[i];
-//             nctrl_pts(i) =  a->nctrl_pts[i];
-//             tot_ndom_pts *= ndom_pts(i);
-//         }
-//         domain.resize(tot_ndom_pts, a->pt_dim);
-// 
-//         // assign values to the domain (geometry)
-//         int cs = 1;                  // stride of a coordinate in this dim
-//         for (int i = 0; i < a->dom_dim; i++) // all dimensions in the domain
-//         {
-//             real_t d = (a->max[i] - a->min[i]) / (ndom_pts(i) - 1);
-//             int k = 0;
-//             int co = 0;                  // j index of start of a new coordinate value
-//             for (int j = 0; j < tot_ndom_pts; j++)
-//             {
-//                 if (a->min[i] + k * d > a->max[i])
-//                     k = 0;
-//                 domain(j, i) = a->min[i] + k * d;
-//                 if (j + 1 - co >= cs)
-//                 {
-//                     k++;
-//                     co = j + 1;
-//                 }
-//             }
-//             cs *= ndom_pts(i);
-//         }
-// 
-//         // assign values to the range (physics attributes)
-//         for (int i = a->dom_dim; i < a->pt_dim; i++)
-//         {
-//             // sphere function
-//             for (int j = 0; j < tot_ndom_pts; j++)
-//             {
-//                 VectorX<T> one_pt = domain.block(j, 0, 1, a->dom_dim).row(0);
-//                 real_t r = a->s;           // shere radius
-//                 if (r * r - one_pt.squaredNorm() < 0)
-//                 {
-//                     fprintf(stderr, "Error: radius is not large enough for domain points\n");
-//                     exit(0);
-//                 }
-//                 domain(j, i) = sqrt(r * r - one_pt.squaredNorm());
-//             }
-//         }
-// 
-//         // extents
-//         for (int i = 0; i < a->pt_dim; i++)
-//         {
-//             domain_mins(i) = a->min[i];
-//             domain_maxs(i) = a->max[i];
-//         }
-//         domain_mins(a->pt_dim - 1) = domain(0               , a->pt_dim - 1);
-//         domain_maxs(a->pt_dim - 1) = domain(tot_ndom_pts - 1, a->pt_dim - 1);
-//         // cerr << "domain_maxs:\n" << domain_maxs << endl;
-//     }
-
-    // y = sine(x)
-    void generate_sine_data(
-            const       diy::Master::ProxyWithLink& cp,
-            DomainArgs& args)
-    {
-        DomainArgs* a = &args;
-        int tot_ndom_pts = 1;
-        p.resize(a->dom_dim);
-        ndom_pts.resize(a->dom_dim);
-        for (int i = 0; i < a->dom_dim; i++)
-        {
-            p(i)         =  a->p[i];
-            ndom_pts(i)  =  a->ndom_pts[i];
-            tot_ndom_pts *= ndom_pts(i);
-        }
-        domain.resize(tot_ndom_pts, a->pt_dim);
-        s = a->s;
-
-        // get local block bounds
-        // if single block, they are passed in args
-        // if multiblock, they were decomposed by diy and are already in the block's domain_mins, maxs
-        if (!a->multiblock)
-        {
-            domain_mins.resize(a->pt_dim);
-            domain_maxs.resize(a->pt_dim);
-            for (int i = 0; i < a->dom_dim; i++)
-            {
-                domain_mins(i) = a->min[i];
-                domain_maxs(i) = a->max[i];
-            }
-        }
-
-        // assign values to the domain (geometry)
-        int cs = 1;                           // stride of a coordinate in this dim
-        real_t eps = 1.0e-5;                  // floating point roundoff error
-        for (int i = 0; i < a->dom_dim; i++)  // all dimensions in the domain
-        {
-            real_t d = (domain_maxs(i) - domain_mins(i)) / (ndom_pts(i) - 1);
-            int k = 0;
-            int co = 0;                       // j index of start of a new coordinate value
-            for (int j = 0; j < tot_ndom_pts; j++)
-            {
-                if (domain_mins(i) + k * d > domain_maxs(i) + eps)
-                    k = 0;
-                domain(j, i) = domain_mins(i) + k * d;
-                if (j + 1 - co >= cs)
-                {
-                    k++;
-                    co = j + 1;
-                }
-            }
-            cs *= ndom_pts(i);
-        }
-
-        real_t min, max;                       // extents of range
-
-        // assign values to the range (physics attributes)
-        // f(x,y,z,...) = sine(x) * sine(y) * sine(z) * ...
-        for (int j = 0; j < tot_ndom_pts; j++)
-        {
-            real_t res = 1.0;                  // product of the sine functions
-            for (int i = 0; i < a->dom_dim; i++)
-                    res *= sin(domain(j, i));
-            res *= a->s;
-            domain(j, a->pt_dim - 1) = res;
-
-            if (j == 0 || res > max)
-                max = res;
-            if (j == 0 || res < min)
-                min = res;
-        }
-
-        // extents
-        domain_mins(a->pt_dim - 1) = min;
-        domain_maxs(a->pt_dim - 1) = max;
-        fprintf(stderr, "gid = %d\n", cp.gid());
-        cerr << "domain_mins:\n" << domain_mins << endl;
-        cerr << "domain_maxs:\n" << domain_maxs << "\n" << endl;
-
-        //             cerr << "domain:\n" << domain << endl;
-    }
-
     // f(x,y,...) = sine(x)/x * sine(y)/y * ...
     void generate_sinc_data(
             const       diy::Master::ProxyWithLink& cp,
             DomainArgs& args)
     {
-        DomainArgs* a = &args;
-        int tot_ndom_pts = 1;
-        p.resize(a->dom_dim);
+        DomainArgs* a   = &args;
+        int nvars       = a->pt_dim - a->dom_dim;             // number of science variables
+        vars.resize(nvars);
+        int tot_ndom_pts    = 1;
+        geometry.p.resize(a->dom_dim);
+        for (int j = 0; j < nvars; j++)
+            vars[j].p.resize(a->dom_dim);
         ndom_pts.resize(a->dom_dim);
         for (int i = 0; i < a->dom_dim; i++)
         {
-            p(i)         =  a->p[i];
-            ndom_pts(i)  =  a->ndom_pts[i];
-            tot_ndom_pts *= ndom_pts(i);
+            geometry.p(i)   =  a->geom_p[i];
+            for (int j = 0; j < nvars; j++)
+                vars[j].p(i) =  a->vars_p[i];
+            ndom_pts(i)     =  a->ndom_pts[i];
+            tot_ndom_pts    *= ndom_pts(i);
         }
         domain.resize(tot_ndom_pts, a->pt_dim);
-        s = a->s;
+//         s = a->s[0];
 
         // get local block bounds
         // if single block, they are passed in args
@@ -594,23 +256,26 @@ struct Block
 
         real_t min, max;                       // extents of range
 
-        // assign values to the range (physics attributes)
+        // assign values to the range (science variables)
         // f(x,y,z,...) = sine(x)/x * sine(y)/y * sine(z)/z * ...
         for (int j = 0; j < tot_ndom_pts; j++)
         {
-            real_t res = 1.0;                  // product of the sinc functions
-            for (int i = 0; i < a->dom_dim; i++)
+            for (int k = 0; k < nvars; k++)        // for all science variables
             {
-                if (domain(j, i) != 0.0)
-                    res *= (sin(domain(j, i) * a->f ) / domain(j, i));
-            }
-            res *= a->s;
-            domain(j, a->pt_dim - 1) = res;
+                real_t res = 1.0;                  // product of the sinc functions
+                for (int i = 0; i < a->dom_dim; i++)
+                {
+                    if (domain(j, i) != 0.0)
+                        res *= (sin(domain(j, i) * a->f[k] ) / domain(j, i));
+                }
+                res *= a->s[k];
+                domain(j, a->dom_dim + k) = res;
 
-            if (j == 0 || res > max)
-                max = res;
-            if (j == 0 || res < min)
-                min = res;
+                if (j == 0 || res > max)
+                    max = res;
+                if (j == 0 || res < min)
+                    min = res;
+            }
         }
 
         // optional wavy domain
@@ -657,11 +322,105 @@ struct Block
         domain_mins(a->pt_dim - 1) = min;
         domain_maxs(a->pt_dim - 1) = max;
 //         fprintf(stderr, "gid = %d\n", cp.gid());
-//         cerr << "domain_mins:\n" << domain_mins << endl;
-//         cerr << "domain_maxs:\n" << domain_maxs << "\n" << endl;
+        cerr << "domain_mins:\n" << domain_mins << endl;
+        cerr << "domain_maxs:\n" << domain_maxs << "\n" << endl;
+
+        cerr << "domain:\n" << domain << endl;
+    }
+
+
+    // y = sine(x)
+    void generate_sine_data(
+            const       diy::Master::ProxyWithLink& cp,
+            DomainArgs& args)
+    {
+        DomainArgs* a   = &args;
+        int nvars       = a->pt_dim - a->dom_dim;             // number of science variables
+        vars.resize(nvars);
+        int tot_ndom_pts = 1;
+        geometry.p.resize(a->dom_dim);
+        for (int j = 0; j < nvars; j++)
+            vars[j].p.resize(a->dom_dim);
+        vars[0].p.resize(a->dom_dim);
+        ndom_pts.resize(a->dom_dim);
+        for (int i = 0; i < a->dom_dim; i++)
+        {
+            geometry.p(i)   =  a->geom_p[i];
+            for (int j = 0; j < nvars; j++)
+                vars[j].p(i) =  a->vars_p[i];
+            ndom_pts(i)     =  a->ndom_pts[i];
+            tot_ndom_pts    *= ndom_pts(i);
+        }
+        domain.resize(tot_ndom_pts, a->pt_dim);
+//         s = a->s[0];
+
+        // get local block bounds
+        // if single block, they are passed in args
+        // if multiblock, they were decomposed by diy and are already in the block's domain_mins, maxs
+        if (!a->multiblock)
+        {
+            domain_mins.resize(a->pt_dim);
+            domain_maxs.resize(a->pt_dim);
+            for (int i = 0; i < a->dom_dim; i++)
+            {
+                domain_mins(i) = a->min[i];
+                domain_maxs(i) = a->max[i];
+            }
+        }
+
+        // assign values to the domain (geometry)
+        int cs = 1;                           // stride of a coordinate in this dim
+        real_t eps = 1.0e-5;                  // floating point roundoff error
+        for (int i = 0; i < a->dom_dim; i++)  // all dimensions in the domain
+        {
+            real_t d = (domain_maxs(i) - domain_mins(i)) / (ndom_pts(i) - 1);
+            int k = 0;
+            int co = 0;                       // j index of start of a new coordinate value
+            for (int j = 0; j < tot_ndom_pts; j++)
+            {
+                if (domain_mins(i) + k * d > domain_maxs(i) + eps)
+                    k = 0;
+                domain(j, i) = domain_mins(i) + k * d;
+                if (j + 1 - co >= cs)
+                {
+                    k++;
+                    co = j + 1;
+                }
+            }
+            cs *= ndom_pts(i);
+        }
+
+        real_t min, max;                       // extents of range
+
+        // assign values to the range (science variables)
+        // f(x,y,z,...) = sine(x) * sine(y) * sine(z) * ...
+        for (int j = 0; j < tot_ndom_pts; j++)
+        {
+            for (int k = 0; k < nvars; k++)        // for all science variables
+            {
+                real_t res = 1.0;                  // product of the sine functions
+                for (int i = 0; i < a->dom_dim; i++)
+                    res *= sin(domain(j, i));
+                res *= a->s[k];
+                domain(j, a->pt_dim - 1) = res;
+
+                if (j == 0 || res > max)
+                    max = res;
+                if (j == 0 || res < min)
+                    min = res;
+            }
+        }
+
+        // extents
+        domain_mins(a->pt_dim - 1) = min;
+        domain_maxs(a->pt_dim - 1) = max;
+        fprintf(stderr, "gid = %d\n", cp.gid());
+        cerr << "domain_mins:\n" << domain_mins << endl;
+        cerr << "domain_maxs:\n" << domain_maxs << "\n" << endl;
 
         //             cerr << "domain:\n" << domain << endl;
     }
+
 
     // read a floating point 3d vector dataset and take one 1-d curve out of the middle of it
     // f = (x, velocity magnitude)
@@ -671,17 +430,17 @@ struct Block
     {
         DomainArgs* a = &args;
         int tot_ndom_pts = 1;
-        p.resize(a->dom_dim);
+        geometry.p.resize(a->dom_dim);
+        vars[0].p.resize(a->dom_dim);
         ndom_pts.resize(a->dom_dim);
-        nctrl_pts.resize(a->dom_dim);
         domain_mins.resize(a->pt_dim);
         domain_maxs.resize(a->pt_dim);
         for (int i = 0; i < a->dom_dim; i++)
         {
-            p(i)         =  a->p[i];
-            ndom_pts(i)  =  a->ndom_pts[i];
-            nctrl_pts(i) =  a->nctrl_pts[i];
-            tot_ndom_pts *= ndom_pts(i);
+            geometry.p(i)   =  a->geom_p[i];
+            vars[0].p(i)    =  a->vars_p[i];
+            ndom_pts(i)     =  a->ndom_pts[i];
+            tot_ndom_pts    *= ndom_pts(i);
         }
         domain.resize(tot_ndom_pts, a->pt_dim);
         vector<float> vel(3 * tot_ndom_pts);
@@ -741,17 +500,17 @@ struct Block
     {
         DomainArgs* a = &args;
         int tot_ndom_pts = 1;
-        p.resize(a->dom_dim);
+        geometry.p.resize(a->dom_dim);
+        vars[0].p.resize(a->dom_dim);
         ndom_pts.resize(a->dom_dim);
-        nctrl_pts.resize(a->dom_dim);
         domain_mins.resize(a->pt_dim);
         domain_maxs.resize(a->pt_dim);
         for (int i = 0; i < a->dom_dim; i++)
         {
-            p(i)         =  a->p[i];
-            ndom_pts(i)  =  a->ndom_pts[i];
-            nctrl_pts(i) =  a->nctrl_pts[i];
-            tot_ndom_pts *= ndom_pts(i);
+            geometry.p(i)   =  a->geom_p[i];
+            vars[0].p(i)    =  a->vars_p[i];
+            ndom_pts(i)     =  a->ndom_pts[i];
+            tot_ndom_pts    *= ndom_pts(i);
         }
         domain.resize(tot_ndom_pts, a->pt_dim);
         vector<float> vel(3 * tot_ndom_pts);
@@ -816,17 +575,17 @@ struct Block
     {
         DomainArgs* a = &args;
         int tot_ndom_pts = 1;
-        p.resize(a->dom_dim);
+        geometry.p.resize(a->dom_dim);
+        vars[0].p.resize(a->dom_dim);
         ndom_pts.resize(a->dom_dim);
-        nctrl_pts.resize(a->dom_dim);
         domain_mins.resize(a->pt_dim);
         domain_maxs.resize(a->pt_dim);
         for (int i = 0; i < a->dom_dim; i++)
         {
-            p(i)         =  a->p[i];
-            ndom_pts(i)  =  a->ndom_pts[i];
-            nctrl_pts(i) =  a->nctrl_pts[i];
-            tot_ndom_pts *= ndom_pts(i);
+            geometry.p(i)   =  a->geom_p[i];
+            vars[0].p(i)    =  a->vars_p[i];
+            ndom_pts(i)     =  a->ndom_pts[i];
+            tot_ndom_pts    *= ndom_pts(i);
         }
         domain.resize(tot_ndom_pts, a->pt_dim);
         vector<float> vel(a->full_dom_pts[0] * a->full_dom_pts[1] * 3);
@@ -914,17 +673,17 @@ struct Block
     {
         DomainArgs* a = &args;
         int tot_ndom_pts = 1;
-        p.resize(a->dom_dim);
+        geometry.p.resize(a->dom_dim);
+        vars[0].p.resize(a->dom_dim);
         ndom_pts.resize(a->dom_dim);
-        nctrl_pts.resize(a->dom_dim);
         domain_mins.resize(a->pt_dim);
         domain_maxs.resize(a->pt_dim);
         for (int i = 0; i < a->dom_dim; i++)
         {
-            p(i)         =  a->p[i];
-            ndom_pts(i)  =  a->ndom_pts[i];
-            nctrl_pts(i) =  a->nctrl_pts[i];
-            tot_ndom_pts *= ndom_pts(i);
+            geometry.p(i)   =  a->geom_p[i];
+            vars[0].p(i)    =  a->vars_p[i];
+            ndom_pts(i)     =  a->ndom_pts[i];
+            tot_ndom_pts    *= ndom_pts(i);
         }
         domain.resize(tot_ndom_pts, a->pt_dim);
 
@@ -991,17 +750,17 @@ struct Block
     {
         DomainArgs* a = &args;
         int tot_ndom_pts = 1;
-        p.resize(a->dom_dim);
+        geometry.p.resize(a->dom_dim);
+        vars[0].p.resize(a->dom_dim);
         ndom_pts.resize(a->dom_dim);
-        nctrl_pts.resize(a->dom_dim);
         domain_mins.resize(a->pt_dim);
         domain_maxs.resize(a->pt_dim);
         for (int i = 0; i < a->dom_dim; i++)
         {
-            p(i)         =  a->p[i];
-            ndom_pts(i)  =  a->ndom_pts[i];
-            nctrl_pts(i) =  a->nctrl_pts[i];
-            tot_ndom_pts *= ndom_pts(i);
+            geometry.p(i)   =  a->geom_p[i];
+            vars[0].p(i)    =  a->vars_p[i];
+            ndom_pts(i)     =  a->ndom_pts[i];
+            tot_ndom_pts    *= ndom_pts(i);
         }
         domain.resize(tot_ndom_pts, a->pt_dim);
         vector<float> vel(a->full_dom_pts[0] * a->full_dom_pts[1] * a->full_dom_pts[2] * 3);
@@ -1092,17 +851,17 @@ struct Block
     {
         DomainArgs* a = &args;
         int tot_ndom_pts = 1;
-        p.resize(a->dom_dim);
+        geometry.p.resize(a->dom_dim);
+        vars[0].p.resize(a->dom_dim);
         ndom_pts.resize(a->dom_dim);
-        nctrl_pts.resize(a->dom_dim);
         domain_mins.resize(a->pt_dim);
         domain_maxs.resize(a->pt_dim);
         for (int i = 0; i < a->dom_dim; i++)
         {
-            p(i)         =  a->p[i];
-            ndom_pts(i)  =  a->ndom_pts[i];
-            nctrl_pts(i) =  a->nctrl_pts[i];
-            tot_ndom_pts *= ndom_pts(i);
+            geometry.p(i)   =  a->geom_p[i];
+            vars[0].p(i)    =  a->vars_p[i];
+            ndom_pts(i)     =  a->ndom_pts[i];
+            tot_ndom_pts    *= ndom_pts(i);
         }
         domain.resize(tot_ndom_pts, a->pt_dim);
 
@@ -1159,17 +918,17 @@ struct Block
     {
         DomainArgs* a = &args;
         int tot_ndom_pts = 1;
-        p.resize(a->dom_dim);
+        geometry.p.resize(a->dom_dim);
+        vars[0].p.resize(a->dom_dim);
         ndom_pts.resize(a->dom_dim);
-        nctrl_pts.resize(a->dom_dim);
         domain_mins.resize(a->pt_dim);
         domain_maxs.resize(a->pt_dim);
         for (int i = 0; i < a->dom_dim; i++)
         {
-            p(i)         =  a->p[i];
-            ndom_pts(i)  =  a->ndom_pts[i];
-            nctrl_pts(i) =  a->nctrl_pts[i];
-            tot_ndom_pts *= ndom_pts(i);
+            geometry.p(i)   =  a->geom_p[i];
+            vars[0].p(i)    =  a->vars_p[i];
+            ndom_pts(i)     =  a->ndom_pts[i];
+            tot_ndom_pts    *= ndom_pts(i);
         }
         domain.resize(tot_ndom_pts, a->pt_dim);
 
@@ -1228,193 +987,247 @@ struct Block
             DomainArgs& args)
     {
         DomainArgs* a = &args;
-        nctrl_pts.resize(a->dom_dim);
-        for (int i = 0; i < a->dom_dim; i++)
-            nctrl_pts(i) =  a->nctrl_pts[i];
-        mfa = new mfa::MFA<T>(p, ndom_pts, domain, ctrl_pts, nctrl_pts, weights, knots);
-        mfa->FixedEncode(nctrl_pts, a->verbose, a->weighted);
-    }
 
-    // adaptively encode block to desired error limit
-    void adaptive_encode_block(
-            const diy::Master::ProxyWithLink& cp,
-            real_t                            err_limit,
-            int                               max_rounds,
-            DomainArgs&                       args)
-    {
-        DomainArgs* a = &args;
-        nctrl_pts.resize(0);            // 0 size means MFA will initialize to minimum p+1
-        mfa = new mfa::MFA<T>(p, ndom_pts, domain, ctrl_pts, nctrl_pts, weights, knots);
-        mfa->AdaptiveEncode(err_limit, nctrl_pts, a->verbose, a->weighted, max_rounds);
-    }
-
-    // nonlinear encoding of block to desired error limit
-    // only for 1D so far
-    void nonlinear_encode_block(
-            const   diy::Master::ProxyWithLink& cp,
-            real_t   err_limit)
-    {
-        // set initial control points here
-        // TODO: what if there aren'e enough control points (p + 1 is the minimum needed)?
-        real_t grad;                             // current gradient (finite difference)
-        real_t prev_grad = 0.0;                  // previous gradient (finite difference)
-        nctrl_pts.resize(1);
-        for (auto i = 0; i < domain.rows(); i++)
+        // initialize control points
+        // TODO: for now geometry and science variables same number of control points; vary later
+        geometry.nctrl_pts.resize(a->dom_dim);
+        for (auto j = 0; j < a->dom_dim; j++)
+            geometry.nctrl_pts(j) =  a->geom_nctrl_pts[j];
+        for (auto i = 0; i < vars.size(); i++)
         {
-            if (i == 0 || i == domain.rows() - 1)
-            {
-                // first and last control points coincide with domain
-                ctrl_pts.conservativeResize(ctrl_pts.rows() + 1, domain.cols());
-                ctrl_pts.row(ctrl_pts.rows() - 1) = domain.row(i);
-            }
-            else
-            {
-                grad = (domain(i, 1) - domain(i - 1, 1)) / (domain(i, 0) - domain(i - 1, 0));
-                // set control point at local min/max (gradient sign change)
-                // TODO: checking exactly for 0.0 is not robust
-                if ((grad == 0.0) || (grad > 0.0 && prev_grad < 0.0) || (grad < 0.0 && prev_grad > 0.0))
-                {
-                    ctrl_pts.conservativeResize(ctrl_pts.rows() + 1, domain.cols());
-                    ctrl_pts.row(ctrl_pts.rows() - 1) = domain.row(i);
-                }
-                prev_grad = grad;
-            }
+            vars[i].nctrl_pts.resize(a->dom_dim);
+            for (auto j = 0; j < a->dom_dim; j++)
+                vars[i].nctrl_pts(j) =  a->vars_nctrl_pts[j];
         }
-        nctrl_pts(0) = ctrl_pts.rows();
 
-        // set initial weights to 1.0
-        weights = VectorX<T>::Ones(ctrl_pts.rows());
+        // encode geometry
+        int ndom_dims = ndom_pts.size();                // domain dimensionality
+        geometry.mfa = new mfa::MFA<T>(geometry.p,
+                                       ndom_pts,
+                                       domain,
+                                       geometry.ctrl_pts,
+                                       geometry.nctrl_pts,
+                                       geometry.weights,
+                                       geometry.knots,
+                                       0,
+                                       ndom_dims - 1);
+        geometry.mfa->FixedEncode(geometry.nctrl_pts, a->verbose, a->weighted);
 
-        // debug
-        cerr << ctrl_pts.rows() << " initial control points:\n" << ctrl_pts << "\n" << endl;
-
-        mfa = new mfa::MFA<T>(p, ndom_pts, domain, ctrl_pts, nctrl_pts, weights, knots);
-        mfa->NonlinearEncode(err_limit, nctrl_pts);
+        // encode science variables
+        for (auto i = 0; i< vars.size(); i++)
+        {
+            vars[i].mfa = new mfa::MFA<T>(vars[i].p,
+                                          ndom_pts,
+                                          domain,
+                                          vars[i].ctrl_pts,
+                                          vars[i].nctrl_pts,
+                                          vars[i].weights,
+                                          vars[i].knots,
+                                          ndom_dims,
+                                          ndom_dims + i);
+            vars[i].mfa->FixedEncode(vars[i].nctrl_pts, a->verbose, a->weighted);
+        }
     }
+
+    // TODO: convert the following to split models
+
+//     // adaptively encode block to desired error limit
+//     void adaptive_encode_block(
+//             const diy::Master::ProxyWithLink& cp,
+//             real_t                            err_limit,
+//             int                               max_rounds,
+//             DomainArgs&                       args)
+//     {
+//         DomainArgs* a = &args;
+//         nctrl_pts.resize(0);            // 0 size means MFA will initialize to minimum p+1
+//         mfa = new mfa::MFA<T>(p, ndom_pts, domain, ctrl_pts, nctrl_pts, weights, knots);
+//         mfa->AdaptiveEncode(err_limit, nctrl_pts, a->verbose, a->weighted, max_rounds);
+//     }
+// 
+//     // nonlinear encoding of block to desired error limit
+//     // only for 1D so far
+//     void nonlinear_encode_block(
+//             const   diy::Master::ProxyWithLink& cp,
+//             real_t   err_limit)
+//     {
+//         // set initial control points here
+//         // TODO: what if there aren'e enough control points (p + 1 is the minimum needed)?
+//         real_t grad;                             // current gradient (finite difference)
+//         real_t prev_grad = 0.0;                  // previous gradient (finite difference)
+//         nctrl_pts.resize(1);
+//         for (auto i = 0; i < domain.rows(); i++)
+//         {
+//             if (i == 0 || i == domain.rows() - 1)
+//             {
+//                 // first and last control points coincide with domain
+//                 ctrl_pts.conservativeResize(ctrl_pts.rows() + 1, domain.cols());
+//                 ctrl_pts.row(ctrl_pts.rows() - 1) = domain.row(i);
+//             }
+//             else
+//             {
+//                 grad = (domain(i, 1) - domain(i - 1, 1)) / (domain(i, 0) - domain(i - 1, 0));
+//                 // set control point at local min/max (gradient sign change)
+//                 // TODO: checking exactly for 0.0 is not robust
+//                 if ((grad == 0.0) || (grad > 0.0 && prev_grad < 0.0) || (grad < 0.0 && prev_grad > 0.0))
+//                 {
+//                     ctrl_pts.conservativeResize(ctrl_pts.rows() + 1, domain.cols());
+//                     ctrl_pts.row(ctrl_pts.rows() - 1) = domain.row(i);
+//                 }
+//                 prev_grad = grad;
+//             }
+//         }
+//         nctrl_pts(0) = ctrl_pts.rows();
+// 
+//         // set initial weights to 1.0
+//         weights = VectorX<T>::Ones(ctrl_pts.rows());
+// 
+//         // debug
+//         cerr << ctrl_pts.rows() << " initial control points:\n" << ctrl_pts << "\n" << endl;
+// 
+//         mfa = new mfa::MFA<T>(p, ndom_pts, domain, ctrl_pts, nctrl_pts, weights, knots);
+//         mfa->NonlinearEncode(err_limit, nctrl_pts);
+//     }
 
     // decode entire block
     void decode_block(const diy::Master::ProxyWithLink& cp)
     {
         approx.resize(domain.rows(), domain.cols());
-        mfa->Decode(approx);
+
+            int ndom_dims = ndom_pts.size();                // domain dimensionality
+            // geometry
+            geometry.mfa->Decode(approx, 0, ndom_dims - 1);
+
+            // science variables
+            for (auto i = 0; i < vars.size(); i++)
+                vars[i].mfa->Decode(approx, ndom_dims, ndom_dims + i);
     }
 
-    // differentiate entire block
-    void differentiate_block(
-            const diy::Master::ProxyWithLink& cp,
-            int                               verbose,  // output level
-            int                               deriv,    // which derivative to take (1 = 1st, 2 = 2nd, ...) in each domain dim.
-            int                               partial)  // limit to partial derivative in just this dimension (-1 = no limit)
-    {
-        approx.resize(domain.rows(), domain.cols());
-        mfa = new mfa::MFA<T>(p, ndom_pts, domain, ctrl_pts, nctrl_pts, weights, knots);
-        VectorXi derivs(p.size());
-        for (auto i = 0; i < derivs.size(); i++)
-            derivs(i) = deriv;
+    // TODO: convert the following to split models
 
-        // optional limit to one partial derivative
-        if (deriv && p.size() > 1 && partial >= 0)
-        {
-            for (auto i = 0; i < p.size(); i++)
-            {
-                if (i != partial)
-                    derivs(i) = 0;
-            }
-        }
+//     // differentiate entire block
+//     void differentiate_block(
+//             const diy::Master::ProxyWithLink& cp,
+//             int                               verbose,  // output level
+//             int                               deriv,    // which derivative to take (1 = 1st, 2 = 2nd, ...) in each domain dim.
+//             int                               partial)  // limit to partial derivative in just this dimension (-1 = no limit)
+//     {
+//         approx.resize(domain.rows(), domain.cols());
+//         mfa = new mfa::MFA<T>(p, ndom_pts, domain, ctrl_pts, nctrl_pts, weights, knots);
+//         VectorXi derivs(p.size());
+//         for (auto i = 0; i < derivs.size(); i++)
+//             derivs(i) = deriv;
+// 
+//         // optional limit to one partial derivative
+//         if (deriv && p.size() > 1 && partial >= 0)
+//         {
+//             for (auto i = 0; i < p.size(); i++)
+//             {
+//                 if (i != partial)
+//                     derivs(i) = 0;
+//             }
+//         }
+// 
+//         mfa->Decode(approx, verbose, derivs);
+// 
+//         // the derivative is a vector of same dimensionality as domain
+//         // derivative needs to be scaled by domain extent because u,v,... are in [0.0, 1.0]
+//         if (deriv)
+//         {
+//             if (p.size() == 1 || partial >= 0) // TODO: not for mixed partials
+//             {
+//                 if (p.size() == 1)
+//                     partial = 0;
+//                 for (auto j = 0; j < approx.cols(); j++)
+//                     // scale once for each derivative
+//                     for (auto i = 0; i < deriv; i++)
+//                         approx.col(j) /= (domain_maxs(partial) - domain_mins(partial));
+//             }
+//         }
+// 
+//         // for plotting, set all but the last dimension to be the same as the input domain
+//         if (deriv)
+//             for (auto i = 0; i < domain.cols() - 1; i++)
+//                 approx.col(i) = domain.col(i);
+//     }
 
-        mfa->Decode(approx, verbose, derivs);
-
-        // the derivative is a vector of same dimensionality as domain
-        // derivative needs to be scaled by domain extent because u,v,... are in [0.0, 1.0]
-        if (deriv)
-        {
-            if (p.size() == 1 || partial >= 0) // TODO: not for mixed partials
-            {
-                if (p.size() == 1)
-                    partial = 0;
-                for (auto j = 0; j < approx.cols(); j++)
-                    // scale once for each derivative
-                    for (auto i = 0; i < deriv; i++)
-                        approx.col(j) /= (domain_maxs(partial) - domain_mins(partial));
-            }
-        }
-
-        // for plotting, set all but the last dimension to be the same as the input domain
-        if (deriv)
-            for (auto i = 0; i < domain.cols() - 1; i++)
-                approx.col(i) = domain.col(i);
-    }
-
-    // compute error field and maximum error in the block
-    // uses normal distance to the curve, surface, etc.
-    void error(
-            const   diy::Master::ProxyWithLink& cp,
-            int     verbose,                                 // output level
-            bool    decode_block)                            // decode entire block first
-    {
-        errs.resize(domain.rows(), domain.cols());
-        errs = domain;
-
-        if (decode_block)
-        {
-            approx.resize(domain.rows(), domain.cols());
-            mfa->Decode(approx);
-        }
-
-#ifndef MFA_NO_TBB                                          // TBB version
-
-        // distance computation
-        size_t max_idx;
-        if (decode_block)
-        {
-            parallel_for (size_t(0), (size_t)domain.rows(), [&] (size_t i)
-                    {
-                    VectorX<T> cpt = approx.row(i);
-                    errs(i, errs.cols() - 1) = fabs(mfa->NormalDistance(cpt, i));
-                    });
-        }
-        else
-        {
-            parallel_for (size_t(0), (size_t)domain.rows(), [&] (size_t i)
-                    {
-                    errs(i, errs.cols() - 1) = mfa->Error(i, verbose);
-                    });
-        }
-        sum_sq_err = 0.0;
-        for (size_t i = 0; i < domain.rows(); i++)
-        {
-            sum_sq_err += (errs(i, errs.cols() - 1) * errs(i, errs.cols() - 1));
-            if (i == 0 || errs(i, errs.cols() - 1) > max_err)
-            {
-                max_err = errs(i, errs.cols() - 1);
-                max_idx = i;
-            }
-        }
-
-#else                                               // single thread version
-
-        // distance computation
-        size_t max_idx;
-        for (size_t i = 0; i < (size_t)domain.rows(); i++)
-        {
-            if (decode_block)
-            {
-                VectorX<T> cpt = approx.row(i);
-                errs(i, errs.cols() - 1) = fabs(mfa->NormalDistance(cpt, i));
-            }
-            else
-                errs(i, errs.cols() - 1) = mfa->Error(i, verbose);
-            if (i == 0 || fabs(errs(i, errs.cols() - 1)) > fabs(max_err))
-            {
-                max_err = errs(i, errs.cols() - 1);
-                max_idx = i;
-            }
-        }
-
-#endif
-
-//         mfa->max_err = max_err;
-    }
+//     // compute error field and maximum error in the block
+//     // uses normal distance to the curve, surface, etc.
+//     void error(
+//             const   diy::Master::ProxyWithLink& cp,
+//             int     verbose,                                 // output level
+//             bool    decode_block)                            // decode entire block first
+//     {
+//         errs.resize(domain.rows(), domain.cols());
+//         errs = domain;
+// 
+//         if (decode_block)
+//         {
+//             approx.resize(domain.rows(), domain.cols());
+// 
+//             int ndom_dims = ndom_pts.size();                // domain dimensionality
+//             // geometry
+//             geometry.mfa->Decode(approx, 0, ndom_dims - 1);
+// 
+//             // science variables
+//             for (auto i = 0; i < vars.size(); i++)
+//                 vars[i].mfa->Decode(approx, ndom_dims, ndom_dims + i);
+//         }
+// 
+// #ifndef MFA_NO_TBB                                          // TBB version
+// 
+//         // distance computation
+//         size_t max_idx;
+//         if (decode_block)
+//         {
+//             parallel_for (size_t(0), (size_t)domain.rows(), [&] (size_t i)
+//                     {
+//                     VectorX<T> cpt = approx.row(i);
+//                     errs(i, errs.cols() - 1) = fabs(mfa->NormalDistance(cpt, i));
+//                     });
+//         }
+//         else
+//         {
+//             parallel_for (size_t(0), (size_t)domain.rows(), [&] (size_t i)
+//                     {
+//                     errs(i, errs.cols() - 1) = mfa->Error(i, verbose);
+//                     });
+//         }
+//         sum_sq_err = 0.0;
+//         for (size_t i = 0; i < domain.rows(); i++)
+//         {
+//             sum_sq_err += (errs(i, errs.cols() - 1) * errs(i, errs.cols() - 1));
+//             if (i == 0 || errs(i, errs.cols() - 1) > max_err)
+//             {
+//                 max_err = errs(i, errs.cols() - 1);
+//                 max_idx = i;
+//             }
+//         }
+// 
+// #else                                               // single thread version
+// 
+//         // distance computation
+//         // TODO: only last variable
+//         size_t max_idx;
+//         for (size_t i = 0; i < (size_t)domain.rows(); i++)
+//         {
+//             if (decode_block)
+//             {
+//                 VectorX<T> cpt = approx.row(i);
+//                 errs(i, errs.cols() - 1) = fabs(mfa->NormalDistance(cpt, i));
+//             }
+//             else
+//                 errs(i, errs.cols() - 1) = mfa->Error(i, verbose);
+//             if (i == 0 || fabs(errs(i, errs.cols() - 1)) > fabs(max_err))
+//             {
+//                 max_err = errs(i, errs.cols() - 1);
+//                 max_idx = i;
+//             }
+//         }
+// 
+// #endif
+// 
+// //         mfa->max_err = max_err;
+//     }
 
     // compute error field and maximum error in the block
     // uses difference between range values
@@ -1430,17 +1243,19 @@ struct Block
         {
             approx.resize(domain.rows(), domain.cols());
 
-            // debug: test nonuniform weights
-//             for (size_t i = 0; i < mfa->weights.size(); i++)
-//                 mfa->weights(i) += i * .01;
-//             cerr << "weights:\n" << mfa->weights << endl;
+            int ndom_dims = ndom_pts.size();                // domain dimensionality
+            // geometry
+            geometry.mfa->Decode(verbose, approx, 0, ndom_dims - 1);
 
-            mfa->Decode(verbose, approx);
+            // science variables
+            for (auto i = 0; i < vars.size(); i++)
+                vars[i].mfa->Decode(verbose, approx, ndom_dims, ndom_dims + i);
         }
 
 #ifndef MFA_NO_TBB                                          // TBB version
 
         // distance computation
+        // TODO: only distance between last science variables
         size_t max_idx;
         int last = errs.cols() - 1;                 // range coordinate
         if (decode_block)
@@ -1455,7 +1270,7 @@ struct Block
         {
             parallel_for (size_t(0), (size_t)domain.rows(), [&] (size_t i)
                     {
-                    errs(i, last) = mfa->RangeError(i, verbose);
+                    errs(i, last) = vars[vars.size() - 1].mfa->RangeError(i, verbose);
                     });
         }
         sum_sq_err = 0.0;
@@ -1472,6 +1287,7 @@ struct Block
 #else                                               // single thread version
 
         // distance computation
+        // TODO: only distance between last science variables
         size_t max_idx;
         int last   = errs.cols() - 1;               // range coordinate
         sum_sq_err = 0.0;
@@ -1483,7 +1299,7 @@ struct Block
                 errs(i, last) = fabs(cpt(last) - domain(i, last));
             }
             else
-                errs(i, last) = mfa->RangeError(i, verbose);
+                errs(i, last) = vars[vars.size() - 1].mfa->RangeError(i, verbose);
             sum_sq_err += (errs(i, last) * errs(i, last));
             if (i == 0 || errs(i, last) > max_err)
             {
@@ -1500,7 +1316,12 @@ struct Block
     // save knot span domains for later comparison with error field
     void knot_span_domains(const diy::Master::ProxyWithLink& cp)
     {
-        mfa->KnotSpanDomains(span_mins, span_maxs);
+        // geometry
+        geometry.mfa->KnotSpanDomains(span_mins, span_maxs);
+
+        // science variables
+        for (auto i = 0; i < vars.size(); i++)
+            vars[i].mfa->KnotSpanDomains(span_mins, span_maxs);
     }
 
     void print_block(const diy::Master::ProxyWithLink& cp)
@@ -1510,24 +1331,58 @@ struct Block
         real_t range_extent = domain.col(last).maxCoeff() - domain.col(last).minCoeff();
 
 //         fprintf(stderr, "gid = %d\n", cp.gid());
-        cerr << "domain\n" << domain << endl;
-        cerr << "nctrl_pts:\n" << nctrl_pts << endl;
-        cerr << ctrl_pts.rows() << " final control points\n" << ctrl_pts << endl;
-        cerr << weights.size()  << " final weights\n" << weights << endl;
-        cerr << knots.size() << " knots\n" << knots << endl;
+//         cerr << "domain\n" << domain << endl;
+
+        // geometry
+        cerr << "----- geometry model -----" << endl;
+        cerr << "nctrl_pts:\n" << geometry.nctrl_pts << endl;
+//         cerr << geometry.ctrl_pts.rows() << " final control points\n" << geometry.ctrl_pts << endl;
+//         cerr << geometry.weights.size()  << " final weights\n" << geometry.weights << endl;
+//         cerr << geometry.knots.size() << " knots\n" << geometry.knots << endl;
+        fprintf(stderr, "# output ctrl pts     = %ld\n", geometry.ctrl_pts.rows());
+        fprintf(stderr, "# output knots        = %ld\n", geometry.knots.size());
+        cerr << "--------------------------" << endl;
+
+
+        // science variables
+        cerr << "----- science variable models -----" << endl;
+        for (auto i = 0; i < vars.size(); i++)
+        {
+            cerr << "----- var " << i << " -----" << endl;
+            cerr << "nctrl_pts:\n" << vars[i].nctrl_pts << endl;
+//             cerr << vars[i].ctrl_pts.rows() << " final control points\n" << vars[i].ctrl_pts << endl;
+//             cerr << vars[i].weights.size()  << " final weights\n" << vars[i].weights << endl;
+//             cerr << vars[i].knots.size() << " knots\n" << vars[i].knots << endl;
+            cerr << "--------------------------" << endl;
+            fprintf(stderr, "# output ctrl pts     = %ld\n", vars[i].ctrl_pts.rows());
+            fprintf(stderr, "# output knots        = %ld\n", vars[i].knots.size());
+        }
+        cerr << "-----------------------------------" << endl;
+
         cerr << approx.rows() << " approximated points\n" << approx << endl;
         fprintf(stderr, "range extent          = %e\n",  range_extent);
         fprintf(stderr, "max_err               = %e\n",  max_err);
         fprintf(stderr, "normalized max_err    = %e\n",  max_err / range_extent);
         fprintf(stderr, "sum of squared errors = %e\n",  sum_sq_err);
-        fprintf(stderr, "L2 error              = %e\n",  sqrt(sum_sq_err /nctrl_pts.rows()));
-        fprintf(stderr, "RMS error             = %e\n",  sqrt(sum_sq_err /domain.rows()));
-        fprintf(stderr, "normalized RMS error  = %e\n",  sqrt(sum_sq_err /domain.rows()) / range_extent);
+        //         DEPRECATE
+//         fprintf(stderr, "L2 error              = %e\n",  sqrt(sum_sq_err / nctrl_pts.rows()));
+        fprintf(stderr, "RMS error             = %e\n",  sqrt(sum_sq_err / domain.rows()));
+        fprintf(stderr, "normalized RMS error  = %e\n",  sqrt(sum_sq_err / domain.rows()) / range_extent);
         fprintf(stderr, "# input points        = %ld\n", domain.rows());
-        fprintf(stderr, "# output ctrl pts     = %ld\n", ctrl_pts.rows());
-        fprintf(stderr, "# output knots        = %ld\n", knots.size());
-        fprintf(stderr, "compression ratio     = %.2f\n",
-                (real_t)(domain.rows()) / (ctrl_pts.rows() + knots.size() / ctrl_pts.cols()));
+
+        // compute compression ratio
+        float in_coords = domain.rows() * domain.cols();
+        float out_coords = geometry.ctrl_pts.rows() * geometry.ctrl_pts.cols();
+        out_coords += geometry.knots.size();
+        for (auto i = 0; i < vars.size(); i++)
+        {
+            out_coords += (vars[i].ctrl_pts.rows() * vars[i].ctrl_pts.cols());
+            out_coords += vars[i].knots.size();
+        }
+        fprintf(stderr, "compression ratio     = %.2f\n", in_coords / out_coords);
+
+//         fprintf(stderr, "compression ratio     = %.2f\n",
+//                 (real_t)(domain.rows()) / (ctrl_pts.rows() + knots.size() / ctrl_pts.cols()));
         fprintf(stderr, "\n");
     }
 
@@ -1588,25 +1443,28 @@ struct Block
 #endif
     }
 
-    VectorXi   ndom_pts;                       // number of domain points in each dimension
-    MatrixX<T> domain;                         // input data (1st dim changes fastest)
-    VectorX<T> domain_mins;                    // local domain minimum corner
-    VectorX<T> domain_maxs;                    // local domain maximum corner
-    VectorXi   p;                              // degree in each dimension
-    VectorXi   nctrl_pts;                      // number of control points in each dimension
-    MatrixX<T> ctrl_pts;                       // NURBS control points (1st dim changes fastest)
-    VectorX<T> weights;                        // weights associated with control points
-    VectorX<T> knots;                          // NURBS knots (1st dim changes fastest)
-    MatrixX<T> approx;                         // points in approximated volume
-    VectorXi   span_mins;                      // idx of minimum domain points of all knot spans
-    VectorXi   span_maxs;                      // idx of maximum domain points of all knot spans
+    // input data
+    VectorXi            ndom_pts;              // number of domain points in each dimension
+    MatrixX<T>          domain;                // input data (1st dim changes fastest)
+    VectorX<T>          domain_mins;           // local domain minimum corner
+    VectorX<T>          domain_maxs;           // local domain maximum corner
 
-    real_t     max_err;                        // maximum (abs value) distance from input points to curve
-    real_t     sum_sq_err;                     // sum of squared errors
-    MatrixX<T> errs;                           // error field (abs. value, not normalized by data range)
+    // MFA models
+    Model<T>            geometry;               // geometry MFA
+    vector< Model<T> >  vars;                   // science variable MFAs
 
-    real_t      s;                             // scaling factor on range values (for error checking)
-    mfa::MFA<T> *mfa;                          // MFA object
+    // output data
+    MatrixX<T>          approx;                 // points in approximated volume
+
+    // errors
+    real_t              max_err;                // maximum (abs value) distance from input points to curve
+    real_t              sum_sq_err;             // sum of squared errors
+    MatrixX<T>          errs;                   // error field (abs. value, not normalized by data range)
+    real_t              s;                      // scaling factor on range values (for error checking)
+
+    // knot spans (for debugging)
+    VectorXi            span_mins;              // idx of minimum domain points of all knot spans
+    VectorXi            span_maxs;              // idx of maximum domain points of all knot spans
 };
 
 namespace diy

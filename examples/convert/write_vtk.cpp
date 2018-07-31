@@ -8,14 +8,15 @@
 // tpeterka@mcs.anl.gov
 //--------------------------------------------------------------
 
-#include "mfa/mfa.hpp"
-#include "../split_block.hpp"
-#include <iostream>
+#include    "mfa/mfa.hpp"
+#include    "../block.hpp"
+#include    <iostream>
+#include    <stdio.h>
 
-#include <diy/master.hpp>
-#include <diy/io/block.hpp>
+#include    <diy/master.hpp>
+#include    <diy/io/block.hpp>
 
-#include "writer.hpp"
+#include    "writer.hpp"
 
 // 3d point or vector
 struct vec3d
@@ -39,67 +40,66 @@ void PrepRenderingData(
         vector<vec3d>&              err_pts,
         vector<vec3d>&              block_mins,
         vector<vec3d>&              block_maxs,
-        int                         nblocks,
         diy::Master&                master)
 {
-    for (int i = 0; i < nblocks; i++)          // blocks
+    for (int i = 0; i < master.size(); i++)          // blocks
     {
         vec3d p;
         Block<real_t>* block = master.block< Block<real_t> >(i);
 
+        // number of science variables
+        nvars = block->vars.size();
+
         // number of raw points
-       for (size_t j = 0; j < (size_t)(block->ndom_pts.size()); j++)
+        for (size_t j = 0; j < (size_t)(block->ndom_pts.size()); j++)
             nraw_pts.push_back(block->ndom_pts(j));
 
-        // raw points
+        // raw geometry and raw science variables
+        int ndom_dims = block->geometry.ctrl_pts.cols();             // number of geometry dims
         for (size_t j = 0; j < (size_t)(block->domain.rows()); j++)
         {
-            p.x = block->domain(j, 0);                      // first 3 dims stored as mesh geometry
-            p.y = block->domain(j, 1);
-            p.z = block->domain.cols() > 2 ?
-                block->domain(j, 2) : 0.0;
+            p.x = block->domain(j, 0);                              // mesh geometry stored in 3d
+            p.y = ndom_dims > 1 ? block->domain(j, 1) : 0.0;
+            p.z = ndom_dims > 2 ? block->domain(j, 2) : 0.0;
             raw_pts.push_back(p);
 
-            if (block->domain.cols() > 3)                   // 4th dim stored as mesh data
-                raw_data.push_back(block->domain(j, 3));
+            for (int k = 0; k < nvars; k++)                         // science variables
+                raw_data.push_back(block->domain(j, ndom_dims + k));
         }
 
-    // number of science variables
-    nvars = block->vars.size();
+        // number of geometry control points
+        for (size_t j = 0; j < (size_t)(block->geometry.nctrl_pts.size()); j++)
+            geom_nctrl_pts.push_back(block->geometry.nctrl_pts(j));
 
-    // number of geometry control points
-    for (size_t j = 0; j < (size_t)(block->geometry.nctrl_pts.size()); j++)
-        geom_nctrl_pts.push_back(block->geometry.nctrl_pts(j));
+        // number of science variable control points
+        vars_nctrl_pts.resize(nvars);
+        for (size_t i = 0; i < nvars; i++)
+            for (size_t j = 0; j < (size_t)(block->vars[i].nctrl_pts.size()); j++)
+                vars_nctrl_pts[i].push_back(block->vars[i].nctrl_pts(j));
 
-    // number of science variable control points
-    vars_nctrl_pts.resize(nvars);
-    for (size_t i = 0; i < nvars; i++)
-        for (size_t j = 0; j < (size_t)(block->vars[i].nctrl_pts.size()); j++)
-            vars_nctrl_pts[i].push_back(block->vars[i].nctrl_pts(j));
-
-    // geometry control points
-    for (size_t j = 0; j < (size_t)(block->geometry.ctrl_pts.rows()); j++)
-    {
-        p.x = block->geometry.ctrl_pts(j, 0);
-        p.y = block->geometry.ctrl_pts.cols() > 2 ?
-            block->geometry.ctrl_pts(j, 1) : 0.0;
-        p.z = block->geometry.ctrl_pts.cols() > 2 ?
-            block->geometry.ctrl_pts(j, 2) : 0.0;
-        geom_ctrl_pts.push_back(p);
-    }
-
-    // science variable control points
-    vars_ctrl_pts.resize(nvars);
-    for (size_t i = 0; i < nvars; i++)
-        for (size_t j = 0; j < (size_t)(block->vars[i].ctrl_pts.rows()); j++)
+        // geometry control points
+        for (size_t j = 0; j < (size_t)(block->geometry.ctrl_pts.rows()); j++)
         {
-            p.x = block->vars[i].ctrl_pts(j, 0);
-            p.y = block->vars[i].ctrl_pts.cols() > 2 ?
-                block->vars[i].ctrl_pts(j, 1) : 0.0;
-            p.z = block->vars[i].ctrl_pts.cols() > 2 ?
-                block->vars[i].ctrl_pts(j, 2) : 0.0;
-            vars_ctrl_pts[i].push_back(p);
+            p.x = block->geometry.ctrl_pts(j, 0);
+            p.y = block->geometry.ctrl_pts.cols() > 2 ?
+                block->geometry.ctrl_pts(j, 1) : 0.0;
+            p.z = block->geometry.ctrl_pts.cols() > 2 ?
+                block->geometry.ctrl_pts(j, 2) : 0.0;
+            geom_ctrl_pts.push_back(p);
         }
+
+        // science variable control points
+        vars_ctrl_pts.resize(nvars);
+        for (size_t i = 0; i < nvars; i++)
+            for (size_t j = 0; j < (size_t)(block->vars[i].ctrl_pts.rows()); j++)
+            {
+                p.x = block->vars[i].ctrl_pts(j, 0);
+                p.y = block->vars[i].ctrl_pts.cols() > 2 ?
+                    block->vars[i].ctrl_pts(j, 1) : 0.0;
+                p.z = block->vars[i].ctrl_pts.cols() > 2 ?
+                    block->vars[i].ctrl_pts(j, 2) : 0.0;
+                vars_ctrl_pts[i].push_back(p);
+            }
 
         // approximated points
         for (size_t j = 0; j < (size_t)(block->approx.rows()); j++)
@@ -177,8 +177,7 @@ int main(int argc, char ** argv)
     diy::ContiguousAssigner   assigner(world.size(), -1); // number of blocks set by read_blocks()
 
     diy::io::read_blocks(infile.c_str(), world, assigner, master, &Block<real_t>::load);
-    int nblocks = master.size();
-    std::cout << nblocks << " blocks read from file "<< infile << "\n";
+    std::cout << master.size() << " blocks read from file "<< infile << "\n";
 
     // package rendering data
     PrepRenderingData(nraw_pts,
@@ -194,7 +193,6 @@ int main(int argc, char ** argv)
                       err_pts,
                       block_mins,
                       block_maxs,
-                      nblocks,
                       master);
 
     // pad dimensions up to 3
@@ -253,18 +251,42 @@ int main(int argc, char ** argv)
     // write raw original points
     if (raw_data.size())
     {
-        vars = &raw_data[0];
-        const char* name_raw_data = "raw_data";
+//         vars = &raw_data[0];
+//         const char* name_raw_data = "raw_data";
+//         write_curvilinear_mesh(
+//                 /* const char *filename */                  "initial_points.vtk",
+//                 /* int useBinary */                         0,
+//                 /* int *dims */                             &nraw_pts[0],
+//                 /* float *pts */                            &(raw_pts[0].x),
+//                 /* int nvars */                             1,
+//                 /* int *vardim */                           &vardim,
+//                 /* int *centering */                        &centering,
+//                 /* const char * const *varnames */          &name_raw_data,
+//                 /* float **vars */                          &vars);
+
+        vars                    = &raw_data[0];
+        int* vardims            = new int[nvars];
+        char** varnames         = new char*[nvars];
+        for (int i = 0; i < nvars; i++)
+        {
+            vardims[i] = 1;                         // TODO; treating each variable as a scalar (for now)
+            varnames[i] = new char[256];
+            sprintf(varnames[i], "var%d", i);
+        }
         write_curvilinear_mesh(
                 /* const char *filename */                  "initial_points.vtk",
                 /* int useBinary */                         0,
                 /* int *dims */                             &nraw_pts[0],
                 /* float *pts */                            &(raw_pts[0].x),
-                /* int nvars */                             1,
-                /* int *vardim */                           &vardim,
+                /* int nvars */                             nvars,
+                /* int *vardim */                           vardims,
                 /* int *centering */                        &centering,
-                /* const char * const *varnames */          &name_raw_data,
+                /* const char * const *varnames */          varnames,
                 /* float **vars */                          &vars);
+        delete[] vardims;
+        for (int i = 0; i < nvars; i++)
+            delete[] varnames[i];
+        delete[] varnames;
     }
     else
     {

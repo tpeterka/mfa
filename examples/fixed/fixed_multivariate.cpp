@@ -1,6 +1,6 @@
 //--------------------------------------------------------------
 // example of encoding / decoding higher dimensional data w/ fixed number of control points and a
-// single block in a split model w/ one model containing geometry and other model science variables
+// single block in a split model w/ one model containing geometry and multiple models containing science variables
 //
 // Tom Peterka
 // Argonne National Laboratory
@@ -144,77 +144,10 @@ int main(int argc, char** argv)
         }
         for (int i = 0; i < pt_dim - dom_dim; i++)      // for all science variables
             d_args.s[i] = 10.0 * (i + 1);                 // scaling factor on range
-        d_args.r = rot * M_PI / 180.0;   // domain rotation angle in rads
-        d_args.t = twist;                // twist (waviness) of domain
+        d_args.r            = rot * M_PI / 180.0;   // domain rotation angle in rads
+        d_args.t            = twist;                // twist (waviness) of domain
         master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
                 { b->generate_sinc_data(cp, d_args); });
-    }
-
-    // sine function f(x) = sin(x), f(x,y) = sin(x)sin(y), ...
-    if (input == "sine")
-    {
-        for (int i = 0; i < MAX_DIM; i++)
-        {
-            d_args.min[i]               = -4.0 * M_PI;
-            d_args.max[i]               = 4.0  * M_PI;
-            d_args.geom_nctrl_pts[i]    = geom_nctrl;
-            d_args.vars_nctrl_pts[i]    = vars_nctrl;
-        }
-        d_args.s[0] = 1.0;              // scaling factor on range
-        master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-                { b->generate_sine_data(cp, d_args); });
-    }
-
-    // S3D dataset
-    if (input == "s3d")
-    {
-        d_args.ndom_pts[0]          = 704;
-        d_args.ndom_pts[1]          = 540;
-        d_args.ndom_pts[2]          = 550;
-        d_args.geom_nctrl_pts[0]    = geom_nctrl;
-        d_args.geom_nctrl_pts[1]    = geom_nctrl;
-        d_args.geom_nctrl_pts[2]    = geom_nctrl;
-        d_args.vars_nctrl_pts[0]    = 140;
-        d_args.vars_nctrl_pts[1]    = 108;
-        d_args.vars_nctrl_pts[2]    = 110;
-        strncpy(d_args.infile, "/Users/tpeterka/datasets/flame/6_small.xyz", sizeof(d_args.infile));
-        if (dom_dim == 1)
-            master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-                    { b->read_1d_slice_3d_vector_data(cp, d_args); });
-        else if (dom_dim == 2)
-            master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-                    { b->read_2d_slice_3d_vector_data(cp, d_args); });
-        else if (dom_dim == 3)
-            master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-                    { b->read_3d_vector_data(cp, d_args); });
-        else
-        {
-            fprintf(stderr, "S3D data only available in 2 or 3d domain\n");
-            exit(0);
-        }
-    }
-
-    // nek5000 dataset
-    if (input == "nek")
-    {
-        for (int i = 0; i < 3; i++)
-        {
-            d_args.ndom_pts[i]          = 200;
-            d_args.geom_nctrl_pts[i]    = geom_nctrl;
-            d_args.vars_nctrl_pts[i]    = vars_nctrl;
-        }
-        strncpy(d_args.infile, "/Users/tpeterka/datasets/nek5000/200x200x200/0.xyz", sizeof(d_args.infile));
-        if (dom_dim == 2)
-            master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-                    { b->read_2d_slice_3d_vector_data(cp, d_args); });
-        else if (dom_dim == 3)
-            master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-                    { b->read_3d_vector_data(cp, d_args); });
-        else
-        {
-            fprintf(stderr, "nek5000 data only available in 2 or 3d domain\n");
-            exit(0);
-        }
     }
 
     // compute the MFA
@@ -237,15 +170,6 @@ int main(int argc, char** argv)
             { b->range_error(cp, 1, true); });
 #endif
     decode_time = MPI_Wtime() - decode_time;
-
-    // debug: write original and approximated data for reading into z-checker
-    // only for one block (one file name used, ie, last block will overwrite earlier ones)
-//     master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-//             { b->write_raw(cp); });
-
-    // debug: save knot span domains for comparing error with location in knot span
-//     master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-//             { b->knot_span_domains(cp); });
 
     // print results
     fprintf(stderr, "\n------- Final block results --------\n");
