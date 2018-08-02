@@ -47,26 +47,28 @@ void PrepRenderingData(
         vec3d p;
         Block<real_t>* block = master.block< Block<real_t> >(i);
 
-        // number of science variables
-        nvars = block->vars.size();
+        // number of geometry dimensions and science variables
+        int ndom_dims   = block->geometry.ctrl_pts.cols();          // number of geometry dims
+        nvars           = block->vars.size();                       // number of science variables
 
         // number of raw points
         for (size_t j = 0; j < (size_t)(block->ndom_pts.size()); j++)
             nraw_pts.push_back(block->ndom_pts(j));
 
         // raw geometry and raw science variables
-        raw_data = new float*[block->domain.rows()];
-        int ndom_dims = block->geometry.ctrl_pts.cols();             // number of geometry dims
+        raw_data = new float*[nvars];
+        for (size_t j = 0; j < nvars; j++)
+            raw_data[j] = new float[block->domain.rows()];
+
         for (size_t j = 0; j < (size_t)(block->domain.rows()); j++)
         {
             p.x = block->domain(j, 0);                              // mesh geometry stored in 3d
-            p.y = ndom_dims > 1 ? block->domain(j, 1) : 0.0;
-            p.z = ndom_dims > 2 ? block->domain(j, 2) : 0.0;
+            p.y = block->domain(j, 1);
+            p.z = block->domain.cols() > 2 ? block->domain(j, 2) : 0.0;
             raw_pts.push_back(p);
 
-            raw_data[j] = new float[nvars];
             for (int k = 0; k < nvars; k++)                         // science variables
-                raw_data[j][k] = block->domain(j, ndom_dims + k);
+                raw_data[k][j] = block->domain(j, ndom_dims + k);
         }
 
         // number of geometry control points
@@ -104,18 +106,19 @@ void PrepRenderingData(
             }
 
         // approximated points
-        approx_data = new float*[block->domain.rows()];
+        approx_data = new float*[nvars];
+        for (size_t j = 0; j < nvars; j++)
+            approx_data[j] = new float[block->domain.rows()];
+
         for (size_t j = 0; j < (size_t)(block->approx.rows()); j++)
         {
             p.x = block->approx(j, 0);                      // first 3 dims stored as mesh geometry
             p.y = block->approx(j, 1);
-            p.z = block->approx.cols() > 2 ?
-                block->approx(j, 2) : 0.0;
+            p.z = block->approx.cols() > 2 ? block->approx(j, 2) : 0.0;
             approx_pts.push_back(p);
 
-            approx_data[j] = new float[nvars];
             for (int k = 0; k < nvars; k++)                         // science variables
-                approx_data[j][k] = block->approx(j, ndom_dims + k);
+                approx_data[k][j] = block->approx(j, ndom_dims + k);
         }
 
         // error points
@@ -323,7 +326,7 @@ int main(int argc, char ** argv)
     for (int i = 0; i < nvars; i++)
         delete[] varnames[i];
     delete[] varnames;
-    for (int j = 0; j < raw_pts.size(); j++)
+    for (int j = 0; j < nvars; j++)
     {
         delete[] raw_data[j];
         delete[] approx_data[j];
