@@ -29,14 +29,14 @@ struct vec3d
 void PrepRenderingData(
         vector<int>&                nraw_pts,
         vector<vec3d>&              raw_pts,
-        vector<float>&              raw_data,
+        float**&                    raw_data,
         int&                        nvars,
         vector<int>&                geom_nctrl_pts,
         vector< vector <int> >&     vars_nctrl_pts,
         vector<vec3d>&              geom_ctrl_pts,
         vector< vector <vec3d> >&   vars_ctrl_pts,
         vector<vec3d>&              approx_pts,
-        vector<float>&              approx_data,
+        float**&                    approx_data,
         vector<vec3d>&              err_pts,
         vector<vec3d>&              block_mins,
         vector<vec3d>&              block_maxs,
@@ -55,6 +55,7 @@ void PrepRenderingData(
             nraw_pts.push_back(block->ndom_pts(j));
 
         // raw geometry and raw science variables
+        raw_data = new float*[block->domain.rows()];
         int ndom_dims = block->geometry.ctrl_pts.cols();             // number of geometry dims
         for (size_t j = 0; j < (size_t)(block->domain.rows()); j++)
         {
@@ -63,8 +64,9 @@ void PrepRenderingData(
             p.z = ndom_dims > 2 ? block->domain(j, 2) : 0.0;
             raw_pts.push_back(p);
 
+            raw_data[j] = new float[nvars];
             for (int k = 0; k < nvars; k++)                         // science variables
-                raw_data.push_back(block->domain(j, ndom_dims + k));
+                raw_data[j][k] = block->domain(j, ndom_dims + k);
         }
 
         // number of geometry control points
@@ -102,6 +104,7 @@ void PrepRenderingData(
             }
 
         // approximated points
+        approx_data = new float*[block->domain.rows()];
         for (size_t j = 0; j < (size_t)(block->approx.rows()); j++)
         {
             p.x = block->approx(j, 0);                      // first 3 dims stored as mesh geometry
@@ -110,8 +113,9 @@ void PrepRenderingData(
                 block->approx(j, 2) : 0.0;
             approx_pts.push_back(p);
 
-            if (block->approx.cols() > 3)                   // 4th dim stored as mesh data
-                approx_data.push_back(block->approx(j, 3));
+            approx_data[j] = new float[nvars];
+            for (int k = 0; k < nvars; k++)                         // science variables
+                approx_data[j][k] = block->approx(j, ndom_dims + k);
         }
 
         // error points
@@ -156,13 +160,13 @@ int main(int argc, char ** argv)
     int                         nvars;              // number of science variables (excluding geometry)
     vector<int>                 nraw_pts;           // number of input points in each dim.
     vector<vec3d>               raw_pts;            // input raw data points (<= 3d)
-    vector<float>               raw_data;           // input raw data values (4d)
+    float**                     raw_data;           // input raw data values (4d)
     vector <int>                geom_nctrl_pts;     // number of control pts in each dim of geometry
     vector < vector <int> >     vars_nctrl_pts;     // number of control pts in each dim. of each science variable
     vector<vec3d>               geom_ctrl_pts;      // control points (<= 3d) in geometry
     vector < vector <vec3d> >   vars_ctrl_pts;      // control points (<= 3d) in science variables
     vector<vec3d>               approx_pts;         // aproximated data points (<= 3d)
-    vector<float>               approx_data;        // approximated data values (4d)
+    float**                     approx_data;        // approximated data values (4d)
     vector<vec3d>               err_pts;            // abs value error field
     vector<vec3d>               block_mins;         // block mins
     vector<vec3d>               block_maxs;         // block maxs
@@ -203,6 +207,7 @@ int main(int argc, char ** argv)
         nraw_pts.push_back(1);
     }
 
+    // number of control points for science variables
     for (size_t j = 0; j < nvars; j++)
     {
         dom_dims = vars_nctrl_pts[j].size();
@@ -215,21 +220,20 @@ int main(int argc, char ** argv)
     for (size_t i=0; i<err_pts.size(); i++)
         errm[i] = err_pts[i].z;
 
-    float *vars;
-    int vardim     = 1;
-    int centering  = 1;
-
-    // write geometry control points
-    write_curvilinear_mesh(
-            /* const char *filename */                      "geom_control_points.vtk",
-            /* int useBinary */                             0,
-            /* int *dims */                                 &geom_nctrl_pts[0],
-            /* float *pts */                                &(geom_ctrl_pts[0].x),
-            /* int nvars */                                 0,
-            /* int *vardim */                               NULL,
-            /* int *centering */                            NULL,
-            /* const char * const *varnames */              NULL,
-            /* float **vars */                              NULL);
+    // science variable settings
+    int vardim          = 1;
+    int centering       = 1;
+    int* vardims        = new int[nvars];
+    char** varnames     = new char*[nvars];
+    int* centerings     = new int[nvars];
+    float* vars;
+    for (int i = 0; i < nvars; i++)
+    {
+        vardims[i]      = 1;                                // TODO; treating each variable as a scalar (for now)
+        varnames[i]     = new char[256];
+        centerings[i]   = 1;
+        sprintf(varnames[i], "var%d", i);
+    }
 
     // write science variables control points
     char filename[256];
@@ -237,42 +241,19 @@ int main(int argc, char ** argv)
     {
         sprintf(filename, "var%d_control_points.vtk", i);
         write_curvilinear_mesh(
-            /* const char *filename */                      filename,
-            /* int useBinary */                             0,
-            /* int *dims */                                 &vars_nctrl_pts[i][0],
-            /* float *pts */                                &(vars_ctrl_pts[i][0].x),
-            /* int nvars */                                 0,
-            /* int *vardim */                               NULL,
-            /* int *centering */                            NULL,
-            /* const char * const *varnames */              NULL,
-            /* float **vars */                              NULL);
+                /* const char *filename */                  filename,
+                /* int useBinary */                         0,
+                /* int *dims */                             &vars_nctrl_pts[i][0],
+                /* float *pts */                            &(vars_ctrl_pts[i][0].x),
+                /* int nvars */                             0,
+                /* int *vardim */                           NULL,
+                /* int *centering */                        NULL,
+                /* const char * const *varnames */          NULL,
+                /* float **vars */                          NULL);
     }
 
     // write raw original points
-    if (raw_data.size())
-    {
-//         vars = &raw_data[0];
-//         const char* name_raw_data = "raw_data";
-//         write_curvilinear_mesh(
-//                 /* const char *filename */                  "initial_points.vtk",
-//                 /* int useBinary */                         0,
-//                 /* int *dims */                             &nraw_pts[0],
-//                 /* float *pts */                            &(raw_pts[0].x),
-//                 /* int nvars */                             1,
-//                 /* int *vardim */                           &vardim,
-//                 /* int *centering */                        &centering,
-//                 /* const char * const *varnames */          &name_raw_data,
-//                 /* float **vars */                          &vars);
-
-        vars                    = &raw_data[0];
-        int* vardims            = new int[nvars];
-        char** varnames         = new char*[nvars];
-        for (int i = 0; i < nvars; i++)
-        {
-            vardims[i] = 1;                         // TODO; treating each variable as a scalar (for now)
-            varnames[i] = new char[256];
-            sprintf(varnames[i], "var%d", i);
-        }
+    if (raw_pts.size())
         write_curvilinear_mesh(
                 /* const char *filename */                  "initial_points.vtk",
                 /* int useBinary */                         0,
@@ -280,14 +261,9 @@ int main(int argc, char ** argv)
                 /* float *pts */                            &(raw_pts[0].x),
                 /* int nvars */                             nvars,
                 /* int *vardim */                           vardims,
-                /* int *centering */                        &centering,
+                /* int *centering */                        centerings,
                 /* const char * const *varnames */          varnames,
-                /* float **vars */                          &vars);
-        delete[] vardims;
-        for (int i = 0; i < nvars; i++)
-            delete[] varnames[i];
-        delete[] varnames;
-    }
+                /* float **vars */                          raw_data);
     else
     {
         vars = &errm[0];
@@ -305,24 +281,19 @@ int main(int argc, char ** argv)
     }
 
     // write approx points
-    if (approx_data.size())
-    {
-        vars = &approx_data[0];
-        const char* name_approx_data ="approx_data";
+    if (approx_pts.size())
         write_curvilinear_mesh(
                 /* const char *filename */                  "approx_points.vtk",
                 /* int useBinary */                         0,
                 /* int *dims */                             &nraw_pts[0],
                 /* float *pts */                            &(approx_pts[0].x),
-                /* int nvars */                             1,
-                /* int *vardim */                           &vardim,
-                /* int *centering */                        &centering,
-                /* const char * const *varnames */          &name_approx_data,
-                /* float **vars */                          &vars);
+                /* int nvars */                             nvars,
+                /* int *vardim */                           vardims,
+                /* int *centering */                        centerings,
+                /* const char * const *varnames */          varnames,
+                /* float **vars */                          approx_data);
 
-    }
     else
-    {
         write_curvilinear_mesh(
                 /* const char *filename */                  "approx_points.vtk",
                 /* int useBinary */                         0,
@@ -333,7 +304,6 @@ int main(int argc, char ** argv)
                 /* int *centering */                        NULL,
                 /* const char * const *varnames */          NULL,
                 /* float **vars */                          NULL);
-    }
 
     // write error
     vars = &errm[0];
@@ -348,4 +318,16 @@ int main(int argc, char ** argv)
             /* int *centering */                            &centering,
             /* const char * const *varnames */              &name_err,
             /* float **vars */                              &vars);
+
+    delete[] vardims;
+    for (int i = 0; i < nvars; i++)
+        delete[] varnames[i];
+    delete[] varnames;
+    for (int j = 0; j < raw_pts.size(); j++)
+    {
+        delete[] raw_data[j];
+        delete[] approx_data[j];
+    }
+    delete[] raw_data;
+    delete[] approx_data;
 }
