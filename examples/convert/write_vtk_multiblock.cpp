@@ -28,14 +28,14 @@ struct vec3d
 void PrepRenderingData(
         vector<int>&                nraw_pts,
         vector<vec3d>&              raw_pts,
-        vector<float>&              raw_data,
+        float**&                    raw_data,
         int&                        nvars,
         vector<int>&                geom_nctrl_pts,
         vector< vector <int> >&     vars_nctrl_pts,
         vector<vec3d>&              geom_ctrl_pts,
         vector< vector <vec3d> >&   vars_ctrl_pts,
         vector<vec3d>&              approx_pts,
-        vector<float>&              approx_data,
+        float**&                    approx_data,
         vector<vec3d>&              err_pts,
         vector<vec3d>&              block_mins,
         vector<vec3d>&              block_maxs,
@@ -43,25 +43,29 @@ void PrepRenderingData(
 {
     vec3d p;
 
+    // number of geometry dimensions and science variables
+    int ndom_dims   = block->geometry.ctrl_pts.cols();          // number of geometry dims
+    nvars           = block->vars.size();                       // number of science variables
+
     // number of raw points
     for (size_t j = 0; j < (size_t)(block->ndom_pts.size()); j++)
         nraw_pts.push_back(block->ndom_pts(j));
 
-    // raw points
+    // raw geometry and science variables
+    raw_data = new float*[nvars];
+    for (size_t j = 0; j < nvars; j++)
+        raw_data[j] = new float[block->domain.rows()];
+
     for (size_t j = 0; j < (size_t)(block->domain.rows()); j++)
     {
         p.x = block->domain(j, 0);                      // first 3 dims stored as mesh geometry
         p.y = block->domain(j, 1);
-        p.z = block->domain.cols() > 2 ?
-            block->domain(j, 2) : 0.0;
+        p.z = block->domain.cols() > 2 ? block->domain(j, 2) : 0.0;
         raw_pts.push_back(p);
 
-        if (block->domain.cols() > 3)                   // 4th dim stored as mesh data
-            raw_data.push_back(block->domain(j, 3));
+        for (int k = 0; k < nvars; k++)                         // science variables
+            raw_data[k][j] = block->domain(j, ndom_dims + k);
     }
-
-    // number of science variables
-    nvars = block->vars.size();
 
     // number of geometry control points
     for (size_t j = 0; j < (size_t)(block->geometry.nctrl_pts.size()); j++)
@@ -98,16 +102,19 @@ void PrepRenderingData(
         }
 
     // approximated points
+    approx_data = new float*[nvars];
+    for (size_t j = 0; j < nvars; j++)
+        approx_data[j] = new float[block->domain.rows()];
+
     for (size_t j = 0; j < (size_t)(block->approx.rows()); j++)
     {
         p.x = block->approx(j, 0);                      // first 3 dims stored as mesh geometry
         p.y = block->approx(j, 1);
-        p.z = block->approx.cols() > 2 ?
-            block->approx(j, 2) : 0.0;
+        p.z = block->approx.cols() > 2 ? block->approx(j, 2) : 0.0;
         approx_pts.push_back(p);
 
-        if (block->approx.cols() > 3)                   // 4th dim stored as mesh data
-            approx_data.push_back(block->approx(j, 3));
+        for (int k = 0; k < nvars; k++)                         // science variables
+            approx_data[k][j] = block->approx(j, ndom_dims + k);
     }
 
     // error points
@@ -148,13 +155,13 @@ void write_vtk_files(
     int                         nvars;              // number of science variables (excluding geometry)
     vector<int>                 nraw_pts;           // number of input points in each dim.
     vector<vec3d>               raw_pts;            // input raw data points (<= 3d)
-    vector<float>               raw_data;           // input raw data values (4d)
+    float**                     raw_data;           // input raw data values (4d)
     vector <int>                geom_nctrl_pts;     // number of control pts in each dim of geometry
     vector < vector <int> >     vars_nctrl_pts;     // number of control pts in each dim. of each science variable
     vector<vec3d>               geom_ctrl_pts;      // control points (<= 3d) in geometry
     vector < vector <vec3d> >   vars_ctrl_pts;      // control points (<= 3d) in science variables
     vector<vec3d>               approx_pts;         // aproximated data points (<= 3d)
-    vector<float>               approx_data;        // approximated data values (4d)
+    float**                     approx_data;        // approximated data values (4d)
     vector<vec3d>               err_pts;            // abs value error field
     vector<vec3d>               block_mins;         // block mins
     vector<vec3d>               block_maxs;         // block maxs
@@ -195,14 +202,24 @@ void write_vtk_files(
     for (size_t i=0; i<err_pts.size(); i++)
         errm[i] = err_pts[i].z;
 
-    char filename[256];
-    float *vars;
-    int vardim     = 1;
-    int centering  = 1;
+    // science variable settings
+    int vardim          = 1;
+    int centering       = 1;
+    int* vardims        = new int[nvars];
+    char** varnames     = new char*[nvars];
+    int* centerings     = new int[nvars];
+    float* vars;
+    for (int i = 0; i < nvars; i++)
+    {
+        vardims[i]      = 1;                                // TODO; treating each variable as a scalar (for now)
+        varnames[i]     = new char[256];
+        centerings[i]   = 1;
+        sprintf(varnames[i], "var%d", i);
+    }
 
     // write geometry control points
+    char filename[256];
     sprintf(filename, "geom_control_points_gid_%d.vtk", cp.gid());
-
     write_curvilinear_mesh(
             /* const char *filename */                      filename,
             /* int useBinary */                             0,
@@ -232,20 +249,18 @@ void write_vtk_files(
 
     // write raw original points
     sprintf(filename, "initial_points_gid_%d.vtk", cp.gid());
-    if (raw_data.size())
+    if (raw_pts.size())
     {
-        vars = &raw_data[0];
-        const char* name_raw_data = "raw_data";
         write_curvilinear_mesh(
                 /* const char *filename */                  filename,
                 /* int useBinary */                         0,
                 /* int *dims */                             &nraw_pts[0],
                 /* float *pts */                            &(raw_pts[0].x),
-                /* int nvars */                             1,
-                /* int *vardim */                           &vardim,
-                /* int *centering */                        &centering,
-                /* const char * const *varnames */          &name_raw_data,
-                /* float **vars */                          &vars);
+                /* int nvars */                             nvars,
+                /* int *vardim */                           vardims,
+                /* int *centering */                        centerings,
+                /* const char * const *varnames */          varnames,
+                /* float **vars */                          raw_data);
     }
     else
     {
@@ -265,20 +280,18 @@ void write_vtk_files(
 
     // write approx points
     sprintf(filename, "approx_points_gid_%d.vtk", cp.gid());
-    if (approx_data.size())
+    if (approx_pts.size())
     {
-        vars = &approx_data[0];
-        const char* name_approx_data ="approx_data";
         write_curvilinear_mesh(
                 /* const char *filename */                  filename,
                 /* int useBinary */                         0,
                 /* int *dims */                             &nraw_pts[0],
                 /* float *pts */                            &(approx_pts[0].x),
-                /* int nvars */                             1,
-                /* int *vardim */                           &vardim,
-                /* int *centering */                        &centering,
-                /* const char * const *varnames */          &name_approx_data,
-                /* float **vars */                          &vars);
+                /* int nvars */                             nvars,
+                /* int *vardim */                           vardims,
+                /* int *centering */                        centerings,
+                /* const char * const *varnames */          varnames,
+                /* float **vars */                          approx_data);
 
     }
     else
@@ -309,6 +322,18 @@ void write_vtk_files(
             /* int *centering */                            &centering,
             /* const char * const *varnames */              &name_err,
             /* float **vars */                              &vars);
+
+    delete[] vardims;
+    for (int i = 0; i < nvars; i++)
+        delete[] varnames[i];
+    delete[] varnames;
+    for (int j = 0; j < nvars; j++)
+    {
+        delete[] raw_data[j];
+        delete[] approx_data[j];
+    }
+    delete[] raw_data;
+    delete[] approx_data;
 }
 
 int main(int argc, char ** argv)

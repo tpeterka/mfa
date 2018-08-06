@@ -238,8 +238,21 @@ int main(int argc, char ** argv)
         sprintf(varnames[i], "var%d", i);
     }
 
-    // write science variables control points
+    // write geometry control points
     char filename[256];
+    sprintf(filename, "geom_control_points.vtk");
+    write_curvilinear_mesh(
+            /* const char *filename */                      filename,
+            /* int useBinary */                             0,
+            /* int *dims */                                 &geom_nctrl_pts[0],
+            /* float *pts */                                &(geom_ctrl_pts[0].x),
+            /* int nvars */                                 0,
+            /* int *vardim */                               NULL,
+            /* int *centering */                            NULL,
+            /* const char * const *varnames */              NULL,
+            /* float **vars */                              NULL);
+
+    // write science variables control points
     for (auto i = 0; i < nvars; i++)
     {
         sprintf(filename, "var%d_control_points.vtk", i);

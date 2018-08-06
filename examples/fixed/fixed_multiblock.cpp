@@ -165,7 +165,8 @@ int main(int argc, char** argv)
     // sine function f(x) = sin(x), f(x,y) = sin(x)sin(y), ...
     if (input == "sine")
     {
-        d_args.s = 1.0;              // scaling factor on range
+        for (int i = 0; i < pt_dim - dom_dim; i++)      // for all science variables
+            d_args.s[i] = i + 1;                        // scaling factor on range
         master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
                 { b->generate_sine_data(cp, d_args); });
     }
@@ -173,8 +174,8 @@ int main(int argc, char** argv)
     // sinc function f(x) = sin(x)/x, f(x,y) = sinc(x)sinc(y), ...
     if (input == "sinc")
     {
-        d_args.s = 10.0;              // scaling factor on range
-        d_args.f = 1.0;               // frequency multiplier
+        for (int i = 0; i < pt_dim - dom_dim; i++)      // for all science variables
+            d_args.s[i] = 10.0 * (i + 1);               // scaling factor on range
         master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
                 { b->generate_sinc_data(cp, d_args); });
     }

@@ -132,6 +132,22 @@ int main(int argc, char** argv)
 
     // initilize input data
 
+    // sine function f(x) = sin(x), f(x,y) = sin(x)sin(y), ...
+    if (input == "sine")
+    {
+        for (int i = 0; i < MAX_DIM; i++)
+        {
+            d_args.min[i]               = -4.0 * M_PI;
+            d_args.max[i]               = 4.0  * M_PI;
+            d_args.geom_nctrl_pts[i]    = geom_nctrl;
+            d_args.vars_nctrl_pts[i]    = vars_nctrl;
+        }
+        for (int i = 0; i < pt_dim - dom_dim; i++)      // for all science variables
+            d_args.s[i] = i + 1;                        // scaling factor on range
+        master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
+                { b->generate_sine_data(cp, d_args); });
+    }
+
     // sinc function f(x) = sin(x)/x, f(x,y) = sinc(x)sinc(y), ...
     if (input == "sinc")
     {
@@ -148,21 +164,6 @@ int main(int argc, char** argv)
         d_args.t = twist;                // twist (waviness) of domain
         master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
                 { b->generate_sinc_data(cp, d_args); });
-    }
-
-    // sine function f(x) = sin(x), f(x,y) = sin(x)sin(y), ...
-    if (input == "sine")
-    {
-        for (int i = 0; i < MAX_DIM; i++)
-        {
-            d_args.min[i]               = -4.0 * M_PI;
-            d_args.max[i]               = 4.0  * M_PI;
-            d_args.geom_nctrl_pts[i]    = geom_nctrl;
-            d_args.vars_nctrl_pts[i]    = vars_nctrl;
-        }
-        d_args.s[0] = 1.0;              // scaling factor on range
-        master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-                { b->generate_sine_data(cp, d_args); });
     }
 
     // S3D dataset

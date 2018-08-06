@@ -325,7 +325,7 @@ struct Block
         cerr << "domain_mins:\n" << domain_mins << endl;
         cerr << "domain_maxs:\n" << domain_maxs << "\n" << endl;
 
-        cerr << "domain:\n" << domain << endl;
+//         cerr << "domain:\n" << domain << endl;
     }
 
 
@@ -1359,7 +1359,7 @@ struct Block
         }
         cerr << "-----------------------------------" << endl;
 
-        cerr << approx.rows() << " approximated points\n" << approx << endl;
+//         cerr << approx.rows() << " approximated points\n" << approx << endl;
         fprintf(stderr, "range extent          = %e\n",  range_extent);
         fprintf(stderr, "max_err               = %e\n",  max_err);
         fprintf(stderr, "normalized max_err    = %e\n",  max_err / range_extent);
