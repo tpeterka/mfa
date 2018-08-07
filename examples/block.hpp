@@ -1000,8 +1000,11 @@ struct Block
                 vars[i].nctrl_pts(j) =  a->vars_nctrl_pts[j];
         }
 
-        // encode geometry
         int ndom_dims = ndom_pts.size();                // domain dimensionality
+
+        // encode geometry
+        if (a->verbose && cp.master()->communicator().rank() == 0)
+            fprintf(stderr, "\nEncoding geometry\n\n");
         geometry.mfa = new mfa::MFA<T>(geometry.p,
                                        ndom_pts,
                                        domain,
@@ -1016,6 +1019,8 @@ struct Block
         // encode science variables
         for (auto i = 0; i< vars.size(); i++)
         {
+            if (a->verbose && cp.master()->communicator().rank() == 0)
+                fprintf(stderr, "\nEncoding science variable %d\n\n", i);
             vars[i].mfa = new mfa::MFA<T>(vars[i].p,
                                           ndom_pts,
                                           domain,
@@ -1029,21 +1034,57 @@ struct Block
         }
     }
 
+
+    // adaptively encode block to desired error limit
+    void adaptive_encode_block(
+            const diy::Master::ProxyWithLink& cp,
+            real_t                            err_limit,
+            int                               max_rounds,
+            DomainArgs&                       args)
+    {
+        DomainArgs* a = &args;
+        geometry.nctrl_pts.resize(0);       // 0 size means MFA will initialize to minimum p+1
+        for (auto i = 0; i < vars.size(); i++)
+            vars[i].nctrl_pts.resize(0);
+
+        int ndom_dims = ndom_pts.size();                // domain dimensionality
+
+        VectorX<T> extents = domain_maxs - domain_mins;
+
+        // encode geometry
+        if (a->verbose && cp.master()->communicator().rank() == 0)
+            fprintf(stderr, "\nEncoding geometry\n\n");
+        geometry.mfa = new mfa::MFA<T>(geometry.p,
+                                       ndom_pts,
+                                       domain,
+                                       geometry.ctrl_pts,
+                                       geometry.nctrl_pts,
+                                       geometry.weights,
+                                       geometry.knots,
+                                       0,
+                                       ndom_dims - 1);
+        geometry.mfa->AdaptiveEncode(err_limit, geometry.nctrl_pts, a->verbose, a->weighted, extents, max_rounds);
+
+        // encode science variables
+        for (auto i = 0; i< vars.size(); i++)
+        {
+            if (a->verbose && cp.master()->communicator().rank() == 0)
+                fprintf(stderr, "\nEncoding science variable %d\n\n", i);
+            vars[i].mfa = new mfa::MFA<T>(vars[i].p,
+                                          ndom_pts,
+                                          domain,
+                                          vars[i].ctrl_pts,
+                                          vars[i].nctrl_pts,
+                                          vars[i].weights,
+                                          vars[i].knots,
+                                          ndom_dims,
+                                          ndom_dims + i);
+            vars[i].mfa->AdaptiveEncode(err_limit, vars[i].nctrl_pts, a->verbose, a->weighted, extents, max_rounds);
+        }
+    }
+
     // TODO: convert the following to split models
 
-//     // adaptively encode block to desired error limit
-//     void adaptive_encode_block(
-//             const diy::Master::ProxyWithLink& cp,
-//             real_t                            err_limit,
-//             int                               max_rounds,
-//             DomainArgs&                       args)
-//     {
-//         DomainArgs* a = &args;
-//         nctrl_pts.resize(0);            // 0 size means MFA will initialize to minimum p+1
-//         mfa = new mfa::MFA<T>(p, ndom_pts, domain, ctrl_pts, nctrl_pts, weights, knots);
-//         mfa->AdaptiveEncode(err_limit, nctrl_pts, a->verbose, a->weighted, max_rounds);
-//     }
-// 
 //     // nonlinear encoding of block to desired error limit
 //     // only for 1D so far
 //     void nonlinear_encode_block(

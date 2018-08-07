@@ -65,7 +65,7 @@ int main(int argc, char** argv)
     ops >> opts::Option('r', "rotate",      rot,        " rotation angle of domain in degrees");
     ops >> opts::Option('t', "twist",       twist,      " twist (waviness) of domain (0.0-1.0)");
 
-    if (ops >> opts::Present('h', "help", "show help"))
+    if (ops >> opts::Present('h', "help", " show help"))
     {
         if (world.rank() == 0)
             std::cout << ops;

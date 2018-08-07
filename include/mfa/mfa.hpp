@@ -101,15 +101,16 @@ namespace mfa
 
         // adaptive encode
         void AdaptiveEncode(
-                T         err_limit,                 // maximum allowable normalized error
-                VectorXi& nctrl_pts_,                // (output) number of control points in each dim
-                int       verbose,                   // output level
-                bool      weighted,                  // solve for and use weights (default = true)
-                int       max_rounds)                // optional maximum number of rounds
+                T           err_limit,                 // maximum allowable normalized error
+                VectorXi&   nctrl_pts_,                // (output) number of control points in each dim
+                int         verbose,                   // output level
+                bool        weighted,                  // solve for and use weights (default = true)
+                VectorX<T>& extents,                   // extents in each dimension, for normalizing error (size 0 means do not normalize)
+                int         max_rounds)                // optional maximum number of rounds
         {
             mfa->weights = VectorX<T>::Ones(mfa->tot_nctrl);
             Encoder<T> encoder(*mfa, verbose);
-            encoder.AdaptiveEncode(err_limit, weighted, max_rounds);
+            encoder.AdaptiveEncode(err_limit, weighted, extents, max_rounds);
             nctrl_pts_ = mfa->nctrl_pts;
         }
 

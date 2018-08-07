@@ -421,9 +421,10 @@ namespace mfa
 
             // clamp dimensions other than cur_dim to same value as first control point
             // eliminates any wiggles in other dimensions due to numerical precision errors
-            for (auto j = 0; j < mfa.p.size(); j++)
-                if (j != cur_dim)
-                    out_pt(j) = temp_ctrl(0, j);
+            // DEPRECATED, doesn't make sense in the split model
+//             for (auto j = 0; j < mfa.p.size(); j++)
+//                 if (j != cur_dim)
+//                     out_pt(j) = temp_ctrl(0, j);
 
             // compute the denominator of the rational curve point and divide by it
             // sum of element-wise multiplication requires transpose so that both arrays are same shape

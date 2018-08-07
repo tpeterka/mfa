@@ -226,9 +226,10 @@ namespace mfa
 
         // adaptive encoding
         void AdaptiveEncode(
-                T    err_limit,             // maximum allowable normalized error
-                bool weighted,              // solve for and use weights
-                int  max_rounds = 0)        // optional maximum number of rounds
+                T           err_limit,              // maximum allowable normalized error
+                bool        weighted,               // solve for and use weights
+                VectorX<T>& extents,                // extents in each dimension, for normalizing error (size 0 means do not normalize)
+                int         max_rounds = 0)         // optional maximum number of rounds
         {
             VectorXi  nnew_knots = VectorXi::Zero(mfa.p.size());        // number of new knots in each dim
             vector<T> new_knots;                                        // new knots (1st dim changes fastest)
@@ -247,17 +248,11 @@ namespace mfa
 
 #ifdef HIGH_D           // high-d w/ splitting spans in the middle
 
-                bool done = NewKnots_full(nnew_knots, new_knots, err_limit, iter);
+                bool done = NewKnots_full(nnew_knots, new_knots, err_limit, extents, iter);
 
 #else               // low-d w/ splitting spans in the middle
 
-                bool done = NewKnots_curve(nnew_knots, new_knots, err_limit, iter);
-
-#endif
-
-#if 0           // low-d w/ splitting spans at point of greatest error
-
-                bool done = NewKnots_curve1(nnew_knots, new_knots, err_limit, iter);
+                bool done = NewKnots_curve(nnew_knots, new_knots, err_limit, extents, iter);
 
 #endif
 
@@ -807,6 +802,7 @@ namespace mfa
                 size_t         co,            // starting ofst for reading domain pts
                 MatrixX<T>&    ctrl_pts,      // control points
                 VectorX<T>&    weights,       // weights associated with control points
+                VectorX<T>&    extents,       // extents in each dimension, for normalizing error (size 0 means do not normalize)
                 set<int>&      err_spans,     // spans with error greater than err_limit
                 T              err_limit)     // max allowable error
         {
@@ -814,6 +810,8 @@ namespace mfa
             VectorX<T> cpt(mfa.ctrl_pts.cols());            // decoded curve point
             int nerr = 0;                                   // number of points with error greater than err_limit
             int span = mfa.p[k];                            // current knot span of the domain point being checked
+            if (!extents.size())
+                extents = VectorX<T>::Ones(mfa.domain.cols());
 
             for (auto i = 0; i < mfa.ndom_pts[k]; i++)      // all domain points in the curve
             {
@@ -822,13 +820,15 @@ namespace mfa
 
                 decoder.CurvePt(k, mfa.params(mfa.po[k] + i), ctrl_pts, weights, cpt, mfa.ko[k]);
 
-//                 T err = fabs(mfa.NormalDistance(cpt, co + i * mfa.ds[k])) / mfa.range_extent;       // normalized by data range
+                // error
+                T max_err = 0.0;
+                for (auto j = 0; j < mfa.max_dim - mfa.min_dim + 1; j++)
+                {
+                    T err = fabs(cpt(j) - mfa.domain(co + i * mfa.ds[k], mfa.min_dim + j)) / extents(mfa.min_dim + j);
+                    max_err = err > max_err ? err : max_err;
+                }
 
-                // range error
-                int last = mfa.max_dim;                     // range coordinate TODO: last doesn't make much sense in the split model
-                T err = fabs(cpt(last) - mfa.domain(co + i * mfa.ds[k], last)) / mfa.range_extent;
-
-                if (err > err_limit)
+                if (max_err > err_limit)
                 {
                     // don't duplicate spans
                     set<int>::iterator it = err_spans.find(span);
@@ -871,10 +871,14 @@ namespace mfa
                 VectorXi&      nnew_knots,                  // number of new knots in each dim
                 vector<T>&     new_knots,                   // new knots (1st dim changes fastest)
                 T              err_limit,                   // max allowable error
+                VectorX<T>&    extents,                     // extents in each dimension, for normalizing error (size 0 means do not normalize)
                 int            iter)                        // iteration number of caller (for debugging)
         {
+            if (!extents.size())
+                extents = VectorX<T>::Ones(mfa.domain.cols());
+
             // resize control points and weights
-            mfa.ctrl_pts.resize(mfa.tot_nctrl, mfa.ctrl_pts.cols());
+            mfa.ctrl_pts.resize(mfa.tot_nctrl, mfa.max_dim - mfa.min_dim + 1);
             mfa.weights = VectorX<T>::Ones(mfa.ctrl_pts.rows());
 
             // full n-d encoding
@@ -884,7 +888,7 @@ namespace mfa
             nnew_knots = VectorXi::Zero(mfa.p.size());
             new_knots.resize(0);
             mfa::NewKnots<T> nk(mfa);
-            bool done = nk.ErrorSpans(nnew_knots, new_knots, err_limit, iter);
+            bool done = nk.ErrorSpans(nnew_knots, new_knots, err_limit, extents, iter);
 
             return done;
         }
@@ -897,6 +901,7 @@ namespace mfa
                 VectorXi&      nnew_knots,                       // number of new knots in each dim
                 vector<T>&     new_knots,                        // new knots (1st dim changes fastest)
                 T              err_limit,                        // max allowable error
+                VectorX<T>&    extents,                          // extents in each dimension, for normalizing error (size 0 means do not normalize)
                 int            iter)                             // iteration number of caller (for debugging)
         {
             // check and assign main quantities
@@ -907,7 +912,7 @@ namespace mfa
             new_knots.resize(0);
 
             // resize control points and weights
-            mfa.ctrl_pts.resize(mfa.tot_nctrl, mfa.ctrl_pts.cols());
+            mfa.ctrl_pts.resize(mfa.tot_nctrl, mfa.max_dim - mfa.min_dim + 1);
             mfa.weights = VectorX<T>::Ones(mfa.ctrl_pts.rows());
 
             for (size_t k = 0; k < ndims; k++)              // for all domain dimensions
@@ -997,7 +1002,7 @@ namespace mfa
                             CopyCtrl(P, k, mfa.co[k][j], temp_ctrl);
 
                             // compute the error on the curve (number of input points with error > err_limit)
-                            size_t nerr = ErrorCurve(k, mfa.co[k][j], temp_ctrl, weights, err_spans, err_limit);
+                            size_t nerr = ErrorCurve(k, mfa.co[k][j], temp_ctrl, weights, extents, err_spans, err_limit);
 
                             if (nerr > max_nerr)
                             {

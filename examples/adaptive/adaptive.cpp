@@ -1,5 +1,6 @@
 //--------------------------------------------------------------
 // example of encoding / decoding higher dimensional data w/ adaptive number of control points
+// and a single block in a split model w/ one model containing geometry and other model science variables
 //
 // Tom Peterka
 // Argonne National Laboratory
@@ -43,7 +44,8 @@ int main(int argc, char** argv)
     real_t norm_err_limit = 1.0;                      // maximum normalized error limit
     int    pt_dim         = 3;                        // dimension of input points
     int    dom_dim        = 2;                        // dimension of domain (<= pt_dim)
-    int    degree         = 4;                        // degree (same for all dims)
+    int    geom_degree    = 1;                        // degree for geometry (same for all dims)
+    int    vars_degree    = 4;                        // degree for science variables (same for all dims)
     int    ndomp          = 100;                      // input number of domain points (same for all dims)
     string input          = "sinc";                   // input dataset
     int    max_rounds     = 0;                        // max. number of rounds (0 = no maximum)
@@ -53,18 +55,19 @@ int main(int argc, char** argv)
 
     // get command line arguments
     opts::Options ops(argc, argv);
-    ops >> opts::Option('e', "error",   norm_err_limit, " maximum normalized error limit");
-    ops >> opts::Option('d', "pt_dim",  pt_dim,         " dimension of points");
-    ops >> opts::Option('m', "dom_dim", dom_dim,        " dimension of domain");
-    ops >> opts::Option('p', "degree",  degree,         " degree in each dimension of domain");
-    ops >> opts::Option('n', "ndomp",   ndomp,          " number of input points in each dimension of domain");
-    ops >> opts::Option('i', "input",   input,          " input dataset");
-    ops >> opts::Option('r', "rounds",  max_rounds,     " maximum number of iterations");
-    ops >> opts::Option('w', "weights", weighted,       " solve for and use weights");
-    ops >> opts::Option('r', "rotate",  rot,            " rotation angle of domain in degrees");
-    ops >> opts::Option('t', "twist",   twist,          " twist (waviness) of domain (0.0-1.0)");
+    ops >> opts::Option('e', "error",       norm_err_limit, " maximum normalized error limit");
+    ops >> opts::Option('d', "pt_dim",      pt_dim,         " dimension of points");
+    ops >> opts::Option('m', "dom_dim",     dom_dim,        " dimension of domain");
+    ops >> opts::Option('p', "geom_degree", geom_degree,    " degree in each dimension of geometry");
+    ops >> opts::Option('q', "vars_degree", vars_degree,    " degree in each dimension of science variables");
+    ops >> opts::Option('n', "ndomp",       ndomp,          " number of input points in each dimension of domain");
+    ops >> opts::Option('i', "input",       input,          " input dataset");
+    ops >> opts::Option('r', "rounds",      max_rounds,     " maximum number of iterations");
+    ops >> opts::Option('w', "weights",     weighted,       " solve for and use weights");
+    ops >> opts::Option('r', "rotate",      rot,            " rotation angle of domain in degrees");
+    ops >> opts::Option('t', "twist",       twist,          " twist (waviness) of domain (0.0-1.0)");
 
-    if (ops >> opts::Present('h', "help", "show help"))
+    if (ops >> opts::Present('h', "help", " show help"))
     {
         if (world.rank() == 0)
             std::cout << ops;
@@ -74,9 +77,9 @@ int main(int argc, char** argv)
     // echo args
     fprintf(stderr, "\n--------- Input arguments ----------\n");
     cerr <<
-        "error = "      << norm_err_limit << " pt_dim = "      << pt_dim     << " dom_dim = " << dom_dim <<
-        "\ndegree = "   << degree         << " input pts = "   << ndomp      <<
-        "\ninput = "    << input          << " max. rounds = " << max_rounds << endl;
+        "error = "          << norm_err_limit   << " pt_dim = "         << pt_dim       << " dom_dim = "        << dom_dim      <<
+        "\ngeom_degree = "  << geom_degree      << " vars_degree = "    << vars_degree  <<
+        "\ninput pts = "    << ndomp            << " input = "          << input        << " max. rounds = "    << max_rounds   << endl;
 #ifdef CURVE_PARAMS
     cerr << "parameterization method = curve" << endl;
 #else
@@ -114,13 +117,15 @@ int main(int argc, char** argv)
     d_args.dom_dim      = dom_dim;
     d_args.weighted     = weighted;
     d_args.multiblock   = false;
-    d_args.f            = 1.0;
     d_args.verbose      = 1;
     d_args.r            = 0.0;
     d_args.t            = 0.0;
+    for (int i = 0; i < pt_dim - dom_dim; i++)
+        d_args.f[i] = 1.0;
     for (int i = 0; i < MAX_DIM; i++)
     {
-        d_args.p[i]         = degree;
+        d_args.geom_p[i]    = geom_degree;
+        d_args.vars_p[i]    = vars_degree;
         d_args.ndom_pts[i]  = ndomp;
     }
 
@@ -132,7 +137,8 @@ int main(int argc, char** argv)
             d_args.min[i]       = -4.0 * M_PI;
             d_args.max[i]       = 4.0  * M_PI;
         }
-        d_args.s            = 1.0;              // scaling factor on range
+        for (int i = 0; i < pt_dim - dom_dim; i++)      // for all science variables
+            d_args.s[i] = i + 1;                        // scaling factor on range
         master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
                 { b->generate_sine_data(cp, d_args); });
     }
@@ -145,7 +151,8 @@ int main(int argc, char** argv)
             d_args.min[i]       = -4.0 * M_PI;
             d_args.max[i]       = 4.0  * M_PI;
         }
-        d_args.s            = 10.0;                 // scaling factor on range
+        for (int i = 0; i < pt_dim - dom_dim; i++)      // for all science variables
+            d_args.s[i] = 10.0 * (i + 1);                 // scaling factor on range
         d_args.r            = rot * M_PI / 180.0;   // domain rotation angle in rads
         d_args.t            = twist;                // twist (waviness) of domain
         master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)

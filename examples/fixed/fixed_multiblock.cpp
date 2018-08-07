@@ -63,7 +63,7 @@ int main(int argc, char** argv)
     ops >> opts::Option('b', "tot_blocks",  tot_blocks, " total number of blocks");
     ops >> opts::Option('t', "strong_sc",   strong_sc,  " strong scaling (1 = strong, 0 = weak)");
 
-    if (ops >> opts::Present('h', "help", "show help"))
+    if (ops >> opts::Present('h', "help", " show help"))
     {
         if (world.rank() == 0)
             std::cout << ops;
