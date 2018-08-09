@@ -82,8 +82,9 @@ struct Model
     MatrixX<T>  ctrl_pts;                       // NURBS control points (1st dim changes fastest)
     VectorX<T>  weights;                        // weights associated with control points
     VectorX<T>  knots;                          // NURBS knots (1st dim changes fastest)
+    int         min_dim;                        // starting coordinate of this model in full-dimensional data
+    int         max_dim;                        // ending coordinate of this model in full-dimensional data
     mfa::MFA<T> *mfa;                           // MFA object
-
 };
 
 // block
@@ -204,8 +205,14 @@ struct Block
         vars.resize(nvars);
         int tot_ndom_pts    = 1;
         geometry.p.resize(a->dom_dim);
+        geometry.min_dim = 0;
+        geometry.max_dim = a->dom_dim - 1;
         for (int j = 0; j < nvars; j++)
+        {
             vars[j].p.resize(a->dom_dim);
+            vars[j].min_dim = a->dom_dim + j;
+            vars[j].max_dim = vars[j].min_dim + 1;
+        }
         ndom_pts.resize(a->dom_dim);
         for (int i = 0; i < a->dom_dim; i++)
         {
@@ -254,8 +261,6 @@ struct Block
             cs *= ndom_pts(i);
         }
 
-        real_t min, max;                       // extents of range
-
         // assign values to the range (science variables)
         // f(x,y,z,...) = sine(x)/x * sine(y)/y * sine(z)/z * ...
         for (int j = 0; j < tot_ndom_pts; j++)
@@ -271,10 +276,10 @@ struct Block
                 res *= a->s[k];
                 domain(j, a->dom_dim + k) = res;
 
-                if (j == 0 || res > max)
-                    max = res;
-                if (j == 0 || res < min)
-                    min = res;
+                if (j == 0 || res > domain_maxs(a->dom_dim + k))
+                    domain_maxs(a->dom_dim + k) = res;
+                if (j == 0 || res < domain_mins(a->dom_dim + k))
+                    domain_mins(a->dom_dim + k) = res;
             }
         }
 
@@ -319,8 +324,6 @@ struct Block
         }
 
         // extents
-        domain_mins(a->pt_dim - 1) = min;
-        domain_maxs(a->pt_dim - 1) = max;
 //         fprintf(stderr, "gid = %d\n", cp.gid());
         cerr << "domain_mins:\n" << domain_mins << endl;
         cerr << "domain_maxs:\n" << domain_maxs << "\n" << endl;
@@ -339,8 +342,14 @@ struct Block
         vars.resize(nvars);
         int tot_ndom_pts = 1;
         geometry.p.resize(a->dom_dim);
+        geometry.min_dim = 0;
+        geometry.max_dim = a->dom_dim - 1;
         for (int j = 0; j < nvars; j++)
+        {
             vars[j].p.resize(a->dom_dim);
+            vars[j].min_dim = a->dom_dim + j;
+            vars[j].max_dim = vars[j].min_dim + 1;
+        }
         vars[0].p.resize(a->dom_dim);
         ndom_pts.resize(a->dom_dim);
         for (int i = 0; i < a->dom_dim; i++)
@@ -390,8 +399,6 @@ struct Block
             cs *= ndom_pts(i);
         }
 
-        real_t min, max;                       // extents of range
-
         // assign values to the range (science variables)
         // f(x,y,z,...) = sine(x) * sine(y) * sine(z) * ...
         for (int j = 0; j < tot_ndom_pts; j++)
@@ -404,17 +411,15 @@ struct Block
                 res *= a->s[k];
                 domain(j, a->pt_dim - 1) = res;
 
-                if (j == 0 || res > max)
-                    max = res;
-                if (j == 0 || res < min)
-                    min = res;
+                if (j == 0 || res > domain_maxs(a->dom_dim + k))
+                    domain_maxs(a->dom_dim + k) = res;
+                if (j == 0 || res < domain_mins(a->dom_dim + k))
+                    domain_mins(a->dom_dim + k) = res;
             }
         }
 
         // extents
-        domain_mins(a->pt_dim - 1) = min;
-        domain_maxs(a->pt_dim - 1) = max;
-        fprintf(stderr, "gid = %d\n", cp.gid());
+//         fprintf(stderr, "gid = %d\n", cp.gid());
         cerr << "domain_mins:\n" << domain_mins << endl;
         cerr << "domain_maxs:\n" << domain_maxs << "\n" << endl;
 
@@ -431,7 +436,11 @@ struct Block
         DomainArgs* a = &args;
         int tot_ndom_pts = 1;
         geometry.p.resize(a->dom_dim);
+        geometry.min_dim = 0;
+        geometry.max_dim = a->dom_dim - 1;
         vars[0].p.resize(a->dom_dim);
+        vars[0].min_dim = a->dom_dim;
+        vars[0].max_dim = vars[0].min_dim + 1;
         ndom_pts.resize(a->dom_dim);
         domain_mins.resize(a->pt_dim);
         domain_maxs.resize(a->pt_dim);
@@ -501,7 +510,11 @@ struct Block
         DomainArgs* a = &args;
         int tot_ndom_pts = 1;
         geometry.p.resize(a->dom_dim);
+        geometry.min_dim = 0;
+        geometry.max_dim = a->dom_dim - 1;
         vars[0].p.resize(a->dom_dim);
+        vars[0].min_dim = a->dom_dim;
+        vars[0].max_dim = vars[0].min_dim + 1;
         ndom_pts.resize(a->dom_dim);
         domain_mins.resize(a->pt_dim);
         domain_maxs.resize(a->pt_dim);
@@ -576,7 +589,11 @@ struct Block
         DomainArgs* a = &args;
         int tot_ndom_pts = 1;
         geometry.p.resize(a->dom_dim);
+        geometry.min_dim = 0;
+        geometry.max_dim = a->dom_dim - 1;
         vars[0].p.resize(a->dom_dim);
+        vars[0].min_dim = a->dom_dim;
+        vars[0].max_dim = vars[0].min_dim + 1;
         ndom_pts.resize(a->dom_dim);
         domain_mins.resize(a->pt_dim);
         domain_maxs.resize(a->pt_dim);
@@ -674,7 +691,11 @@ struct Block
         DomainArgs* a = &args;
         int tot_ndom_pts = 1;
         geometry.p.resize(a->dom_dim);
+        geometry.min_dim = 0;
+        geometry.max_dim = a->dom_dim - 1;
         vars[0].p.resize(a->dom_dim);
+        vars[0].min_dim = a->dom_dim;
+        vars[0].max_dim = vars[0].min_dim + 1;
         ndom_pts.resize(a->dom_dim);
         domain_mins.resize(a->pt_dim);
         domain_maxs.resize(a->pt_dim);
@@ -751,7 +772,11 @@ struct Block
         DomainArgs* a = &args;
         int tot_ndom_pts = 1;
         geometry.p.resize(a->dom_dim);
+        geometry.min_dim = 0;
+        geometry.max_dim = a->dom_dim - 1;
         vars[0].p.resize(a->dom_dim);
+        vars[0].min_dim = a->dom_dim;
+        vars[0].max_dim = vars[0].min_dim + 1;
         ndom_pts.resize(a->dom_dim);
         domain_mins.resize(a->pt_dim);
         domain_maxs.resize(a->pt_dim);
@@ -852,7 +877,11 @@ struct Block
         DomainArgs* a = &args;
         int tot_ndom_pts = 1;
         geometry.p.resize(a->dom_dim);
+        geometry.min_dim = 0;
+        geometry.max_dim = a->dom_dim - 1;
         vars[0].p.resize(a->dom_dim);
+        vars[0].min_dim = a->dom_dim;
+        vars[0].max_dim = vars[0].min_dim + 1;
         ndom_pts.resize(a->dom_dim);
         domain_mins.resize(a->pt_dim);
         domain_maxs.resize(a->pt_dim);
@@ -919,7 +948,11 @@ struct Block
         DomainArgs* a = &args;
         int tot_ndom_pts = 1;
         geometry.p.resize(a->dom_dim);
+        geometry.min_dim = 0;
+        geometry.max_dim = a->dom_dim - 1;
         vars[0].p.resize(a->dom_dim);
+        vars[0].min_dim = a->dom_dim;
+        vars[0].max_dim = vars[0].min_dim + 1;
         ndom_pts.resize(a->dom_dim);
         domain_mins.resize(a->pt_dim);
         domain_maxs.resize(a->pt_dim);
@@ -1028,7 +1061,7 @@ struct Block
                                           vars[i].nctrl_pts,
                                           vars[i].weights,
                                           vars[i].knots,
-                                          ndom_dims,
+                                          ndom_dims + i,        // assumes each variable is scalar
                                           ndom_dims + i);
             vars[i].mfa->FixedEncode(vars[i].nctrl_pts, a->verbose, a->weighted);
         }
@@ -1077,7 +1110,7 @@ struct Block
                                           vars[i].nctrl_pts,
                                           vars[i].weights,
                                           vars[i].knots,
-                                          ndom_dims,
+                                          ndom_dims + i,        // assumes each variable is scalar
                                           ndom_dims + i);
             vars[i].mfa->AdaptiveEncode(err_limit, vars[i].nctrl_pts, a->verbose, a->weighted, extents, max_rounds);
         }
@@ -1134,13 +1167,13 @@ struct Block
     {
         approx.resize(domain.rows(), domain.cols());
 
-            int ndom_dims = ndom_pts.size();                // domain dimensionality
-            // geometry
-            geometry.mfa->Decode(approx, 0, ndom_dims - 1);
+        int ndom_dims = ndom_pts.size();                // domain dimensionality
+        // geometry
+        geometry.mfa->Decode(approx, 0, ndom_dims - 1);
 
-            // science variables
-            for (auto i = 0; i < vars.size(); i++)
-                vars[i].mfa->Decode(approx, ndom_dims, ndom_dims + i);
+        // science variables
+        for (auto i = 0; i < vars.size(); i++)
+            vars[i].mfa->Decode(approx, ndom_dims + i, ndom_dims + i);  // assumes each variable is scalar
     }
 
     // TODO: convert the following to split models
@@ -1217,7 +1250,6 @@ struct Block
 // #ifndef MFA_NO_TBB                                          // TBB version
 // 
 //         // distance computation
-//         size_t max_idx;
 //         if (decode_block)
 //         {
 //             parallel_for (size_t(0), (size_t)domain.rows(), [&] (size_t i)
@@ -1238,17 +1270,13 @@ struct Block
 //         {
 //             sum_sq_err += (errs(i, errs.cols() - 1) * errs(i, errs.cols() - 1));
 //             if (i == 0 || errs(i, errs.cols() - 1) > max_err)
-//             {
 //                 max_err = errs(i, errs.cols() - 1);
-//                 max_idx = i;
-//             }
 //         }
 // 
 // #else                                               // single thread version
 // 
 //         // distance computation
 //         // TODO: only last variable
-//         size_t max_idx;
 //         for (size_t i = 0; i < (size_t)domain.rows(); i++)
 //         {
 //             if (decode_block)
@@ -1259,10 +1287,7 @@ struct Block
 //             else
 //                 errs(i, errs.cols() - 1) = mfa->Error(i, verbose);
 //             if (i == 0 || fabs(errs(i, errs.cols() - 1)) > fabs(max_err))
-//             {
 //                 max_err = errs(i, errs.cols() - 1);
-//                 max_idx = i;
-//             }
 //         }
 // 
 // #endif
@@ -1271,87 +1296,120 @@ struct Block
 //     }
 
     // compute error field and maximum error in the block
-    // uses difference between range values
+    // uses coordinate-wise difference between values
     void range_error(
             const   diy::Master::ProxyWithLink& cp,
             int     verbose,                                 // output level
             bool    decode_block)                            // decode entire block first
     {
         errs.resize(domain.rows(), domain.cols());
-        errs = domain;
+        errs            = domain;
+        int ndom_dims   = ndom_pts.size();                // domain dimensionality
 
         if (decode_block)
         {
             approx.resize(domain.rows(), domain.cols());
 
-            int ndom_dims = ndom_pts.size();                // domain dimensionality
             // geometry
             geometry.mfa->Decode(verbose, approx, 0, ndom_dims - 1);
 
             // science variables
             for (auto i = 0; i < vars.size(); i++)
-                vars[i].mfa->Decode(verbose, approx, ndom_dims, ndom_dims + i);
+                vars[i].mfa->Decode(verbose, approx, ndom_dims + i, ndom_dims + i);     // assumes all variables are scalar
         }
 
 #ifndef MFA_NO_TBB                                          // TBB version
 
         // distance computation
-        // TODO: only distance between last science variables
-        size_t max_idx;
-        int last = errs.cols() - 1;                 // range coordinate
         if (decode_block)
         {
             parallel_for (size_t(0), (size_t)domain.rows(), [&] (size_t i)
                     {
-                    VectorX<T> cpt = approx.row(i);
-                    errs(i, last) = fabs(cpt(last) - domain(i, last));
+                        VectorX<T> cpt = approx.row(i);
+                        for (auto j = 0; j < domain.cols(); j++)
+                        {
+                            T err = fabs(cpt(j) - domain(i, j));
+                            if (j >= ndom_dims)
+                                errs(i, j) = err;           // error for each science variable
+                        }
                     });
         }
         else
         {
             parallel_for (size_t(0), (size_t)domain.rows(), [&] (size_t i)
                     {
-                    errs(i, last) = vars[vars.size() - 1].mfa->RangeError(i, verbose);
+                        VectorX<T> err;                                 // errors for all coordinates in current model
+                        for (auto k = 0; k < vars.size() + 1; k++)      // for all models, geometry + science
+                        {
+                            if (k == 0)                                 // geometry
+                            {
+                                err.resize(geometry.max_dim - geometry.min_dim);
+                                geometry.mfa->AbsCoordError(i, err, verbose);
+                            }
+                            else
+                            {
+                                err.resize(vars[k - 1].max_dim - vars[k - 1].min_dim);
+                                vars[k - 1].mfa->AbsCoordError(i, err, verbose);
+                            }
+
+                            for (auto j = 0; j < err.size(); j++)
+                                if (k)                                              // science variables
+                                    errs(i, vars[k - 1].min_dim + j) = err(j); // error for each science variable
+                        }
                     });
-        }
-        sum_sq_err = 0.0;
-        for (size_t i = 0; i < domain.rows(); i++)
-        {
-            sum_sq_err += (errs(i, last) * errs(i, last));
-            if (i == 0 || errs(i, last) > max_err)
-            {
-                max_err = errs(i, last);
-                max_idx = i;
-            }
         }
 
 #else                                               // single thread version
 
-        // distance computation
-        // TODO: only distance between last science variables
-        size_t max_idx;
-        int last   = errs.cols() - 1;               // range coordinate
-        sum_sq_err = 0.0;
-        for (size_t i = 0; i < (size_t)domain.rows(); i++)
+        for (auto i = 0; i < (size_t)domain.rows(); i++)
         {
             if (decode_block)
             {
                 VectorX<T> cpt = approx.row(i);
-                errs(i, last) = fabs(cpt(last) - domain(i, last));
+                for (auto j = 0; j < domain.cols(); j++)
+                {
+                    T err = fabs(cpt(j) - domain(i, j));
+                    if (j >= ndom_dims)
+                        errs(i, j) = err;           // error for each science variable
+                }
             }
             else
-                errs(i, last) = vars[vars.size() - 1].mfa->RangeError(i, verbose);
-            sum_sq_err += (errs(i, last) * errs(i, last));
-            if (i == 0 || errs(i, last) > max_err)
             {
-                max_err = errs(i, last);
-                max_idx = i;
+                VectorX<T> err;                                 // errors for all coordinates in current model
+                for (auto k = 0; k < vars.size() + 1; k++)      // for all models, geometry + science
+                {
+                    if (k == 0)                                 // geometry
+                    {
+                        err.resize(geometry.max_dim - geometry.min_dim);
+                        geometry.mfa->AbsCoordError(i, err, verbose);
+                    }
+                    else
+                    {
+                        err.resize(vars[k - 1].max_dim - vars[k - 1].min_dim);
+                        vars[k - 1].mfa->AbsCoordError(i, err, verbose);
+                    }
+
+                    for (auto j = 0; j < err.size(); j++)
+                    {
+                        if (k)                                              // science variables
+                            errs(i, vars[k - 1].min_dim + j) = err(j);      // error for each science variable
+                    }
+                }
             }
         }
 
 #endif
 
-//         mfa->max_err = max_err;
+        sum_sq_err = 0.0;
+        for (auto i = 0; i < domain.rows(); i++)
+        {
+            for (auto j = ndom_dims; j < domain.cols(); j++)
+            {
+                sum_sq_err += (errs(i, j) * errs(i, j));
+                if ((i == 0 && j == ndom_dims) || errs(i, j) > max_err)
+                    max_err = errs(i, j);
+            }
+        }
     }
 
     // save knot span domains for later comparison with error field
@@ -1375,40 +1433,39 @@ struct Block
 //         cerr << "domain\n" << domain << endl;
 
         // geometry
-        cerr << "----- geometry model -----" << endl;
+        cerr << "\n------- geometry model -------" << endl;
         cerr << "nctrl_pts:\n" << geometry.nctrl_pts << endl;
 //         cerr << geometry.ctrl_pts.rows() << " final control points\n" << geometry.ctrl_pts << endl;
 //         cerr << geometry.weights.size()  << " final weights\n" << geometry.weights << endl;
 //         cerr << geometry.knots.size() << " knots\n" << geometry.knots << endl;
         fprintf(stderr, "# output ctrl pts     = %ld\n", geometry.ctrl_pts.rows());
         fprintf(stderr, "# output knots        = %ld\n", geometry.knots.size());
-        cerr << "--------------------------" << endl;
+        cerr << "-----------------------------" << endl;
 
 
         // science variables
-        cerr << "----- science variable models -----" << endl;
+        cerr << "\n----- science variable models -----" << endl;
         for (auto i = 0; i < vars.size(); i++)
         {
-            cerr << "----- var " << i << " -----" << endl;
+            cerr << "\n---------- var " << i << " ----------" << endl;
             cerr << "nctrl_pts:\n" << vars[i].nctrl_pts << endl;
 //             cerr << vars[i].ctrl_pts.rows() << " final control points\n" << vars[i].ctrl_pts << endl;
 //             cerr << vars[i].weights.size()  << " final weights\n" << vars[i].weights << endl;
 //             cerr << vars[i].knots.size() << " knots\n" << vars[i].knots << endl;
-            cerr << "--------------------------" << endl;
             fprintf(stderr, "# output ctrl pts     = %ld\n", vars[i].ctrl_pts.rows());
             fprintf(stderr, "# output knots        = %ld\n", vars[i].knots.size());
+            cerr << "-----------------------------" << endl;
         }
-        cerr << "-----------------------------------" << endl;
+        cerr << "\n-----------------------------------" << endl;
 
 //         cerr << approx.rows() << " approximated points\n" << approx << endl;
+        T rms_err = sqrt(sum_sq_err / (domain.rows()) * vars.size());
         fprintf(stderr, "range extent          = %e\n",  range_extent);
         fprintf(stderr, "max_err               = %e\n",  max_err);
         fprintf(stderr, "normalized max_err    = %e\n",  max_err / range_extent);
         fprintf(stderr, "sum of squared errors = %e\n",  sum_sq_err);
-        //         DEPRECATE
-//         fprintf(stderr, "L2 error              = %e\n",  sqrt(sum_sq_err / nctrl_pts.rows()));
-        fprintf(stderr, "RMS error             = %e\n",  sqrt(sum_sq_err / domain.rows()));
-        fprintf(stderr, "normalized RMS error  = %e\n",  sqrt(sum_sq_err / domain.rows()) / range_extent);
+        fprintf(stderr, "RMS error             = %e\n",  rms_err);
+        fprintf(stderr, "normalized RMS error  = %e\n",  rms_err / range_extent);
         fprintf(stderr, "# input points        = %ld\n", domain.rows());
 
         // compute compression ratio

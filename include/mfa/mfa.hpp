@@ -163,11 +163,12 @@ namespace mfa
             return err;
         }
 
-        // compute the error (absolute value of difference of range coordinates) of the mfa at a domain point
+        // compute the error (absolute value of coordinate-wise difference) of the mfa at a domain point
         // error is not normalized by the data range (absolute, not relative error)
-        T RangeError(
-                size_t idx,               // index of domain point
-                int    verbose)           // output level
+        void AbsCoordError(
+                size_t      idx,                // index of domain point
+                VectorX<T>& error,              // absolute value of error at each coordinate
+                int         verbose)            // output level
         {
             // convert linear idx to multidim. i,j,k... indices in each domain dimension
             VectorXi ijk(mfa->p.size());
@@ -183,11 +184,36 @@ namespace mfa
             Decoder<T> decoder(*mfa, verbose);
             decoder.VolPt(param, cpt);
 
-            int last = mfa->domain.cols() - 1;           // range coordinate
-            T err = fabs(cpt(last) - mfa->domain(idx, last));
-
-            return err;
+            for (auto i = 0; i < mfa->ctrl_pts.cols(); i++)
+                error(i) = fabs(cpt(i) - mfa->domain(idx, mfa->min_dim + i));
         }
+
+        // DEPRECATED, use CoordError instead
+        // compute the error (absolute value of difference of range coordinates) of the mfa at a domain point
+        // error is not normalized by the data range (absolute, not relative error)
+//         T RangeError(
+//                 size_t idx,               // index of domain point
+//                 int    verbose)           // output level
+//         {
+//             // convert linear idx to multidim. i,j,k... indices in each domain dimension
+//             VectorXi ijk(mfa->p.size());
+//             mfa->idx2ijk(idx, ijk);
+// 
+//             // compute parameters for the vertices of the cell
+//             VectorX<T> param(mfa->p.size());
+//             for (int i = 0; i < mfa->p.size(); i++)
+//                 param(i) = mfa->params(ijk(i) + mfa->po[i]);
+// 
+//             // approximated value
+//             VectorX<T> cpt(mfa->ctrl_pts.cols());          // approximated point
+//             Decoder<T> decoder(*mfa, verbose);
+//             decoder.VolPt(param, cpt);
+// 
+//             int last = mfa->domain.cols() - 1;           // range coordinate
+//             T err = fabs(cpt(last) - mfa->domain(idx, last));
+// 
+//             return err;
+//         }
 
         T NormalDistance(
                 VectorX<T>& pt,             // point whose distance from domain is desired

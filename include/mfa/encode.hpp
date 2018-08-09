@@ -703,7 +703,7 @@ namespace mfa
                 P(i, P.cols() - 1) = P2(i, P.cols() - 1);
 #endif
 
-            // append points from P to control points
+            // append points from P to control points that will become inputs for next dimension
             // TODO: any way to avoid this?
             CopyCtrl(P, k, co, cs, to, temp_ctrl0, temp_ctrl1);
 
@@ -715,7 +715,7 @@ namespace mfa
             }
         }
 
-        // copy points from P to temporary control points
+        // append solved control points from P to become inputs for next dimension
         // TODO: any way to avoid this copy?
         // last dimension gets copied to final control points
         // previous dimensions get copied to alternating double buffers
@@ -742,13 +742,13 @@ namespace mfa
                 for (int i = 0; i < P.rows(); i++)
                     temp_ctrl0.row(to + i * cs) = P.row(i);
             }
-            // even numbered dims (but not the last one) copied from temp_ctrl1 to temp_ctrl0
+            // even numbered dims (but not the last one) copied from P to temp_ctrl0
             else if (k % 2 == 0 && k < ndims - 1)
             {
                 for (int i = 0; i < P.rows(); i++)
                     temp_ctrl0.row(to + i * cs) = P.row(i);
             }
-            // odd numbered dims (but not the last one) copied from temp_ctrl0 to temp_ctrl1
+            // odd numbered dims (but not the last one) copied from P to temp_ctrl1
             else if (k % 2 == 1 && k < ndims - 1)
             {
                 for (int i = 0; i < P.rows(); i++)
@@ -768,29 +768,30 @@ namespace mfa
             }
         }
 
-        // append points from P to temporary control points
-        // TODO: any way to avoid this copy?
-        // just simple copy to one temporary buffer, no alternating double buffers
-        // nor copy to final control points
-        void CopyCtrl(
-                MatrixX<T>& P,          // solved points for current dimension and curve
-                int         k,          // current dimension
-                size_t      co,         // starting offset for reading domain points
-                MatrixX<T>& temp_ctrl)  // temporary control points buffer
-        {
-            // clamp all dimensions other than k to the same as the domain points
-            // this eliminates any wiggles in other dimensions from the computation of P (typically ~10^-5)
-            for (int i = 0; i < P.rows(); i++)
-            {
-                for (auto j = 0; j < mfa.ctrl_pts.cols(); j++)
-                {
-                    if (j < mfa.p.size() && j != k)
-                        temp_ctrl(i, j) = mfa.domain(co, j);
-                    else
-                        temp_ctrl(i, j) = P(i, j);
-                }
-            }
-        }
+        //         DEPRECATED
+//         // append points from P to temporary control points
+//         // TODO: any way to avoid this copy?
+//         // just simple copy to one temporary buffer, no alternating double buffers
+//         // nor copy to final control points
+//         void CopyCtrl(
+//                 MatrixX<T>& P,          // solved points for current dimension and curve
+//                 int         k,          // current dimension
+//                 size_t      co,         // starting offset for reading domain points
+//                 MatrixX<T>& temp_ctrl)  // temporary control points buffer
+//         {
+//             // clamp all dimensions other than k to the same as the domain points
+//             // this eliminates any wiggles in other dimensions from the computation of P (typically ~10^-5)
+//             for (int i = 0; i < P.rows(); i++)
+//             {
+//                 for (auto j = 0; j < mfa.ctrl_pts.cols(); j++)
+//                 {
+//                     if (j < mfa.p.size() && j != k)
+//                         temp_ctrl(i, j) = mfa.domain(co, j);
+//                     else
+//                         temp_ctrl(i, j) = P(i, j);
+//                 }
+//             }
+//         }
 
         // computes new knots to be inserted into a curve
         // for each current knot span where the error is greater than the limit, finds the domain point
@@ -819,6 +820,7 @@ namespace mfa
                     span++;
 
                 decoder.CurvePt(k, mfa.params(mfa.po[k] + i), ctrl_pts, weights, cpt, mfa.ko[k]);
+
 
                 // error
                 T max_err = 0.0;
@@ -997,12 +999,8 @@ namespace mfa
                                 P(i, P.cols() - 1) = P2(i, P.cols() - 1);
 #endif
 
-                            // append points from P to control points
-                            // TODO: any way to avoid this?
-                            CopyCtrl(P, k, mfa.co[k][j], temp_ctrl);
-
                             // compute the error on the curve (number of input points with error > err_limit)
-                            size_t nerr = ErrorCurve(k, mfa.co[k][j], temp_ctrl, weights, extents, err_spans, err_limit);
+                            size_t nerr = ErrorCurve(k, mfa.co[k][j], P, weights, extents, err_spans, err_limit);
 
                             if (nerr > max_nerr)
                             {

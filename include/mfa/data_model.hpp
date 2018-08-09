@@ -1050,8 +1050,8 @@ namespace mfa
        T                         eps;           // minimum difference considered significant
        T                         max_err;       // unnormalized absolute value of maximum error
        vector<KnotSpan <T> >     knot_spans;    // knot spans
-       int                       min_dim;       // starting coordinate for range data
-       int                       max_dim;       // ending coordinate for range data
+       int                       min_dim;       // starting coordinate of this model in full-dimensional data
+       int                       max_dim;       // ending coordinate of this model in full-dimensional data
     };
 
 }
