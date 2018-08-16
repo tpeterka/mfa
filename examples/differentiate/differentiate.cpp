@@ -44,7 +44,7 @@ int main(int argc, char** argv)
     ops >> opts::Option('i', "infile",  infile,  " diy input file name");
     ops >> opts::Option('a', "partial", partial, " dimension of 1 partial derivative only");
 
-    if (ops >> opts::Present('h', "help", "show help"))
+    if (ops >> opts::Present('h', "help", " show help"))
     {
         if (world.rank() == 0)
             std::cout << ops;
@@ -83,7 +83,7 @@ int main(int argc, char** argv)
     fprintf(stderr, "\nComputing derivative...\n");
     double decode_time = MPI_Wtime();
     master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-            { b->differentiate_block(cp, 1, deriv, partial); });
+            { b->differentiate_block(cp, 1, deriv, partial, -1); });
     decode_time = MPI_Wtime() - decode_time;
 
     // print results

@@ -1176,53 +1176,70 @@ struct Block
             vars[i].mfa->Decode(approx, ndom_dims + i, ndom_dims + i);  // assumes each variable is scalar
     }
 
-    // TODO: convert the following to split models
 
-//     // differentiate entire block
-//     void differentiate_block(
-//             const diy::Master::ProxyWithLink& cp,
-//             int                               verbose,  // output level
-//             int                               deriv,    // which derivative to take (1 = 1st, 2 = 2nd, ...) in each domain dim.
-//             int                               partial)  // limit to partial derivative in just this dimension (-1 = no limit)
-//     {
-//         approx.resize(domain.rows(), domain.cols());
-//         mfa = new mfa::MFA<T>(p, ndom_pts, domain, ctrl_pts, nctrl_pts, weights, knots);
-//         VectorXi derivs(p.size());
-//         for (auto i = 0; i < derivs.size(); i++)
-//             derivs(i) = deriv;
-// 
-//         // optional limit to one partial derivative
-//         if (deriv && p.size() > 1 && partial >= 0)
-//         {
-//             for (auto i = 0; i < p.size(); i++)
-//             {
-//                 if (i != partial)
-//                     derivs(i) = 0;
-//             }
-//         }
-// 
-//         mfa->Decode(approx, verbose, derivs);
-// 
-//         // the derivative is a vector of same dimensionality as domain
-//         // derivative needs to be scaled by domain extent because u,v,... are in [0.0, 1.0]
-//         if (deriv)
-//         {
-//             if (p.size() == 1 || partial >= 0) // TODO: not for mixed partials
-//             {
-//                 if (p.size() == 1)
-//                     partial = 0;
-//                 for (auto j = 0; j < approx.cols(); j++)
-//                     // scale once for each derivative
-//                     for (auto i = 0; i < deriv; i++)
-//                         approx.col(j) /= (domain_maxs(partial) - domain_mins(partial));
-//             }
-//         }
-// 
-//         // for plotting, set all but the last dimension to be the same as the input domain
-//         if (deriv)
-//             for (auto i = 0; i < domain.cols() - 1; i++)
-//                 approx.col(i) = domain.col(i);
-//     }
+    // differentiate entire block
+    void differentiate_block(
+            const diy::Master::ProxyWithLink& cp,
+            int                               verbose,  // output level
+            int                               deriv,    // which derivative to take (1 = 1st, 2 = 2nd, ...) in each domain dim.
+            int                               partial,  // limit to partial derivative in just this dimension (-1 = no limit)
+            int                               var)      // differentiate only this one science variable (0 to nvars -1, -1 = all vars)
+    {
+        approx.resize(domain.rows(), domain.cols());
+        int ndom_dims = ndom_pts.size();                // domain dimensionality
+        VectorXi derivs(ndom_dims);
+
+        for (auto i = 0; i < derivs.size(); i++)
+            derivs(i) = deriv;
+
+        // optional limit to one partial derivative
+        if (deriv && ndom_dims > 1 && partial >= 0)
+        {
+            for (auto i = 0; i < ndom_dims; i++)
+            {
+                if (i != partial)
+                    derivs(i) = 0;
+            }
+        }
+
+        // science variables
+        for (auto i = 0; i < vars.size(); i++)
+            if (var < 0 || var == i)
+            {
+                vars[i].mfa = new mfa::MFA<T>(vars[i].p,
+                                              ndom_pts,
+                                              domain,
+                                              vars[i].ctrl_pts,
+                                              vars[i].nctrl_pts,
+                                              vars[i].weights,
+                                              vars[i].knots,
+                                              ndom_dims + i,        // assumes each variable is scalar
+                                              ndom_dims + i);
+                vars[i].mfa->Decode(verbose, approx, ndom_dims + i, ndom_dims + i, derivs);  // assumes each variable is scalar
+            }
+
+        // the derivative is a vector of same dimensionality as domain
+        // derivative needs to be scaled by domain extent because u,v,... are in [0.0, 1.0]
+        if (deriv)
+        {
+            if (ndom_dims == 1 || partial >= 0) // TODO: not for mixed partials
+            {
+                if (ndom_dims == 1)
+                    partial = 0;
+                for (auto j = 0; j < approx.cols(); j++)
+                    // scale once for each derivative
+                    for (auto i = 0; i < deriv; i++)
+                        approx.col(j) /= (domain_maxs(partial) - domain_mins(partial));
+            }
+        }
+
+        // for plotting, set the geometry coordinates to be the same as the input
+        if (deriv)
+            for (auto i = 0; i < ndom_dims; i++)
+                approx.col(i) = domain.col(i);
+    }
+
+// TODO: convert the following to split models
 
 //     // compute error field and maximum error in the block
 //     // uses normal distance to the curve, surface, etc.
