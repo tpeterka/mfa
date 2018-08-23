@@ -1047,6 +1047,7 @@ struct Block
                                        geometry.knots,
                                        0,
                                        ndom_dims - 1);
+        // TODO: consider not weighting the geometry (only science variables), depends on geometry complexity
         geometry.mfa->FixedEncode(geometry.nctrl_pts, a->verbose, a->weighted);
 
         // encode science variables
@@ -1096,6 +1097,7 @@ struct Block
                                        geometry.knots,
                                        0,
                                        ndom_dims - 1);
+        // TODO: consider not weighting the geometry (only science variables), depends on geometry complexity
         geometry.mfa->AdaptiveEncode(err_limit, geometry.nctrl_pts, a->verbose, a->weighted, extents, max_rounds);
 
         // encode science variables

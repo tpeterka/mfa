@@ -649,30 +649,15 @@ namespace mfa
                     Q.row(i) = temp_ctrl1.row(co + i * cs);
             }
 
-            // solve for weights in the last domain dimension only
             VectorX<T> weights = VectorX<T>::Ones(N.cols());
-            if (weighted)
-            {
 
 #ifndef MFA_NO_WEIGHTS
 
-                if (k == mfa.p.size() - 1)                  // last dimension
-                {
-                    if (!Weights(k, Q, N, NtN, curve_id, weights))    // solve for weights
-                    {
-                        // if weights not found, copy from previous curve, written to the mfa already
-                        // TODO: cheap hack; need a more robust way to make the weights similar across curves
-                        if (to)                             // not the first curve
-                        {
-                            //                     for (auto i = 0; i < weights.size(); i++)
-                            //                         weights(i) = mfa.weights(to - 1 + i * cs);
-                        }
-                    }
-                }
+            if (weighted)
+                if (k == mfa.p.size() - 1)                      // only during last dimension of separable iteration over dimensions
+                    Weights(k, Q, N, NtN, curve_id, weights);   // solve for weights
 
 #endif
-
-            }
 
             // compute R
             // first dimension reads from domain
