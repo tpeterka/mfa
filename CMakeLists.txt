@@ -32,7 +32,7 @@ if                          (${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
     endif                   ()
 endif                       (${CMAKE_SYSTEM_NAME} MATCHES      "Darwin")
 
- # MPI
+# MPI
  if                         (NOT wrapped_mpi)
      find_package           (MPI REQUIRED)
      set                    (libraries ${libraries} ${MPI_C_LIBRARIES} ${MPI_CXX_LIBRARIES})
@@ -94,9 +94,15 @@ set                         (libraries
                              ${COIN_UTILS_LIB}
                              ${CMAKE_THREAD_LIBS_INIT})
 
+# Testing
+# NB testing must be enabled before adding tests subdirectory, otherwise no tests will be found
+enable_testing              ()
+include                     (CTest)
+
 # Subdirectories
 if                          (DIY_INCLUDE_DIRS AND EIGEN_INCLUDE_DIRS)
     add_subdirectory        (examples)
+    add_subdirectory        (tests)
 else                        ()
     message                 (ERROR "Need diy2 and eigen in order to build mfa")
 endif                       ()
@@ -112,3 +118,4 @@ foreach                     (ITEM ${DEPLOY_FILES_AND_DIRS})
 endforeach                  ()
 install                     (FILES ${FILES_TO_DEPLOY} DESTINATION ${CMAKE_INSTALL_PREFIX}/include)
 install                     (DIRECTORY ${DIRS_TO_DEPLOY} DESTINATION ${CMAKE_INSTALL_PREFIX}/include)
+

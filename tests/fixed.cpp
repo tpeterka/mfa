@@ -239,15 +239,6 @@ int main(int argc, char** argv)
 #endif
     decode_time = MPI_Wtime() - decode_time;
 
-    // debug: write original and approximated data for reading into z-checker
-    // only for one block (one file name used, ie, last block will overwrite earlier ones)
-//     master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-//             { b->write_raw(cp); });
-
-    // debug: save knot span domains for comparing error with location in knot span
-//     master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-//             { b->knot_span_domains(cp); });
-
     // print results
     fprintf(stderr, "\n------- Final block results --------\n");
     master.foreach(&Block<real_t>::print_block);
@@ -257,4 +248,19 @@ int main(int argc, char** argv)
 
     // save the results in diy format
     diy::io::write_blocks("approx.out", world, master);
+
+    // check the results of the last (only) science variable
+    Block<real_t>* b    = static_cast<Block<real_t>*>(master.block(0));
+    int ndom_dims       = b->ndom_pts.size();                // domain dimensionality
+    real_t range_extent = b->domain.col(ndom_dims).maxCoeff() - b->domain.col(ndom_dims).minCoeff();
+    real_t err_factor   = 1.0e-3;
+    // for ./fixed-test -i sinc -d 3 -m 2 -p 1 -q 5 -v 20 -w 0
+    real_t expect_err   = 4.304489e-4;
+    real_t our_err      = b->max_errs[0] / range_extent;    // normalized max_err
+    if (fabs(expect_err - our_err) / expect_err > err_factor)
+    {
+        fprintf(stderr, "our error (%e) and expected error (%e) differ by more than a factor of %e\n", our_err, expect_err, err_factor);
+        abort();
+    }
+
 }

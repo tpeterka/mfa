@@ -1,3 +1,5 @@
+include_directories         (${CMAKE_SOURCE_DIR}/examples)          # needed for block.hpp and opts.h
+
 add_executable              (write_vtk              write_vtk.cpp writer.cpp)
 add_executable              (write_vtk_multiblock   write_vtk_multiblock.cpp writer.cpp)
 target_link_libraries       (write_vtk              ${libraries})

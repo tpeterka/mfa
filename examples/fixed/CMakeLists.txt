@@ -1,3 +1,5 @@
+include_directories         (${CMAKE_SOURCE_DIR}/examples)          # needed for block.hpp and opts.h
+
 add_executable              (fixed              fixed.cpp)
 add_executable              (fixed_multiblock   fixed_multiblock.cpp)
 target_link_libraries       (fixed              ${libraries})

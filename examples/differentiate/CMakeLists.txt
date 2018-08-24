@@ -1,3 +1,5 @@
+include_directories         (${CMAKE_SOURCE_DIR}/examples)          # needed for block.hpp and opts.h
+
 add_executable              (differentiate      differentiate.cpp)
 target_link_libraries       (differentiate      ${libraries})
 

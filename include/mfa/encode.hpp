@@ -589,7 +589,7 @@ namespace mfa
             {
                 if (mfa.nctrl_pts(i) <= mfa.p(i))
                 {
-                    fprintf(stderr, "Error: Encode() number of control points in dimension %ld"
+                    fprintf(stderr, "Error: Encode() number of control points in dimension %ld "
                             "must be at least p + 1 for dimension %ld\n", i, i);
                     exit(1);
                 }

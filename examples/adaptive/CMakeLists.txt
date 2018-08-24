@@ -1,3 +1,5 @@
+include_directories         (${CMAKE_SOURCE_DIR}/examples)          # needed for block.hpp and opts.h
+
 add_executable              (adaptive       adaptive.cpp)
 target_link_libraries       (adaptive       ${libraries})
 

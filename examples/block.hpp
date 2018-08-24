@@ -78,7 +78,7 @@ template <typename T>
 struct Model
 {
     VectorXi    p;                              // degree in each dimension
-    VectorXi    nctrl_pts;                      // number of control points in each dimension
+    VectorXi    nctrl_pts;                      // number of control points in each domain dimension
     MatrixX<T>  ctrl_pts;                       // NURBS control points (1st dim changes fastest)
     VectorX<T>  weights;                        // weights associated with control points
     VectorX<T>  knots;                          // NURBS knots (1st dim changes fastest)
@@ -203,6 +203,8 @@ struct Block
         DomainArgs* a   = &args;
         int nvars       = a->pt_dim - a->dom_dim;             // number of science variables
         vars.resize(nvars);
+        max_errs.resize(nvars);
+        sum_sq_errs.resize(nvars);
         int tot_ndom_pts    = 1;
         geometry.p.resize(a->dom_dim);
         geometry.min_dim = 0;
@@ -340,6 +342,8 @@ struct Block
         DomainArgs* a   = &args;
         int nvars       = a->pt_dim - a->dom_dim;             // number of science variables
         vars.resize(nvars);
+        max_errs.resize(nvars);
+        sum_sq_errs.resize(nvars);
         int tot_ndom_pts = 1;
         geometry.p.resize(a->dom_dim);
         geometry.min_dim = 0;
@@ -438,6 +442,10 @@ struct Block
         geometry.p.resize(a->dom_dim);
         geometry.min_dim = 0;
         geometry.max_dim = a->dom_dim - 1;
+        int nvars = 1;
+        vars.resize(nvars);
+        max_errs.resize(nvars);
+        sum_sq_errs.resize(nvars);
         vars[0].p.resize(a->dom_dim);
         vars[0].min_dim = a->dom_dim;
         vars[0].max_dim = vars[0].min_dim + 1;
@@ -512,6 +520,10 @@ struct Block
         geometry.p.resize(a->dom_dim);
         geometry.min_dim = 0;
         geometry.max_dim = a->dom_dim - 1;
+        int nvars = 1;
+        vars.resize(nvars);
+        max_errs.resize(nvars);
+        sum_sq_errs.resize(nvars);
         vars[0].p.resize(a->dom_dim);
         vars[0].min_dim = a->dom_dim;
         vars[0].max_dim = vars[0].min_dim + 1;
@@ -591,6 +603,10 @@ struct Block
         geometry.p.resize(a->dom_dim);
         geometry.min_dim = 0;
         geometry.max_dim = a->dom_dim - 1;
+        int nvars = 1;
+        vars.resize(nvars);
+        max_errs.resize(nvars);
+        sum_sq_errs.resize(nvars);
         vars[0].p.resize(a->dom_dim);
         vars[0].min_dim = a->dom_dim;
         vars[0].max_dim = vars[0].min_dim + 1;
@@ -693,6 +709,10 @@ struct Block
         geometry.p.resize(a->dom_dim);
         geometry.min_dim = 0;
         geometry.max_dim = a->dom_dim - 1;
+        int nvars = 1;
+        vars.resize(nvars);
+        max_errs.resize(nvars);
+        sum_sq_errs.resize(nvars);
         vars[0].p.resize(a->dom_dim);
         vars[0].min_dim = a->dom_dim;
         vars[0].max_dim = vars[0].min_dim + 1;
@@ -774,6 +794,10 @@ struct Block
         geometry.p.resize(a->dom_dim);
         geometry.min_dim = 0;
         geometry.max_dim = a->dom_dim - 1;
+        int nvars = 1;
+        vars.resize(nvars);
+        max_errs.resize(nvars);
+        sum_sq_errs.resize(nvars);
         vars[0].p.resize(a->dom_dim);
         vars[0].min_dim = a->dom_dim;
         vars[0].max_dim = vars[0].min_dim + 1;
@@ -879,6 +903,10 @@ struct Block
         geometry.p.resize(a->dom_dim);
         geometry.min_dim = 0;
         geometry.max_dim = a->dom_dim - 1;
+        int nvars = 1;
+        vars.resize(nvars);
+        max_errs.resize(nvars);
+        sum_sq_errs.resize(nvars);
         vars[0].p.resize(a->dom_dim);
         vars[0].min_dim = a->dom_dim;
         vars[0].max_dim = vars[0].min_dim + 1;
@@ -950,6 +978,10 @@ struct Block
         geometry.p.resize(a->dom_dim);
         geometry.min_dim = 0;
         geometry.max_dim = a->dom_dim - 1;
+        int nvars = 1;
+        vars.resize(nvars);
+        max_errs.resize(nvars);
+        sum_sq_errs.resize(nvars);
         vars[0].p.resize(a->dom_dim);
         vars[0].min_dim = a->dom_dim;
         vars[0].max_dim = vars[0].min_dim + 1;
@@ -1419,14 +1451,15 @@ struct Block
 
 #endif
 
-        sum_sq_err = 0.0;
+        for (auto j = ndom_dims; j < domain.cols(); j++)
+            sum_sq_errs[j - ndom_dims] = 0.0;
         for (auto i = 0; i < domain.rows(); i++)
         {
             for (auto j = ndom_dims; j < domain.cols(); j++)
             {
-                sum_sq_err += (errs(i, j) * errs(i, j));
-                if ((i == 0 && j == ndom_dims) || errs(i, j) > max_err)
-                    max_err = errs(i, j);
+                sum_sq_errs[j - ndom_dims] += (errs(i, j) * errs(i, j));
+                if ((i == 0 && j == ndom_dims) || errs(i, j) > max_errs[j - ndom_dims])
+                    max_errs[j - ndom_dims] = errs(i, j);
             }
         }
     }
@@ -1444,9 +1477,7 @@ struct Block
 
     void print_block(const diy::Master::ProxyWithLink& cp)
     {
-        // max extent of input data points
-        int last            = domain.cols() - 1;
-        real_t range_extent = domain.col(last).maxCoeff() - domain.col(last).minCoeff();
+        int ndom_dims = ndom_pts.size();                // domain dimensionality
 
 //         fprintf(stderr, "gid = %d\n", cp.gid());
 //         cerr << "domain\n" << domain << endl;
@@ -1466,6 +1497,7 @@ struct Block
         cerr << "\n----- science variable models -----" << endl;
         for (auto i = 0; i < vars.size(); i++)
         {
+            real_t range_extent = domain.col(ndom_dims + i).maxCoeff() - domain.col(ndom_dims + i).minCoeff();
             cerr << "\n---------- var " << i << " ----------" << endl;
             cerr << "nctrl_pts:\n" << vars[i].nctrl_pts << endl;
 //             cerr << vars[i].ctrl_pts.rows() << " final control points\n" << vars[i].ctrl_pts << endl;
@@ -1473,18 +1505,18 @@ struct Block
 //             cerr << vars[i].knots.size() << " knots\n" << vars[i].knots << endl;
             fprintf(stderr, "# output ctrl pts     = %ld\n", vars[i].ctrl_pts.rows());
             fprintf(stderr, "# output knots        = %ld\n", vars[i].knots.size());
+            T rms_err = sqrt(sum_sq_errs[i] / (domain.rows()));
+            fprintf(stderr, "range extent          = %e\n",  range_extent);
+            fprintf(stderr, "max_err               = %e\n",  max_errs[i]);
+            fprintf(stderr, "normalized max_err    = %e\n",  max_errs[i] / range_extent);
+            fprintf(stderr, "sum of squared errors = %e\n",  sum_sq_errs[i]);
+            fprintf(stderr, "RMS error             = %e\n",  rms_err);
+            fprintf(stderr, "normalized RMS error  = %e\n",  rms_err / range_extent);
             cerr << "-----------------------------" << endl;
         }
         cerr << "\n-----------------------------------" << endl;
 
 //         cerr << approx.rows() << " approximated points\n" << approx << endl;
-        T rms_err = sqrt(sum_sq_err / (domain.rows()) * vars.size());
-        fprintf(stderr, "range extent          = %e\n",  range_extent);
-        fprintf(stderr, "max_err               = %e\n",  max_err);
-        fprintf(stderr, "normalized max_err    = %e\n",  max_err / range_extent);
-        fprintf(stderr, "sum of squared errors = %e\n",  sum_sq_err);
-        fprintf(stderr, "RMS error             = %e\n",  rms_err);
-        fprintf(stderr, "normalized RMS error  = %e\n",  rms_err / range_extent);
         fprintf(stderr, "# input points        = %ld\n", domain.rows());
 
         // compute compression ratio
@@ -1500,7 +1532,6 @@ struct Block
 
 //         fprintf(stderr, "compression ratio     = %.2f\n",
 //                 (real_t)(domain.rows()) / (ctrl_pts.rows() + knots.size() / ctrl_pts.cols()));
-        fprintf(stderr, "\n");
     }
 
     void print_deriv(const diy::Master::ProxyWithLink& cp)
@@ -1573,11 +1604,12 @@ struct Block
     // output data
     MatrixX<T>          approx;                 // points in approximated volume
 
-    // errors
-    real_t              max_err;                // maximum (abs value) distance from input points to curve
-    real_t              sum_sq_err;             // sum of squared errors
+    // errors for each science variable
+    vector<T>           max_errs;               // maximum (abs value) distance from input points to curve
+    vector<T>           sum_sq_errs;            // sum of squared errors
+
+    // error field for last science variable only
     MatrixX<T>          errs;                   // error field (abs. value, not normalized by data range)
-    real_t              s;                      // scaling factor on range values (for error checking)
 
     // knot spans (for debugging)
     VectorXi            span_mins;              // idx of minimum domain points of all knot spans
