@@ -218,4 +218,29 @@ int main(int argc, char** argv)
 
     // save the results in diy format
     diy::io::write_blocks("approx.out", world, master);
+
+    // check the results of the last (only) science variable
+    // only checking error for one rank and one configuration of total number of blocks
+    if (world.rank() == 0 && tot_blocks == 4)
+    {
+        Block<real_t>* b        = static_cast<Block<real_t>*>(master.block(0));
+        int     ndom_dims       = b->ndom_pts.size();               // domain dimensionality
+        real_t  range_extent    = b->domain.col(ndom_dims).maxCoeff() - b->domain.col(ndom_dims).minCoeff();
+        real_t  err_factor      = 1.0e-3;
+        real_t  our_err         = b->max_errs[0] / range_extent;    // actual normalized max_err
+        real_t  expect_err;                                         // expected (normalized max) error
+
+        // for ./fixed-multiblock-test> -i sinc -d 3 -m 2 -p 1 -q 5 -n 500 -v 50 -b 4 -t 1 -w 0
+        if (strong_sc)
+            expect_err   = 4.021332e-7;
+        // for ./fixed-multiblock-test> -i sinc -d 3 -m 2 -p 1 -q 5 -n 100 -v 10 -b 4 -t 0 -w 0
+        else
+            expect_err   = 7.246911e-3;
+
+        if (fabs(expect_err - our_err) / expect_err > err_factor)
+        {
+            fprintf(stderr, "our error (%e) and expected error (%e) differ by more than a factor of %e\n", our_err, expect_err, err_factor);
+            abort();
+        }
+    }
 }

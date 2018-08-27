@@ -46,7 +46,7 @@ add_test                    (NAME write-vtk-multiblock-fixed-test
                              COMMAND write-vtk-multiblock-test approx.out
                             )
 
-add_test                    (NAME adaptive-test
+add_test                    (NAME adaptive-sinc-test
                              COMMAND adaptive-test -i sinc -d 3 -m 2 -p 1 -q 5 -e 1e-2 -w 0
                             )
 
@@ -56,6 +56,10 @@ add_test                    (NAME differentiate-adaptive-test
 
 add_test                    (NAME write-vtk-adaptive-test
                              COMMAND write-vtk-test approx.out
+                            )
+
+add_test                    (NAME adaptive-s3dtest
+                             COMMAND adaptive-test -i s3d -d 2 -m 1 -p 1 -q 3 -e 1e-2 -w 0
                             )
 
 

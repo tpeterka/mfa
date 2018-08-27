@@ -270,14 +270,27 @@ int main(int argc, char** argv)
     diy::io::write_blocks("approx.out", world, master);
 
     // check the results of the last (only) science variable
-    Block<real_t>* b    = static_cast<Block<real_t>*>(master.block(0));
-    int ndom_dims       = b->ndom_pts.size();                // domain dimensionality
-    real_t range_extent = b->domain.col(ndom_dims).maxCoeff() - b->domain.col(ndom_dims).minCoeff();
-    real_t err_factor   = 1.0e-3;
-    // for ./adaptive-test -i sinc -d 4 -m 3 -p 1 -q 5 -e 1e-2 -w 0
-    real_t expect_err   = 1.894724e-2;
-    real_t our_err      = b->max_errs[0] / range_extent;    // normalized max_err
-    int expect_nctrl    = 169;
+    Block<real_t>* b        = static_cast<Block<real_t>*>(master.block(0));
+    int     ndom_dims       = b->ndom_pts.size();               // domain dimensionality
+    real_t  range_extent    = b->domain.col(ndom_dims).maxCoeff() - b->domain.col(ndom_dims).minCoeff();
+    real_t  err_factor      = 1.0e-3;
+    real_t  our_err         = b->max_errs[0] / range_extent;    // actual normalized max_err
+    real_t  expect_err;                                         // expected (normalized max) error
+    int     expect_nctrl;                                       // expected number of control points
+
+    if (input == "sinc")
+    {
+        // for ./adaptive-test -i sinc -d 4 -m 3 -p 1 -q 5 -e 1e-2 -w 0
+        expect_err   = 1.894724e-2;
+        expect_nctrl    = 169;
+    }
+    if (input == "s3d")
+    {
+        // for ./adaptive-test -i s3d -d 2 -m 1 -p 1 -q 3 -e 1e-2 -w 0
+        expect_err   = 8.884982e-3;
+        expect_nctrl    = 91;
+    }
+
     int our_nctrl       = b->vars[0].ctrl_pts.rows();
     if (fabs(expect_err - our_err) / expect_err > err_factor)
     {
