@@ -241,7 +241,6 @@ struct Block
             tot_ndom_pts    *= ndom_pts(i);
         }
         domain.resize(tot_ndom_pts, a->pt_dim);
-//         s = a->s[0];
 
         // get local block bounds
         // if single block, they are passed in args
@@ -381,7 +380,6 @@ struct Block
             tot_ndom_pts    *= ndom_pts(i);
         }
         domain.resize(tot_ndom_pts, a->pt_dim);
-//         s = a->s[0];
 
         // get local block bounds
         // if single block, they are passed in args
@@ -1607,7 +1605,9 @@ namespace diy
                 {
                     diy::save(bb, m.rows());
                     diy::save(bb, m.cols());
-                    diy::save(bb, m.data(), m.rows() * m.cols());
+                    for (size_t i = 0; i < m.rows(); ++i)
+                        for (size_t j = 0; j < m.cols(); ++j)
+                            diy::save(bb, m(i, j));
                 }
             static
                 void load(diy::BinaryBuffer& bb, MatrixX<T>& m)
@@ -1616,7 +1616,9 @@ namespace diy
                     diy::load(bb, rows);
                     diy::load(bb, cols);
                     m.resize(rows, cols);
-                    diy::load(bb, m.data(), rows * cols);
+                    for (size_t i = 0; i < m.rows(); ++i)
+                        for (size_t j = 0; j < m.cols(); ++j)
+                            diy::load(bb, m(i, j));
                 }
         };
         template <typename T>
@@ -1626,7 +1628,8 @@ namespace diy
                 void save(diy::BinaryBuffer& bb, const VectorX<T>& v)
                 {
                     diy::save(bb, v.size());
-                    diy::save(bb, v.data(), v.size());
+                    for (size_t i = 0; i < v.size(); ++i)
+                        diy::save(bb, v(i));
                 }
             static
                 void load(diy::BinaryBuffer& bb, VectorX<T>& v)
@@ -1634,7 +1637,8 @@ namespace diy
                     Index size;
                     diy::load(bb, size);
                     v.resize(size);
-                    diy::load(bb, v.data(), size);
+                    for (size_t i = 0; i < size; ++i)
+                        diy::load(bb, v(i));
                 }
         };
         template<>
@@ -1644,7 +1648,8 @@ namespace diy
                 void save(diy::BinaryBuffer& bb, const VectorXi& v)
                 {
                     diy::save(bb, v.size());
-                    diy::save(bb, v.data(), v.size());
+                    for (size_t i = 0; i < v.size(); ++i)
+                        diy::save(bb, v(i));
                 }
             static
                 void load(diy::BinaryBuffer& bb, VectorXi& v)
@@ -1652,7 +1657,8 @@ namespace diy
                     Index size;
                     diy::load(bb, size);
                     v.resize(size);
-                    diy::load(bb, v.data(), size);
-                }
+                    for (size_t i = 0; i < size; ++i)
+                        diy::load(bb, v.data()[i]);
+                 }
         };
 }
