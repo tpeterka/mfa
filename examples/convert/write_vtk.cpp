@@ -38,8 +38,6 @@ void PrepRenderingData(
         vector<vec3d>&              approx_pts,
         float**&                    approx_data,
         vector<vec3d>&              err_pts,
-        vector<vec3d>&              block_mins,
-        vector<vec3d>&              block_maxs,
         diy::Master&                master)
 {
     for (int i = 0; i < master.size(); i++)          // blocks
@@ -136,20 +134,6 @@ void PrepRenderingData(
             if (block->errs.cols() == 2 && p.y > max_err)
                 max_err = p.y;
         }
-
-        // block mins
-        p.x = block->domain_mins(0);
-        p.y = block->domain_mins(1);
-        p.z = block->domain_mins.size() > 2 ?
-            block->domain_mins(2) : 0.0;
-        block_mins.push_back(p);
-
-        // block maxs
-        p.x = block->domain_maxs(0);
-        p.y = block->domain_maxs(1);
-        p.z = block->domain_maxs.size() > 2 ?
-            block->domain_maxs(2) : 0.0;
-        block_maxs.push_back(p);
     }
 }
 
@@ -171,8 +155,6 @@ int main(int argc, char ** argv)
     vector<vec3d>               approx_pts;         // aproximated data points (<= 3d)
     float**                     approx_data;        // approximated data values (4d)
     vector<vec3d>               err_pts;            // abs value error field
-    vector<vec3d>               block_mins;         // block mins
-    vector<vec3d>               block_maxs;         // block maxs
     string infile(argv[1]);
 
     diy::FileStorage storage("./DIY.XXXXXX");     // used for blocks to be moved out of core
@@ -198,8 +180,6 @@ int main(int argc, char ** argv)
                       approx_pts,
                       approx_data,
                       err_pts,
-                      block_mins,
-                      block_maxs,
                       master);
 
     // pad dimensions up to 3

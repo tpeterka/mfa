@@ -7,6 +7,12 @@ option                      (tbb_thread     "Enable TBB threading"              
 # C++11
 set                         (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
 
+# Default to Release
+if                          (NOT CMAKE_BUILD_TYPE)
+    set                     (CMAKE_BUILD_TYPE "Release" CACHE STRING "Choose the type of build, options are: Debug Release RelWithDebInfo MinSizeRel." FORCE)
+    set_property            (CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS "Debug" "Release" "MinSizeRel" "RelWithDebInfo")
+endif                       (NOT CMAKE_BUILD_TYPE)
+
 # OSX flags
 if                          (${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
   add_definitions           (-DMAC_OSX)

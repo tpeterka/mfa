@@ -91,6 +91,26 @@ struct Model
 template <typename T>
 struct Block
 {
+    // input data
+    VectorXi            ndom_pts;              // number of domain points in each dimension
+    MatrixX<T>          domain;                // input data (1st dim changes fastest)
+    VectorX<T>          domain_mins;           // local domain minimum corner
+    VectorX<T>          domain_maxs;           // local domain maximum corner
+
+    // MFA models
+    Model<T>            geometry;               // geometry MFA
+    vector< Model<T> >  vars;                   // science variable MFAs
+
+    // output data
+    MatrixX<T>          approx;                 // points in approximated volume
+
+    // errors for each science variable
+    vector<T>           max_errs;               // maximum (abs value) distance from input points to curve
+    vector<T>           sum_sq_errs;            // sum of squared errors
+
+    // error field for last science variable only
+    MatrixX<T>          errs;                   // error field (abs. value, not normalized by data range)
+
     static
         void* create()          { return new Block; }
 
@@ -154,8 +174,6 @@ struct Block
 
             diy::save(bb, b->approx);
             diy::save(bb, b->errs);
-            diy::save(bb, b->span_mins);
-            diy::save(bb, b->span_maxs);
         }
     static
         void load(
@@ -191,8 +209,6 @@ struct Block
 
             diy::load(bb, b->approx);
             diy::load(bb, b->errs);
-            diy::load(bb, b->span_mins);
-            diy::load(bb, b->span_maxs);
         }
 
     // f(x,y,...) = sine(x)/x * sine(y)/y * ...
@@ -1464,17 +1480,6 @@ struct Block
         }
     }
 
-    // save knot span domains for later comparison with error field
-    void knot_span_domains(const diy::Master::ProxyWithLink& cp)
-    {
-        // geometry
-        geometry.mfa->KnotSpanDomains(span_mins, span_maxs);
-
-        // science variables
-        for (auto i = 0; i < vars.size(); i++)
-            vars[i].mfa->KnotSpanDomains(span_mins, span_maxs);
-    }
-
     void print_block(const diy::Master::ProxyWithLink& cp)
     {
         int ndom_dims = ndom_pts.size();                // domain dimensionality
@@ -1590,30 +1595,6 @@ struct Block
                 fprintf(stderr, "Error writing raw data: approximated data does match writen/read back data\n");
 #endif
     }
-
-    // input data
-    VectorXi            ndom_pts;              // number of domain points in each dimension
-    MatrixX<T>          domain;                // input data (1st dim changes fastest)
-    VectorX<T>          domain_mins;           // local domain minimum corner
-    VectorX<T>          domain_maxs;           // local domain maximum corner
-
-    // MFA models
-    Model<T>            geometry;               // geometry MFA
-    vector< Model<T> >  vars;                   // science variable MFAs
-
-    // output data
-    MatrixX<T>          approx;                 // points in approximated volume
-
-    // errors for each science variable
-    vector<T>           max_errs;               // maximum (abs value) distance from input points to curve
-    vector<T>           sum_sq_errs;            // sum of squared errors
-
-    // error field for last science variable only
-    MatrixX<T>          errs;                   // error field (abs. value, not normalized by data range)
-
-    // knot spans (for debugging)
-    VectorXi            span_mins;              // idx of minimum domain points of all knot spans
-    VectorXi            span_maxs;              // idx of maximum domain points of all knot spans
 };
 
 namespace diy
