@@ -6,17 +6,18 @@
 // tpeterka@mcs.anl.gov
 //--------------------------------------------------------------
 
-#include <mfa/mfa.hpp>
+#include    <mfa/mfa.hpp>
 
-#include <diy/master.hpp>
-#include <diy/reduce-operations.hpp>
-#include <diy/decomposition.hpp>
-#include <diy/assigner.hpp>
-#include <diy/io/block.hpp>
+#include    <diy/master.hpp>
+#include    <diy/reduce-operations.hpp>
+#include    <diy/decomposition.hpp>
+#include    <diy/assigner.hpp>
+#include    <diy/io/block.hpp>
+#include    <diy/pick.hpp>
 
-#include <stdio.h>
+#include    <stdio.h>
 
-#include <Eigen/Dense>
+#include    <Eigen/Dense>
 
 #define MAX_DIM 8                           // a user limit, not mfa's
 
@@ -40,6 +41,7 @@ using VectorX  = Eigen::Matrix<T, Eigen::Dynamic, 1>;
 
 typedef diy::ContinuousBounds          Bounds;
 typedef diy::RegularContinuousLink     RCLink;
+typedef diy::RegularDecomposer<Bounds> Decomposer;
 
 // arguments to block foreach functions
 struct DomainArgs
@@ -126,7 +128,8 @@ struct Block
             const diy::Link& link,              // neighborhood
             diy::Master&     master,            // diy master
             int              dom_dim,           // domain dimensionality
-            int              pt_dim)            // point dimensionality
+            int              pt_dim,            // point dimensionality
+            T                ghost_factor = 0.0)// amount of ghost zone overlap as a factor of block size (0.0 - 1.0)
     {
         Block*          b   = new Block;
         diy::Link*      l   = new diy::Link(link);
@@ -135,10 +138,20 @@ struct Block
 
         b->domain_mins.resize(pt_dim);
         b->domain_maxs.resize(pt_dim);
+
+        // manually set ghosted block bounds as a factor increase of original core bounds
         for (int i = 0; i < dom_dim; i++)
         {
-            b->domain_mins(i) = core.min[i];
-            b->domain_maxs(i) = core.max[i];
+            T ghost_amount = ghost_factor * (core.max[i] - core.min[i]);
+            if (core.min[i] > domain.min[i])
+                b->domain_mins(i) = core.min[i] - ghost_amount;
+            else
+                b->domain_mins(i)= core.min[i];
+
+            if (core.max[i] < domain.max[i])
+                b->domain_maxs(i) = core.max[i] + ghost_amount;
+            else
+                b->domain_maxs(i) = core.max[i];
         }
     }
 
@@ -210,6 +223,13 @@ struct Block
             diy::load(bb, b->approx);
             diy::load(bb, b->errs);
         }
+
+    // debug: print link
+    void print_link(const       diy::Master::ProxyWithLink& cp)
+    {
+        // debug
+        diy::RegularLink<Bounds> *l = static_cast<diy::RegularLink<Bounds>*>(cp.link());
+    }
 
     // f(x,y,...) = sine(x)/x * sine(y)/y * ...
     void generate_sinc_data(
@@ -341,7 +361,7 @@ struct Block
         }
 
         // extents
-//         fprintf(stderr, "gid = %d\n", cp.gid());
+        fprintf(stderr, "gid = %d\n", cp.gid());
         cerr << "domain_mins:\n" << domain_mins << endl;
         cerr << "domain_maxs:\n" << domain_maxs << "\n" << endl;
 
@@ -1592,6 +1612,61 @@ struct Block
             if (in_approx[i] != approx(i, last))
                 fprintf(stderr, "Error writing raw data: approximated data does match writen/read back data\n");
 #endif
+    }
+
+    // send decoded ghost points
+    // assumes entire block was already decoded
+    void send_ghost_pts(const diy::Master::ProxyWithLink&   cp,
+                        const Decomposer&                   decomposer)
+    {
+        diy::RegularLink<Bounds> *l = static_cast<diy::RegularLink<Bounds>*>(cp.link());
+        map<diy::BlockID, vector<VectorX<T> > > outgoing_pts;
+        VectorX<T> pt(domain.cols());
+
+        // check decoded points whether they fall into neighboring block bounds (including ghost)
+        for (auto i = 0; i < (size_t)domain.rows(); i++)
+        {
+            vector<int> dests;                      // link neighbor targets (not gids)
+            auto it = dests.begin();
+            insert_iterator<vector<int> > insert_it(dests, it);
+            diy::in(*l, domain.row(i).data(), insert_it, decomposer.domain);
+
+            if (dests.size())
+                pt = domain.row(i);
+
+            // prepare map of pts going to each neighbor
+            for (auto j = 0; j < dests.size(); j++)
+            {
+                diy::BlockID bid = l->target(dests[j]);
+                outgoing_pts[bid].push_back(pt);
+                // fprintf(stderr, "gid %d enqueue [%.3f %.3f %.3f] to gid %d\n",
+                //         gid, domain(i, 0), domain(i, 1), domain(i, 2), bid.gid);
+            }
+        }
+
+        // enqueue the vectors of points to send to each neighbor block
+        for (auto it = outgoing_pts.begin(); it != outgoing_pts.end(); it++)
+            for (auto i = 0; i < it->second.size(); i++)
+                cp.enqueue(it->first, it->second[i]);
+    }
+
+    void recv_ghost_pts(const diy::Master::ProxyWithLink& cp)
+    {
+        diy::Link*    l = cp.link();
+
+        // gids of incoming neighbors in the link
+        std::vector<int> in;
+        cp.incoming(in);
+
+        // for all neighbor blocks
+        // dequeue data received from this neighbor block in the last exchange
+        for (unsigned i = 0; i < in.size(); ++i)
+        {
+            VectorXf pt;
+            cp.dequeue(in[i], pt);
+            // debug: print the point
+            cerr << "gid " << cp.gid() << " received " << pt.transpose() << endl;
+        }
     }
 };
 
