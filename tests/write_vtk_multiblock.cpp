@@ -134,17 +134,17 @@ void PrepRenderingData(
     }
 
     // block mins
-    p.x = block->domain_mins(0);
-    p.y = block->domain_mins(1);
-    p.z = block->domain_mins.size() > 2 ?
-        block->domain_mins(2) : 0.0;
+    p.x = block->bounds_mins(0);
+    p.y = block->bounds_mins(1);
+    p.z = block->bounds_mins.size() > 2 ?
+        block->bounds_mins(2) : 0.0;
     block_mins.push_back(p);
 
     // block maxs
-    p.x = block->domain_maxs(0);
-    p.y = block->domain_maxs(1);
-    p.z = block->domain_maxs.size() > 2 ?
-        block->domain_maxs(2) : 0.0;
+    p.x = block->bounds_maxs(0);
+    p.y = block->bounds_maxs(1);
+    p.z = block->bounds_maxs.size() > 2 ?
+        block->bounds_maxs(2) : 0.0;
     block_maxs.push_back(p);
 }
 
