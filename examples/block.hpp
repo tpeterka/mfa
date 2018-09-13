@@ -94,10 +94,12 @@ template <typename T>
 struct Block
 {
     // input data
-    VectorXi            ndom_pts;              // number of domain points in each dimension
-    MatrixX<T>          domain;                // input data (1st dim changes fastest)
-    VectorX<T>          domain_mins;           // local domain minimum corner
-    VectorX<T>          domain_maxs;           // local domain maximum corner
+    VectorXi            ndom_pts;               // number of domain points in each dimension
+    MatrixX<T>          domain;                 // input data (1st dim changes fastest)
+    VectorX<T>          domain_mins;            // local domain minimum corner
+    VectorX<T>          domain_maxs;            // local domain maximum corner
+    VectorX<T>          core_mins;              // local domain minimum corner w/o ghost
+    VectorX<T>          core_maxs;              // local domain maximum corner w/o ghost
 
     // MFA models
     Model<T>            geometry;               // geometry MFA
@@ -138,6 +140,8 @@ struct Block
 
         b->domain_mins.resize(pt_dim);
         b->domain_maxs.resize(pt_dim);
+        b->core_mins.resize(dom_dim);
+        b->core_maxs.resize(dom_dim);
 
         // manually set ghosted block bounds as a factor increase of original core bounds
         for (int i = 0; i < dom_dim; i++)
@@ -152,6 +156,8 @@ struct Block
                 b->domain_maxs(i) = core.max[i] + ghost_amount;
             else
                 b->domain_maxs(i) = core.max[i];
+            b->core_mins(i) = core.min[i];
+            b->core_maxs(i) = core.max[i];
         }
     }
 
@@ -251,8 +257,18 @@ struct Block
             for (int j = 0; j < nvars; j++)
                 vars[j].p(i) =  a->vars_p[i];
             ndom_pts(i)     =  a->ndom_pts[i];
-            tot_ndom_pts    *= ndom_pts(i);
         }
+
+        // adjust number of domain points for ghost
+        VectorX<T> d(a->dom_dim);               // step in domain points in each dimension
+        for (int i = 0; i < a->dom_dim; i++)
+        {
+            d(i) = (core_maxs(i) - core_mins(i)) / (ndom_pts(i) - 1);
+            ndom_pts(i) += floor((core_mins(i) - domain_mins(i)) / d(i));
+            ndom_pts(i) += floor((domain_maxs(i) - core_maxs(i)) / d(i));
+            tot_ndom_pts *= ndom_pts(i);
+        }
+
         domain.resize(tot_ndom_pts, a->pt_dim);
 
         // get local block bounds
@@ -271,17 +287,16 @@ struct Block
 
         // assign values to the domain (geometry)
         int cs = 1;                           // stride of a coordinate in this dim
-        real_t eps = 1.0e-5;                   // roundoff error
+        real_t eps = 1.0e-5;                  // floating point roundoff error
         for (int i = 0; i < a->dom_dim; i++)  // all dimensions in the domain
         {
-            real_t d = (domain_maxs(i) - domain_mins(i)) / (ndom_pts(i) - 1);
             int k = 0;
             int co = 0;                       // j index of start of a new coordinate value
             for (int j = 0; j < tot_ndom_pts; j++)
             {
-                if (domain_mins(i) + k * d > domain_maxs(i) + eps)
+                if (domain_mins(i) + k * d(i) > domain_maxs(i) + eps)
                     k = 0;
-                domain(j, i) = domain_mins(i) + k * d;
+                domain(j, i) = domain_mins(i) + k * d(i);
                 if (j + 1 - co >= cs)
                 {
                     k++;
@@ -382,7 +397,6 @@ struct Block
             vars[j].min_dim = a->dom_dim + j;
             vars[j].max_dim = vars[j].min_dim + 1;
         }
-        vars[0].p.resize(a->dom_dim);
         ndom_pts.resize(a->dom_dim);
         for (int i = 0; i < a->dom_dim; i++)
         {
@@ -390,8 +404,18 @@ struct Block
             for (int j = 0; j < nvars; j++)
                 vars[j].p(i) =  a->vars_p[i];
             ndom_pts(i)     =  a->ndom_pts[i];
-            tot_ndom_pts    *= ndom_pts(i);
         }
+
+        // adjust number of domain points for ghost
+        VectorX<T> d(a->dom_dim);               // step in domain points in each dimension
+        for (int i = 0; i < a->dom_dim; i++)
+        {
+            d(i) = (core_maxs(i) - core_mins(i)) / (ndom_pts(i) - 1);
+            ndom_pts(i) += floor((core_mins(i) - domain_mins(i)) / d(i));
+            ndom_pts(i) += floor((domain_maxs(i) - core_maxs(i)) / d(i));
+            tot_ndom_pts *= ndom_pts(i);
+        }
+
         domain.resize(tot_ndom_pts, a->pt_dim);
 
         // get local block bounds
@@ -413,14 +437,13 @@ struct Block
         real_t eps = 1.0e-5;                  // floating point roundoff error
         for (int i = 0; i < a->dom_dim; i++)  // all dimensions in the domain
         {
-            real_t d = (domain_maxs(i) - domain_mins(i)) / (ndom_pts(i) - 1);
             int k = 0;
             int co = 0;                       // j index of start of a new coordinate value
             for (int j = 0; j < tot_ndom_pts; j++)
             {
-                if (domain_mins(i) + k * d > domain_maxs(i) + eps)
+                if (domain_mins(i) + k * d(i) > domain_maxs(i) + eps)
                     k = 0;
-                domain(j, i) = domain_mins(i) + k * d;
+                domain(j, i) = domain_mins(i) + k * d(i);
                 if (j + 1 - co >= cs)
                 {
                     k++;
@@ -1495,8 +1518,8 @@ struct Block
     {
         int ndom_dims = ndom_pts.size();                // domain dimensionality
 
-//         fprintf(stderr, "gid = %d\n", cp.gid());
-//         cerr << "domain\n" << domain << endl;
+        fprintf(stderr, "gid = %d\n", cp.gid());
+        cerr << "domain\n" << domain << endl;
 
         // geometry
         cerr << "\n------- geometry model -------" << endl;
@@ -1532,7 +1555,7 @@ struct Block
         }
         cerr << "\n-----------------------------------" << endl;
 
-//         cerr << approx.rows() << " approximated points\n" << approx << endl;
+        cerr << approx.rows() << " approximated points\n" << approx << endl;
         fprintf(stderr, "# input points        = %ld\n", domain.rows());
 
         // compute compression ratio
@@ -1632,6 +1655,7 @@ struct Block
             {
                 diy::BlockID bid = l->target(dests[j]);
                 outgoing_pts[bid].push_back(pt);
+                // debug: print the point
                 cerr << "gid " << cp.gid() << " sent " << pt.transpose() << " to gid " << bid.gid << endl;
             }
         }
