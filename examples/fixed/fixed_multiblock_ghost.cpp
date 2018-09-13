@@ -129,10 +129,8 @@ int main(int argc, char** argv)
     Decomposer decomposer(dom_dim, dom_bounds, tot_blocks);
     decomposer.decompose(world.rank(),
                          assigner,
-                         [&](int gid, const Bounds& core, const Bounds& bounds, const Bounds& domain, const diy::Link& link)
+                         [&](int gid, const Bounds& core, const Bounds& bounds, const Bounds& domain, const RCLink& link)
                          { Block<real_t>::add(gid, core, bounds, domain, link, master, dom_dim, pt_dim, ghost); });
-    // debug
-    master.foreach(&Block<real_t>::print_link);
 
     vector<int> divs(dom_dim);                          // number of blocks in each dimension
     decomposer.fill_divisions(divs);

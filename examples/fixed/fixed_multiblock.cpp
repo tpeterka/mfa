@@ -126,7 +126,7 @@ int main(int argc, char** argv)
     diy::RegularDecomposer<Bounds> decomposer(dom_dim, dom_bounds, tot_blocks);
     decomposer.decompose(world.rank(),
                          assigner,
-                         [&](int gid, const Bounds& core, const Bounds& bounds, const Bounds& domain, const diy::Link& link)
+                         [&](int gid, const Bounds& core, const Bounds& bounds, const Bounds& domain, const RCLink& link)
                          { Block<real_t>::add(gid, core, bounds, domain, link, master, dom_dim, pt_dim); });
     vector<int> divs(dom_dim);                          // number of blocks in each dimension
     decomposer.fill_divisions(divs);

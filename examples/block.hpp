@@ -125,14 +125,14 @@ struct Block
             const Bounds&    core,              // block bounds without any ghost added
             const Bounds&    bounds,            // block bounds including any ghost region added
             const Bounds&    domain,            // global data bounds
-            const diy::Link& link,              // neighborhood
+            const RCLink&    link,              // neighborhood
             diy::Master&     master,            // diy master
             int              dom_dim,           // domain dimensionality
             int              pt_dim,            // point dimensionality
             T                ghost_factor = 0.0)// amount of ghost zone overlap as a factor of block size (0.0 - 1.0)
     {
         Block*          b   = new Block;
-        diy::Link*      l   = new diy::Link(link);
+        RCLink*         l   = new RCLink(link);
         diy::Master&    m   = const_cast<diy::Master&>(master);
         m.add(gid, b, l);
 
@@ -223,13 +223,6 @@ struct Block
             diy::load(bb, b->approx);
             diy::load(bb, b->errs);
         }
-
-    // debug: print link
-    void print_link(const       diy::Master::ProxyWithLink& cp)
-    {
-        // debug
-        diy::RegularLink<Bounds> *l = static_cast<diy::RegularLink<Bounds>*>(cp.link());
-    }
 
     // f(x,y,...) = sine(x)/x * sine(y)/y * ...
     void generate_sinc_data(
@@ -1619,7 +1612,7 @@ struct Block
     void send_ghost_pts(const diy::Master::ProxyWithLink&   cp,
                         const Decomposer&                   decomposer)
     {
-        diy::RegularLink<Bounds> *l = static_cast<diy::RegularLink<Bounds>*>(cp.link());
+        RCLink *l = static_cast<RCLink *>(cp.link());
         map<diy::BlockID, vector<VectorX<T> > > outgoing_pts;
         VectorX<T> pt(domain.cols());
 
@@ -1639,8 +1632,7 @@ struct Block
             {
                 diy::BlockID bid = l->target(dests[j]);
                 outgoing_pts[bid].push_back(pt);
-                // fprintf(stderr, "gid %d enqueue [%.3f %.3f %.3f] to gid %d\n",
-                //         gid, domain(i, 0), domain(i, 1), domain(i, 2), bid.gid);
+                cerr << "gid " << cp.gid() << " sent " << pt.transpose() << " to gid " << bid.gid << endl;
             }
         }
 
@@ -1652,7 +1644,7 @@ struct Block
 
     void recv_ghost_pts(const diy::Master::ProxyWithLink& cp)
     {
-        diy::Link*    l = cp.link();
+        VectorX<T> pt(domain.cols());                   // incoming point
 
         // gids of incoming neighbors in the link
         std::vector<int> in;
@@ -1662,10 +1654,12 @@ struct Block
         // dequeue data received from this neighbor block in the last exchange
         for (unsigned i = 0; i < in.size(); ++i)
         {
-            VectorXf pt;
-            cp.dequeue(in[i], pt);
-            // debug: print the point
-            cerr << "gid " << cp.gid() << " received " << pt.transpose() << endl;
+            while (cp.incoming(in[i]))
+            {
+                cp.dequeue(in[i], pt);
+                // debug: print the point
+                cerr << "gid " << cp.gid() << " received " << pt.transpose() << endl;
+            }
         }
     }
 };
