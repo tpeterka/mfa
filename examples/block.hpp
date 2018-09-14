@@ -259,6 +259,24 @@ struct Block
             ndom_pts(i)     =  a->ndom_pts[i];
         }
 
+        // get local block bounds
+        // if single block, they are passed in args
+        // if multiblock, they were decomposed by diy and are already in the block's bounds_mins, maxs
+        if (!a->multiblock)
+        {
+            bounds_mins.resize(a->pt_dim);
+            bounds_maxs.resize(a->pt_dim);
+            core_mins.resize(a->dom_dim);
+            core_maxs.resize(a->dom_dim);
+            for (int i = 0; i < a->dom_dim; i++)
+            {
+                bounds_mins(i)  = a->min[i];
+                bounds_maxs(i)  = a->max[i];
+                core_mins(i)    = a->min[i];
+                core_maxs(i)    = a->max[i];
+            }
+        }
+
         // adjust number of domain points for ghost
         VectorX<T> d(a->dom_dim);               // step in domain points in each dimension
         for (int i = 0; i < a->dom_dim; i++)
@@ -270,20 +288,6 @@ struct Block
         }
 
         domain.resize(tot_ndom_pts, a->pt_dim);
-
-        // get local block bounds
-        // if single block, they are passed in args
-        // if multiblock, they were decomposed by diy and are already in the block's bounds_mins, maxs
-        if (!a->multiblock)
-        {
-            bounds_mins.resize(a->pt_dim);
-            bounds_maxs.resize(a->pt_dim);
-            for (int i = 0; i < a->dom_dim; i++)
-            {
-                bounds_mins(i) = a->min[i];
-                bounds_maxs(i) = a->max[i];
-            }
-        }
 
         // assign values to the domain (geometry)
         int cs = 1;                           // stride of a coordinate in this dim
@@ -406,6 +410,22 @@ struct Block
             ndom_pts(i)     =  a->ndom_pts[i];
         }
 
+        // get local block bounds
+        // if single block, they are passed in args
+        // if multiblock, they were decomposed by diy and are already in the block's bounds_mins, maxs
+        if (!a->multiblock)
+        {
+            bounds_mins.resize(a->pt_dim);
+            bounds_maxs.resize(a->pt_dim);
+            for (int i = 0; i < a->dom_dim; i++)
+            {
+                bounds_mins(i)  = a->min[i];
+                bounds_maxs(i)  = a->max[i];
+                core_mins(i)    = a->min[i];
+                core_maxs(i)    = a->max[i];
+            }
+        }
+
         // adjust number of domain points for ghost
         VectorX<T> d(a->dom_dim);               // step in domain points in each dimension
         for (int i = 0; i < a->dom_dim; i++)
@@ -417,20 +437,6 @@ struct Block
         }
 
         domain.resize(tot_ndom_pts, a->pt_dim);
-
-        // get local block bounds
-        // if single block, they are passed in args
-        // if multiblock, they were decomposed by diy and are already in the block's bounds_mins, maxs
-        if (!a->multiblock)
-        {
-            bounds_mins.resize(a->pt_dim);
-            bounds_maxs.resize(a->pt_dim);
-            for (int i = 0; i < a->dom_dim; i++)
-            {
-                bounds_mins(i) = a->min[i];
-                bounds_maxs(i) = a->max[i];
-            }
-        }
 
         // assign values to the domain (geometry)
         int cs = 1;                           // stride of a coordinate in this dim
@@ -554,6 +560,13 @@ struct Block
         // extents
         bounds_mins(0) = 0.0;
         bounds_maxs(0) = domain(tot_ndom_pts - 1, 0);
+        core_mins.resize(a->dom_dim);
+        core_maxs.resize(a->dom_dim);
+        for (int i = 0; i < a->dom_dim; i++)
+        {
+            core_mins(i) = bounds_mins(i);
+            core_maxs(i) = bounds_maxs(i);
+        }
 
         // debug
         cerr << "domain extent:\n min\n" << bounds_mins << "\nmax\n" << bounds_maxs << endl;
@@ -637,6 +650,11 @@ struct Block
         bounds_mins(1) = 0.0;
         bounds_maxs(0) = domain(tot_ndom_pts - 1, 0);
         bounds_maxs(1) = domain(tot_ndom_pts - 1, 1);
+        for (int i = 0; i < a->dom_dim; i++)
+        {
+            core_mins(i) = bounds_mins(i);
+            core_maxs(i) = bounds_maxs(i);
+        }
 
         // debug
         cerr << "domain extent:\n min\n" << bounds_mins << "\nmax\n" << bounds_maxs << endl;
@@ -743,6 +761,13 @@ struct Block
         bounds_mins(1) = domain(0, 1);
         bounds_maxs(0) = domain(tot_ndom_pts - 1, 0);
         bounds_maxs(1) = domain(tot_ndom_pts - 1, 1);
+        core_mins.resize(a->dom_dim);
+        core_maxs.resize(a->dom_dim);
+        for (int i = 0; i < a->dom_dim; i++)
+        {
+            core_mins(i) = bounds_mins(i);
+            core_maxs(i) = bounds_maxs(i);
+        }
 
         // debug
         cerr << "domain extent:\n min\n" << bounds_mins << "\nmax\n" << bounds_maxs << endl;
@@ -828,6 +853,11 @@ struct Block
         bounds_maxs(0) = domain(tot_ndom_pts - 1, 0);
         bounds_maxs(1) = domain(tot_ndom_pts - 1, 1);
         bounds_maxs(2) = domain(tot_ndom_pts - 1, 2);
+        for (int i = 0; i < a->dom_dim; i++)
+        {
+            core_mins(i) = bounds_mins(i);
+            core_maxs(i) = bounds_maxs(i);
+        }
 
         // debug
         cerr << "domain extent:\n min\n" << bounds_mins << "\nmax\n" << bounds_maxs << endl;
@@ -937,6 +967,13 @@ struct Block
         bounds_maxs(0) = domain(tot_ndom_pts - 1, 0);
         bounds_maxs(1) = domain(tot_ndom_pts - 1, 1);
         bounds_maxs(2) = domain(tot_ndom_pts - 1, 2);
+        core_mins.resize(a->dom_dim);
+        core_maxs.resize(a->dom_dim);
+        for (int i = 0; i < a->dom_dim; i++)
+        {
+            core_mins(i) = bounds_mins(i);
+            core_maxs(i) = bounds_maxs(i);
+        }
 
         // debug
         cerr << "domain extent:\n min\n" << bounds_mins << "\nmax\n" << bounds_maxs << endl;
@@ -1012,6 +1049,13 @@ struct Block
         bounds_mins(1) = 0.0;
         bounds_maxs(0) = domain(tot_ndom_pts - 1, 0);
         bounds_maxs(1) = domain(tot_ndom_pts - 1, 1);
+        core_mins.resize(a->dom_dim);
+        core_maxs.resize(a->dom_dim);
+        for (int i = 0; i < a->dom_dim; i++)
+        {
+            core_mins(i) = bounds_mins(i);
+            core_maxs(i) = bounds_maxs(i);
+        }
 
         // debug
         cerr << "domain extent:\n min\n" << bounds_mins << "\nmax\n" << bounds_maxs << endl;
@@ -1091,6 +1135,13 @@ struct Block
         bounds_maxs(0) = domain(tot_ndom_pts - 1, 0);
         bounds_maxs(1) = domain(tot_ndom_pts - 1, 1);
         bounds_maxs(2) = domain(tot_ndom_pts - 1, 2);
+        core_mins.resize(a->dom_dim);
+        core_maxs.resize(a->dom_dim);
+        for (int i = 0; i < a->dom_dim; i++)
+        {
+            core_mins(i) = bounds_mins(i);
+            core_maxs(i) = bounds_maxs(i);
+        }
 
         // debug
         cerr << "domain extent:\n min\n" << bounds_mins << "\nmax\n" << bounds_maxs << endl;
@@ -1518,8 +1569,8 @@ struct Block
     {
         int ndom_dims = ndom_pts.size();                // domain dimensionality
 
-        fprintf(stderr, "gid = %d\n", cp.gid());
-        cerr << "domain\n" << domain << endl;
+//         fprintf(stderr, "gid = %d\n", cp.gid());
+//         cerr << "domain\n" << domain << endl;
 
         // geometry
         cerr << "\n------- geometry model -------" << endl;
@@ -1555,8 +1606,8 @@ struct Block
         }
         cerr << "\n-----------------------------------" << endl;
 
-        cerr << approx.rows() << " approximated points\n" << approx << endl;
-        fprintf(stderr, "# input points        = %ld\n", domain.rows());
+//         cerr << approx.rows() << " approximated points\n" << approx << endl;
+//         fprintf(stderr, "# input points        = %ld\n", domain.rows());
 
         // compute compression ratio
         float in_coords = domain.rows() * domain.cols();
