@@ -33,11 +33,17 @@ add_test                    (NAME write-vtk-fixed-test
 
 foreach                     (p 1 3 4)
     foreach                 (b 4 16)
-        add_test            (NAME fixed-multiblock-test-strong-p${p}-b${b}
-                            COMMAND ${MPIEXEC} -np ${p} $<TARGET_FILE:fixed-multiblock-test> -i sinc -d 3 -m 2 -p 1 -q 5 -n 500 -v 50 -b ${b} -t 1 -w 0
+        add_test            (NAME fixed-multiblock-test-strong-no-exchange-p${p}-b${b}
+                            COMMAND ${MPIEXEC} -np ${p} $<TARGET_FILE:fixed-multiblock-test> -i sinc -d 3 -m 2 -p 1 -q 5 -n 500 -v 50 -b ${b} -t 1 -o 0.0 -w 0
                             )
-        add_test            (NAME fixed-multiblock-test-weak-p${p}-b${b}
-                            COMMAND ${MPIEXEC} -np ${p} $<TARGET_FILE:fixed-multiblock-test> -i sinc -d 3 -m 2 -p 1 -q 5 -n 100 -v 10 -b ${b} -t 0 -w 0
+        add_test            (NAME fixed-multiblock-test-strong-exchange-p${p}-b${b}
+                            COMMAND ${MPIEXEC} -np ${p} $<TARGET_FILE:fixed-multiblock-test> -i sinc -d 3 -m 2 -p 1 -q 5 -n 500 -v 50 -b ${b} -t 1 -o 0.1 -w 0
+                            )
+        add_test            (NAME fixed-multiblock-test-weak-no-exchange-p${p}-b${b}
+                            COMMAND ${MPIEXEC} -np ${p} $<TARGET_FILE:fixed-multiblock-test> -i sinc -d 3 -m 2 -p 1 -q 5 -n 100 -v 10 -b ${b} -t 0 -o 0.0 -w 0
+                            )
+        add_test            (NAME fixed-multiblock-test-weak-exchange-p${p}-b${b}
+                            COMMAND ${MPIEXEC} -np ${p} $<TARGET_FILE:fixed-multiblock-test> -i sinc -d 3 -m 2 -p 1 -q 5 -n 100 -v 10 -b ${b} -t 0 -o 0.1 -w 0
                             )
     endforeach              (b)
 endforeach                  (p)

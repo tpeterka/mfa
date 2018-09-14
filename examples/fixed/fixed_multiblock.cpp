@@ -1,6 +1,6 @@
 //--------------------------------------------------------------
 // example of encoding / decoding higher dimensional data w/ fixed number of control points and
-// multiple blocks
+// multiple blocks with ghost zone overlap
 //
 // Tom Peterka
 // Argonne National Laboratory
@@ -48,6 +48,7 @@ int main(int argc, char** argv)
     string input        = "sine";               // input dataset
     bool   weighted     = true;                 // solve for and use weights
     bool   strong_sc    = true;                 // strong scaling (false = weak scaling)
+    real_t ghost        = 0.1;                  // amount of ghost zone overlap as a factor of block size (0.0 - 1.0)
 
     // get command line arguments
     opts::Options ops(argc, argv);
@@ -62,6 +63,7 @@ int main(int argc, char** argv)
     ops >> opts::Option('w', "weights",     weighted,   " solve for and use weights");
     ops >> opts::Option('b', "tot_blocks",  tot_blocks, " total number of blocks");
     ops >> opts::Option('t', "strong_sc",   strong_sc,  " strong scaling (1 = strong, 0 = weak)");
+    ops >> opts::Option('o', "overlap",     ghost,      " relative ghost zone overlap (0.0 - 1.0)");
 
     if (ops >> opts::Present('h', "help", " show help"))
     {
@@ -83,7 +85,8 @@ int main(int argc, char** argv)
             "\ngeom_degree = "  << geom_degree  << " vars_degree = "    << vars_degree  <<
             "\ninput pts = "    << ndomp        << " geom_ctrl pts = "  << geom_nctrl   <<
             "\nvars_ctrl_pts = "<< vars_nctrl   << " input = "          << input        <<
-            " tot_blocks = "    << tot_blocks   << " strong scaling = " << strong_sc    << endl;
+            " tot_blocks = "    << tot_blocks   << " strong scaling = " << strong_sc    <<
+            " ghost overlap = " << ghost        << endl;
 #ifdef CURVE_PARAMS
         cerr << "parameterization method = curve" << endl;
 #else
@@ -123,11 +126,12 @@ int main(int argc, char** argv)
     }
 
     // decompose the domain into blocks
-    diy::RegularDecomposer<Bounds> decomposer(dom_dim, dom_bounds, tot_blocks);
+    Decomposer decomposer(dom_dim, dom_bounds, tot_blocks);
     decomposer.decompose(world.rank(),
                          assigner,
                          [&](int gid, const Bounds& core, const Bounds& bounds, const Bounds& domain, const RCLink& link)
-                         { Block<real_t>::add(gid, core, bounds, domain, link, master, dom_dim, pt_dim); });
+                         { Block<real_t>::add(gid, core, bounds, domain, link, master, dom_dim, pt_dim, ghost); });
+
     vector<int> divs(dom_dim);                          // number of blocks in each dimension
     decomposer.fill_divisions(divs);
 
@@ -204,6 +208,17 @@ int main(int argc, char** argv)
             { b->range_error(cp, 0, true); });
 #endif
     decode_time = MPI_Wtime() - decode_time;
+
+    // exchange ghost zone of decoded blocks
+    // assumes all points have been decoded already
+    // TODO: don't assume decoded points and decode inside the send_ghost_pts function
+    if (ghost > 0.0)           // 0 signifies skip the exchange, need some overlap to compute blend
+    {
+        master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
+                { b->send_ghost_pts(cp, decomposer); });
+        master.exchange();
+        master.foreach(&Block<real_t>::recv_ghost_pts);
+    }
 
     // print block results
     fprintf(stderr, "\n------- Final block results --------\n");
