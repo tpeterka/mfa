@@ -1688,18 +1688,18 @@ struct Block
     {
         RCLink *l = static_cast<RCLink *>(cp.link());
         map<diy::BlockID, vector<VectorX<T> > > outgoing_pts;
-        VectorX<T> pt(domain.cols());
+        VectorX<T> pt(approx.cols());
 
         // check decoded points whether they fall into neighboring block bounds (including ghost)
-        for (auto i = 0; i < (size_t)domain.rows(); i++)
+        for (auto i = 0; i < (size_t)approx.rows(); i++)
         {
             vector<int> dests;                      // link neighbor targets (not gids)
             auto it = dests.begin();
             insert_iterator<vector<int> > insert_it(dests, it);
-            diy::in(*l, domain.row(i).data(), insert_it, decomposer.domain);
+            diy::in(*l, approx.row(i).data(), insert_it, decomposer.domain);
 
             if (dests.size())
-                pt = domain.row(i);
+                pt = approx.row(i);
 
             // prepare map of pts going to each neighbor
             for (auto j = 0; j < dests.size(); j++)
@@ -1719,7 +1719,7 @@ struct Block
 
     void recv_ghost_pts(const diy::Master::ProxyWithLink& cp)
     {
-        VectorX<T> pt(domain.cols());                   // incoming point
+        VectorX<T> pt(approx.cols());                   // incoming point
 
         // gids of incoming neighbors in the link
         std::vector<int> in;
