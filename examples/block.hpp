@@ -277,13 +277,20 @@ struct Block
             }
         }
 
-        // adjust number of domain points for ghost
+        // adjust number of domain points and starting domain point for ghost
         VectorX<T> d(a->dom_dim);               // step in domain points in each dimension
+        VectorX<T> p0(a->dom_dim);              // starting point in each dimension
+        int nghost_pts;                         // number of ghost points in current dimension
         for (int i = 0; i < a->dom_dim; i++)
         {
             d(i) = (core_maxs(i) - core_mins(i)) / (ndom_pts(i) - 1);
-            ndom_pts(i) += floor((core_mins(i) - bounds_mins(i)) / d(i));
-            ndom_pts(i) += floor((bounds_maxs(i) - core_maxs(i)) / d(i));
+            // min direction
+            nghost_pts = floor((core_mins(i) - bounds_mins(i)) / d(i));
+            ndom_pts(i) += nghost_pts;
+            p0(i) = core_mins(i) - nghost_pts * d(i);
+            // max direction
+            nghost_pts = floor((bounds_maxs(i) - core_maxs(i)) / d(i));
+            ndom_pts(i) += nghost_pts;
             tot_ndom_pts *= ndom_pts(i);
         }
 
@@ -298,9 +305,9 @@ struct Block
             int co = 0;                       // j index of start of a new coordinate value
             for (int j = 0; j < tot_ndom_pts; j++)
             {
-                if (bounds_mins(i) + k * d(i) > bounds_maxs(i) + eps)
+                if (p0(i) + k * d(i) > bounds_maxs(i) + eps)
                     k = 0;
-                domain(j, i) = bounds_mins(i) + k * d(i);
+                domain(j, i) = p0(i) + k * d(i);
                 if (j + 1 - co >= cs)
                 {
                     k++;
@@ -426,13 +433,20 @@ struct Block
             }
         }
 
-        // adjust number of domain points for ghost
+        // adjust number of domain points and starting domain point for ghost
         VectorX<T> d(a->dom_dim);               // step in domain points in each dimension
+        VectorX<T> p0(a->dom_dim);              // starting point in each dimension
+        int nghost_pts;                         // number of ghost points in current dimension
         for (int i = 0; i < a->dom_dim; i++)
         {
             d(i) = (core_maxs(i) - core_mins(i)) / (ndom_pts(i) - 1);
-            ndom_pts(i) += floor((core_mins(i) - bounds_mins(i)) / d(i));
-            ndom_pts(i) += floor((bounds_maxs(i) - core_maxs(i)) / d(i));
+            // min direction
+            nghost_pts = floor((core_mins(i) - bounds_mins(i)) / d(i));
+            ndom_pts(i) += nghost_pts;
+            p0(i) = core_mins(i) - nghost_pts * d(i);
+            // max direction
+            nghost_pts = floor((bounds_maxs(i) - core_maxs(i)) / d(i));
+            ndom_pts(i) += nghost_pts;
             tot_ndom_pts *= ndom_pts(i);
         }
 
@@ -447,9 +461,9 @@ struct Block
             int co = 0;                       // j index of start of a new coordinate value
             for (int j = 0; j < tot_ndom_pts; j++)
             {
-                if (bounds_mins(i) + k * d(i) > bounds_maxs(i) + eps)
+                if (p0(i) + k * d(i) > bounds_maxs(i) + eps)
                     k = 0;
-                domain(j, i) = bounds_mins(i) + k * d(i);
+                domain(j, i) = p0(i) + k * d(i);
                 if (j + 1 - co >= cs)
                 {
                     k++;
