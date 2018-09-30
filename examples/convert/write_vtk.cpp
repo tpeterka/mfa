@@ -35,6 +35,7 @@ void PrepRenderingData(
         vector< vector <int> >&     vars_nctrl_pts,
         vector<vec3d>&              geom_ctrl_pts,
         vector< vector <vec3d> >&   vars_ctrl_pts,
+        float**&                    vars_ctrl_data,
         vector<vec3d>&              approx_pts,
         float**&                    approx_data,
         vector<vec3d>&              err_pts,
@@ -80,28 +81,119 @@ void PrepRenderingData(
                 vars_nctrl_pts[i].push_back(block->vars[i].nctrl_pts(j));
 
         // geometry control points
+
+        // compute vectors of individual control point coordinates for the tensor product
+        vector<vector<float>> ctrl_pts_coords(ndom_dims);
+        size_t k0               = 0;            // starting offset of knots in current dim
+        size_t nknots_prev_dim  = 0;            // number of knots in previous dim
+        for (int k = 0; k < ndom_dims; k++)
+        {
+            ctrl_pts_coords[k].resize(block->geometry.nctrl_pts(k));
+            k0 += nknots_prev_dim;
+            for (size_t j = 0; j < (size_t)(block->geometry.nctrl_pts(k)); j++)
+            {
+                float tsum = 0.0;
+                for (int l = 1; l < block->geometry.p(k) + 1; l++)
+                    tsum += block->geometry.knots(k0 + j + l);
+                tsum /= float(block->geometry.p(k));
+                ctrl_pts_coords[k][j] = block->core_mins(k) + tsum * (block->core_maxs(k) - block->core_mins(k));
+            }
+            nknots_prev_dim = block->geometry.nctrl_pts(k) + block->geometry.p(k) + 1;    // nknots = n + p + 1 by defn.
+        }
+
+        // form the tensor product of control points from the vectors of individual coordinates
+        vector<size_t> ijk(ndom_dims);                              // indices of control point
         for (size_t j = 0; j < (size_t)(block->geometry.ctrl_pts.rows()); j++)
         {
-            p.x = block->geometry.ctrl_pts(j, 0);
-            p.y = block->geometry.ctrl_pts.cols() > 2 ?
-                block->geometry.ctrl_pts(j, 1) : 0.0;
-            p.z = block->geometry.ctrl_pts.cols() > 2 ?
-                block->geometry.ctrl_pts(j, 2) : 0.0;
+            // first 3 dims stored as mesh geometry
+            p.x = ctrl_pts_coords[0][ijk[0]];
+            if (ndom_dims < 2)
+                p.y = 0.0;
+            else
+                p.y = ctrl_pts_coords[1][ijk[1]];
+            if (ndom_dims < 3)
+                    p.z = 0.0;
+            else
+                p.z = ctrl_pts_coords[2][ijk[2]];
             geom_ctrl_pts.push_back(p);
+
+            // update ijk of next point
+            for (int k = 0; k < ndom_dims; k++)
+            {
+                if (ijk[k] < block->geometry.nctrl_pts(k) - 1)
+                {
+                    ijk[k]++;
+                    break;
+                }
+                else
+                    ijk[k] = 0;
+            }
         }
 
         // science variable control points
         vars_ctrl_pts.resize(nvars);
+        vars_ctrl_data = new float*[nvars];
         for (size_t i = 0; i < nvars; i++)
+        {
+            vars_ctrl_data[i] = new float[block->vars[i].ctrl_pts.rows()];
+
+            // compute vectors of individual control point coordinates for the tensor product
+            vector<vector<float>> ctrl_pts_coords(ndom_dims);
+            size_t k0               = 0;            // starting offset of knots in current dim
+            size_t nknots_prev_dim  = 0;            // number of knots in previous dim
+            for (int k = 0; k < ndom_dims; k++)
+            {
+                ctrl_pts_coords[k].resize(block->vars[i].nctrl_pts(k));
+                k0 += nknots_prev_dim;
+                for (size_t j = 0; j < (size_t)(block->vars[i].nctrl_pts(k)); j++)
+                {
+                    float tsum = 0.0;
+                    for (int l = 1; l < block->vars[i].p(k) + 1; l++)
+                        tsum += block->vars[i].knots(k0 + j + l);
+                    tsum /= float(block->vars[i].p(k));
+                    ctrl_pts_coords[k][j] = block->core_mins(k) + tsum * (block->core_maxs(k) - block->core_mins(k));
+                }
+                nknots_prev_dim = block->vars[i].nctrl_pts(k) + block->vars[i].p(k) + 1;    // nknots = n + p + 1 by defn.
+            }
+
+            // form the tensor product of control points from the vectors of individual coordinates
+            vector<size_t> ijk(ndom_dims);                              // indices of control point
             for (size_t j = 0; j < (size_t)(block->vars[i].ctrl_pts.rows()); j++)
             {
-                p.x = block->vars[i].ctrl_pts(j, 0);
-                p.y = block->vars[i].ctrl_pts.cols() > 2 ?
-                    block->vars[i].ctrl_pts(j, 1) : 0.0;
-                p.z = block->vars[i].ctrl_pts.cols() > 2 ?
-                    block->vars[i].ctrl_pts(j, 2) : 0.0;
+                // first 3 dims stored as mesh geometry
+                // control point position and optionally science variable, if the total fits in 3d
+                p.x = ctrl_pts_coords[0][ijk[0]];
+                if (ndom_dims < 2)
+                {
+                    p.y = block->vars[i].ctrl_pts(j, 0);
+                    p.z = 0.0;
+                }
+                else
+                {
+                    p.y = ctrl_pts_coords[1][ijk[1]];
+                    if (ndom_dims < 3)
+                        p.z = block->vars[i].ctrl_pts(j, 0);
+                    else
+                        p.z = ctrl_pts_coords[2][ijk[2]];
+                }
                 vars_ctrl_pts[i].push_back(p);
+
+                // science variable also stored as data
+                vars_ctrl_data[i][j] = block->vars[i].ctrl_pts(j, 0);
+
+                // update ijk of next point
+                for (int k = 0; k < ndom_dims; k++)
+                {
+                    if (ijk[k] < block->vars[i].nctrl_pts(k) - 1)
+                    {
+                        ijk[k]++;
+                        break;
+                    }
+                    else
+                        ijk[k] = 0;
+                }
             }
+        }
 
         // approximated points
         approx_data = new float*[nvars];
@@ -152,6 +244,7 @@ int main(int argc, char ** argv)
     vector < vector <int> >     vars_nctrl_pts;     // number of control pts in each dim. of each science variable
     vector<vec3d>               geom_ctrl_pts;      // control points (<= 3d) in geometry
     vector < vector <vec3d> >   vars_ctrl_pts;      // control points (<= 3d) in science variables
+    float**                     vars_ctrl_data;     // control point data values (4d)
     vector<vec3d>               approx_pts;         // aproximated data points (<= 3d)
     float**                     approx_data;        // approximated data values (4d)
     vector<vec3d>               err_pts;            // abs value error field
@@ -177,6 +270,7 @@ int main(int argc, char ** argv)
                       vars_nctrl_pts,
                       geom_ctrl_pts,
                       vars_ctrl_pts,
+                      vars_ctrl_data,
                       approx_pts,
                       approx_data,
                       err_pts,
@@ -241,11 +335,11 @@ int main(int argc, char ** argv)
                 /* int useBinary */                         0,
                 /* int *dims */                             &vars_nctrl_pts[i][0],
                 /* float *pts */                            &(vars_ctrl_pts[i][0].x),
-                /* int nvars */                             0,
-                /* int *vardim */                           NULL,
-                /* int *centering */                        NULL,
-                /* const char * const *varnames */          NULL,
-                /* float **vars */                          NULL);
+                /* int nvars */                             nvars,
+                /* int *vardim */                           vardims,
+                /* int *centering */                        centerings,
+                /* const char * const *varnames */          varnames,
+                /* float **vars */                          vars_ctrl_data);
     }
 
     // write raw original points
@@ -322,8 +416,10 @@ int main(int argc, char ** argv)
     for (int j = 0; j < nvars; j++)
     {
         delete[] raw_data[j];
+        delete[] vars_ctrl_data[j];
         delete[] approx_data[j];
     }
     delete[] raw_data;
+    delete[] vars_ctrl_data;
     delete[] approx_data;
 }

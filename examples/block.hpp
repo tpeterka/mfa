@@ -172,6 +172,8 @@ struct Block
             diy::save(bb, b->domain);
             diy::save(bb, b->bounds_mins);
             diy::save(bb, b->bounds_maxs);
+            diy::save(bb, b->core_mins);
+            diy::save(bb, b->core_maxs);
 
             // geometry
             diy::save(bb, b->geometry.p);
@@ -205,6 +207,8 @@ struct Block
             diy::load(bb, b->domain);
             diy::load(bb, b->bounds_mins);
             diy::load(bb, b->bounds_maxs);
+            diy::load(bb, b->core_mins);
+            diy::load(bb, b->core_maxs);
 
             // geometry
             diy::load(bb, b->geometry.p);
@@ -1604,9 +1608,9 @@ struct Block
             real_t range_extent = domain.col(ndom_dims + i).maxCoeff() - domain.col(ndom_dims + i).minCoeff();
             cerr << "\n---------- var " << i << " ----------" << endl;
             cerr << "nctrl_pts:\n" << vars[i].nctrl_pts << endl;
-//             cerr << vars[i].ctrl_pts.rows() << " final control points\n" << vars[i].ctrl_pts << endl;
+            cerr << vars[i].ctrl_pts.rows() << " final control points\n" << vars[i].ctrl_pts << endl;
 //             cerr << vars[i].weights.size()  << " final weights\n" << vars[i].weights << endl;
-//             cerr << vars[i].knots.size() << " knots\n" << vars[i].knots << endl;
+            cerr << vars[i].knots.size() << " knots\n" << vars[i].knots << endl;
             fprintf(stderr, "# output ctrl pts     = %ld\n", vars[i].ctrl_pts.rows());
             fprintf(stderr, "# output knots        = %ld\n", vars[i].knots.size());
             T rms_err = sqrt(sum_sq_errs[i] / (domain.rows()));
