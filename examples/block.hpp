@@ -385,6 +385,8 @@ struct Block
 
         // extents
         fprintf(stderr, "gid = %d\n", cp.gid());
+        cerr << "core_mins:\n" << core_mins << endl;
+        cerr << "core_maxs:\n" << core_maxs << endl;
         cerr << "bounds_mins:\n" << bounds_mins << endl;
         cerr << "bounds_maxs:\n" << bounds_maxs << "\n" << endl;
 
@@ -1707,6 +1709,8 @@ struct Block
         RCLink *l = static_cast<RCLink *>(cp.link());
         map<diy::BlockID, vector<VectorX<T> > > outgoing_pts;
         VectorX<T> pt(approx.cols());
+//         T eps = geometry.mfa->mfa->eps;
+        T eps = 1.0e-6;
 
         // check decoded points whether they fall into neighboring block bounds (including ghost)
         for (auto i = 0; i < (size_t)approx.rows(); i++)
@@ -1714,10 +1718,8 @@ struct Block
             vector<int> dests;                      // link neighbor targets (not gids)
             auto it = dests.begin();
             insert_iterator<vector<int> > insert_it(dests, it);
-            diy::in(*l, approx.row(i).data(), insert_it, decomposer.domain);
-
-            if (dests.size())
-                pt = approx.row(i);
+            pt = approx.row(i);
+            diy::near(*l, pt.data(), eps, insert_it, decomposer.domain);
 
             // prepare map of pts going to each neighbor
             for (auto j = 0; j < dests.size(); j++)
