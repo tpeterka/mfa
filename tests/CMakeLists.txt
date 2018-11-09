@@ -19,8 +19,16 @@ target_link_libraries       (write-vtk-test                         ${libraries}
 add_executable              (write-vtk-multiblock-test              write_vtk_multiblock.cpp ${CMAKE_SOURCE_DIR}/examples/convert/writer.cpp)
 target_link_libraries       (write-vtk-multiblock-test              ${libraries})
 
-add_test                    (NAME fixed-test
+add_test                    (NAME fixed-sinc-2d-test
                              COMMAND fixed-test -i sinc -d 3 -m 2 -p 1 -q 5 -v 20 -w 0
+                            )
+
+add_test                    (NAME fixed-s3d-1d-test
+                             COMMAND fixed-test -i s3d -d 2 -m 1 -p 1 -q 3 -w 0
+                            )
+
+add_test                    (NAME fixed-s3d-2d-test
+                             COMMAND fixed-test -i s3d -d 3 -m 2 -p 1 -q 3 -w 0
                             )
 
 add_test                    (NAME differentiate-fixed-test

@@ -254,8 +254,16 @@ int main(int argc, char** argv)
     int ndom_dims       = b->ndom_pts.size();                // domain dimensionality
     real_t range_extent = b->domain.col(ndom_dims).maxCoeff() - b->domain.col(ndom_dims).minCoeff();
     real_t err_factor   = 1.0e-3;
+    real_t expect_err;
     // for ./fixed-test -i sinc -d 3 -m 2 -p 1 -q 5 -v 20 -w 0
-    real_t expect_err   = 4.304489e-4;
+    if (input == "sinc" && dom_dim == 3)
+        expect_err   = 4.304489e-4;
+    // for ./fixed-test -i s3d -d 2 -m 1 -p 1 -q 3 -w 0
+    if (input == "s3d" && dom_dim == 1)
+        expect_err   = 6.819451e-2;
+    // for ./fixed-test -i s3d -d 3 -m 2 -p 1 -q 3 -w 0
+    if (input == "s3d" && dom_dim == 2)
+        expect_err   = 2.778071e-1;
     real_t our_err      = b->max_errs[0] / range_extent;    // normalized max_err
     if (fabs(expect_err - our_err) / expect_err > err_factor)
     {
