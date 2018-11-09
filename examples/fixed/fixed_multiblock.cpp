@@ -25,8 +25,6 @@
 
 using namespace std;
 
-typedef  diy::RegularDecomposer<Bounds> Decomposer;
-
 int main(int argc, char** argv)
 {
     // initialize MPI
@@ -118,7 +116,7 @@ int main(int argc, char** argv)
     diy::ContiguousAssigner   assigner(world.size(), tot_blocks);
 
     // set global domain bounds
-    Bounds dom_bounds;
+    Bounds dom_bounds(dom_dim);
     for (int i = 0; i < dom_dim; ++i)
     {
         dom_bounds.min[i] = -4.0 * M_PI;

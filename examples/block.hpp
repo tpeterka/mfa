@@ -39,8 +39,21 @@ using MatrixX = Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic>;
 template <typename T>
 using VectorX  = Eigen::Matrix<T, Eigen::Dynamic, 1>;
 
+#if 1                                   // default float bounds
+
 typedef diy::ContinuousBounds          Bounds;
 typedef diy::RegularContinuousLink     RCLink;
+
+#else                                   // templated bounds TODO: not working yet
+
+typedef diy::Bounds<real_t>            Bounds;
+typedef diy::RegularLink<Bounds>       RCLink;
+
+// TODO: temporary fix, create an RCLink so that its type is registered in the link factory
+RCLink unused;
+
+#endif
+
 typedef diy::RegularDecomposer<Bounds> Decomposer;
 
 // arguments to block foreach functions
@@ -93,6 +106,10 @@ struct Model
 template <typename T>
 struct Block
 {
+    // dimensionality
+    int                 dom_dim;                // dimensionality of domain (geometry)
+    int                 pt_dim;                 // dimensionality of full point (geometry + science vars)
+
     // input data
     VectorXi            ndom_pts;               // number of domain points in each dimension
     MatrixX<T>          domain;                 // input data (1st dim changes fastest)
@@ -138,6 +155,10 @@ struct Block
         diy::Master&    m   = const_cast<diy::Master&>(master);
         m.add(gid, b, l);
 
+        b->dom_dim = dom_dim;
+        b->pt_dim  = pt_dim;
+
+        // NB: using bounds to hold full point dimensionality, but using core to hold only domain dimensionality
         b->bounds_mins.resize(pt_dim);
         b->bounds_maxs.resize(pt_dim);
         b->core_mins.resize(dom_dim);
@@ -670,6 +691,8 @@ struct Block
         bounds_mins(1) = 0.0;
         bounds_maxs(0) = domain(tot_ndom_pts - 1, 0);
         bounds_maxs(1) = domain(tot_ndom_pts - 1, 1);
+        core_mins.resize(a->dom_dim);
+        core_maxs.resize(a->dom_dim);
         for (int i = 0; i < a->dom_dim; i++)
         {
             core_mins(i) = bounds_mins(i);
@@ -873,6 +896,8 @@ struct Block
         bounds_maxs(0) = domain(tot_ndom_pts - 1, 0);
         bounds_maxs(1) = domain(tot_ndom_pts - 1, 1);
         bounds_maxs(2) = domain(tot_ndom_pts - 1, 2);
+        core_mins.resize(a->dom_dim);
+        core_maxs.resize(a->dom_dim);
         for (int i = 0; i < a->dom_dim; i++)
         {
             core_mins(i) = bounds_mins(i);
@@ -1708,8 +1733,8 @@ struct Block
     {
         RCLink *l = static_cast<RCLink *>(cp.link());
         map<diy::BlockID, vector<VectorX<T> > > outgoing_pts;
-        VectorX<T> pt(approx.cols());
-//         T eps = geometry.mfa->mfa->eps;
+        vector<T>   dom_pt(dom_dim);                    // only domain coords of point, for checking neighbor bounds
+        VectorX<T>  full_pt(approx.cols());             // full coordinates of point
         T eps = 1.0e-6;
 
         // check decoded points whether they fall into neighboring block bounds (including ghost)
@@ -1718,16 +1743,19 @@ struct Block
             vector<int> dests;                      // link neighbor targets (not gids)
             auto it = dests.begin();
             insert_iterator<vector<int> > insert_it(dests, it);
-            pt = approx.row(i);
-            diy::near(*l, pt.data(), eps, insert_it, decomposer.domain);
+            for (auto j = 0; j < dom_dim; j++)
+                dom_pt[j] = approx(i, j);
+            diy::near(*l, dom_pt, eps, insert_it, decomposer.domain);
+            if (dests.size())
+                full_pt = approx.row(i);
 
             // prepare map of pts going to each neighbor
             for (auto j = 0; j < dests.size(); j++)
             {
                 diy::BlockID bid = l->target(dests[j]);
-                outgoing_pts[bid].push_back(pt);
+                outgoing_pts[bid].push_back(full_pt);
                 // debug: print the point
-                cerr << "gid " << cp.gid() << " sent " << pt.transpose() << " to gid " << bid.gid << endl;
+                cerr << "gid " << cp.gid() << " sent " << full_pt.transpose() << " to gid " << bid.gid << endl;
             }
         }
 
