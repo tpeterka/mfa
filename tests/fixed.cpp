@@ -111,11 +111,24 @@ int main(int argc, char** argv)
                                      &Block<real_t>::save,
                                      &Block<real_t>::load);
     diy::ContiguousAssigner   assigner(world.size(), tot_blocks);
-    diy::decompose(world.rank(), assigner, master);
 
-    DomainArgs d_args;
+    // even though this is a single-block example, we want diy to do a proper decomposition with a link
+    // so that everything works downstream (reading file with links, e.g.)
+    // therefore, set some dummy global domain bounds and decompose the domain
+    Bounds dom_bounds(dom_dim);
+    for (int i = 0; i < dom_dim; ++i)
+    {
+        dom_bounds.min[i] = 0.0;
+        dom_bounds.max[i] = 1.0;
+    }
+    Decomposer decomposer(dom_dim, dom_bounds, tot_blocks);
+    decomposer.decompose(world.rank(),
+                         assigner,
+                         [&](int gid, const Bounds& core, const Bounds& bounds, const Bounds& domain, const RCLink& link)
+                         { Block<real_t>::add(gid, core, bounds, domain, link, master, dom_dim, pt_dim, 0.0); });
 
     // set default args for diy foreach callback functions
+    DomainArgs d_args;
     d_args.pt_dim       = pt_dim;
     d_args.dom_dim      = dom_dim;
     d_args.weighted     = weighted;

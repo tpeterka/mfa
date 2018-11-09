@@ -39,7 +39,7 @@ using MatrixX = Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic>;
 template <typename T>
 using VectorX  = Eigen::Matrix<T, Eigen::Dynamic, 1>;
 
-#if 1                                   // default float bounds
+#if 0                                   // default float bounds
 
 typedef diy::ContinuousBounds          Bounds;
 typedef diy::RegularContinuousLink     RCLink;
