@@ -39,18 +39,15 @@ using MatrixX = Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic>;
 template <typename T>
 using VectorX  = Eigen::Matrix<T, Eigen::Dynamic, 1>;
 
-#if 0                                   // default float bounds
+#if 1                                   // default float bounds
 
 typedef diy::ContinuousBounds          Bounds;
 typedef diy::RegularContinuousLink     RCLink;
 
-#else                                   // templated bounds TODO: not working yet
+#else                                   // templated bounds
 
 typedef diy::Bounds<real_t>            Bounds;
 typedef diy::RegularLink<Bounds>       RCLink;
-
-// TODO: temporary fix, create an RCLink so that its type is registered in the link factory
-RCLink unused;
 
 #endif
 
