@@ -11,6 +11,7 @@
 #include    <mfa/data_model.hpp>
 #include    <mfa/decode.hpp>
 #include    <mfa/encode.hpp>
+#include    <mfa/tmesh.hpp>
 
 #include    <Eigen/Dense>
 #include    <vector>

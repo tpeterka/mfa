@@ -107,11 +107,24 @@ int main(int argc, char** argv)
                                      &Block<real_t>::save,
                                      &Block<real_t>::load);
     diy::ContiguousAssigner   assigner(world.size(), tot_blocks);
-    diy::decompose(world.rank(), assigner, master);
 
-    DomainArgs d_args;
+    // even though this is a single-block example, we want diy to do a proper decomposition with a link
+    // so that everything works downstream (reading file with links, e.g.)
+    // therefore, set some dummy global domain bounds and decompose the domain
+    Bounds dom_bounds(dom_dim);
+    for (int i = 0; i < dom_dim; ++i)
+    {
+        dom_bounds.min[i] = 0.0;
+        dom_bounds.max[i] = 1.0;
+    }
+    Decomposer decomposer(dom_dim, dom_bounds, tot_blocks);
+    decomposer.decompose(world.rank(),
+                         assigner,
+                         [&](int gid, const Bounds& core, const Bounds& bounds, const Bounds& domain, const RCLink& link)
+                         { Block<real_t>::add(gid, core, bounds, domain, link, master, dom_dim, pt_dim, 0.0); });
 
     // set default args for diy foreach callback functions
+    DomainArgs d_args;
     d_args.pt_dim       = pt_dim;
     d_args.dom_dim      = dom_dim;
     d_args.weighted     = weighted;
@@ -146,28 +159,35 @@ int main(int argc, char** argv)
     }
 
     // initialize tmesh with a tensor product
+    mfa::Tmesh<real_t> tmesh(dom_dim);
     master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-            { b->init_tmesh(cp, d_args); });
+            { b->init_tmesh(cp, tmesh); });
 
     // print tmesh
+    fmt::print(stderr, "\n----- Initial T-mesh -----\n\n");
     master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-            { b->print_tmesh(cp, d_args); });
+            { b->print_tmesh(cp, tmesh); });
+    fmt::print(stderr, "--------------------------\n\n");
 
     // refine tmesh
     master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-            { b-refine1_tmesh(cp, d_args); });
+            { b->refine1_tmesh(cp, tmesh); });
 
     // print tmesh
+    fmt::print(stderr, "\n----- T-mesh after first refinement -----\n\n");
     master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-            { b->print_tmesh(cp, d_args); });
+            { b->print_tmesh(cp, tmesh); });
+    fmt::print(stderr, "--------------------------\n\n");
 
     // refine tmesh again
     master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-            { b->refine2_tmesh(cp, d_args); });
+            { b->refine2_tmesh(cp, tmesh); });
 
     // print tmesh
+    fmt::print(stderr, "\n----- T-mesh after second refinement -----\n\n");
     master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-            { b->print_tmesh(cp, d_args); });
+            { b->print_tmesh(cp, tmesh); });
+    fmt::print(stderr, "--------------------------\n\n");
 
     // save the results in diy format
     diy::io::write_blocks("approx.out", world, master);
