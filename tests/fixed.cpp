@@ -269,7 +269,7 @@ int main(int argc, char** argv)
     real_t err_factor   = 1.0e-3;
     real_t expect_err;
     // for ./fixed-test -i sinc -d 3 -m 2 -p 1 -q 5 -v 20 -w 0
-    if (input == "sinc" && dom_dim == 3)
+    if (input == "sinc" && dom_dim == 2)
         expect_err   = 4.304489e-4;
     // for ./fixed-test -i s3d -d 2 -m 1 -p 1 -q 3 -w 0
     if (input == "s3d" && dom_dim == 1)
