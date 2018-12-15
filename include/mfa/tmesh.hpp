@@ -100,8 +100,48 @@ namespace mfa
                 }
             } while (vec_grew);   // keep checking until no more tensors are added
 
+            // the new tensor has either been added already or still needs to be added
+            // either way, create reference to new tensor and get its index at the end of vector of tensor prods.
+            size_t          new_tensor_idx;
+            TensorProduct&  new_tensor_ref = new_tensor;
+            if (!tensor_inserted)
+            {
+                // new tensor will go at the back of the vector
+                new_tensor_idx = tensor_prods.size();
+                new_tensor_ref = new_tensor;
+            }
+            else
+            {
+                // new tensor is already at the back of the vector
+                new_tensor_idx = tensor_prods.size() - 1;
+                new_tensor_ref = tensor_prods[new_tensor_idx];
+            }
+
+            // adjust next and prev pointers for new tensor
+            for (int j = 0; j < dom_dim_; j++)
+            {
+                for (auto k = 0; k < new_tensor_idx; k++)
+                {
+                    // debug
+//                     fmt::print(stderr, "final add: cur_dim={} new_tensor_idx={} checking existing_tensor_idx={}\n", j, new_tensor_idx, k);
+
+                    TensorProduct& existing_tensor_ref = tensor_prods[k];
+                    int adjacent_retval = adjacent(new_tensor_ref, existing_tensor_ref, j);
+
+                    if (adjacent_retval == 1)
+                    {
+                        new_tensor_ref.next[j].push_back(k);
+                        existing_tensor_ref.prev[j].push_back(new_tensor_idx);
+                    }
+                    else if (adjacent_retval == -1)
+                    {
+                        new_tensor_ref.prev[j].push_back(k);
+                        existing_tensor_ref.next[j].push_back(new_tensor_idx);
+                    }
+                }
+            }
+
             // add the tensor
-            // TODO: update next and prev pointers based on intersections found
             if (!tensor_inserted)
                 tensor_prods.push_back(new_tensor);
         }
@@ -213,31 +253,75 @@ namespace mfa
             if (!subset(max_side_tensor.knot_mins, max_side_tensor.knot_maxs, new_tensor.knot_mins, new_tensor.knot_maxs))
             {
                 // adjust next and prev pointers for existing_tensor and max_side_tensor in the current dimension
-                if (existing_tensor.next[cur_dim].size())
+                for (int i = 0; i < existing_tensor.next[cur_dim].size(); i++)
                 {
-                    max_side_tensor.next[cur_dim].push_back(existing_tensor.next[cur_dim].back());  // TODO: is the correct pointer at the back, or does it have to be found?
-                    existing_tensor.next[cur_dim].back()    = max_side_tensor_idx;                  // TODO: is the correct pointer at the back, or does it have to be found?
+                    if (adjacent(max_side_tensor, tensor_prods[existing_tensor.next[cur_dim][i]], cur_dim))
+                    {
+                        max_side_tensor.next[cur_dim].push_back(existing_tensor.next[cur_dim][i]);
+                        vector<size_t>& prev    = tensor_prods[existing_tensor.next[cur_dim][i]].prev[cur_dim];
+                        auto it                 = find(prev.begin(), prev.end(), existing_tensor_idx);
+                        assert(it != prev.end());
+                        size_t k                = distance(prev.begin(), it);
+                        prev[k]                 = max_side_tensor_idx;
+                    }
                 }
-                else
+
+                // connect next and prev pointers of existing and new max side tensors only if
+                // the new tensor will not completely separate the two
+                if (!occluded(new_tensor, existing_tensor, cur_dim))
                 {
                     existing_tensor.next[cur_dim].push_back(max_side_tensor_idx);
+                    max_side_tensor.prev[cur_dim].push_back(existing_tensor_idx);
                 }
-                max_side_tensor.prev[cur_dim].push_back(existing_tensor_idx);
 
                 // adjust next and prev pointers for existing_tensor and max_side_tensor in other dimensions
                 for (int j = 0; j < dom_dim_; j++)
                 {
                     if (j == cur_dim)
                         continue;
+
+                    // next pointer
                     for (int i = 0; i < existing_tensor.next[j].size(); i++)
-                        if (intersect_all_dims(max_side_tensor, tensor_prods[existing_tensor.next[j][i]], cur_dim))
+                    {
+                        // debug
+                        int retval = adjacent(max_side_tensor, tensor_prods[existing_tensor.next[j][i]], j);
+
+                        // add new next pointers
+                        if (adjacent(max_side_tensor, tensor_prods[existing_tensor.next[j][i]], j))
                         {
                             max_side_tensor.next[j].push_back(existing_tensor.next[j][i]);
                             tensor_prods[existing_tensor.next[j][i]].prev[j].push_back(max_side_tensor_idx);
+
+                            // debug
+                            assert(retval == 1);
                         }
+
+                    }
+
+                    // prev pointer
+                    for (int i = 0; i < existing_tensor.prev[j].size(); i++)
+                    {
+                        // debug
+                        int retval = adjacent(max_side_tensor, tensor_prods[existing_tensor.prev[j][i]], j);
+
+                        // add new prev pointers
+                        if (adjacent(max_side_tensor, tensor_prods[existing_tensor.prev[j][i]], j))
+                        {
+                            max_side_tensor.prev[j].push_back(existing_tensor.prev[j][i]);
+                            tensor_prods[existing_tensor.prev[j][i]].next[j].push_back(max_side_tensor_idx);
+
+                            // debug
+                            assert(retval == -1);
+                        }
+
+                    }
                 }
 
+                // add the new max side tensor
                 tensor_prods.push_back(max_side_tensor);
+
+                // delete next and prev pointers of existing tensor that are no longer valid as a result of adding new max side
+                delete_old_pointers(existing_tensor_idx);
 
                 // check if the knot mins, maxs of the existing or added tensor match the original new tensor
                 if ( (max_side_tensor.knot_mins == new_tensor.knot_mins && max_side_tensor.knot_maxs == new_tensor.knot_maxs) ||
@@ -246,7 +330,74 @@ namespace mfa
 
                 return true;
             }
+
+            // delete next and prev pointers of existing tensor that are no longer valid as a result of adding new max side
+            delete_old_pointers(existing_tensor_idx);
+
             return false;
+        }
+
+        // delete pointers that are no longer valid as a result of adding a new max side tensor
+        void delete_old_pointers(int existing_tensor_idx)               // index in tensor_prods of existing tensor
+        {
+            TensorProduct& existing_tensor  = tensor_prods[existing_tensor_idx];
+
+            for (int j = 0; j < dom_dim_; j++)
+            {
+                // next pointer
+                size_t valid_size = existing_tensor.next[j].size();     // size excluding invalid entries at back
+                for (int i = 0; i < valid_size; i++)
+                {
+                    if (!adjacent(existing_tensor, tensor_prods[existing_tensor.next[j][i]], j))
+                    {
+                        // debug
+//                         fmt::print(stderr, "next tensor {} is no longer adjacent to existing_tensor {}\n",
+//                                 existing_tensor.next[j][i], existing_tensor_idx);
+
+                        // remove the prev pointer of the next tensor
+                        vector<size_t>& prev    = tensor_prods[existing_tensor.next[j][i]].prev[j];
+                        auto it                 = find(prev.begin(), prev.end(), existing_tensor_idx);
+                        if (it != prev.end())                       // it's possible the pointer was removed earlier and won't be found
+                        {
+                            size_t k                = distance(prev.begin(), it);
+                            prev[k] = prev.back();
+                            prev.resize(prev.size() - 1);
+                        }
+
+                        // remove the next pointer of the existing tensor
+                        existing_tensor.next[j][i] = existing_tensor.next[j][valid_size - 1];
+                        valid_size--;
+                    }
+                }
+                existing_tensor.next[j].resize(valid_size);         // drop the invalid entries at back
+
+                // prev pointer
+                valid_size = existing_tensor.prev[j].size();        // size excluding invalid entries at back
+                for (int i = 0; i < valid_size; i++)
+                {
+                    if (!adjacent(existing_tensor, tensor_prods[existing_tensor.prev[j][i]], j))
+                    {
+                        // debug
+//                         fmt::print(stderr, "prev tensor {} is no longer adjacent to existing_tensor {}\n",
+//                                 existing_tensor.prev[j][i], existing_tensor_idx);
+
+                        // remove the next pointer of the prev tensor
+                        vector<size_t>& next    = tensor_prods[existing_tensor.prev[j][i]].next[j];
+                        auto it                 = find(next.begin(), next.end(), existing_tensor_idx);
+                        if (it != next.end())                       // it's possible the pointer was removed earlier and won't be found
+                        {
+                            size_t k                = distance(next.begin(), it);
+                            next[k] = next.back();
+                            next.resize(next.size() - 1);
+                        }
+
+                        // remove the prev pointer of the existing tensor
+                        existing_tensor.prev[j][i] = existing_tensor.prev[j][valid_size - 1];
+                        valid_size--;
+                    }
+                }
+                existing_tensor.prev[j].resize(valid_size);         // drop the invalid entries at back
+            }
         }
 
         // DEPRECATED
@@ -316,32 +467,122 @@ namespace mfa
 //             }
 //             return false;
 //         }
+// 
+//         // check if intersection exists in all dimensions between knot_mins, knot_maxs of two tensors
+//         // skip dimension skip_dim
+//         // tensors touching on a face or edge counts as intersecting
+//         bool intersect_all_dims(TensorProduct&          new_tensor,     // new tensor product to be added
+//                                 TensorProduct&          existing_tensor,// existing tensor product
+//                                 int                     skip_dim = -1)  // skip checking in this dimension (off by default)
+//         {
+//             for (int j = 0; j < dom_dim_; j++)
+//             {
+//                 if (j == skip_dim)
+//                     continue;
+// 
+//                 // there is no intersection in at least one of the other dimensions
+//                 if( (new_tensor.knot_mins[j] < existing_tensor.knot_mins[j] || new_tensor.knot_mins[j] > existing_tensor.knot_maxs[j]) &&
+//                     (new_tensor.knot_maxs[j] > existing_tensor.knot_maxs[j] || new_tensor.knot_maxs[j] < existing_tensor.knot_mins[j]) )
+//                 {
+//                     // debug
+//                     fmt::print(stderr, "skip_dim={} retval=false new_tensor=[{} {} : {} {}] existing_tensor=[{} {} : {} {}]\n",
+//                             skip_dim, new_tensor.knot_mins[0], new_tensor.knot_mins[1], new_tensor.knot_maxs[0], new_tensor.knot_maxs[1],
+//                             existing_tensor.knot_mins[0], existing_tensor.knot_mins[1], existing_tensor.knot_maxs[0], existing_tensor.knot_maxs[1]);
+// 
+//                     return false;
+//                 }
+//             }
+// 
+//             // debug
+//             fmt::print(stderr, "skip_dim={} retval=true new_tensor=[{} {} : {} {}] existing_tensor=[{} {} : {} {}]\n",
+//                     skip_dim, new_tensor.knot_mins[0], new_tensor.knot_mins[1], new_tensor.knot_maxs[0], new_tensor.knot_maxs[1],
+//                     existing_tensor.knot_mins[0], existing_tensor.knot_mins[1], existing_tensor.knot_maxs[0], existing_tensor.knot_maxs[1]);
+// 
+//             return true;
+//         }
 
-        // check if intersection exists in all dimensions between knot_mins, knot_maxs of two tensors
-        // skip dimension skip_dim
-        bool intersect_all_dims(TensorProduct&          new_tensor,     // new tensor product to be added
-                                TensorProduct&          existing_tensor,// existing tensor product
-                                int                     skip_dim)       // skip checking in this dimension
+        // check if new_tensor is adjacent to existing_tensor in current dimension
+        // returns -1: existing_tensor is adjacent on min side of new_tensor in current dim.
+        //          0: not adjacent
+        //          1: existing_tensor is adjacent on max side of new_tensor in current dim.
+        int adjacent(TensorProduct&          new_tensor,       // new tensor product to be added
+                     TensorProduct&          existing_tensor,  // existing tensor product
+                     int                     cur_dim)          // current dimension
         {
+            int retval = 0;
+
+            // check if adjacency exists in current dim
+            if (new_tensor.knot_mins[cur_dim] == existing_tensor.knot_maxs[cur_dim])
+                retval = -1;
+            else if (new_tensor.knot_maxs[cur_dim] == existing_tensor.knot_mins[cur_dim])
+                retval = 1;
+            else
+            {
+                // debug
+//                 fmt::print(stderr, "adj 1: cur_dim={} retval=0 new_tensor=[{} {} : {} {}] existing_tensor=[{} {} : {} {}]\n",
+//                         cur_dim, new_tensor.knot_mins[0], new_tensor.knot_mins[1], new_tensor.knot_maxs[0], new_tensor.knot_maxs[1],
+//                         existing_tensor.knot_mins[0], existing_tensor.knot_mins[1], existing_tensor.knot_maxs[0], existing_tensor.knot_maxs[1]);
+
+                return 0;
+            }
+
+            // confirm that intersection in at least one other dimension exists
             for (int j = 0; j < dom_dim_; j++)
             {
-                if (j == skip_dim)
+                if (j == cur_dim)
                     continue;
 
-                // there is no intersection in at least one of the other dimensions
-                if( (new_tensor.knot_mins[j] < existing_tensor.knot_mins[j] || new_tensor.knot_mins[j] > existing_tensor.knot_maxs[j]) &&
-                    (new_tensor.knot_maxs[j] > existing_tensor.knot_maxs[j] || new_tensor.knot_maxs[j] < existing_tensor.knot_mins[j]) )
+                // the area touching is zero in some dimension
+                // two cases are checked because role of new and existing tensor can be interchanged for adjacency; both need to fail to be nonadjacent
+                if ( (new_tensor.knot_mins[j]      < existing_tensor.knot_mins[j] || new_tensor.knot_mins[j]      >= existing_tensor.knot_maxs[j]) &&
+                     (existing_tensor.knot_mins[j] < new_tensor.knot_mins[j]      || existing_tensor.knot_mins[j] >= new_tensor.knot_maxs[j]))
+                {
+
+                    // debug
+//                     fmt::print(stderr, "adj 2: cur_dim={} retval=0 new_tensor=[{} {} : {} {}] existing_tensor=[{} {} : {} {}]\n",
+//                             cur_dim, new_tensor.knot_mins[0], new_tensor.knot_mins[1], new_tensor.knot_maxs[0], new_tensor.knot_maxs[1],
+//                             existing_tensor.knot_mins[0], existing_tensor.knot_mins[1], existing_tensor.knot_maxs[0], existing_tensor.knot_maxs[1]);
+
+                    return 0;
+                }
+            }
+
+            // debug
+//             fmt::print(stderr, "adj: cur_dim={} retval={} new_tensor=[{} {} : {} {}] existing_tensor=[{} {} : {} {}]\n",
+//                     cur_dim, retval, new_tensor.knot_mins[0], new_tensor.knot_mins[1], new_tensor.knot_maxs[0], new_tensor.knot_maxs[1],
+//                     existing_tensor.knot_mins[0], existing_tensor.knot_mins[1], existing_tensor.knot_maxs[0], existing_tensor.knot_maxs[1]);
+
+            return retval;
+        }
+
+        // check if new_tensor completely occludes any neighbor of existing_tensor
+        // ie, returns true if the face they share is the full size of existing_tensor
+        // assumes they share a face in the cur_dim (does not check)
+        int occluded(TensorProduct&          new_tensor,       // new tensor product to be added
+                     TensorProduct&          existing_tensor,  // existing tensor product
+                     int                     cur_dim)          // current dimension
+        {
+            // confirm that new_tensor is larger than existing_tensor in every dimension except cur_dim
+            for (int j = 0; j < dom_dim_; j++)
+            {
+                if (j == cur_dim)
+                    continue;
+
+                if(new_tensor.knot_mins[j] > existing_tensor.knot_mins[j] ||
+                   new_tensor.knot_maxs[j] < existing_tensor.knot_maxs[j])
                     return false;
             }
 
             // debug
-//             fmt::print(stderr, "skip_dim={} new_tensor.knot_mins=[{} {}] new_tensor.knot_maxs=[{} {}]\n",
-//                     skip_dim, new_tensor.knot_mins[0], new_tensor.knot_mins[1], new_tensor.knot_maxs[0], new_tensor.knot_maxs[1]);
+//             fmt::print(stderr, "cur_dim={} return=true new_tensor=[{} {} : {} {}] existing_tensor=[{} {} : {} {}]\n",
+//                     cur_dim, new_tensor.knot_mins[0], new_tensor.knot_mins[1], new_tensor.knot_maxs[0], new_tensor.knot_maxs[1],
+//                     existing_tensor.knot_mins[0], existing_tensor.kot_mins[1], existing_tensor.knot_maxs[0], existing_tensor.knot_maxs[1]);
 
             return true;
         }
 
         // checks if a_mins, maxs are a subset of b_mins, maxs
+        // identical bounds counts as a subset (does not need to be proper subset)
         bool subset(const vector<size_t>& a_mins,
                     const vector<size_t>& a_maxs,
                     const vector<size_t>& b_mins,
