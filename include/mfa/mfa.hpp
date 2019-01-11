@@ -81,6 +81,11 @@ namespace mfa
             delete mfa;
         }
 
+        MFA_Data<T>& mfa_data()
+        {
+            return *mfa;
+        }
+
         // encode
         void Encode(int verbose)                         // output level
         {
