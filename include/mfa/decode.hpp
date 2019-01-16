@@ -580,17 +580,32 @@ namespace mfa
                     temp_ctrl.row(span - mfa.p(cur_dim) + j) *
                     temp_weights(span - mfa.p(cur_dim) + j);
 
-            // clamp dimensions other than cur_dim to same value as first control point
-            // eliminates any wiggles in other dimensions due to numerical precision errors
-            // DEPRECATED, doesn't make sense in the split model
-//             for (auto j = 0; j < mfa.p.size(); j++)
-//                 if (j != cur_dim)
-//                     out_pt(j) = temp_ctrl(0, j);
-
             // compute the denominator of the rational curve point and divide by it
             // sum of element-wise multiplication requires transpose so that both arrays are same shape
             // (rows in this case), otherwise eigen cannot multiply them
             T denom = (N.row(0).cwiseProduct(temp_weights.transpose())).sum();
+            out_pt /= denom;
+        }
+
+        // compute a point from a NURBS curve at a given parameter value
+        // this version takes a temporary set of control points for one curve and a local knot vector
+        void CurvePt(
+                int                 cur_dim,        // current dimension
+                T                   param,          // parameter value of desired point
+                MatrixX<T>&         temp_ctrl,      // temporary control points
+                VectorX<T>&         temp_weights,   // weights associate with temporary control points
+                const vector<T>&    loc_knots,      // local knot vector
+                VectorX<T>&         out_pt)         // (output) point
+        {
+            VectorX<T> N = VectorX<T>::Zero(temp_ctrl.rows());      // basis coefficients
+            mfa.BasisFuns(cur_dim, param, loc_knots, N);
+            out_pt = VectorX<T>::Zero(temp_ctrl.cols());  // initializes and resizes
+
+            for (int j = 0; j <= mfa.p(cur_dim); j++)
+                out_pt += N(j) * temp_ctrl.row(j) * temp_weights(j);
+
+            // compute the denominator of the rational curve point and divide by it
+            T denom = (N.cwiseProduct(temp_weights)).sum();      // sum of element-wise multiplication of N and temp_weights
             out_pt /= denom;
         }
 

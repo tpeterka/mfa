@@ -265,6 +265,40 @@ namespace mfa
             }
         }
 
+        // computes one row of basis function values for a given local knot vector (in parameter, not index space)
+        // writes results in a row of N; assumes N has been allocated by caller
+        void BasisFuns(
+                int             cur_dim,    // current dimension
+                T               u,          // parameter value
+                const vector<T> loc_knots,  // local knot vector
+                VectorX<T>&     N)          // vector (one row) of (output) p+1 basis function values
+        {
+            // init
+            N(0) = 1.0;
+
+            // temporary recurrence results
+            // left(j)  = u - knots(1 - j)
+            // right(j) = knots(j) - u
+            vector<T> left(p(cur_dim) + 1);
+            vector<T> right(p(cur_dim) + 1);
+
+            // fill N
+            for (int j = 1; j <= p(cur_dim); j++)
+            {
+                left[j]  = u - knots(1 - j);
+                right[j] = knots(j) - u;
+
+                T saved = 0.0;
+                for (int r = 0; r < j; r++)
+                {
+                    T temp  = N(r) / (right[r + 1] + left[j - r]);
+                    N(r)    = saved + right[r + 1] * temp;
+                    saved   = left[j - r] * temp;
+                }
+                N(j) = saved;
+            }
+        }
+
 #ifndef UNCLAMPED_KNOTS       // repeated knots at ends
 
         // binary search to find the span in the knots vector containing a given parameter value

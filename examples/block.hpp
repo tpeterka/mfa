@@ -2030,10 +2030,31 @@ struct Block
         // pretend this tmesh is for the first science variable
         mfa::Tmesh<T>& tmesh = *vars[0].tmesh;
 
+        // compute range of anchor points for a given point to decode
+        VectorX<T> param(dom_dim);
+        param(0) = 0.5;             // hard-code some example pt
+        param(1) = 0.5;
+        vector<vector<size_t>> anchors(dom_dim);                // anchors affecting the decoding point
+        tmesh.anchors(param, anchors);
+
         vector<vector<size_t>> loc_knot_vec(dom_dim);               // local knot vector
         tmesh.local_knot_vector(anchor, loc_knot_vec);
 
-        // print
+        // print anchors
+        fmt::print(stderr, "for decoding point = [ ");
+        for (auto i = 0; i < dom_dim; i++)
+            fmt::print(stderr, "{} ", param[i]);
+        fmt::print(stderr, "],\n");
+
+        for (auto i = 0; i < dom_dim; i++)
+        {
+            fmt::print(stderr, "dim {} local anchors = [", i);
+            for (auto j = 0; j < anchors[i].size(); j++)
+                fmt::print(stderr, "{} ", anchors[i][j]);
+            fmt::print(stderr, "]\n");
+        }
+
+        // print local knot vectors
         fmt::print(stderr, "for anchor = [ ");
         for (auto i = 0; i < dom_dim; i++)
             fmt::print(stderr, "{} ", anchor[i]);
@@ -2048,7 +2069,6 @@ struct Block
         }
         fmt::print(stderr, "\n--------------------------\n\n");
     }
-
 };
 
 namespace diy

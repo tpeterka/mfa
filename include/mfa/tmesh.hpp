@@ -585,44 +585,45 @@ namespace mfa
             return true;
         }
 
-        // compute local knot vector in index space
-        void local_knot_vector(const vector<size_t>&        anchor,             // knot indices of anchor for odd degree or
-                                                                                // knot indices of start of rectangle containing anchor for even degree
-                               vector<vector<size_t>>&      loc_knots)          // (output) local knot vector in index space
+        // given a center point in index space, find intersecting knot lines in index space
+        // in -/+ directions in all dimensions
+        void knot_intersections(const vector<size_t>&   center,             // knot indices of anchor for odd degree or
+                                                                            // knot indices of start of rectangle containing anchor for even degree
+                                const VectorXi&         p,                  // local degree in each dimension
+                                vector<vector<size_t>>& loc_knots)          // (output) local knot vector in index space
         {
             loc_knots.resize(dom_dim_);
-            assert(anchor.size() == dom_dim_);
+            assert(center.size() == dom_dim_);
 
-            // find most refined tensor product containing anchor and that level of refinement
+            // find most refined tensor product containing center and that level of refinement
             // levels monotonically nondecrease; hence, find last tensor product containing the anchor
             size_t max_j = 0;
             for (auto j = 0; j < tensor_prods.size(); j++)
-                if (in(anchor, tensor_prods[j], -1))
+                if (in(center, tensor_prods[j], -1))
                         max_j = j;
             size_t max_level = tensor_prods[max_j].level;
 
-            // debug (hard-coded for 2d)
-//             fmt::print(stderr, "anchor=[{} {}] cur_tensor={} cur_level={}\n", anchor[0], anchor[1], max_j, max_level);
+            // walk the t-mesh in all dimensions, min. and max. directions outward from the center
+            // looking for interecting knot lines
 
-            for (auto i = 0; i < dom_dim_; i++)
+            for (auto i = 0; i < dom_dim_; i++)                             // for all dims
             {
-                auto p = mfa_.p[i];                                         // degree of current dim.
-                loc_knots[i].resize(p + 2);                                 // support of basis func. is p+2 by definition
+                loc_knots[i].resize(p(i) + 2);                              // support of basis func. is p+2 by definition
 
                 size_t start, min, max;
-                if (p % 2)                                                  // odd degree
+                if (p(i) % 2)                                                  // odd degree
                 {
-                    start   = (p + 1) / 2;
-                    min     = (p + 1) / 2;
-                    max     = (p + 1) / 2;
+                    start   = (p(i) + 1) / 2;
+                    min     = (p(i) + 1) / 2;
+                    max     = (p(i) + 1) / 2;
                 }
                 else                                                        // even degree
                 {
-                    start   = p / 2;
-                    min     = p / 2;
-                    max     = p / 2 + 1;
+                    start   = p(i) / 2;
+                    min     = p(i) / 2;
+                    max     = p(i) / 2 + 1;
                 }
-                loc_knots[i][start] = anchor[i];                            // start by anchoring the center of the knot vector
+                loc_knots[i][start] = center[i];                            // start by center the center of the knot vector
                 size_t cur_knot_idx = loc_knots[i][start];
                 size_t cur_tensor   = max_j;
                 size_t cur_level    = max_level;
@@ -630,7 +631,8 @@ namespace mfa
                 // debug
 //                 fmt::print(stderr, "dim={} (prev) cur_tensor={} cur_level={}\n", i, cur_tensor, cur_level);
 
-                for (int j = 0; j < min; j++)                               // add 'min' more knots in minimum direction from the anchor
+                // from the center in the min. direction
+                for (int j = 0; j < min; j++)                               // add 'min' more knots in minimum direction from the center
                 {
                     bool done = false;
                     do
@@ -643,7 +645,7 @@ namespace mfa
                                 vector<size_t>& prev = tensor_prods[cur_tensor].prev[i];
                                 size_t k;
                                 for (k = 0; k < prev.size(); k++)
-                                    if (in(anchor, tensor_prods[prev[k]], i))
+                                    if (in(center, tensor_prods[prev[k]], i))
                                         break;
                                 if (k == prev.size())
                                 {
@@ -680,7 +682,8 @@ namespace mfa
                 // debug
 //                 fmt::print(stderr, "dim={} (next) cur_tensor={} cur_level={}\n", i, cur_tensor, cur_level);
 
-                for (int j = 0; j < max; j++)                               // add 'max' more knots in maximum direction from the anchor
+                // from the center in the max. direction
+                for (int j = 0; j < max; j++)                               // add 'max' more knots in maximum direction from the center
                 {
                     bool done = false;
                     do
@@ -693,7 +696,7 @@ namespace mfa
                                 vector<size_t>& next = tensor_prods[cur_tensor].next[i];
                                 size_t k;
                                 for (k = 0; k < next.size(); k++)
-                                    if (in(anchor, tensor_prods[next[k]], i))
+                                    if (in(center, tensor_prods[next[k]], i))
                                         break;
                                 if (k == next.size())
                                 {
@@ -723,7 +726,31 @@ namespace mfa
                         }
                     } while (!done);
                 }
-            }
+            }                                                                   // for all dims.
+        }
+
+        // given an anchor point in index space, compute local knot vector in index space
+        void local_knot_vector(const vector<size_t>&        anchor,             // knot indices of anchor for odd degree or
+                                                                                // knot indices of start of rectangle containing anchor for even degree
+                               vector<vector<size_t>>&      loc_knots)          // (output) local knot vector in index space
+        {
+            knot_intersections(anchor, mfa_.p, loc_knots);
+        }
+
+        // given a point in parameter space to decode, compute range of anchor points in index space
+        void anchors(const VectorX<T>&          param,              // parameter value in each dim. of desired point
+                     vector<vector<size_t>>&    anchors)            // (output) local knot vector in index space
+        {
+            anchors.resize(dom_dim_);
+
+            // TODO: convert param to target in index space
+            vector<size_t> target(dom_dim_);
+            target[0] = 2;      // TODO: hard-coded example for now
+            target[1] = 2;
+
+            // subtract 1 from degree so that same code as for local knot vectors can be reused
+            // support for a decoded point is p+1 basis functions, while width of a local knot vector is p+2
+            knot_intersections(target, mfa_.p - VectorXi::Ones(dom_dim_), anchors);
         }
 
         void print() const
