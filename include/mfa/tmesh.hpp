@@ -20,6 +20,13 @@ struct ControlPoints
     vector<VectorX<T>>          weights;            // weights associated with control points in each cross-slice
 };
 
+struct NeighborTensor                               // neighboring tensor product
+{
+    int     dim;                                    // neighbor is in this dimension from the original tensor
+    int     level;                                  // level of neighbor
+    size_t  tensor_idx;                             // index in tensor_prods of the neighbor
+};
+
 template <typename T>
 struct TensorProduct
 {
@@ -590,7 +597,8 @@ namespace mfa
         void knot_intersections(const vector<size_t>&   center,             // knot indices of anchor for odd degree or
                                                                             // knot indices of start of rectangle containing anchor for even degree
                                 const VectorXi&         p,                  // local degree in each dimension
-                                vector<vector<size_t>>& loc_knots)          // (output) local knot vector in index space
+                                vector<vector<size_t>>& loc_knots,          // (output) local knot vector in index space
+                                vector<NeighborTensor>& neigh_hi_levels)    // (output) intersected neighbor tensors of higher level than center
         {
             loc_knots.resize(dom_dim_);
             assert(center.size() == dom_dim_);
@@ -601,7 +609,7 @@ namespace mfa
             for (auto j = 0; j < tensor_prods.size(); j++)
                 if (in(center, tensor_prods[j], -1))
                         max_j = j;
-            size_t max_level = tensor_prods[max_j].level;
+            int max_level = tensor_prods[max_j].level;
 
             // walk the t-mesh in all dimensions, min. and max. directions outward from the center
             // looking for interecting knot lines
@@ -611,25 +619,18 @@ namespace mfa
                 loc_knots[i].resize(p(i) + 2);                              // support of basis func. is p+2 by definition
 
                 size_t start, min, max;
-                if (p(i) % 2)                                                  // odd degree
-                {
-                    start   = (p(i) + 1) / 2;
-                    min     = (p(i) + 1) / 2;
-                    max     = (p(i) + 1) / 2;
-                }
+                if (p(i) % 2)                                               // odd degree
+                    start = min = max = (p(i) + 1) / 2;
                 else                                                        // even degree
                 {
-                    start   = p(i) / 2;
-                    min     = p(i) / 2;
-                    max     = p(i) / 2 + 1;
+                    start = min = p(i) / 2;
+                    max         = p(i) / 2 + 1;
                 }
                 loc_knots[i][start] = center[i];                            // start by center the center of the knot vector
                 size_t cur_knot_idx = loc_knots[i][start];
                 size_t cur_tensor   = max_j;
-                size_t cur_level    = max_level;
-
-                // debug
-//                 fmt::print(stderr, "dim={} (prev) cur_tensor={} cur_level={}\n", i, cur_tensor, cur_level);
+                int    cur_level    = max_level;
+                vector<size_t> cur  = center;                               // current knot location in the tmesh (index space)
 
                 // from the center in the min. direction
                 for (int j = 0; j < min; j++)                               // add 'min' more knots in minimum direction from the center
@@ -637,27 +638,18 @@ namespace mfa
                     bool done = false;
                     do
                     {
-                        if (cur_knot_idx > 0)
+                        if (cur_knot_idx > 0)                               // more knots in the tmesh
                         {
+                            // check which is the correct previous tensor
+                            // if more than one tensor sharing the target, pick highest level
                             if (cur_knot_idx - 1 < tensor_prods[cur_tensor].knot_mins[i])
-                            {
-                                // check which is the correct previous tensor
-                                vector<size_t>& prev = tensor_prods[cur_tensor].prev[i];
-                                size_t k;
-                                for (k = 0; k < prev.size(); k++)
-                                    if (in(center, tensor_prods[prev[k]], i))
-                                        break;
-                                if (k == prev.size())
-                                {
-                                    fmt::print(stderr, "Error: no valid previous tensor for knot vector\n");
-                                    abort();
-                                }
-                                cur_tensor  = prev[k];
-                                cur_level   = tensor_prods[cur_tensor].level;
+                                neighbor_tensors(tensor_prods[cur_tensor].prev[i], i, center, cur_tensor, cur_level, neigh_hi_levels);
 
-                                // debug
-//                                 fmt::print(stderr, "dim={} (prev) cur_tensor={} cur_level={}\n", i, cur_tensor, cur_level);
-                            }
+                            // check if next knot borders a higher level; if so, switch to higher level tensor
+                            cur[i] = cur_knot_idx - 1;
+                            border_higher_level(cur, cur_tensor, cur_level);
+
+                            // move to next knot
                             if (all_knot_levels[i][cur_knot_idx - 1] > cur_level)
                                 cur_knot_idx--;
                             if (cur_knot_idx > 0                                            &&
@@ -668,19 +660,19 @@ namespace mfa
                                 done = true;
                             }
                         }
-                        else
+                        else                                                // no more knots in the tmesh
                         {
-                            loc_knots[i][start - j - 1] = cur_knot_idx;         // repeat last knot as many times as needed
+                            loc_knots[i][start - j - 1] = cur_knot_idx;     // repeat last knot as many times as needed
                             done = true;
                         }
                     } while (!done);
                 }
+
+                // reset back to center
                 cur_knot_idx    = loc_knots[i][start];
                 cur_tensor      = max_j;
                 cur_level       = max_level;
-
-                // debug
-//                 fmt::print(stderr, "dim={} (next) cur_tensor={} cur_level={}\n", i, cur_tensor, cur_level);
+                cur             = center;
 
                 // from the center in the max. direction
                 for (int j = 0; j < max; j++)                               // add 'max' more knots in maximum direction from the center
@@ -688,27 +680,18 @@ namespace mfa
                     bool done = false;
                     do
                     {
-                        if (cur_knot_idx + 1 < all_knots[i].size())
+                        if (cur_knot_idx + 1 < all_knots[i].size())         // more knots in the tmesh
                         {
+                            // check which is the correct previous tensor
+                            // if more than one tensor sharing the target, pick highest level
                             if (cur_knot_idx + 1 > tensor_prods[cur_tensor].knot_maxs[i])
-                            {
-                                // check which is the correct next tensor
-                                vector<size_t>& next = tensor_prods[cur_tensor].next[i];
-                                size_t k;
-                                for (k = 0; k < next.size(); k++)
-                                    if (in(center, tensor_prods[next[k]], i))
-                                        break;
-                                if (k == next.size())
-                                {
-                                    fmt::print(stderr, "Error: no valid next tensor for knot vector\n");
-                                    abort();
-                                }
-                                cur_tensor  = next[k];
-                                cur_level   = tensor_prods[cur_tensor].level;
+                                neighbor_tensors(tensor_prods[cur_tensor].next[i], i, center, cur_tensor, cur_level, neigh_hi_levels);
 
-                                // debug
-//                                 fmt::print(stderr, "dim={} (next) cur_tensor={} cur_level={}\n", i, cur_tensor, cur_level);
-                            }
+                            // check if next knot borders a higher level; if so, switch to higher level tensor
+                            cur[i] = cur_knot_idx + 1;
+                            border_higher_level(cur, cur_tensor, cur_level);
+
+                            // move to next knot
                             if (all_knot_levels[i][cur_knot_idx + 1] > cur_level)
                                 cur_knot_idx++;
                             if (cur_knot_idx + 1 < all_knots[i].size()                      &&
@@ -719,14 +702,73 @@ namespace mfa
                                 done = true;
                             }
                         }
-                        else
+                        else                                                // no more knots in the tmesh
                         {
-                            loc_knots[i][start + j + 1] = cur_knot_idx;         // repeat last knot as many times as needed
+                            loc_knots[i][start + j + 1] = cur_knot_idx;     // repeat last knot as many times as needed
                             done = true;
                         }
                     } while (!done);
                 }
-            }                                                                   // for all dims.
+            }                                                               // for all dims.
+        }
+
+        // check which is the correct previous or next neighbor tensor containing the target
+        // if more than one tensor sharing the target, pick highest level
+        // updates cur_tensor and cur_level and neigh_hi_levels
+        void neighbor_tensors(const vector<size_t>&     prev_next,              // previous or next neighbor tensors
+                              int                       cur_dim,                // current dimension
+                              const vector<size_t>&     target,                 // target knot indices
+                              size_t&                   cur_tensor,             // (input / output) highest level neighbor tensor containing the target
+                              int&                      cur_level,              // (input / output) level of current tensor
+                              vector<NeighborTensor>&   neigh_hi_levels)        // (input / output) neighbors with higher levels than current tensor
+        {
+            size_t  temp_max_level;
+            size_t  temp_max_k;
+            bool    first_time = true;
+            for (auto k = 0; k < prev_next.size(); k++)
+            {
+                if (in(target, tensor_prods[prev_next[k]], cur_dim))
+                {
+                    if (first_time)
+                    {
+                        temp_max_k      = k;
+                        temp_max_level  = tensor_prods[prev_next[k]].level;
+                        first_time      = false;
+                    }
+                    else if (tensor_prods[prev_next[k]].level > temp_max_level)
+                    {
+                        temp_max_level  = tensor_prods[prev_next[k]].level;
+                        temp_max_k      = k;
+                    }
+                }
+            }
+            if (first_time)
+            {
+                fmt::print(stderr, "Error: no valid previous tensor for knot vector\n");
+                abort();
+            }
+            cur_tensor = prev_next[temp_max_k];
+            if (tensor_prods[cur_tensor].level > cur_level)
+            {
+                NeighborTensor neighbor = {cur_dim, tensor_prods[cur_tensor].level, prev_next[temp_max_k]};
+                neigh_hi_levels.push_back(neighbor);
+            }
+            cur_level = tensor_prods[cur_tensor].level;
+        }
+
+        // check if target knot index borders a higher level; if so, switch to higher level tensor
+        void border_higher_level(const vector<size_t>&  target,         // target knot indices
+                                 size_t&                cur_tensor,     // (input / output) highest level neighbor tensor containing the target
+                                 int&                   cur_level)      // (input / output) level of current tensor
+        {
+            for (auto k = cur_tensor; k < tensor_prods.size(); k++) // start checking at current tensor because levels are monotonic nondecreasing
+            {
+                if (in(target, tensor_prods[k], -1) && tensor_prods[k].level > cur_level)
+                {
+                    cur_tensor  = k;
+                    cur_level   = tensor_prods[k].level;
+                }
+            }
         }
 
         // given an anchor point in index space, compute local knot vector in index space
@@ -734,7 +776,8 @@ namespace mfa
                                                                                 // knot indices of start of rectangle containing anchor for even degree
                                vector<vector<size_t>>&      loc_knots)          // (output) local knot vector in index space
         {
-            knot_intersections(anchor, mfa_.p, loc_knots);
+            vector<NeighborTensor> unused;
+            knot_intersections(anchor, mfa_.p, loc_knots, unused);
         }
 
         // given a point in parameter space to decode, compute range of anchor points in index space
@@ -742,15 +785,95 @@ namespace mfa
                      vector<vector<size_t>>&    anchors)            // (output) local knot vector in index space
         {
             anchors.resize(dom_dim_);
+            vector<vector<size_t>> anchor_cands(dom_dim_);          // anchor candidates (possibly more than necessary)
 
-            // TODO: convert param to target in index space
+            // convert param to target in index space
             vector<size_t> target(dom_dim_);
-            target[0] = 2;      // TODO: hard-coded example for now
-            target[1] = 2;
+            for (auto i = 0; i < dom_dim_; i++)
+            {
+                // start searching at the last repeating 0, which is at position p
+                auto it     = upper_bound(all_knots[i].begin() + mfa_.p(i), all_knots[i].end(), param(i));
+                // test starting at the beginning of all_knots (remove eventually)
+//                 auto it     = upper_bound(all_knots[i].begin(), all_knots[i].end(), param(i));
+                target[i]   = it - all_knots[i].begin() - 1;
+            }
+
+            // debug
+            fmt::print(stderr, "param=[{} {}] target=[{} {}]\n", param(0), param(1), target[0], target[1]);
+
+            vector<NeighborTensor> neigh_hi_levels;                 // neighbor tensors of a higher level than tensor containing target
 
             // subtract 1 from degree so that same code as for local knot vectors can be reused
             // support for a decoded point is p+1 basis functions, while width of a local knot vector is p+2
-            knot_intersections(target, mfa_.p - VectorXi::Ones(dom_dim_), anchors);
+            knot_intersections(target, mfa_.p - VectorXi::Ones(dom_dim_), anchor_cands, neigh_hi_levels);
+
+            if (neigh_hi_levels.size())
+            {
+                // debug
+                fmt::print(stderr, "{} neigh_hi_levels:\n", neigh_hi_levels.size());
+
+                for (auto i = 0; i < neigh_hi_levels.size(); i++)
+                {
+                    // debug
+                    fmt::print(stderr, "dim={} level={} tensor_idx={}\n",
+                            neigh_hi_levels[i].dim, neigh_hi_levels[i].level, neigh_hi_levels[i].tensor_idx);
+
+                    // knot intersections at center of neigh_hi_level
+                    vector<vector<size_t>> temp_anchors(dom_dim_);
+                    vector<NeighborTensor> unused;
+                    vector<size_t> temp_target(dom_dim_);
+                    for (auto j = 0; j < dom_dim_; j++)
+                        temp_target[j] = (tensor_prods[neigh_hi_levels[i].tensor_idx].knot_mins[j] +
+                                tensor_prods[neigh_hi_levels[i].tensor_idx].knot_maxs[j]) / 2;
+                    knot_intersections(temp_target, mfa_.p - VectorXi::Ones(dom_dim_), temp_anchors, unused);
+
+                    // merge knot_intersections of neigh_hi_level with anchor_cands keeping sorted order, growing size of anchor_cands
+                    for (auto j = 0; j < dom_dim_; j++)
+                    {
+                        if (j == neigh_hi_levels[i].dim)
+                            continue;
+
+                        // anchor_cands[j] = set union of temp_anchors[j] and anchor_cands[j], maintaining sorted order
+                        vector<size_t> union_anchors;
+                        set_union(temp_anchors[j].begin(), temp_anchors[j].end(), anchor_cands[j].begin(), anchor_cands[j].end(), back_inserter(union_anchors));
+                        anchor_cands[j] = union_anchors;
+                    }
+                }
+
+                // copy central p+1 anchors from anchor_cands into anchors
+                for (auto i = 0; i < dom_dim_; i++)
+                {
+                    auto it = find (anchor_cands[i].begin(), anchor_cands[i].end(), target[i]);
+                    if (it == anchor_cands[i].end())
+                    {
+                        fmt::print(stderr, "Error: target {} not found in anchor_cands[dim {}]\n", target[i], i);
+                        abort();
+                    }
+                    size_t target_loc = it - anchor_cands[i].begin();           // index of target[i] in anchor_cands[i]
+                    size_t start, min, max;                                     // starting index and number of items to copy in min and max direction
+                    if (mfa_.p(i) % 2)
+                    {
+                        start = min = mfa_.p(i) / 2;
+                        max = mfa_.p(i) / 2 + 1;
+                    }
+                    else
+                        start = min = max = mfa_.p(i) / 2;
+
+                    anchors[i].resize(mfa_.p(i) + 1);
+                    anchors[i][start] = anchor_cands[i][target_loc];
+
+                    for (int j = 0; j < min; j++)                               // add 'min' more knots in minimum direction from the center
+                        anchors[i][start - j - 1] = anchor_cands[i][target_loc - j - 1];
+                    for (int j = 0; j < max; j++)                               // add 'max' more knots in maximum direction from the center
+                        anchors[i][start + j + 1] = anchor_cands[i][target_loc + j + 1];
+                }
+            }
+            else
+            {
+                // copy anchor_cands to anchors
+                for (auto i = 0; i < dom_dim_; i++)
+                    anchors[i] = anchor_cands[i];
+            }
         }
 
         void print() const

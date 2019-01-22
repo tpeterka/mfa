@@ -169,44 +169,44 @@ int main(int argc, char** argv)
     fmt::print(stderr, "--------------------------\n\n");
 
 
-    // test finding a local knot vector
-    vector<size_t> anchor(dom_dim);
-    anchor[0] = 2;
-    anchor[1] = 2;
+    // decode a point in the tmesh
+    VectorX<real_t> param(dom_dim);
+    param(0) = 0.5;
+    param(1) = 0.5;
     master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-            { b->local_knot_vector(cp, anchor); });
+            { b->decode_tmesh(cp, param); });
 
-//     // refine tmesh
-//     master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-//             { b->refine1_tmesh(cp); });
-// 
-//     // print tmesh
-//     fmt::print(stderr, "\n----- T-mesh after first refinement -----\n\n");
-//     master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-//             { b->print_tmesh(cp); });
-//     fmt::print(stderr, "--------------------------\n\n");
-// 
-//     // test finding a local knot vector
-//     anchor[0] = 5;
-//     anchor[1] = 5;
-//     master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-//             { b->local_knot_vector(cp, anchor); });
-// 
-//     // refine tmesh again
-//     master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-//             { b->refine2_tmesh(cp); });
-// 
-//     // print tmesh
-//     fmt::print(stderr, "\n----- T-mesh after second refinement -----\n\n");
-//     master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-//             { b->print_tmesh(cp); });
-//     fmt::print(stderr, "--------------------------\n\n");
-// 
-//     // test finding a local knot vector
-//     anchor[0] = 5;
-//     anchor[1] = 1;
-//     master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-//             { b->local_knot_vector(cp, anchor); });
+    // refine tmesh
+    master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
+            { b->refine1_tmesh(cp); });
+
+    // print tmesh
+    fmt::print(stderr, "\n----- T-mesh after first refinement -----\n\n");
+    master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
+            { b->print_tmesh(cp); });
+    fmt::print(stderr, "--------------------------\n\n");
+
+    // decode a point in the tmesh
+    param(0) = 0.7;
+    param(1) = 0.7;
+    master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
+            { b->decode_tmesh(cp, param); });
+
+    // refine tmesh again
+    master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
+            { b->refine2_tmesh(cp); });
+
+    // print tmesh
+    fmt::print(stderr, "\n----- T-mesh after second refinement -----\n\n");
+    master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
+            { b->print_tmesh(cp); });
+    fmt::print(stderr, "--------------------------\n\n");
+
+    // decode a point in the tmesh
+    param(0) = 0.7;
+    param(1) = 0.4;
+    master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
+            { b->decode_tmesh(cp, param); });
 
     // save the results in diy format
     diy::io::write_blocks("approx.out", world, master);

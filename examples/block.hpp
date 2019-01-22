@@ -2023,22 +2023,16 @@ struct Block
         tmesh.print();
     }
 
-    // compute local knot vector
-    void local_knot_vector(const diy::Master::ProxyWithLink&      cp,
-                           const vector<size_t>&                  anchor)
+    // decode a point in the t-mesh
+    void decode_tmesh(const diy::Master::ProxyWithLink&     cp,
+                      const VectorX<T>&                     param)      // parameters of point to decode
     {
         // pretend this tmesh is for the first science variable
         mfa::Tmesh<T>& tmesh = *vars[0].tmesh;
 
         // compute range of anchor points for a given point to decode
-        VectorX<T> param(dom_dim);
-        param(0) = 0.5;             // hard-code some example pt
-        param(1) = 0.5;
-        vector<vector<size_t>> anchors(dom_dim);                // anchors affecting the decoding point
+        vector<vector<size_t>> anchors(dom_dim);                        // anchors affecting the decoding point
         tmesh.anchors(param, anchors);
-
-        vector<vector<size_t>> loc_knot_vec(dom_dim);               // local knot vector
-        tmesh.local_knot_vector(anchor, loc_knot_vec);
 
         // print anchors
         fmt::print(stderr, "for decoding point = [ ");
@@ -2053,21 +2047,61 @@ struct Block
                 fmt::print(stderr, "{} ", anchors[i][j]);
             fmt::print(stderr, "]\n");
         }
-
-        // print local knot vectors
-        fmt::print(stderr, "for anchor = [ ");
-        for (auto i = 0; i < dom_dim; i++)
-            fmt::print(stderr, "{} ", anchor[i]);
-        fmt::print(stderr, "],\n");
-
-        for (auto i = 0; i < dom_dim; i++)
-        {
-            fmt::print(stderr, "dim {} local knot vector = [", i);
-            for (auto j = 0; j < loc_knot_vec[i].size(); j++)
-                fmt::print(stderr, "{} ", loc_knot_vec[i][j]);
-            fmt::print(stderr, "]\n");
-        }
         fmt::print(stderr, "\n--------------------------\n\n");
+
+        // compute local knot vectors for each anchor in Cartesian product of anchors
+
+        int tot_nanchors = 1;                                               // total number of anchors in flattened space
+        for (auto i = 0; i < dom_dim; i++)
+            tot_nanchors *= anchors[i].size();
+        vector<int> anchor_idx(dom_dim);                                    // current index of anchor in each dim, initialized to 0s
+
+        for (auto j = 0; j < tot_nanchors; j++)
+        {
+            vector<size_t> anchor(dom_dim);                                 // one anchor from anchors
+            for (auto i = 0; i < dom_dim; i++)
+                anchor[i] = anchors[i][anchor_idx[i]];
+            anchor_idx[0]++;
+
+            // for all dimensions except last, check if anchor_idx is at the end
+            for (auto k = 0; k < dom_dim - 1; k++)
+            {
+                if (anchor_idx[k] == anchors[k].size())
+                {
+                    anchor_idx[k] = 0;
+                    anchor_idx[k + 1]++;
+                }
+            }
+
+            vector<vector<size_t>> loc_knot_vec(dom_dim);                   // local knot vector
+            tmesh.local_knot_vector(anchor, loc_knot_vec);
+
+            // print local knot vectors
+            fmt::print(stderr, "for anchor = [ ");
+            for (auto i = 0; i < dom_dim; i++)
+                fmt::print(stderr, "{} ", anchor[i]);
+            fmt::print(stderr, "],\n");
+
+            for (auto i = 0; i < dom_dim; i++)
+            {
+                fmt::print(stderr, "dim {} local knot vector = [", i);
+                for (auto j = 0; j < loc_knot_vec[i].size(); j++)
+                    fmt::print(stderr, "{} ", loc_knot_vec[i][j]);
+                fmt::print(stderr, "]\n");
+            }
+            fmt::print(stderr, "\n--------------------------\n\n");
+
+            // TODO: insert any missing knots and control points (port Youssef's knot insertion algorithm)
+            // TODO: insert missing knots into tmesh so that knot lines will be intersected
+
+            // TODO: compute basis function in each dimension
+
+            // TODO: locate corresponding control point
+
+            // TODO: multiply basis function by control point and add to current sum
+        }
+
+        // TODO: normalize sum of basis functions * control points
     }
 };
 
