@@ -19,6 +19,8 @@
 
 #include    <Eigen/Dense>
 
+#include    <random>
+
 #define MAX_DIM 8                           // a user limit, not mfa's
 
 using namespace std;
@@ -241,6 +243,377 @@ struct Block
             diy::load(bb, b->approx);
             diy::load(bb, b->errs);
         }
+
+    // f16
+    void generate_f16_data(
+            const       diy::Master::ProxyWithLink& cp,
+            DomainArgs& args)
+    {
+        DomainArgs* a   = &args;
+        int nvars       = a->pt_dim - a->dom_dim;             // number of science variables
+        vars.resize(nvars);
+        max_errs.resize(nvars);
+        sum_sq_errs.resize(nvars);
+        int tot_ndom_pts    = 1;
+        geometry.p.resize(a->dom_dim);
+        geometry.min_dim = 0;
+        geometry.max_dim = a->dom_dim - 1;
+        for (int j = 0; j < nvars; j++)
+        {
+            vars[j].p.resize(a->dom_dim);
+            vars[j].min_dim = a->dom_dim + j;
+            vars[j].max_dim = vars[j].min_dim + 1;
+        }
+        ndom_pts.resize(a->dom_dim);
+        for (int i = 0; i < a->dom_dim; i++)
+        {
+            geometry.p(i)   =  a->geom_p[i];
+            for (int j = 0; j < nvars; j++)
+                vars[j].p(i) =  a->vars_p[i];
+            ndom_pts(i)     =  a->ndom_pts[i];
+        }
+
+        // get local block bounds
+        // if single block, they are passed in args
+        // if multiblock, they were decomposed by diy and are already in the block's bounds_mins, maxs
+        if (!a->multiblock)
+        {
+            bounds_mins.resize(a->pt_dim);
+            bounds_maxs.resize(a->pt_dim);
+            core_mins.resize(a->dom_dim);
+            core_maxs.resize(a->dom_dim);
+            for (int i = 0; i < a->dom_dim; i++)
+            {
+                bounds_mins(i)  = a->min[i];
+                bounds_maxs(i)  = a->max[i];
+                core_mins(i)    = a->min[i];
+                core_maxs(i)    = a->max[i];
+            }
+        }
+
+        // adjust number of domain points and starting domain point for ghost
+        VectorX<T> d(a->dom_dim);               // step in domain points in each dimension
+        VectorX<T> p0(a->dom_dim);              // starting point in each dimension
+        int nghost_pts;                         // number of ghost points in current dimension
+        for (int i = 0; i < a->dom_dim; i++)
+        {
+            d(i) = (core_maxs(i) - core_mins(i)) / (ndom_pts(i) - 1);
+            // min direction
+            nghost_pts = floor((core_mins(i) - bounds_mins(i)) / d(i));
+            ndom_pts(i) += nghost_pts;
+            p0(i) = core_mins(i) - nghost_pts * d(i);
+            // max direction
+            nghost_pts = floor((bounds_maxs(i) - core_maxs(i)) / d(i));
+            ndom_pts(i) += nghost_pts;
+            tot_ndom_pts *= ndom_pts(i);
+        }
+
+        domain.resize(tot_ndom_pts, a->pt_dim);
+
+        // assign values to the domain (geometry)
+        int cs = 1;                           // stride of a coordinate in this dim
+        real_t eps = 1.0e-5;                  // floating point roundoff error
+        for (int i = 0; i < a->dom_dim; i++)  // all dimensions in the domain
+        {
+            int k = 0;
+            int co = 0;                       // j index of start of a new coordinate value
+            for (int j = 0; j < tot_ndom_pts; j++)
+            {
+                if (p0(i) + k * d(i) > bounds_maxs(i) + eps)
+                    k = 0;
+                domain(j, i) = p0(i) + k * d(i);
+                if (j + 1 - co >= cs)
+                {
+                    k++;
+                    co = j + 1;
+                }
+            }
+            cs *= ndom_pts(i);
+        }
+
+        // normal distribution for generating noise
+        default_random_engine generator;
+        normal_distribution<double> distribution(0.0, 1.0);
+
+        // assign values to the range (science variables)
+        // hard-coded for 2 domain dimensions and 1 science variable
+        for (int j = 0; j < tot_ndom_pts; j++)
+        {
+            domain(j, a->dom_dim) =
+                (pow(domain(j, 0), 4)                        +
+                 pow(domain(j, 1), 4)                        +
+                 pow(domain(j, 0), 2) * pow(domain(j, 1), 2) +
+                 domain(j, 0) * domain(j, 1)                   ) /
+                (pow(domain(j, 0), 3)                        +
+                 pow(domain(j, 1), 3)                        +
+                 4                                             );
+
+            // add some noise
+            double noise = distribution(generator);
+            domain(j, a->dom_dim) *= (1.0 + a->r * noise);
+
+            if (j == 0 || domain(j, a->dom_dim) > bounds_maxs(a->dom_dim))
+                bounds_maxs(a->dom_dim) = domain(j, a->dom_dim);
+            if (j == 0 || domain(j, a->dom_dim) < bounds_mins(a->dom_dim))
+                bounds_mins(a->dom_dim) = domain(j, a->dom_dim);
+        }
+
+        // extents
+        fprintf(stderr, "gid = %d\n", cp.gid());
+        cerr << "core_mins:\n" << core_mins << endl;
+        cerr << "core_maxs:\n" << core_maxs << endl;
+        cerr << "bounds_mins:\n" << bounds_mins << endl;
+        cerr << "bounds_maxs:\n" << bounds_maxs << "\n" << endl;
+
+//         cerr << "domain:\n" << domain << endl;
+    }
+
+    // f17
+    void generate_f17_data(
+            const       diy::Master::ProxyWithLink& cp,
+            DomainArgs& args)
+    {
+        DomainArgs* a   = &args;
+        int nvars       = a->pt_dim - a->dom_dim;             // number of science variables
+        vars.resize(nvars);
+        max_errs.resize(nvars);
+        sum_sq_errs.resize(nvars);
+        int tot_ndom_pts    = 1;
+        geometry.p.resize(a->dom_dim);
+        geometry.min_dim = 0;
+        geometry.max_dim = a->dom_dim - 1;
+        for (int j = 0; j < nvars; j++)
+        {
+            vars[j].p.resize(a->dom_dim);
+            vars[j].min_dim = a->dom_dim + j;
+            vars[j].max_dim = vars[j].min_dim + 1;
+        }
+        ndom_pts.resize(a->dom_dim);
+        for (int i = 0; i < a->dom_dim; i++)
+        {
+            geometry.p(i)   =  a->geom_p[i];
+            for (int j = 0; j < nvars; j++)
+                vars[j].p(i) =  a->vars_p[i];
+            ndom_pts(i)     =  a->ndom_pts[i];
+        }
+
+        // get local block bounds
+        // if single block, they are passed in args
+        // if multiblock, they were decomposed by diy and are already in the block's bounds_mins, maxs
+        if (!a->multiblock)
+        {
+            bounds_mins.resize(a->pt_dim);
+            bounds_maxs.resize(a->pt_dim);
+            core_mins.resize(a->dom_dim);
+            core_maxs.resize(a->dom_dim);
+            for (int i = 0; i < a->dom_dim; i++)
+            {
+                bounds_mins(i)  = a->min[i];
+                bounds_maxs(i)  = a->max[i];
+                core_mins(i)    = a->min[i];
+                core_maxs(i)    = a->max[i];
+            }
+        }
+
+        // adjust number of domain points and starting domain point for ghost
+        VectorX<T> d(a->dom_dim);               // step in domain points in each dimension
+        VectorX<T> p0(a->dom_dim);              // starting point in each dimension
+        int nghost_pts;                         // number of ghost points in current dimension
+        for (int i = 0; i < a->dom_dim; i++)
+        {
+            d(i) = (core_maxs(i) - core_mins(i)) / (ndom_pts(i) - 1);
+            // min direction
+            nghost_pts = floor((core_mins(i) - bounds_mins(i)) / d(i));
+            ndom_pts(i) += nghost_pts;
+            p0(i) = core_mins(i) - nghost_pts * d(i);
+            // max direction
+            nghost_pts = floor((bounds_maxs(i) - core_maxs(i)) / d(i));
+            ndom_pts(i) += nghost_pts;
+            tot_ndom_pts *= ndom_pts(i);
+        }
+
+        domain.resize(tot_ndom_pts, a->pt_dim);
+
+        // assign values to the domain (geometry)
+        int cs = 1;                           // stride of a coordinate in this dim
+        real_t eps = 1.0e-5;                  // floating point roundoff error
+        for (int i = 0; i < a->dom_dim; i++)  // all dimensions in the domain
+        {
+            int k = 0;
+            int co = 0;                       // j index of start of a new coordinate value
+            for (int j = 0; j < tot_ndom_pts; j++)
+            {
+                if (p0(i) + k * d(i) > bounds_maxs(i) + eps)
+                    k = 0;
+                domain(j, i) = p0(i) + k * d(i);
+                if (j + 1 - co >= cs)
+                {
+                    k++;
+                    co = j + 1;
+                }
+            }
+            cs *= ndom_pts(i);
+        }
+
+        // normal distribution for generating noise
+        default_random_engine generator;
+        normal_distribution<double> distribution(0.0, 1.0);
+
+        // assign values to the range (science variables)
+        // hard-coded for 3 domain dimensions and 1 science variable
+        // domain dims: 0=E, 1=G, 2=M
+        for (int j = 0; j < tot_ndom_pts; j++)
+        {
+            real_t E                = domain(j, 0);
+            real_t G                = domain(j, 1);
+            real_t M                = domain(j, 2);
+            real_t gamma            = sqrt(M * M * (M * M + G * G));
+            real_t kprop            = (2.0 * sqrt(2.0) * M * G * gamma ) / (M_PI * sqrt(M * M + gamma));
+            domain(j, a->dom_dim)   = kprop / ((E * E - M * M) * (E * E - M * M) + M * M * G);
+
+            // add some noise
+            double noise = distribution(generator);
+            domain(j, a->dom_dim) *= (1.0 + a->r * noise);
+
+            if (j == 0 || domain(j, a->dom_dim) > bounds_maxs(a->dom_dim))
+                bounds_maxs(a->dom_dim) = domain(j, a->dom_dim);
+            if (j == 0 || domain(j, a->dom_dim) < bounds_mins(a->dom_dim))
+                bounds_mins(a->dom_dim) = domain(j, a->dom_dim);
+        }
+
+        // extents
+        fprintf(stderr, "gid = %d\n", cp.gid());
+        cerr << "core_mins:\n" << core_mins << endl;
+        cerr << "core_maxs:\n" << core_maxs << endl;
+        cerr << "bounds_mins:\n" << bounds_mins << endl;
+        cerr << "bounds_maxs:\n" << bounds_maxs << "\n" << endl;
+
+//         cerr << "domain:\n" << domain << endl;
+    }
+
+    // f18
+    void generate_f18_data(
+            const       diy::Master::ProxyWithLink& cp,
+            DomainArgs& args)
+    {
+        DomainArgs* a   = &args;
+        int nvars       = a->pt_dim - a->dom_dim;             // number of science variables
+        vars.resize(nvars);
+        max_errs.resize(nvars);
+        sum_sq_errs.resize(nvars);
+        int tot_ndom_pts    = 1;
+        geometry.p.resize(a->dom_dim);
+        geometry.min_dim = 0;
+        geometry.max_dim = a->dom_dim - 1;
+        for (int j = 0; j < nvars; j++)
+        {
+            vars[j].p.resize(a->dom_dim);
+            vars[j].min_dim = a->dom_dim + j;
+            vars[j].max_dim = vars[j].min_dim + 1;
+        }
+        ndom_pts.resize(a->dom_dim);
+        for (int i = 0; i < a->dom_dim; i++)
+        {
+            geometry.p(i)   =  a->geom_p[i];
+            for (int j = 0; j < nvars; j++)
+                vars[j].p(i) =  a->vars_p[i];
+            ndom_pts(i)     =  a->ndom_pts[i];
+        }
+
+        // get local block bounds
+        // if single block, they are passed in args
+        // if multiblock, they were decomposed by diy and are already in the block's bounds_mins, maxs
+        if (!a->multiblock)
+        {
+            bounds_mins.resize(a->pt_dim);
+            bounds_maxs.resize(a->pt_dim);
+            core_mins.resize(a->dom_dim);
+            core_maxs.resize(a->dom_dim);
+            for (int i = 0; i < a->dom_dim; i++)
+            {
+                bounds_mins(i)  = a->min[i];
+                bounds_maxs(i)  = a->max[i];
+                core_mins(i)    = a->min[i];
+                core_maxs(i)    = a->max[i];
+            }
+        }
+
+        // adjust number of domain points and starting domain point for ghost
+        VectorX<T> d(a->dom_dim);               // step in domain points in each dimension
+        VectorX<T> p0(a->dom_dim);              // starting point in each dimension
+        int nghost_pts;                         // number of ghost points in current dimension
+        for (int i = 0; i < a->dom_dim; i++)
+        {
+            d(i) = (core_maxs(i) - core_mins(i)) / (ndom_pts(i) - 1);
+            // min direction
+            nghost_pts = floor((core_mins(i) - bounds_mins(i)) / d(i));
+            ndom_pts(i) += nghost_pts;
+            p0(i) = core_mins(i) - nghost_pts * d(i);
+            // max direction
+            nghost_pts = floor((bounds_maxs(i) - core_maxs(i)) / d(i));
+            ndom_pts(i) += nghost_pts;
+            tot_ndom_pts *= ndom_pts(i);
+        }
+
+        domain.resize(tot_ndom_pts, a->pt_dim);
+
+        // assign values to the domain (geometry)
+        int cs = 1;                           // stride of a coordinate in this dim
+        real_t eps = 1.0e-5;                  // floating point roundoff error
+        for (int i = 0; i < a->dom_dim; i++)  // all dimensions in the domain
+        {
+            int k = 0;
+            int co = 0;                       // j index of start of a new coordinate value
+            for (int j = 0; j < tot_ndom_pts; j++)
+            {
+                if (p0(i) + k * d(i) > bounds_maxs(i) + eps)
+                    k = 0;
+                domain(j, i) = p0(i) + k * d(i);
+                if (j + 1 - co >= cs)
+                {
+                    k++;
+                    co = j + 1;
+                }
+            }
+            cs *= ndom_pts(i);
+        }
+
+        // normal distribution for generating noise
+        default_random_engine generator;
+        normal_distribution<double> distribution(0.0, 1.0);
+
+        // assign values to the range (science variables)
+        // hard-coded for 4 domain dimensions and 1 science variable
+        // domain dims: 0=x1, 1=x2, 2=x3, 3=x4
+        for (int j = 0; j < tot_ndom_pts; j++)
+        {
+            real_t x1               = domain(j, 0);
+            real_t x2               = domain(j, 1);
+            real_t x3               = domain(j, 2);
+            real_t x4               = domain(j, 3);
+            domain(j, a->dom_dim)   =
+//                 arctanh(x1) + arctanh(x2) + arctanh(x3) + arctanh(x4) / ((x1 * x1 - 1) / x2);
+                atanh(x1) + atanh(x2) + atanh(x3) + atanh(x4) / ((pow(x1, 2) - 1) * pow(x2, -1));
+
+            // add some noise
+            double noise = distribution(generator);
+            domain(j, a->dom_dim) *= (1.0 + a->r * noise);
+
+            if (j == 0 || domain(j, a->dom_dim) > bounds_maxs(a->dom_dim))
+                bounds_maxs(a->dom_dim) = domain(j, a->dom_dim);
+            if (j == 0 || domain(j, a->dom_dim) < bounds_mins(a->dom_dim))
+                bounds_mins(a->dom_dim) = domain(j, a->dom_dim);
+        }
+
+        // extents
+        fprintf(stderr, "gid = %d\n", cp.gid());
+        cerr << "core_mins:\n" << core_mins << endl;
+        cerr << "core_maxs:\n" << core_maxs << endl;
+        cerr << "bounds_mins:\n" << bounds_mins << endl;
+        cerr << "bounds_maxs:\n" << bounds_maxs << "\n" << endl;
+
+//         cerr << "domain:\n" << domain << endl;
+    }
 
     // f(x,y,...) = sine(x)/x * sine(y)/y * ...
     void generate_sinc_data(
@@ -1495,9 +1868,11 @@ struct Block
             approx.resize(domain.rows(), domain.cols());
 
             // geometry
+            fmt::print(stderr, "Decoding geometry...\n");
             geometry.mfa->Decode(verbose, approx, 0, ndom_dims - 1);
 
             // science variables
+            fmt::print(stderr, "Decoding science variables...\n");
             for (auto i = 0; i < vars.size(); i++)
                 vars[i].mfa->Decode(verbose, approx, ndom_dims + i, ndom_dims + i);     // assumes all variables are scalar
         }
