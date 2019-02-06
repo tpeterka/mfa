@@ -244,6 +244,46 @@ struct Block
             diy::load(bb, b->errs);
         }
 
+    // evaluate f16 function
+    T f16(VectorX<T>&   domain_pt)
+    {
+        T retval =
+            (pow(domain_pt(0), 4)                        +
+             pow(domain_pt(1), 4)                        +
+             pow(domain_pt(0), 2) * pow(domain_pt(1), 2) +
+             domain_pt(0) * domain_pt(1)                 ) /
+            (pow(domain_pt(0), 3)                        +
+             pow(domain_pt(1), 3)                        +
+             4                                           );
+
+        return retval;
+    }
+
+    // evaluate f17 function
+    T f17(VectorX<T>&   domain_pt)
+    {
+        T E         = domain_pt(0);
+        T G         = domain_pt(1);
+        T M         = domain_pt(2);
+        T gamma     = sqrt(M * M * (M * M + G * G));
+        T kprop     = (2.0 * sqrt(2.0) * M * G * gamma ) / (M_PI * sqrt(M * M + gamma));
+        T retval    = kprop / ((E * E - M * M) * (E * E - M * M) + M * M * G);
+
+        return retval;
+    }
+
+    // evaluate f18 function
+    T f18(VectorX<T>&   domain_pt)
+    {
+        T x1        = domain_pt(0);
+        T x2        = domain_pt(1);
+        T x3        = domain_pt(2);
+        T x4        = domain_pt(3);
+        T retval    = atanh(x1) + atanh(x2) + atanh(x3) + atanh(x4) / ((pow(x1, 2) - 1) * pow(x2, -1));
+
+        return retval;
+    }
+
     // f16
     void generate_f16_data(
             const       diy::Master::ProxyWithLink& cp,
@@ -337,16 +377,29 @@ struct Block
 
         // assign values to the range (science variables)
         // hard-coded for 2 domain dimensions and 1 science variable
+        VectorX<T> dom_pt(a->dom_dim);
         for (int j = 0; j < tot_ndom_pts; j++)
         {
-            domain(j, a->dom_dim) =
-                (pow(domain(j, 0), 4)                        +
-                 pow(domain(j, 1), 4)                        +
-                 pow(domain(j, 0), 2) * pow(domain(j, 1), 2) +
-                 domain(j, 0) * domain(j, 1)                   ) /
-                (pow(domain(j, 0), 3)                        +
-                 pow(domain(j, 1), 3)                        +
-                 4                                             );
+            //             DEPRECATED
+//             domain(j, a->dom_dim) =
+//                 (pow(domain(j, 0), 4)                        +
+//                  pow(domain(j, 1), 4)                        +
+//                  pow(domain(j, 0), 2) * pow(domain(j, 1), 2) +
+//                  domain(j, 0) * domain(j, 1)                   ) /
+//                 (pow(domain(j, 0), 3)                        +
+//                  pow(domain(j, 1), 3)                        +
+//                  4                                             );
+
+            dom_pt = domain.block(j, 0, 1, a->dom_dim).transpose();
+            T retval = f16(dom_pt);
+            domain(j, a->dom_dim) = retval;
+
+            // debug: confirm that factored out function produces same result
+//             if (domain(j, a->dom_dim) != retval)
+//             {
+//                 fmt::print(stderr, "Error: function value does not match\n");
+//                 exit(0);
+//             }
 
             // add some noise
             double noise = distribution(generator);
@@ -462,14 +515,27 @@ struct Block
         // assign values to the range (science variables)
         // hard-coded for 3 domain dimensions and 1 science variable
         // domain dims: 0=E, 1=G, 2=M
+        VectorX<T> dom_pt(a->dom_dim);
         for (int j = 0; j < tot_ndom_pts; j++)
         {
-            real_t E                = domain(j, 0);
-            real_t G                = domain(j, 1);
-            real_t M                = domain(j, 2);
-            real_t gamma            = sqrt(M * M * (M * M + G * G));
-            real_t kprop            = (2.0 * sqrt(2.0) * M * G * gamma ) / (M_PI * sqrt(M * M + gamma));
-            domain(j, a->dom_dim)   = kprop / ((E * E - M * M) * (E * E - M * M) + M * M * G);
+            //             DEPRECATED
+//             real_t E                = domain(j, 0);
+//             real_t G                = domain(j, 1);
+//             real_t M                = domain(j, 2);
+//             real_t gamma            = sqrt(M * M * (M * M + G * G));
+//             real_t kprop            = (2.0 * sqrt(2.0) * M * G * gamma ) / (M_PI * sqrt(M * M + gamma));
+//             domain(j, a->dom_dim)   = kprop / ((E * E - M * M) * (E * E - M * M) + M * M * G);
+
+            dom_pt = domain.block(j, 0, 1, a->dom_dim).transpose();
+            T retval = f17(dom_pt);
+            domain(j, a->dom_dim) = retval;
+
+            // debug: confirm that factored out function produces same result
+//             if (domain(j, a->dom_dim) != retval)
+//             {
+//                 fmt::print(stderr, "Error: function value does not match\n");
+//                 exit(0);
+//             }
 
             // add some noise
             double noise = distribution(generator);
@@ -585,6 +651,7 @@ struct Block
         // assign values to the range (science variables)
         // hard-coded for 4 domain dimensions and 1 science variable
         // domain dims: 0=x1, 1=x2, 2=x3, 3=x4
+        VectorX<T> dom_pt(a->dom_dim);
         for (int j = 0; j < tot_ndom_pts; j++)
         {
             real_t x1               = domain(j, 0);
@@ -592,8 +659,18 @@ struct Block
             real_t x3               = domain(j, 2);
             real_t x4               = domain(j, 3);
             domain(j, a->dom_dim)   =
-//                 arctanh(x1) + arctanh(x2) + arctanh(x3) + arctanh(x4) / ((x1 * x1 - 1) / x2);
                 atanh(x1) + atanh(x2) + atanh(x3) + atanh(x4) / ((pow(x1, 2) - 1) * pow(x2, -1));
+
+            dom_pt = domain.block(j, 0, 1, a->dom_dim).transpose();
+            T retval = f18(dom_pt);
+            domain(j, a->dom_dim) = retval;
+
+            // debug: confirm that factored out function produces same result
+            if (domain(j, a->dom_dim) != retval)
+            {
+                fmt::print(stderr, "Error: function value does not match\n");
+                exit(0);
+            }
 
             // add some noise
             double noise = distribution(generator);
@@ -1851,6 +1928,93 @@ struct Block
 // 
 // //         mfa->max_err = max_err;
 //     }
+
+    // compute error to synthethic, non-noisy function (for HEP applications)
+    // outputs L1, L2, Linfinity error
+    void analytical_error(const diy::Master::ProxyWithLink&     cp,
+                          string&                               fun,    // function to evaluate
+                          T&                                    L1,     // (output) L-1 norm
+                          T&                                    L2,     // (output) L-2 norm
+                          T&                                    Linf,   // (output) L-infinity norm
+                          DomainArgs&                           args)
+    {
+        DomainArgs* a   = &args;
+
+        T sum_errs      = 0.0;                                  // sum of absolute values of errors (L-1 norm)
+        T sum_sq_errs   = 0.0;                                  // sum of squares of errors (square of L-2 norm)
+        T max_err       = -1.0;                                 // maximum absolute value of error (L-infinity norm)
+
+        size_t tot_ndom_pts = 1;
+        for (auto i = 0; i < dom_dim; i++)
+            tot_ndom_pts *= a->ndom_pts[i];
+
+        vector<int> dom_idx(dom_dim);                           // current index of domain point in each dim, initialized to 0s
+
+        // steps in each dimension in paramater space and real space
+        vector<T> dom_step_real(dom_dim);                       // spacing between domain points in real space
+        vector<T> dom_step_param(dom_dim);                      // spacing between domain points in parameter space
+        for (auto i = 0; i < dom_dim; i++)
+        {
+            dom_step_param[i] = 1.0 / (double)(a->ndom_pts[i] - 1);
+            dom_step_real[i] = dom_step_param[i] * (a->max[i] - a->min[i]);
+        }
+
+        // flattened loop over all the points in a domain in dimension dom_dim
+        fmt::print(stderr, "Testing analytical error norms over a total of {} points\n", tot_ndom_pts);
+        for (auto j = 0; j < tot_ndom_pts; j++)
+        {
+            // compute current point in real and parameter space
+            VectorX<T> dom_pt_real(dom_dim);                // one domain point in real space
+            VectorX<T> dom_pt_param(dom_dim);               // one domain point in parameter space
+            for (auto i = 0; i < dom_dim; i++)
+            {
+                dom_pt_real(i) = a->min[i] + dom_idx[i] * dom_step_real[i];
+                dom_pt_param(i) = dom_idx[i] * dom_step_param[i];
+            }
+
+            // evaluate function at dom_pt_real
+            T true_val;
+            if (fun == "f16")
+                true_val = f16(dom_pt_real);
+            if (fun == "f17")
+                true_val = f17(dom_pt_real);
+            if (fun == "f18")
+                true_val = f18(dom_pt_real);
+
+            // evaluate MFA at dom_pt_param
+            VectorX<T> cpt(1);                              // hard-coded for one science variable
+            vars[0].mfa->DecodePt(dom_pt_param, cpt);       // hard-coded for one science variable
+
+            // compute and accrue error
+            T err = fabs(true_val - cpt(0));
+            sum_errs += err;                                // L1
+            sum_sq_errs += err * err;                       // L2
+            if (err > max_err)                              // Linf
+                max_err = err;
+
+            // debug
+//             fmt::print(stderr, "true_val={} approx_val={} abs_diff={}\n", true_val, cpt(0), fabs(true_val - cpt(0)));
+
+            dom_idx[0]++;
+
+            // debug
+//             cerr << "dom_pt_param: " << dom_pt_param.transpose() << " dom_pt_real: " << dom_pt_real.transpose() << endl;
+
+            // for all dimensions except last, check if pt_idx is at the end, part of flattened loop logic
+            for (auto k = 0; k < dom_dim - 1; k++)
+            {
+                if (dom_idx[k] == a->ndom_pts[k])
+                {
+                    dom_idx[k] = 0;
+                    dom_idx[k + 1]++;
+                }
+            }
+        }                                                   // for all points in flattened loop
+
+        L1    = sum_errs;
+        L2    = sqrt(sum_sq_errs);
+        Linf  = max_err;
+    }
 
     // compute error field and maximum error in the block
     // uses coordinate-wise difference between values

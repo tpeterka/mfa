@@ -163,6 +163,15 @@ namespace mfa
             return err;
         }
 
+        // decode single point at the given parameter location
+        void DecodePt(VectorX<T>& param,        // parameters of point to decode
+                      VectorX<T>& cpt)          // (output) decoded point
+        {
+            int verbose = 0;
+            Decoder<T> decoder(*mfa, verbose);
+            decoder.VolPt(param, cpt);
+        }
+
         // compute the error (absolute value of coordinate-wise difference) of the mfa at a domain point
         // error is not normalized by the data range (absolute, not relative error)
         void AbsCoordError(

@@ -44,6 +44,7 @@ int main(int argc, char** argv)
     int    geom_degree  = 1;                    // degree for geometry (same for all dims)
     int    vars_degree  = 4;                    // degree for science variables (same for all dims)
     int    ndomp        = 25;                   // input number of domain points (same for all dims)
+    int    ntest        = 0;                    // number of input test points in each dim for analytical error tests
     int    geom_nctrl   = -1;                   // input number of control points for geometry (same for all dims)
     int    vars_nctrl   = 11;                   // input number of control points for all science variables (same for all dims)
     string input        = "f16";                // input dataset
@@ -57,6 +58,7 @@ int main(int argc, char** argv)
     ops >> opts::Option('p', "geom_degree", geom_degree," degree in each dimension of geometry");
     ops >> opts::Option('q', "vars_degree", vars_degree," degree in each dimension of science variables");
     ops >> opts::Option('n', "ndomp",       ndomp,      " number of input points in each dimension of domain");
+    ops >> opts::Option('a', "ntest",       ntest,      " number of test points in each dimension of domain (for analytical error calculation)");
     ops >> opts::Option('g', "geom_nctrl",  geom_nctrl, " number of control points in each dimension of geometry");
     ops >> opts::Option('v', "vars_nctrl",  vars_nctrl, " number of control points in each dimension of all science variables");
     ops >> opts::Option('i', "input",       input,      " input dataset");
@@ -80,7 +82,8 @@ int main(int argc, char** argv)
         "pt_dim = "         << pt_dim       << " dom_dim = "        << dom_dim      <<
         "\ngeom_degree = "  << geom_degree  << " vars_degree = "    << vars_degree  <<
         "\ninput pts = "    << ndomp        << " geom_ctrl pts = "  << geom_nctrl   <<
-        "\nvars_ctrl_pts = "<< vars_nctrl   << " input = "          << input        << endl;
+        "\nvars_ctrl_pts = "<< vars_nctrl   << " test_points = "    << ntest        <<
+        " input = "         << input        <<  endl;
 #ifdef CURVE_PARAMS
     cerr << "parameterization method = curve" << endl;
 #else
@@ -209,6 +212,25 @@ int main(int argc, char** argv)
     master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
             { b->range_error(cp, 1, true); });
     decode_time = MPI_Wtime() - decode_time;
+
+    // compute the norms of analytical errors synthetic function w/o noise at different domain points than the input
+    if (ntest > 0)
+    {
+        real_t L1, L2, Linf;                                // L-1, 2, infinity norms
+
+        for (int i = 0; i < MAX_DIM; i++)
+            d_args.ndom_pts[i] = ntest;
+
+        master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
+                { b->analytical_error(cp, input, L1, L2, Linf, d_args); });
+
+        // print analytical errors
+        fprintf(stderr, "\n------ Analytical error norms -------\n");
+        fprintf(stderr, "L-1        norm = %e\n", L1);
+        fprintf(stderr, "L-2        norm = %e\n", L2);
+        fprintf(stderr, "L-infinity norm = %e\n", Linf);
+        fprintf(stderr, "-------------------------------------\n\n");
+    }
 
     // print results
     fprintf(stderr, "\n------- Final block results --------\n");
