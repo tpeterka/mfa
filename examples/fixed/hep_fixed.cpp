@@ -83,7 +83,7 @@ int main(int argc, char** argv)
         "\ngeom_degree = "  << geom_degree  << " vars_degree = "    << vars_degree  <<
         "\ninput pts = "    << ndomp        << " geom_ctrl pts = "  << geom_nctrl   <<
         "\nvars_ctrl_pts = "<< vars_nctrl   << " test_points = "    << ntest        <<
-        " input = "         << input        <<  endl;
+        "\ninput = "        << input        <<  endl;
 #ifdef CURVE_PARAMS
     cerr << "parameterization method = curve" << endl;
 #else

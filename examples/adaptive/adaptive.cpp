@@ -47,6 +47,7 @@ int main(int argc, char** argv)
     int    geom_degree    = 1;                        // degree for geometry (same for all dims)
     int    vars_degree    = 4;                        // degree for science variables (same for all dims)
     int    ndomp          = 100;                      // input number of domain points (same for all dims)
+    int    ntest          = 0;                        // number of input test points in each dim for analytical error tests
     string input          = "sinc";                   // input dataset
     int    max_rounds     = 0;                        // max. number of rounds (0 = no maximum)
     bool   weighted       = true;                     // solve for and use weights
@@ -62,6 +63,7 @@ int main(int argc, char** argv)
     ops >> opts::Option('p', "geom_degree", geom_degree,    " degree in each dimension of geometry");
     ops >> opts::Option('q', "vars_degree", vars_degree,    " degree in each dimension of science variables");
     ops >> opts::Option('n', "ndomp",       ndomp,          " number of input points in each dimension of domain");
+    ops >> opts::Option('a', "ntest",       ntest,          " number of test points in each dimension of domain (for analytical error calculation)");
     ops >> opts::Option('i', "input",       input,          " input dataset");
     ops >> opts::Option('r', "rounds",      max_rounds,     " maximum number of iterations");
     ops >> opts::Option('w', "weights",     weighted,       " solve for and use weights");
@@ -81,7 +83,8 @@ int main(int argc, char** argv)
     cerr <<
         "error = "          << norm_err_limit   << " pt_dim = "         << pt_dim       << " dom_dim = "        << dom_dim      <<
         "\ngeom_degree = "  << geom_degree      << " vars_degree = "    << vars_degree  <<
-        "\ninput pts = "    << ndomp            << " input = "          << input        << " max. rounds = "    << max_rounds   << endl;
+        "\ninput pts = "    << ndomp            << " input = "          << input        << " max. rounds = "    << max_rounds   <<
+        "\ntest_points = "  << ntest            << endl;
 #ifdef CURVE_PARAMS
     cerr << "parameterization method = curve" << endl;
 #else
@@ -283,6 +286,25 @@ int main(int argc, char** argv)
 //     // debug: save knot span domains for comparing error with location in knot span
 //     master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
 //             { b->knot_span_domains(cp); });
+
+    // compute the norms of analytical errors synthetic function w/o noise at different domain points than the input
+    if (ntest > 0)
+    {
+        real_t L1, L2, Linf;                                // L-1, 2, infinity norms
+
+        for (int i = 0; i < MAX_DIM; i++)
+            d_args.ndom_pts[i] = ntest;
+
+        master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
+                { b->analytical_error(cp, input, L1, L2, Linf, d_args); });
+
+        // print analytical errors
+        fprintf(stderr, "\n------ Analytical error norms -------\n");
+        fprintf(stderr, "L-1        norm = %e\n", L1);
+        fprintf(stderr, "L-2        norm = %e\n", L2);
+        fprintf(stderr, "L-infinity norm = %e\n", Linf);
+        fprintf(stderr, "-------------------------------------\n\n");
+    }
 
     // print results
     fprintf(stderr, "\n------- Final block results --------\n");
