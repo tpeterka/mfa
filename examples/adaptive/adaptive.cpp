@@ -52,6 +52,7 @@ int main(int argc, char** argv)
     bool   weighted       = true;                     // solve for and use weights
     real_t rot            = 0.0;                      // rotation angle in degrees
     real_t twist          = 0.0;                      // twist (waviness) of domain (0.0-1.0)
+    real_t noise          = 0.0;                      // fraction of noise
 
     // get command line arguments
     opts::Options ops(argc, argv);
@@ -66,6 +67,7 @@ int main(int argc, char** argv)
     ops >> opts::Option('w', "weights",     weighted,       " solve for and use weights");
     ops >> opts::Option('r', "rotate",      rot,            " rotation angle of domain in degrees");
     ops >> opts::Option('t', "twist",       twist,          " twist (waviness) of domain (0.0-1.0)");
+    ops >> opts::Option('n', "noise",       noise,          " fraction of noise (0.0 - 1.0)");
 
     if (ops >> opts::Present('h', "help", " show help"))
     {
@@ -129,6 +131,7 @@ int main(int argc, char** argv)
     d_args.pt_dim       = pt_dim;
     d_args.dom_dim      = dom_dim;
     d_args.weighted     = weighted;
+    d_args.n            = noise;
     d_args.multiblock   = false;
     d_args.verbose      = 1;
     d_args.r            = 0.0;
@@ -153,7 +156,7 @@ int main(int argc, char** argv)
         for (int i = 0; i < pt_dim - dom_dim; i++)      // for all science variables
             d_args.s[i] = i + 1;                        // scaling factor on range
         master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-                { b->generate_sine_data(cp, d_args); });
+                { b->generate_analytical_data(cp, input, d_args); });
     }
 
     // sinc function f(x) = sin(x)/x, f(x,y) = sinc(x)sinc(y), ...
@@ -169,7 +172,7 @@ int main(int argc, char** argv)
         d_args.r            = rot * M_PI / 180.0;   // domain rotation angle in rads
         d_args.t            = twist;                // twist (waviness) of domain
         master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-                { b->generate_sinc_data(cp, d_args); });
+                { b->generate_analytical_data(cp, input, d_args); });
     }
 
     // S3D dataset

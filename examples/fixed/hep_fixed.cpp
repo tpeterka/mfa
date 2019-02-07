@@ -133,7 +133,7 @@ int main(int argc, char** argv)
     d_args.pt_dim       = pt_dim;
     d_args.dom_dim      = dom_dim;
     d_args.weighted     = weighted;
-    d_args.r            = noise;
+    d_args.n            = noise;
     d_args.t            = 0.0;
     d_args.multiblock   = false;
     d_args.verbose      = 1;
@@ -161,7 +161,7 @@ int main(int argc, char** argv)
         for (int i = 0; i < pt_dim - dom_dim; i++)      // for all science variables
             d_args.s[i] = 1.0;                          // scaling factor on range
         master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-                { b->generate_f16_data(cp, d_args); });
+                { b->generate_analytical_data(cp, input, d_args); });
     }
 
     // f17 function
@@ -178,7 +178,7 @@ int main(int argc, char** argv)
         for (int i = 0; i < pt_dim - dom_dim; i++)      // for all science variables
             d_args.s[i] = 1.0;                          // scaling factor on range
         master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-                { b->generate_f17_data(cp, d_args); });
+                { b->generate_analytical_data(cp, input, d_args); });
     }
 
     // f18 function
@@ -194,7 +194,7 @@ int main(int argc, char** argv)
         for (int i = 0; i < pt_dim - dom_dim; i++)      // for all science variables
             d_args.s[i] = 1.0;                          // scaling factor on range
         master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-                { b->generate_f18_data(cp, d_args); });
+                { b->generate_analytical_data(cp, input, d_args); });
     }
 
     // compute the MFA

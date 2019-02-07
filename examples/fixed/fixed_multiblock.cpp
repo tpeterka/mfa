@@ -47,6 +47,7 @@ int main(int argc, char** argv)
     bool   weighted     = true;                 // solve for and use weights
     bool   strong_sc    = true;                 // strong scaling (false = weak scaling)
     real_t ghost        = 0.1;                  // amount of ghost zone overlap as a factor of block size (0.0 - 1.0)
+    real_t noise        = 0.0;                  // fraction of noise
 
     // get command line arguments
     opts::Options ops(argc, argv);
@@ -62,6 +63,7 @@ int main(int argc, char** argv)
     ops >> opts::Option('b', "tot_blocks",  tot_blocks, " total number of blocks");
     ops >> opts::Option('t', "strong_sc",   strong_sc,  " strong scaling (1 = strong, 0 = weak)");
     ops >> opts::Option('o', "overlap",     ghost,      " relative ghost zone overlap (0.0 - 1.0)");
+    ops >> opts::Option('n', "noise",       noise,      " fraction of noise (0.0 - 1.0)");
 
     if (ops >> opts::Present('h', "help", " show help"))
     {
@@ -139,6 +141,7 @@ int main(int argc, char** argv)
     d_args.pt_dim       = pt_dim;
     d_args.dom_dim      = dom_dim;
     d_args.weighted     = weighted;
+    d_args.n            = noise;
     d_args.multiblock   = true;
     d_args.verbose      = 0;
     d_args.r            = 0.0;
@@ -170,7 +173,7 @@ int main(int argc, char** argv)
         for (int i = 0; i < pt_dim - dom_dim; i++)      // for all science variables
             d_args.s[i] = i + 1;                        // scaling factor on range
         master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-                { b->generate_sine_data(cp, d_args); });
+                { b->generate_analytical_data(cp, input, d_args); });
     }
 
     // sinc function f(x) = sin(x)/x, f(x,y) = sinc(x)sinc(y), ...
@@ -179,7 +182,7 @@ int main(int argc, char** argv)
         for (int i = 0; i < pt_dim - dom_dim; i++)      // for all science variables
             d_args.s[i] = 10.0 * (i + 1);               // scaling factor on range
         master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-                { b->generate_sinc_data(cp, d_args); });
+                { b->generate_analytical_data(cp, input, d_args); });
     }
 
     // compute the MFA
