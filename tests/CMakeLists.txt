@@ -24,11 +24,11 @@ add_test                    (NAME fixed-sinc-2d-test
                             )
 
 add_test                    (NAME fixed-s3d-1d-test
-                             COMMAND fixed-test -i s3d -d 2 -m 1 -p 1 -q 3 -w 0
+                             COMMAND fixed-test -i s3d -d 2 -m 1 -p 1 -q 3 -w 0 -f ${s3d_infile}
                             )
 
 add_test                    (NAME fixed-s3d-2d-test
-                             COMMAND fixed-test -i s3d -d 3 -m 2 -p 1 -q 3 -w 0
+                             COMMAND fixed-test -i s3d -d 3 -m 2 -p 1 -q 3 -w 0 -f ${s3d_infile}
                             )
 
 add_test                    (NAME differentiate-fixed-test
@@ -73,7 +73,7 @@ add_test                    (NAME write-vtk-adaptive-test
                             )
 
 add_test                    (NAME adaptive-s3dtest
-                             COMMAND adaptive-test -i s3d -d 2 -m 1 -p 1 -q 3 -e 1e-2 -w 0
+                             COMMAND adaptive-test -i s3d -d 2 -m 1 -p 1 -q 3 -e 1e-2 -w 0 -f ${s3d_infile}
                             )
 
 

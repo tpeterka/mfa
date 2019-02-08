@@ -3,6 +3,7 @@ cmake_minimum_required      (VERSION 2.8)
 
 option                      (wrapped_mpi    "MPI compiler wrapper requires no further MPI libs"     OFF)
 option                      (tbb_thread     "Enable TBB threading"                                  ON)
+option                      (s3d_infile     "Path/filename of s3d dataset (for unit testing)"         )
 
 # C++11
 set                         (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")

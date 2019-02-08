@@ -49,6 +49,7 @@ int main(int argc, char** argv)
     bool   weighted     = true;                 // solve for and use weights
     bool   strong_sc    = true;                 // strong scaling (false = weak scaling)
     bool   error        = true;                 // decode all input points and check error
+    string infile;                              // input file name
 
     // get command line arguments
     opts::Options ops(argc, argv);
@@ -63,6 +64,7 @@ int main(int argc, char** argv)
     ops >> opts::Option('w', "weights",     weighted,   " solve for and use weights");
     ops >> opts::Option('b', "tot_blocks",  tot_blocks, " total number of blocks");
     ops >> opts::Option('t', "strong_sc",   strong_sc,  " strong scaling (1 = strong, 0 = weak)");
+    ops >> opts::Option('f', "infile",      infile,     " input file name");
 
     if (ops >> opts::Present('h', "help", " show help"))
     {

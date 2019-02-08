@@ -51,6 +51,7 @@ int main(int argc, char** argv)
     real_t rot          = 0.0;                  // rotation angle in degrees
     real_t twist        = 0.0;                  // twist (waviness) of domain (0.0-1.0)
     bool   error        = true;                 // decode all input points and check error
+    string infile;                              // input file name
 
     // get command line arguments
     opts::Options ops(argc, argv);
@@ -65,6 +66,7 @@ int main(int argc, char** argv)
     ops >> opts::Option('w', "weights",     weighted,   " solve for and use weights");
     ops >> opts::Option('r', "rotate",      rot,        " rotation angle of domain in degrees");
     ops >> opts::Option('t', "twist",       twist,      " twist (waviness) of domain (0.0-1.0)");
+    ops >> opts::Option('f', "infile",      infile,     " input file name");
 
     if (ops >> opts::Present('h', "help", " show help"))
     {
@@ -192,7 +194,8 @@ int main(int argc, char** argv)
         d_args.vars_nctrl_pts[0]    = 140;
         d_args.vars_nctrl_pts[1]    = 108;
         d_args.vars_nctrl_pts[2]    = 110;
-        strncpy(d_args.infile, "/Users/tpeterka/datasets/flame/6_small.xyz", sizeof(d_args.infile));
+        strncpy(d_args.infile, infile.c_str(), sizeof(d_args.infile));
+//         strncpy(d_args.infile, "/Users/tpeterka/datasets/flame/6_small.xyz", sizeof(d_args.infile));
         if (dom_dim == 1)
             master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
                     { b->read_1d_slice_3d_vector_data(cp, d_args); });
@@ -218,7 +221,8 @@ int main(int argc, char** argv)
             d_args.geom_nctrl_pts[i]    = geom_nctrl;
             d_args.vars_nctrl_pts[i]    = vars_nctrl;
         }
-        strncpy(d_args.infile, "/Users/tpeterka/datasets/nek5000/200x200x200/0.xyz", sizeof(d_args.infile));
+        strncpy(d_args.infile, infile.c_str(), sizeof(d_args.infile));
+//         strncpy(d_args.infile, "/Users/tpeterka/datasets/nek5000/200x200x200/0.xyz", sizeof(d_args.infile));
         if (dom_dim == 2)
             master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
                     { b->read_2d_slice_3d_vector_data(cp, d_args); });

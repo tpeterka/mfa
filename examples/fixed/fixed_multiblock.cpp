@@ -50,6 +50,7 @@ int main(int argc, char** argv)
     real_t ghost        = 0.1;                  // amount of ghost zone overlap as a factor of block size (0.0 - 1.0)
     real_t noise        = 0.0;                  // fraction of noise
     bool   error        = true;                 // decode all input points and check error
+    string infile;                              // input file name
 
     // get command line arguments
     opts::Options ops(argc, argv);
@@ -68,6 +69,7 @@ int main(int argc, char** argv)
     ops >> opts::Option('o', "overlap",     ghost,      " relative ghost zone overlap (0.0 - 1.0)");
     ops >> opts::Option('b', "noise",       noise,      " fraction of noise (0.0 - 1.0)");
     ops >> opts::Option('e', "error",       error,      " decode entire error field (default=true)");
+    ops >> opts::Option('f', "infile",      infile,     " input file name");
 
     if (ops >> opts::Present('h', "help", " show help"))
     {
