@@ -299,7 +299,7 @@ struct Block
         T M         = domain_pt(2);
         T gamma     = sqrt(M * M * (M * M + G * G));
         T kprop     = (2.0 * sqrt(2.0) * M * G * gamma ) / (M_PI * sqrt(M * M + gamma));
-        T retval    = kprop / ((E * E - M * M) * (E * E - M * M) + M * M * G);
+        T retval    = kprop / ((E * E - M * M) * (E * E - M * M) + M * M * G * G);
 
         return retval;
     }

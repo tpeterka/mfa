@@ -67,7 +67,7 @@ int main(int argc, char** argv)
     ops >> opts::Option('w', "weights",     weighted,   " solve for and use weights");
     ops >> opts::Option('r', "rotate",      rot,        " rotation angle of domain in degrees");
     ops >> opts::Option('t', "twist",       twist,      " twist (waviness) of domain (0.0-1.0)");
-    ops >> opts::Option('n', "noise",       noise,      " fraction of noise (0.0 - 1.0)");
+    ops >> opts::Option('b', "noise",       noise,      " fraction of noise (0.0 - 1.0)");
 
     if (ops >> opts::Present('h', "help", " show help"))
     {
@@ -87,7 +87,8 @@ int main(int argc, char** argv)
         "\ngeom_degree = "  << geom_degree  << " vars_degree = "    << vars_degree  <<
         "\ninput pts = "    << ndomp        << " geom_ctrl pts = "  << geom_nctrl   <<
         "\nvars_ctrl_pts = "<< vars_nctrl   << " test_points = "    << ntest        <<
-        "\ninput = "        << input        << endl;
+        "\ninput = "        << input        << " noise = "          << noise        << endl;
+
 #ifdef CURVE_PARAMS
     cerr << "parameterization method = curve" << endl;
 #else
@@ -181,6 +182,55 @@ int main(int argc, char** argv)
             d_args.s[i] = 10.0 * (i + 1);                 // scaling factor on range
         d_args.r = rot * M_PI / 180.0;   // domain rotation angle in rads
         d_args.t = twist;                // twist (waviness) of domain
+        master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
+                { b->generate_analytical_data(cp, input, d_args); });
+    }
+
+    // f16 function
+    if (input == "f16")
+    {
+        for (int i = 0; i < MAX_DIM; i++)
+        {
+            d_args.min[i]               = -1.0;
+            d_args.max[i]               = 1.0;
+            d_args.geom_nctrl_pts[i]    = geom_nctrl;
+            d_args.vars_nctrl_pts[i]    = vars_nctrl;
+        }
+        for (int i = 0; i < pt_dim - dom_dim; i++)      // for all science variables
+            d_args.s[i] = 1.0;                          // scaling factor on range
+        master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
+                { b->generate_analytical_data(cp, input, d_args); });
+    }
+
+    // f17 function
+    if (input == "f17")
+    {
+        d_args.min[0] = 80.0;   d_args.max[0] = 100.0;
+        d_args.min[1] = 5.0;    d_args.max[1] = 10.0;
+        d_args.min[2] = 90.0;   d_args.max[2] = 93.0;
+        for (int i = 0; i < MAX_DIM; i++)
+        {
+            d_args.geom_nctrl_pts[i]    = geom_nctrl;
+            d_args.vars_nctrl_pts[i]    = vars_nctrl;
+        }
+        for (int i = 0; i < pt_dim - dom_dim; i++)      // for all science variables
+            d_args.s[i] = 1.0;                          // scaling factor on range
+        master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
+                { b->generate_analytical_data(cp, input, d_args); });
+    }
+
+    // f18 function
+    if (input == "f18")
+    {
+        for (int i = 0; i < MAX_DIM; i++)
+        {
+            d_args.min[i]               = -0.95;
+            d_args.max[i]               = 0.95;
+            d_args.geom_nctrl_pts[i]    = geom_nctrl;
+            d_args.vars_nctrl_pts[i]    = vars_nctrl;
+        }
+        for (int i = 0; i < pt_dim - dom_dim; i++)      // for all science variables
+            d_args.s[i] = 1.0;                          // scaling factor on range
         master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
                 { b->generate_analytical_data(cp, input, d_args); });
     }

@@ -65,7 +65,7 @@ int main(int argc, char** argv)
     ops >> opts::Option('b', "tot_blocks",  tot_blocks, " total number of blocks");
     ops >> opts::Option('t', "strong_sc",   strong_sc,  " strong scaling (1 = strong, 0 = weak)");
     ops >> opts::Option('o', "overlap",     ghost,      " relative ghost zone overlap (0.0 - 1.0)");
-    ops >> opts::Option('n', "noise",       noise,      " fraction of noise (0.0 - 1.0)");
+    ops >> opts::Option('b', "noise",       noise,      " fraction of noise (0.0 - 1.0)");
 
     if (ops >> opts::Present('h', "help", " show help"))
     {
@@ -87,8 +87,9 @@ int main(int argc, char** argv)
             "\ngeom_degree = "  << geom_degree  << " vars_degree = "    << vars_degree  <<
             "\ninput pts = "    << ndomp        << " geom_ctrl pts = "  << geom_nctrl   <<
             "\nvars_ctrl_pts = "<< vars_nctrl   << " input = "          << input        <<
-            " tot_blocks = "    << tot_blocks   << " strong scaling = " << strong_sc    <<
-            " ghost overlap = " << ghost        << " test_points = "    << ntest        << endl;
+            "\ntot_blocks = "    << tot_blocks   << " strong scaling = " << strong_sc   <<
+            "\nghost overlap = " << ghost        << " test_points = "    << ntest       <<
+            "\nnoise = "         << noise        << endl;
 #ifdef CURVE_PARAMS
         cerr << "parameterization method = curve" << endl;
 #else

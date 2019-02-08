@@ -63,7 +63,7 @@ int main(int argc, char** argv)
     ops >> opts::Option('v', "vars_nctrl",  vars_nctrl, " number of control points in each dimension of all science variables");
     ops >> opts::Option('i', "input",       input,      " input dataset");
     ops >> opts::Option('w', "weights",     weighted,   " solve for and use weights");
-    ops >> opts::Option('n', "noise",       noise,      " fraction of noise (0.0 - 1.0)");
+    ops >> opts::Option('b', "noise",       noise,      " fraction of noise (0.0 - 1.0)");
 
     if (ops >> opts::Present('h', "help", " show help"))
     {
@@ -83,7 +83,7 @@ int main(int argc, char** argv)
         "\ngeom_degree = "  << geom_degree  << " vars_degree = "    << vars_degree  <<
         "\ninput pts = "    << ndomp        << " geom_ctrl pts = "  << geom_nctrl   <<
         "\nvars_ctrl_pts = "<< vars_nctrl   << " test_points = "    << ntest        <<
-        "\ninput = "        << input        <<  endl;
+        "\ninput = "        << input        << " noise = "          << noise        << endl;
 #ifdef CURVE_PARAMS
     cerr << "parameterization method = curve" << endl;
 #else

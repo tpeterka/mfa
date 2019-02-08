@@ -63,7 +63,7 @@ int main(int argc, char** argv)
     ops >> opts::Option('i', "input",       input,          " input dataset");
     ops >> opts::Option('r', "rounds",      max_rounds,     " maximum number of iterations");
     ops >> opts::Option('w', "weights",     weighted,       " solve for and use weights");
-    ops >> opts::Option('n', "noise",       noise,      " fraction of noise (0.0 - 1.0)");
+    ops >> opts::Option('b', "noise",       noise,      " fraction of noise (0.0 - 1.0)");
 
     if (ops >> opts::Present('h', "help", " show help"))
     {
@@ -77,7 +77,8 @@ int main(int argc, char** argv)
     cerr <<
         "error = "          << norm_err_limit   << " pt_dim = "         << pt_dim       << " dom_dim = "        << dom_dim      <<
         "\ngeom_degree = "  << geom_degree      << " vars_degree = "    << vars_degree  <<
-        "\ninput pts = "    << ndomp            << " input = "          << input        << " max. rounds = "    << max_rounds   << endl;
+        "\ninput pts = "    << ndomp            << " input = "          << input        << " max. rounds = "    << max_rounds   <<
+        "\nnoise = "        << noise            << endl;
 #ifdef CURVE_PARAMS
     cerr << "parameterization method = curve" << endl;
 #else
