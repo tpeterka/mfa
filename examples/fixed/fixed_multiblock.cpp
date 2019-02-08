@@ -188,6 +188,55 @@ int main(int argc, char** argv)
                 { b->generate_analytical_data(cp, input, d_args); });
     }
 
+    // f16 function
+    if (input == "f16")
+    {
+        for (int i = 0; i < MAX_DIM; i++)
+        {
+            d_args.min[i]               = -1.0;
+            d_args.max[i]               = 1.0;
+            d_args.geom_nctrl_pts[i]    = geom_nctrl;
+            d_args.vars_nctrl_pts[i]    = vars_nctrl;
+        }
+        for (int i = 0; i < pt_dim - dom_dim; i++)      // for all science variables
+            d_args.s[i] = 1.0;                          // scaling factor on range
+        master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
+                { b->generate_analytical_data(cp, input, d_args); });
+    }
+
+    // f17 function
+    if (input == "f17")
+    {
+        d_args.min[0] = 80.0;   d_args.max[0] = 100.0;
+        d_args.min[1] = 5.0;    d_args.max[1] = 10.0;
+        d_args.min[2] = 90.0;   d_args.max[2] = 93.0;
+        for (int i = 0; i < MAX_DIM; i++)
+        {
+            d_args.geom_nctrl_pts[i]    = geom_nctrl;
+            d_args.vars_nctrl_pts[i]    = vars_nctrl;
+        }
+        for (int i = 0; i < pt_dim - dom_dim; i++)      // for all science variables
+            d_args.s[i] = 1.0;                          // scaling factor on range
+        master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
+                { b->generate_analytical_data(cp, input, d_args); });
+    }
+
+    // f18 function
+    if (input == "f18")
+    {
+        for (int i = 0; i < MAX_DIM; i++)
+        {
+            d_args.min[i]               = -0.95;
+            d_args.max[i]               = 0.95;
+            d_args.geom_nctrl_pts[i]    = geom_nctrl;
+            d_args.vars_nctrl_pts[i]    = vars_nctrl;
+        }
+        for (int i = 0; i < pt_dim - dom_dim; i++)      // for all science variables
+            d_args.s[i] = 1.0;                          // scaling factor on range
+        master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
+                { b->generate_analytical_data(cp, input, d_args); });
+    }
+
     // compute the MFA
     if (world.rank() == 0)
         fprintf(stderr, "\nStarting fixed encoding...\n\n");
