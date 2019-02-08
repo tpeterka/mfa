@@ -49,6 +49,7 @@ int main(int argc, char** argv)
     bool   strong_sc    = true;                 // strong scaling (false = weak scaling)
     real_t ghost        = 0.1;                  // amount of ghost zone overlap as a factor of block size (0.0 - 1.0)
     real_t noise        = 0.0;                  // fraction of noise
+    bool   error        = true;                 // decode all input points and check error
 
     // get command line arguments
     opts::Options ops(argc, argv);
@@ -66,6 +67,7 @@ int main(int argc, char** argv)
     ops >> opts::Option('t', "strong_sc",   strong_sc,  " strong scaling (1 = strong, 0 = weak)");
     ops >> opts::Option('o', "overlap",     ghost,      " relative ghost zone overlap (0.0 - 1.0)");
     ops >> opts::Option('b', "noise",       noise,      " fraction of noise (0.0 - 1.0)");
+    ops >> opts::Option('e', "error",       error,      " decode entire error field (default=true)");
 
     if (ops >> opts::Present('h', "help", " show help"))
     {
@@ -250,17 +252,20 @@ int main(int argc, char** argv)
         fprintf(stderr, "\n\nFixed encoding done.\n\n");
 
     // debug: compute error field for visualization and max error to verify that it is below the threshold
-    if (world.rank() == 0)
-        fprintf(stderr, "\nFinal decoding and computing max. error...\n");
     double decode_time = MPI_Wtime();
+    if (error)
+    {
+        if (world.rank() == 0)
+            fprintf(stderr, "\nFinal decoding and computing max. error...\n");
 #ifdef CURVE_PARAMS     // normal distance
-    master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-            { b->error(cp, 0, true); });
+        master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
+                { b->error(cp, 0, true); });
 #else                   // range coordinate difference
-    master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-            { b->range_error(cp, 0, true); });
+        master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
+                { b->range_error(cp, 0, true); });
 #endif
-    decode_time = MPI_Wtime() - decode_time;
+        decode_time = MPI_Wtime() - decode_time;
+    }
 
     // exchange ghost zone of decoded blocks
     // assumes all points have been decoded already
@@ -294,9 +299,11 @@ int main(int argc, char** argv)
 
     // print block results
     fprintf(stderr, "\n------- Final block results --------\n");
-    master.foreach(&Block<real_t>::print_block);
+    master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
+            { b->print_block(cp, error); });
     fprintf(stderr, "encoding time         = %.3lf s.\n", encode_time);
-    fprintf(stderr, "decoding time         = %.3lf s.\n", decode_time);
+    if (error)
+        fprintf(stderr, "decoding time         = %.3lf s.\n", decode_time);
     fprintf(stderr, "-------------------------------------\n\n");
 
     // print overall timing results

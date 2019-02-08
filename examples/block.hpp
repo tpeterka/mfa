@@ -1661,7 +1661,8 @@ struct Block
         }
     }
 
-    void print_block(const diy::Master::ProxyWithLink& cp)
+    void print_block(const diy::Master::ProxyWithLink& cp,
+                     bool                              error)       // error was computed
     {
         int ndom_dims = ndom_pts.size();                // domain dimensionality
 
@@ -1693,11 +1694,14 @@ struct Block
             fprintf(stderr, "# output knots        = %ld\n", vars[i].knots.size());
             T rms_err = sqrt(sum_sq_errs[i] / (domain.rows()));
             fprintf(stderr, "range extent          = %e\n",  range_extent);
-            fprintf(stderr, "max_err               = %e\n",  max_errs[i]);
-            fprintf(stderr, "normalized max_err    = %e\n",  max_errs[i] / range_extent);
-            fprintf(stderr, "sum of squared errors = %e\n",  sum_sq_errs[i]);
-            fprintf(stderr, "RMS error             = %e\n",  rms_err);
-            fprintf(stderr, "normalized RMS error  = %e\n",  rms_err / range_extent);
+            if (error)
+            {
+                fprintf(stderr, "max_err               = %e\n",  max_errs[i]);
+                fprintf(stderr, "normalized max_err    = %e\n",  max_errs[i] / range_extent);
+                fprintf(stderr, "sum of squared errors = %e\n",  sum_sq_errs[i]);
+                fprintf(stderr, "RMS error             = %e\n",  rms_err);
+                fprintf(stderr, "normalized RMS error  = %e\n",  rms_err / range_extent);
+            }
             cerr << "-----------------------------" << endl;
         }
         cerr << "\n-----------------------------------" << endl;

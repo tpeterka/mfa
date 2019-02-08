@@ -48,6 +48,7 @@ int main(int argc, char** argv)
     string input        = "sine";               // input dataset
     bool   weighted     = true;                 // solve for and use weights
     bool   strong_sc    = true;                 // strong scaling (false = weak scaling)
+    bool   error        = true;                 // decode all input points and check error
 
     // get command line arguments
     opts::Options ops(argc, argv);
@@ -181,10 +182,10 @@ int main(int argc, char** argv)
     }
 
     // compute the MFA
+    double encode_time = MPI_Wtime();
     if (world.rank() == 0)
         fprintf(stderr, "\nStarting fixed encoding...\n\n");
     world.barrier();                     // to synchronize timing
-    double encode_time = MPI_Wtime();
     master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
             { b->fixed_encode_block(cp, d_args); });
     world.barrier();                     // to synchronize timing
@@ -193,23 +194,28 @@ int main(int argc, char** argv)
         fprintf(stderr, "\n\nFixed encoding done.\n\n");
 
     // debug: compute error field for visualization and max error to verify that it is below the threshold
-    if (world.rank() == 0)
-        fprintf(stderr, "\nFinal decoding and computing max. error...\n");
     double decode_time = MPI_Wtime();
+    if (error)
+    {
+        if (world.rank() == 0)
+            fprintf(stderr, "\nFinal decoding and computing max. error...\n");
 #ifdef CURVE_PARAMS     // normal distance
-    master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-            { b->error(cp, 0, true); });
+        master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
+                { b->error(cp, 0, true); });
 #else                   // range coordinate difference
-    master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-            { b->range_error(cp, 0, true); });
+        master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
+                { b->range_error(cp, 0, true); });
 #endif
-    decode_time = MPI_Wtime() - decode_time;
+        decode_time = MPI_Wtime() - decode_time;
+    }
 
     // print block results
     fprintf(stderr, "\n------- Final block results --------\n");
-    master.foreach(&Block<real_t>::print_block);
+    master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
+            { b->print_block(cp, error); });
     fprintf(stderr, "encoding time         = %.3lf s.\n", encode_time);
-    fprintf(stderr, "decoding time         = %.3lf s.\n", decode_time);
+    if (error)
+        fprintf(stderr, "decoding time         = %.3lf s.\n", decode_time);
     fprintf(stderr, "-------------------------------------\n\n");
 
     // print overall timing results

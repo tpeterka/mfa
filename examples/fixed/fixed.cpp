@@ -52,6 +52,7 @@ int main(int argc, char** argv)
     real_t rot          = 0.0;                  // rotation angle in degrees
     real_t twist        = 0.0;                  // twist (waviness) of domain (0.0-1.0)
     real_t noise        = 0.0;                  // fraction of noise
+    bool   error        = true;                 // decode all input points and check error
 
     // get command line arguments
     opts::Options ops(argc, argv);
@@ -68,6 +69,7 @@ int main(int argc, char** argv)
     ops >> opts::Option('r', "rotate",      rot,        " rotation angle of domain in degrees");
     ops >> opts::Option('t', "twist",       twist,      " twist (waviness) of domain (0.0-1.0)");
     ops >> opts::Option('b', "noise",       noise,      " fraction of noise (0.0 - 1.0)");
+    ops >> opts::Option('e', "error",       error,      " decode entire error field (default=true)");
 
     if (ops >> opts::Present('h', "help", " show help"))
     {
@@ -297,16 +299,19 @@ int main(int argc, char** argv)
     fprintf(stderr, "\n\nFixed encoding done.\n\n");
 
     // debug: compute error field for visualization and max error to verify that it is below the threshold
-    fprintf(stderr, "\nFinal decoding and computing max. error...\n");
     double decode_time = MPI_Wtime();
+    if (error)
+    {
+        fprintf(stderr, "\nFinal decoding and computing max. error...\n");
 #ifdef CURVE_PARAMS     // normal distance
-    master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-            { b->error(cp, 1, true); });
+        master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
+                { b->error(cp, 1, true); });
 #else                   // range coordinate difference
-    master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-            { b->range_error(cp, 1, true); });
+        master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
+                { b->range_error(cp, 1, true); });
 #endif
-    decode_time = MPI_Wtime() - decode_time;
+        decode_time = MPI_Wtime() - decode_time;
+    }
 
     // debug: write original and approximated data for reading into z-checker
     // only for one block (one file name used, ie, last block will overwrite earlier ones)
@@ -338,9 +343,11 @@ int main(int argc, char** argv)
 
     // print results
     fprintf(stderr, "\n------- Final block results --------\n");
-    master.foreach(&Block<real_t>::print_block);
+    master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
+            { b->print_block(cp, error); });
     fprintf(stderr, "encoding time         = %.3lf s.\n", encode_time);
-    fprintf(stderr, "decoding time         = %.3lf s.\n", decode_time);
+    if (error)
+        fprintf(stderr, "decoding time         = %.3lf s.\n", decode_time);
     fprintf(stderr, "-------------------------------------\n\n");
 
     // save the results in diy format

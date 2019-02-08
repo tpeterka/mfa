@@ -6,8 +6,8 @@ add_executable              (fixed_multiblock           fixed_multiblock.cpp)
 target_link_libraries       (fixed                      ${libraries})
 target_link_libraries       (fixed_multiblock           ${libraries})
 
-set_property                (TARGET fixed                   PROPERTY INSTALL_RPATH_USE_LINK_PATH TRUE)
-set_property                (TARGET fixed_multiblock        PROPERTY INSTALL_RPATH_USE_LINK_PATH TRUE)
+set_property                (TARGET fixed               PROPERTY INSTALL_RPATH_USE_LINK_PATH TRUE)
+set_property                (TARGET fixed_multiblock    PROPERTY INSTALL_RPATH_USE_LINK_PATH TRUE)
 
 install                     (TARGETS fixed fixed_multiblock
                             DESTINATION ${CMAKE_INSTALL_PREFIX}/examples/fixed/

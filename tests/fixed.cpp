@@ -50,6 +50,7 @@ int main(int argc, char** argv)
     bool   weighted     = true;                 // solve for and use weights
     real_t rot          = 0.0;                  // rotation angle in degrees
     real_t twist        = 0.0;                  // twist (waviness) of domain (0.0-1.0)
+    bool   error        = true;                 // decode all input points and check error
 
     // get command line arguments
     opts::Options ops(argc, argv);
@@ -254,9 +255,11 @@ int main(int argc, char** argv)
 
     // print results
     fprintf(stderr, "\n------- Final block results --------\n");
-    master.foreach(&Block<real_t>::print_block);
+    master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
+            { b->print_block(cp, error); });
     fprintf(stderr, "encoding time         = %.3lf s.\n", encode_time);
-    fprintf(stderr, "decoding time         = %.3lf s.\n", decode_time);
+    if (error)
+        fprintf(stderr, "decoding time         = %.3lf s.\n", decode_time);
     fprintf(stderr, "-------------------------------------\n\n");
 
     // save the results in diy format
