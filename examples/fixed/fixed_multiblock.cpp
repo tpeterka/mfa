@@ -20,8 +20,9 @@
 #include <diy/assigner.hpp>
 #include <diy/io/block.hpp>
 
+#include <diy/../../examples/opts.h>
+
 #include "block.hpp"
-#include "opts.h"
 
 using namespace std;
 
@@ -45,15 +46,16 @@ int main(int argc, char** argv)
     int    geom_nctrl   = -1;                   // input number of control points for geometry (same for all dims)
     int    vars_nctrl   = 11;                   // input number of control points for all science variables (same for all dims)
     string input        = "sine";               // input dataset
-    bool   weighted     = true;                 // solve for and use weights
-    bool   strong_sc    = true;                 // strong scaling (false = weak scaling)
+    int    weighted     = 1;                    // solve for and use weights (bool 0 or 1)
+    int    strong_sc    = 1;                    // strong scaling (bool 0 or 1, 0 = weak scaling)
     real_t ghost        = 0.1;                  // amount of ghost zone overlap as a factor of block size (0.0 - 1.0)
     real_t noise        = 0.0;                  // fraction of noise
-    bool   error        = true;                 // decode all input points and check error
+    int    error        = 1;                    // decode all input points and check error (bool 0 or 1)
     string infile;                              // input file name
+    bool   help;                                // show help
 
     // get command line arguments
-    opts::Options ops(argc, argv);
+    opts::Options ops;
     ops >> opts::Option('d', "pt_dim",      pt_dim,     " dimension of points");
     ops >> opts::Option('m', "dom_dim",     dom_dim,    " dimension of domain");
     ops >> opts::Option('p', "geom_degree", geom_degree," degree in each dimension of geometry");
@@ -67,11 +69,12 @@ int main(int argc, char** argv)
     ops >> opts::Option('b', "tot_blocks",  tot_blocks, " total number of blocks");
     ops >> opts::Option('t', "strong_sc",   strong_sc,  " strong scaling (1 = strong, 0 = weak)");
     ops >> opts::Option('o', "overlap",     ghost,      " relative ghost zone overlap (0.0 - 1.0)");
-    ops >> opts::Option('b', "noise",       noise,      " fraction of noise (0.0 - 1.0)");
-    ops >> opts::Option('e', "error",       error,      " decode entire error field (default=true)");
+    ops >> opts::Option('s', "noise",       noise,      " fraction of noise (0.0 - 1.0)");
+    ops >> opts::Option('c', "error",       error,      " decode entire error field (default=true)");
     ops >> opts::Option('f', "infile",      infile,     " input file name");
+    ops >> opts::Option('h', "help",        help,       " show help");
 
-    if (ops >> opts::Present('h', "help", " show help"))
+    if (!ops.parse(argc, argv) || help)
     {
         if (world.rank() == 0)
             std::cout << ops;

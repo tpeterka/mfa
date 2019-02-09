@@ -20,8 +20,9 @@
 #include <diy/assigner.hpp>
 #include <diy/io/block.hpp>
 
+#include <diy/../../examples/opts.h>
+
 #include "block.hpp"
-#include "opts.h"
 
 using namespace std;
 
@@ -48,15 +49,16 @@ int main(int argc, char** argv)
     int    geom_nctrl   = -1;                   // input number of control points for geometry (same for all dims)
     int    vars_nctrl   = 11;                   // input number of control points for all science variables (same for all dims)
     string input        = "sine";               // input dataset
-    bool   weighted     = true;                 // solve for and use weights
+    int    weighted     = 1;                    // solve for and use weights (bool 1 or 0))
     real_t rot          = 0.0;                  // rotation angle in degrees
     real_t twist        = 0.0;                  // twist (waviness) of domain (0.0-1.0)
     real_t noise        = 0.0;                  // fraction of noise
-    bool   error        = true;                 // decode all input points and check error
+    int    error        = 1;                    // decode all input points and check error (bool 1 or 0)
     string infile;                              // input file name
+    bool   help;                                // show help
 
     // get command line arguments
-    opts::Options ops(argc, argv);
+    opts::Options ops;
     ops >> opts::Option('d', "pt_dim",      pt_dim,     " dimension of points");
     ops >> opts::Option('m', "dom_dim",     dom_dim,    " dimension of domain");
     ops >> opts::Option('p', "geom_degree", geom_degree," degree in each dimension of geometry");
@@ -69,11 +71,12 @@ int main(int argc, char** argv)
     ops >> opts::Option('w', "weights",     weighted,   " solve for and use weights");
     ops >> opts::Option('r', "rotate",      rot,        " rotation angle of domain in degrees");
     ops >> opts::Option('t', "twist",       twist,      " twist (waviness) of domain (0.0-1.0)");
-    ops >> opts::Option('b', "noise",       noise,      " fraction of noise (0.0 - 1.0)");
-    ops >> opts::Option('e', "error",       error,      " decode entire error field (default=true)");
+    ops >> opts::Option('s', "noise",       noise,      " fraction of noise (0.0 - 1.0)");
+    ops >> opts::Option('c', "error",       error,      " decode entire error field (default=true)");
     ops >> opts::Option('f', "infile",      infile,     " input file name");
+    ops >> opts::Option('h', "help",        help,       " show help");
 
-    if (ops >> opts::Present('h', "help", " show help"))
+    if (!ops.parse(argc, argv) || help)
     {
         if (world.rank() == 0)
             std::cout << ops;

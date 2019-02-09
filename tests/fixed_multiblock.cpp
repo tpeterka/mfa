@@ -20,8 +20,9 @@
 #include <diy/assigner.hpp>
 #include <diy/io/block.hpp>
 
+#include <diy/../../examples/opts.h>
+
 #include "block.hpp"
-#include "opts.h"
 
 using namespace std;
 
@@ -46,13 +47,14 @@ int main(int argc, char** argv)
     int    geom_nctrl   = -1;                   // input number of control points for geometry (same for all dims)
     int    vars_nctrl   = 11;                   // input number of control points for all science variables (same for all dims)
     string input        = "sine";               // input dataset
-    bool   weighted     = true;                 // solve for and use weights
-    bool   strong_sc    = true;                 // strong scaling (false = weak scaling)
-    bool   error        = true;                 // decode all input points and check error
+    int    weighted     = 1;                    // solve for and use weights (bool 0 or 1)
+    int    strong_sc    = 1;                    // strong scaling (bool 0 or 1, 0 = weak scaling)
+    int    error        = 1;                    // decode all input points and check error (bool 0 or 1)
     string infile;                              // input file name
+    bool   help;                                // show help
 
     // get command line arguments
-    opts::Options ops(argc, argv);
+    opts::Options ops;
     ops >> opts::Option('d', "pt_dim",      pt_dim,     " dimension of points");
     ops >> opts::Option('m', "dom_dim",     dom_dim,    " dimension of domain");
     ops >> opts::Option('p', "geom_degree", geom_degree," degree in each dimension of geometry");
@@ -66,7 +68,7 @@ int main(int argc, char** argv)
     ops >> opts::Option('t', "strong_sc",   strong_sc,  " strong scaling (1 = strong, 0 = weak)");
     ops >> opts::Option('f', "infile",      infile,     " input file name");
 
-    if (ops >> opts::Present('h', "help", " show help"))
+    if (!ops.parse(argc, argv) || help)
     {
         if (world.rank() == 0)
             std::cout << ops;
