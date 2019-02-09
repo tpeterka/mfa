@@ -396,7 +396,7 @@ struct Block
             // for all dimensions except last, check for end of the line, part of flattened loop logic
             for (auto k = 0; k < dom_dim - 1; k++)
             {
-                if (dom_idx[k] == a->ndom_pts[k])
+                if (dom_idx[k] == ndom_pts(k))
                 {
                     dom_idx[k] = 0;
                     dom_idx[k + 1]++;

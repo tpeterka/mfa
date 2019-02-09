@@ -49,6 +49,7 @@ int main(int argc, char** argv)
     string input        = "sine";               // input dataset
     int    weighted     = 1;                    // solve for and use weights (bool 0 or 1)
     int    strong_sc    = 1;                    // strong scaling (bool 0 or 1, 0 = weak scaling)
+    real_t ghost        = 0.1;                  // amount of ghost zone overlap as a factor of block size (0.0 - 1.0)
     int    error        = 1;                    // decode all input points and check error (bool 0 or 1)
     string infile;                              // input file name
     bool   help;                                // show help
@@ -66,6 +67,7 @@ int main(int argc, char** argv)
     ops >> opts::Option('w', "weights",     weighted,   " solve for and use weights");
     ops >> opts::Option('b', "tot_blocks",  tot_blocks, " total number of blocks");
     ops >> opts::Option('t', "strong_sc",   strong_sc,  " strong scaling (1 = strong, 0 = weak)");
+    ops >> opts::Option('o', "overlap",     ghost,      " relative ghost zone overlap (0.0 - 1.0)");
     ops >> opts::Option('f', "infile",      infile,     " input file name");
 
     if (!ops.parse(argc, argv) || help)
@@ -132,7 +134,7 @@ int main(int argc, char** argv)
     decomposer.decompose(world.rank(),
                          assigner,
                          [&](int gid, const Bounds& core, const Bounds& bounds, const Bounds& domain, const RCLink& link)
-                         { Block<real_t>::add(gid, core, bounds, domain, link, master, dom_dim, pt_dim); });
+                         { Block<real_t>::add(gid, core, bounds, domain, link, master, dom_dim, pt_dim, ghost); });
     vector<int> divs(dom_dim);                          // number of blocks in each dimension
     decomposer.fill_divisions(divs);
 
@@ -213,6 +215,17 @@ int main(int argc, char** argv)
         decode_time = MPI_Wtime() - decode_time;
     }
 
+    // exchange ghost zone of decoded blocks
+    // assumes all points have been decoded already
+    // TODO: don't assume decoded points and decode inside the send_ghost_pts function
+    if (ghost > 0.0)           // 0 signifies skip the exchange, need some overlap to compute blend
+    {
+        master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
+                { b->send_ghost_pts(cp, decomposer); });
+        master.exchange();
+        master.foreach(&Block<real_t>::recv_ghost_pts);
+    }
+
     // print block results
     fprintf(stderr, "\n------- Final block results --------\n");
     master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
@@ -241,11 +254,15 @@ int main(int argc, char** argv)
         real_t  expect_err;                                         // expected (normalized max) error
 
         // for ./fixed-multiblock-test> -i sinc -d 3 -m 2 -p 1 -q 5 -n 500 -v 50 -b 4 -t 1 -w 0
-        if (strong_sc)
-            expect_err   = 4.021332e-7;
+        if (strong_sc && !ghost)
+            expect_err   = 4.021332e-07;
+        if (strong_sc && ghost)
+            expect_err   = 9.842469e-07;
         // for ./fixed-multiblock-test> -i sinc -d 3 -m 2 -p 1 -q 5 -n 100 -v 10 -b 4 -t 0 -w 0
-        else
-            expect_err   = 7.246911e-3;
+        if (!strong_sc && !ghost)
+            expect_err   = 7.246910e-03;
+        if (!strong_sc && ghost)
+            expect_err   = 7.655586e-03;
 
         if (fabs(expect_err - our_err) / expect_err > err_factor)
         {

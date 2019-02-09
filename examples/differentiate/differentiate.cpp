@@ -19,8 +19,9 @@
 #include <diy/assigner.hpp>
 #include <diy/io/block.hpp>
 
+#include <diy/../../examples/opts.h>
+
 #include "block.hpp"
-#include "opts.h"
 
 using namespace std;
 
@@ -37,14 +38,16 @@ int main(int argc, char** argv)
     // default command line arguments
     int  deriv     = 1;                         // which derivative to take (1st, 2nd, ...)
     int  partial   = -1;                        // limit derivatives to one partial in this dimension
+    bool help;                                  // show help
 
     // get command line arguments
-    opts::Options ops(argc, argv);
+    opts::Options ops;
     ops >> opts::Option('d', "deriv",   deriv,   " which derivative to take (1 = 1st, 2 = 2nd, ...)");
     ops >> opts::Option('i', "infile",  infile,  " diy input file name");
     ops >> opts::Option('a', "partial", partial, " dimension of 1 partial derivative only");
+    ops >> opts::Option('h', "help",    help,    " show help");
 
-    if (ops >> opts::Present('h', "help", " show help"))
+    if (!ops.parse(argc, argv) || help)
     {
         if (world.rank() == 0)
             std::cout << ops;
