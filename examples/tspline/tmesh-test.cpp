@@ -19,8 +19,9 @@
 #include <diy/assigner.hpp>
 #include <diy/io/block.hpp>
 
+#include <diy/../../examples/opts.h>
+
 #include "block.hpp"
-#include "opts.h"
 
 using namespace std;
 
@@ -48,12 +49,13 @@ int main(int argc, char** argv)
     int    ndomp          = 100;                      // input number of domain points (same for all dims)
     string input          = "sinc";                   // input dataset
     int    max_rounds     = 0;                        // max. number of rounds (0 = no maximum)
-    bool   weighted       = true;                     // solve for and use weights
+    int    weighted       = 1;                        // solve for and use weights (bool 1 or 0))
     real_t rot            = 0.0;                      // rotation angle in degrees
     real_t twist          = 0.0;                      // twist (waviness) of domain (0.0-1.0)
+    bool   help;                                      // show help
 
     // get command line arguments
-    opts::Options ops(argc, argv);
+    opts::Options ops;
     ops >> opts::Option('e', "error",       norm_err_limit, " maximum normalized error limit");
     ops >> opts::Option('d', "pt_dim",      pt_dim,         " dimension of points");
     ops >> opts::Option('m', "dom_dim",     dom_dim,        " dimension of domain");
@@ -65,8 +67,9 @@ int main(int argc, char** argv)
     ops >> opts::Option('w', "weights",     weighted,       " solve for and use weights");
     ops >> opts::Option('r', "rotate",      rot,            " rotation angle of domain in degrees");
     ops >> opts::Option('t', "twist",       twist,          " twist (waviness) of domain (0.0-1.0)");
+    ops >> opts::Option('h', "help",        help,       " show help");
 
-    if (ops >> opts::Present('h', "help", " show help"))
+    if (!ops.parse(argc, argv) || help)
     {
         if (world.rank() == 0)
             std::cout << ops;
@@ -155,7 +158,7 @@ int main(int argc, char** argv)
         d_args.r            = rot * M_PI / 180.0;   // domain rotation angle in rads
         d_args.t            = twist;                // twist (waviness) of domain
         master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-                { b->generate_sinc_data(cp, d_args); });
+                { b->generate_analytical_data(cp, input, d_args); });
     }
 
     // initialize tmesh with a tensor product
