@@ -311,7 +311,7 @@ struct Block
         T x2        = domain_pt(1);
         T x3        = domain_pt(2);
         T x4        = domain_pt(3);
-        T retval    = atanh(x1) + atanh(x2) + atanh(x3) + atanh(x4) / ((pow(x1, 2) - 1) * pow(x2, -1));
+        T retval    = (atanh(x1) + atanh(x2) + atanh(x3) + atanh(x4)) / ((pow(x1, 2) - 1) * pow(x2, -1));
 
         return retval;
     }
@@ -1499,6 +1499,10 @@ struct Block
 
             // evaluate function at dom_pt_real
             T true_val;
+            if (fun == "sinc")
+                true_val = sinc(dom_pt_real, args, 0);      // hard-coded for one science variable
+            if (fun == "sine")
+                true_val = sine(dom_pt_real, args, 0);      // hard-codded for one science variable
             if (fun == "f16")
                 true_val = f16(dom_pt_real);
             if (fun == "f17")
