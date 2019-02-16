@@ -157,7 +157,7 @@ int main(int argc, char** argv)
         d_args.ndom_pts[i]  = ndomp;
     }
 
-    // initilize input data
+    // initialize input data
 
     // sine function f(x) = sin(x), f(x,y) = sin(x)sin(y), ...
     if (input == "sine")
@@ -337,8 +337,10 @@ int main(int argc, char** argv)
         for (int i = 0; i < MAX_DIM; i++)
             d_args.ndom_pts[i] = ntest;
 
+        vector<vec3d> unused;
         master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-                { b->analytical_error(cp, input, L1, L2, Linf, d_args); });
+                { b->analytical_error(cp, input, L1, L2, Linf, d_args, true, false, unused, NULL, unused, NULL); });
+
 
         // print analytical errors
         fprintf(stderr, "\n------ Analytical error norms -------\n");

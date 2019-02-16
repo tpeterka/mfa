@@ -45,6 +45,13 @@ typedef diy::Bounds<real_t>            Bounds;
 typedef diy::RegularLink<Bounds>       RCLink;
 typedef diy::RegularDecomposer<Bounds> Decomposer;
 
+// 3d point or vector
+struct vec3d
+{
+    float x, y, z;
+    float mag() { return sqrt(x*x + y*y + z*z); }
+};
+
 // arguments to block foreach functions
 struct DomainArgs
 {
@@ -1456,18 +1463,30 @@ struct Block
 
     // compute error to synthethic, non-noisy function (for HEP applications)
     // outputs L1, L2, Linfinity error
-    void analytical_error(const diy::Master::ProxyWithLink&     cp,
-                          string&                               fun,    // function to evaluate
-                          T&                                    L1,     // (output) L-1 norm
-                          T&                                    L2,     // (output) L-2 norm
-                          T&                                    Linf,   // (output) L-infinity norm
-                          DomainArgs&                           args)
+    // optionally outputs true and test point locations and true and test values there
+    // if optional test output wanted, caller has to allocate true_pts, test_pts, true_data, and test_data
+    void analytical_error(
+            const diy::Master::ProxyWithLink&     cp,
+            string&                               fun,                // function to evaluate
+            T&                                    L1,                 // (output) L-1 norm
+            T&                                    L2,                 // (output) L-2 norm
+            T&                                    Linf,               // (output) L-infinity norm
+            DomainArgs&                           args,               // input args
+            bool                                  exist_mfa,          // whether the mfa already exists
+            bool                                  output,             // whether to output test_pts, true_data, test_data or only compute error norms
+            vector<vec3d>&                        true_pts,           // (output) true points locations
+            float**                               true_data,          // (output) true data values (4d)
+            vector<vec3d>&                        test_pts,           // (output) test points locations
+            float**                               test_data)          // (output) test data values (4d)
     {
         DomainArgs* a   = &args;
 
         T sum_errs      = 0.0;                                  // sum of absolute values of errors (L-1 norm)
         T sum_sq_errs   = 0.0;                                  // sum of squares of errors (square of L-2 norm)
         T max_err       = -1.0;                                 // maximum absolute value of error (L-infinity norm)
+
+        if (!dom_dim)
+            dom_dim = ndom_pts.size();
 
         size_t tot_ndom_pts = 1;
         for (auto i = 0; i < dom_dim; i++)
@@ -1482,6 +1501,20 @@ struct Block
         {
             dom_step_param[i] = 1.0 / (double)(a->ndom_pts[i] - 1);
             dom_step_real[i] = dom_step_param[i] * (a->max[i] - a->min[i]);
+        }
+
+        // create mfa from block data if the mfa does not exist (only first science variable)
+        if (!exist_mfa)
+        {
+            vars[0].mfa = new mfa::MFA<T>(vars[0].p,
+                    ndom_pts,
+                    domain,
+                    vars[0].ctrl_pts,
+                    vars[0].nctrl_pts,
+                    vars[0].weights,
+                    vars[0].knots,
+                    dom_dim,            // assumes each variable is scalar
+                    dom_dim);
         }
 
         // flattened loop over all the points in a domain in dimension dom_dim
@@ -1513,21 +1546,47 @@ struct Block
             // evaluate MFA at dom_pt_param
             VectorX<T> cpt(1);                              // hard-coded for one science variable
             vars[0].mfa->DecodePt(dom_pt_param, cpt);       // hard-coded for one science variable
+            T test_val = cpt(0);
 
             // compute and accrue error
-            T err = fabs(true_val - cpt(0));
+            T err = fabs(true_val - test_val);
             sum_errs += err;                                // L1
             sum_sq_errs += err * err;                       // L2
             if (err > max_err)                              // Linf
                 max_err = err;
 
-            // debug
-//             fmt::print(stderr, "true_val={} approx_val={} abs_diff={}\n", true_val, cpt(0), fabs(true_val - cpt(0)));
+            if (output)
+            {
+                vec3d true_pt, test_pt;
+                true_pt.x = test_pt.x = dom_pt_real(0);
+                if (dom_dim > 2)        // 3d or greater domain
+                {
+                    true_pt.y = test_pt.y = dom_pt_real(1);
+                    true_pt.z = test_pt.z = dom_pt_real(2);
+                }
+                else if (dom_dim > 1)   // 2d domain
+                {
+                    true_pt.y = test_pt.y = dom_pt_real(1);
+                    true_pt.z = true_val;
+                    test_pt.z = test_val;
+                }
+                else                    // 1d domain
+                {
+                    true_pt.y = true_val;
+                    test_pt.y = test_val;
+                    true_pt.z = test_pt.z = 0.0;
+                }
+
+                true_pts[j] = true_pt;
+                test_pts[j] = test_pt;
+
+                true_data[0][j] = true_val;
+                test_data[0][j] = test_val;
+
+//                 fmt::print(stderr, "x={} y={} true_val={} test_val={}\n", test_pt.x, test_pt.y, true_val, test_val);
+            }
 
             dom_idx[0]++;
-
-            // debug
-//             cerr << "dom_pt_param: " << dom_pt_param.transpose() << " dom_pt_real: " << dom_pt_real.transpose() << endl;
 
             // for all dimensions except last, check if pt_idx is at the end, part of flattened loop logic
             for (auto k = 0; k < dom_dim - 1; k++)

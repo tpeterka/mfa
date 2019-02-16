@@ -18,13 +18,6 @@
 
 #include    "writer.hpp"
 
-// 3d point or vector
-struct vec3d
-{
-    float x, y, z;
-    float mag() { return sqrt(x*x + y*y + z*z); }
-};
-
 // package rendering data
 void PrepRenderingData(
         vector<int>&                nraw_pts,

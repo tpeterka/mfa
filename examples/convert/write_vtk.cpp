@@ -18,13 +18,6 @@
 
 #include    "writer.hpp"
 
-// 3d point or vector
-struct vec3d
-{
-    float x, y, z;
-    float mag() { return sqrt(x*x + y*y + z*z); }
-};
-
 // package rendering data
 void PrepRenderingData(
         vector<int>&                nraw_pts,
@@ -413,6 +406,7 @@ int main(int argc, char ** argv)
     for (int i = 0; i < nvars; i++)
         delete[] varnames[i];
     delete[] varnames;
+    delete[] centerings;
     for (int j = 0; j < nvars; j++)
     {
         delete[] raw_data[j];
