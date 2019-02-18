@@ -1,18 +1,12 @@
 include_directories         (${CMAKE_SOURCE_DIR}/examples)          # needed for block.hpp and opts.h
 
 add_executable              (write_vtk              write_vtk.cpp writer.cpp)
-add_executable              (write_vtk_multiblock   write_vtk_multiblock.cpp writer.cpp)
-add_executable              (write_vtk_test_data    write_vtk_test_data.cpp writer.cpp)
 
 target_link_libraries       (write_vtk              ${libraries})
-target_link_libraries       (write_vtk_multiblock   ${libraries})
-target_link_libraries       (write_vtk_test_data    ${libraries})
 
 set_property                (TARGET write_vtk               PROPERTY INSTALL_RPATH_USE_LINK_PATH TRUE)
-set_property                (TARGET write_vtk_multiblock    PROPERTY INSTALL_RPATH_USE_LINK_PATH TRUE)
-set_property                (TARGET write_vtk_test_data     PROPERTY INSTALL_RPATH_USE_LINK_PATH TRUE)
 
-install                     (TARGETS write_vtk write_vtk_multiblock write_vtk_test_data
+install                     (TARGETS write_vtk
                             DESTINATION ${CMAKE_INSTALL_PREFIX}/examples/convert/
                             PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE
                             GROUP_READ GROUP_WRITE GROUP_EXECUTE

@@ -77,10 +77,6 @@ file `deriv.out` contains the derivatives from the last example. Either output
 can be converted to VTK format (for visualization) as follows:
 
 ```
-# single block
-/path/to/mfa/install/examples/write_vtk </path/to/approx.out/or/deriv.out>
-
-# multiple blocks
-/path/to/mfa/install/examples/write_vtk_multiblock </path/to/approx.out>
+/path/to/mfa/install/examples/write_vtk -f </path/to/approx.out/or/deriv.out>
 ```
 
