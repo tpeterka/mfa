@@ -98,7 +98,6 @@ struct Model
     int         min_dim;                        // starting coordinate of this model in full-dimensional data
     int         max_dim;                        // ending coordinate of this model in full-dimensional data
     mfa::MFA<T> *mfa;                           // MFA object
-    mfa::Tmesh<T> *tmesh;                       // t-mesh object
 };
 
 // block
@@ -1925,7 +1924,6 @@ struct Block
                                        geometry.knots,
                                        0,
                                        ndom_dims - 1);
-        geometry.tmesh = new mfa::Tmesh<T>(ndom_dims, geometry.mfa->mfa_data());
 
         // science variable mfas
         for (auto i = 0; i< vars.size(); i++)
@@ -1939,11 +1937,10 @@ struct Block
                                           vars[i].knots,
                                           ndom_dims + i,        // assumes each variable is scalar
                                           ndom_dims + i);
-            vars[i].tmesh = new mfa::Tmesh<T>(ndom_dims, vars[i].mfa->mfa_data());
         }
 
         // pretend this tmesh is for the first science variable
-        mfa::Tmesh<T>& tmesh = *vars[0].tmesh;
+        mfa::Tmesh<T>& tmesh = vars[0].mfa->mfa_data().tmesh;
 
         // initialize all_knots
         tmesh.all_knots.resize(dom_dim);
@@ -1976,7 +1973,7 @@ struct Block
     void refine1_tmesh(const diy::Master::ProxyWithLink&   cp)
     {
         // pretend this tmesh is for the first science variable
-        mfa::Tmesh<T>& tmesh = *vars[0].tmesh;
+        mfa::Tmesh<T>& tmesh = vars[0].mfa->mfa_data().tmesh;
 
         // insert new knots into all_knots
         tmesh.insert_knot(0, 2, 1, 0.3);
@@ -1997,7 +1994,7 @@ struct Block
     void refine2_tmesh(const diy::Master::ProxyWithLink&   cp)
     {
         // pretend this tmesh is for the first science variable
-        mfa::Tmesh<T>& tmesh = *vars[0].tmesh;
+        mfa::Tmesh<T>& tmesh = vars[0].mfa->mfa_data().tmesh;
 
         // insert new knots into all_knots
         tmesh.insert_knot(0, 4, 2, 0.5);
@@ -2018,7 +2015,7 @@ struct Block
     void print_tmesh(const diy::Master::ProxyWithLink&      cp)
     {
         // pretend this tmesh is for the first science variable
-        mfa::Tmesh<T>& tmesh = *vars[0].tmesh;
+        mfa::Tmesh<T>& tmesh = vars[0].mfa->mfa_data().tmesh;
 
         tmesh.print();
     }
@@ -2028,7 +2025,7 @@ struct Block
                       const VectorX<T>&                     param)      // parameters of point to decode
     {
         // pretend this tmesh is for the first science variable
-        mfa::Tmesh<T>& tmesh = *vars[0].tmesh;
+        mfa::Tmesh<T>& tmesh = vars[0].mfa->mfa_data().tmesh;
 
         // compute range of anchor points for a given point to decode
         vector<vector<size_t>> anchors(dom_dim);                        // anchors affecting the decoding point

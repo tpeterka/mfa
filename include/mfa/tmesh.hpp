@@ -42,10 +42,18 @@ namespace mfa
         vector<vector<int>>         all_knot_levels;    // refinement levels of all_knots[dimension][index]
         vector<TensorProduct<T>>    tensor_prods;       // all tensor products
         int                         dom_dim_;           // domain dimensionality
-        MFA_Data<T>&                mfa_;               // mfa for this t-mesh
+        VectorXi&                   p_;                 // degree in each dimension
+        int                         min_dim_;           // starting coordinate of this model in full-dimensional data
+        int                         max_dim_;           // ending coordinate of this model in full-dimensional data
 
-        Tmesh(int dom_dim, MFA_Data<T>& mfa) :
-            dom_dim_(dom_dim), mfa_(mfa)                { all_knots.resize(dom_dim_); }
+        Tmesh(int       dom_dim,                        // number of domain dimension
+              VectorXi& p,                              // degree in each dimension
+              int       min_dim,                        // starting coordinate of this model in full-dimensional data
+              int       max_dim) :                      // ending coordinate of this model in full-dimensional data
+                dom_dim_(dom_dim),
+                p_(p),
+                min_dim_(min_dim),
+                max_dim_(max_dim)                       { all_knots.resize(dom_dim_); }
 
         // insert a knot into all_knots
         void insert_knot(int        dim,                // dimension of knot vector
@@ -91,11 +99,11 @@ namespace mfa
                 // level 0 has only one box of control points
                 for (auto j = 0; j < dom_dim_; j++)
                 {
-                    new_tensor.nctrl_pts[j] = all_knots[j].size() - mfa_.p[j] - 1;
+                    new_tensor.nctrl_pts[j] = all_knots[j].size() - p_[j] - 1;
                     tot_nctrl_pts *= new_tensor.nctrl_pts[j];
                 }
-                new_tensor.ctrl_pts.resize(tot_nctrl_pts, mfa_.max_dim - mfa_.min_dim + 1);
-                new_tensor.weights.resize(tot_nctrl_pts, mfa_.max_dim - mfa_.min_dim + 1);
+                new_tensor.ctrl_pts.resize(tot_nctrl_pts, max_dim_ - min_dim_ + 1);
+                new_tensor.weights.resize(tot_nctrl_pts, max_dim_ - min_dim_ + 1);
 
             }
             else
@@ -112,19 +120,19 @@ namespace mfa
                     size_t nanchors = 0;
                     for (auto i = knot_mins[j]; i <= knot_maxs[j]; i++)
                         nknots++;
-                    if (mfa_.p[j] % 2 == 0)         // even degree: anchors are between knot lines
+                    if (p_[j] % 2 == 0)         // even degree: anchors are between knot lines
                         nanchors = nknots - 1;
                     else                            // odd degree: anchors are on knot lines
                         nanchors = nknots;
-                    if (knot_mins[j] < mfa_.p[j] - 1)                       // skip up to p-1 anchors at start of global knots
-                        nanchors -= (mfa_.p[j] - 1 - knot_mins[j]);
-                    if (knot_maxs[j] > all_knots[j].size() - mfa_.p[j])     // skip up to p-1 anchors at end of global knots
-                        nanchors -= (knot_maxs[j] + mfa_.p[j] - all_knots[j].size());
+                    if (knot_mins[j] < p_[j] - 1)                       // skip up to p-1 anchors at start of global knots
+                        nanchors -= (p_[j] - 1 - knot_mins[j]);
+                    if (knot_maxs[j] > all_knots[j].size() - p_[j])     // skip up to p-1 anchors at end of global knots
+                        nanchors -= (knot_maxs[j] + p_[j] - all_knots[j].size());
                     new_tensor.nctrl_pts[j] = nanchors;
                     tot_nctrl_pts *= nanchors;
                 }
-                new_tensor.ctrl_pts.resize(tot_nctrl_pts, mfa_.max_dim - mfa_.min_dim + 1);
-                new_tensor.weights.resize(tot_nctrl_pts, mfa_.max_dim - mfa_.min_dim + 1);
+                new_tensor.ctrl_pts.resize(tot_nctrl_pts, max_dim_ - min_dim_ + 1);
+                new_tensor.weights.resize(tot_nctrl_pts, max_dim_ - min_dim_ + 1);
             }
 
             vector<int> split_side(dom_dim_);       // whether min (-1) or max (1) or both (2) sides of
@@ -461,7 +469,7 @@ namespace mfa
 
             // convert split_knot_idx to ctrl_pt_idx
             min_ctrl_idx = split_knot_idx;
-            if (mfa_.p[cur_dim] % 2 == 0)                       // even degree
+            if (p_[cur_dim] % 2 == 0)                       // even degree
                 max_ctrl_idx = split_knot_idx - 1;
             else                                                // odd degree
                 max_ctrl_idx = split_knot_idx;
@@ -469,8 +477,8 @@ namespace mfa
             // if existing tensor starts at global minimum, the first p-1 knots do not have anchors
             if (existing_tensor.knot_mins[cur_dim] == 0)
             {
-                min_ctrl_idx -= (mfa_.p[cur_dim] - 1);
-                max_ctrl_idx -= (mfa_.p[cur_dim] - 1);
+                min_ctrl_idx -= (p_[cur_dim] - 1);
+                max_ctrl_idx -= (p_[cur_dim] - 1);
             }
 
             // if max_ctrl_idx is past last existing control point, then split is too close to global edge and must be clamped to last control point
@@ -498,8 +506,8 @@ namespace mfa
                     tot_nctrl_pts           *= new_exist_nctrl_pts(i);
                 }
             }
-            MatrixX<T> new_exist_ctrl_pts(tot_nctrl_pts, mfa_.max_dim - mfa_.min_dim + 1);
-            MatrixX<T> new_exist_weights(tot_nctrl_pts, mfa_.max_dim - mfa_.min_dim + 1);
+            MatrixX<T> new_exist_ctrl_pts(tot_nctrl_pts, max_dim_ - min_dim_ + 1);
+            MatrixX<T> new_exist_weights(tot_nctrl_pts, max_dim_ - min_dim_ + 1);
 
             // allocate new control point matrix for new max side tensor
             if (!skip_max_side)
@@ -513,8 +521,8 @@ namespace mfa
                         max_side_tensor.nctrl_pts(i) = existing_tensor.nctrl_pts(i) - min_ctrl_idx;
                     tot_nctrl_pts *= max_side_tensor.nctrl_pts(i);
                 }
-                max_side_tensor.ctrl_pts.resize(tot_nctrl_pts, mfa_.max_dim - mfa_.min_dim + 1);
-                max_side_tensor.weights.resize(tot_nctrl_pts, mfa_.max_dim - mfa_.min_dim + 1);
+                max_side_tensor.ctrl_pts.resize(tot_nctrl_pts, max_dim_ - min_dim_ + 1);
+                max_side_tensor.weights.resize(tot_nctrl_pts, max_dim_ - min_dim_ + 1);
             }
 
             // split the control points
@@ -757,7 +765,7 @@ namespace mfa
                     continue;
 
                 // move pt[i] to center of t-mesh cell if degree is even
-                float fp = mfa_.p[i] % 2 ? pt[i] : pt[i] + 0.5;
+                float fp = p_[i] % 2 ? pt[i] : pt[i] + 0.5;
 
                 if (fp < float(tensor.knot_mins[i]) || fp > float(tensor.knot_maxs[i]))
                         return false;
@@ -951,7 +959,7 @@ namespace mfa
                                vector<vector<KnotIdx>>&     loc_knots)          // (output) local knot vector in index space
         {
             vector<NeighborTensor> unused;
-            knot_intersections(anchor, mfa_.p, loc_knots, unused);
+            knot_intersections(anchor, p_, loc_knots, unused);
         }
 
         // given a point in parameter space to decode, compute range of anchor points in index space
@@ -966,7 +974,7 @@ namespace mfa
             for (auto i = 0; i < dom_dim_; i++)
             {
                 // start searching at the last repeating 0, which is at position p
-                auto it     = upper_bound(all_knots[i].begin() + mfa_.p(i), all_knots[i].end(), param(i));
+                auto it     = upper_bound(all_knots[i].begin() + p_(i), all_knots[i].end(), param(i));
                 // test starting at the beginning of all_knots (remove eventually)
 //                 auto it     = upper_bound(all_knots[i].begin(), all_knots[i].end(), param(i));
                 target[i]   = it - all_knots[i].begin() - 1;
@@ -979,7 +987,7 @@ namespace mfa
 
             // subtract 1 from degree so that same code as for local knot vectors can be reused
             // support for a decoded point is p+1 basis functions, while width of a local knot vector is p+2
-            knot_intersections(target, mfa_.p - VectorXi::Ones(dom_dim_), anchor_cands, neigh_hi_levels);
+            knot_intersections(target, p_ - VectorXi::Ones(dom_dim_), anchor_cands, neigh_hi_levels);
 
             if (neigh_hi_levels.size())
             {
@@ -999,7 +1007,7 @@ namespace mfa
                     for (auto j = 0; j < dom_dim_; j++)
                         temp_target[j] = (tensor_prods[neigh_hi_levels[i].tensor_idx].knot_mins[j] +
                                 tensor_prods[neigh_hi_levels[i].tensor_idx].knot_maxs[j]) / 2;
-                    knot_intersections(temp_target, mfa_.p - VectorXi::Ones(dom_dim_), temp_anchors, unused);
+                    knot_intersections(temp_target, p_ - VectorXi::Ones(dom_dim_), temp_anchors, unused);
 
                     // merge knot_intersections of neigh_hi_level with anchor_cands keeping sorted order, growing size of anchor_cands
                     for (auto j = 0; j < dom_dim_; j++)
@@ -1025,15 +1033,15 @@ namespace mfa
                     }
                     KnotIdx target_loc = it - anchor_cands[i].begin();           // index of target[i] in anchor_cands[i]
                     KnotIdx start, min, max;                                     // starting index and number of items to copy in min and max direction
-                    if (mfa_.p(i) % 2)
+                    if (p_(i) % 2)
                     {
-                        start = min = mfa_.p(i) / 2;
-                        max = mfa_.p(i) / 2 + 1;
+                        start = min = p_(i) / 2;
+                        max = p_(i) / 2 + 1;
                     }
                     else
-                        start = min = max = mfa_.p(i) / 2;
+                        start = min = max = p_(i) / 2;
 
-                    anchors[i].resize(mfa_.p(i) + 1);
+                    anchors[i].resize(p_(i) + 1);
                     anchors[i][start] = anchor_cands[i][target_loc];
 
                     for (int j = 0; j < min; j++)                               // add 'min' more knots in minimum direction from the center

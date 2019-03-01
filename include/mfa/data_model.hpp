@@ -30,20 +30,19 @@
 #include    <iostream>
 
 #ifndef MFA_NO_TBB
-
 #include    <tbb/tbb.h>
 using namespace tbb;
-
 #endif
 
-typedef Eigen::MatrixXf MatrixXf;
-typedef Eigen::VectorXf VectorXf;
-typedef Eigen::MatrixXd MatrixXd;
-typedef Eigen::VectorXd VectorXd;
-typedef Eigen::VectorXi VectorXi;
-typedef Eigen::ArrayXXf ArrayXXf;
-typedef Eigen::ArrayXXd ArrayXXd;
+using namespace std;
 
+using MatrixXf = Eigen::MatrixXf;
+using VectorXf = Eigen::VectorXf;
+using MatrixXd = Eigen::MatrixXd;
+using VectorXd = Eigen::VectorXd;
+using VectorXi = Eigen::VectorXi;
+using ArrayXXf = Eigen::ArrayXXf;
+using ArrayXXd = Eigen::ArrayXXd;
 template <typename T>
 using MatrixX = Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic>;
 template <typename T>
@@ -53,7 +52,7 @@ using ArrayXX  = Eigen::Array<T, Eigen::Dynamic, Eigen::Dynamic>;
 template <typename T>
 using ArrayX   = Eigen::Array<T, Eigen::Dynamic, 1>;
 
-using namespace std;
+#include    "tmesh.hpp"
 
 // --- data model ---
 //
@@ -124,7 +123,8 @@ namespace mfa
             knots(knots_),
             min_dim(min_dim_),
             max_dim(max_dim_),
-            eps(eps_)
+            eps(eps_),
+            tmesh(p_.size(), p_, min_dim_, max_dim_)
         {
             // check dimensionality for sanity
             assert(p.size() < domain.cols());
@@ -1069,9 +1069,13 @@ namespace mfa
        VectorXi&                 nctrl_pts;     // number of control points in each dim
        MatrixX<T>&               domain;        // input data points (row-major order: 1st dim changes fastest)
        VectorX<T>                params;        // parameters for input points (single coords: 1st dim params, 2nd dim, ...)
+
+       // TODO: deprecate ctrl_pts, weights, knots once t-mesh is used
        MatrixX<T>&               ctrl_pts;      // (output) control pts (row-major order: 1st dim changes fastest)
        VectorX<T>&               weights;       // (output) weights associated with control points
        VectorX<T>&               knots;         // (output) knots (single coords: 1st dim knots, 2nd dim, ...)
+
+       Tmesh<T>                  tmesh;         // t-mesh of knots, control points, wieghts
        T                         range_extent;  // extent of range value of input data points
        vector<size_t>            po;            // starting offset for params in each dim
        vector< vector <size_t> > co;            // starting offset for curves in each dim
