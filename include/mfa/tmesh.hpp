@@ -8,18 +8,7 @@
 #ifndef _TMESH_HPP
 #define _TMESH_HPP
 
-#include    <diy/fmt/format.h>
-
 using namespace std;
-
-// DEPRECATED
-// template <typename T>
-// struct ControlPoints
-// {
-//     VectorXi                    nctrl_pts;          // number of control points in each domain dimension
-//     vector<MatrixX<T>>          ctrl_pts;           // NURBS control points in each cross-slice (1st dim changes fastest)
-//     vector<VectorX<T>>          weights;            // weights associated with control points in each cross-slice
-// };
 
 struct NeighborTensor                               // neighboring tensor product
 {
@@ -147,14 +136,14 @@ namespace mfa
                 for (auto j = 0; j < tensor_prods.size(); j++)
                 {
                     // debug
-//                     fmt::print(stderr, "checking for intersection between new tensor and existing tensor idx={}\n", j);
+//                     fprintf(stderr, "checking for intersection between new tensor and existing tensor idx=%lu\n", j);
 
                     if (nonempty_intersection(new_tensor, tensor_prods[j], split_side))
                     {
                         // debug
-//                         fmt::print(stderr, "intersection found between new tensor and existing tensor idx={} split_side=[{} {}]\n",
+//                         fprintf(stderr, "intersection found between new tensor and existing tensor idx=%lu split_side=[%d %d]\n",
 //                                 j, split_side[0], split_side[1]);
-//                         fmt::print(stderr, "\ntensors before intersection\n\n");
+//                         fprintf(stderr, "\ntensors before intersection\n\n");
 //                         print();
 
                         if ((vec_grew = intersect(new_tensor, j, split_side, knots_match)) && vec_grew)
@@ -163,7 +152,7 @@ namespace mfa
                                 tensor_inserted = true;
 
                             // debug
-                            fmt::print(stderr, "\ntensors after intersection\n\n");
+                            fprintf(stderr, "\ntensors after intersection\n\n");
                             print();
 
                             break;  // adding a tensor invalidates iterator, start iteration over
@@ -195,7 +184,7 @@ namespace mfa
                 for (auto k = 0; k < new_tensor_idx; k++)
                 {
                     // debug
-//                     fmt::print(stderr, "final add: cur_dim={} new_tensor_idx={} checking existing_tensor_idx={}\n", j, new_tensor_idx, k);
+//                     fprintf(stderr, "final add: cur_dim=%d new_tensor_idx=%lu checking existing_tensor_idx=%lu\n", j, new_tensor_idx, k);
 
                     TensorProduct<T>& existing_tensor_ref = tensor_prods[k];
                     int adjacent_retval = adjacent(new_tensor_ref, existing_tensor_ref, j);
@@ -233,7 +222,7 @@ namespace mfa
                 if (new_tensor.knot_mins[j] > existing_tensor.knot_mins[j] && new_tensor.knot_mins[j] < existing_tensor.knot_maxs[j])
                 {
 //                     // debug
-//                     fmt::print(stderr, "cur_dim={} split_side=-1 new min {} exist min {} exist max{}\n",
+//                     fprintf(stderr, "cur_dim=%d split_side=-1 new min %lu exist min %lu exist max %lu\n",
 //                             j, new_tensor.knot_mins[j], existing_tensor.knot_mins[j], existing_tensor.knot_maxs[j]);
 
                     split_side[j] = -1;
@@ -242,7 +231,7 @@ namespace mfa
                 if (new_tensor.knot_maxs[j] > existing_tensor.knot_mins[j] && new_tensor.knot_maxs[j] < existing_tensor.knot_maxs[j])
                 {
                     // debug
-//                     fmt::print(stderr, "cur_dim={} split_side=1 new max {} exist min {} exist max{}\n",
+//                     fprintf(stderr, "cur_dim=%d split_side=1 new max %lu exist min %lu exist max %lu\n",
 //                             j, new_tensor.knot_maxs[j], existing_tensor.knot_mins[j], existing_tensor.knot_maxs[j]);
 
                     split_side[j] = 1;
@@ -397,7 +386,7 @@ namespace mfa
                 //  TODO: hard-coded knot_idx - 1 for split knot idx in current tensor (not global knot idx); not a robust solution
 
 //                 // debug
-//                 fmt::print(stderr, "1: calling split_ctrl_pts existing_tensor_idx={} local_knot_idx={}\n", existing_tensor_idx, local_knot_idx);
+//                 fprintf(stderr, "1: calling split_ctrl_pts existing_tensor_idx=%lu local_knot_idx=%lu\n", existing_tensor_idx, local_knot_idx);
 
                 split_ctrl_pts(existing_tensor_idx, max_side_tensor, cur_dim, local_knot_idx, false);
 
@@ -420,7 +409,7 @@ namespace mfa
                 size_t local_knot_idx = global2local_knot_idx(knot_idx, existing_tensor_idx, cur_dim);
 
 //                 // debug
-//                 fmt::print(stderr, "2: calling split_ctrl_pts existing_tensor_idx={} local_knot_idx={}\n", existing_tensor_idx, local_knot_idx);
+//                 fprintf(stderr, "2: calling split_ctrl_pts existing_tensor_idx=%lu local_knot_idx=%lu\n", existing_tensor_idx, local_knot_idx);
 
                 split_ctrl_pts(existing_tensor_idx, new_tensor, cur_dim, local_knot_idx, true);
             }
@@ -443,7 +432,7 @@ namespace mfa
 
             if (knot_idx < min_idx || knot_idx > max_idx)
             {
-                fmt::print(stderr, "Error: in global2local_knot_idx, knot_idx is not within min, max knot_idx of existing tensor\n");
+                fprintf(stderr, "Error: in global2local_knot_idx, knot_idx is not within min, max knot_idx of existing tensor\n");
                 abort();
             }
 
@@ -486,9 +475,9 @@ namespace mfa
                 max_ctrl_idx = existing_tensor.nctrl_pts[cur_dim] - 1;
 
             // debug
-//             fmt::print(stderr, "splitting ctrl points in dim {} split_knot_idx={} max_ctrl_idx={} min_ctrl_idx={}\n",
+//             fprintf(stderr, "splitting ctrl points in dim %d split_knot_idx=%lu max_ctrl_idx=%lu min_ctrl_idx=%lu\n",
 //                     cur_dim, split_knot_idx, max_ctrl_idx, min_ctrl_idx);
-//             fmt::print(stderr, "old existing tensor tot_nctrl_pts={} = [{} {}]\n", existing_tensor.ctrl_pts.rows(), existing_tensor.nctrl_pts[0], existing_tensor.nctrl_pts[1]);
+//             fprintf(stderr, "old existing tensor tot_nctrl_pts=%lu = [%d %d]\n", existing_tensor.ctrl_pts.rows(), existing_tensor.nctrl_pts[0], existing_tensor.nctrl_pts[1]);
 
             // allocate new control point matrix for existing tensor
             size_t tot_nctrl_pts = 1;
@@ -532,13 +521,13 @@ namespace mfa
             for (auto j = 0; j < existing_tensor.ctrl_pts.rows(); j++)  // flattened loop over all the points in a domain in dimension dom_dim
             {
                 // debug
-//                 fmt::print(stderr, "dim_idx=[{} {}]\n", dim_idx[0], dim_idx[1]);
+//                 fprintf(stderr, "dim_idx=[%d %d]\n", dim_idx[0], dim_idx[1]);
 
                 // control point goes either to existing or max side tensor depending on index in current dimension
                 if (dim_idx[cur_dim] <= max_ctrl_idx)
                 {
                     // debug
-//                     fmt::print(stderr, "moving to new_exist_ctrl_pts[{}]\n", cur_exist_idx);
+//                     fprintf(stderr, "moving to new_exist_ctrl_pts[%lu]\n", cur_exist_idx);
 
                     new_exist_ctrl_pts.row(cur_exist_idx) = existing_tensor.ctrl_pts.row(j);
                     new_exist_weights.row(cur_exist_idx) = existing_tensor.weights.row(j);
@@ -549,7 +538,7 @@ namespace mfa
                     if (!skip_max_side)
                     {
                         // debug
-//                         fmt::print(stderr, "moving to max_side_tensor.ctrl_pts[{}]\n", cur_max_side_idx);
+//                         fprintf(stderr, "moving to max_side_tensor.ctrl_pts[%lu]\n", cur_max_side_idx);
 
                         max_side_tensor.ctrl_pts.row(cur_max_side_idx) = existing_tensor.ctrl_pts.row(j);
                         max_side_tensor.weights.row(cur_max_side_idx) = existing_tensor.weights.row(j);
@@ -576,9 +565,9 @@ namespace mfa
             existing_tensor.nctrl_pts   = new_exist_nctrl_pts;
 
             // debug
-//             fmt::print(stderr, "new existing tensor tot_nctrl_pts={} = [{} {}]\n", existing_tensor.ctrl_pts.rows(), existing_tensor.nctrl_pts[0], existing_tensor.nctrl_pts[1]);
+//             fprintf(stderr, "new existing tensor tot_nctrl_pts=%lu = [%d %d]\n", existing_tensor.ctrl_pts.rows(), existing_tensor.nctrl_pts[0], existing_tensor.nctrl_pts[1]);
 //             if (!skip_max_side)
-//                 fmt::print(stderr, "max side tensor tot_nctrl_pts={} = [{} {}]\n\n", max_side_tensor.ctrl_pts.rows(), max_side_tensor.nctrl_pts[0], max_side_tensor.nctrl_pts[1]);
+//                 fprintf(stderr, "max side tensor tot_nctrl_pts=%lu = [%d %d]\n\n", max_side_tensor.ctrl_pts.rows(), max_side_tensor.nctrl_pts[0], max_side_tensor.nctrl_pts[1]);
         }
 
         // delete pointers that are no longer valid as a result of adding a new max side tensor
@@ -595,7 +584,7 @@ namespace mfa
                     if (!adjacent(existing_tensor, tensor_prods[existing_tensor.next[j][i]], j))
                     {
                         // debug
-//                         fmt::print(stderr, "next tensor {} is no longer adjacent to existing_tensor {}\n",
+//                         fprintf(stderr, "next tensor %lu is no longer adjacent to existing_tensor %lu\n",
 //                                 existing_tensor.next[j][i], existing_tensor_idx);
 
                         // remove the prev pointer of the next tensor
@@ -622,7 +611,7 @@ namespace mfa
                     if (!adjacent(existing_tensor, tensor_prods[existing_tensor.prev[j][i]], j))
                     {
                         // debug
-//                         fmt::print(stderr, "prev tensor {} is no longer adjacent to existing_tensor {}\n",
+//                         fprintf(stderr, "prev tensor %lu is no longer adjacent to existing_tensor %lu\n",
 //                                 existing_tensor.prev[j][i], existing_tensor_idx);
 
                         // remove the next pointer of the prev tensor
@@ -662,7 +651,7 @@ namespace mfa
             else
             {
                 // debug
-//                 fmt::print(stderr, "adj 1: cur_dim={} retval=0 new_tensor=[{} {} : {} {}] existing_tensor=[{} {} : {} {}]\n",
+//                 fprintf(stderr, "adj 1: cur_dim=%d retval=0 new_tensor=[%lu %lu : %lu %lu] existing_tensor=[%lu %lu : %lu %lu]\n",
 //                         cur_dim, new_tensor.knot_mins[0], new_tensor.knot_mins[1], new_tensor.knot_maxs[0], new_tensor.knot_maxs[1],
 //                         existing_tensor.knot_mins[0], existing_tensor.knot_mins[1], existing_tensor.knot_maxs[0], existing_tensor.knot_maxs[1]);
 
@@ -682,7 +671,7 @@ namespace mfa
                 {
 
                     // debug
-//                     fmt::print(stderr, "adj 2: cur_dim={} retval=0 new_tensor=[{} {} : {} {}] existing_tensor=[{} {} : {} {}]\n",
+//                     fprintf(stderr, "adj 2: cur_dim=%d retval=0 new_tensor=[%lu %lu : %lu %lu] existing_tensor=[%lu %lu : %lu %lu]\n",
 //                             cur_dim, new_tensor.knot_mins[0], new_tensor.knot_mins[1], new_tensor.knot_maxs[0], new_tensor.knot_maxs[1],
 //                             existing_tensor.knot_mins[0], existing_tensor.knot_mins[1], existing_tensor.knot_maxs[0], existing_tensor.knot_maxs[1]);
 
@@ -691,7 +680,7 @@ namespace mfa
             }
 
             // debug
-//             fmt::print(stderr, "adj: cur_dim={} retval={} new_tensor=[{} {} : {} {}] existing_tensor=[{} {} : {} {}]\n",
+//             fprintf(stderr, "adj: cur_dim=%d retval=%d new_tensor=[%lu %lu : %lu %lu] existing_tensor=[%lu %lu : %lu %lu]\n",
 //                     cur_dim, retval, new_tensor.knot_mins[0], new_tensor.knot_mins[1], new_tensor.knot_maxs[0], new_tensor.knot_maxs[1],
 //                     existing_tensor.knot_mins[0], existing_tensor.knot_mins[1], existing_tensor.knot_maxs[0], existing_tensor.knot_maxs[1]);
 
@@ -717,7 +706,7 @@ namespace mfa
             }
 
             // debug
-//             fmt::print(stderr, "cur_dim={} return=true new_tensor=[{} {} : {} {}] existing_tensor=[{} {} : {} {}]\n",
+//             fprintf(stderr, "cur_dim=%d return=true new_tensor=[%lu %lu : %lu %lu] existing_tensor=[%lu %lu : %lu %lu]\n",
 //                     cur_dim, new_tensor.knot_mins[0], new_tensor.knot_mins[1], new_tensor.knot_maxs[0], new_tensor.knot_maxs[1],
 //                     existing_tensor.knot_mins[0], existing_tensor.kot_mins[1], existing_tensor.knot_maxs[0], existing_tensor.knot_maxs[1]);
 
@@ -735,7 +724,7 @@ namespace mfa
             size_t a_size = a_mins.size();
             if (a_size != a_maxs.size() || a_size != b_mins.size() || a_size != b_maxs.size())
             {
-                fmt::print(stderr, "Error, size mismatch in subset()\n");
+                fprintf(stderr, "Error, size mismatch in subset()\n");
                 abort();
             }
 
@@ -745,7 +734,7 @@ namespace mfa
                         return false;
 
             // debug
-//             fmt::print(stderr, "[{} {} : {} {}] is a subset of [{} {} : {} {}]\n",
+//             fprintf(stderr, "[%lu %lu : %lu %lu] is a subset of [%lu %lu : %lu %lu]\n",
 //                     a_mins[0], a_mins[1], a_maxs[0], a_maxs[1], b_mins[0], b_mins[1], b_maxs[0], b_maxs[1]);
 
             return true;
@@ -926,7 +915,7 @@ namespace mfa
             }
             if (first_time)
             {
-                fmt::print(stderr, "Error: no valid previous tensor for knot vector\n");
+                fprintf(stderr, "Error: no valid previous tensor for knot vector\n");
                 abort();
             }
             cur_tensor = prev_next[temp_max_k];
@@ -981,7 +970,7 @@ namespace mfa
             }
 
             // debug
-            fmt::print(stderr, "param=[{} {}] target=[{} {}]\n", param(0), param(1), target[0], target[1]);
+            fprintf(stderr, "param=[%.2lf %.2lf] target=[%lu %lu]\n", param(0), param(1), target[0], target[1]);
 
             vector<NeighborTensor> neigh_hi_levels;                 // neighbor tensors of a higher level than tensor containing target
 
@@ -992,12 +981,12 @@ namespace mfa
             if (neigh_hi_levels.size())
             {
                 // debug
-                fmt::print(stderr, "{} neigh_hi_levels:\n", neigh_hi_levels.size());
+                fprintf(stderr, "%lu neigh_hi_levels:\n", neigh_hi_levels.size());
 
                 for (auto i = 0; i < neigh_hi_levels.size(); i++)
                 {
                     // debug
-                    fmt::print(stderr, "dim={} level={} tensor_idx={}\n",
+                    fprintf(stderr, "dim=%d level=%d tensor_idx=%lu\n",
                             neigh_hi_levels[i].dim, neigh_hi_levels[i].level, neigh_hi_levels[i].tensor_idx);
 
                     // knot intersections at center of neigh_hi_level
@@ -1028,7 +1017,7 @@ namespace mfa
                     auto it = find (anchor_cands[i].begin(), anchor_cands[i].end(), target[i]);
                     if (it == anchor_cands[i].end())
                     {
-                        fmt::print(stderr, "Error: target {} not found in anchor_cands[dim {}]\n", target[i], i);
+                        fprintf(stderr, "Error: target %lu not found in anchor_cands[dim %d]\n", target[i], i);
                         abort();
                     }
                     size_t target_loc = it - anchor_cands[i].begin();           // index of target[i] in anchor_cands[i]
@@ -1063,60 +1052,60 @@ namespace mfa
             // all_knots
             for (int i = 0; i < dom_dim_; i++)
             {
-                fmt::print(stderr, "all_knots[dim {}]: ", i);
+                fprintf(stderr, "all_knots[dim %d] ", i);
                 for (auto j = 0; j < all_knots[i].size(); j++)
-                    fmt::print(stderr, "{} (l{}) ", all_knots[i][j], all_knot_levels[i][j]);
-                fmt::print(stderr, "\n");
+                    fprintf(stderr, "%.2lf (l%d) ", all_knots[i][j], all_knot_levels[i][j]);
+                fprintf(stderr, "\n");
             }
-            fmt::print(stderr, "\n");
+            fprintf(stderr, "\n");
 
-            fmt::print(stderr, "T-mesh has {} tensor products\n\n", tensor_prods.size());
+            fprintf(stderr, "T-mesh has %lu tensor products\n\n", tensor_prods.size());
 
             // tensor products
             for (auto j = 0; j < tensor_prods.size(); j++)
             {
                 const TensorProduct<T>& t = tensor_prods[j];
-                fmt::print(stderr, "tensor_prods[{}] level={}:\n", j, t.level);
+                fprintf(stderr, "tensor_prods[%d] level=%d\n", j, t.level);
 
-                fmt::print(stderr, "knots [ ");
+                fprintf(stderr, "knots [ ");
                 for (int i = 0; i < dom_dim_; i++)
-                    fmt::print(stderr,"{} ", t.knot_mins[i]);
-                fmt::print(stderr, "] : ");
+                    fprintf(stderr,"%lu ", t.knot_mins[i]);
+                fprintf(stderr, "] : ");
 
-                fmt::print(stderr, "[ ");
+                fprintf(stderr, "[ ");
                 for (int i = 0; i < dom_dim_; i++)
-                    fmt::print(stderr,"{} ", t.knot_maxs[i]);
-                fmt::print(stderr, "]\n");
+                    fprintf(stderr,"%lu ", t.knot_maxs[i]);
+                fprintf(stderr, "]\n");
 
-                fmt::print(stderr, "nctrl_pts [ ");
+                fprintf(stderr, "nctrl_pts [ ");
                 for (int i = 0; i < dom_dim_; i++)
-                    fmt::print(stderr,"{} ", t.nctrl_pts[i]);
-                fmt::print(stderr, "]\n");
+                    fprintf(stderr,"%d ", t.nctrl_pts[i]);
+                fprintf(stderr, "]\n");
 
-                fmt::print(stderr, "next tensors [ ");
+                fprintf(stderr, "next tensors [ ");
                 for (int i = 0; i < dom_dim_; i++)
                 {
-                    fmt::print(stderr, "[ ");
+                    fprintf(stderr, "[ ");
                     for (const size_t& n : t.next[i])
-                        fmt::print(stderr, "{} ", n);
-                    fmt::print(stderr, "] ");
-                    fmt::print(stderr," ");
+                        fprintf(stderr, "%lu ", n);
+                    fprintf(stderr, "] ");
+                    fprintf(stderr," ");
                 }
-                fmt::print(stderr, "]\n");
+                fprintf(stderr, "]\n");
 
-                fmt::print(stderr, "previous tensors [ ");
+                fprintf(stderr, "previous tensors [ ");
                 for (int i = 0; i < dom_dim_; i++)
                 {
-                    fmt::print(stderr, "[ ");
+                    fprintf(stderr, "[ ");
                     for (const size_t& n : t.prev[i])
-                        fmt::print(stderr, "{} ", n);
-                    fmt::print(stderr, "] ");
-                    fmt::print(stderr," ");
+                        fprintf(stderr, "%lu ", n);
+                    fprintf(stderr, "] ");
+                    fprintf(stderr," ");
                 }
 
-                fmt::print(stderr, "]\n\n");
+                fprintf(stderr, "]\n\n");
             }
-            fmt::print(stderr, "\n");
+            fprintf(stderr, "\n");
         }
 
     };
