@@ -53,7 +53,21 @@ namespace mfa
                 dom_dim_(dom_dim),
                 p_(p),
                 min_dim_(min_dim),
-                max_dim_(max_dim)                       { all_knots.resize(dom_dim_); }
+                max_dim_(max_dim)
+        {
+            all_knots.resize(dom_dim_);
+            all_knot_levels.resize(dom_dim_);
+        }
+
+        // initialize knots
+        void init_knots(VectorXi& nctrl_pts)
+        {
+            for (auto i = 0; i < dom_dim_; i++)
+            {
+                all_knots[i].resize(nctrl_pts(i) + p_(i) + 1);
+                all_knot_levels[i].resize(nctrl_pts(i) + p_(i) + 1);
+            }
+        }
 
         // insert a knot into all_knots
         void insert_knot(int        dim,                // dimension of knot vector
@@ -103,8 +117,7 @@ namespace mfa
                     tot_nctrl_pts *= new_tensor.nctrl_pts[j];
                 }
                 new_tensor.ctrl_pts.resize(tot_nctrl_pts, max_dim_ - min_dim_ + 1);
-                new_tensor.weights.resize(tot_nctrl_pts, max_dim_ - min_dim_ + 1);
-
+                new_tensor.weights.resize(tot_nctrl_pts);
             }
             else
             {

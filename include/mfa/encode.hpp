@@ -150,20 +150,27 @@ namespace mfa
                 // N has semibandwidth < p  nonzero entries across diagonal
                 MatrixX<T> N = MatrixX<T>::Zero(m(k) + 1, n(k) + 1); // coefficients matrix
 
-                for (int i = 0; i < N.rows(); i++)            // the rows of N
+                // DEPRECATED
+//                 for (int i = 0; i < N.rows(); i++)            // the rows of N
+//                 {
+//                     // TODO: deprecate once tmesh is being used
+//                     int span = mfa.FindSpan(k, mfa.params(mfa.po[k] + i), mfa.ko[k]) - mfa.ko[k];   // relative to ko
+//                     mfa.BasisFuns(k, mfa.params(mfa.po[k] + i), span, N, i);
+//                 }
+
+
+                for (int i = 0; i < N.rows(); i++)              // the rows of N
                 {
-                    int span = mfa.FindSpan(k, mfa.params(mfa.po[k] + i), mfa.ko[k]) - mfa.ko[k];   // relative to ko
+                    int span = mfa.FindSpan(k, mfa.params(mfa.po[k] + i), mfa.tmesh.all_knots[k]);
                     mfa.BasisFuns(k, mfa.params(mfa.po[k] + i), span, N, i);
                 }
-
-                // debug
-//                 cerr << "N:\n" << N << endl;
 
                 // TODO: NtN is going to be very sparse when it is large: switch to sparse representation
                 // NtN has semibandwidth < p + 1 nonzero entries across diagonal
                 MatrixX<T> NtN  = N.transpose() * N;
 
                 // debug
+//                 cerr << "N:\n" << N << endl;
 //                 cerr << "NtN:\n" << NtN << endl;
 
 #ifndef MFA_NO_TBB                                  // TBB version
@@ -182,7 +189,8 @@ namespace mfa
                         MatrixX<T> P(N.cols(), mfa.ctrl_pts.cols());
 
                         // compute the one curve of control points
-                        CtrlCurve(N, NtN, R, P, k, co[j], cs, to[j], temp_ctrl0, temp_ctrl1, -1, weighted);
+                        // TODO: hard-coded for first tensor product
+                        CtrlCurve(N, NtN, R, P, k, co[j], cs, to[j], temp_ctrl0, temp_ctrl1, -1, mfa.tmesh.tensor_prods[0], weighted);
                         });                                                  // curves in this dimension
 
 #else                                       // serial vesion
@@ -207,7 +215,8 @@ namespace mfa
                     }
 
                     // compute the one curve of control points
-                    CtrlCurve(N, NtN, R, P, k, co[j], cs, to[j], temp_ctrl0, temp_ctrl1, j, weighted);
+                    // TODO: hard-coded for first tensor product
+                    CtrlCurve(N, NtN, R, P, k, co[j], cs, to[j], temp_ctrl0, temp_ctrl1, j, mfa.tmesh.tensor_prods[0], weighted);
                 }
 
 #endif
@@ -615,24 +624,25 @@ namespace mfa
 
         // solves for one curve of control points
         void CtrlCurve(
-                MatrixX<T>& N,           // basis functions for current dimension
-                MatrixX<T>& NtN,         // Nt * N
-                MatrixX<T>& R,           // residual matrix for current dimension and curve
-                MatrixX<T>& P,           // solved points for current dimension and curve
-                size_t      k,           // current dimension
-                size_t      co,          // starting ofst for reading domain pts
-                size_t      cs,          // stride for reading domain points
-                size_t      to,          // starting ofst for writing control pts
-                MatrixX<T>& temp_ctrl0,  // first temporary control points buffer
-                MatrixX<T>& temp_ctrl1,  // second temporary control points buffer
-                int         curve_id,    // debugging
-                bool        weighted = true)    // solve for and use weights
+                MatrixX<T>&         N,                  // basis functions for current dimension
+                MatrixX<T>&         NtN,                // Nt * N
+                MatrixX<T>&         R,                  // residual matrix for current dimension and curve
+                MatrixX<T>&         P,                  // solved points for current dimension and curve
+                size_t              k,                  // current dimension
+                size_t              co,                 // starting ofst for reading domain pts
+                size_t              cs,                 // stride for reading domain points
+                size_t              to,                 // starting ofst for writing control pts
+                MatrixX<T>&         temp_ctrl0,         // first temporary control points buffer
+                MatrixX<T>&         temp_ctrl1,         // second temporary control points buffer
+                int                 curve_id,           // debugging
+                TensorProduct<T>&   tensor,             // tensor product containing result
+                bool                weighted = true)    // solve for and use weights
         {
             // solve for weights
             // TODO: avoid copying into Q by passing temp_ctrl0, temp_ctrl1, co, cs to Weights()
             // TODO: check that this is right, using co and cs for copying control points and domain points
             MatrixX<T> Q;
-            Q.resize(mfa.ndom_pts(k), mfa.ctrl_pts.cols());
+            Q.resize(mfa.ndom_pts(k), tensor.ctrl_pts.cols());
             if (k == 0)
             {
                 for (auto i = 0; i < mfa.ndom_pts(k); i++)
@@ -654,7 +664,7 @@ namespace mfa
 #ifndef MFA_NO_WEIGHTS
 
             if (weighted)
-                if (k == mfa.p.size() - 1)                      // only during last dimension of separable iteration over dimensions
+                if (k == mfa.dom_dim - 1)                      // only during last dimension of separable iteration over dimensions
                     Weights(k, Q, N, NtN, curve_id, weights);   // solve for weights
 
 #endif
@@ -664,6 +674,9 @@ namespace mfa
             // subsequent dims alternate reading temp_ctrl0 and temp_ctrl1
             // even dim reads temp_ctrl1, odd dim reads temp_ctrl0; opposite of writing order
             // because what was written in the previous dimension is read in the current one
+
+            // TODO: remove mfa.ko[k] from the following calls
+            // TODO: move mfa.po[k] to tensor
 
             if (k == 0)
                 RHS(k, N, R, weights, mfa.ko[k], mfa.po[k], co);                 // input points = default domain
@@ -690,13 +703,17 @@ namespace mfa
 
             // append points from P to control points that will become inputs for next dimension
             // TODO: any way to avoid this?
-            CopyCtrl(P, k, co, cs, to, temp_ctrl0, temp_ctrl1);
+            CopyCtrl(P, k, co, cs, to, tensor, temp_ctrl0, temp_ctrl1);
 
             // copy weights of final dimension to mfa
-            if (k == mfa.p.size() - 1)
+            if (k == mfa.dom_dim - 1)
             {
                 for (auto i = 0; i < weights.size(); i++)
+                {
+                    // Depracate mfa.weights once tensor.weights are being used
                     mfa.weights(to + i * cs) = weights(i);
+                    tensor.weights(to + i * cs) = weights(i);
+                }
             }
         }
 
@@ -705,21 +722,26 @@ namespace mfa
         // last dimension gets copied to final control points
         // previous dimensions get copied to alternating double buffers
         void CopyCtrl(
-                MatrixX<T>& P,          // solved points for current dimension and curve
-                int         k,          // current dimension
-                size_t      co,         // starting offset for reading domain points
-                size_t      cs,         // stride for reading domain points
-                size_t      to,         // starting offset for writing control points
-                MatrixX<T>& temp_ctrl0, // first temporary control points buffer
-                MatrixX<T>& temp_ctrl1)  // second temporary control points buffer
+                MatrixX<T>&         P,              // solved points for current dimension and curve
+                int                 k,              // current dimension
+                size_t              co,             // starting offset for reading domain points
+                size_t              cs,             // stride for reading domain points
+                size_t              to,             // starting offset for writing control points
+                TensorProduct<T>&   tensor,         // tensor product containing result
+                MatrixX<T>&         temp_ctrl0,     // first temporary control points buffer
+                MatrixX<T>&         temp_ctrl1)     // second temporary control points buffer
         {
-            int ndims = mfa.ndom_pts.size();             // number of domain dimensions
+            int ndims = mfa.ndom_pts.size();    // number of domain dimensions
 
             // if there is only one dim, copy straight to output
             if (ndims == 1)
             {
                 for (int i = 0; i < P.rows(); i++)
+                {
+                    // Deprecate once tensor.ctrl_pts are being used
                     mfa.ctrl_pts.row(to + i * cs) = P.row(i);
+                    tensor.ctrl_pts.row(to + i * cs) = P.row(i);
+                }
             }
             // first dim copied from domain to temp_ctrl0
             else if (k == 0)
@@ -743,13 +765,21 @@ namespace mfa
             else if (k == ndims - 1 && k % 2 == 0)
             {
                 for (int i = 0; i < P.rows(); i++)
+                {
+                    // Deprecate once tensor.ctrl_pts are being used
                     mfa.ctrl_pts.row(to + i * cs) = P.row(i);
+                    tensor.ctrl_pts.row(to + i * cs) = P.row(i);
+                }
             }
             // final dim if odd is copied from temp_ctrl0 to ctrl_pts
             else if (k == ndims - 1 && k % 2 == 1)
             {
                 for (int i = 0; i < P.rows(); i++)
+                {
+                    // Deprecate once tensor.ctrl_pts are being used
                     mfa.ctrl_pts.row(to + i * cs) = P.row(i);
+                    tensor.ctrl_pts.row(to + i * cs) = P.row(i);
+                }
             }
         }
 

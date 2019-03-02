@@ -171,7 +171,8 @@ namespace mfa
 
                 // compute approximated point for this parameter vector
                 VectorX<T> cpt(mfa.ctrl_pts.cols());        // evaluated point
-                VolPt(param, cpt, thread_decode_info.local(), derivs);  // faster improved VolPt
+                // TODO: hard-coded for first tensor of tmesh
+                VolPt(param, cpt, thread_decode_info.local(), mfa.tmesh.tensor_prods[0], derivs);  // faster improved VolPt
                 //                 DEPRECATE
 //                 VolPt(param, cpt, derivs);                              // slower original VolPt
                 approx.block(i, min_dim, 1, max_dim - min_dim + 1) = cpt.transpose();
@@ -199,7 +200,8 @@ namespace mfa
                     param(j) = mfa.params(iter[j] + ofst[j]);
 
                 // compute approximated point for this parameter vector
-                VolPt(param, cpt, decode_info, derivs);     // faster improved VolPt
+                // TODO: hard-coded for first tensor of tmesh
+                VolPt(param, cpt, decode_info, mfa.tmesh.tensor_prods[0], derivs);     // faster improved VolPt
                 //                 DEPRECATE
 //                 VolPt(param, cpt, derivs);                  // slower original VolPt
 
@@ -276,7 +278,9 @@ namespace mfa
             {
                 temp[i]    = VectorX<T>::Zero(mfa.ctrl_pts.cols());
                 iter[i]    = 0;
-                span[i]    = mfa.FindSpan(i, param(i), mfa.ko[i]) - mfa.ko[i];  // relative to ko
+                //                 DEPRECATED
+//                 span[i]    = mfa.FindSpan(i, param(i), mfa.ko[i]) - mfa.ko[i];  // relative to ko
+                span[i]    = mfa.FindSpan(i, param(i), mfa.tmesh.all_knots[i]);
                 N[i]       = MatrixX<T>::Zero(1, mfa.nctrl_pts(i));
                 if (derivs.size() && derivs(i))
                 {
@@ -374,7 +378,9 @@ namespace mfa
             // basis funs
             for (size_t i = 0; i < mfa.p.size(); i++)       // for all dims
             {
-                di.span[i]    = mfa.FindSpan(i, param(i), mfa.ko[i]) - mfa.ko[i];  // relative to ko
+                //                 DEPRECATED
+//                 di.span[i]    = mfa.FindSpan(i, param(i), mfa.ko[i]) - mfa.ko[i];  // relative to ko
+                di.span[i]    = mfa.FindSpan(i, param(i), mfa.tmesh.all_knots[i]);
                 if (derivs.size() && derivs(i))
                 {
                     mfa.DerBasisFuns(i, param(i), di.span[i], derivs(i), di.ders[i]);
@@ -436,6 +442,106 @@ namespace mfa
             out_pt = di.temp[mfa.p.size() - 1] / denom;
 #else                                           // weigh only range dimension
             out_pt   = di.temp[mfa.p.size() - 1];
+            out_pt(last) /= denom;
+#endif
+
+        }
+
+        // compute a point from a NURBS n-d volume at a given parameter value
+        // faster version when decoding multiple points, takes a DecodeInfo object that is allocated once only
+        // tmesh version, takes a tensor product as input
+        // algorithm 4.3, Piegl & Tiller (P&T) p.134
+        void VolPt(
+                VectorX<T>&         param,      // parameter value in each dim. of desired point
+                VectorX<T>&         out_pt,     // (output) point, allocated by caller
+                DecodeInfo<T>&      di,         // reusable decode info allocated by caller (more efficient when calling VolPt multiple times)
+                TensorProduct<T>&   tensor,     // tensor product to use for decoding
+                VectorXi&           derivs)     // derivative to take in each domain dim. (0 = value, 1 = 1st deriv, 2 = 2nd deriv, ...)
+                                                // pass size-0 vector if unused
+        {
+            int last = tensor.ctrl_pts.cols() - 1;
+            if (derivs.size())                  // extra check for derivatives, won't slow down normal point evaluation
+            {
+                if (derivs.size() != mfa.dom_dim)
+                {
+                    fprintf(stderr, "Error: size of derivatives vector is not the same as the number of domain dimensions\n");
+                    exit(0);
+                }
+                for (auto i = 0; i < mfa.dom_dim; i++)
+                    if (derivs(i) > mfa.p(i))
+                        fprintf(stderr, "Warning: In dimension %d, trying to take derivative %d of an MFA with degree %d will result in 0. This may not be what you want",
+                                i, derivs(i), mfa.p(i));
+            }
+
+            di.Reset(mfa, derivs);
+
+            // basis funs
+            for (size_t i = 0; i < mfa.dom_dim; i++)       // for all dims
+            {
+                //                 DEPRECATED
+//                 di.span[i]    = mfa.FindSpan(i, param(i), mfa.ko[i]) - mfa.ko[i];  // relative to ko
+                di.span[i]    = mfa.FindSpan(i, param(i), mfa.tmesh.all_knots[i]);
+                if (derivs.size() && derivs(i))
+                {
+                    mfa.DerBasisFuns(i, param(i), di.span[i], derivs(i), di.ders[i]);
+                    di.N[i].row(0) = di.ders[i].row(derivs(i));
+                }
+                else
+                    mfa.BasisFuns(i, param(i), di.span[i], di.N[i], 0);
+            }
+
+            // linear index of first control point
+            di.ctrl_idx = 0;
+            for (int j = 0; j < mfa.dom_dim; j++)
+                di.ctrl_idx += (di.span[j] - mfa.p(j) + ct(0, j)) * cs[j];
+            size_t start_ctrl_idx = di.ctrl_idx;
+
+            for (int i = 0; i < tot_iters; i++)             // 1-d flattening all n-d nested loop computations
+            {
+                // always compute the point in the first dimension
+                di.ctrl_pt  = tensor.ctrl_pts.row(di.ctrl_idx);
+                T w         = tensor.weights(di.ctrl_idx);
+
+#ifdef WEIGH_ALL_DIMS                               // weigh all dimensions
+                di.temp[0] += (di.N[0])(0, di.iter[0] + di.span[0] - mfa.p(0)) * di.ctrl_pt * w;
+#else                                               // weigh only range dimension
+                for (auto j = 0; j < last; j++)
+                    (di.temp[0])(j) += (di.N[0])(0, di.iter[0] + di.span[0] - mfa.p(0)) * di.ctrl_pt(j);
+                (di.temp[0])(last) += (di.N[0])(0, di.iter[0] + di.span[0] - mfa.p(0)) * di.ctrl_pt(last) * w;
+#endif
+
+                di.temp_denom(0) += w * di.N[0](0, di.iter[0] + di.span[0] - mfa.p(0));
+                di.iter[0]++;
+
+                // for all dimensions except last, check if span is finished
+                di.ctrl_idx = start_ctrl_idx;
+                for (size_t k = 0; k < mfa.dom_dim; k++)
+                {
+                    if (i < tot_iters - 1)
+                        di.ctrl_idx += ct(i + 1, k) * cs[k];        // ctrl_idx for the next iteration (i+1)
+                    if (k < mfa.dom_dim - 1 && di.iter[k] - 1 == mfa.p(k))
+                    {
+                        // compute point in next higher dimension and reset computation for current dim
+                        di.temp[k + 1]        += (di.N[k + 1])(0, di.iter[k + 1] + di.span[k + 1] - mfa.p(k + 1)) * di.temp[k];
+                        di.temp_denom(k + 1)  += di.temp_denom(k) * di.N[k + 1](0, di.iter[k + 1] + di.span[k + 1] - mfa.p(k + 1));
+                        di.temp_denom(k)       = 0.0;
+                        di.temp[k].setZero();
+                        di.iter[k]             = 0;
+                        di.iter[k + 1]++;
+                    }
+                }
+            }
+
+            T denom;                                // rational denominator
+            if (derivs.size() && derivs.sum())
+                denom = 1.0;                        // TODO: weights for derivatives not implemented yet
+            else
+                denom = di.temp_denom(mfa.dom_dim - 1);
+
+#ifdef WEIGH_ALL_DIMS                           // weigh all dimensions
+            out_pt = di.temp[mfa.dom_dim - 1] / denom;
+#else                                           // weigh only range dimension
+            out_pt   = di.temp[mfa.dom_dim - 1];
             out_pt(last) /= denom;
 #endif
 
@@ -570,7 +676,9 @@ namespace mfa
                 VectorX<T>& out_pt,             // (output) point
                 int         ko = 0)             // starting knot offset
         {
-            int span   = mfa.FindSpan(cur_dim, param, ko) - ko;         // relative to ko
+            //             DEPRECATED
+//             int span   = mfa.FindSpan(cur_dim, param, ko) - ko;         // relative to ko
+            int span   = mfa.FindSpan(cur_dim, param, mfa.tmesh.all_knots[cur_dim]);
             MatrixX<T> N = MatrixX<T>::Zero(1, temp_ctrl.rows());      // basis coefficients
             mfa.BasisFuns(cur_dim, param, span, N, 0);
             out_pt = VectorX<T>::Zero(temp_ctrl.cols());  // initializes and resizes
