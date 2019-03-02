@@ -315,7 +315,8 @@ namespace mfa
                 ctrl_idx = start_ctrl_idx;
                 for (size_t k = 0; k < mfa.p.size(); k++)
                 {
-                    ctrl_idx += ct(i + 1, k) * cs[k];        // ctrl_idx for the next iteration (i+1)
+                    if (i < tot_iters - 1)
+                        ctrl_idx += ct(i + 1, k) * cs[k];        // ctrl_idx for the next iteration (i+1)
                     if (k < mfa.p.size() - 1 && iter[k] - 1 == mfa.p(k))
                     {
                         // compute point in next higher dimension and reset computation for current dim
@@ -410,7 +411,8 @@ namespace mfa
                 di.ctrl_idx = start_ctrl_idx;
                 for (size_t k = 0; k < mfa.p.size(); k++)
                 {
-                    di.ctrl_idx += ct(i + 1, k) * cs[k];        // ctrl_idx for the next iteration (i+1)
+                    if (i < tot_iters - 1)
+                        di.ctrl_idx += ct(i + 1, k) * cs[k];        // ctrl_idx for the next iteration (i+1)
                     if (k < mfa.p.size() - 1 && di.iter[k] - 1 == mfa.p(k))
                     {
                         // compute point in next higher dimension and reset computation for current dim
