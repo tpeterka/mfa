@@ -57,23 +57,19 @@ namespace mfa
     public:
 
         MFA(
-                VectorXi&   p_,             // polynomial degree in each dimension
-                VectorXi&   ndom_pts_,      // number of input data points in each dim
-                MatrixX<T>& domain_,        // input data points (1st dim changes fastest)
-                MatrixX<T>& ctrl_pts_,      // (output, optional input) control points (1st dim changes fastest)
-                VectorXi&   nctrl_pts_,     // (output, optional input) number of control points in each dim
-                VectorX<T>& weights_,       // (output, optional input) weights associated with control points
-                VectorX<T>& knots_,         // (output) knots (1st dim changes fastest)
-                int         min_dim_ = -1,  // starting coordinate for input data; -1 = use all coordinates
-                int         max_dim_ = -1,  // ending coordinate for input data; -1 = use all coordinates
-                T           eps_ = 1.0e-6)  // minimum difference considered significant
+                VectorXi&           p_,             // polynomial degree in each dimension
+                VectorXi&           ndom_pts_,      // number of input data points in each dim
+                MatrixX<T>&         domain_,        // input data points (1st dim changes fastest)
+                VectorXi&           nctrl_pts_,     // (output, optional input) number of control points in each dim
+                int                 min_dim_ = -1,  // starting coordinate for input data; -1 = use all coordinates
+                int                 max_dim_ = -1,  // ending coordinate for input data; -1 = use all coordinates
+                T                   eps_ = 1.0e-6)  // minimum difference considered significant
         {
             if (min_dim_ == -1)
                 min_dim_ = 0;
             if (max_dim_ == -1)
                 max_dim_ = domain_.cols() - 1;
-            mfa = new MFA_Data<T>(p_, ndom_pts_, domain_, ctrl_pts_, nctrl_pts_, weights_,
-                    knots_, min_dim_, max_dim_, eps_);
+            mfa = new MFA_Data<T>(p_, ndom_pts_, domain_, nctrl_pts_, min_dim_, max_dim_, eps_);
         }
 
         ~MFA()
@@ -84,6 +80,11 @@ namespace mfa
         MFA_Data<T>& mfa_data()
         {
             return *mfa;
+        }
+
+        Tmesh<T>& tmesh()
+        {
+            return mfa->tmesh;
         }
 
         // encode
@@ -99,10 +100,12 @@ namespace mfa
                 int      verbose,                   // output level
                 bool     weighted)                  // solve for and use weights (default = true)
         {
-            mfa->weights = VectorX<T>::Ones(mfa->tot_nctrl);
+            // TODO: hard-coded for single tensor
+            mfa->tmesh.tensor_prods[0].weights = VectorX<T>::Ones(mfa->tmesh.tensor_prods[0].nctrl_pts.prod());
             Encoder<T> encoder(*mfa, verbose);
             encoder.Encode(weighted);
-            nctrl_pts_ = mfa->nctrl_pts;
+            // TODO: hard-coded for single tensor
+            nctrl_pts_ = mfa->tmesh.tensor_prods[0].nctrl_pts;
         }
 
         // adaptive encode
@@ -114,10 +117,13 @@ namespace mfa
                 VectorX<T>& extents,                   // extents in each dimension, for normalizing error (size 0 means do not normalize)
                 int         max_rounds)                // optional maximum number of rounds
         {
+            // TODO: update to tmesh
+#if 0
             mfa->weights = VectorX<T>::Ones(mfa->tot_nctrl);
             Encoder<T> encoder(*mfa, verbose);
             encoder.AdaptiveEncode(err_limit, weighted, extents, max_rounds);
             nctrl_pts_ = mfa->nctrl_pts;
+#endif
         }
 
         // decode points
@@ -175,7 +181,8 @@ namespace mfa
         {
             int verbose = 0;
             Decoder<T> decoder(*mfa, verbose);
-            decoder.VolPt(param, cpt);
+            // TODO: hard-coded for one tensor product
+            decoder.VolPt(param, cpt, mfa->tmesh.tensor_prods[0]);
         }
 
         // compute the error (absolute value of coordinate-wise difference) of the mfa at a domain point
@@ -194,16 +201,19 @@ namespace mfa
             for (int i = 0; i < mfa->p.size(); i++)
                 param(i) = mfa->params(ijk(i) + mfa->po[i]);
 
-            // approximated value
-            VectorX<T> cpt(mfa->ctrl_pts.cols());          // approximated point
-            Decoder<T> decoder(*mfa, verbose);
-            decoder.VolPt(param, cpt);
+            // NB, assumes at least one tensor product exists and that all have the same ctrl pt dimensionality
+            int pt_dim = mfa->tmesh.tensor_prods[0].ctrl_pts.cols();
 
-            for (auto i = 0; i < mfa->ctrl_pts.cols(); i++)
+            // approximated value
+            VectorX<T> cpt(pt_dim);          // approximated point
+            Decoder<T> decoder(*mfa, verbose);
+            decoder.VolPt(param, cpt, mfa->tmesh.tensor_prods[0]);      // TODO: hard-coded for first tensor product
+
+            for (auto i = 0; i < pt_dim; i++)
                 error(i) = fabs(cpt(i) - mfa->domain(idx, mfa->min_dim + i));
         }
 
-        // DEPRECATED, use CoordError instead
+        // DEPRECATED, use AbsCoordError instead
         // compute the error (absolute value of difference of range coordinates) of the mfa at a domain point
         // error is not normalized by the data range (absolute, not relative error)
 //         T RangeError(

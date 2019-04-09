@@ -90,11 +90,6 @@ struct ErrArgs
 template <typename T>
 struct Model
 {
-    VectorXi    p;                              // degree in each dimension
-    VectorXi    nctrl_pts;                      // number of control points in each domain dimension
-    MatrixX<T>  ctrl_pts;                       // NURBS control points (1st dim changes fastest)
-    VectorX<T>  weights;                        // weights associated with control points
-    VectorX<T>  knots;                          // NURBS knots (1st dim changes fastest)
     int         min_dim;                        // starting coordinate of this model in full-dimensional data
     int         max_dim;                        // ending coordinate of this model in full-dimensional data
     mfa::MFA<T> *mfa;                           // MFA object
@@ -195,21 +190,27 @@ struct Block
             diy::save(bb, b->core_maxs);
 
             // geometry
-            diy::save(bb, b->geometry.p);
-            diy::save(bb, b->geometry.nctrl_pts);
-            diy::save(bb, b->geometry.ctrl_pts);
-            diy::save(bb, b->geometry.weights);
-            diy::save(bb, b->geometry.knots);
+            diy::save(bb, b->geometry.mfa->mfa_data().p);
+            for (TensorProduct<T>& t: b->geometry.mfa->tmesh().tensor_prods)
+                diy::save(bb, t.nctrl_pts);
+            for (TensorProduct<T>& t: b->geometry.mfa->tmesh().tensor_prods)
+                diy::save(bb, t.ctrl_pts);
+            for (TensorProduct<T>& t: b->geometry.mfa->tmesh().tensor_prods)
+                diy::save(bb, t.weights);
+            diy::save(bb, b->geometry.mfa->tmesh().all_knots);     // TODO: are 2d stl vectors serialized automatically?
 
             // science variables
             diy::save(bb, b->vars.size());
             for (auto i = 0; i < b->vars.size(); i++)
             {
-                diy::save(bb, b->vars[i].p);
-                diy::save(bb, b->vars[i].nctrl_pts);
-                diy::save(bb, b->vars[i].ctrl_pts);
-                diy::save(bb, b->vars[i].weights);
-                diy::save(bb, b->vars[i].knots);
+                diy::save(bb, b->vars[i].mfa->mfa_data().p);
+                for (TensorProduct<T>& t: b->vars[i].mfa->tmesh().tensor_prods)
+                    diy::save(bb, t.nctrl_pts);
+                for (TensorProduct<T>& t: b->vars[i].mfa->tmesh().tensor_prods)
+                    diy::save(bb, t.ctrl_pts);
+                for (TensorProduct<T>& t: b->vars[i].mfa->tmesh().tensor_prods)
+                    diy::save(bb, t.weights);
+                diy::save(bb, b->vars[i].mfa->tmesh().all_knots);     // TODO: are 2d stl vectors serialized automatically?
             }
 
             diy::save(bb, b->approx);
@@ -230,11 +231,14 @@ struct Block
             diy::load(bb, b->core_maxs);
 
             // geometry
-            diy::load(bb, b->geometry.p);
-            diy::load(bb, b->geometry.nctrl_pts);
-            diy::load(bb, b->geometry.ctrl_pts);
-            diy::load(bb, b->geometry.weights);
-            diy::load(bb, b->geometry.knots);
+            diy::load(bb, b->geometry.mfa->mfa_data().p);
+            for (TensorProduct<T>& t: b->geometry.mfa->tmesh().tensor_prods)
+                diy::load(bb, t.nctrl_pts);
+            for (TensorProduct<T>& t: b->geometry.mfa->tmesh().tensor_prods)
+                diy::load(bb, t.ctrl_pts);
+            for (TensorProduct<T>& t: b->geometry.mfa->tmesh().tensor_prods)
+                diy::load(bb, t.weights);
+            diy::load(bb, b->geometry.mfa->tmesh().all_knots);     // TODO: are 2d stl vectors serialized automatically?
 
             // science variables
             size_t nvars;
@@ -242,11 +246,14 @@ struct Block
             b->vars.resize(nvars);
             for (auto i = 0; i < b->vars.size(); i++)
             {
-                diy::load(bb, b->vars[i].p);
-                diy::load(bb, b->vars[i].nctrl_pts);
-                diy::load(bb, b->vars[i].ctrl_pts);
-                diy::load(bb, b->vars[i].weights);
-                diy::load(bb, b->vars[i].knots);
+                diy::load(bb, b->vars[i].mfa->mfa_data().p);
+                for (TensorProduct<T>& t: b->vars[i].mfa->tmesh().tensor_prods)
+                    diy::load(bb, t.nctrl_pts);
+                for (TensorProduct<T>& t: b->vars[i].mfa->tmesh().tensor_prods)
+                    diy::load(bb, t.ctrl_pts);
+                for (TensorProduct<T>& t: b->vars[i].mfa->tmesh().tensor_prods)
+                    diy::load(bb, t.weights);
+                diy::load(bb, b->vars[i].mfa->tmesh().all_knots);     // TODO: are 2d stl vectors serialized automatically?
             }
 
             diy::load(bb, b->approx);
@@ -336,22 +343,22 @@ struct Block
         max_errs.resize(nvars);
         sum_sq_errs.resize(nvars);
         int tot_ndom_pts    = 1;
-        geometry.p.resize(a->dom_dim);
+//         geometry.mfa->mfa_data().p.resize(a->dom_dim);
         geometry.min_dim = 0;
         geometry.max_dim = a->dom_dim - 1;
         for (int j = 0; j < nvars; j++)
         {
-            vars[j].p.resize(a->dom_dim);
+//             vars[j].mfa->mfa_data().p.resize(a->dom_dim);
             vars[j].min_dim = a->dom_dim + j;
             vars[j].max_dim = vars[j].min_dim + 1;
         }
         ndom_pts.resize(a->dom_dim);
         for (int i = 0; i < a->dom_dim; i++)
         {
-            geometry.p(i)   =  a->geom_p[i];
-            for (int j = 0; j < nvars; j++)
-                vars[j].p(i) =  a->vars_p[i];
-            ndom_pts(i)     =  a->ndom_pts[i];
+//             geometry.mfa->mfa_data().p(i) = a->geom_p[i];
+//             for (int j = 0; j < nvars; j++)
+//                 vars[j].mfa->mfa_data().p(i) = a->vars_p[i];
+            ndom_pts(i) = a->ndom_pts[i];
         }
 
         // get local block bounds
@@ -506,14 +513,14 @@ struct Block
     {
         DomainArgs* a = &args;
         int tot_ndom_pts = 1;
-        geometry.p.resize(a->dom_dim);
+        geometry.mfa->mfa_data().p.resize(a->dom_dim);
         geometry.min_dim = 0;
         geometry.max_dim = a->dom_dim - 1;
         int nvars = 1;
         vars.resize(nvars);
         max_errs.resize(nvars);
         sum_sq_errs.resize(nvars);
-        vars[0].p.resize(a->dom_dim);
+        vars[0].mfa->mfa_data().p.resize(a->dom_dim);
         vars[0].min_dim = a->dom_dim;
         vars[0].max_dim = vars[0].min_dim + 1;
         ndom_pts.resize(a->dom_dim);
@@ -521,10 +528,10 @@ struct Block
         bounds_maxs.resize(a->pt_dim);
         for (int i = 0; i < a->dom_dim; i++)
         {
-            geometry.p(i)   =  a->geom_p[i];
-            vars[0].p(i)    =  a->vars_p[i];
-            ndom_pts(i)     =  a->ndom_pts[i];
-            tot_ndom_pts    *= ndom_pts(i);
+            geometry.mfa->mfa_data().p(i)     =  a->geom_p[i];
+            vars[0].mfa->mfa_data().p(i)      =  a->vars_p[i];
+            ndom_pts(i)                     =  a->ndom_pts[i];
+            tot_ndom_pts                    *= ndom_pts(i);
         }
         domain.resize(tot_ndom_pts, a->pt_dim);
         vector<float> vel(3 * tot_ndom_pts);
@@ -591,14 +598,14 @@ struct Block
     {
         DomainArgs* a = &args;
         int tot_ndom_pts = 1;
-        geometry.p.resize(a->dom_dim);
+        geometry.mfa->mfa_data().p.resize(a->dom_dim);
         geometry.min_dim = 0;
         geometry.max_dim = a->dom_dim - 1;
         int nvars = 1;
         vars.resize(nvars);
         max_errs.resize(nvars);
         sum_sq_errs.resize(nvars);
-        vars[0].p.resize(a->dom_dim);
+        vars[0].mfa->mfa_data().p.resize(a->dom_dim);
         vars[0].min_dim = a->dom_dim;
         vars[0].max_dim = vars[0].min_dim + 1;
         ndom_pts.resize(a->dom_dim);
@@ -606,10 +613,10 @@ struct Block
         bounds_maxs.resize(a->pt_dim);
         for (int i = 0; i < a->dom_dim; i++)
         {
-            geometry.p(i)   =  a->geom_p[i];
-            vars[0].p(i)    =  a->vars_p[i];
-            ndom_pts(i)     =  a->ndom_pts[i];
-            tot_ndom_pts    *= ndom_pts(i);
+            geometry.mfa->mfa_data().p(i)     =  a->geom_p[i];
+            vars[0].mfa->mfa_data().p(i)      =  a->vars_p[i];
+            ndom_pts(i)                     =  a->ndom_pts[i];
+            tot_ndom_pts                    *= ndom_pts(i);
         }
         domain.resize(tot_ndom_pts, a->pt_dim);
         vector<float> vel(3 * tot_ndom_pts);
@@ -794,14 +801,14 @@ struct Block
     {
         DomainArgs* a = &args;
         int tot_ndom_pts = 1;
-        geometry.p.resize(a->dom_dim);
+        geometry.mfa->mfa_data().p.resize(a->dom_dim);
         geometry.min_dim = 0;
         geometry.max_dim = a->dom_dim - 1;
         int nvars = 1;
         vars.resize(nvars);
         max_errs.resize(nvars);
         sum_sq_errs.resize(nvars);
-        vars[0].p.resize(a->dom_dim);
+        vars[0].mfa->mfa_data().p.resize(a->dom_dim);
         vars[0].min_dim = a->dom_dim;
         vars[0].max_dim = vars[0].min_dim + 1;
         ndom_pts.resize(a->dom_dim);
@@ -809,10 +816,10 @@ struct Block
         bounds_maxs.resize(a->pt_dim);
         for (int i = 0; i < a->dom_dim; i++)
         {
-            geometry.p(i)   =  a->geom_p[i];
-            vars[0].p(i)    =  a->vars_p[i];
-            ndom_pts(i)     =  a->ndom_pts[i];
-            tot_ndom_pts    *= ndom_pts(i);
+            geometry.mfa->mfa_data().p(i)     =  a->geom_p[i];
+            vars[0].mfa->mfa_data().p(i)      =  a->vars_p[i];
+            ndom_pts(i)                     =  a->ndom_pts[i];
+            tot_ndom_pts                    *= ndom_pts(i);
         }
         domain.resize(tot_ndom_pts, a->pt_dim);
 
@@ -1168,51 +1175,49 @@ struct Block
             DomainArgs& args)
     {
         DomainArgs* a = &args;
+        int ndom_dims = a->dom_dim;                // domain dimensionality
 
-        // initialize control points
-        // TODO: for now geometry and science variables same number of control points; vary later
-        geometry.nctrl_pts.resize(a->dom_dim);
+        VectorXi nctrl_pts(a->dom_dim);
+        VectorXi p(a->dom_dim);
+        VectorXi ndom_pts(a->dom_dim);
         for (auto j = 0; j < a->dom_dim; j++)
-            geometry.nctrl_pts(j) =  a->geom_nctrl_pts[j];
-        for (auto i = 0; i < vars.size(); i++)
         {
-            vars[i].nctrl_pts.resize(a->dom_dim);
-            for (auto j = 0; j < a->dom_dim; j++)
-                vars[i].nctrl_pts(j) =  a->vars_nctrl_pts[j];
+            nctrl_pts(j)    = a->geom_nctrl_pts[j];
+            ndom_pts(j)     = a->ndom_pts[j];
+            p(j)            = a->geom_p[j];
         }
-
-        int ndom_dims = ndom_pts.size();                // domain dimensionality
 
         // encode geometry
         if (a->verbose && cp.master()->communicator().rank() == 0)
             fprintf(stderr, "\nEncoding geometry\n\n");
-        geometry.mfa = new mfa::MFA<T>(geometry.p,
+        geometry.mfa = new mfa::MFA<T>(p,
                                        ndom_pts,
                                        domain,
-                                       geometry.ctrl_pts,
-                                       geometry.nctrl_pts,
-                                       geometry.weights,
-                                       geometry.knots,
+                                       nctrl_pts,
                                        0,
                                        ndom_dims - 1);
         // TODO: consider not weighting the geometry (only science variables), depends on geometry complexity
-        geometry.mfa->FixedEncode(geometry.nctrl_pts, a->verbose, a->weighted);
+        geometry.mfa->FixedEncode(nctrl_pts, a->verbose, a->weighted);
 
         // encode science variables
+        // same number of control points and same degree for all variables in this example
+        for (auto j = 0; j < a->dom_dim; j++)
+        {
+            nctrl_pts(j)    = a->vars_nctrl_pts[j];
+            p(j)            = a->vars_p[j];
+        }
+
         for (auto i = 0; i< vars.size(); i++)
         {
             if (a->verbose && cp.master()->communicator().rank() == 0)
                 fprintf(stderr, "\nEncoding science variable %d\n\n", i);
-            vars[i].mfa = new mfa::MFA<T>(vars[i].p,
+            vars[i].mfa = new mfa::MFA<T>(p,
                                           ndom_pts,
                                           domain,
-                                          vars[i].ctrl_pts,
-                                          vars[i].nctrl_pts,
-                                          vars[i].weights,
-                                          vars[i].knots,
+                                          nctrl_pts,
                                           ndom_dims + i,        // assumes each variable is scalar
                                           ndom_dims + i);
-            vars[i].mfa->FixedEncode(vars[i].nctrl_pts, a->verbose, a->weighted);
+            vars[i].mfa->FixedEncode(nctrl_pts, a->verbose, a->weighted);
         }
     }
 
@@ -1504,19 +1509,19 @@ struct Block
             dom_step_real[i] = dom_step_param[i] * (a->max[i] - a->min[i]);
         }
 
-        // create mfa from block data if the mfa does not exist (only first science variable)
-        if (!exist_mfa)
-        {
-            vars[0].mfa = new mfa::MFA<T>(vars[0].p,
-                    ndom_pts,
-                    domain,
-                    vars[0].ctrl_pts,
-                    vars[0].nctrl_pts,
-                    vars[0].weights,
-                    vars[0].knots,
-                    dom_dim,            // assumes each variable is scalar
-                    dom_dim);
-        }
+//         // create mfa from block data if the mfa does not exist (only first science variable)
+//         if (!exist_mfa)
+//         {
+//             vars[0].mfa = new mfa::MFA<T>(vars[0].mfa->mfa_data().p,
+//                     ndom_pts,
+//                     domain,
+//                     t.ctrl_pts,
+//                     t.nctrl_pts,
+//                     t.weights,
+//                     vars[0].mfa->tmesh().all_knots,
+//                     dom_dim,            // assumes each variable is scalar
+//                     dom_dim);
+//         }
 
         // flattened loop over all the points in a domain in dimension dom_dim
         fmt::print(stderr, "Testing analytical error norms over a total of {} points\n", tot_ndom_pts);
@@ -1734,15 +1739,23 @@ struct Block
 //         cerr << "domain\n" << domain << endl;
 
         // geometry
+        // TODO: hard-coded for one tensor product
         cerr << "\n------- geometry model -------" << endl;
-        cerr << "nctrl_pts:\n" << geometry.nctrl_pts << endl;
-//         cerr << geometry.ctrl_pts.rows() << " final control points\n" << geometry.ctrl_pts << endl;
-//         cerr << geometry.weights.size()  << " final weights\n" << geometry.weights << endl;
-//         cerr << geometry.knots.size() << " knots\n" << geometry.knots << endl;
-        fprintf(stderr, "# output ctrl pts     = %ld\n", geometry.ctrl_pts.rows());
-        fprintf(stderr, "# output knots        = %ld\n", geometry.knots.size());
-        cerr << "-----------------------------" << endl;
+        cerr << "# output ctrl pts     = [ " << geometry.mfa->tmesh().tensor_prods[0].nctrl_pts.transpose() << " ]" << endl;
 
+        //  debug: print control points and weights
+//         print_ctrl_weights(geometry.mfa->tmesh());
+        // debug: print knots
+//         print_knots(geometry.mfa->tmesh());
+
+        fprintf(stderr, "# output knots        = [ ");
+        for (auto j = 0 ; j < geometry.mfa->tmesh().all_knots.size(); j++)
+        {
+            fprintf(stderr, "%ld ", geometry.mfa->tmesh().all_knots[j].size());
+        }
+        fprintf(stderr, "]\n");
+
+        cerr << "-----------------------------" << endl;
 
         // science variables
         cerr << "\n----- science variable models -----" << endl;
@@ -1750,12 +1763,23 @@ struct Block
         {
             real_t range_extent = domain.col(ndom_dims + i).maxCoeff() - domain.col(ndom_dims + i).minCoeff();
             cerr << "\n---------- var " << i << " ----------" << endl;
-            cerr << "nctrl_pts:\n" << vars[i].nctrl_pts << endl;
-//             cerr << vars[i].ctrl_pts.rows() << " final control points\n" << vars[i].ctrl_pts << endl;
-//             cerr << vars[i].weights.size()  << " final weights\n" << vars[i].weights << endl;
-//             cerr << vars[i].knots.size() << " knots\n" << vars[i].knots << endl;
-            fprintf(stderr, "# output ctrl pts     = %ld\n", vars[i].ctrl_pts.rows());
-            fprintf(stderr, "# output knots        = %ld\n", vars[i].knots.size());
+            cerr << "# ouput ctrl pts      = [ " << vars[i].mfa->tmesh().tensor_prods[0].nctrl_pts.transpose() << " ]" << endl;
+
+            //  debug: print control points and weights
+//             print_ctrl_weights(vars[i].mfa->tmesh());
+            // debug: print knots
+//             print_knots(vars[i].mfa->tmesh());
+
+
+            fprintf(stderr, "# output knots        = [ ");
+            for (auto j = 0 ; j < vars[i].mfa->tmesh().all_knots.size(); j++)
+            {
+                fprintf(stderr, "%ld ", vars[i].mfa->tmesh().all_knots[j].size());
+            }
+            fprintf(stderr, "]\n");
+
+            cerr << "-----------------------------" << endl;
+
             T rms_err = sqrt(sum_sq_errs[i] / (domain.rows()));
             fprintf(stderr, "range extent          = %e\n",  range_extent);
             if (error)
@@ -1770,22 +1794,56 @@ struct Block
         }
         cerr << "\n-----------------------------------" << endl;
 
+        //  debug: print approximated points
 //         cerr << approx.rows() << " approximated points\n" << approx << endl;
 //         fprintf(stderr, "# input points        = %ld\n", domain.rows());
 
-        // compute compression ratio
+        fprintf(stderr, "compression ratio     = %.2f\n", compute_compression());
+    }
+
+    // compute compression ratio
+    float compute_compression()
+    {
+        // TODO: hard-coded for one tensor product
         float in_coords = domain.rows() * domain.cols();
-        float out_coords = geometry.ctrl_pts.rows() * geometry.ctrl_pts.cols();
-        out_coords += geometry.knots.size();
+        float out_coords = geometry.mfa->tmesh().tensor_prods[0].ctrl_pts.rows() *
+            geometry.mfa->tmesh().tensor_prods[0].ctrl_pts.cols();
+        for (auto j = 0; j < geometry.mfa->tmesh().all_knots.size(); j++)
+            out_coords += geometry.mfa->tmesh().all_knots[j].size();
         for (auto i = 0; i < vars.size(); i++)
         {
-            out_coords += (vars[i].ctrl_pts.rows() * vars[i].ctrl_pts.cols());
-            out_coords += vars[i].knots.size();
+            out_coords += (vars[i].mfa->tmesh().tensor_prods[0].ctrl_pts.rows() *
+                    vars[i].mfa->tmesh().tensor_prods[0].ctrl_pts.cols());
+            for (auto j = 0; j < vars[i].mfa->tmesh().all_knots.size(); j++)
+                out_coords += vars[i].mfa->tmesh().all_knots[j].size();
         }
-        fprintf(stderr, "compression ratio     = %.2f\n", in_coords / out_coords);
+        return(in_coords / out_coords);
+    }
 
-//         fprintf(stderr, "compression ratio     = %.2f\n",
-//                 (real_t)(domain.rows()) / (ctrl_pts.rows() + knots.size() / ctrl_pts.cols()));
+    //  debug: print control points and weights in all tensor products of a tmesh
+    void print_ctrl_weights(mfa::Tmesh<T>& tmesh)
+    {
+        for (auto i = 0; i < tmesh.tensor_prods.size(); i++)
+        {
+            cerr << "tensor_prods[" << i << "]:\n" << endl;
+            cerr << tmesh.tensor_prods[i].ctrl_pts.rows() <<
+                " final control points\n" << tmesh.tensor_prods[i].ctrl_pts << endl;
+            cerr << tmesh.tensor_prods[i].weights.size()  <<
+                " final weights\n" << tmesh.tensor_prods[i].weights << endl;
+        }
+    }
+
+    // debug: print knots in a tmesh
+    void print_knots(mfa::Tmesh<T>& tmesh)
+    {
+        for (auto j = 0 ; j < tmesh.all_knots.size(); j++)
+        {
+            fprintf(stderr, "%ld knots[%d]: [ ", tmesh.all_knots[j].size(), j);
+            for (auto k = 0; k < tmesh.all_knots[j].size(); k++)
+                fprintf(stderr, "%.3lf ", tmesh.all_knots[j][k]);
+            fprintf(stderr, " ]\n");
+        }
+        fprintf(stderr, "\n");
     }
 
     void print_deriv(const diy::Master::ProxyWithLink& cp)

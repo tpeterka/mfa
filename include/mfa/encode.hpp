@@ -69,15 +69,17 @@ namespace mfa
                 bool weighted = true)       // solve for and use weights
         {
             // check and assign main quantities
-            VectorXi n;                             // number of control point spans in each domain dim
-            VectorXi m;                             // number of input data point spans in each domain dim
-            int      ndims = mfa.ndom_pts.size();   // number of domain dimensions
-            size_t   cs    = 1;                     // stride for input points in curve in cur. dim
+            VectorXi n;                                     // number of control point spans in each domain dim
+            VectorXi m;                                     // number of input data point spans in each domain dim
+            int      ndims      = mfa.ndom_pts.size();      // number of domain dimensions
+            size_t   cs         = 1;                        // stride for input points in curve in cur. dim
+            int      pt_dim     = mfa.tmesh.tensor_prods[0].ctrl_pts.cols();    // control point dimensonality
 
             Quants(n, m);
 
             // control points
-            mfa.ctrl_pts.resize(mfa.tot_nctrl, mfa.max_dim - mfa.min_dim + 1);
+            // TODO: hard-coded for single tensor
+            mfa.tmesh.tensor_prods[0].ctrl_pts.resize(mfa.tmesh.tensor_prods[0].nctrl_pts.prod(), mfa.max_dim - mfa.min_dim + 1);
 
             // 2 buffers of temporary control points
             // double buffer needed to write output curves of current dim without changing its input pts
@@ -87,9 +89,12 @@ namespace mfa
             // TODO: need to find a more space-efficient way
             size_t tot_ntemp_ctrl = 1;
             for (size_t k = 0; k < ndims; k++)
-                tot_ntemp_ctrl *= (k == 0 ? mfa.nctrl_pts(k) : mfa.ndom_pts(k));
-            MatrixX<T> temp_ctrl0 = MatrixX<T>::Zero(tot_ntemp_ctrl, mfa.ctrl_pts.cols());
-            MatrixX<T> temp_ctrl1 = MatrixX<T>::Zero(tot_ntemp_ctrl, mfa.ctrl_pts.cols());
+            {
+                // TODO: hard-coded for single tensor
+                tot_ntemp_ctrl *= (k == 0 ? mfa.tmesh.tensor_prods[0].nctrl_pts(k) : mfa.ndom_pts(k));
+            }
+            MatrixX<T> temp_ctrl0 = MatrixX<T>::Zero(tot_ntemp_ctrl, pt_dim);
+            MatrixX<T> temp_ctrl1 = MatrixX<T>::Zero(tot_ntemp_ctrl, pt_dim);
 
             VectorXi ntemp_ctrl = mfa.ndom_pts;     // current num of temp control pts in each dim
 
@@ -101,7 +106,10 @@ namespace mfa
                 for (int i = 0; i < ndims; i++)
                 {
                     if (i < k)
-                        ncurves *= mfa.nctrl_pts(i);
+                    {
+                        // TODO: hard-coded for single tensor
+                        ncurves *= mfa.tmesh.tensor_prods[0].nctrl_pts(i);
+                    }
                     else if (i > k)
                         ncurves *= mfa.ndom_pts(i);
                     // NB: current dimension contributes no curves, hence no i == k case
@@ -126,7 +134,8 @@ namespace mfa
                     {
                         co[j] = coo + cs * ntemp_ctrl(k);
                         coo   = co[j];
-                        to[j] = too + cs * mfa.nctrl_pts(k);
+                        // TODO: hard-coded for single tensor
+                        to[j] = too + cs * mfa.tmesh.tensor_prods[0].nctrl_pts(k);
                         too   = to[j];
                     }
                 }
@@ -150,18 +159,10 @@ namespace mfa
                 // N has semibandwidth < p  nonzero entries across diagonal
                 MatrixX<T> N = MatrixX<T>::Zero(m(k) + 1, n(k) + 1); // coefficients matrix
 
-                // DEPRECATED
-//                 for (int i = 0; i < N.rows(); i++)            // the rows of N
-//                 {
-//                     // TODO: deprecate once tmesh is being used
-//                     int span = mfa.FindSpan(k, mfa.params(mfa.po[k] + i), mfa.ko[k]) - mfa.ko[k];   // relative to ko
-//                     mfa.BasisFuns(k, mfa.params(mfa.po[k] + i), span, N, i);
-//                 }
-
-
                 for (int i = 0; i < N.rows(); i++)              // the rows of N
                 {
-                    int span = mfa.FindSpan(k, mfa.params(mfa.po[k] + i), mfa.tmesh.all_knots[k]);
+                    // TODO: hard-coded for single tensor
+                    int span = mfa.FindSpan(k, mfa.params(mfa.po[k] + i), mfa.tmesh.tensor_prods[0]);
                     mfa.BasisFuns(k, mfa.params(mfa.po[k] + i), span, N, i);
                 }
 
@@ -181,12 +182,12 @@ namespace mfa
                         // fprintf(stderr, "j=%ld curve\n", j);
 
                         // R is the right hand side needed for solving NtN * P = R
-                        MatrixX<T> R(N.cols(), mfa.ctrl_pts.cols());
+                        MatrixX<T> R(N.cols(), pt_dim);
 
                         // P are the unknown control points and the solution to NtN * P = R
                         // NtN is positive definite -> do not need pivoting
                         // TODO: use a common representation for P and ctrl_pts to avoid copying
-                        MatrixX<T> P(N.cols(), mfa.ctrl_pts.cols());
+                        MatrixX<T> P(N.cols(), pt_dim);
 
                         // compute the one curve of control points
                         // TODO: hard-coded for first tensor product
@@ -196,12 +197,12 @@ namespace mfa
 #else                                       // serial vesion
 
                 // R is the right hand side needed for solving NtN * P = R
-                MatrixX<T> R(N.cols(), mfa.ctrl_pts.cols());
+                MatrixX<T> R(N.cols(), pt_dim);
 
                 // P are the unknown control points and the solution to NtN * P = R
                 // NtN is positive definite -> do not need pivoting
                 // TODO: use a common representation for P and ctrl_pts to avoid copying
-                MatrixX<T> P(N.cols(), mfa.ctrl_pts.cols());
+                MatrixX<T> P(N.cols(), pt_dim);
 
                 // encode curves in this dimension
                 for (size_t j = 0; j < ncurves; j++)
@@ -221,7 +222,8 @@ namespace mfa
 
 #endif
                 // adjust offsets and strides for next dimension
-                ntemp_ctrl(k) = mfa.nctrl_pts(k);
+                // TODO: hard-coded for single tensor
+                ntemp_ctrl(k) = mfa.tmesh.tensor_prods[0].nctrl_pts(k);
                 cs *= ntemp_ctrl(k);
 
                 NtN.resize(0, 0);                           // free NtN
@@ -276,11 +278,14 @@ namespace mfa
                 // check if the new knots would make the number of control points >= number of input points in any dim
                 done = false;
                 for (auto k = 0; k < mfa.p.size(); k++)
-                    if (mfa.ndom_pts(k) <= mfa.nctrl_pts(k) + nnew_knots(k))
+                {
+                    // TODO: hard-coded for single tensor
+                    if (mfa.ndom_pts(k) <= mfa.tmesh.tensor_prods[0].nctrl_pts(k) + nnew_knots(k))
                     {
                         done = true;
                         break;
                     }
+                }
                 if (done)
                 {
                     if (verbose)
@@ -477,7 +482,6 @@ namespace mfa
                 MatrixX<T>& N,        // matrix of basis function coefficients
                 MatrixX<T>& R,        // (output) residual matrix allocated by caller
                 VectorX<T>& weights,  // precomputed weights for n + 1 control points on this curve
-                int         ko,       // index of starting knot
                 int         po,       // index of starting parameter
                 int         co)       // index of starting domain pt in current curve
         {
@@ -540,7 +544,6 @@ namespace mfa
                 MatrixX<T>& N,        // matrix of basis function coefficients
                 MatrixX<T>& R,        // (output) residual matrix allocated by caller
                 VectorX<T>& weights,  // precomputed weights for n + 1 control points on this curve
-                int         ko,       // index of starting knot
                 int         po,       // index of starting parameter
                 int         co,       // index of starting input pt in current curve
                 int         cs)       // stride of input pts in current curve
@@ -596,20 +599,23 @@ namespace mfa
             }
             for (size_t i = 0; i < mfa.p.size(); i++)
             {
-                if (mfa.nctrl_pts(i) <= mfa.p(i))
+                // TODO: hard-coded for one tensor
+                if (mfa.tmesh.tensor_prods[0].nctrl_pts(i) <= mfa.p(i))
                 {
                     fprintf(stderr, "Error: Encode() number of control points in dimension %ld "
                             "must be at least p + 1 for dimension %ld\n", i, i);
                     exit(1);
                 }
-                if (mfa.nctrl_pts(i) > mfa.ndom_pts(i))
+                // TODO: hard-coded for one tensor
+                if (mfa.tmesh.tensor_prods[0].nctrl_pts(i) > mfa.ndom_pts(i))
                 {
+                    // TODO: hard-coded for one tensor
                     fprintf(stderr, "Warning: Encode() number of control points (%d) in dimension %ld "
                             "exceeds number of input data points (%d) in dimension %ld. "
                             "Technically, this is not an error, but it could be a sign something is wrong and "
                             "probably not desired if you want compression. You may not be able to get the "
                             "desired error limit and compression simultaneously. Try increasing error limit?\n",
-                            mfa.nctrl_pts(i), i, mfa.ndom_pts(i), i);
+                            mfa.tmesh.tensor_prods[0].nctrl_pts(i), i, mfa.ndom_pts(i), i);
                 }
             }
 
@@ -617,7 +623,8 @@ namespace mfa
             m.resize(mfa.p.size());
             for (size_t i = 0; i < mfa.p.size(); i++)
             {
-                n(i)        =  mfa.nctrl_pts(i) - 1;
+                // TODO: hard-coded for one tensor
+                n(i)        =  mfa.tmesh.tensor_prods[0].nctrl_pts(i) - 1;
                 m(i)        =  mfa.ndom_pts(i)  - 1;
             }
         }
@@ -675,15 +682,14 @@ namespace mfa
             // even dim reads temp_ctrl1, odd dim reads temp_ctrl0; opposite of writing order
             // because what was written in the previous dimension is read in the current one
 
-            // TODO: remove mfa.ko[k] from the following calls
             // TODO: move mfa.po[k] to tensor
 
             if (k == 0)
-                RHS(k, N, R, weights, mfa.ko[k], mfa.po[k], co);                 // input points = default domain
+                RHS(k, N, R, weights, mfa.po[k], co);                 // input points = default domain
             else if (k % 2)
-                RHS(k, temp_ctrl0, N, R, weights, mfa.ko[k], mfa.po[k], co, cs); // input points = temp_ctrl0
+                RHS(k, temp_ctrl0, N, R, weights, mfa.po[k], co, cs); // input points = temp_ctrl0
             else
-                RHS(k, temp_ctrl1, N, R, weights, mfa.ko[k], mfa.po[k], co, cs); // input points = temp_ctrl1
+                RHS(k, temp_ctrl1, N, R, weights, mfa.po[k], co, cs); // input points = temp_ctrl1
 
             // rationalize NtN, ie, weigh the basis function coefficients
             MatrixX<T> NtN_rat = NtN;
@@ -709,11 +715,7 @@ namespace mfa
             if (k == mfa.dom_dim - 1)
             {
                 for (auto i = 0; i < weights.size(); i++)
-                {
-                    // Depracate mfa.weights once tensor.weights are being used
-                    mfa.weights(to + i * cs) = weights(i);
                     tensor.weights(to + i * cs) = weights(i);
-                }
             }
         }
 
@@ -737,11 +739,7 @@ namespace mfa
             if (ndims == 1)
             {
                 for (int i = 0; i < P.rows(); i++)
-                {
-                    // Deprecate once tensor.ctrl_pts are being used
-                    mfa.ctrl_pts.row(to + i * cs) = P.row(i);
                     tensor.ctrl_pts.row(to + i * cs) = P.row(i);
-                }
             }
             // first dim copied from domain to temp_ctrl0
             else if (k == 0)
@@ -765,48 +763,15 @@ namespace mfa
             else if (k == ndims - 1 && k % 2 == 0)
             {
                 for (int i = 0; i < P.rows(); i++)
-                {
-                    // Deprecate once tensor.ctrl_pts are being used
-                    mfa.ctrl_pts.row(to + i * cs) = P.row(i);
                     tensor.ctrl_pts.row(to + i * cs) = P.row(i);
-                }
             }
             // final dim if odd is copied from temp_ctrl0 to ctrl_pts
             else if (k == ndims - 1 && k % 2 == 1)
             {
                 for (int i = 0; i < P.rows(); i++)
-                {
-                    // Deprecate once tensor.ctrl_pts are being used
-                    mfa.ctrl_pts.row(to + i * cs) = P.row(i);
                     tensor.ctrl_pts.row(to + i * cs) = P.row(i);
-                }
             }
         }
-
-        //         DEPRECATED
-//         // append points from P to temporary control points
-//         // TODO: any way to avoid this copy?
-//         // just simple copy to one temporary buffer, no alternating double buffers
-//         // nor copy to final control points
-//         void CopyCtrl(
-//                 MatrixX<T>& P,          // solved points for current dimension and curve
-//                 int         k,          // current dimension
-//                 size_t      co,         // starting offset for reading domain points
-//                 MatrixX<T>& temp_ctrl)  // temporary control points buffer
-//         {
-//             // clamp all dimensions other than k to the same as the domain points
-//             // this eliminates any wiggles in other dimensions from the computation of P (typically ~10^-5)
-//             for (int i = 0; i < P.rows(); i++)
-//             {
-//                 for (auto j = 0; j < mfa.ctrl_pts.cols(); j++)
-//                 {
-//                     if (j < mfa.p.size() && j != k)
-//                         temp_ctrl(i, j) = mfa.domain(co, j);
-//                     else
-//                         temp_ctrl(i, j) = P(i, j);
-//                 }
-//             }
-//         }
 
         // computes new knots to be inserted into a curve
         // for each current knot span where the error is greater than the limit, finds the domain point
@@ -823,18 +788,19 @@ namespace mfa
                 T              err_limit)     // max allowable error
         {
             mfa::Decoder<T> decoder(mfa, verbose);
-            VectorX<T> cpt(mfa.ctrl_pts.cols());            // decoded curve point
-            int nerr = 0;                                   // number of points with error greater than err_limit
-            int span = mfa.p[k];                            // current knot span of the domain point being checked
+            int pt_dim = mfa.tmesh.tensor_prods[0].ctrl_pts.cols();     // control point dimensonality
+            VectorX<T> cpt(pt_dim);                                     // decoded curve point
+            int nerr = 0;                                               // number of points with error greater than err_limit
+            int span = mfa.p[k];                                        // current knot span of the domain point being checked
             if (!extents.size())
                 extents = VectorX<T>::Ones(mfa.domain.cols());
 
             for (auto i = 0; i < mfa.ndom_pts[k]; i++)      // all domain points in the curve
             {
-                while (mfa.knots(mfa.ko[k] + span + 1) < 1.0 && mfa.knots(mfa.ko[k] + span + 1) <= mfa.params(mfa.po[k] + i))
+                while (mfa.tensor.all_knots[k][span + 1] < 1.0 && mfa.tensor.all_knots[k][span + 1] <= mfa.params(mfa.po[k] + i))
                     span++;
 
-                decoder.CurvePt(k, mfa.params(mfa.po[k] + i), ctrl_pts, weights, cpt, mfa.ko[k]);
+                decoder.CurvePt(k, mfa.params(mfa.po[k] + i), ctrl_pts, weights, cpt);
 
 
                 // error
@@ -853,15 +819,15 @@ namespace mfa
                     {
                         // ensure there would be a domain point in both halves of the span if it were split
                         bool split_left = false;
-                        for (auto j = i; mfa.params(mfa.po[k] + j) >= mfa.knots(mfa.ko[k] + span); j--)
-                            if (mfa.params(mfa.po[k] + j) < (mfa.knots(mfa.ko[k] + span) + mfa.knots(mfa.ko[k] + span + 1)) / 2.0)
+                        for (auto j = i; mfa.params(mfa.po[k] + j) >= mfa.tensor.all_knots[k][span]; j--)
+                            if (mfa.params(mfa.po[k] + j) < (mfa.tensor.all_knots[k][span] + mfa.tensor.all_knots[k][span + 1]) / 2.0)
                             {
                                 split_left = true;
                                 break;
                             }
                         bool split_right = false;
-                        for (auto j = i; mfa.params(mfa.po[k] + j) < mfa.knots(mfa.ko[k] + span + 1); j++)
-                            if (mfa.params(mfa.po[k] + j) >= (mfa.knots(mfa.ko[k] + span) + mfa.knots(mfa.ko[k] + span + 1)) / 2.0)
+                        for (auto j = i; mfa.params(mfa.po[k] + j) < mfa.tensor.all_knots[k][span + 1]; j++)
+                            if (mfa.params(mfa.po[k] + j) >= (mfa.tensor.all_knots[k][span] + mfa.tensor.all_knots[k][span + 1]) / 2.0)
                             {
                                 split_right = true;
                                 break;
@@ -922,8 +888,10 @@ namespace mfa
                 int            iter)                             // iteration number of caller (for debugging)
         {
             // check and assign main quantities
-            int  ndims = mfa.ndom_pts.size();                   // number of domain dimensions
-            VectorXi n = mfa.nctrl_pts - VectorXi::Ones(ndims); // number of control point spans in each domain dim
+            int  ndims  = mfa.ndom_pts.size();                          // number of domain dimensions
+            int  pt_dim = mfa.tmesh.tensor_prods[0].ctrl_pts.cols();    // control point dimensonality
+            // TODO: hard-coded for one tensor
+            VectorXi n = mfa.tmesh.tensor_prods[0].nctrl_pts - VectorXi::Ones(ndims); // number of control point spans in each domain dim
             VectorXi m = mfa.ndom_pts  - VectorXi::Ones(ndims); // number of input data point spans in each domain dim
             nnew_knots = VectorXi::Zero(mfa.p.size());
             new_knots.resize(0);
@@ -939,7 +907,8 @@ namespace mfa
                 VectorX<T> weights = VectorX<T>::Ones(n(k) + 1);
 
                 // temporary control points for one curve
-                MatrixX<T> temp_ctrl = MatrixX<T>::Zero(mfa.nctrl_pts(k), mfa.ctrl_pts.cols());
+                // TODO: hard-coded for one tensor
+                MatrixX<T> temp_ctrl = MatrixX<T>::Zero(mfa.tmesh.tensor_prods[0].nctrl_pts(k), pt_dim);
 
                 // error spans for one curve and for worst curve
                 set<int> err_spans;
@@ -959,7 +928,8 @@ namespace mfa
 
                 for (int i = 0; i < N.rows(); i++)            // the rows of N
                 {
-                    int span = mfa.FindSpan(k, mfa.params(mfa.po[k] + i), mfa.ko[k]) - mfa.ko[k];   // relative to ko
+                    // TODO: hard-coded for single tensor
+                    int span = mfa.FindSpan(k, mfa.params(mfa.po[k] + i), mfa.tmesh.tensor_prods[0]);
                     mfa.BasisFuns(k, mfa.params(mfa.po[k] + i), span, N, i);
                 }
 
@@ -968,12 +938,12 @@ namespace mfa
                 MatrixX<T> NtN = N.transpose() * N;
 
                 // R is the right hand side needed for solving NtN * P = R
-                MatrixX<T> R(N.cols(), mfa.ctrl_pts.cols());
+                MatrixX<T> R(N.cols(), pt_dim);
 
                 // P are the unknown interior control points and the solution to NtN * P = R
                 // NtN is positive definite -> do not need pivoting
                 // TODO: use a common representation for P and ctrl_pts to avoid copying
-                MatrixX<T> P(N.cols(), mfa.ctrl_pts.cols());
+                MatrixX<T> P(N.cols(), pt_dim);
 
                 size_t ncurves   = mfa.domain.rows() / mfa.ndom_pts(k); // number of curves in this dimension
                 int nsame_steps  = 0;                                   // number of steps with same number of erroneous points
@@ -1047,9 +1017,10 @@ namespace mfa
                 for (set<int>::iterator it = err_spans.begin(); it != err_spans.end(); ++it)
                 {
                     // debug
-                    assert(*it < mfa.nctrl_pts[k]);                          // not trying to go beyond the last span
+                    // TODO: hard-coded for one tensor
+                    assert(*it < mfa.tmesh.tensor_prods[0].nctrl_pts[k]);                          // not trying to go beyond the last span
 
-                    new_knots[old_size + i] = (mfa.knots(mfa.ko[k] + *it) + mfa.knots(mfa.ko[k] + *it + 1)) / 2.0;
+                    new_knots[old_size + i] = (mfa.tensor.all_knots[k][*it] + mfa.tensor.all_knots[k][*it + 1]) / 2.0;
                     i++;
                 }
 
