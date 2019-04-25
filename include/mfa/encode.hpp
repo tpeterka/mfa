@@ -45,10 +45,12 @@ namespace mfa
     public:
 
         Encoder(
-                MFA_Data<T>& mfa_,                  // MFA data model
-                int         verbose_)               // output level
+                MatrixX<T>&     domain_,            // input points
+                MFA_Data<T>&    mfa_,               // MFA data model
+                int             verbose_)           // output level
             : mfa(mfa_),
             verbose(verbose_),
+            domain(domain_),
             max_num_curves(1.0e4)                           // max num. curves to check in one dimension of curve version
         {}
 
@@ -65,8 +67,7 @@ namespace mfa
         // (1D = NURBS curve, 2D = surface, 3D = volumem 4D = hypervolume, etc.)
         // 2. The dimensionality of individual domain and control points (domain.cols())
         // p.size() should be < domain.cols()
-        void Encode(
-                bool weighted = true)       // solve for and use weights
+        void Encode(bool weighted = true)                   // solve for and use weights
         {
             // check and assign main quantities
             VectorXi n;                                     // number of control point spans in each domain dim
@@ -496,7 +497,7 @@ namespace mfa
                 if (denom(k) == 0.0)
                     denom(k) = 1.0;
 #endif
-                Rk.row(k) = mfa.domain.block(co + k * mfa.ds[cur_dim], mfa.min_dim, 1, mfa.max_dim - mfa.min_dim + 1);
+                Rk.row(k) = domain.block(co + k * mfa.ds[cur_dim], mfa.min_dim, 1, mfa.max_dim - mfa.min_dim + 1);
             }
 
 #ifdef WEIGH_ALL_DIMS                               // weigh all dimensions
@@ -653,7 +654,7 @@ namespace mfa
             if (k == 0)
             {
                 for (auto i = 0; i < mfa.ndom_pts(k); i++)
-                    Q.row(i) = mfa.domain.block(co + i * cs, mfa.min_dim, 1, mfa.max_dim - mfa.min_dim + 1);
+                    Q.row(i) = domain.block(co + i * cs, mfa.min_dim, 1, mfa.max_dim - mfa.min_dim + 1);
             }
             else if (k % 2)
             {
@@ -793,7 +794,7 @@ namespace mfa
             int nerr = 0;                                               // number of points with error greater than err_limit
             int span = mfa.p[k];                                        // current knot span of the domain point being checked
             if (!extents.size())
-                extents = VectorX<T>::Ones(mfa.domain.cols());
+                extents = VectorX<T>::Ones(domain.cols());
 
             for (auto i = 0; i < mfa.ndom_pts[k]; i++)      // all domain points in the curve
             {
@@ -807,7 +808,7 @@ namespace mfa
                 T max_err = 0.0;
                 for (auto j = 0; j < mfa.max_dim - mfa.min_dim + 1; j++)
                 {
-                    T err = fabs(cpt(j) - mfa.domain(co + i * mfa.ds[k], mfa.min_dim + j)) / extents(mfa.min_dim + j);
+                    T err = fabs(cpt(j) - domain(co + i * mfa.ds[k], mfa.min_dim + j)) / extents(mfa.min_dim + j);
                     max_err = err > max_err ? err : max_err;
                 }
 
@@ -858,7 +859,7 @@ namespace mfa
                 int            iter)                        // iteration number of caller (for debugging)
         {
             if (!extents.size())
-                extents = VectorX<T>::Ones(mfa.domain.cols());
+                extents = VectorX<T>::Ones(mfa.ctrl_pts.cols());
 
             // resize control points and weights
             mfa.ctrl_pts.resize(mfa.tot_nctrl, mfa.max_dim - mfa.min_dim + 1);
@@ -945,7 +946,7 @@ namespace mfa
                 // TODO: use a common representation for P and ctrl_pts to avoid copying
                 MatrixX<T> P(N.cols(), pt_dim);
 
-                size_t ncurves   = mfa.domain.rows() / mfa.ndom_pts(k); // number of curves in this dimension
+                size_t ncurves   = domain.rows() / mfa.ndom_pts(k); // number of curves in this dimension
                 int nsame_steps  = 0;                                   // number of steps with same number of erroneous points
                 int n_step_sizes = 0;                                   // number of step sizes so far
 
@@ -1044,9 +1045,10 @@ namespace mfa
         template <typename>
         friend class NewKnots;
 
-        MFA_Data<T>& mfa;                           // the mfa object
-        int          verbose;                       // output level
-        size_t       max_num_curves;                // max num. curves per dimension to check in curve version
+        MatrixX<T>&     domain;                         // input points
+        MFA_Data<T>&    mfa;                            // the mfa object
+        int             verbose;                        // output level
+        size_t          max_num_curves;                 // max num. curves per dimension to check in curve version
     };
 }
 

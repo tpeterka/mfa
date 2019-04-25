@@ -93,7 +93,6 @@ namespace mfa
                 !mfa.tmesh.tensor_prods.size()              ||
                 !mfa.tmesh.tensor_prods[0].nctrl_pts.size() ||
                 !mfa.tmesh.tensor_prods[0].ctrl_pts.size()  ||
-                !mfa.domain.size()                          ||
                 !mfa.params.size())
             {
                 fprintf(stderr, "Decoder() error: Attempting to decode before encoding.\n");
@@ -133,20 +132,22 @@ namespace mfa
         // computes approximated points from a given set of domain points and an n-d NURBS volume
         // P&T eq. 9.77, p. 424
         // assumes all vectors have been correctly resized by the caller
-        void Decode(
-                MatrixX<T>& approx,                 // (output) points (1st dim changes fastest)
+        void DecodeDomain(
+                MatrixX<T>& domain,                 // input points (1st dim changes fastest)
+                MatrixX<T>& approx,                 // decoded output points (1st dim changes fastest)
                 int         min_dim,                // first dimension to decode
                 int         max_dim)                // last dimension to decode
         {
             VectorXi no_ders;                       // size 0 means no derivatives
-            Decode(approx, min_dim, max_dim, no_ders);
+            Decode(domain, approx, min_dim, max_dim, no_ders);
         }
 
         // computes approximated points from a given set of domain points and an n-d NURBS volume
         // P&T eq. 9.77, p. 424
         // assumes all vectors have been correctly resized by the caller
-        void Decode(
-                MatrixX<T>& approx,                 // (output) points (1st dim changes fastest)
+        void DecodeDomain(
+                MatrixX<T>& domain,                 // input points (1st dim changes fastest)
+                MatrixX<T>& approx,                 // decoded output points (1st dim changes fastest)
                 int         min_dim,                // first dimension to decode
                 int         max_dim,                // last dimension to decode
                 VectorXi&   derivs)                 // derivative to take in each domain dim. (0 = value, 1 = 1st deriv, 2 = 2nd deriv, ...)
@@ -165,7 +166,7 @@ namespace mfa
             for (size_t i = 0; i < mfa.p.size() - 1; i++)
                 ofst[i + 1] = ofst[i] + mfa.ndom_pts(i);
 
-            parallel_for (size_t(0), (size_t)mfa.domain.rows(), [&] (size_t i)
+            parallel_for (size_t(0), (size_t)domain.rows(), [&] (size_t i)
             {
                 // convert linear idx to multidim. i,j,k... indices in each domain dimension
                 VectorXi ijk(mfa.p.size());
@@ -221,8 +222,8 @@ namespace mfa
 
                 // print progress
                 if (verbose)
-                    if (i > 0 && mfa.domain.rows() >= 100 && i % (mfa.domain.rows() / 100) == 0)
-                        fprintf(stderr, "\r%.0f %% decoded", (T)i / (T)(mfa.domain.rows()) * 100);
+                    if (i > 0 && domain.rows() >= 100 && i % (domain.rows() / 100) == 0)
+                        fprintf(stderr, "\r%.0f %% decoded", (T)i / (T)(domain.rows()) * 100);
             }
 
 #endif

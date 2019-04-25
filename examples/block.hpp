@@ -79,8 +79,7 @@ struct DomainArgs
 };
 
 struct ErrArgs
-{
-    int    max_niter;                           // max num iterations to search for nearest curve pt
+{ int    max_niter;                           // max num iterations to search for nearest curve pt
     real_t err_bound;                           // desired error bound (stop searching if less)
     int    search_rad;                          // number of parameter steps to search path on either
                                                 // side of parameter value of input point
@@ -182,8 +181,10 @@ struct Block
         {
             Block* b = (Block*)b_;
 
+            // TODO: don't save ndom_pts and domain in practice
             diy::save(bb, b->ndom_pts);
             diy::save(bb, b->domain);
+
             diy::save(bb, b->bounds_mins);
             diy::save(bb, b->bounds_maxs);
             diy::save(bb, b->core_mins);
@@ -197,7 +198,7 @@ struct Block
                 diy::save(bb, t.ctrl_pts);
             for (TensorProduct<T>& t: b->geometry.mfa->tmesh().tensor_prods)
                 diy::save(bb, t.weights);
-            diy::save(bb, b->geometry.mfa->tmesh().all_knots);     // TODO: are 2d stl vectors serialized automatically?
+            diy::save(bb, b->geometry.mfa->tmesh().all_knots);
 
             // science variables
             diy::save(bb, b->vars.size());
@@ -210,7 +211,7 @@ struct Block
                     diy::save(bb, t.ctrl_pts);
                 for (TensorProduct<T>& t: b->vars[i].mfa->tmesh().tensor_prods)
                     diy::save(bb, t.weights);
-                diy::save(bb, b->vars[i].mfa->tmesh().all_knots);     // TODO: are 2d stl vectors serialized automatically?
+                diy::save(bb, b->vars[i].mfa->tmesh().all_knots);
             }
 
             diy::save(bb, b->approx);
@@ -223,22 +224,27 @@ struct Block
         {
             Block* b = (Block*)b_;
 
+            // TODO: don't load ndom_pts and domain in practice
             diy::load(bb, b->ndom_pts);
             diy::load(bb, b->domain);
+
             diy::load(bb, b->bounds_mins);
             diy::load(bb, b->bounds_maxs);
             diy::load(bb, b->core_mins);
             diy::load(bb, b->core_maxs);
 
+            VectorXi p;
+
             // geometry
-            diy::load(bb, b->geometry.mfa->mfa_data().p);
+            diy::load(bb, p);
+            b->geometry.mfa = new mfa::MFA<T>(p);
             for (TensorProduct<T>& t: b->geometry.mfa->tmesh().tensor_prods)
                 diy::load(bb, t.nctrl_pts);
             for (TensorProduct<T>& t: b->geometry.mfa->tmesh().tensor_prods)
                 diy::load(bb, t.ctrl_pts);
             for (TensorProduct<T>& t: b->geometry.mfa->tmesh().tensor_prods)
                 diy::load(bb, t.weights);
-            diy::load(bb, b->geometry.mfa->tmesh().all_knots);     // TODO: are 2d stl vectors serialized automatically?
+            diy::load(bb, b->geometry.mfa->tmesh().all_knots);
 
             // science variables
             size_t nvars;
@@ -246,14 +252,15 @@ struct Block
             b->vars.resize(nvars);
             for (auto i = 0; i < b->vars.size(); i++)
             {
-                diy::load(bb, b->vars[i].mfa->mfa_data().p);
+                diy::load(bb, p);
+                b->vars[i].mfa = new mfa::MFA<T>(p);
                 for (TensorProduct<T>& t: b->vars[i].mfa->tmesh().tensor_prods)
                     diy::load(bb, t.nctrl_pts);
                 for (TensorProduct<T>& t: b->vars[i].mfa->tmesh().tensor_prods)
                     diy::load(bb, t.ctrl_pts);
                 for (TensorProduct<T>& t: b->vars[i].mfa->tmesh().tensor_prods)
                     diy::load(bb, t.weights);
-                diy::load(bb, b->vars[i].mfa->tmesh().all_knots);     // TODO: are 2d stl vectors serialized automatically?
+                diy::load(bb, b->vars[i].mfa->tmesh().all_knots);
             }
 
             diy::load(bb, b->approx);
@@ -513,14 +520,12 @@ struct Block
     {
         DomainArgs* a = &args;
         int tot_ndom_pts = 1;
-        geometry.mfa->mfa_data().p.resize(a->dom_dim);
         geometry.min_dim = 0;
         geometry.max_dim = a->dom_dim - 1;
         int nvars = 1;
         vars.resize(nvars);
         max_errs.resize(nvars);
         sum_sq_errs.resize(nvars);
-        vars[0].mfa->mfa_data().p.resize(a->dom_dim);
         vars[0].min_dim = a->dom_dim;
         vars[0].max_dim = vars[0].min_dim + 1;
         ndom_pts.resize(a->dom_dim);
@@ -528,8 +533,6 @@ struct Block
         bounds_maxs.resize(a->pt_dim);
         for (int i = 0; i < a->dom_dim; i++)
         {
-            geometry.mfa->mfa_data().p(i)     =  a->geom_p[i];
-            vars[0].mfa->mfa_data().p(i)      =  a->vars_p[i];
             ndom_pts(i)                     =  a->ndom_pts[i];
             tot_ndom_pts                    *= ndom_pts(i);
         }
@@ -598,14 +601,12 @@ struct Block
     {
         DomainArgs* a = &args;
         int tot_ndom_pts = 1;
-        geometry.mfa->mfa_data().p.resize(a->dom_dim);
         geometry.min_dim = 0;
         geometry.max_dim = a->dom_dim - 1;
         int nvars = 1;
         vars.resize(nvars);
         max_errs.resize(nvars);
         sum_sq_errs.resize(nvars);
-        vars[0].mfa->mfa_data().p.resize(a->dom_dim);
         vars[0].min_dim = a->dom_dim;
         vars[0].max_dim = vars[0].min_dim + 1;
         ndom_pts.resize(a->dom_dim);
@@ -613,8 +614,6 @@ struct Block
         bounds_maxs.resize(a->pt_dim);
         for (int i = 0; i < a->dom_dim; i++)
         {
-            geometry.mfa->mfa_data().p(i)     =  a->geom_p[i];
-            vars[0].mfa->mfa_data().p(i)      =  a->vars_p[i];
             ndom_pts(i)                     =  a->ndom_pts[i];
             tot_ndom_pts                    *= ndom_pts(i);
         }
@@ -688,14 +687,12 @@ struct Block
     {
         DomainArgs* a = &args;
         int tot_ndom_pts = 1;
-        geometry.p.resize(a->dom_dim);
         geometry.min_dim = 0;
         geometry.max_dim = a->dom_dim - 1;
         int nvars = 1;
         vars.resize(nvars);
         max_errs.resize(nvars);
         sum_sq_errs.resize(nvars);
-        vars[0].p.resize(a->dom_dim);
         vars[0].min_dim = a->dom_dim;
         vars[0].max_dim = vars[0].min_dim + 1;
         ndom_pts.resize(a->dom_dim);
@@ -703,8 +700,6 @@ struct Block
         bounds_maxs.resize(a->pt_dim);
         for (int i = 0; i < a->dom_dim; i++)
         {
-            geometry.p(i)   =  a->geom_p[i];
-            vars[0].p(i)    =  a->vars_p[i];
             ndom_pts(i)     =  a->ndom_pts[i];
             tot_ndom_pts    *= ndom_pts(i);
         }
@@ -801,14 +796,12 @@ struct Block
     {
         DomainArgs* a = &args;
         int tot_ndom_pts = 1;
-        geometry.mfa->mfa_data().p.resize(a->dom_dim);
         geometry.min_dim = 0;
         geometry.max_dim = a->dom_dim - 1;
         int nvars = 1;
         vars.resize(nvars);
         max_errs.resize(nvars);
         sum_sq_errs.resize(nvars);
-        vars[0].mfa->mfa_data().p.resize(a->dom_dim);
         vars[0].min_dim = a->dom_dim;
         vars[0].max_dim = vars[0].min_dim + 1;
         ndom_pts.resize(a->dom_dim);
@@ -816,8 +809,6 @@ struct Block
         bounds_maxs.resize(a->pt_dim);
         for (int i = 0; i < a->dom_dim; i++)
         {
-            geometry.mfa->mfa_data().p(i)     =  a->geom_p[i];
-            vars[0].mfa->mfa_data().p(i)      =  a->vars_p[i];
             ndom_pts(i)                     =  a->ndom_pts[i];
             tot_ndom_pts                    *= ndom_pts(i);
         }
@@ -893,14 +884,12 @@ struct Block
     {
         DomainArgs* a = &args;
         int tot_ndom_pts = 1;
-        geometry.p.resize(a->dom_dim);
         geometry.min_dim = 0;
         geometry.max_dim = a->dom_dim - 1;
         int nvars = 1;
         vars.resize(nvars);
         max_errs.resize(nvars);
         sum_sq_errs.resize(nvars);
-        vars[0].p.resize(a->dom_dim);
         vars[0].min_dim = a->dom_dim;
         vars[0].max_dim = vars[0].min_dim + 1;
         ndom_pts.resize(a->dom_dim);
@@ -908,8 +897,6 @@ struct Block
         bounds_maxs.resize(a->pt_dim);
         for (int i = 0; i < a->dom_dim; i++)
         {
-            geometry.p(i)   =  a->geom_p[i];
-            vars[0].p(i)    =  a->vars_p[i];
             ndom_pts(i)     =  a->ndom_pts[i];
             tot_ndom_pts    *= ndom_pts(i);
         }
@@ -1197,7 +1184,7 @@ struct Block
                                        0,
                                        ndom_dims - 1);
         // TODO: consider not weighting the geometry (only science variables), depends on geometry complexity
-        geometry.mfa->FixedEncode(nctrl_pts, a->verbose, a->weighted);
+        geometry.mfa->FixedEncode(domain, nctrl_pts, a->verbose, a->weighted);
 
         // encode science variables
         // same number of control points and same degree for all variables in this example
@@ -1217,7 +1204,7 @@ struct Block
                                           nctrl_pts,
                                           ndom_dims + i,        // assumes each variable is scalar
                                           ndom_dims + i);
-            vars[i].mfa->FixedEncode(nctrl_pts, a->verbose, a->weighted);
+            vars[i].mfa->FixedEncode(domain, nctrl_pts, a->verbose, a->weighted);
         }
     }
 
@@ -1627,12 +1614,12 @@ struct Block
 
             // geometry
             fmt::print(stderr, "Decoding geometry...\n");
-            geometry.mfa->Decode(verbose, approx, 0, ndom_dims - 1);
+            geometry.mfa->DecodeDomain(domain, verbose, approx, 0, ndom_dims - 1);
 
             // science variables
             fmt::print(stderr, "Decoding science variables...\n");
             for (auto i = 0; i < vars.size(); i++)
-                vars[i].mfa->Decode(verbose, approx, ndom_dims + i, ndom_dims + i);     // assumes all variables are scalar
+                vars[i].mfa->DecodeDomain(domain, verbose, approx, ndom_dims + i, ndom_dims + i);     // assumes all variables are scalar
         }
 
 #ifndef MFA_NO_TBB                                          // TBB version
@@ -1661,12 +1648,12 @@ struct Block
                             if (k == 0)                                 // geometry
                             {
                                 err.resize(geometry.max_dim - geometry.min_dim);
-                                geometry.mfa->AbsCoordError(i, err, verbose);
+                                geometry.mfa->AbsCoordError(domain, i, err, verbose);
                             }
                             else
                             {
                                 err.resize(vars[k - 1].max_dim - vars[k - 1].min_dim);
-                                vars[k - 1].mfa->AbsCoordError(i, err, verbose);
+                                vars[k - 1].mfa->AbsCoordError(domain, i, err, verbose);
                             }
 
                             for (auto j = 0; j < err.size(); j++)
@@ -1698,12 +1685,12 @@ struct Block
                     if (k == 0)                                 // geometry
                     {
                         err.resize(geometry.max_dim - geometry.min_dim);
-                        geometry.mfa->AbsCoordError(i, err, verbose);
+                        geometry.mfa->AbsCoordError(domain, i, err, verbose);
                     }
                     else
                     {
                         err.resize(vars[k - 1].max_dim - vars[k - 1].min_dim);
-                        vars[k - 1].mfa->AbsCoordError(i, err, verbose);
+                        vars[k - 1].mfa->AbsCoordError(domain, i, err, verbose);
                     }
 
                     for (auto j = 0; j < err.size(); j++)
@@ -2162,6 +2149,28 @@ struct Block
 
 namespace diy
 {
+    //         DEPRECATE: not necessary to specialize vector<vector>>; diy handles correctly
+//         template <typename T>
+//         struct Serialization< vector<vector<T>> >
+//         {
+//             static
+//                 void save(diy::BinaryBuffer& bb, const vector<vector<T>>& v)
+//                 {
+//                     diy::save(bb, v.size());
+//                     for (auto i = 0; i < v.size(); i++)
+//                         diy::save(bb, v[i]);
+//                 }
+//             static
+//                 void load(diy::BinaryBuffer& bb, vector<vector<T>>& v)
+//                 {
+//                     size_t size;
+//                     diy::load(bb, size);
+//                     v.resize(size);
+//                     for (size_t i = 0; i < v.size(); i++)
+//                             diy::load(bb, v[i]);
+//                 }
+//         };
+
         template <typename T>
         struct Serialization<MatrixX<T>>
         {
@@ -2186,6 +2195,7 @@ namespace diy
                             diy::load(bb, m(i, j));
                 }
         };
+
         template <typename T>
         struct Serialization<VectorX<T>>
         {
@@ -2206,6 +2216,7 @@ namespace diy
                         diy::load(bb, v(i));
                 }
         };
+
         template<>
         struct Serialization<VectorXi>
         {

@@ -56,6 +56,7 @@ namespace mfa
     {
     public:
 
+        // constructor for creating an mfa from input points
         MFA(
                 VectorXi&           p_,             // polynomial degree in each dimension
                 VectorXi&           ndom_pts_,      // number of input data points in each dim
@@ -70,6 +71,20 @@ namespace mfa
             if (max_dim_ == -1)
                 max_dim_ = domain_.cols() - 1;
             mfa = new MFA_Data<T>(p_, ndom_pts_, domain_, nctrl_pts_, min_dim_, max_dim_, eps_);
+        }
+
+        // constructor when reading mfa in and knowing nothing about it yet except its degree and dimensionality
+        MFA(
+                VectorXi&           p_,             // polynomial degree in each dimension
+                int                 min_dim_ = -1,  // starting coordinate for input data; -1 = use all coordinates
+                int                 max_dim_ = -1,  // ending coordinate for input data; -1 = use all coordinates
+                T                   eps_ = 1.0e-6)  // minimum difference considered significant
+        {
+            if (min_dim_ == -1)
+                min_dim_ = 0;
+            if (max_dim_ == -1)
+                max_dim_ = 1;
+            mfa = new MFA_Data<T>(p_, min_dim_, max_dim_, eps_);
         }
 
         ~MFA()
@@ -96,13 +111,14 @@ namespace mfa
 
         // fixed number of control points encode
         void FixedEncode(
-                VectorXi &nctrl_pts_,               // (output) number of control points in each dim
-                int      verbose,                   // output level
-                bool     weighted)                  // solve for and use weights (default = true)
+                MatrixX<T>& domain,                     // input points
+                VectorXi    &nctrl_pts_,                // (output) number of control points in each dim
+                int         verbose,                    // output level
+                bool        weighted)                   // solve for and use weights (default = true)
         {
             // TODO: hard-coded for single tensor
             mfa->tmesh.tensor_prods[0].weights = VectorX<T>::Ones(mfa->tmesh.tensor_prods[0].nctrl_pts.prod());
-            Encoder<T> encoder(*mfa, verbose);
+            Encoder<T> encoder(domain, *mfa, verbose);
             encoder.Encode(weighted);
             // TODO: hard-coded for single tensor
             nctrl_pts_ = mfa->tmesh.tensor_prods[0].nctrl_pts;
@@ -110,6 +126,7 @@ namespace mfa
 
         // adaptive encode
         void AdaptiveEncode(
+                MatrixX<T>& domain,                    // input points
                 T           err_limit,                 // maximum allowable normalized error
                 VectorXi&   nctrl_pts_,                // (output) number of control points in each dim
                 int         verbose,                   // output level
@@ -120,25 +137,27 @@ namespace mfa
             // TODO: update to tmesh
 #if 0
             mfa->weights = VectorX<T>::Ones(mfa->tot_nctrl);
-            Encoder<T> encoder(*mfa, verbose);
+            Encoder<T> encoder(domain, *mfa, verbose);
             encoder.AdaptiveEncode(err_limit, weighted, extents, max_rounds);
             nctrl_pts_ = mfa->nctrl_pts;
 #endif
         }
 
-        // decode points
-        void Decode(
+        // decode values at all input points
+        void DecodeDomain(
+                MatrixX<T>& domain,                 // input points
                 int         verbose,                // output level
                 MatrixX<T>& approx,                 // decoded points
                 int         min_dim,                // first dimension to decode
                 int         max_dim)                // last dimension to decode
         {
             VectorXi no_derivs;                     // size-0 means no derivatives
-            Decode(verbose, approx, min_dim, max_dim, no_derivs);
+            DecodeDomain(domain, verbose, approx, min_dim, max_dim, no_derivs);
         }
 
-        // decode derivatives
-        void Decode(
+        // decode derivatives at all input points
+        void DecodeDomain(
+                MatrixX<T>& domain,                 // input points
                 int         verbose,                // output level
                 MatrixX<T>& approx,                 // decoded derivatives
                 int         min_dim,                // first dimension to decode
@@ -147,7 +166,7 @@ namespace mfa
                                                     // pass size-0 vector if unused
         {
             mfa::Decoder<T> decoder(*mfa, verbose);
-            decoder.Decode(approx, min_dim, max_dim, derivs);
+            decoder.DecodeDomain(domain, approx, min_dim, max_dim, derivs);
         }
 
         // compute the error (absolute value of distance in normal direction) of the mfa at a domain point
@@ -188,6 +207,7 @@ namespace mfa
         // compute the error (absolute value of coordinate-wise difference) of the mfa at a domain point
         // error is not normalized by the data range (absolute, not relative error)
         void AbsCoordError(
+                MatrixX<T>& domain,             // input points
                 size_t      idx,                // index of domain point
                 VectorX<T>& error,              // absolute value of error at each coordinate
                 int         verbose)            // output level
@@ -210,7 +230,7 @@ namespace mfa
             decoder.VolPt(param, cpt, mfa->tmesh.tensor_prods[0]);      // TODO: hard-coded for first tensor product
 
             for (auto i = 0; i < pt_dim; i++)
-                error(i) = fabs(cpt(i) - mfa->domain(idx, mfa->min_dim + i));
+                error(i) = fabs(cpt(i) - domain(idx, mfa->min_dim + i));
         }
 
         // DEPRECATED, use AbsCoordError instead

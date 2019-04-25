@@ -103,6 +103,7 @@ namespace mfa
     {
     public:
 
+        // constructor for creating an mfa from input points
         MFA_Data(
                 VectorXi&           p_,             // polynomial degree in each dimension
                 VectorXi&           ndom_pts_,      // number of input data points in each dim
@@ -113,7 +114,6 @@ namespace mfa
                 T                   eps_ = 1.0e-6) :// minimum difference considered significant
             p(p_),
             ndom_pts(ndom_pts_),
-            domain(domain_),
             min_dim(min_dim_),
             max_dim(max_dim_),
             eps(eps_),
@@ -121,11 +121,11 @@ namespace mfa
             dom_dim(p_.size())
         {
             // check dimensionality for sanity
-            assert(dom_dim < domain.cols());
+            assert(dom_dim < domain_.cols());
 
             // max extent of input data points
-            int last     = domain.cols() - 1;
-            range_extent = domain.col(last).maxCoeff() - domain.col(last).minCoeff();
+            int last     = domain_.cols() - 1;
+            range_extent = domain_.col(last).maxCoeff() - domain_.col(last).minCoeff();
 
             // set number of control points to the minimum, p + 1, if they have not been initialized
             if (!nctrl_pts_.size())
@@ -165,10 +165,10 @@ namespace mfa
             params.resize(tot_nparams);
 
 #ifdef CURVE_PARAMS
-            Params();                               // params space according to the curve length (per P&T)
+            Params(domain_);                    // params space according to the curve length (per P&T)
             Knots(tmesh);                       // knots spaced according to parameters (per P&T)
 #else
-            DomainParams();                         // params spaced according to domain spacing
+            DomainParams(domain_);              // params spaced according to domain spacing
 #ifndef UNCLAMPED_KNOTS
             UniformKnots(tmesh);                // knots spaced uniformly
 #else
@@ -185,7 +185,7 @@ namespace mfa
             co.resize(dom_dim);
             for (auto k = 0; k < dom_dim; k++)
             {
-                size_t ncurves  = domain.rows() / ndom_pts(k);  // number of curves in this dimension
+                size_t ncurves  = domain_.rows() / ndom_pts(k);  // number of curves in this dimension
                 size_t coo      = 0;                            // co at start of contiguous sequence
                 co[k].resize(ncurves);
 
@@ -205,6 +205,30 @@ namespace mfa
             }
         }
 
+        // constructor when reading mfa in and knowing nothing about it yet except its degree and dimensionality
+        MFA_Data(
+                VectorXi&           p_,             // polynomial degree in each dimension
+                int                 min_dim_,       // starting coordinate for input data
+                int                 max_dim_,       // ending coordinate for input data
+                T                   eps_ = 1.0e-6) :// minimum difference considered significant
+            p(p_),
+            dom_dim(p_.size()),
+            min_dim(min_dim_),
+            max_dim(max_dim_),
+            eps(eps_),
+            tmesh(p_.size(), p_, min_dim_, max_dim_)
+        {
+            // initialize first tensor product
+            vector<size_t> knot_mins(dom_dim);
+            vector<size_t> knot_maxs(dom_dim);
+            for (auto i = 0; i < dom_dim; i++)
+            {
+                knot_mins[i] = 0;
+                knot_maxs[i] = tmesh.all_knots[i].size() - 1;
+            }
+            tmesh.insert_tensor(knot_mins, knot_maxs);
+        }
+
         ~MFA_Data() {}
 
         // convert linear domain point index into (i,j,k,...) multidimensional index
@@ -213,20 +237,20 @@ namespace mfa
                 size_t    idx,                  // linear cell indx
                 VectorXi& ijk)                  // i,j,k,... indices in all dimensions
         {
-                if (dom_dim == 1)
-                {
-                    ijk(0) = idx;
-                    return;
-                }
-
-                for (int i = 0; i < dom_dim; i++)
-                {
-                    if (i < dom_dim - 1)
-                        ijk(i) = (idx % ds[i + 1]) / ds[i];
-                    else
-                        ijk(i) = idx / ds[i];
-                }
+            if (dom_dim == 1)
+            {
+                ijk(0) = idx;
+                return;
             }
+
+            for (int i = 0; i < dom_dim; i++)
+            {
+                if (i < dom_dim - 1)
+                    ijk(i) = (idx % ds[i + 1]) / ds[i];
+                else
+                    ijk(i) = idx / ds[i];
+            }
+        }
 
         // convert (i,j,k,...) multidimensional index into linear index into domain
         // number of dimension is the domain dimensionality
@@ -502,6 +526,7 @@ namespace mfa
         // domain dimensions (not from 2 points in each dimension)
         T NormalDistance(
                 VectorX<T>& pt,          // point whose distance from domain is desired
+                MatrixX<T>& domain,      // input data points (1st dim changes fastest)
                 size_t      idx)         // index of min. corner of cell in the domain
             // that will be used to compute partial derivatives
         {
@@ -575,7 +600,7 @@ namespace mfa
         // total number of params is the sum of ndom_pts over the dimensions, much less than the total
         // number of data points (which would be the product)
         // assumes params were allocated by caller
-        void Params()
+        void Params(MatrixX<T>& domain)                   // input data points (1st dim changes fastest)
         {
             T          tot_dist;                          // total chord length
             VectorX<T> dists(ndom_pts.maxCoeff() - 1);    // chord lengths of data point spans for any dim
@@ -663,7 +688,7 @@ namespace mfa
         // total number of params is the sum of ndom_pts over the dimensions, much less than the total
         // number of data points (which would be the product)
         // assumes params were allocated by caller
-        void DomainParams()
+        void DomainParams(MatrixX<T>& domain)                   // input data points (1st dim changes fastest)
         {
             size_t cs = 1;                                      // stride for domain points in current dim.
             for (size_t k = 0; k < dom_dim; k++)               // for all domain dimensions
@@ -914,7 +939,6 @@ namespace mfa
 
        VectorXi                  p;             // polynomial degree in each domain dimension
        VectorXi                  ndom_pts;      // number of input data points in each domain dim
-       MatrixX<T>&               domain;        // input data points (row-major order: 1st dim changes fastest)
 
        // TODO: store params in separate vectors the way knots are stored and get rid of tot_nparams and po
        VectorX<T>                params;        // parameters for input points (single coords: 1st dim params, 2nd dim, ...)
