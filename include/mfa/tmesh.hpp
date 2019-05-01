@@ -49,7 +49,8 @@ namespace mfa
         Tmesh(int       dom_dim,                        // number of domain dimension
               VectorXi& p,                              // degree in each dimension
               int       min_dim,                        // starting coordinate of this model in full-dimensional data
-              int       max_dim) :                      // ending coordinate of this model in full-dimensional data
+              int       max_dim,                        // ending coordinate of this model in full-dimensional data
+              size_t    ntensor_prods =  0) :           // number of tensor products to allocate
                 dom_dim_(dom_dim),
                 p_(p),
                 min_dim_(min_dim),
@@ -57,6 +58,9 @@ namespace mfa
         {
             all_knots.resize(dom_dim_);
             all_knot_levels.resize(dom_dim_);
+
+            if (ntensor_prods)
+                tensor_prods.resize(ntensor_prods);
         }
 
         // initialize knots

@@ -192,12 +192,17 @@ struct Block
 
             // geometry
             diy::save(bb, b->geometry.mfa->mfa_data().p);
+            diy::save(bb, b->geometry.mfa->tmesh().tensor_prods.size());
             for (TensorProduct<T>& t: b->geometry.mfa->tmesh().tensor_prods)
                 diy::save(bb, t.nctrl_pts);
             for (TensorProduct<T>& t: b->geometry.mfa->tmesh().tensor_prods)
                 diy::save(bb, t.ctrl_pts);
             for (TensorProduct<T>& t: b->geometry.mfa->tmesh().tensor_prods)
                 diy::save(bb, t.weights);
+            for (TensorProduct<T>& t: b->geometry.mfa->tmesh().tensor_prods)
+                diy::save(bb, t.knot_mins);
+            for (TensorProduct<T>& t: b->geometry.mfa->tmesh().tensor_prods)
+                diy::save(bb, t.knot_maxs);
             diy::save(bb, b->geometry.mfa->tmesh().all_knots);
 
             // science variables
@@ -205,12 +210,17 @@ struct Block
             for (auto i = 0; i < b->vars.size(); i++)
             {
                 diy::save(bb, b->vars[i].mfa->mfa_data().p);
+                diy::save(bb, b->vars[i].mfa->tmesh().tensor_prods.size());
                 for (TensorProduct<T>& t: b->vars[i].mfa->tmesh().tensor_prods)
                     diy::save(bb, t.nctrl_pts);
                 for (TensorProduct<T>& t: b->vars[i].mfa->tmesh().tensor_prods)
                     diy::save(bb, t.ctrl_pts);
                 for (TensorProduct<T>& t: b->vars[i].mfa->tmesh().tensor_prods)
                     diy::save(bb, t.weights);
+                for (TensorProduct<T>& t: b->vars[i].mfa->tmesh().tensor_prods)
+                    diy::save(bb, t.knot_mins);
+                for (TensorProduct<T>& t: b->vars[i].mfa->tmesh().tensor_prods)
+                    diy::save(bb, t.knot_maxs);
                 diy::save(bb, b->vars[i].mfa->tmesh().all_knots);
             }
 
@@ -233,17 +243,23 @@ struct Block
             diy::load(bb, b->core_mins);
             diy::load(bb, b->core_maxs);
 
-            VectorXi p;
+            VectorXi    p;                  // degree of the mfa
+            size_t      ntensor_prods;      // number of tensor products in the tmesh
 
             // geometry
             diy::load(bb, p);
-            b->geometry.mfa = new mfa::MFA<T>(p);
+            diy::load(bb, ntensor_prods);
+            b->geometry.mfa = new mfa::MFA<T>(p, ntensor_prods);
             for (TensorProduct<T>& t: b->geometry.mfa->tmesh().tensor_prods)
                 diy::load(bb, t.nctrl_pts);
             for (TensorProduct<T>& t: b->geometry.mfa->tmesh().tensor_prods)
                 diy::load(bb, t.ctrl_pts);
             for (TensorProduct<T>& t: b->geometry.mfa->tmesh().tensor_prods)
                 diy::load(bb, t.weights);
+            for (TensorProduct<T>& t: b->geometry.mfa->tmesh().tensor_prods)
+                diy::load(bb, t.knot_mins);
+            for (TensorProduct<T>& t: b->geometry.mfa->tmesh().tensor_prods)
+                diy::load(bb, t.knot_maxs);
             diy::load(bb, b->geometry.mfa->tmesh().all_knots);
 
             // science variables
@@ -253,13 +269,18 @@ struct Block
             for (auto i = 0; i < b->vars.size(); i++)
             {
                 diy::load(bb, p);
-                b->vars[i].mfa = new mfa::MFA<T>(p);
+                diy::load(bb, ntensor_prods);
+                b->vars[i].mfa = new mfa::MFA<T>(p, ntensor_prods);
                 for (TensorProduct<T>& t: b->vars[i].mfa->tmesh().tensor_prods)
                     diy::load(bb, t.nctrl_pts);
                 for (TensorProduct<T>& t: b->vars[i].mfa->tmesh().tensor_prods)
                     diy::load(bb, t.ctrl_pts);
                 for (TensorProduct<T>& t: b->vars[i].mfa->tmesh().tensor_prods)
                     diy::load(bb, t.weights);
+                for (TensorProduct<T>& t: b->vars[i].mfa->tmesh().tensor_prods)
+                    diy::load(bb, t.knot_mins);
+                for (TensorProduct<T>& t: b->vars[i].mfa->tmesh().tensor_prods)
+                    diy::load(bb, t.knot_maxs);
                 diy::load(bb, b->vars[i].mfa->tmesh().all_knots);
             }
 
@@ -1465,7 +1486,6 @@ struct Block
             T&                                    L2,                 // (output) L-2 norm
             T&                                    Linf,               // (output) L-infinity norm
             DomainArgs&                           args,               // input args
-            bool                                  exist_mfa,          // whether the mfa already exists
             bool                                  output,             // whether to output test_pts, true_data, test_data or only compute error norms
             vector<vec3d>&                        true_pts,           // (output) true points locations
             float**                               true_data,          // (output) true data values (4d)
@@ -1495,20 +1515,6 @@ struct Block
             dom_step_param[i] = 1.0 / (double)(a->ndom_pts[i] - 1);
             dom_step_real[i] = dom_step_param[i] * (a->max[i] - a->min[i]);
         }
-
-//         // create mfa from block data if the mfa does not exist (only first science variable)
-//         if (!exist_mfa)
-//         {
-//             vars[0].mfa = new mfa::MFA<T>(vars[0].mfa->mfa_data().p,
-//                     ndom_pts,
-//                     domain,
-//                     t.ctrl_pts,
-//                     t.nctrl_pts,
-//                     t.weights,
-//                     vars[0].mfa->tmesh().all_knots,
-//                     dom_dim,            // assumes each variable is scalar
-//                     dom_dim);
-//         }
 
         // flattened loop over all the points in a domain in dimension dom_dim
         fmt::print(stderr, "Testing analytical error norms over a total of {} points\n", tot_ndom_pts);

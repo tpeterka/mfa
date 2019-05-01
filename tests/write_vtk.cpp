@@ -465,7 +465,7 @@ void test_and_write(Block<real_t>*                      b,
 
     // compute the norms of analytical errors synthetic function w/o noise at different domain points than the input
     real_t L1, L2, Linf;                                // L-1, 2, infinity norms
-    b->analytical_error(cp, input, L1, L2, Linf, args, false, true, true_pts, true_data, test_pts, test_data);
+    b->analytical_error(cp, input, L1, L2, Linf, args, true, true_pts, true_data, test_pts, test_data);
 
     // print analytical errors
     fprintf(stderr, "\n------ Analytical error norms -------\n");

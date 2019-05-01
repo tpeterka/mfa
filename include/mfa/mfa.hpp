@@ -76,6 +76,7 @@ namespace mfa
         // constructor when reading mfa in and knowing nothing about it yet except its degree and dimensionality
         MFA(
                 VectorXi&           p_,             // polynomial degree in each dimension
+                size_t              ntensor_prods,  // number of tensor products to allocate in tmesh
                 int                 min_dim_ = -1,  // starting coordinate for input data; -1 = use all coordinates
                 int                 max_dim_ = -1,  // ending coordinate for input data; -1 = use all coordinates
                 T                   eps_ = 1.0e-6)  // minimum difference considered significant
@@ -84,7 +85,7 @@ namespace mfa
                 min_dim_ = 0;
             if (max_dim_ == -1)
                 max_dim_ = 1;
-            mfa = new MFA_Data<T>(p_, min_dim_, max_dim_, eps_);
+            mfa = new MFA_Data<T>(p_, ntensor_prods, min_dim_, max_dim_, eps_);
         }
 
         ~MFA()

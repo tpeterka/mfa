@@ -208,6 +208,7 @@ namespace mfa
         // constructor when reading mfa in and knowing nothing about it yet except its degree and dimensionality
         MFA_Data(
                 VectorXi&           p_,             // polynomial degree in each dimension
+                size_t              ntensor_prods,  // number of tensor products to allocate in tmesh
                 int                 min_dim_,       // starting coordinate for input data
                 int                 max_dim_,       // ending coordinate for input data
                 T                   eps_ = 1.0e-6) :// minimum difference considered significant
@@ -216,18 +217,7 @@ namespace mfa
             min_dim(min_dim_),
             max_dim(max_dim_),
             eps(eps_),
-            tmesh(p_.size(), p_, min_dim_, max_dim_)
-        {
-            // initialize first tensor product
-            vector<size_t> knot_mins(dom_dim);
-            vector<size_t> knot_maxs(dom_dim);
-            for (auto i = 0; i < dom_dim; i++)
-            {
-                knot_mins[i] = 0;
-                knot_maxs[i] = tmesh.all_knots[i].size() - 1;
-            }
-            tmesh.insert_tensor(knot_mins, knot_maxs);
-        }
+            tmesh(p_.size(), p_, min_dim_, max_dim_, ntensor_prods) {}
 
         ~MFA_Data() {}
 

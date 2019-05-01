@@ -88,12 +88,10 @@ namespace mfa
         {
             // ensure that encoding was already done
             if (!mfa.p.size()                               ||
-                !mfa.ndom_pts.size()                        ||
                 !mfa.tmesh.all_knots.size()                 ||
                 !mfa.tmesh.tensor_prods.size()              ||
                 !mfa.tmesh.tensor_prods[0].nctrl_pts.size() ||
-                !mfa.tmesh.tensor_prods[0].ctrl_pts.size()  ||
-                !mfa.params.size())
+                !mfa.tmesh.tensor_prods[0].ctrl_pts.size())
             {
                 fprintf(stderr, "Decoder() error: Attempting to decode before encoding.\n");
                 exit(0);
