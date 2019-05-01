@@ -173,7 +173,7 @@ namespace mfa
                 // compute parameters for the vertices of the cell
                 VectorX<T> param(mfa.p.size());
                 for (int i = 0; i < mfa.p.size(); i++)
-                    param(i) = mfa.params(ijk(i) + mfa.po[i]);
+                    param(i) = mfa.params[i][ijk(i)];
 
                 // compute approximated point for this parameter vector
                 VectorX<T> cpt(last + 1);               // evaluated point

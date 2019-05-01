@@ -220,7 +220,7 @@ namespace mfa
             // compute parameters for the vertices of the cell
             VectorX<T> param(mfa->p.size());
             for (int i = 0; i < mfa->p.size(); i++)
-                param(i) = mfa->params(ijk(i) + mfa->po[i]);
+                param(i) = mfa->params[i][ijk(i)];
 
             // NB, assumes at least one tensor product exists and that all have the same ctrl pt dimensionality
             int pt_dim = mfa->tmesh.tensor_prods[0].ctrl_pts.cols();

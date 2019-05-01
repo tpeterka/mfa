@@ -163,8 +163,8 @@ namespace mfa
                 for (int i = 0; i < N.rows(); i++)              // the rows of N
                 {
                     // TODO: hard-coded for single tensor
-                    int span = mfa.FindSpan(k, mfa.params(mfa.po[k] + i), mfa.tmesh.tensor_prods[0]);
-                    mfa.BasisFuns(k, mfa.params(mfa.po[k] + i), span, N, i);
+                    int span = mfa.FindSpan(k, mfa.params[k][i], mfa.tmesh.tensor_prods[0]);
+                    mfa.BasisFuns(k, mfa.params[k][i], span, N, i);
                 }
 
                 // TODO: NtN is going to be very sparse when it is large: switch to sparse representation
@@ -483,7 +483,6 @@ namespace mfa
                 MatrixX<T>& N,        // matrix of basis function coefficients
                 MatrixX<T>& R,        // (output) residual matrix allocated by caller
                 VectorX<T>& weights,  // precomputed weights for n + 1 control points on this curve
-                int         po,       // index of starting parameter
                 int         co)       // index of starting domain pt in current curve
         {
             int last   = R.cols() - 1;                                  // column of range value TODO: weighing only the last column does not make much sense in the split model
@@ -545,7 +544,6 @@ namespace mfa
                 MatrixX<T>& N,        // matrix of basis function coefficients
                 MatrixX<T>& R,        // (output) residual matrix allocated by caller
                 VectorX<T>& weights,  // precomputed weights for n + 1 control points on this curve
-                int         po,       // index of starting parameter
                 int         co,       // index of starting input pt in current curve
                 int         cs)       // stride of input pts in current curve
         {
@@ -682,15 +680,12 @@ namespace mfa
             // subsequent dims alternate reading temp_ctrl0 and temp_ctrl1
             // even dim reads temp_ctrl1, odd dim reads temp_ctrl0; opposite of writing order
             // because what was written in the previous dimension is read in the current one
-
-            // TODO: move mfa.po[k] to tensor
-
             if (k == 0)
-                RHS(k, N, R, weights, mfa.po[k], co);                 // input points = default domain
+                RHS(k, N, R, weights, co);                 // input points = default domain
             else if (k % 2)
-                RHS(k, temp_ctrl0, N, R, weights, mfa.po[k], co, cs); // input points = temp_ctrl0
+                RHS(k, temp_ctrl0, N, R, weights, co, cs); // input points = temp_ctrl0
             else
-                RHS(k, temp_ctrl1, N, R, weights, mfa.po[k], co, cs); // input points = temp_ctrl1
+                RHS(k, temp_ctrl1, N, R, weights, co, cs); // input points = temp_ctrl1
 
             // rationalize NtN, ie, weigh the basis function coefficients
             MatrixX<T> NtN_rat = NtN;
@@ -798,10 +793,10 @@ namespace mfa
 
             for (auto i = 0; i < mfa.ndom_pts[k]; i++)      // all domain points in the curve
             {
-                while (mfa.tensor.all_knots[k][span + 1] < 1.0 && mfa.tensor.all_knots[k][span + 1] <= mfa.params(mfa.po[k] + i))
+                while (mfa.tensor.all_knots[k][span + 1] < 1.0 && mfa.tensor.all_knots[k][span + 1] <= mfa.params[k][i])
                     span++;
 
-                decoder.CurvePt(k, mfa.params(mfa.po[k] + i), ctrl_pts, weights, cpt);
+                decoder.CurvePt(k, mfa.params[k][i], ctrl_pts, weights, cpt);
 
 
                 // error
@@ -820,15 +815,15 @@ namespace mfa
                     {
                         // ensure there would be a domain point in both halves of the span if it were split
                         bool split_left = false;
-                        for (auto j = i; mfa.params(mfa.po[k] + j) >= mfa.tensor.all_knots[k][span]; j--)
-                            if (mfa.params(mfa.po[k] + j) < (mfa.tensor.all_knots[k][span] + mfa.tensor.all_knots[k][span + 1]) / 2.0)
+                        for (auto j = i; mfa.params[k][j] >= mfa.tensor.all_knots[k][span]; j--)
+                            if (mfa.params[k][j] < (mfa.tensor.all_knots[k][span] + mfa.tensor.all_knots[k][span + 1]) / 2.0)
                             {
                                 split_left = true;
                                 break;
                             }
                         bool split_right = false;
-                        for (auto j = i; mfa.params(mfa.po[k] + j) < mfa.tensor.all_knots[k][span + 1]; j++)
-                            if (mfa.params(mfa.po[k] + j) >= (mfa.tensor.all_knots[k][span] + mfa.tensor.all_knots[k][span + 1]) / 2.0)
+                        for (auto j = i; mfa.params[k][j] < mfa.tensor.all_knots[k][span + 1]; j++)
+                            if (mfa.params[k][j] >= (mfa.tensor.all_knots[k][span] + mfa.tensor.all_knots[k][span + 1]) / 2.0)
                             {
                                 split_right = true;
                                 break;
@@ -930,8 +925,8 @@ namespace mfa
                 for (int i = 0; i < N.rows(); i++)            // the rows of N
                 {
                     // TODO: hard-coded for single tensor
-                    int span = mfa.FindSpan(k, mfa.params(mfa.po[k] + i), mfa.tmesh.tensor_prods[0]);
-                    mfa.BasisFuns(k, mfa.params(mfa.po[k] + i), span, N, i);
+                    int span = mfa.FindSpan(k, mfa.params[k][i], mfa.tmesh.tensor_prods[0]);
+                    mfa.BasisFuns(k, mfa.params[k][i], span, N, i);
                 }
 
                 // TODO: NtN is going to be very sparse when it is large: switch to sparse representation
@@ -967,7 +962,7 @@ namespace mfa
                         if (j >= n_step_sizes && (j - n_step_sizes) % s == 0)   // this is one of the s-th curves; compute it
                         {
                             // compute R from input domain points
-                            RHS(k, N, R, weights, mfa.ko[k], mfa.po[k], mfa.co[k][j]);
+                            RHS(k, N, R, weights, mfa.ko[k], mfa.co[k][j]);
 
                             // rationalize NtN
                             MatrixX<T> NtN_rat = NtN;

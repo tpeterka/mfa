@@ -113,7 +113,7 @@ namespace mfa
                 int                 max_dim_,       // ending coordinate for input data
                 T                   eps_ = 1.0e-6) :// minimum difference considered significant
             p(p_),
-            ndom_pts(ndom_pts_),
+//             ndom_pts(ndom_pts_),
             min_dim(min_dim_),
             max_dim(max_dim_),
             eps(eps_),
@@ -135,10 +135,6 @@ namespace mfa
                     nctrl_pts_(i) = p(i) + 1;
             }
 
-            // total number of params = sum of ndom_pts over all dimensions
-            // not the total number of data points, which would be the product
-            tot_nparams = ndom_pts.sum();
-
             // initialize tmesh knots
             tmesh.init_knots(nctrl_pts_);
 
@@ -152,17 +148,13 @@ namespace mfa
             }
             tmesh.insert_tensor(knot_mins, knot_maxs);
 
-            // offsets and strides for knots, params, and control points in different dimensions
-            po.resize(dom_dim, 0);                  // offset for params
+            // stride for domain points in different dimensions
             ds.resize(dom_dim, 1);                  // stride for domain points
             for (size_t i = 1; i < dom_dim; i++)
-            {
-                po[i] = po[i - 1] + ndom_pts[i - 1];
                 ds[i] = ds[i - 1] * ndom_pts[i - 1];
-            }
 
             // precompute curve parameters and knots for input points
-            params.resize(tot_nparams);
+            params.resize(dom_dim);
 
 #ifdef CURVE_PARAMS
             Params(domain_);                    // params space according to the curve length (per P&T)
@@ -598,12 +590,12 @@ namespace mfa
             VectorX<T> d;                                 // current chord length
 
             // following are counters for slicing domain and params into curves in different dimensions
-            size_t po = 0;                     // starting offset for parameters in current dim
             size_t co = 0;                     // starting offset for curves in domain in current dim
             size_t cs = 1;                     // stride for domain points in curves in current dim
 
             for (size_t k = 0; k < ndom_pts.size(); k++)         // for all domain dimensions
             {
+                params[k].resize(ndom_pts(k));
                 co = 0;
                 size_t coo = 0;                                  // co at start of contiguous sequence
                 size_t ncurves = domain.rows() / ndom_pts(k);    // number of curves in this dimension
@@ -612,40 +604,25 @@ namespace mfa
                 {
                     tot_dist = 0.0;
 
-                    // debug
-                    // fprintf(stderr, "1: k %d j %d po %d co %d cs %d\n", k, j, po, co, cs);
-
                     // chord lengths
                     for (size_t i = 0; i < ndom_pts(k) - 1; i++) // for all spans in this curve
                     {
                         // TODO: normalize domain so that dimensions they have similar scales
-
-                        // debug
-                        // fprintf(stderr, "  i %d co + i * cs = %d co + (i + 1) * cs = %d\n",
-                        //         i, co + i * cs, co + (i + 1) * cs);
-
                         d = domain.row(co + i * cs) - domain.row(co + (i + 1) * cs);
                         dists(i) = d.norm();                     // Euclidean distance (l-2 norm)
-                        //                 fprintf(stderr, "dists[%lu] = %.3f\n", i, dists[i]);
                         tot_dist += dists(i);
                     }
-
-                    //             fprintf(stderr, "tot_dist=%.3f\n", tot_dist);
 
                     // accumulate (sum) parameters from this curve into the params for this dim.
                     if (tot_dist > 0.0)                          // skip zero length curves
                     {
-                        params(po)                   = 0.0;      // first parameter is known
-                        params(po + ndom_pts(k) - 1) = 1.0;      // last parameter is known
+                        params[k][0]                 = 0.0;      // first parameter is known
+                        params[k][ndom_pts(k) - 1]   = 1.0;      // last parameter is known
                         T prev_param                 = 0.0;      // param value at previous iteration below
                         for (size_t i = 0; i < ndom_pts(k) - 2; i++)
                         {
                             T dfrac             = dists(i) / tot_dist;
-                            params(po + i + 1) += prev_param + dfrac;
-                            // debug
-                            //                     fprintf(stderr, "k %ld j %ld i %ld po %ld "
-                            //                             "param %.3f = prev_param %.3f + dfrac %.3f\n",
-                            //                             k, j, i, po, prev_param + dfrac, prev_param, dfrac);
+                            params[k][i + 1]    += prev_param + dfrac;
                             prev_param += dfrac;
                         }
                     }
@@ -664,9 +641,8 @@ namespace mfa
                 // average the params for this dimension by dividing by the number of curves that
                 // contributed to the sum (skipped zero length curves)
                 for (size_t i = 0; i < ndom_pts(k) - 2; i++)
-                    params(po + i + 1) /= (ncurves - nzero_length_curves);
+                    params[k][i + 1] /= (ncurves - nzero_length_curves);
 
-                po += ndom_pts(k);
                 cs *= ndom_pts(k);
             }                                                    // domain dimensions
             // debug
@@ -683,13 +659,12 @@ namespace mfa
             size_t cs = 1;                                      // stride for domain points in current dim.
             for (size_t k = 0; k < dom_dim; k++)               // for all domain dimensions
             {
-                params(po[k]) = 0.0;
-
+                params[k].resize(ndom_pts(k));
                 for (size_t i = 1; i < ndom_pts(k) - 1; i++)
-                    params(po[k] + i) = fabs( (domain(cs * i,                 k) - domain(0, k)) /
+                    params[k][i]= fabs( (domain(cs * i, k) - domain(0, k)) /
                             (domain(cs * (ndom_pts(k) - 1), k) - domain(0, k)) );
 
-                params(po[k] + ndom_pts(k) - 1) = 1.0;
+                params[k][ndom_pts(k) - 1] = 1.0;
                 cs *= ndom_pts(k);
             }                                                    // domain dimensions
 
@@ -930,17 +905,13 @@ namespace mfa
        VectorXi                  p;             // polynomial degree in each domain dimension
        VectorXi                  ndom_pts;      // number of input data points in each domain dim
 
-       // TODO: store params in separate vectors the way knots are stored and get rid of tot_nparams and po
-       VectorX<T>                params;        // parameters for input points (single coords: 1st dim params, 2nd dim, ...)
+       vector<vector<T>>         params;        // parameters for input points[dimension][index]
 
        Tmesh<T>                  tmesh;         // t-mesh of knots, control points, weights
        T                         range_extent;  // extent of range value of input data points
-       vector<size_t>            po;            // starting offset for params in each dim
        vector< vector <size_t> > co;            // starting offset for curves in each dim
 
        vector<size_t>            ds;            // stride for domain points in each dim
-       size_t                    tot_nparams;   // total number of params = sum of ndom_pts over all dims
-                                                // not the total number of data pts, which would be the prod.
        T                         eps;           // minimum difference considered significant
        T                         max_err;       // unnormalized absolute value of maximum error
        vector<KnotSpan <T> >     knot_spans;    // knot spans
