@@ -69,7 +69,7 @@ int main(int argc, char** argv)
     ops >> opts::Option('n', "ndomp",       ndomp,          " number of input points in each dimension of domain");
     ops >> opts::Option('a', "ntest",       ntest,          " number of test points in each dimension of domain (for analytical error calculation)");
     ops >> opts::Option('i', "input",       input,          " input dataset");
-    ops >> opts::Option('r', "rounds",      max_rounds,     " maximum number of iterations");
+    ops >> opts::Option('u', "rounds",      max_rounds,     " maximum number of iterations");
     ops >> opts::Option('w', "weights",     weighted,       " solve for and use weights");
     ops >> opts::Option('r', "rotate",      rot,            " rotation angle of domain in degrees");
     ops >> opts::Option('t', "twist",       twist,          " twist (waviness) of domain (0.0-1.0)");
@@ -318,18 +318,18 @@ int main(int argc, char** argv)
 
     // debug: compute error field for visualization and max error to verify that it is below the threshold
     double decode_time = MPI_Wtime();
-    if (error)
-    {
-        fprintf(stderr, "\nFinal decoding and computing max. error...\n");
-#ifdef CURVE_PARAMS     // normal distance
-        master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-                { b->error(cp, 1, true); });
-#else                   // range coordinate difference
-        master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-                { b->range_error(cp, 1, true); });
-#endif
-        decode_time = MPI_Wtime() - decode_time;
-    }
+//     if (error)
+//     {
+//         fprintf(stderr, "\nFinal decoding and computing max. error...\n");
+// #ifdef CURVE_PARAMS     // normal distance
+//         master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
+//                 { b->error(cp, 1, true); });
+// #else                   // range coordinate difference
+//         master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
+//                 { b->range_error(cp, 1, true); });
+// #endif
+//         decode_time = MPI_Wtime() - decode_time;
+//     }
 
 //     // debug: write original and approximated data for reading into z-checker
 //     // only for one block (one file name used, ie, last block will overwrite earlier ones)
@@ -350,7 +350,7 @@ int main(int argc, char** argv)
 
         vector<vec3d> unused;
         master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-                { b->analytical_error(cp, input, L1, L2, Linf, d_args, true, false, unused, NULL, unused, NULL); });
+                { b->analytical_error(cp, input, L1, L2, Linf, d_args, false, unused, NULL, unused, NULL); });
 
         // print analytical errors
         fprintf(stderr, "\n------ Analytical error norms -------\n");

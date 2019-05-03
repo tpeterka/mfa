@@ -98,9 +98,28 @@ struct KnotSpan
 
 namespace mfa
 {
-    template <typename T>                   // float or double
+    template <typename T>                       // float or double
     class MFA_Data
     {
+    public:                                     // TODO: restrict access
+
+       VectorXi                  p;             // polynomial degree in each domain dimension
+       VectorXi                  ndom_pts;      // number of input data points in each domain dim
+
+       vector<vector<T>>         params;        // parameters for input points[dimension][index]
+
+       Tmesh<T>                  tmesh;         // t-mesh of knots, control points, weights
+       T                         range_extent;  // extent of range value of input data points
+       vector< vector <size_t> > co;            // starting offset for curves in each dim
+
+       vector<size_t>            ds;            // stride for domain points in each dim
+       T                         eps;           // minimum difference considered significant
+       T                         max_err;       // unnormalized absolute value of maximum error
+       vector<KnotSpan <T> >     knot_spans;    // knot spans
+       int                       min_dim;       // starting coordinate of this model in full-dimensional data
+       int                       max_dim;       // ending coordinate of this model in full-dimensional data
+       size_t                    dom_dim;       // number of domain dimensions
+
     public:
 
         // constructor for creating an mfa from input points
@@ -108,12 +127,12 @@ namespace mfa
                 VectorXi&           p_,             // polynomial degree in each dimension
                 VectorXi&           ndom_pts_,      // number of input data points in each dim
                 MatrixX<T>&         domain_,        // input data points (1st dim changes fastest)
-                VectorXi&           nctrl_pts_,     // (output, optional input) number of control points in each dim
+                VectorXi            nctrl_pts_,     // optional number of control points in each dim (size 0 means minimum p+1)
                 int                 min_dim_,       // starting coordinate for input data
                 int                 max_dim_,       // ending coordinate for input data
                 T                   eps_ = 1.0e-6) :// minimum difference considered significant
             p(p_),
-//             ndom_pts(ndom_pts_),
+            ndom_pts(ndom_pts_),
             min_dim(min_dim_),
             max_dim(max_dim_),
             eps(eps_),
@@ -249,6 +268,7 @@ namespace mfa
             }
         }
 
+        // TODO: Does this need to check the level of the knots and only return the span if it's in the current tensor?
         // binary search to find the span in the knots vector containing a given parameter value
         // returns span index i s.t. u is in [ knots[i], knots[i + 1] )
         // NB closed interval at left and open interval at right
@@ -257,13 +277,29 @@ namespace mfa
         // i will be in the range [p, n], where n = number of control points - 1 because there are
         // p + 1 repeated knots at start and end of knot vector
         // algorithm 2.1, P&T, p. 68
+        //
+        // prints an error and returns -1 if u is not in the min,max range of knots in tensor or if levels of u and the span do not match
         int FindSpan(
                 int                     cur_dim,            // current dimension
                 T                       u,                  // parameter value
                 const TensorProduct<T>& tensor)             // tensor product in tmesh
         {
+            if (u < tmesh.all_knots[cur_dim][tensor.knot_mins[cur_dim]] ||
+                    u > tmesh.all_knots[cur_dim][tensor.knot_maxs[cur_dim]])
+            {
+                fprintf(stderr, "FindSpan(): Asking for parameter value outside of the knot min/max of the current tensor. This should not happen.\n");
+                return -1;
+            }
+
             if (u == tmesh.all_knots[cur_dim][tensor.nctrl_pts(cur_dim)])
+            {
+                if (tmesh.all_knot_levels[cur_dim][tensor.nctrl_pts(cur_dim)] != tensor.level)
+                {
+                    fprintf(stderr, "FindSpan(): level mismatch at nctrl_pts. This should not happen.\n");
+                    return -1;
+                }
                 return tensor.nctrl_pts(cur_dim) - 1;
+            }
 
             // binary search
             int low = p(cur_dim);
@@ -278,44 +314,19 @@ namespace mfa
                 mid = (low + high) / 2;
             }
 
+            while (tmesh.all_knot_levels[cur_dim][mid] > tensor.level && mid > 0)
+                mid--;
+
+            if (tmesh.all_knot_levels[cur_dim][mid] != tensor.level)
+            {
+                fprintf(stderr, "FindSpan(): level mismatch at mid. This should not happen.\n");
+                return -1;
+            }
+
             return mid;
         }
 
-        // TODO: this is not right
-        // computes one row of basis function values for a given local knot vector (in parameter, not index space)
-        // writes results in a row of N; assumes N has been allocated by caller
-        void BasisFuns(
-                int                 cur_dim,    // current dimension
-                T                   u,          // parameter value
-                const vector<T>&    loc_knots,  // local knot vector
-                VectorX<T>&         N)          // vector (one row) of (output) p+1 basis function values
-        {
-            // init
-            N(0) = 1.0;
-
-            // temporary recurrence results
-            // left(j)  = u - loc_knots(1 - j)
-            // right(j) = loc_knots(j) - u
-            vector<T> left(p(cur_dim) + 1);
-            vector<T> right(p(cur_dim) + 1);
-
-            // fill N
-            for (int j = 1; j <= p(cur_dim); j++)
-            {
-                left[j]  = u - loc_knots(1 - j);
-                right[j] = loc_knots(j) - u;
-
-                T saved = 0.0;
-                for (int r = 0; r < j; r++)
-                {
-                    T temp  = N(r) / (right[r + 1] + left[j - r]);
-                    N(r)    = saved + right[r + 1] * temp;
-                    saved   = left[j - r] * temp;
-                }
-                N(j) = saved;
-            }
-        }
-
+        // TODO: skip knots not in current level
         // computes one row of basis function values for a given parameter value
         // writes results in a row of N
         // algorithm 2.2 of P&T, p. 70
@@ -323,11 +334,12 @@ namespace mfa
         //
         // assumes N has been allocated by caller
         void BasisFuns(
-                int                 cur_dim,        // current dimension
-                T                   u,              // parameter value
-                int                 span,           // index of span in the knots vector containing u, relative to ko
-                MatrixX<T>&         N,              // matrix of (output) basis function values
-                int                 row)            // row in N of result
+                const TensorProduct<T>& tensor,     // current tensor product
+                int                     cur_dim,    // current dimension
+                T                       u,          // parameter value
+                int                     span,       // index of span in the knots vector containing u, relative to ko
+                MatrixX<T>&             N,          // matrix of (output) basis function values
+                int                     row)        // row in N of result
         {
             // init
             vector<T> scratch(p(cur_dim) + 1);                  // scratchpad, same as N in P&T p. 70
@@ -340,10 +352,27 @@ namespace mfa
             vector<T> right(p(cur_dim) + 1);
 
             // fill N
+            int j_left = 1;             // j_left and j_right are like j in the loop below but skip over knots not in the right level
+            int j_right = 1;
             for (int j = 1; j <= p(cur_dim); j++)
             {
-                left[j]  = u - tmesh.all_knots[cur_dim][span + 1 - j];
-                right[j] = tmesh.all_knots[cur_dim][span + j] - u;
+                // skip knots not in current level
+                while (tmesh.all_knot_levels[cur_dim][span + 1 - j_left] != tensor.level)
+                {
+                    j_left++;
+                    assert(span + 1 - j_left >= 0);
+                }
+                // left[j] is u = the jth knot in the correct level to the left of span
+                left[j]  = u - tmesh.all_knots[cur_dim][span + 1 - j_left];
+                while (tmesh.all_knot_levels[cur_dim][span + j_right] != tensor.level)
+                {
+                    j_right++;
+                    assert(span + j_right < tmesh.all_knot_levels[cur_dim].size());
+                }
+                // right[j] = the jth knot in the correct level to the right of span - u
+                right[j] = tmesh.all_knots[cur_dim][span + j_right] - u;
+                j_left++;
+                j_right++;
 
                 T saved = 0.0;
                 for (int r = 0; r < j; r++)
@@ -360,7 +389,7 @@ namespace mfa
                 N(row, span - p(cur_dim) + j) = scratch[j];
         }
 
-        // TODO: update to tmesh, latest version
+        // TODO: update to tmesh
         // computes one row of basis function values for a given parameter value
         // writes results in a row of N
         // computes first k derivatives of one row of basis function values for a given parameter value
@@ -774,6 +803,10 @@ namespace mfa
             }
         }
 
+        // TODO: change over to tmesh or deprecate, depending whether we will be splitting
+        // full-dimensional knot spans and whether an index into knot spans is still needed
+        // now that knots have be reorganized into vectors for each dimension and levels
+        //
         // initialize knot span index
 //         void KnotSpanIndex()
 //         {
@@ -899,27 +932,7 @@ namespace mfa
 //                 }
 //             }
 //         }
-
-    public:                                     // TODO: restrict access
-
-       VectorXi                  p;             // polynomial degree in each domain dimension
-       VectorXi                  ndom_pts;      // number of input data points in each domain dim
-
-       vector<vector<T>>         params;        // parameters for input points[dimension][index]
-
-       Tmesh<T>                  tmesh;         // t-mesh of knots, control points, weights
-       T                         range_extent;  // extent of range value of input data points
-       vector< vector <size_t> > co;            // starting offset for curves in each dim
-
-       vector<size_t>            ds;            // stride for domain points in each dim
-       T                         eps;           // minimum difference considered significant
-       T                         max_err;       // unnormalized absolute value of maximum error
-       vector<KnotSpan <T> >     knot_spans;    // knot spans
-       int                       min_dim;       // starting coordinate of this model in full-dimensional data
-       int                       max_dim;       // ending coordinate of this model in full-dimensional data
-       size_t                    dom_dim;       // number of domain dimensions
     };
-
 }
 
 #endif

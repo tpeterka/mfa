@@ -61,7 +61,7 @@ namespace mfa
                 VectorXi&           p_,             // polynomial degree in each dimension
                 VectorXi&           ndom_pts_,      // number of input data points in each dim
                 MatrixX<T>&         domain_,        // input data points (1st dim changes fastest)
-                VectorXi&           nctrl_pts_,     // (output, optional input) number of control points in each dim
+                VectorXi            nctrl_pts_,     // optional number of control points in each dim (size 0 means minimum p+1)
                 int                 min_dim_ = -1,  // starting coordinate for input data; -1 = use all coordinates
                 int                 max_dim_ = -1,  // ending coordinate for input data; -1 = use all coordinates
                 T                   eps_ = 1.0e-6)  // minimum difference considered significant
@@ -113,7 +113,7 @@ namespace mfa
         // fixed number of control points encode
         void FixedEncode(
                 MatrixX<T>& domain,                     // input points
-                VectorXi    &nctrl_pts_,                // (output) number of control points in each dim
+                VectorXi    nctrl_pts,                  // number of control points in each dim
                 int         verbose,                    // output level
                 bool        weighted)                   // solve for and use weights (default = true)
         {
@@ -121,27 +121,19 @@ namespace mfa
             mfa->tmesh.tensor_prods[0].weights = VectorX<T>::Ones(mfa->tmesh.tensor_prods[0].nctrl_pts.prod());
             Encoder<T> encoder(domain, *mfa, verbose);
             encoder.Encode(weighted);
-            // TODO: hard-coded for single tensor
-            nctrl_pts_ = mfa->tmesh.tensor_prods[0].nctrl_pts;
         }
 
         // adaptive encode
         void AdaptiveEncode(
                 MatrixX<T>& domain,                    // input points
                 T           err_limit,                 // maximum allowable normalized error
-                VectorXi&   nctrl_pts_,                // (output) number of control points in each dim
                 int         verbose,                   // output level
                 bool        weighted,                  // solve for and use weights (default = true)
                 VectorX<T>& extents,                   // extents in each dimension, for normalizing error (size 0 means do not normalize)
                 int         max_rounds)                // optional maximum number of rounds
         {
-            // TODO: update to tmesh
-#if 0
-            mfa->weights = VectorX<T>::Ones(mfa->tot_nctrl);
             Encoder<T> encoder(domain, *mfa, verbose);
             encoder.AdaptiveEncode(err_limit, weighted, extents, max_rounds);
-            nctrl_pts_ = mfa->nctrl_pts;
-#endif
         }
 
         // decode values at all input points

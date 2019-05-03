@@ -76,14 +76,24 @@ namespace mfa
         }
     };
 
-    template <typename T>                           // float or double
+    template <typename T>                               // float or double
     class Decoder
     {
+    private:
+
+        int             tot_iters;                      // total iterations in flattened decoding of all dimensions
+        MatrixXi        ct;                             // coordinates of first control point of curve for given iteration
+                                                        // of decoding loop, relative to start of box of
+                                                        // control points
+        vector<size_t>  cs;                             // control point stride (only in decoder, not mfa)
+        int             verbose;                        // output level
+        MFA_Data<T>&    mfa;                            // the mfa object
+
     public:
 
         Decoder(
-                MFA_Data<T>& mfa_,                          // MFA data model
-                int          verbose_)                      // output level
+                MFA_Data<T>& mfa_,                      // MFA data model
+                int          verbose_)                  // output level
             : mfa(mfa_), verbose(verbose_)
         {
             // ensure that encoding was already done
@@ -300,7 +310,7 @@ namespace mfa
 //                     N[i].row(0) = Ders.row(derivs(i));
                 }
                 else
-                    mfa.BasisFuns(i, param(i), span[i], N[i], 0);
+                    mfa.BasisFuns(tensor, i, param(i), span[i], N[i], 0);
             }
 
             // linear index of first control point
@@ -398,7 +408,7 @@ namespace mfa
 //                     di.N[i].row(0) = di.ders[i].row(derivs(i));
                 }
                 else
-                    mfa.BasisFuns(i, param(i), di.span[i], di.N[i], 0);
+                    mfa.BasisFuns(tensor, i, param(i), di.span[i], di.N[i], 0);
             }
 
             // linear index of first control point
@@ -458,37 +468,37 @@ namespace mfa
 
         }
 
-        //         DEPRECATE
-//         // compute a point from a NURBS curve at a given parameter value
-//         // this version takes a temporary set of control points for one curve only rather than
-//         // reading full n-d set of control points from the mfa
-//         // algorithm 4.1, Piegl & Tiller (P&T) p.124
-//         void CurvePt(
-//                 int         cur_dim,            // current dimension
-//                 T           param,              // parameter value of desired point
-//                 MatrixX<T>& temp_ctrl,          // temporary control points
-//                 VectorX<T>& temp_weights,       // weights associate with temporary control points
-//                 VectorX<T>& out_pt,             // (output) point
-//                 int         ko = 0)             // starting knot offset
-//         {
-//             // TODO: hard-coded for one tensor product
-//             int span   = mfa.FindSpan(cur_dim, param, mfa.tmesh.tensor_prods[0]);
-//             MatrixX<T> N = MatrixX<T>::Zero(1, temp_ctrl.rows());      // basis coefficients
-//             mfa.BasisFuns(cur_dim, param, span, N, 0);
-//             out_pt = VectorX<T>::Zero(temp_ctrl.cols());  // initializes and resizes
-// 
-//             for (int j = 0; j <= mfa.p(cur_dim); j++)
-//                 out_pt += N(0, j + span - mfa.p(cur_dim)) *
-//                     temp_ctrl.row(span - mfa.p(cur_dim) + j) *
-//                     temp_weights(span - mfa.p(cur_dim) + j);
-// 
-//             // compute the denominator of the rational curve point and divide by it
-//             // sum of element-wise multiplication requires transpose so that both arrays are same shape
-//             // (rows in this case), otherwise eigen cannot multiply them
-//             T denom = (N.row(0).cwiseProduct(temp_weights.transpose())).sum();
-//             out_pt /= denom;
-//         }
+        // compute a point from a NURBS curve at a given parameter value
+        // this version takes a temporary set of control points for one curve only rather than
+        // reading full n-d set of control points from the mfa
+        // algorithm 4.1, Piegl & Tiller (P&T) p.124
+        void CurvePt(
+                int                     cur_dim,        // current dimension
+                T                       param,          // parameter value of desired point
+                MatrixX<T>&             temp_ctrl,      // temporary control points
+                VectorX<T>&             temp_weights,   // weights associate with temporary control points
+                const TensorProduct<T>& tensor,         // current tensor product
+                VectorX<T>&             out_pt)         // (output) point
+        {
+            int span   = mfa.FindSpan(cur_dim, param, tensor);
+            MatrixX<T> N = MatrixX<T>::Zero(1, temp_ctrl.rows());      // basis coefficients
+            mfa.BasisFuns(cur_dim, param, span, N, 0);
+            out_pt = VectorX<T>::Zero(temp_ctrl.cols());  // initializes and resizes
 
+            for (int j = 0; j <= mfa.p(cur_dim); j++)
+                out_pt += N(0, j + span - mfa.p(cur_dim)) *
+                    temp_ctrl.row(span - mfa.p(cur_dim) + j) *
+                    temp_weights(span - mfa.p(cur_dim) + j);
+
+            // compute the denominator of the rational curve point and divide by it
+            // sum of element-wise multiplication requires transpose so that both arrays are same shape
+            // (rows in this case), otherwise eigen cannot multiply them
+            T denom = (N.row(0).cwiseProduct(temp_weights.transpose())).sum();
+            out_pt /= denom;
+        }
+
+//         DEPRECATE
+//         this is not right
 //         // compute a point from a NURBS curve at a given parameter value
 //         // this version takes a temporary set of control points for one curve and a local knot vector
 //         void CurvePt(
@@ -510,16 +520,6 @@ namespace mfa
 //             T denom = (N.cwiseProduct(temp_weights)).sum();      // sum of element-wise multiplication of N and temp_weights
 //             out_pt /= denom;
 //         }
-
-    private:
-
-        int             tot_iters;                      // total iterations in flattened decoding of all dimensions
-        MatrixXi        ct;                             // coordinates of first control point of curve for given iteration
-                                                        // of decoding loop, relative to start of box of
-                                                        // control points
-        vector<size_t>  cs;                             // control point stride (only in decoder, not mfa)
-        int             verbose;                        // output level
-        MFA_Data<T>&    mfa;                            // the mfa object
     };
 }
 

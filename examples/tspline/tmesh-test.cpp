@@ -171,7 +171,6 @@ int main(int argc, char** argv)
             { b->print_tmesh(cp); });
     fmt::print(stderr, "--------------------------\n\n");
 
-
     // decode a point in the tmesh
     VectorX<real_t> param(dom_dim);
     param(0) = 0.5;

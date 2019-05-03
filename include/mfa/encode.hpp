@@ -33,25 +33,35 @@ typedef Eigen::VectorXi VectorXi;
 
 using namespace std;
 
-template <typename T>                       // float or double
+template <typename T>                                   // float or double
 class NewKnots;
 
 
 namespace mfa
 {
-    template <typename T>                   // float or double
+    template <typename T>                               // float or double
     class Encoder
     {
+    private:
+
+        template <typename>
+        friend class NewKnots;
+
+        MatrixX<T>&     domain;                         // input points
+        MFA_Data<T>&    mfa;                            // the mfa object
+        int             verbose;                        // output level
+        size_t          max_num_curves;                 // max num. curves per dimension to check in curve version
+
     public:
 
         Encoder(
-                MatrixX<T>&     domain_,            // input points
-                MFA_Data<T>&    mfa_,               // MFA data model
-                int             verbose_)           // output level
+                MatrixX<T>&     domain_,                // input points
+                MFA_Data<T>&    mfa_,                   // MFA data model
+                int             verbose_)               // output level
             : mfa(mfa_),
             verbose(verbose_),
             domain(domain_),
-            max_num_curves(1.0e4)                           // max num. curves to check in one dimension of curve version
+            max_num_curves(1.0e4)                       // max num. curves to check in one dimension of curve version
         {}
 
         ~Encoder() {}
@@ -164,7 +174,7 @@ namespace mfa
                 {
                     // TODO: hard-coded for single tensor
                     int span = mfa.FindSpan(k, mfa.params[k][i], mfa.tmesh.tensor_prods[0]);
-                    mfa.BasisFuns(k, mfa.params[k][i], span, N, i);
+                    mfa.BasisFuns(mfa.tmesh.tensor_prods[0], k, mfa.params[k][i], span, N, i);
                 }
 
                 // TODO: NtN is going to be very sparse when it is large: switch to sparse representation
@@ -238,35 +248,40 @@ namespace mfa
 
         // adaptive encoding
         void AdaptiveEncode(
-                T           err_limit,              // maximum allowable normalized error
-                bool        weighted,               // solve for and use weights
-                VectorX<T>& extents,                // extents in each dimension, for normalizing error (size 0 means do not normalize)
-                int         max_rounds = 0)         // optional maximum number of rounds
+                T                   err_limit,                  // maximum allowable normalized error
+                bool                weighted,                   // solve for and use weights
+                const VectorX<T>&   extents,                    // extents in each dimension, for normalizing error (size 0 means do not normalize)
+                int                 max_rounds = 0)             // optional maximum number of rounds
         {
-            VectorXi  nnew_knots = VectorXi::Zero(mfa.p.size());        // number of new knots in each dim
-            vector<T> new_knots;                                        // new knots (1st dim changes fastest)
-
             // TODO: use weights for knot insertion
             // for now, weights are only used for final full encode
 
             // loop until no change in knots
             for (int iter = 0; ; iter++)
             {
-                if (max_rounds > 0 && iter >= max_rounds)               // optional cap on number of rounds
+                if (max_rounds > 0 && iter >= max_rounds)       // optional cap on number of rounds
                     break;
 
                 if (verbose)
                     fprintf(stderr, "Iteration %d...\n", iter);
 
-#ifdef HIGH_D           // high-d w/ splitting spans in the middle
+                // print tmesh
+                fprintf(stderr, "\n----- T-mesh at the start of iteration %d-----\n\n", iter);
+                mfa.tmesh.print();
+                fprintf(stderr, "--------------------------\n\n");
 
-                bool done = NewKnots_full(nnew_knots, new_knots, err_limit, extents, iter);
+                // using NewKnots_full high-d span splitting with tmesh (for now)
+                bool done = NewKnots_full(err_limit, extents, iter);
 
-#else               // low-d w/ splitting spans in the middle
-
-                bool done = NewKnots_curve(nnew_knots, new_knots, err_limit, extents, iter);
-
-#endif
+// #ifdef HIGH_D           // high-d w/ splitting spans in the middle
+// 
+//                 bool done = NewKnots_full(err_limit, extents, iter);
+// 
+// #else               // low-d w/ splitting spans in the middle
+// 
+//                 bool done = NewKnots_curve(new_knots, err_limit, extents, iter);
+// 
+// #endif
 
                 // no new knots to be added
                 if (done)
@@ -281,7 +296,7 @@ namespace mfa
                 for (auto k = 0; k < mfa.p.size(); k++)
                 {
                     // TODO: hard-coded for single tensor
-                    if (mfa.ndom_pts(k) <= mfa.tmesh.tensor_prods[0].nctrl_pts(k) + nnew_knots(k))
+                    if (mfa.ndom_pts(k) <= mfa.tmesh.tensor_prods[0].nctrl_pts(k))
                     {
                         done = true;
                         break;
@@ -297,7 +312,7 @@ namespace mfa
 
             // final full encoding needed after last knot insertion above
             if (verbose)
-                fprintf(stderr, "Encoding in full %ldD\n", mfa.p.size());
+                fprintf(stderr, "Encoding in full %ldD\n", mfa.dom_dim);
             Encode(weighted);
         }
 
@@ -775,28 +790,29 @@ namespace mfa
         //
         // this version takes a set of control points as input instead of mfa.ctrl_pts
         int ErrorCurve(
-                size_t         k,             // current dimension
-                size_t         co,            // starting ofst for reading domain pts
-                MatrixX<T>&    ctrl_pts,      // control points
-                VectorX<T>&    weights,       // weights associated with control points
-                VectorX<T>&    extents,       // extents in each dimension, for normalizing error (size 0 means do not normalize)
-                set<int>&      err_spans,     // spans with error greater than err_limit
-                T              err_limit)     // max allowable error
+                size_t                  k,          // current dimension
+                const TensorProduct<T>& tensor,     // current tensor product
+                size_t                  co,         // starting ofst for reading domain pts
+                MatrixX<T>&             ctrl_pts,   // control points
+                VectorX<T>&             weights,    // weights associated with control points
+                VectorX<T>              extents,    // extents in each dimension, for normalizing error (size 0 means do not normalize)
+                set<int>&               err_spans,  // spans with error greater than err_limit
+                T                       err_limit)  // max allowable error
         {
             mfa::Decoder<T> decoder(mfa, verbose);
-            int pt_dim = mfa.tmesh.tensor_prods[0].ctrl_pts.cols();     // control point dimensonality
-            VectorX<T> cpt(pt_dim);                                     // decoded curve point
-            int nerr = 0;                                               // number of points with error greater than err_limit
-            int span = mfa.p[k];                                        // current knot span of the domain point being checked
+            int pt_dim = tensor.ctrl_pts.cols();            // control point dimensonality
+            VectorX<T> cpt(pt_dim);                         // decoded curve point
+            int nerr = 0;                                   // number of points with error greater than err_limit
+            int span = mfa.p[k];                            // current knot span of the domain point being checked
             if (!extents.size())
                 extents = VectorX<T>::Ones(domain.cols());
 
             for (auto i = 0; i < mfa.ndom_pts[k]; i++)      // all domain points in the curve
             {
-                while (mfa.tensor.all_knots[k][span + 1] < 1.0 && mfa.tensor.all_knots[k][span + 1] <= mfa.params[k][i])
+                while (mfa.tmesh.all_knots[k][span + 1] < 1.0 && mfa.tmesh.all_knots[k][span + 1] <= mfa.params[k][i])
                     span++;
 
-                decoder.CurvePt(k, mfa.params[k][i], ctrl_pts, weights, cpt);
+                decoder.CurvePt(k, mfa.params[k][i], ctrl_pts, weights, tensor, cpt);
 
 
                 // error
@@ -815,15 +831,15 @@ namespace mfa
                     {
                         // ensure there would be a domain point in both halves of the span if it were split
                         bool split_left = false;
-                        for (auto j = i; mfa.params[k][j] >= mfa.tensor.all_knots[k][span]; j--)
-                            if (mfa.params[k][j] < (mfa.tensor.all_knots[k][span] + mfa.tensor.all_knots[k][span + 1]) / 2.0)
+                        for (auto j = i; mfa.params[k][j] >= mfa.tmesh.all_knots[k][span]; j--)
+                            if (mfa.params[k][j] < (mfa.tmesh.all_knots[k][span] + mfa.tmesh.all_knots[k][span + 1]) / 2.0)
                             {
                                 split_left = true;
                                 break;
                             }
                         bool split_right = false;
-                        for (auto j = i; mfa.params[k][j] < mfa.tensor.all_knots[k][span + 1]; j++)
-                            if (mfa.params[k][j] >= (mfa.tensor.all_knots[k][span] + mfa.tensor.all_knots[k][span + 1]) / 2.0)
+                        for (auto j = i; mfa.params[k][j] < mfa.tmesh.all_knots[k][span + 1]; j++)
+                            if (mfa.params[k][j] >= (mfa.tmesh.all_knots[k][span] + mfa.tmesh.all_knots[k][span + 1]) / 2.0)
                             {
                                 split_right = true;
                                 break;
@@ -843,31 +859,33 @@ namespace mfa
             return nerr;
         }
 
+        // TODO: this hasn't been used or tested since converting over to tmesh
         // encodes at full dimensionality and decodes at full dimensionality
         // decodes full-d points in each knot span and adds new knot spans where error > err_limit
         // returns true if done, ie, no knots are inserted
         bool NewKnots_full(
-                VectorXi&      nnew_knots,                  // number of new knots in each dim
-                vector<T>&     new_knots,                   // new knots (1st dim changes fastest)
-                T              err_limit,                   // max allowable error
-                VectorX<T>&    extents,                     // extents in each dimension, for normalizing error (size 0 means do not normalize)
-                int            iter)                        // iteration number of caller (for debugging)
+                T                   err_limit,                   // max allowable error
+                VectorX<T>          extents,                     // extents in each dimension, for normalizing error (size 0 means do not normalize)
+                int                 iter)                        // iteration number of caller (for debugging)
         {
+            bool done = true;
+
             if (!extents.size())
-                extents = VectorX<T>::Ones(mfa.ctrl_pts.cols());
+                extents = VectorX<T>::Ones(mfa.tmesh.tensor_prods[0].ctrl_pts.cols());
 
-            // resize control points and weights
-            mfa.ctrl_pts.resize(mfa.tot_nctrl, mfa.max_dim - mfa.min_dim + 1);
-            mfa.weights = VectorX<T>::Ones(mfa.ctrl_pts.rows());
+            for (TensorProduct<T>& t : mfa.tmesh.tensor_prods)             // for all tensor products in the tmesh
+            {
+                // resize control points and weights
+                t.ctrl_pts.resize(t.nctrl_pts.prod(), mfa.max_dim - mfa.min_dim + 1);
+                t.weights = VectorX<T>::Ones(t.ctrl_pts.rows());
 
-            // full n-d encoding
-            Encode();
+                // full n-d encoding
+                Encode();
 
-            // find new knots
-            nnew_knots = VectorXi::Zero(mfa.p.size());
-            new_knots.resize(0);
-            mfa::NewKnots<T> nk(mfa);
-            bool done = nk.ErrorSpans(nnew_knots, new_knots, err_limit, extents, iter);
+                // find new knots
+                mfa::NewKnots<T> nk(mfa);
+                done &= nk.FirstErrorSpan(domain, t, extents, err_limit, iter);
+            }
 
             return done;
         }
@@ -877,173 +895,168 @@ namespace mfa
         // adds knots in middles of spans that have error higher than the limit
         // returns true if done, ie, no knots are inserted
         bool NewKnots_curve(
-                VectorXi&      nnew_knots,                       // number of new knots in each dim
-                vector<T>&     new_knots,                        // new knots (1st dim changes fastest)
-                T              err_limit,                        // max allowable error
-                VectorX<T>&    extents,                          // extents in each dimension, for normalizing error (size 0 means do not normalize)
-                int            iter)                             // iteration number of caller (for debugging)
+                vector<vector<T>>&  new_knots,                              // new knots
+                T                   err_limit,                              // max allowable error
+                const VectorX<T>&   extents,                                // extents in each dimension, for normalizing error (size 0 means do not normalize)
+                int                 iter)                                   // iteration number of caller (for debugging)
         {
-            // check and assign main quantities
-            int  ndims  = mfa.ndom_pts.size();                          // number of domain dimensions
-            int  pt_dim = mfa.tmesh.tensor_prods[0].ctrl_pts.cols();    // control point dimensonality
-            // TODO: hard-coded for one tensor
-            VectorXi n = mfa.tmesh.tensor_prods[0].nctrl_pts - VectorXi::Ones(ndims); // number of control point spans in each domain dim
-            VectorXi m = mfa.ndom_pts  - VectorXi::Ones(ndims); // number of input data point spans in each domain dim
-            nnew_knots = VectorXi::Zero(mfa.p.size());
-            new_knots.resize(0);
+            int     pt_dim          = mfa.tmesh.tensor_prods[0].ctrl_pts.cols();    // control point dimensonality
+            size_t  tot_nnew_knots  = 0;                                            // total number of new knots found
+            new_knots.resize(mfa.dom_dim);
 
-            // resize control points and weights
-            mfa.ctrl_pts.resize(mfa.tot_nctrl, mfa.max_dim - mfa.min_dim + 1);
-            mfa.weights = VectorX<T>::Ones(mfa.ctrl_pts.rows());
-
-            for (size_t k = 0; k < ndims; k++)              // for all domain dimensions
+            for (TensorProduct<T>& t : mfa.tmesh.tensor_prods)             // for all tensor products in the tmesh
             {
-                // for now set weights to 1, TODO: get weights from elsewhere
-                // NB: weights are for all n + 1 control points, not just the n -1 interior ones
-                VectorX<T> weights = VectorX<T>::Ones(n(k) + 1);
+                // check and assign main quantities
+                VectorXi n = t.nctrl_pts - VectorXi::Ones(mfa.dom_dim);     // number of control point spans in each domain dim
+                VectorXi m = mfa.ndom_pts  - VectorXi::Ones(mfa.dom_dim);   // number of input data point spans in each domain dim
 
-                // temporary control points for one curve
-                // TODO: hard-coded for one tensor
-                MatrixX<T> temp_ctrl = MatrixX<T>::Zero(mfa.tmesh.tensor_prods[0].nctrl_pts(k), pt_dim);
+                // resize control points and weights
+                t.ctrl_pts.resize(t.nctrl_pts.prod(), mfa.max_dim - mfa.min_dim + 1);
+                t.weights = VectorX<T>::Ones(t.ctrl_pts.rows());
 
-                // error spans for one curve and for worst curve
-                set<int> err_spans;
-
-                // maximum number of domain points with error greater than err_limit and their curves
-                size_t max_nerr     =  0;
-
-                // N is a matrix of (m + 1) x (n + 1) scalars that are the basis function coefficients
-                //  _                          _
-                // |  N_0(u[0])   ... N_n(u[0]) |
-                // |     ...      ...      ...  |
-                // |  N_0(u[m])   ... N_n(u[m]) |
-                //  -                          -
-                // TODO: N is going to be very sparse when it is large: switch to sparse representation
-                // N has semibandwidth < p  nonzero entries across diagonal
-                MatrixX<T> N = MatrixX<T>::Zero(m(k) + 1, n(k) + 1); // coefficients matrix
-
-                for (int i = 0; i < N.rows(); i++)            // the rows of N
+                for (size_t k = 0; k < mfa.dom_dim; k++)                    // for all domain dimensions
                 {
-                    // TODO: hard-coded for single tensor
-                    int span = mfa.FindSpan(k, mfa.params[k][i], mfa.tmesh.tensor_prods[0]);
-                    mfa.BasisFuns(k, mfa.params[k][i], span, N, i);
-                }
+                    new_knots[k].resize(0);
 
-                // TODO: NtN is going to be very sparse when it is large: switch to sparse representation
-                // NtN has semibandwidth < p + 1 nonzero entries across diagonal
-                MatrixX<T> NtN = N.transpose() * N;
+                    // for now set weights to 1, TODO: get weights from elsewhere
+                    // NB: weights are for all n + 1 control points, not just the n -1 interior ones
+                    VectorX<T> weights = VectorX<T>::Ones(n(k) + 1);
 
-                // R is the right hand side needed for solving NtN * P = R
-                MatrixX<T> R(N.cols(), pt_dim);
+                    // temporary control points for one curve
+                    MatrixX<T> temp_ctrl = MatrixX<T>::Zero(t.nctrl_pts(k), pt_dim);
 
-                // P are the unknown interior control points and the solution to NtN * P = R
-                // NtN is positive definite -> do not need pivoting
-                // TODO: use a common representation for P and ctrl_pts to avoid copying
-                MatrixX<T> P(N.cols(), pt_dim);
+                    // error spans for one curve and for worst curve
+                    set<int> err_spans;
 
-                size_t ncurves   = domain.rows() / mfa.ndom_pts(k); // number of curves in this dimension
-                int nsame_steps  = 0;                                   // number of steps with same number of erroneous points
-                int n_step_sizes = 0;                                   // number of step sizes so far
+                    // maximum number of domain points with error greater than err_limit and their curves
+                    size_t max_nerr     =  0;
 
-                // starting step size over curves
-                size_t s0 = ncurves / 2 > 0 ? ncurves / 2 : 1;
+                    // N is a matrix of (m + 1) x (n + 1) scalars that are the basis function coefficients
+                    //  _                          _
+                    // |  N_0(u[0])   ... N_n(u[0]) |
+                    // |     ...      ...      ...  |
+                    // |  N_0(u[m])   ... N_n(u[m]) |
+                    //  -                          -
+                    // TODO: N is going to be very sparse when it is large: switch to sparse representation
+                    // N has semibandwidth < p  nonzero entries across diagonal
+                    MatrixX<T> N = MatrixX<T>::Zero(m(k) + 1, n(k) + 1);    // coefficients matrix
 
-                // debug, only one step size s=1
-                //         s0 = 1;
-
-                for (size_t s = s0; s >= 1 && ncurves / s < max_num_curves; s /= 2)        // for all step sizes over curves
-                {
-                    bool new_max_nerr = false;                      // this step size changed the max_nerr
-
-                    for (size_t j = 0; j < ncurves; j++)            // for all the curves in this dimension
+                    for (int i = 0; i < N.rows(); i++)                      // the rows of N
                     {
-                        // each time the step changes, shift start of s-th curves by one (by subtracting
-                        // n_step-sizes below)
-                        if (j >= n_step_sizes && (j - n_step_sizes) % s == 0)   // this is one of the s-th curves; compute it
+                        // TODO: hard-coded for single tensor
+                        int span = mfa.FindSpan(k, mfa.params[k][i], mfa.tmesh.tensor_prods[0]);
+                        mfa.BasisFuns(k, mfa.params[k][i], span, N, i);
+                    }
+
+                    // TODO: NtN is going to be very sparse when it is large: switch to sparse representation
+                    // NtN has semibandwidth < p + 1 nonzero entries across diagonal
+                    MatrixX<T> NtN = N.transpose() * N;
+
+                    // R is the right hand side needed for solving NtN * P = R
+                    MatrixX<T> R(N.cols(), pt_dim);
+
+                    // P are the unknown interior control points and the solution to NtN * P = R
+                    // NtN is positive definite -> do not need pivoting
+                    // TODO: use a common representation for P and ctrl_pts to avoid copying
+                    MatrixX<T> P(N.cols(), pt_dim);
+
+                    size_t ncurves   = domain.rows() / mfa.ndom_pts(k);     // number of curves in this dimension
+                    int nsame_steps  = 0;                                   // number of steps with same number of erroneous points
+                    int n_step_sizes = 0;                                   // number of step sizes so far
+
+                    // starting step size over curves
+                    size_t s0 = ncurves / 2 > 0 ? ncurves / 2 : 1;
+
+                    // debug, only one step size s=1
+                    //         s0 = 1;
+
+                    for (size_t s = s0; s >= 1 && ncurves / s < max_num_curves; s /= 2)     // for all step sizes over curves
+                    {
+                        bool new_max_nerr = false;                          // this step size changed the max_nerr
+
+                        for (size_t j = 0; j < ncurves; j++)                // for all the curves in this dimension
                         {
-                            // compute R from input domain points
-                            RHS(k, N, R, weights, mfa.ko[k], mfa.co[k][j]);
+                            // each time the step changes, shift start of s-th curves by one (by subtracting
+                            // n_step-sizes below)
+                            if (j >= n_step_sizes && (j - n_step_sizes) % s == 0)           // this is one of the s-th curves; compute it
+                            {
+                                // compute R from input domain points
+                                RHS(k, N, R, weights, mfa.co[k][j]);
 
-                            // rationalize NtN
-                            MatrixX<T> NtN_rat = NtN;
-                            mfa.Rationalize(k, weights, N, NtN_rat);
+                                // rationalize NtN
+                                MatrixX<T> NtN_rat = NtN;
+                                mfa.Rationalize(k, weights, N, NtN_rat);
 
-                            // solve for P
-#ifdef WEIGH_ALL_DIMS                                           // weigh all dimensions
-                            P = NtN_rat.ldlt().solve(R);
-#else                                                           // don't weigh domain coordinate (only range)
-                            // TODO: avoid 2 solves?
-                            MatrixX<T> P2(P.rows(), P.cols());
-                            P = NtN.ldlt().solve(R);                            // nonrational domain coordinates
-                            P2 = NtN_rat.ldlt().solve(R);                       // rational range coordinate
-                            for (auto i = 0; i < P.rows(); i++)
-                                P(i, P.cols() - 1) = P2(i, P.cols() - 1);
+                                // solve for P
+#ifdef WEIGH_ALL_DIMS                                                       // weigh all dimensions
+                                P = NtN_rat.ldlt().solve(R);
+#else                                                                       // don't weigh domain coordinate (only range)
+                                // TODO: avoid 2 solves?
+                                MatrixX<T> P2(P.rows(), P.cols());
+                                P = NtN.ldlt().solve(R);                    // nonrational domain coordinates
+                                P2 = NtN_rat.ldlt().solve(R);               // rational range coordinate
+                                for (auto i = 0; i < P.rows(); i++)
+                                    P(i, P.cols() - 1) = P2(i, P.cols() - 1);
 #endif
 
-                            // compute the error on the curve (number of input points with error > err_limit)
-                            size_t nerr = ErrorCurve(k, mfa.co[k][j], P, weights, extents, err_spans, err_limit);
+                                // compute the error on the curve (number of input points with error > err_limit)
+                                size_t nerr = ErrorCurve(k, t, mfa.co[k][j], P, weights, extents, err_spans, err_limit);
 
-                            if (nerr > max_nerr)
-                            {
-                                max_nerr     = nerr;
-                                new_max_nerr = true;
+                                if (nerr > max_nerr)
+                                {
+                                    max_nerr     = nerr;
+                                    new_max_nerr = true;
+                                }
                             }
-                        }
-                    }                                               // curves in this dimension
+                        }                                                   // curves in this dimension
 
-                    // stop refining step if no change
-                    if (max_nerr && !new_max_nerr)
-                        nsame_steps++;
-                    if (nsame_steps == 2)
-                        break;
+                        // stop refining step if no change
+                        if (max_nerr && !new_max_nerr)
+                            nsame_steps++;
+                        if (nsame_steps == 2)
+                            break;
 
-                    n_step_sizes++;
-                }                                                   // step sizes over curves
+                        n_step_sizes++;
+                    }                                                       // step sizes over curves
 
-                // free R, NtN, and P
-                R.resize(0, 0);
-                NtN.resize(0, 0);
-                P.resize(0, 0);
+                    // free R, NtN, and P
+                    R.resize(0, 0);
+                    NtN.resize(0, 0);
+                    P.resize(0, 0);
 
-                // add new knots in the middle of spans with errors
-                nnew_knots(k) = err_spans.size();
-                auto old_size = new_knots.size();
-                new_knots.resize(old_size + err_spans.size());      // existing values are preserved
-                size_t i = 0;                                       // index into new_knots
-                for (set<int>::iterator it = err_spans.begin(); it != err_spans.end(); ++it)
-                {
-                    // debug
-                    // TODO: hard-coded for one tensor
-                    assert(*it < mfa.tmesh.tensor_prods[0].nctrl_pts[k]);                          // not trying to go beyond the last span
+                    // add new knots in the middle of spans with errors
+                    new_knots[k].resize(err_spans.size());
+                    tot_nnew_knots += new_knots[k].size();
+                    size_t i = 0;                                           // index into new_knots
+                    for (set<int>::iterator it = err_spans.begin(); it != err_spans.end(); ++it)
+                    {
+                        // debug
+                        assert(*it < t.nctrl_pts[k]);                       // not trying to go beyond the last span
 
-                    new_knots[old_size + i] = (mfa.tensor.all_knots[k][*it] + mfa.tensor.all_knots[k][*it + 1]) / 2.0;
-                    i++;
-                }
+                        new_knots[k][i] = (mfa.tmesh.all_knots[k][*it] + mfa.tmesh.all_knots[k][*it + 1]) / 2.0;
+                        i++;
+                    }
 
-                // print progress
-                //         fprintf(stderr, "\rdimension %ld of %d encoded\n", k + 1, ndims);
-            }                                                      // domain dimensions
+                    // print progress
+                    //         fprintf(stderr, "\rdimension %ld of %d encoded\n", k + 1, mfa.dom_dim);
+                }                                                           // domain dimensions
 
-            mfa::NewKnots<T> nk(mfa);
-            nk.InsertKnots(nnew_knots, new_knots);
+                mfa::NewKnots<T> nk(mfa);
+                nk.InsertKnots(t, new_knots);
+            }                                                               // tensor products
 
             // debug
-//             cerr << "\nnnew_knots:\n" << nnew_knots << endl;
 //             cerr << "new_knots:\n"  << endl;
 //             for (auto i = 0; i < new_knots.size(); i++)
-//                 cerr << new_knots[i] << endl;
+//             {
+//                 for (auto j = 0; j < new_knots[i].size(); j++)
+//                     cerr << new_knots[i][j] << " ";
+//                  cerr << endl;
+//             }
 //             cerr << endl;
 
-            return(nnew_knots.sum() ? 0 : 1);
+            return(tot_nnew_knots ? 0 : 1);
         }
-
-        template <typename>
-        friend class NewKnots;
-
-        MatrixX<T>&     domain;                         // input points
-        MFA_Data<T>&    mfa;                            // the mfa object
-        int             verbose;                        // output level
-        size_t          max_num_curves;                 // max num. curves per dimension to check in curve version
     };
 }
 

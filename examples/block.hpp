@@ -371,23 +371,16 @@ struct Block
         max_errs.resize(nvars);
         sum_sq_errs.resize(nvars);
         int tot_ndom_pts    = 1;
-//         geometry.mfa->mfa_data().p.resize(a->dom_dim);
         geometry.min_dim = 0;
         geometry.max_dim = a->dom_dim - 1;
         for (int j = 0; j < nvars; j++)
         {
-//             vars[j].mfa->mfa_data().p.resize(a->dom_dim);
             vars[j].min_dim = a->dom_dim + j;
             vars[j].max_dim = vars[j].min_dim + 1;
         }
         ndom_pts.resize(a->dom_dim);
         for (int i = 0; i < a->dom_dim; i++)
-        {
-//             geometry.mfa->mfa_data().p(i) = a->geom_p[i];
-//             for (int j = 0; j < nvars; j++)
-//                 vars[j].mfa->mfa_data().p(i) = a->vars_p[i];
             ndom_pts(i) = a->ndom_pts[i];
-        }
 
         // get local block bounds
         // if single block, they are passed in args
@@ -1017,14 +1010,12 @@ struct Block
     {
         DomainArgs* a = &args;
         int tot_ndom_pts = 1;
-        geometry.p.resize(a->dom_dim);
         geometry.min_dim = 0;
         geometry.max_dim = a->dom_dim - 1;
         int nvars = 1;
         vars.resize(nvars);
         max_errs.resize(nvars);
         sum_sq_errs.resize(nvars);
-        vars[0].p.resize(a->dom_dim);
         vars[0].min_dim = a->dom_dim;
         vars[0].max_dim = vars[0].min_dim + 1;
         ndom_pts.resize(a->dom_dim);
@@ -1032,8 +1023,6 @@ struct Block
         bounds_maxs.resize(a->pt_dim);
         for (int i = 0; i < a->dom_dim; i++)
         {
-            geometry.p(i)   =  a->geom_p[i];
-            vars[0].p(i)    =  a->vars_p[i];
             ndom_pts(i)     =  a->ndom_pts[i];
             tot_ndom_pts    *= ndom_pts(i);
         }
@@ -1099,14 +1088,12 @@ struct Block
     {
         DomainArgs* a = &args;
         int tot_ndom_pts = 1;
-        geometry.p.resize(a->dom_dim);
         geometry.min_dim = 0;
         geometry.max_dim = a->dom_dim - 1;
         int nvars = 1;
         vars.resize(nvars);
         max_errs.resize(nvars);
         sum_sq_errs.resize(nvars);
-        vars[0].p.resize(a->dom_dim);
         vars[0].min_dim = a->dom_dim;
         vars[0].max_dim = vars[0].min_dim + 1;
         ndom_pts.resize(a->dom_dim);
@@ -1114,8 +1101,6 @@ struct Block
         bounds_maxs.resize(a->pt_dim);
         for (int i = 0; i < a->dom_dim; i++)
         {
-            geometry.p(i)   =  a->geom_p[i];
-            vars[0].p(i)    =  a->vars_p[i];
             ndom_pts(i)     =  a->ndom_pts[i];
             tot_ndom_pts    *= ndom_pts(i);
         }
@@ -1238,92 +1223,45 @@ struct Block
             DomainArgs&                       args)
     {
         DomainArgs* a = &args;
-        geometry.nctrl_pts.resize(0);       // 0 size means MFA will initialize to minimum p+1
-        for (auto i = 0; i < vars.size(); i++)
-            vars[i].nctrl_pts.resize(0);
-
-        int ndom_dims = ndom_pts.size();                // domain dimensionality
-
+        int ndom_dims = a->dom_dim;                     // domain dimensionality
+        VectorXi nctrl_pts(0);                          // size 0 means minimum p+1
+        VectorXi p(ndom_dims);
+        VectorXi ndom_pts(ndom_dims);
         VectorX<T> extents = bounds_maxs - bounds_mins;
+        for (auto j = 0; j < ndom_dims; j++)
+        {
+            ndom_pts(j)     = a->ndom_pts[j];
+            p(j)            = a->geom_p[j];
+        }
 
         // encode geometry
         if (a->verbose && cp.master()->communicator().rank() == 0)
             fprintf(stderr, "\nEncoding geometry\n\n");
-        geometry.mfa = new mfa::MFA<T>(geometry.p,
+        geometry.mfa = new mfa::MFA<T>(p,
                                        ndom_pts,
                                        domain,
-                                       geometry.ctrl_pts,
-                                       geometry.nctrl_pts,
-                                       geometry.weights,
-                                       geometry.knots,
+                                       nctrl_pts,
                                        0,
                                        ndom_dims - 1);
         // TODO: consider not weighting the geometry (only science variables), depends on geometry complexity
-        geometry.mfa->AdaptiveEncode(err_limit, geometry.nctrl_pts, a->verbose, a->weighted, extents, max_rounds);
+        geometry.mfa->AdaptiveEncode(domain, err_limit, a->verbose, a->weighted, extents, max_rounds);
 
         // encode science variables
+        for (auto j = 0; j < ndom_dims; j++)
+            p(j)            = a->vars_p[j];
         for (auto i = 0; i< vars.size(); i++)
         {
             if (a->verbose && cp.master()->communicator().rank() == 0)
                 fprintf(stderr, "\nEncoding science variable %d\n\n", i);
-            vars[i].mfa = new mfa::MFA<T>(vars[i].p,
+            vars[i].mfa = new mfa::MFA<T>(p,
                                           ndom_pts,
                                           domain,
-                                          vars[i].ctrl_pts,
-                                          vars[i].nctrl_pts,
-                                          vars[i].weights,
-                                          vars[i].knots,
+                                          nctrl_pts,
                                           ndom_dims + i,        // assumes each variable is scalar
                                           ndom_dims + i);
-            vars[i].mfa->AdaptiveEncode(err_limit, vars[i].nctrl_pts, a->verbose, a->weighted, extents, max_rounds);
+            vars[i].mfa->AdaptiveEncode(domain, err_limit, a->verbose, a->weighted, extents, max_rounds);
         }
     }
-
-    // TODO: convert the following to split models
-
-//     // nonlinear encoding of block to desired error limit
-//     // only for 1D so far
-//     void nonlinear_encode_block(
-//             const   diy::Master::ProxyWithLink& cp,
-//             real_t   err_limit)
-//     {
-//         // set initial control points here
-//         // TODO: what if there aren'e enough control points (p + 1 is the minimum needed)?
-//         real_t grad;                             // current gradient (finite difference)
-//         real_t prev_grad = 0.0;                  // previous gradient (finite difference)
-//         nctrl_pts.resize(1);
-//         for (auto i = 0; i < domain.rows(); i++)
-//         {
-//             if (i == 0 || i == domain.rows() - 1)
-//             {
-//                 // first and last control points coincide with domain
-//                 ctrl_pts.conservativeResize(ctrl_pts.rows() + 1, domain.cols());
-//                 ctrl_pts.row(ctrl_pts.rows() - 1) = domain.row(i);
-//             }
-//             else
-//             {
-//                 grad = (domain(i, 1) - domain(i - 1, 1)) / (domain(i, 0) - domain(i - 1, 0));
-//                 // set control point at local min/max (gradient sign change)
-//                 // TODO: checking exactly for 0.0 is not robust
-//                 if ((grad == 0.0) || (grad > 0.0 && prev_grad < 0.0) || (grad < 0.0 && prev_grad > 0.0))
-//                 {
-//                     ctrl_pts.conservativeResize(ctrl_pts.rows() + 1, domain.cols());
-//                     ctrl_pts.row(ctrl_pts.rows() - 1) = domain.row(i);
-//                 }
-//                 prev_grad = grad;
-//             }
-//         }
-//         nctrl_pts(0) = ctrl_pts.rows();
-// 
-//         // set initial weights to 1.0
-//         weights = VectorX<T>::Ones(ctrl_pts.rows());
-// 
-//         // debug
-//         cerr << ctrl_pts.rows() << " initial control points:\n" << ctrl_pts << "\n" << endl;
-// 
-//         mfa = new mfa::MFA<T>(p, ndom_pts, domain, ctrl_pts, nctrl_pts, weights, knots);
-//         mfa->NonlinearEncode(err_limit, nctrl_pts);
-//     }
 
     // decode entire block
     void decode_block(const diy::Master::ProxyWithLink& cp)
@@ -1338,7 +1276,6 @@ struct Block
         for (auto i = 0; i < vars.size(); i++)
             vars[i].mfa->Decode(approx, ndom_dims + i, ndom_dims + i);  // assumes each variable is scalar
     }
-
 
     // differentiate entire block
     void differentiate_block(

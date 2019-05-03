@@ -66,7 +66,7 @@ int main(int argc, char** argv)
     ops >> opts::Option('q', "vars_degree", vars_degree,    " degree in each dimension of science variables");
     ops >> opts::Option('n', "ndomp",       ndomp,          " number of input points in each dimension of domain");
     ops >> opts::Option('i', "input",       input,          " input dataset");
-    ops >> opts::Option('r', "rounds",      max_rounds,     " maximum number of iterations");
+    ops >> opts::Option('u', "rounds",      max_rounds,     " maximum number of iterations");
     ops >> opts::Option('w', "weights",     weighted,       " solve for and use weights");
     ops >> opts::Option('r', "rotate",      rot,            " rotation angle of domain in degrees");
     ops >> opts::Option('t', "twist",       twist,          " twist (waviness) of domain (0.0-1.0)");
