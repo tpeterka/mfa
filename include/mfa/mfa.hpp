@@ -103,13 +103,6 @@ namespace mfa
             return mfa->tmesh;
         }
 
-        // encode
-        void Encode(int verbose)                         // output level
-        {
-            Encoder<T> encoder(*mfa, verbose);
-            encoder.Encode();
-        }
-
         // fixed number of control points encode
         void FixedEncode(
                 MatrixX<T>& domain,                     // input points
@@ -117,10 +110,12 @@ namespace mfa
                 int         verbose,                    // output level
                 bool        weighted)                   // solve for and use weights (default = true)
         {
-            // TODO: hard-coded for single tensor
-            mfa->tmesh.tensor_prods[0].weights = VectorX<T>::Ones(mfa->tmesh.tensor_prods[0].nctrl_pts.prod());
-            Encoder<T> encoder(domain, *mfa, verbose);
-            encoder.Encode(weighted);
+            for (TensorProduct<T>& t : mfa->tmesh.tensor_prods)             // for all tensor products in the tmesh
+            {
+                t.weights = VectorX<T>::Ones(t.nctrl_pts.prod());
+                Encoder<T> encoder(domain, *mfa, verbose);
+                encoder.Encode(t, weighted);
+            }
         }
 
         // adaptive encode

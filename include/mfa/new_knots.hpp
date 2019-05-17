@@ -163,7 +163,7 @@ namespace mfa
                         // new knot is the midpoint of the span containing the domain point parameters
                         T new_knot_val = (mfa.tmesh.all_knots[k][span[k]] + mfa.tmesh.all_knots[k][span[k] + 1]) / 2.0;
                         new_knots[k].push_back(new_knot_val);
-                        new_levels[k].push_back(tensor.level + 1);  // adapt at the next level
+                        new_levels[k].push_back(iter + 1);  // adapt at the next level, for now every iteration is a new level
                     }
                     InsertKnots(tensor, new_knots, new_levels);
                     return false;

@@ -77,20 +77,20 @@ namespace mfa
         // (1D = NURBS curve, 2D = surface, 3D = volumem 4D = hypervolume, etc.)
         // 2. The dimensionality of individual domain and control points (domain.cols())
         // p.size() should be < domain.cols()
-        void Encode(bool weighted = true)                   // solve for and use weights
+        void Encode(TensorProduct<T>&   tensor,             // current tensor product
+                    bool                weighted = true)    // solve for and use weights
         {
             // check and assign main quantities
             VectorXi n;                                     // number of control point spans in each domain dim
             VectorXi m;                                     // number of input data point spans in each domain dim
             int      ndims      = mfa.ndom_pts.size();      // number of domain dimensions
             size_t   cs         = 1;                        // stride for input points in curve in cur. dim
-            int      pt_dim     = mfa.tmesh.tensor_prods[0].ctrl_pts.cols();    // control point dimensonality
+            int      pt_dim     = tensor.ctrl_pts.cols();   // control point dimensonality
 
             Quants(n, m);
 
             // control points
-            // TODO: hard-coded for single tensor
-            mfa.tmesh.tensor_prods[0].ctrl_pts.resize(mfa.tmesh.tensor_prods[0].nctrl_pts.prod(), mfa.max_dim - mfa.min_dim + 1);
+            tensor.ctrl_pts.resize(tensor.nctrl_pts.prod(), mfa.max_dim - mfa.min_dim + 1);
 
             // 2 buffers of temporary control points
             // double buffer needed to write output curves of current dim without changing its input pts
@@ -100,10 +100,7 @@ namespace mfa
             // TODO: need to find a more space-efficient way
             size_t tot_ntemp_ctrl = 1;
             for (size_t k = 0; k < ndims; k++)
-            {
-                // TODO: hard-coded for single tensor
-                tot_ntemp_ctrl *= (k == 0 ? mfa.tmesh.tensor_prods[0].nctrl_pts(k) : mfa.ndom_pts(k));
-            }
+                tot_ntemp_ctrl *= (k == 0 ? tensor.nctrl_pts(k) : mfa.ndom_pts(k));
             MatrixX<T> temp_ctrl0 = MatrixX<T>::Zero(tot_ntemp_ctrl, pt_dim);
             MatrixX<T> temp_ctrl1 = MatrixX<T>::Zero(tot_ntemp_ctrl, pt_dim);
 
@@ -117,10 +114,7 @@ namespace mfa
                 for (int i = 0; i < ndims; i++)
                 {
                     if (i < k)
-                    {
-                        // TODO: hard-coded for single tensor
-                        ncurves *= mfa.tmesh.tensor_prods[0].nctrl_pts(i);
-                    }
+                        ncurves *= tensor.nctrl_pts(i);
                     else if (i > k)
                         ncurves *= mfa.ndom_pts(i);
                     // NB: current dimension contributes no curves, hence no i == k case
@@ -145,8 +139,7 @@ namespace mfa
                     {
                         co[j] = coo + cs * ntemp_ctrl(k);
                         coo   = co[j];
-                        // TODO: hard-coded for single tensor
-                        to[j] = too + cs * mfa.tmesh.tensor_prods[0].nctrl_pts(k);
+                        to[j] = too + cs * tensor.nctrl_pts(k);
                         too   = to[j];
                     }
                 }
@@ -172,9 +165,8 @@ namespace mfa
 
                 for (int i = 0; i < N.rows(); i++)              // the rows of N
                 {
-                    // TODO: hard-coded for single tensor
-                    int span = mfa.FindSpan(k, mfa.params[k][i], mfa.tmesh.tensor_prods[0]);
-                    mfa.BasisFuns(mfa.tmesh.tensor_prods[0], k, mfa.params[k][i], span, N, i);
+                    int span = mfa.FindSpan(k, mfa.params[k][i], tensor);
+                    mfa.BasisFuns(tensor, k, mfa.params[k][i], span, N, i);
                 }
 
                 // TODO: NtN is going to be very sparse when it is large: switch to sparse representation
@@ -201,8 +193,7 @@ namespace mfa
                         MatrixX<T> P(N.cols(), pt_dim);
 
                         // compute the one curve of control points
-                        // TODO: hard-coded for first tensor product
-                        CtrlCurve(N, NtN, R, P, k, co[j], cs, to[j], temp_ctrl0, temp_ctrl1, -1, mfa.tmesh.tensor_prods[0], weighted);
+                        CtrlCurve(N, NtN, R, P, k, co[j], cs, to[j], temp_ctrl0, temp_ctrl1, -1, tensor, weighted);
                         });                                                  // curves in this dimension
 
 #else                                       // serial vesion
@@ -227,14 +218,12 @@ namespace mfa
                     }
 
                     // compute the one curve of control points
-                    // TODO: hard-coded for first tensor product
-                    CtrlCurve(N, NtN, R, P, k, co[j], cs, to[j], temp_ctrl0, temp_ctrl1, j, mfa.tmesh.tensor_prods[0], weighted);
+                    CtrlCurve(N, NtN, R, P, k, co[j], cs, to[j], temp_ctrl0, temp_ctrl1, j, tensor, weighted);
                 }
 
 #endif
                 // adjust offsets and strides for next dimension
-                // TODO: hard-coded for single tensor
-                ntemp_ctrl(k) = mfa.tmesh.tensor_prods[0].nctrl_pts(k);
+                ntemp_ctrl(k) = tensor.nctrl_pts(k);
                 cs *= ntemp_ctrl(k);
 
                 NtN.resize(0, 0);                           // free NtN
@@ -265,7 +254,7 @@ namespace mfa
                 if (verbose)
                     fprintf(stderr, "Iteration %d...\n", iter);
 
-                // print tmesh
+                // debug: print tmesh
                 fprintf(stderr, "\n----- T-mesh at the start of iteration %d-----\n\n", iter);
                 mfa.tmesh.print();
                 fprintf(stderr, "--------------------------\n\n");
@@ -283,6 +272,11 @@ namespace mfa
 // 
 // #endif
 
+                // debug: print tmesh
+                fprintf(stderr, "\n----- T-mesh at the end of iteration %d-----\n\n", iter);
+                mfa.tmesh.print();
+                fprintf(stderr, "--------------------------\n\n");
+
                 // no new knots to be added
                 if (done)
                 {
@@ -293,13 +287,15 @@ namespace mfa
 
                 // check if the new knots would make the number of control points >= number of input points in any dim
                 done = false;
-                for (auto k = 0; k < mfa.p.size(); k++)
+                for (auto k = 0; k < mfa.dom_dim; k++)
                 {
-                    // TODO: hard-coded for single tensor
-                    if (mfa.ndom_pts(k) <= mfa.tmesh.tensor_prods[0].nctrl_pts(k))
+                    for (TensorProduct<T>& t : mfa.tmesh.tensor_prods)
                     {
-                        done = true;
-                        break;
+                        if (mfa.ndom_pts(k) <= t.nctrl_pts(k))
+                        {
+                            done = true;
+                            break;
+                        }
                     }
                 }
                 if (done)
@@ -313,7 +309,8 @@ namespace mfa
             // final full encoding needed after last knot insertion above
             if (verbose)
                 fprintf(stderr, "Encoding in full %ldD\n", mfa.dom_dim);
-            Encode(weighted);
+            for (TensorProduct<T>& t : mfa.tmesh.tensor_prods)
+                Encode(t, weighted);
         }
 
     private:
@@ -859,7 +856,7 @@ namespace mfa
             return nerr;
         }
 
-        // TODO: this hasn't been used or tested since converting over to tmesh
+        // this is the version used currently for tmesh
         // encodes at full dimensionality and decodes at full dimensionality
         // decodes full-d points in each knot span and adds new knot spans where error > err_limit
         // returns true if done, ie, no knots are inserted
@@ -880,7 +877,7 @@ namespace mfa
                 t.weights = VectorX<T>::Ones(t.ctrl_pts.rows());
 
                 // full n-d encoding
-                Encode();
+                Encode(t);
 
                 // find new knots
                 mfa::NewKnots<T> nk(mfa);

@@ -48,7 +48,7 @@ int main(int argc, char** argv)
     int    ntest        = 0;                    // number of input test points in each dim for analytical error tests
     int    geom_nctrl   = -1;                   // input number of control points for geometry (same for all dims)
     int    vars_nctrl   = 11;                   // input number of control points for all science variables (same for all dims)
-    string input        = "sine";               // input dataset
+    string input        = "sinc";               // input dataset
     int    weighted     = 1;                    // solve for and use weights (bool 1 or 0))
     real_t rot          = 0.0;                  // rotation angle in degrees
     real_t twist        = 0.0;                  // twist (waviness) of domain (0.0-1.0)
@@ -86,6 +86,8 @@ int main(int argc, char** argv)
     // minimal number of geometry control points if not specified
     if (geom_nctrl == -1)
         geom_nctrl = geom_degree + 1;
+    if (vars_nctrl == -1)
+        vars_nctrl = vars_degree + 1;
 
     // echo args
     fprintf(stderr, "\n--------- Input arguments ----------\n");
@@ -152,9 +154,11 @@ int main(int argc, char** argv)
         d_args.f[i] = 1.0;
     for (int i = 0; i < MAX_DIM; i++)
     {
-        d_args.geom_p[i]    = geom_degree;
-        d_args.vars_p[i]    = vars_degree;
-        d_args.ndom_pts[i]  = ndomp;
+        d_args.geom_p[i]            = geom_degree;
+        d_args.vars_p[i]            = vars_degree;
+        d_args.ndom_pts[i]          = ndomp;
+        d_args.geom_nctrl_pts[i]    = geom_nctrl;
+        d_args.vars_nctrl_pts[i]    = vars_nctrl;
     }
 
     // initialize input data
@@ -166,8 +170,6 @@ int main(int argc, char** argv)
         {
             d_args.min[i]               = -4.0 * M_PI;
             d_args.max[i]               = 4.0  * M_PI;
-            d_args.geom_nctrl_pts[i]    = geom_nctrl;
-            d_args.vars_nctrl_pts[i]    = vars_nctrl;
         }
         for (int i = 0; i < pt_dim - dom_dim; i++)      // for all science variables
             d_args.s[i] = i + 1;                        // scaling factor on range
@@ -182,8 +184,6 @@ int main(int argc, char** argv)
         {
             d_args.min[i]               = -4.0 * M_PI;
             d_args.max[i]               = 4.0  * M_PI;
-            d_args.geom_nctrl_pts[i]    = geom_nctrl;
-            d_args.vars_nctrl_pts[i]    = vars_nctrl;
         }
         for (int i = 0; i < pt_dim - dom_dim; i++)      // for all science variables
             d_args.s[i] = 10.0 * (i + 1);                 // scaling factor on range
@@ -200,8 +200,6 @@ int main(int argc, char** argv)
         {
             d_args.min[i]               = -1.0;
             d_args.max[i]               = 1.0;
-            d_args.geom_nctrl_pts[i]    = geom_nctrl;
-            d_args.vars_nctrl_pts[i]    = vars_nctrl;
         }
         for (int i = 0; i < pt_dim - dom_dim; i++)      // for all science variables
             d_args.s[i] = 1.0;                          // scaling factor on range
@@ -215,11 +213,6 @@ int main(int argc, char** argv)
         d_args.min[0] = 80.0;   d_args.max[0] = 100.0;
         d_args.min[1] = 5.0;    d_args.max[1] = 10.0;
         d_args.min[2] = 90.0;   d_args.max[2] = 93.0;
-        for (int i = 0; i < MAX_DIM; i++)
-        {
-            d_args.geom_nctrl_pts[i]    = geom_nctrl;
-            d_args.vars_nctrl_pts[i]    = vars_nctrl;
-        }
         for (int i = 0; i < pt_dim - dom_dim; i++)      // for all science variables
             d_args.s[i] = 1.0;                          // scaling factor on range
         master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
@@ -233,8 +226,6 @@ int main(int argc, char** argv)
         {
             d_args.min[i]               = -0.95;
             d_args.max[i]               = 0.95;
-            d_args.geom_nctrl_pts[i]    = geom_nctrl;
-            d_args.vars_nctrl_pts[i]    = vars_nctrl;
         }
         for (int i = 0; i < pt_dim - dom_dim; i++)      // for all science variables
             d_args.s[i] = 1.0;                          // scaling factor on range
@@ -248,9 +239,6 @@ int main(int argc, char** argv)
         d_args.ndom_pts[0]          = 704;
         d_args.ndom_pts[1]          = 540;
         d_args.ndom_pts[2]          = 550;
-        d_args.geom_nctrl_pts[0]    = geom_nctrl;
-        d_args.geom_nctrl_pts[1]    = geom_nctrl;
-        d_args.geom_nctrl_pts[2]    = geom_nctrl;
         d_args.vars_nctrl_pts[0]    = 140;
         d_args.vars_nctrl_pts[1]    = 108;
         d_args.vars_nctrl_pts[2]    = 110;
@@ -276,11 +264,7 @@ int main(int argc, char** argv)
     if (input == "nek")
     {
         for (int i = 0; i < 3; i++)
-        {
-            d_args.ndom_pts[i]          = 200;
-            d_args.geom_nctrl_pts[i]    = geom_nctrl;
-            d_args.vars_nctrl_pts[i]    = vars_nctrl;
-        }
+            d_args.ndom_pts[i] = 200;
         strncpy(d_args.infile, infile.c_str(), sizeof(d_args.infile));
 //         strncpy(d_args.infile, "/Users/tpeterka/datasets/nek5000/200x200x200/0.xyz", sizeof(d_args.infile));
         if (dom_dim == 2)

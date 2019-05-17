@@ -1224,12 +1224,13 @@ struct Block
     {
         DomainArgs* a = &args;
         int ndom_dims = a->dom_dim;                     // domain dimensionality
-        VectorXi nctrl_pts(0);                          // size 0 means minimum p+1
+        VectorXi nctrl_pts(a->dom_dim);
         VectorXi p(ndom_dims);
         VectorXi ndom_pts(ndom_dims);
         VectorX<T> extents = bounds_maxs - bounds_mins;
         for (auto j = 0; j < ndom_dims; j++)
         {
+            nctrl_pts(j)    = a->geom_nctrl_pts[j];
             ndom_pts(j)     = a->ndom_pts[j];
             p(j)            = a->geom_p[j];
         }
@@ -1248,7 +1249,11 @@ struct Block
 
         // encode science variables
         for (auto j = 0; j < ndom_dims; j++)
+        {
+            nctrl_pts(j)    = a->vars_nctrl_pts[j];
             p(j)            = a->vars_p[j];
+        }
+
         for (auto i = 0; i< vars.size(); i++)
         {
             if (a->verbose && cp.master()->communicator().rank() == 0)

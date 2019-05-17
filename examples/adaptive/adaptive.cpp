@@ -49,6 +49,8 @@ int main(int argc, char** argv)
     int    vars_degree    = 4;                        // degree for science variables (same for all dims)
     int    ndomp          = 100;                      // input number of domain points (same for all dims)
     int    ntest          = 0;                        // number of input test points in each dim for analytical error tests
+    int    geom_nctrl     = -1;                       // input number of control points for geometry (same for all dims)
+    int    vars_nctrl     = -1;                       // input number of control points for all science variables (same for all dims)
     string input          = "sinc";                   // input dataset
     int    max_rounds     = 0;                        // max. number of rounds (0 = no maximum)
     int    weighted       = 1;                        // solve for and use weights (bool 0 or 1)
@@ -67,6 +69,8 @@ int main(int argc, char** argv)
     ops >> opts::Option('p', "geom_degree", geom_degree,    " degree in each dimension of geometry");
     ops >> opts::Option('q', "vars_degree", vars_degree,    " degree in each dimension of science variables");
     ops >> opts::Option('n', "ndomp",       ndomp,          " number of input points in each dimension of domain");
+    ops >> opts::Option('g', "geom_nctrl",  geom_nctrl,     " starting number of control points in each dimension of geometry");
+    ops >> opts::Option('v', "vars_nctrl",  vars_nctrl,     " starting number of control points in each dimension of all science variables");
     ops >> opts::Option('a', "ntest",       ntest,          " number of test points in each dimension of domain (for analytical error calculation)");
     ops >> opts::Option('i', "input",       input,          " input dataset");
     ops >> opts::Option('u', "rounds",      max_rounds,     " maximum number of iterations");
@@ -76,6 +80,7 @@ int main(int argc, char** argv)
     ops >> opts::Option('s', "noise",       noise,          " fraction of noise (0.0 - 1.0)");
     ops >> opts::Option('c', "error",       error,          " decode entire error field (default=true)");
     ops >> opts::Option('f', "infile",      infile,         " input file name");
+    ops >> opts::Option('h', "help",        help,           " show help");
 
     if (!ops.parse(argc, argv) || help)
     {
@@ -84,13 +89,20 @@ int main(int argc, char** argv)
         return 1;
     }
 
+    // start with minimal number of geometry control points if not specified
+    if (geom_nctrl == -1)
+        geom_nctrl = geom_degree + 1;
+    if (vars_nctrl == -1)
+        vars_nctrl = vars_degree + 1;
+
     // echo args
     fprintf(stderr, "\n--------- Input arguments ----------\n");
     cerr <<
-        "error = "          << norm_err_limit   << " pt_dim = "         << pt_dim       << " dom_dim = "        << dom_dim      <<
-        "\ngeom_degree = "  << geom_degree      << " vars_degree = "    << vars_degree  <<
-        "\ninput pts = "    << ndomp            << " input = "          << input        << " max. rounds = "    << max_rounds   <<
-        "\ntest_points = "  << ntest            << " noise = "          << noise        << endl;
+        "error = "              << norm_err_limit   << " pt_dim = "         << pt_dim       << " dom_dim = "        << dom_dim      <<
+        "\ngeom_degree = "      << geom_degree      << " vars_degree = "    << vars_degree  <<
+        "\ngeom_ctrl pts = "    << geom_nctrl       << " vars_ctrl_pts = "  << vars_nctrl   << " test_points = "    << ntest        <<
+        "\ninput pts = "        << ndomp            << " input = "          << input        << " max. rounds = "    << max_rounds   <<
+        "\ntest_points = "      << ntest            << " noise = "          << noise        << endl;
 #ifdef CURVE_PARAMS
     cerr << "parameterization method = curve" << endl;
 #else
@@ -149,9 +161,11 @@ int main(int argc, char** argv)
         d_args.f[i] = 1.0;
     for (int i = 0; i < MAX_DIM; i++)
     {
-        d_args.geom_p[i]    = geom_degree;
-        d_args.vars_p[i]    = vars_degree;
-        d_args.ndom_pts[i]  = ndomp;
+        d_args.geom_p[i]            = geom_degree;
+        d_args.vars_p[i]            = vars_degree;
+        d_args.ndom_pts[i]          = ndomp;
+        d_args.geom_nctrl_pts[i]    = geom_nctrl;
+        d_args.vars_nctrl_pts[i]    = vars_nctrl;
     }
 
     // sine function f(x) = sin(x), f(x,y) = sin(x)sin(y), ...
@@ -227,9 +241,9 @@ int main(int argc, char** argv)
     // S3D dataset
     if (input == "s3d")
     {
-        d_args.ndom_pts[0]  = 704;
-        d_args.ndom_pts[1]  = 540;
-        d_args.ndom_pts[2]  = 550;
+        d_args.ndom_pts[0]          = 704;
+        d_args.ndom_pts[1]          = 540;
+        d_args.ndom_pts[2]          = 550;
         strncpy(d_args.infile, infile.c_str(), sizeof(d_args.infile));
 //         strncpy(d_args.infile, "/Users/tpeterka/datasets/flame/6_small.xyz", sizeof(d_args.infile));
         if (dom_dim == 1)
@@ -251,9 +265,8 @@ int main(int argc, char** argv)
     // nek5000 dataset
     if (input == "nek")
     {
-        d_args.ndom_pts[0]  = 200;
-        d_args.ndom_pts[1]  = 200;
-        d_args.ndom_pts[2]  = 200;
+        for (int i = 0; i < 3; i++)
+            d_args.ndom_pts[i] = 200;
         strncpy(d_args.infile, infile.c_str(), sizeof(d_args.infile));
 //         strncpy(d_args.infile, "/Users/tpeterka/datasets/nek5000/200x200x200/0.xyz", sizeof(d_args.infile));
         if (dom_dim == 2)
