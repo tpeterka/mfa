@@ -806,7 +806,6 @@ namespace mfa
 
                 decoder.CurvePt(k, mfa.params(mfa.po[k] + i), ctrl_pts, weights, cpt, mfa.ko[k]);
 
-
                 // error
                 T max_err = 0.0;
                 for (auto j = 0; j < mfa.max_dim - mfa.min_dim + 1; j++)

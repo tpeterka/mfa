@@ -69,7 +69,7 @@ int main(int argc, char** argv)
     ops >> opts::Option('n', "ndomp",       ndomp,          " number of input points in each dimension of domain");
     ops >> opts::Option('a', "ntest",       ntest,          " number of test points in each dimension of domain (for analytical error calculation)");
     ops >> opts::Option('i', "input",       input,          " input dataset");
-    ops >> opts::Option('r', "rounds",      max_rounds,     " maximum number of iterations");
+    ops >> opts::Option('u', "rounds",      max_rounds,     " maximum number of iterations");
     ops >> opts::Option('w', "weights",     weighted,       " solve for and use weights");
     ops >> opts::Option('r', "rotate",      rot,            " rotation angle of domain in degrees");
     ops >> opts::Option('t', "twist",       twist,          " twist (waviness) of domain (0.0-1.0)");
