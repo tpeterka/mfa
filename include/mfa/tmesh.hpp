@@ -92,8 +92,8 @@ namespace mfa
             }
         }
 
-        // insert a tensor product into tensor_prods
-        void insert_tensor(const vector<KnotIdx>&   knot_mins,      // indices in all_knots of min. corner of tensor to be inserted
+        // append a tensor product to the back of tensor_prods
+        void append_tensor(const vector<KnotIdx>&   knot_mins,      // indices in all_knots of min. corner of tensor to be inserted
                            const vector<KnotIdx>&   knot_maxs)      // indices in all_knots of max. corner
         {
             bool vec_grew;                          // vector of tensor_prods grew
@@ -147,6 +147,9 @@ namespace mfa
                         nanchors -= (knot_maxs[j] + p_[j] - all_knots[j].size());
                     new_tensor.nctrl_pts[j] = nanchors;
                     tot_nctrl_pts *= nanchors;
+
+                    // debug
+//                     fprintf(stderr, "appending tensor with %ld knots and %d control points in dimension %d\n", nknots, new_tensor.nctrl_pts[j], j);
                 }
                 new_tensor.ctrl_pts.resize(tot_nctrl_pts, max_dim_ - min_dim_ + 1);
                 new_tensor.weights.resize(tot_nctrl_pts, max_dim_ - min_dim_ + 1);

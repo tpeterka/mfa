@@ -165,7 +165,7 @@ namespace mfa
                 knot_mins[i] = 0;
                 knot_maxs[i] = tmesh.all_knots[i].size() - 1;
             }
-            tmesh.insert_tensor(knot_mins, knot_maxs);
+            tmesh.append_tensor(knot_mins, knot_maxs);
 
             // stride for domain points in different dimensions
             ds.resize(dom_dim, 1);                  // stride for domain points

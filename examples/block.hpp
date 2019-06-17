@@ -1951,15 +1951,15 @@ struct Block
         }
 
         // initialize first tensor product
-        vector<size_t> knot_mins(dom_dim);
-        vector<size_t> knot_maxs(dom_dim);
+        vector<KnotIdx> knot_mins(dom_dim);
+        vector<KnotIdx> knot_maxs(dom_dim);
         for (auto i = 0; i < dom_dim; i++)
         {
             knot_mins[i] = 0;
             knot_maxs[i] = 5;
         }
 
-        tmesh.insert_tensor(knot_mins, knot_maxs);
+        tmesh.append_tensor(knot_mins, knot_maxs);
     }
 
     // refine the t-mesh the first time
@@ -1973,14 +1973,14 @@ struct Block
         tmesh.insert_knot(1, 3, 1, 0.5);
 
         // insert tensor product
-        vector<size_t> knot_mins(dom_dim);
-        vector<size_t> knot_maxs(dom_dim);
+        vector<KnotIdx> knot_mins(dom_dim);
+        vector<KnotIdx> knot_maxs(dom_dim);
         assert(dom_dim == 2);           // testing 2d for now
         knot_mins[0] = 0;
         knot_mins[1] = 1;
         knot_maxs[0] = 4;
         knot_maxs[1] = 5;
-        tmesh.insert_tensor(knot_mins, knot_maxs);
+        tmesh.append_tensor(knot_mins, knot_maxs);
     }
 
     // refine the t-mesh the second time
@@ -2001,7 +2001,7 @@ struct Block
         knot_mins[1] = 2;
         knot_maxs[0] = 6;
         knot_maxs[1] = 6;
-        tmesh.insert_tensor(knot_mins, knot_maxs);
+        tmesh.append_tensor(knot_mins, knot_maxs);
     }
 
     // print the t-mesh

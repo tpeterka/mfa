@@ -245,6 +245,7 @@ namespace mfa
             // TODO: use weights for knot insertion
             // for now, weights are only used for final full encode
 
+
             // loop until no change in knots
             for (int iter = 0; ; iter++)
             {
@@ -867,11 +868,18 @@ namespace mfa
         {
             bool done = true;
 
+            // indices in tensor, in each dim. of inserted knots in full knot vector after insertion
+            // inserted_knot_idx[tensor][dim][inserted_knot] = index of inserted knot
+            vector<vector<vector<KnotIdx>>> inserted_knot_idxs(mfa.tmesh.tensor_prods.size());
+
             if (!extents.size())
                 extents = VectorX<T>::Ones(mfa.tmesh.tensor_prods[0].ctrl_pts.cols());
 
-            for (TensorProduct<T>& t : mfa.tmesh.tensor_prods)             // for all tensor products in the tmesh
+            // for all tensor products in the tmesh
+            for (auto i = 0; i < mfa.tmesh.tensor_prods.size(); i++)
             {
+                TensorProduct<T>& t = mfa.tmesh.tensor_prods[i];
+
                 // resize control points and weights
                 t.ctrl_pts.resize(t.nctrl_pts.prod(), mfa.max_dim - mfa.min_dim + 1);
                 t.weights = VectorX<T>::Ones(t.ctrl_pts.rows());
@@ -881,7 +889,44 @@ namespace mfa
 
                 // find new knots
                 mfa::NewKnots<T> nk(mfa);
-                done &= nk.FirstErrorSpan(domain, t, extents, err_limit, iter);
+                done &= nk.FirstErrorSpan(domain, t, extents, err_limit, iter, inserted_knot_idxs[i]);
+            }
+
+            // append new tensors
+            vector<KnotIdx> knot_mins(mfa.dom_dim);
+            vector<KnotIdx> knot_maxs(mfa.dom_dim);
+            auto ntensors = mfa.tmesh.tensor_prods.size();      // number of tensors before any additional appends
+            for (auto i = 0; i < ntensors; i++)
+            {
+                // no knots were inserted for the current tensor
+                if (!inserted_knot_idxs[i].size())
+                    continue;
+
+                // expand knot mins and maxs by p-1 index lines on each side
+                for (auto j = 0; j < mfa.dom_dim; j++)
+                {
+                    KnotIdx min_idx, max_idx;
+                    for (auto k = 0; k < inserted_knot_idxs[i][j].size(); k++)
+                    {
+                        assert(inserted_knot_idxs[i][j][k] - (mfa.p(j) - 1) >= 0);
+                        assert(inserted_knot_idxs[i][j][k] + mfa.p(j) - 1 < mfa.tmesh.all_knots[j].size());
+                        if (k == 0 || inserted_knot_idxs[i][j][k] < min_idx)
+                        {
+                            knot_mins[j] = inserted_knot_idxs[i][j][k] - (mfa.p(j) - 1);
+                            min_idx = inserted_knot_idxs[i][j][k];
+                        }
+                        if (k == 0 || inserted_knot_idxs[i][j][k] > max_idx)
+                        {
+                            knot_maxs[j] = inserted_knot_idxs[i][j][k] + mfa.p(j) - 1;
+                            max_idx = inserted_knot_idxs[i][j][k];
+                        }
+                    }
+                }
+
+                // debug
+                fprintf(stderr, "appending tensor with knot_mins [%ld %ld] knot_maxs [%ld %ld]\n", knot_mins[0], knot_mins[1], knot_maxs[0], knot_maxs[1]);
+
+                mfa.tmesh.append_tensor(knot_mins, knot_maxs);
             }
 
             return done;

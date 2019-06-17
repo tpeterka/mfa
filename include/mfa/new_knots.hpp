@@ -44,16 +44,19 @@ namespace mfa
         // inserts a set of knots (in all dimensions) into the original knot set
         // also increases the numbers of control points (in all dimensions) that will result
         void InsertKnots(
-                TensorProduct<T>&       tensor,         // curent tensor product
-                vector<vector<T>>&      new_knots,      // new knots
-                vector<vector<int>>&    new_levels)     // new knot levels
+                TensorProduct<T>&           tensor,                 // curent tensor product
+                vector<vector<T>>&          new_knots,              // new knots
+                vector<vector<int>>&        new_levels,             // new knot levels
+                vector<vector<KnotIdx>>&    inserted_knot_idxs)     // indices in each dim. of inserted knots in full knot vector after insertion
         {
             vector<vector<T>> temp_knots(mfa.dom_dim);
             vector<vector<int>> temp_levels(mfa.dom_dim);
+            inserted_knot_idxs.resize(mfa.dom_dim);
 
             // insert new_knots into knots: replace old knots with union of old and new (in temp_knots)
-            for (size_t k = 0; k < mfa.dom_dim; k++)    // for all domain dimensions
+            for (size_t k = 0; k < mfa.dom_dim; k++)                // for all domain dimensions
             {
+                inserted_knot_idxs[k].clear();
                 auto ninserted = mfa.tmesh.all_knots[k].size();      // number of new knots inserted
 
                 // manual walk along old and new knots so that levels can be inserted along with knots
@@ -68,6 +71,7 @@ namespace mfa
                     {
                         temp_knots[k].push_back(*nk++);
                         temp_levels[k].push_back(*nl++);
+                        inserted_knot_idxs[k].push_back(temp_knots[k].size() - 1);
                     }
                     else if (nk == new_knots[k].end())
                     {
@@ -83,6 +87,7 @@ namespace mfa
                     {
                         temp_knots[k].push_back(*nk++);
                         temp_levels[k].push_back(*nl++);
+                        inserted_knot_idxs[k].push_back(temp_knots[k].size() - 1);
                     }
                     else if (*ak == *nk)
                     {
@@ -93,18 +98,26 @@ namespace mfa
                     }
                 }
 
-                mfa.tmesh.all_knots[k]          = temp_knots[k];
-                mfa.tmesh.all_knot_levels[k]    = temp_levels[k];
+                for (auto i = 0; i < inserted_knot_idxs[k].size(); i++)
+                {
+                    auto idx = inserted_knot_idxs[k][i];
+                    mfa.tmesh.insert_knot(k, idx, temp_levels[k][idx], temp_knots[k][idx]);
+                }
 
-                // increase knot_maxs
-                ninserted           = mfa.tmesh.all_knots[k].size() - ninserted;
-                tensor.knot_maxs[k] += ninserted;
 
-                // increase number of control points
-                tensor.nctrl_pts(k) = mfa.tmesh.all_knots[k].size() - mfa.p(k) - 1;
+                //                 TODO: DEPRECATE, inserting new tensor should handle this
+//                 mfa.tmesh.all_knots[k]          = temp_knots[k];
+//                 mfa.tmesh.all_knot_levels[k]    = temp_levels[k];
+//                 // increase knot_maxs
+//                 ninserted           = mfa.tmesh.all_knots[k].size() - ninserted;
+//                 tensor.knot_maxs[k] += ninserted;
+// 
+//                 // increase number of control points
+//                 tensor.nctrl_pts(k) = mfa.tmesh.all_knots[k].size() - mfa.p(k) - 1;
             }   // for all domain dimensions
 
-            tensor.weights =  VectorX<T>::Ones(tensor.nctrl_pts.prod());
+            //             TODO: DEPRECATE; inserting new tensor should handle this
+//             tensor.weights =  VectorX<T>::Ones(tensor.nctrl_pts.prod());
         }
 
         // computes error in knot spans and returns first new knot (in all dimensions at once) that should be inserted
@@ -116,11 +129,12 @@ namespace mfa
         // increment ijk in the loop over domain points instead of calling idx2ijk
         // TBB? (currently serial)
         bool FirstErrorSpan(
-                MatrixX<T>&         domain,                      // input points
-                TensorProduct<T>&   tensor,                      // current tensor product
-                VectorX<T>          extents,                     // extents in each dimension, for normalizing error (size 0 means do not normalize)
-                T                   err_limit,                   // max. allowed error
-                int                 iter)                        // iteration number
+                MatrixX<T>&                 domain,                 // input points
+                TensorProduct<T>&           tensor,                 // current tensor product
+                VectorX<T>                  extents,                // extents in each dimension, for normalizing error (size 0 means do not normalize)
+                T                           err_limit,              // max. allowed error
+                int                         iter,                   // iteration number
+                vector<vector<KnotIdx>>&    inserted_knot_idxs)     // indices in each dim. of inserted knots in full knot vector after insertion
         {
             Decoder<T>          decoder(mfa, 1);
             VectorXi            ijk(mfa.dom_dim);                   // i,j,k of domain point
@@ -165,7 +179,7 @@ namespace mfa
                         new_knots[k].push_back(new_knot_val);
                         new_levels[k].push_back(iter + 1);  // adapt at the next level, for now every iteration is a new level
                     }
-                    InsertKnots(tensor, new_knots, new_levels);
+                    InsertKnots(tensor, new_knots, new_levels, inserted_knot_idxs);
                     return false;
                 }
             }
