@@ -6,7 +6,11 @@ option                      (tbb_thread     "Enable TBB threading"              
 option                      (s3d_infile     "Path/filename of s3d dataset (for unit testing)"         )
 
 # C++11
-set                         (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
+
+# DEPRECATE; not using C++17 in production (only a test)
+# set                         (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++17")
+
+set                         (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++17")
 
 # Default to Release
 if                          (NOT CMAKE_BUILD_TYPE)
@@ -82,6 +86,10 @@ else                        ()
     message                 ("Coin-OR CLP found; weights are enabled")
 endif                       ()
 
+# DEPRECATE; not using boost in production (only a test)
+# Boost
+# find_package                (Boost 1.70.0 REQUIRED)
+
 # Include dirs
 set                         (CMAKE_INCLUDE_SYSTEM_FLAG_CXX "-isystem")
 include_directories         (${CMAKE_CURRENT_SOURCE_DIR}/include
@@ -92,6 +100,9 @@ include_directories         (${CMAKE_CURRENT_SOURCE_DIR}/include
                             )
 if                          (NOT "${CLP_INCLUDE_DIRS}" STREQUAL "")
     include_directories     (${CLP_INCLUDE_DIRS})
+endif                       ()
+if                          (NOT "${Boost_INCLUDE_DIRS}" STREQUAL "")
+    include_directories     (${Boost_INCLUDE_DIRS})
 endif                       ()
 
 # Libraries

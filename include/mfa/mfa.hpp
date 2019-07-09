@@ -110,12 +110,12 @@ namespace mfa
                 int         verbose,                    // output level
                 bool        weighted)                   // solve for and use weights (default = true)
         {
-            for (TensorProduct<T>& t : mfa->tmesh.tensor_prods)             // for all tensor products in the tmesh
-            {
-                t.weights = VectorX<T>::Ones(t.nctrl_pts.prod());
-                Encoder<T> encoder(domain, *mfa, verbose);
-                encoder.Encode(t, weighted);
-            }
+            // fixed encode assumes the tmesh has only one tensor product
+            TensorProduct<T>&t = mfa->tmesh.tensor_prods[0];
+
+            t.weights = VectorX<T>::Ones(t.nctrl_pts.prod());
+            Encoder<T> encoder(domain, *mfa, verbose);
+            encoder.Encode(t.nctrl_pts, t.ctrl_pts, t.weights, weighted);
         }
 
         // adaptive encode

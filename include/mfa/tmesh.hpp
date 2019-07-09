@@ -152,7 +152,7 @@ namespace mfa
 //                     fprintf(stderr, "appending tensor with %ld knots and %d control points in dimension %d\n", nknots, new_tensor.nctrl_pts[j], j);
                 }
                 new_tensor.ctrl_pts.resize(tot_nctrl_pts, max_dim_ - min_dim_ + 1);
-                new_tensor.weights.resize(tot_nctrl_pts, max_dim_ - min_dim_ + 1);
+                new_tensor.weights.resize(tot_nctrl_pts);
             }
 
             vector<int> split_side(dom_dim_);       // whether min (-1) or max (1) or both (2) sides of
@@ -527,7 +527,7 @@ namespace mfa
                 }
             }
             MatrixX<T> new_exist_ctrl_pts(tot_nctrl_pts, max_dim_ - min_dim_ + 1);
-            MatrixX<T> new_exist_weights(tot_nctrl_pts, max_dim_ - min_dim_ + 1);
+            VectorX<T> new_exist_weights(tot_nctrl_pts);
 
             // allocate new control point matrix for new max side tensor
             if (!skip_max_side)
@@ -542,7 +542,7 @@ namespace mfa
                     tot_nctrl_pts *= max_side_tensor.nctrl_pts(i);
                 }
                 max_side_tensor.ctrl_pts.resize(tot_nctrl_pts, max_dim_ - min_dim_ + 1);
-                max_side_tensor.weights.resize(tot_nctrl_pts, max_dim_ - min_dim_ + 1);
+                max_side_tensor.weights.resize(tot_nctrl_pts);
             }
 
             // split the control points
@@ -561,7 +561,7 @@ namespace mfa
 //                     fprintf(stderr, "moving to new_exist_ctrl_pts[%lu]\n", cur_exist_idx);
 
                     new_exist_ctrl_pts.row(cur_exist_idx) = existing_tensor.ctrl_pts.row(j);
-                    new_exist_weights.row(cur_exist_idx) = existing_tensor.weights.row(j);
+                    new_exist_weights(cur_exist_idx) = existing_tensor.weights(j);
                     cur_exist_idx++;
                 }
                 if (dim_idx[cur_dim] >= min_ctrl_idx)
@@ -572,7 +572,7 @@ namespace mfa
 //                         fprintf(stderr, "moving to max_side_tensor.ctrl_pts[%lu]\n", cur_max_side_idx);
 
                         max_side_tensor.ctrl_pts.row(cur_max_side_idx) = existing_tensor.ctrl_pts.row(j);
-                        max_side_tensor.weights.row(cur_max_side_idx) = existing_tensor.weights.row(j);
+                        max_side_tensor.weights(cur_max_side_idx) = existing_tensor.weights(j);
                     }
                     cur_max_side_idx++;
                 }
@@ -984,7 +984,7 @@ namespace mfa
 
         // given a point in parameter space to decode, compute range of anchor points in index space
         void anchors(const VectorX<T>&          param,              // parameter value in each dim. of desired point
-                     vector<vector<KnotIdx>>&   anchors)            // (output) local knot vector in index space
+                     vector<vector<KnotIdx>>&   anchors)            // (output) anchor points in index space
         {
             anchors.resize(dom_dim_);
             vector<vector<KnotIdx>> anchor_cands(dom_dim_);         // anchor candidates (possibly more than necessary)

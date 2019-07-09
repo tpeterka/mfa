@@ -268,7 +268,37 @@ namespace mfa
             }
         }
 
-        // TODO: Does this need to check the level of the knots and only return the span if it's in the current tensor?
+        // binary search to find the span in the knots vector containing a given parameter value
+        // returns span index i s.t. u is in [ knots[i], knots[i + 1] )
+        // NB closed interval at left and open interval at right
+        //
+        // i will be in the range [p, n], where n = number of control points - 1 because there are
+        // p + 1 repeated knots at start and end of knot vector
+        // algorithm 2.1, P&T, p. 68
+        int FindSpan(
+                int                     cur_dim,            // current dimension
+                T                       u,                  // parameter value
+                int                     nctrl_pts)          // number of control points in current dim
+        {
+            if (u == tmesh.all_knots[cur_dim][nctrl_pts])
+                return nctrl_pts - 1;
+
+            // binary search
+            int low = p(cur_dim);
+            int high = nctrl_pts;
+            int mid = (low + high) / 2;
+            while (u < tmesh.all_knots[cur_dim][mid] || u >= tmesh.all_knots[cur_dim][mid + 1])
+            {
+                if (u < tmesh.all_knots[cur_dim][mid])
+                    high = mid;
+                else
+                    low = mid;
+                mid = (low + high) / 2;
+            }
+
+            return mid;
+        }
+
         // binary search to find the span in the knots vector containing a given parameter value
         // returns span index i s.t. u is in [ knots[i], knots[i + 1] )
         // NB closed interval at left and open interval at right
@@ -326,7 +356,51 @@ namespace mfa
             return mid;
         }
 
-        // TODO: skip knots not in current level
+        // computes one row of basis function values for a given parameter value
+        // writes results in a row of N
+        // algorithm 2.2 of P&T, p. 70
+        //
+        // assumes N has been allocated by caller
+        void BasisFuns(
+                int                     cur_dim,    // current dimension
+                T                       u,          // parameter value
+                int                     span,       // index of span in the knots vector containing u, relative to ko
+                MatrixX<T>&             N,          // matrix of (output) basis function values
+                int                     row)        // row in N of result
+        {
+            // init
+            vector<T> scratch(p(cur_dim) + 1);                  // scratchpad, same as N in P&T p. 70
+            scratch[0] = 1.0;
+
+            // temporary recurrence results
+            // left(j)  = u - knots(span + 1 - j)
+            // right(j) = knots(span + j) - u
+            vector<T> left(p(cur_dim) + 1);
+            vector<T> right(p(cur_dim) + 1);
+
+            // fill N
+            for (int j = 1; j <= p(cur_dim); j++)
+            {
+                // left[j] is u = the jth knot in the correct level to the left of span
+                left[j]  = u - tmesh.all_knots[cur_dim][span + 1 - j];
+                // right[j] = the jth knot in the correct level to the right of span - u
+                right[j] = tmesh.all_knots[cur_dim][span + j] - u;
+
+                T saved = 0.0;
+                for (int r = 0; r < j; r++)
+                {
+                    T temp = scratch[r] / (right[r + 1] + left[j - r]);
+                    scratch[r] = saved + right[r + 1] * temp;
+                    saved = left[j - r] * temp;
+                }
+                scratch[j] = saved;
+            }
+
+            // copy scratch to N
+            for (int j = 0; j < p(cur_dim) + 1; j++)
+                N(row, span - p(cur_dim) + j) = scratch[j];
+        }
+
         // computes one row of basis function values for a given parameter value
         // writes results in a row of N
         // algorithm 2.2 of P&T, p. 70

@@ -44,7 +44,6 @@ namespace mfa
         // inserts a set of knots (in all dimensions) into the original knot set
         // also increases the numbers of control points (in all dimensions) that will result
         void InsertKnots(
-                TensorProduct<T>&           tensor,                 // curent tensor product
                 vector<vector<T>>&          new_knots,              // new knots
                 vector<vector<int>>&        new_levels,             // new knot levels
                 vector<vector<KnotIdx>>&    inserted_knot_idxs)     // indices in each dim. of inserted knots in full knot vector after insertion
@@ -103,21 +102,7 @@ namespace mfa
                     auto idx = inserted_knot_idxs[k][i];
                     mfa.tmesh.insert_knot(k, idx, temp_levels[k][idx], temp_knots[k][idx]);
                 }
-
-
-                //                 TODO: DEPRECATE, inserting new tensor should handle this
-//                 mfa.tmesh.all_knots[k]          = temp_knots[k];
-//                 mfa.tmesh.all_knot_levels[k]    = temp_levels[k];
-//                 // increase knot_maxs
-//                 ninserted           = mfa.tmesh.all_knots[k].size() - ninserted;
-//                 tensor.knot_maxs[k] += ninserted;
-// 
-//                 // increase number of control points
-//                 tensor.nctrl_pts(k) = mfa.tmesh.all_knots[k].size() - mfa.p(k) - 1;
             }   // for all domain dimensions
-
-            //             TODO: DEPRECATE; inserting new tensor should handle this
-//             tensor.weights =  VectorX<T>::Ones(tensor.nctrl_pts.prod());
         }
 
         // computes error in knot spans and returns first new knot (in all dimensions at once) that should be inserted
@@ -130,10 +115,10 @@ namespace mfa
         // TBB? (currently serial)
         bool FirstErrorSpan(
                 MatrixX<T>&                 domain,                 // input points
-                TensorProduct<T>&           tensor,                 // current tensor product
                 VectorX<T>                  extents,                // extents in each dimension, for normalizing error (size 0 means do not normalize)
                 T                           err_limit,              // max. allowed error
                 int                         iter,                   // iteration number
+                const VectorXi&             nctrl_pts,              // number of control points
                 vector<vector<KnotIdx>>&    inserted_knot_idxs)     // indices in each dim. of inserted knots in full knot vector after insertion
         {
             Decoder<T>          decoder(mfa, 1);
@@ -154,7 +139,7 @@ namespace mfa
                 for (auto k = 0; k < mfa.dom_dim; k++)
                     param(k) = mfa.params[k][ijk(k)];
                 VectorX<T> cpt(domain.cols());                      // approximated point
-                decoder.VolPt(param, cpt, decode_info, tensor);
+                decoder.VolPt_tmesh(param, cpt);
                 int last = domain.cols() - 1;                       // range coordinate
 
                 // error
@@ -169,7 +154,7 @@ namespace mfa
                 {
                     for (auto k = 0; k < mfa.dom_dim; k++)
                     {
-                        span[k] = mfa.FindSpan(k, param(k), tensor);
+                        span[k] = mfa.FindSpan(k, param(k), nctrl_pts(k));
 
                         // span should never be the last knot because of the repeated knots at end
                         assert(span[k] < mfa.tmesh.all_knots[k].size() - 1);
@@ -179,7 +164,7 @@ namespace mfa
                         new_knots[k].push_back(new_knot_val);
                         new_levels[k].push_back(iter + 1);  // adapt at the next level, for now every iteration is a new level
                     }
-                    InsertKnots(tensor, new_knots, new_levels, inserted_knot_idxs);
+                    InsertKnots(new_knots, new_levels, inserted_knot_idxs);
                     return false;
                 }
             }
