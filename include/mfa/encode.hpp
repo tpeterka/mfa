@@ -156,20 +156,20 @@ namespace mfa
                 //  -                          -
                 // TODO: N is going to be very sparse when it is large: switch to sparse representation
                 // N has semibandwidth < p  nonzero entries across diagonal
-                MatrixX<T> N = MatrixX<T>::Zero(m(k) + 1, n(k) + 1); // coefficients matrix
+//                 MatrixX<T> N = MatrixX<T>::Zero(m(k) + 1, n(k) + 1); // coefficients matrix
 
-                for (int i = 0; i < N.rows(); i++)              // the rows of N
+                for (int i = 0; i < mfa.N[k].rows(); i++)
                 {
                     int span = mfa.FindSpan(k, mfa.params[k][i], nctrl_pts(k));
-                    mfa.BasisFuns(k, mfa.params[k][i], span, N, i);
+                    mfa.BasisFuns(k, mfa.params[k][i], span, mfa.N[k], i);
                 }
 
                 // TODO: NtN is going to be very sparse when it is large: switch to sparse representation
                 // NtN has semibandwidth < p + 1 nonzero entries across diagonal
-                MatrixX<T> NtN  = N.transpose() * N;
+                MatrixX<T> NtN  = mfa.N[k].transpose() * mfa.N[k];
 
                 // debug
-                //                 cerr << "N:\n" << N << endl;
+                //                 cerr << "N[k]:\n" << mfa.N[k] << endl;
                 //                 cerr << "NtN:\n" << NtN << endl;
 
 #ifndef MFA_NO_TBB                                  // TBB version
@@ -180,26 +180,26 @@ namespace mfa
                         // fprintf(stderr, "j=%ld curve\n", j);
 
                         // R is the right hand side needed for solving NtN * P = R
-                        MatrixX<T> R(N.cols(), pt_dim);
+                        MatrixX<T> R(mfa.N[k].cols(), pt_dim);
 
                         // P are the unknown control points and the solution to NtN * P = R
                         // NtN is positive definite -> do not need pivoting
                         // TODO: use a common representation for P and ctrl_pts to avoid copying
-                        MatrixX<T> P(N.cols(), pt_dim);
+                        MatrixX<T> P(mfa.N[k].cols(), pt_dim);
 
                         // compute the one curve of control points
-                        CtrlCurve(N, NtN, R, P, k, co[j], cs, to[j], temp_ctrl0, temp_ctrl1, -1, ctrl_pts, weights, weighted);
+                        CtrlCurve(mfa.N[k], NtN, R, P, k, co[j], cs, to[j], temp_ctrl0, temp_ctrl1, -1, ctrl_pts, weights, weighted);
                         });                                                  // curves in this dimension
 
 #else                                       // serial vesion
 
                 // R is the right hand side needed for solving NtN * P = R
-                MatrixX<T> R(N.cols(), pt_dim);
+                MatrixX<T> R(mfa.N[k].cols(), pt_dim);
 
                 // P are the unknown control points and the solution to NtN * P = R
                 // NtN is positive definite -> do not need pivoting
                 // TODO: use a common representation for P and ctrl_pts to avoid copying
-                MatrixX<T> P(N.cols(), pt_dim);
+                MatrixX<T> P(mfa.N[k].cols(), pt_dim);
 
                 // encode curves in this dimension
                 for (size_t j = 0; j < ncurves; j++)
@@ -213,7 +213,7 @@ namespace mfa
                     }
 
                     // compute the one curve of control points
-                    CtrlCurve(N, NtN, R, P, k, co[j], cs, to[j], temp_ctrl0, temp_ctrl1, j, ctrl_pts, weights, weighted);
+                    CtrlCurve(mfa.N[k], NtN, R, P, k, co[j], cs, to[j], temp_ctrl0, temp_ctrl1, j, ctrl_pts, weights, weighted);
                 }
 
 #endif
@@ -221,7 +221,8 @@ namespace mfa
                 ntemp_ctrl(k) = nctrl_pts(k);
                 cs *= ntemp_ctrl(k);
 
-                NtN.resize(0, 0);                           // free NtN
+                // should not need to free Ntn; freed when going out of scope
+//                 NtN.resize(0, 0);                           // free NtN
 
                 // print progress
                 if (verbose)

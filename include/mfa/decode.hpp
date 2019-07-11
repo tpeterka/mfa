@@ -14,15 +14,7 @@
 
 #include    <Eigen/Dense>
 
-// DEPRECATE
-// // attempt at using boost tensor class
-// #include    <boost/numeric/ublas/tensor.hpp>
-// #include    <boost/numeric/ublas/matrix.hpp>
-// #include    <boost/numeric/ublas/vector.hpp>
-// namespace ublas = boost::numeric::ublas;
-
 typedef Eigen::MatrixXi MatrixXi;
-
 
 namespace mfa
 {
@@ -39,13 +31,9 @@ namespace mfa
         VectorX<T>          temp_denom;                     // temporary rational NURBS denominator in each dim
         vector<MatrixX<T>>  ders;                           // derivatives in each dim.
 
-        // DEPRECATE
-//         MatrixX<T>          NN;                             // TODO: for testing all basis functions, remove eventually
-
         DecodeInfo(const MFA_Data<T>&   mfa,                // current mfa
                    const VectorXi&      derivs)             // derivative to take in each domain dim. (0 = value, 1 = 1st deriv, 2 = 2nd deriv, ...)
                                                             // pass size-0 vector if unused
-
         {
             N.resize(mfa.p.size());
             temp.resize(mfa.p.size());
@@ -56,33 +44,25 @@ namespace mfa
             temp_denom = VectorX<T>::Zero(mfa.p.size());
             ders.resize(mfa.p.size());
 
-            for (size_t i = 0; i < mfa.p.size(); i++)       // for all dims
+            for (size_t i = 0; i < mfa.dom_dim; i++)
             {
                 temp[i]    = VectorX<T>::Zero(mfa.tmesh.tensor_prods[0].ctrl_pts.cols());
                 // TODO: hard-coded for one tensor product
                 N[i]       = MatrixX<T>::Zero(1, mfa.tmesh.tensor_prods[0].nctrl_pts(i));
                 if (derivs.size() && derivs(i))
-                {
                     // TODO: hard-coded for one tensor product
                     ders[i] = MatrixX<T>::Zero(derivs(i) + 1, mfa.tmesh.tensor_prods[0].nctrl_pts(i));
-                }
             }
-
-            // DEPRECATE
-            // TODO: for testing all basis functions; remove eventually
-            // TODO: hard-coded fro one tensor product
-//             size_t ctrl_pt_box_size = 1;
-//             for (auto i = 0; i < mfa.dom_dim; i++)       // for all dims
-//                 ctrl_pt_box_size *= mfa.tmesh.tensor_prods[0].nctrl_pts(i);
-//             NN = MatrixX<T>::Ones(1, ctrl_pt_box_size);
         }
 
+        // reset decode info
+        // version for recomputing basis functions
         void Reset(const MFA_Data<T>&   mfa,                // current mfa
                    const VectorXi&      derivs)             // derivative to take in each domain dim. (0 = value, 1 = 1st deriv, 2 = 2nd deriv, ...)
                                                             // pass size-0 vector if unused
         {
             temp_denom.setZero();
-            for (auto i = 0; i < mfa.p.size(); i++)
+            for (auto i = 0; i < mfa.dom_dim; i++)
             {
                 temp[i].setZero();
                 iter[i] = 0;
@@ -90,11 +70,18 @@ namespace mfa
                 if (derivs.size() && derivs(i))
                     ders[i].setZero();
             }
+        }
 
-            // DEPRECATE
-            // TODO: for testing all basis functions, remove eventually
-//             for (auto i = 0; i < NN.cols(); i++)
-//                 NN(0, i) = 1;
+        // reset decode info
+        // version for saved basis functions
+        void Reset_saved_basis(const MFA_Data<T>&   mfa)    // current mfa
+        {
+            temp_denom.setZero();
+            for (auto i = 0; i < mfa.dom_dim; i++)
+            {
+                temp[i].setZero();
+                iter[i] = 0;
+            }
         }
     };
 
@@ -183,8 +170,8 @@ namespace mfa
                 VectorXi&   derivs)                 // derivative to take in each domain dim. (0 = value, 1 = 1st deriv, 2 = 2nd deriv, ...)
                                                     // pass size-0 vector if unused
         {
-            vector<size_t> iter(mfa.p.size(), 0);   // parameter index (iteration count) in current dim.
-            int last = mfa.tmesh.tensor_prods[0].ctrl_pts.cols() - 1;     // last coordinate of control point
+            VectorXi iter = VectorXi::Zero(mfa.dom_dim);                    // parameter index (iteration count, ie, ijk) in current dim.
+            int last = mfa.tmesh.tensor_prods[0].ctrl_pts.cols() - 1;       // last coordinate of control point
 
 #ifndef MFA_NO_TBB                                  // TBB version, faster (~3X) than serial
 
@@ -195,18 +182,29 @@ namespace mfa
             parallel_for (size_t(0), (size_t)domain.rows(), [&] (size_t i)
             {
                 // convert linear idx to multidim. i,j,k... indices in each domain dimension
-                VectorXi ijk(mfa.p.size());
+                VectorXi ijk(mfa.dom_dim);
                 mfa.idx2ijk(i, ijk);
 
                 // compute parameters for the vertices of the cell
-                VectorX<T> param(mfa.p.size());
-                for (int i = 0; i < mfa.p.size(); i++)
-                    param(i) = mfa.params[i][ijk(i)];
+                VectorX<T> param(mfa.dom_dim);
+                for (int j = 0; j < mfa.dom_dim; j++)
+                    param(j) = mfa.params[j][ijk(j)];
 
                 // compute approximated point for this parameter vector
                 VectorX<T> cpt(last + 1);               // evaluated point
+
                 // TODO: hard-coded for first tensor of tmesh
-                VolPt(param, cpt, thread_decode_info.local(), mfa.tmesh.tensor_prods[0], derivs);  // faster improved VolPt
+
+                // using old VolPt
+//                 VolPt(param, cpt, thread_decode_info.local(), mfa.tmesh.tensor_prods[0], derivs);  // faster improved VolPt
+//                 if (i == 0)
+//                     fprintf(stderr, "Using old VolPt\n");
+
+                // using new VolPt
+                if (i == 0)
+                    fprintf(stderr, "Using new VolPt\n");
+                VolPt_saved_basis(ijk, param, cpt, thread_decode_info.local(), mfa.tmesh.tensor_prods[0]);
+
                 approx.block(i, min_dim, 1, max_dim - min_dim + 1) = cpt.transpose();
             });
             if (verbose)
@@ -222,33 +220,32 @@ namespace mfa
             for (size_t i = 0; i < domain.rows(); i++)
             {
                 // extract parameter vector for one input point from the linearized vector of all params
-                for (size_t j = 0; j < mfa.p.size(); j++)
-                    param(j) = mfa.params[j][iter[j]];
+                for (size_t j = 0; j < mfa.dom_dim; j++)
+                    param(j) = mfa.params[j][iter(j)];
 
                 // compute approximated point for this parameter vector
                 // TODO: hard-coded for first tensor of tmesh
 
                 // using old VolPt
-                VolPt(param, cpt, decode_info, mfa.tmesh.tensor_prods[0], derivs);     // faster improved VolPt
-                if (i == 0)
-                    fprintf(stderr, "Using old VolPt\n");
-
-                // DEPRECATE
-                // using new VolPt
+//                 VolPt(param, cpt, decode_info, mfa.tmesh.tensor_prods[0], derivs);
 //                 if (i == 0)
-//                     fprintf(stderr, "Using new VolPt\n");
-//                 VolPt_all_basis(param, cpt, decode_info, mfa.tmesh.tensor_prods[0], derivs);     // tensor contraction version of VolPt
+//                     fprintf(stderr, "Using old VolPt\n");
+
+                // using new VolPt
+                if (i == 0)
+                    fprintf(stderr, "Using new VolPt\n");
+                VolPt_saved_basis(iter, param, cpt, decode_info, mfa.tmesh.tensor_prods[0]);
 
                 // update the indices in the linearized vector of all params for next input point
-                for (size_t j = 0; j < mfa.p.size(); j++)
+                for (size_t j = 0; j < mfa.dom_dim; j++)
                 {
-                    if (iter[j] < mfa.ndom_pts(j) - 1)
+                    if (iter(j) < mfa.ndom_pts(j) - 1)
                     {
-                        iter[j]++;
+                        iter(j)++;
                         break;
                     }
                     else
-                        iter[j] = 0;
+                        iter(j) = 0;
                 }
 
                 approx.block(i, min_dim, 1, max_dim - min_dim + 1) = cpt.transpose();
@@ -474,66 +471,78 @@ namespace mfa
 
         }
 
-        // DEPRECATE
-//         // compute a point from a NURBS n-d volume at a given parameter value
-//         // computes all basis functions instead of nonzero ones
-//         void VolPt_all_basis(
-//                 VectorX<T>&         param,      // parameter value in each dim. of desired point
-//                 VectorX<T>&         out_pt,     // (output) point, allocated by caller
-//                 DecodeInfo<T>&      di,         // reusable decode info allocated by caller (more efficient when calling VolPt multiple times)
-//                 TensorProduct<T>&   tensor,     // tensor product to use for decoding
-//                 VectorXi&           derivs)     // derivative to take in each domain dim. (0 = value, 1 = 1st deriv, 2 = 2nd deriv, ...)
-//                                                 // pass size-0 vector if unused
-//         {
-//             int last = tensor.ctrl_pts.cols() - 1;
-//             if (derivs.size())                  // extra check for derivatives, won't slow down normal point evaluation
-//             {
-//                 if (derivs.size() != mfa.dom_dim)
-//                 {
-//                     fprintf(stderr, "Error: size of derivatives vector is not the same as the number of domain dimensions\n");
-//                     exit(0);
-//                 }
-//                 for (auto i = 0; i < mfa.dom_dim; i++)
-//                     if (derivs(i) > mfa.p(i))
-//                         fprintf(stderr, "Warning: In dimension %d, trying to take derivative %d of an MFA with degree %d will result in 0. This may not be what you want",
-//                                 i, derivs(i), mfa.p(i));
-//             }
-// 
-//             di.Reset(mfa, derivs);
-// 
-//             size_t repeat = 1;                                          // number of times to repeat the same multiplication
-//             for (auto i = 0; i < mfa.dom_dim; i++)                      // for all dims
-//             {
-//                 di.span[i]    = mfa.FindSpan(i, param(i), tensor);
-// 
-//                 if (derivs.size() && derivs(i))
-//                 {
-//                     // TODO: uncomment after DerBasisFuns are converted to tmesh
-// //                     mfa.DerBasisFuns(i, param(i), di.span[i], derivs(i), di.ders[i]);
-// //                     di.N[i].row(0) = di.ders[i].row(derivs(i));
-//                 }
-//                 else
-//                 {
-//                   mfa.BasisFuns(tensor, i, param(i), di.span[i], di.N[i], 0);
-// 
-//                     for (auto j = 0; j < di.NN.cols(); j++)
-//                     {
-//                         // multiply in basis functions
-//                         size_t N_idx = j / repeat % di.N[i].cols();
-//                         di.NN(0, j) *= di.N[i](N_idx);
-//                     }
-//                     repeat *= tensor.nctrl_pts(i);
-//                 }
-//             }                                                           // for all dims
-// 
-//             // multiply basis functions by control points
-//             out_pt.transpose() = di.NN * tensor.ctrl_pts;
-// 
-//             // TODO: multiply by weights and divide by denom
-//         }
+        // compute a point from a NURBS n-d volume at a given parameter value
+        // fastest version for multiple points, reuses saved basis functions
+        // only values, no derivatives, because basis functions were not saved for derivatives
+        // algorithm 4.3, Piegl & Tiller (P&T) p.134
+        void VolPt_saved_basis(
+                VectorXi&           ijk,        // ijk index of input domain point being decoded
+                VectorX<T>&         param,      // parameter value in each dim. of desired point
+                VectorX<T>&         out_pt,     // (output) point, allocated by caller
+                DecodeInfo<T>&      di,         // reusable decode info allocated by caller (more efficient when calling VolPt multiple times)
+                TensorProduct<T>&   tensor)     // tensor product to use for decoding
+        {
+            int last = tensor.ctrl_pts.cols() - 1;
+
+            di.Reset_saved_basis(mfa);
+
+            // linear index of first control point
+            di.ctrl_idx = 0;
+            for (int j = 0; j < mfa.dom_dim; j++)
+            {
+                di.span[j]    = mfa.FindSpan(j, param(j), tensor);
+                di.ctrl_idx += (di.span[j] - mfa.p(j) + ct(0, j)) * cs[j];
+            }
+            size_t start_ctrl_idx = di.ctrl_idx;
+
+            for (int i = 0; i < tot_iters; i++)             // 1-d flattening all n-d nested loop computations
+            {
+                // always compute the point in the first dimension
+                di.ctrl_pt  = tensor.ctrl_pts.row(di.ctrl_idx);
+                T w         = tensor.weights(di.ctrl_idx);
+
+#ifdef WEIGH_ALL_DIMS                               // weigh all dimensions
+                di.temp[0] += (mfa.N[0])(ijk(0), di.iter[0] + di.span[0] - mfa.p(0)) * di.ctrl_pt * w;
+#else                                               // weigh only range dimension
+                for (auto j = 0; j < last; j++)
+                    (di.temp[0])(j) += (mfa.N[0])(ijk(0), di.iter[0] + di.span[0] - mfa.p(0)) * di.ctrl_pt(j);
+                (di.temp[0])(last) += (mfa.N[0])(ijk(0), di.iter[0] + di.span[0] - mfa.p(0)) * di.ctrl_pt(last) * w;
+#endif
+
+                di.temp_denom(0) += w * mfa.N[0](ijk(0), di.iter[0] + di.span[0] - mfa.p(0));
+                di.iter[0]++;
+
+                // for all dimensions except last, check if span is finished
+                di.ctrl_idx = start_ctrl_idx;
+                for (size_t k = 0; k < mfa.dom_dim; k++)
+                {
+                    if (i < tot_iters - 1)
+                        di.ctrl_idx += ct(i + 1, k) * cs[k];        // ctrl_idx for the next iteration (i+1)
+                    if (k < mfa.dom_dim - 1 && di.iter[k] - 1 == mfa.p(k))
+                    {
+                        // compute point in next higher dimension and reset computation for current dim
+                        di.temp[k + 1]        += (mfa.N[k + 1])(ijk(k + 1), di.iter[k + 1] + di.span[k + 1] - mfa.p(k + 1)) * di.temp[k];
+                        di.temp_denom(k + 1)  += di.temp_denom(k) * mfa.N[k + 1](ijk(k + 1), di.iter[k + 1] + di.span[k + 1] - mfa.p(k + 1));
+                        di.temp_denom(k)       = 0.0;
+                        di.temp[k].setZero();
+                        di.iter[k]             = 0;
+                        di.iter[k + 1]++;
+                    }
+                }
+            }
+
+            T denom = di.temp_denom(mfa.dom_dim - 1);   // rational denominator
+
+#ifdef WEIGH_ALL_DIMS                                   // weigh all dimensions
+            out_pt = di.temp[mfa.dom_dim - 1] / denom;
+#else                                                   // weigh only range dimension
+            out_pt   = di.temp[mfa.dom_dim - 1];
+            out_pt(last) /= denom;
+#endif
+        }
 
         // compute a point from a NURBS n-d volume at a given parameter value
-        // faster version for multiple points, reuses decode info
+        // faster version for multiple points, reuses decode info, but recomputes basis functions
         // algorithm 4.3, Piegl & Tiller (P&T) p.134
         void VolPt(
                 VectorX<T>&         param,      // parameter value in each dim. of desired point
@@ -570,7 +579,6 @@ namespace mfa
 //                     mfa.DerBasisFuns(i, param(i), di.span[i], derivs(i), di.ders[i]);
 //                     di.N[i].row(0) = di.ders[i].row(derivs(i));
                 }
-
                 else
                     mfa.BasisFuns(tensor, i, param(i), di.span[i], di.N[i], 0);
             }
@@ -629,10 +637,6 @@ namespace mfa
             out_pt   = di.temp[mfa.dom_dim - 1];
             out_pt(last) /= denom;
 #endif
-
-            // debug
-//             if (out_pt.size() == 1)                 // debugging the science variable
-//                 cerr << "out_pt: " << out_pt.transpose() << endl;
         }
 
         // compute a point from a NURBS curve at a given parameter value

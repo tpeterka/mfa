@@ -107,6 +107,8 @@ namespace mfa
        VectorXi                  ndom_pts;      // number of input data points in each domain dim
 
        vector<vector<T>>         params;        // parameters for input points[dimension][index]
+       vector<MatrixX<T>>        N;             // vector of basis functions for each dimension
+                                                // for all input points (matrix rows) and control points (matrix cols)
 
        Tmesh<T>                  tmesh;         // t-mesh of knots, control points, weights
        T                         range_extent;  // extent of range value of input data points
@@ -153,6 +155,11 @@ namespace mfa
                 for (auto i = 0; i < dom_dim; i++)
                     nctrl_pts_(i) = p(i) + 1;
             }
+
+            // allocate basis functions
+            N.resize(dom_dim);
+            for (auto i = 0; i < dom_dim; i++)
+                N[i] = MatrixX<T>::Zero(ndom_pts(i), nctrl_pts_(i));
 
             // initialize tmesh knots
             tmesh.init_knots(nctrl_pts_);
