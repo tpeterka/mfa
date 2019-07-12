@@ -363,6 +363,8 @@ namespace mfa
             return mid;
         }
 
+#if 1           // normal versioin
+
         // computes one row of basis function values for a given parameter value
         // writes results in a row of N
         // algorithm 2.2 of P&T, p. 70
@@ -371,7 +373,7 @@ namespace mfa
         void BasisFuns(
                 int                     cur_dim,    // current dimension
                 T                       u,          // parameter value
-                int                     span,       // index of span in the knots vector containing u, relative to ko
+                int                     span,       // index of span in the knots vector containing u
                 MatrixX<T>&             N,          // matrix of (output) basis function values
                 int                     row)        // row in N of result
         {
@@ -406,6 +408,88 @@ namespace mfa
             // copy scratch to N
             for (int j = 0; j < p(cur_dim) + 1; j++)
                 N(row, span - p(cur_dim) + j) = scratch[j];
+
+            // debug
+//             cerr << N << endl;
+        }
+
+# else      // testing calling OneBasisFun
+
+        // computes one row of basis function values for a given parameter value
+        // writes results in a row of N
+        // algorithm 2.2 of P&T, p. 70
+        //
+        // assumes N has been allocated by caller
+        void BasisFuns(
+                int                     cur_dim,    // current dimension
+                T                       u,          // parameter value
+                int                     span,       // index of span in the knots vector containing u
+                MatrixX<T>&             N,          // matrix of (output) basis function values
+                int                     row)        // row in N of result
+        {
+            for (int j = 0; j < p(cur_dim) + 1; j++)
+                N(row, span - p(cur_dim) + j) = OneBasisFun(cur_dim, u, span - p(cur_dim) + j);
+
+            // debug
+//             cerr << N << endl;
+        }
+
+#endif
+
+        // computes and returns one basis function value for a given parameter value
+        // algorithm 2.4 of P&T, p. 74
+        //
+        T OneBasisFun(
+                int                     cur_dim,        // current dimension
+                T                       u,              // parameter value
+                int                     i)              // compute the ith basis function, 0 <= i <= p(cur_dim)
+        {
+            vector<T> N(p(cur_dim) + 1);                // triangular table result
+            vector<T>& U = tmesh.all_knots[cur_dim];    // alias for knot vector for current dimension
+
+            // 1 at edges of global knot vector
+            if ( (i == 0 && u == U[0]) || ( i == U.size() - p(cur_dim) - 2 && u == U.back()) )
+                return 1.0;
+
+            // zero outside of local knot vector
+            if (u < U[i] || u >= U[i + p(cur_dim) + 1])
+                return 0.0;
+
+            // initialize 0-th degree functions
+            for (auto j = 0; j <= p(cur_dim); j++)
+            {
+                if (u >= U[i + j] && u < U[i + j + 1])
+                    N[j] = 1.0;
+                else
+                    N[j] = 0.0;
+            }
+
+            // compute triangular table
+            T saved, uleft, uright, temp;
+            for (auto k = 1; k <= p(cur_dim); k++)
+            {
+                if (N[0] == 0.0)
+                    saved = 0.0;
+                else
+                    saved = ((u - U[i]) * N[0]) / (U[i + k] - U[i]);
+                for (auto j = 0; j < p(cur_dim) - k + 1; j++)
+                {
+                    uleft     = U[i + j + 1];
+                    uright    = U[i + j + k + 1];
+                    if (N[j + 1] == 0.0)
+                    {
+                        N[j]    = saved;
+                        saved   = 0.0;
+                    }
+                    else
+                    {
+                        temp    = N[j + 1] / (uright - uleft);
+                        N[j]    = saved + (uright - u) * temp;
+                        saved   = (u - uleft) * temp;
+                    }
+                }
+            }
+            return N[0];
         }
 
         // computes one row of basis function values for a given parameter value
