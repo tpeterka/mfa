@@ -363,14 +363,12 @@ namespace mfa
             return mid;
         }
 
-#if 1           // normal versioin
-
+        // original version of basis functions from algorithm 2.2 of P&T, p. 70
         // computes one row of basis function values for a given parameter value
         // writes results in a row of N
-        // algorithm 2.2 of P&T, p. 70
         //
         // assumes N has been allocated by caller
-        void BasisFuns(
+        void OrigBasisFuns(
                 int                     cur_dim,    // current dimension
                 T                       u,          // parameter value
                 int                     span,       // index of span in the knots vector containing u
@@ -413,8 +411,7 @@ namespace mfa
 //             cerr << N << endl;
         }
 
-# else      // testing calling OneBasisFun
-
+        // tmesh version of basis functions that computes one basis function at a time for each local knot vector
         // computes one row of basis function values for a given parameter value
         // writes results in a row of N
         // algorithm 2.2 of P&T, p. 70
@@ -427,16 +424,37 @@ namespace mfa
                 MatrixX<T>&             N,          // matrix of (output) basis function values
                 int                     row)        // row in N of result
         {
-            for (int j = 0; j < p(cur_dim) + 1; j++)
-                N(row, span - p(cur_dim) + j) = OneBasisFun(cur_dim, u, span - p(cur_dim) + j);
+            // DEPRECATED
+            // test OneBasisFun based on global knot vector
+//             for (auto j = 0; j < p(cur_dim) + 1; j++)
+//             {
+//                 N(row, span - p(cur_dim) + j) = OneBasisFun(cur_dim, u, span - p(cur_dim) + j);
+// 
+//                 // debug
+// //                 fprintf(stderr, "span = %d ith basis fun = %d row = %d\n", span, span - p(cur_dim) + j, row);
+//             }
+
+            vector<T> loc_knots(p(cur_dim) + 2);
+
+            for (auto j = 0; j < p(cur_dim) + 1; j++)
+            {
+                for (auto i = 0; i < p(cur_dim) + 2; i++)
+                    loc_knots[i] = tmesh.all_knots[cur_dim][span - p(cur_dim) + j + i];
+
+//                 // debug
+//                 fprintf(stderr, "span = %d ith basis fun = %d row = %d loc_knots: ", span, span - p(cur_dim) + j, row);
+//                 for (auto i = 0; i < loc_knots.size(); i++)
+//                     fprintf(stderr, "%.3lf ", loc_knots[i]);
+//                 fprintf(stderr, "\n");
+
+                N(row, span - p(cur_dim) + j) = OneBasisFun(cur_dim, u, loc_knots);
+            }
 
             // debug
-//             cerr << N << endl;
+//             cerr << N << "\n---" << endl;
         }
 
-#endif
-
-        // computes and returns one basis function value for a given parameter value
+        // computes and returns one (the ith) basis function value for a given parameter value
         // algorithm 2.4 of P&T, p. 74
         //
         T OneBasisFun(
@@ -476,6 +494,70 @@ namespace mfa
                 {
                     uleft     = U[i + j + 1];
                     uright    = U[i + j + k + 1];
+                    if (N[j + 1] == 0.0)
+                    {
+                        N[j]    = saved;
+                        saved   = 0.0;
+                    }
+                    else
+                    {
+                        temp    = N[j + 1] / (uright - uleft);
+                        N[j]    = saved + (uright - u) * temp;
+                        saved   = (u - uleft) * temp;
+                    }
+                }
+            }
+            return N[0];
+        }
+
+        // computes and returns one basis function value for a given parameter value and local knot vector
+        // based on algorithm 2.4 of P&T, p. 74
+        //
+        T OneBasisFun(
+                int                     cur_dim,        // current dimension
+                T                       u,              // parameter value
+                vector<T>               loc_knots)      // local knot vector
+        {
+            vector<T> N(p(cur_dim) + 1);                // triangular table result
+            vector<T>& U = loc_knots;                   // alias for knot vector for current dimension
+
+            // corner case: 1 at right edge of local knot vector
+            if (u == 1.0)
+            {
+                bool edge = true;
+                for (auto j = 0; j < p(cur_dim) + 1; j++)
+                {
+                    if (loc_knots[1 + j] != 1.0)
+                    {
+                        edge = false;
+                        break;
+                    }
+                }
+                if (edge)
+                    return 1.0;
+            }
+
+            // initialize 0-th degree functions
+            for (auto j = 0; j <= p(cur_dim); j++)
+            {
+                if (u >= U[j] && u < U[j + 1])
+                    N[j] = 1.0;
+                else
+                    N[j] = 0.0;
+            }
+
+            // compute triangular table
+            T saved, uleft, uright, temp;
+            for (auto k = 1; k <= p(cur_dim); k++)
+            {
+                if (N[0] == 0.0)
+                    saved = 0.0;
+                else
+                    saved = ((u - U[0]) * N[0]) / (U[k] - U[0]);
+                for (auto j = 0; j < p(cur_dim) - k + 1; j++)
+                {
+                    uleft     = U[j + 1];
+                    uright    = U[j + k + 1];
                     if (N[j + 1] == 0.0)
                     {
                         N[j]    = saved;
