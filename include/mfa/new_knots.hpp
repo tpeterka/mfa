@@ -119,6 +119,8 @@ namespace mfa
                 T                           err_limit,              // max. allowed error
                 int                         iter,                   // iteration number
                 const VectorXi&             nctrl_pts,              // number of control points
+                MatrixX<T>&                 ctrl_pts,               // control points
+                VectorX<T>&                 weights,                // control point weights
                 vector<vector<KnotIdx>>&    inserted_knot_idxs)     // indices in each dim. of inserted knots in full knot vector after insertion
         {
             Decoder<T>          decoder(mfa, 1);
@@ -139,7 +141,7 @@ namespace mfa
                 for (auto k = 0; k < mfa.dom_dim; k++)
                     param(k) = mfa.params[k][ijk(k)];
                 VectorX<T> cpt(domain.cols());                      // approximated point
-                decoder.VolPt_tmesh(param, cpt);
+                decoder.VolPt_tmesh(param, nctrl_pts, ctrl_pts, weights, cpt);
                 int last = domain.cols() - 1;                       // range coordinate
 
                 // error

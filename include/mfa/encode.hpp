@@ -156,7 +156,6 @@ namespace mfa
                 //  -                          -
                 // TODO: N is going to be very sparse when it is large: switch to sparse representation
                 // N has semibandwidth < p  nonzero entries across diagonal
-//                 MatrixX<T> N = MatrixX<T>::Zero(m(k) + 1, n(k) + 1); // coefficients matrix
 
                 for (int i = 0; i < mfa.N[k].rows(); i++)
                 {
@@ -990,7 +989,7 @@ namespace mfa
 
             // find new knots
             mfa::NewKnots<T> nk(mfa);
-            done &= nk.FirstErrorSpan(domain, extents, err_limit, iter, nctrl_pts, inserted_knot_idxs);
+            done &= nk.FirstErrorSpan(domain, extents, err_limit, iter, nctrl_pts, ctrl_pts, weights, inserted_knot_idxs);
 
             // append new tensors
             vector<KnotIdx> knot_mins(mfa.dom_dim);

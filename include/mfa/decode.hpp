@@ -198,12 +198,19 @@ namespace mfa
                 // using old VolPt
 //                 VolPt(param, cpt, thread_decode_info.local(), mfa.tmesh.tensor_prods[0], derivs);  // faster improved VolPt
 //                 if (i == 0)
-//                     fprintf(stderr, "Using old VolPt\n");
+//                     fprintf(stderr, "Using VolPt\n");
 
-                // using new VolPt
+                // using VolPt for saved basis
+//                 if (i == 0)
+//                     fprintf(stderr, "Using VolPt_saved_basis\n");
+//                 VolPt_saved_basis(ijk, param, cpt, thread_decode_info.local(), mfa.tmesh.tensor_prods[0]);
+
+                // using VolPt for tmesh
+                // hard-coded for first tensor product
                 if (i == 0)
-                    fprintf(stderr, "Using new VolPt\n");
-                VolPt_saved_basis(ijk, param, cpt, thread_decode_info.local(), mfa.tmesh.tensor_prods[0]);
+                    fprintf(stderr, "Using VolPt_tmesh\n");
+                VolPt_tmesh(param, mfa.tmesh.tensor_prods[0].nctrl_pts, mfa.tmesh.tensor_prods[0].ctrl_pts,
+                        mfa.tmesh.tensor_prods[0].weights, cpt);
 
                 approx.block(i, min_dim, 1, max_dim - min_dim + 1) = cpt.transpose();
             });
@@ -229,12 +236,19 @@ namespace mfa
                 // using old VolPt
 //                 VolPt(param, cpt, decode_info, mfa.tmesh.tensor_prods[0], derivs);
 //                 if (i == 0)
-//                     fprintf(stderr, "Using old VolPt\n");
+//                     fprintf(stderr, "Using VolPt\n");
 
-                // using new VolPt
+                // using VolPt for saved basis
+//                 if (i == 0)
+//                     fprintf(stderr, "Using VolPt_saved_basis\n");
+//                 VolPt_saved_basis(iter, param, cpt, decode_info, mfa.tmesh.tensor_prods[0]);
+
+                // using VolPt for tmesh
+                // hard-coded for first tensor product
                 if (i == 0)
-                    fprintf(stderr, "Using new VolPt\n");
-                VolPt_saved_basis(iter, param, cpt, decode_info, mfa.tmesh.tensor_prods[0]);
+                    fprintf(stderr, "Using VolPt_tmesh\n");
+                VolPt_tmesh(param, mfa.tmesh.tensor_prods[0].nctrl_pts, mfa.tmesh.tensor_prods[0].ctrl_pts,
+                        mfa.tmesh.tensor_prods[0].weights, cpt);
 
                 // update the indices in the linearized vector of all params for next input point
                 for (size_t j = 0; j < mfa.dom_dim; j++)
@@ -260,83 +274,113 @@ namespace mfa
 
         }
 
-        // decode a point in the t-mesh
-        // TODO: totally unoptimized, VolPt used decode_info, this version does not
+        // decode a point in the t-mesh for a given set of control points
+        // TODO: unoptimized; creates new DecodeInfo each time it is called
         void VolPt_tmesh(const VectorX<T>&      param,      // parameters of point to decode
+                         const VectorXi&        nctrl_pts,  // number of control points
+                         MatrixX<T>&            ctrl_pts,   // control points
+                         VectorX<T>&            weights,    // control point weights
                          VectorX<T>&            out_pt)     // (output) point, allocated by caller
         {
             // compute range of anchor points for a given point to decode
             vector<vector<size_t>> anchors(mfa.dom_dim);                        // anchors affecting the decoding point
             mfa.tmesh.anchors(param, anchors);
 
-            // print anchors
+            // debug: print global knots
+//             for (auto i = 0; i < mfa.dom_dim; i++)
+//             {
+//                 fprintf(stderr, "dim %d global knots = [", i);
+//                 for (auto j = 0; j < mfa.tmesh.all_knots[i].size(); j++)
+//                     fprintf(stderr, "%lf ", mfa.tmesh.all_knots[i][j]);
+//                 fprintf(stderr, "]\n");
+//             }
+
+            // debug: print decoding point
             fprintf(stderr, "for decoding point = [ ");
             for (auto i = 0; i < mfa.dom_dim; i++)
                 fprintf(stderr, "%.3lf ", param[i]);
             fprintf(stderr, "],\n");
 
+            // debug: print anchors
+//             for (auto i = 0; i < mfa.dom_dim; i++)
+//             {
+//                 fprintf(stderr, "dim %d anchors = [", i);
+//                 for (auto j = 0; j < anchors[i].size(); j++)
+//                     fprintf(stderr, "%ld ", anchors[i][j]);
+//                 fprintf(stderr, "]\n");
+//             }
+//             fprintf(stderr, "\n--------------------------\n\n");
+
+            // TODO: insert any missing knots and control points (port Youssef's knot insertion algorithm)
+
+            // compute basis functions in each dimension
+            vector<MatrixX<T>> N(mfa.dom_dim);                          // basis functions in each dimension
+            vector<vector<KnotIdx>> local_knot_idxs(mfa.dom_dim);       // local knot indices
+            vector<size_t> anchor(mfa.dom_dim);                         // one anchor from anchors
             for (auto i = 0; i < mfa.dom_dim; i++)
             {
-                fprintf(stderr, "dim %d local anchors = [", i);
-                for (auto j = 0; j < anchors[i].size(); j++)
-                    fprintf(stderr, "%ld ", anchors[i][j]);
-                fprintf(stderr, "]\n");
+                N[i] = MatrixX<T>::Zero(1, mfa.p(i) + 1);
+                local_knot_idxs[i].resize(mfa.p(i) + 2);                // local knot vector for current dim in index space
+                vector<T> local_knots(mfa.p(i) + 2);                    // local knot vector for current dim in parameter space
+                size_t local_ctrl_idx = 0;                              // index into local control points
+
+                for (auto k = 0; k < anchors[i].size(); k++)            // p + 1 anchors
+                {
+                    // anchor[j] = kth anchor in each dimension j; anchors start counting at 1
+                    for (auto j = 0; j < mfa.dom_dim; j++)
+                        anchor[j] = anchors[j][k];
+                    mfa.tmesh.local_knot_vector(anchor, local_knot_idxs);
+                    for (auto n = 0; n < local_knot_idxs[i].size(); n++)
+                        local_knots[n] = mfa.tmesh.all_knots[i][local_knot_idxs[i][n]];
+
+                    // writing basis function into column corresponding to anchor position makes it multiply correct control point
+                    // anchors start counting at 1, so subtract 1 when using them here
+                    N[i](0, anchors[i][k] - 1) = mfa.OneBasisFun(i, param(i), local_knots);
+
+                    // debug: print local knot vectors
+//                     fprintf(stderr, "for anchor = [ ");
+//                     for (auto i = 0; i < mfa.dom_dim; i++)
+//                         fprintf(stderr, "%ld ", anchor[i]);
+//                     fprintf(stderr, "],\n");
+//                     for (auto i = 0; i < mfa.dom_dim; i++)
+//                     {
+//                         fprintf(stderr, "dim %d local knot idxs = [", i);
+//                         for (auto j = 0; j < local_knot_idxs[i].size(); j++)
+//                             fprintf(stderr, "%ld ", local_knot_idxs[i][j]);
+//                         fprintf(stderr, "]\n");
+//                     }
+//                     for (auto i = 0; i < mfa.dom_dim; i++)
+//                     {
+//                         fprintf(stderr, "dim %d global knots = [", i);
+//                         for (auto j = 0; j < mfa.tmesh.all_knots[i].size(); j++)
+//                             fprintf(stderr, "%lf ", mfa.tmesh.all_knots[i][j]);
+//                         fprintf(stderr, "]\n");
+//                     }
+//                     for (auto i = 0; i < mfa.dom_dim; i++)
+//                     {
+//                         fprintf(stderr, "dim %d local knots = [", i);
+//                         for (auto j = 0; j < local_knots.size(); j++)
+//                             fprintf(stderr, "%lf ", local_knots[j]);
+//                         fprintf(stderr, "]\n");
+//                     }
+                }
             }
-            fprintf(stderr, "\n--------------------------\n\n");
 
-            // compute local knot vectors for each anchor in Cartesian product of anchors
-
-            int tot_nanchors = 1;                                               // total number of anchors in flattened space
+            // normalize sum of basis functions
             for (auto i = 0; i < mfa.dom_dim; i++)
-                tot_nanchors *= anchors[i].size();
-            vector<int> anchor_idx(mfa.dom_dim);                                    // current index of anchor in each dim, initialized to 0s
-
-            for (auto j = 0; j < tot_nanchors; j++)                                 // for all anchors
             {
-                vector<size_t> anchor(mfa.dom_dim);                                 // one anchor from anchors
-                for (auto i = 0; i < mfa.dom_dim; i++)
-                    anchor[i] = anchors[i][anchor_idx[i]];
-                anchor_idx[0]++;
+                N[i].row(0) /= N[i].row(0).sum();
+                // debug
+//                 cerr << "N[" << i << "]: " << N[i].row(0) << endl;
+            }
 
-                // for all dimensions except last, check if anchor_idx is at the end
-                for (auto k = 0; k < mfa.dom_dim - 1; k++)
-                {
-                    if (anchor_idx[k] == anchors[k].size())
-                    {
-                        anchor_idx[k] = 0;
-                        anchor_idx[k + 1]++;
-                    }
-                }
+            // decode the point
+            VectorXi unused;                        // not using derivatives
+            // TODO: hard-coded for first tensor product
+            VolPt(param, out_pt, mfa.tmesh.tensor_prods[0], unused, N, nctrl_pts, ctrl_pts, weights);
 
-                vector<vector<size_t>> loc_knot_vec(mfa.dom_dim);                   // local knot vector
-                mfa.tmesh.local_knot_vector(anchor, loc_knot_vec);
-
-                // print local knot vectors
-                fprintf(stderr, "for anchor = [ ");
-                for (auto i = 0; i < mfa.dom_dim; i++)
-                    fprintf(stderr, "%ld ", anchor[i]);
-                fprintf(stderr, "],\n");
-
-                for (auto i = 0; i < mfa.dom_dim; i++)
-                {
-                    fprintf(stderr, "dim %d local knot vector = [", i);
-                    for (auto j = 0; j < loc_knot_vec[i].size(); j++)
-                        fprintf(stderr, "%ld ", loc_knot_vec[i][j]);
-                    fprintf(stderr, "]\n");
-                }
-                fprintf(stderr, "\n--------------------------\n\n");
-
-                // TODO: insert any missing knots and control points (port Youssef's knot insertion algorithm)
-                // TODO: insert missing knots into tmesh so that knot lines will be intersected
-
-                // TODO: compute basis function in each dimension
-
-                // TODO: locate corresponding control point
-
-                // TODO: multiply basis function by control point and add to current sum
-            }                                                                       // for all anchors
-
-            // TODO: normalize sum of basis functions * control points
+            // debug
+            cerr << "out_pt: " << out_pt.transpose() << "\n" << endl;
         }
 
         // compute a point from a NURBS n-d volume at a given parameter value
@@ -425,6 +469,116 @@ namespace mfa
                 // always compute the point in the first dimension
                 ctrl_pt = tensor.ctrl_pts.row(ctrl_idx);
                 T w     = tensor.weights(ctrl_idx);
+
+#ifdef WEIGH_ALL_DIMS                               // weigh all dimensions
+                temp[0] += (N[0])(0, iter[0] + span[0] - mfa.p(0)) * ctrl_pt * w;
+#else                                               // weigh only range dimension
+                for (auto j = 0; j < last; j++)
+                    (temp[0])(j) += (N[0])(0, iter[0] + span[0] - mfa.p(0)) * ctrl_pt(j);
+                (temp[0])(last) += (N[0])(0, iter[0] + span[0] - mfa.p(0)) * ctrl_pt(last) * w;
+#endif
+
+                temp_denom(0) += w * N[0](0, iter[0] + span[0] - mfa.p(0));
+                iter[0]++;
+
+                // for all dimensions except last, check if span is finished
+                ctrl_idx = start_ctrl_idx;
+                for (size_t k = 0; k < mfa.p.size(); k++)
+                {
+                    if (i < tot_iters - 1)
+                        ctrl_idx += ct(i + 1, k) * cs[k];        // ctrl_idx for the next iteration (i+1)
+                    if (k < mfa.p.size() - 1 && iter[k] - 1 == mfa.p(k))
+                    {
+                        // compute point in next higher dimension and reset computation for current dim
+                        temp[k + 1]        += (N[k + 1])(0, iter[k + 1] + span[k + 1] - mfa.p(k + 1)) * temp[k];
+                        temp_denom(k + 1)  += temp_denom(k) * N[k + 1](0, iter[k + 1] + span[k + 1] - mfa.p(k + 1));
+                        temp_denom(k)       = 0.0;
+                        temp[k]             = VectorX<T>::Zero(last + 1);
+                        iter[k]             = 0;
+                        iter[k + 1]++;
+                    }
+                }
+            }
+
+            T denom;                                // rational denominator
+            if (derivs.size() && derivs.sum())
+                denom = 1.0;                        // TODO: weights for derivatives not implemented yet
+            else
+                denom = temp_denom(mfa.p.size() - 1);
+
+#ifdef WEIGH_ALL_DIMS                           // weigh all dimensions
+            out_pt = temp[mfa.p.size() - 1] / denom;
+#else                                           // weigh only range dimension
+            out_pt   = temp[mfa.p.size() - 1];
+            out_pt(last) /= denom;
+#endif
+
+        }
+
+        // compute a point from a NURBS n-d volume at a given parameter value
+        // slower version for single points
+        // custom basis and control points provided as arguments
+        // algorithm 4.3, Piegl & Tiller (P&T) p.134
+        void VolPt(
+                const VectorX<T>&   param,      // parameter value in each dim. of desired point
+                VectorX<T>&         out_pt,     // (output) point, allocated by caller
+                TensorProduct<T>&   tensor,     // tensor product to use for decoding
+                VectorXi&           derivs,     // derivative to take in each domain dim. (0 = value, 1 = 1st deriv, 2 = 2nd deriv, ...)
+                                                // pass size-0 vector if unused
+                vector<MatrixX<T>>& N,          // basis functions in each dimension
+                const VectorXi&     nctrl_pts,  // number of control points
+                MatrixX<T>&         ctrl_pts,   // control points
+                VectorX<T>&         weights)    // weights
+        {
+            int last = ctrl_pts.cols() - 1;     // last coordinate of control point
+            if (derivs.size())                  // extra check for derivatives, won't slow down normal point evaluation
+            {
+                if (derivs.size() != mfa.p.size())
+                {
+                    fprintf(stderr, "Error: size of derivatives vector is not the same as the number of domain dimensions\n");
+                    exit(0);
+                }
+                for (auto i = 0; i < mfa.p.size(); i++)
+                    if (derivs(i) > mfa.p(i))
+                        fprintf(stderr, "Warning: In dimension %d, trying to take derivative %d of an MFA with degree %d will result in 0. This may not be what you want",
+                                i, derivs(i), mfa.p(i));
+            }
+
+            // init
+            vector<VectorX<T>>  temp(mfa.p.size());           // temporary point in each dim.
+            vector<int>         span(mfa.p.size());           // span in each dim.
+            vector<int>         n(mfa.p.size());              // number of control point spans in each dim
+            vector<int>         iter(mfa.p.size());           // iteration number in each dim.
+            VectorX<T>          ctrl_pt(last + 1);            // one control point
+            int                 ctrl_idx;                     // control point linear ordering index
+            VectorX<T>          temp_denom = VectorX<T>::Zero(mfa.p.size());     // temporary rational NURBS denominator in each dim
+
+            // basis funs
+            for (size_t i = 0; i < mfa.p.size(); i++)       // for all dims
+            {
+                temp[i]    = VectorX<T>::Zero(last + 1);
+                iter[i]    = 0;
+                span[i]    = mfa.FindSpan(i, param(i), tensor);
+                if (derivs.size() && derivs(i))
+                {
+                    MatrixX<T> Ders = MatrixX<T>::Zero(derivs(i) + 1, nctrl_pts(i));
+                    // TODO: uncomment after DerBasisFuns converted to tmesh
+//                     mfa.DerBasisFuns(i, param(i), span[i], derivs(i), Ders);
+//                     N[i].row(0) = Ders.row(derivs(i));
+                }
+            }
+
+            // linear index of first control point
+            ctrl_idx = 0;
+            for (int j = 0; j < mfa.p.size(); j++)
+                ctrl_idx += (span[j] - mfa.p(j) + ct(0, j)) * cs[j];
+            size_t start_ctrl_idx = ctrl_idx;
+
+            for (int i = 0; i < tot_iters; i++)             // 1-d flattening all n-d nested loop computations
+            {
+                // always compute the point in the first dimension
+                ctrl_pt = ctrl_pts.row(ctrl_idx);
+                T w     = weights(ctrl_idx);
 
 #ifdef WEIGH_ALL_DIMS                               // weigh all dimensions
                 temp[0] += (N[0])(0, iter[0] + span[0] - mfa.p(0)) * ctrl_pt * w;

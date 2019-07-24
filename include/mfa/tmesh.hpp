@@ -914,7 +914,7 @@ namespace mfa
             }                                                               // for all dims.
         }
 
-        // check which is the correct previous or next neighbor tensor containing the target
+        // check which is the correct previous or next neighbor tensor containing the target in the current dimension
         // if more than one tensor sharing the target, pick highest level
         // updates cur_tensor and cur_level and neigh_hi_levels
         void neighbor_tensors(const vector<TensorIdx>&  prev_next,              // previous or next neighbor tensors
@@ -929,7 +929,7 @@ namespace mfa
             bool    first_time = true;
             for (auto k = 0; k < prev_next.size(); k++)
             {
-                if (in(target, tensor_prods[prev_next[k]], cur_dim))
+                if (in(target, tensor_prods[prev_next[k]]))
                 {
                     if (first_time)
                     {
@@ -973,7 +973,7 @@ namespace mfa
             }
         }
 
-        // given an anchor point in index space, compute local knot vector in index space
+        // given an anchor point in index space, compute local knot vector in all dimensions in index space
         void local_knot_vector(const vector<KnotIdx>&       anchor,             // knot indices of anchor for odd degree or
                                                                                 // knot indices of start of rectangle containing anchor for even degree
                                vector<vector<KnotIdx>>&     loc_knots)          // (output) local knot vector in index space
@@ -983,6 +983,7 @@ namespace mfa
         }
 
         // given a point in parameter space to decode, compute range of anchor points in index space
+        // anchors start counting at 1 instead of 0 (first control point is anchor 1) (ref: Bazilevs 2010)
         void anchors(const VectorX<T>&          param,              // parameter value in each dim. of desired point
                      vector<vector<KnotIdx>>&   anchors)            // (output) anchor points in index space
         {
@@ -990,18 +991,24 @@ namespace mfa
             vector<vector<KnotIdx>> anchor_cands(dom_dim_);         // anchor candidates (possibly more than necessary)
 
             // convert param to target in index space
-            vector<KnotIdx> target(dom_dim_);
+            vector<KnotIdx> target(dom_dim_);                       // center anchor in each dim.
+                                                                    // param(i) is in the knot span [target(i), target(i) + 1] (inclusively)
             for (auto i = 0; i < dom_dim_; i++)
             {
-                // start searching at the last repeating 0, which is at position p
-                auto it     = upper_bound(all_knots[i].begin() + p_(i), all_knots[i].end(), param(i));
-                // test starting at the beginning of all_knots (remove eventually)
-//                 auto it     = upper_bound(all_knots[i].begin(), all_knots[i].end(), param(i));
-                target[i]   = it - all_knots[i].begin() - 1;
+                if (param(i) == 0.0)
+                    target[i] = p_(i);
+                else
+                {
+                    // start searching at the last repeating 0, which is at position p
+                    auto it     = upper_bound(all_knots[i].begin() + p_(i), all_knots[i].end(), param(i));
+                    target[i]   = it - all_knots[i].begin() - 1;
+                    while (all_knots[i][target[i]] == param(i))
+                        target[i]--;
+                }
             }
 
             // debug
-            fprintf(stderr, "param=[%.2lf %.2lf] target=[%lu %lu]\n", param(0), param(1), target[0], target[1]);
+//             fprintf(stderr, "param=[%.2lf %.2lf] target=[%lu %lu]\n", param(0), param(1), target[0], target[1]);
 
             vector<NeighborTensor> neigh_hi_levels;                 // neighbor tensors of a higher level than tensor containing target
 
