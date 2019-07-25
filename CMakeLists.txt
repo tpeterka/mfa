@@ -6,11 +6,7 @@ option                      (tbb_thread     "Enable TBB threading"              
 option                      (s3d_infile     "Path/filename of s3d dataset (for unit testing)"         )
 
 # C++11
-
-# DEPRECATE; not using C++17 in production (only a test)
-# set                         (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++17")
-
-set                         (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++17")
+set                         (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
 
 # Default to Release
 if                          (NOT CMAKE_BUILD_TYPE)
