@@ -296,10 +296,10 @@ namespace mfa
 //             }
 
             // debug: print decoding point
-            fprintf(stderr, "for decoding point = [ ");
-            for (auto i = 0; i < mfa.dom_dim; i++)
-                fprintf(stderr, "%.3lf ", param[i]);
-            fprintf(stderr, "],\n");
+//             fprintf(stderr, "for decoding point = [ ");
+//             for (auto i = 0; i < mfa.dom_dim; i++)
+//                 fprintf(stderr, "%.3lf ", param[i]);
+//             fprintf(stderr, "],\n");
 
             // debug: print anchors
 //             for (auto i = 0; i < mfa.dom_dim; i++)
@@ -319,7 +319,7 @@ namespace mfa
             vector<size_t> anchor(mfa.dom_dim);                         // one anchor from anchors
             for (auto i = 0; i < mfa.dom_dim; i++)
             {
-                N[i] = MatrixX<T>::Zero(1, mfa.p(i) + 1);
+                N[i] = MatrixX<T>::Zero(1, nctrl_pts(i));
                 local_knot_idxs[i].resize(mfa.p(i) + 2);                // local knot vector for current dim in index space
                 vector<T> local_knots(mfa.p(i) + 2);                    // local knot vector for current dim in parameter space
                 size_t local_ctrl_idx = 0;                              // index into local control points
@@ -380,7 +380,7 @@ namespace mfa
             VolPt(param, out_pt, mfa.tmesh.tensor_prods[0], unused, N, nctrl_pts, ctrl_pts, weights);
 
             // debug
-            cerr << "out_pt: " << out_pt.transpose() << "\n" << endl;
+//             cerr << "out_pt: " << out_pt.transpose() << "\n" << endl;
         }
 
         // compute a point from a NURBS n-d volume at a given parameter value

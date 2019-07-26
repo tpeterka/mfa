@@ -42,7 +42,7 @@ namespace mfa
         vector<vector<int>>         all_knot_levels;    // refinement levels of all_knots[dimension][index]
         vector<TensorProduct<T>>    tensor_prods;       // all tensor products
         int                         dom_dim_;           // domain dimensionality
-        VectorXi&                   p_;                 // degree in each dimension
+        VectorXi                    p_;                 // degree in each dimension
         int                         min_dim_;           // starting coordinate of this model in full-dimensional data
         int                         max_dim_;           // ending coordinate of this model in full-dimensional data
 
