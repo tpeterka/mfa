@@ -848,7 +848,129 @@ namespace mfa
             return normal.dot(pt - dom_pt);
         }
 
-    private:
+        // knot insertion into tensor product
+        void KnotInsertion(const vector<T>&     u,              // new knot value to be inserted
+                TensorProduct<T>&    tensor)         // tensor product for insertion
+        {
+            // TODO: currently only for one curve in 0th dimension
+
+            vector<T>   new_knots;
+            vector<int> new_knot_levels;
+            MatrixX<T>  new_ctrl_pts;
+            VectorX<T>  new_weights;
+
+            T new_knot = u[0];
+
+            // debug
+            fprintf(stderr, "all_knots before insertion: ");
+            for (auto j = 0; j < tmesh.all_knots[0].size(); j++)
+                fprintf(stderr, "%.2lf (l%d) ", tmesh.all_knots[0][j], tmesh.all_knot_levels[0][j]);
+            fprintf(stderr, "\n");
+            cerr << "ctrl_pts before insertion:\n" << tensor.ctrl_pts << endl;
+            cerr << "weights before insertion:\n" << tensor.weights << endl;
+
+            CurveKnotIns(0, tmesh.all_knots[0], tmesh.all_knot_levels[0], tensor.ctrl_pts,
+                    tensor.weights, new_knot, tensor.level, new_knots, new_knot_levels, new_ctrl_pts, new_weights);
+
+            tmesh.all_knots[0]                  = new_knots;
+            tmesh.all_knot_levels[0]            = new_knot_levels;
+            tensor.ctrl_pts                     = new_ctrl_pts;
+            tensor.weights                      = new_weights;
+            tensor.knot_maxs[0]++;
+            tensor.nctrl_pts[0]++;
+
+            // debug
+            fprintf(stderr, "all_knots after insertion: ");
+            for (auto j = 0; j < tmesh.all_knots[0].size(); j++)
+                fprintf(stderr, "%.2lf (l%d) ", tmesh.all_knots[0][j], tmesh.all_knot_levels[0][j]);
+            fprintf(stderr, "\n");
+            cerr << "ctrl_pts after insertion:\n" << tmesh.tensor_prods[0].ctrl_pts << endl;
+            cerr << "weights after insertion:\n" << tmesh.tensor_prods[0].weights << endl;
+        }
+
+        private:
+
+        // curve knot insertion
+        // Algorithm 5.1 from P&T p. 551
+        // not for inserting a duplicate knot (does not handle knot multiplicity > 1)
+        // original algorithm from P&T did handle multiplicity, but I simplified
+        void CurveKnotIns(int           cur_dim,            // current dimension
+                vector<T>&    old_knots,          // old knot vector in cur. dim.
+                vector<int>&  old_knot_levels,    // old knot levels in cur. dim.
+                MatrixX<T>&   old_ctrl_pts,       // old control points of curve
+                VectorX<T>&   old_weights,        // old control point weights of curve
+                T             u,                  // new knot value to be inserted
+                int           level,              // level of new knot to be inserted
+                vector<T>&    new_knots,          // (output) new knot vector in cur. dim.
+                vector<int>&  new_knot_levels,    // (output) new knot levels in cur. dim.
+                MatrixX<T>&   new_ctrl_pts,       // (output) new control points of curve
+                VectorX<T>&   new_weights)        // (output) new control point weights of curve
+        {
+            new_knots.resize(old_knots.size() + 1);
+            new_knot_levels.resize(old_knot_levels.size() + 1);
+            new_ctrl_pts.resize(old_ctrl_pts.rows() + 1, old_ctrl_pts.cols());
+            new_weights.resize(old_weights.size() + 1);
+            MatrixX<T> temp_ctrl_pts(p(cur_dim) + 1, old_ctrl_pts.cols());
+            VectorX<T> temp_weights(p(cur_dim) + 1);
+
+            int span = FindSpan(cur_dim, u, old_ctrl_pts.rows());
+            if (tmesh.all_knots[cur_dim][span] == u)         // not for multiple knots
+            {
+                fprintf(stderr, "Error: CurveKnotIns attempting to insert duplicate knot\n");
+                exit(0);
+            }
+
+            // load new knot vector
+            for (auto i = 0; i <= span; i++)
+            {
+                new_knots[i]        = old_knots[i];
+                new_knot_levels[i]  = old_knot_levels[i];
+            }
+            new_knots[span + 1]         = u;
+            new_knot_levels[span + 1]   = level;
+            for (auto i = span + 1; i < old_ctrl_pts.rows() + p(cur_dim) + 1; i++)
+            {
+                new_knots[i + 1]        = old_knots[i];
+                new_knot_levels[i + 1]  = old_knot_levels[i];
+            }
+
+            // save unaltered control points and weights
+            for (auto i = 0; i <= span - p(cur_dim); i++)
+            {
+                new_ctrl_pts.row(i) = old_ctrl_pts.row(i);
+                new_weights(i)      = old_weights(i);
+            }
+            for (auto i = span; i < old_ctrl_pts.rows(); i++)
+            {
+                new_ctrl_pts.row(i + 1) = old_ctrl_pts.row(i);
+                new_weights(i + 1)      = old_weights(i);
+            }
+            for (auto i = 0; i <= p(cur_dim); i++)
+            {
+                temp_ctrl_pts.row(i)    = old_ctrl_pts.row(span - p(cur_dim) + i);
+                temp_weights(i)         = old_weights(span - p(cur_dim) + i);
+            }
+
+            // insert the knot
+            auto L = span - p(cur_dim) + 1;
+            for (auto i = 0; i <= p(cur_dim) - 1; i++)
+            {
+                T alpha                 = (u - old_knots[L + i]) / (old_knots[i + span + 1] - old_knots[L + i]);
+                temp_ctrl_pts.row(i)    = alpha * temp_ctrl_pts.row(i + 1) + (1.0 - alpha) * temp_ctrl_pts.row(i);
+                temp_weights(i)         = alpha * temp_weights(i + 1) + (1.0 - alpha) * temp_weights(i);
+            }
+            new_ctrl_pts.row(L)     = temp_ctrl_pts.row(0);
+            new_weights(L)          = temp_weights(0);
+            new_ctrl_pts.row(span)  = temp_ctrl_pts.row(p(cur_dim) - 1);
+            new_weights(span)       = temp_weights(p(cur_dim) - 1);
+
+            // load remaining control points
+            for (auto i = L + 1; i < span; i++)
+            {
+                new_ctrl_pts.row(i) = temp_ctrl_pts.row(i - L);
+                new_weights(i)      = temp_weights(i - L);
+            }
+        }
 
         // precompute curve parameters for input data points using the chord-length method
         // n-d version of algorithm 9.3, P&T, p. 377
@@ -1179,7 +1301,7 @@ namespace mfa
 //                 }
 //             }
 //         }
+
     };
 }
-
 #endif

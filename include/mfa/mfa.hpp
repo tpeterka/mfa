@@ -116,6 +116,12 @@ namespace mfa
             t.weights = VectorX<T>::Ones(t.nctrl_pts.prod());
             Encoder<T> encoder(domain, *mfa, verbose);
             encoder.Encode(t.nctrl_pts, t.ctrl_pts, t.weights, weighted);
+
+            // debug: try inserting a knot
+            vector<T> new_knot(mfa->dom_dim);
+            for (auto i = 0; i < mfa->dom_dim; i++)
+                new_knot[i] = 0.5;
+            mfa->KnotInsertion(new_knot, tmesh().tensor_prods[0]);
         }
 
         // adaptive encode
