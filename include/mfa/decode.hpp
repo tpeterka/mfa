@@ -311,12 +311,12 @@ namespace mfa
 //             }
 //             fprintf(stderr, "\n--------------------------\n\n");
 
-            // TODO: insert any missing knots and control points (port Youssef's knot insertion algorithm)
+            // TODO: insert any missing knots and control points
 
             // compute basis functions in each dimension
             vector<MatrixX<T>> N(mfa.dom_dim);                          // basis functions in each dimension
             vector<vector<KnotIdx>> local_knot_idxs(mfa.dom_dim);       // local knot indices
-            vector<size_t> anchor(mfa.dom_dim);                         // one anchor from anchors
+            vector<size_t> center(mfa.dom_dim);                         // center anchor from anchors, offset by (p+1)/2
             for (auto i = 0; i < mfa.dom_dim; i++)
             {
                 N[i] = MatrixX<T>::Zero(1, nctrl_pts(i));
@@ -326,43 +326,25 @@ namespace mfa
 
                 for (auto k = 0; k < anchors[i].size(); k++)            // p + 1 anchors
                 {
-                    // anchor[j] = kth anchor in each dimension j; anchors start counting at 1
+                    // anchor[j] = kth anchor in each dimension j
                     for (auto j = 0; j < mfa.dom_dim; j++)
-                        anchor[j] = anchors[j][k];
-                    mfa.tmesh.local_knot_vector(anchor, local_knot_idxs);
+                        center[j] = anchors[j][k] + (mfa.p(j) + 1) / 2; // center is offset from anchor by (p + 1) / 2
+                    mfa.tmesh.local_knot_vector(center, local_knot_idxs);
                     for (auto n = 0; n < local_knot_idxs[i].size(); n++)
                         local_knots[n] = mfa.tmesh.all_knots[i][local_knot_idxs[i][n]];
 
-                    // writing basis function into column corresponding to anchor position makes it multiply correct control point
-                    // anchors start counting at 1, so subtract 1 when using them here
-                    N[i](0, anchors[i][k] - 1) = mfa.OneBasisFun(i, param(i), local_knots);
+                    // debug
+//                     if (anchors[i][k] >= N[i].cols())
+//                         fprintf(stderr, "Error: trying to access column %ld but N only has %ld columns\n", anchors[i][k] - 1, N[i].cols());
 
-                    // debug: print local knot vectors
-//                     fprintf(stderr, "for anchor = [ ");
-//                     for (auto i = 0; i < mfa.dom_dim; i++)
-//                         fprintf(stderr, "%ld ", anchor[i]);
-//                     fprintf(stderr, "],\n");
-//                     for (auto i = 0; i < mfa.dom_dim; i++)
-//                     {
-//                         fprintf(stderr, "dim %d local knot idxs = [", i);
-//                         for (auto j = 0; j < local_knot_idxs[i].size(); j++)
-//                             fprintf(stderr, "%ld ", local_knot_idxs[i][j]);
-//                         fprintf(stderr, "]\n");
-//                     }
-//                     for (auto i = 0; i < mfa.dom_dim; i++)
-//                     {
-//                         fprintf(stderr, "dim %d global knots = [", i);
-//                         for (auto j = 0; j < mfa.tmesh.all_knots[i].size(); j++)
-//                             fprintf(stderr, "%lf ", mfa.tmesh.all_knots[i][j]);
-//                         fprintf(stderr, "]\n");
-//                     }
-//                     for (auto i = 0; i < mfa.dom_dim; i++)
-//                     {
-//                         fprintf(stderr, "dim %d local knots = [", i);
-//                         for (auto j = 0; j < local_knots.size(); j++)
-//                             fprintf(stderr, "%lf ", local_knots[j]);
-//                         fprintf(stderr, "]\n");
-//                     }
+                    // writing basis function into column corresponding to anchor position makes it multiply correct control point
+                    N[i](0, anchors[i][k]) = mfa.OneBasisFun(i, param(i), local_knots);
+
+                    // debug: print local knot idxs
+//                     fprintf(stderr, "local knot idxs = [");
+//                     for (auto j = 0; j < local_knot_idxs[i].size(); j++)
+//                         fprintf(stderr, "%ld ", local_knot_idxs[i][j]);
+//                     fprintf(stderr, "]\n");
                 }
             }
 

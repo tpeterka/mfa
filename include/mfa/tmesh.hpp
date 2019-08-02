@@ -974,16 +974,16 @@ namespace mfa
         }
 
         // given an anchor point in index space, compute local knot vector in all dimensions in index space
-        void local_knot_vector(const vector<KnotIdx>&       anchor,             // knot indices of anchor for odd degree or
-                                                                                // knot indices of start of rectangle containing anchor for even degree
-                               vector<vector<KnotIdx>>&     loc_knots)          // (output) local knot vector in index space
+        // in Bazilevs 2010, knot indices start at 1, but mine start counting at 0
+        void local_knot_vector(const vector<KnotIdx>&       center,             // knot indices of center of anchors
+                               vector<vector<KnotIdx>>&     loc_knot_idxs)      // (output) local knot vector in index space
         {
             vector<NeighborTensor> unused;
-            knot_intersections(anchor, p_, loc_knots, unused);
+            knot_intersections(center, p_, loc_knot_idxs, unused);
         }
 
         // given a point in parameter space to decode, compute range of anchor points in index space
-        // anchors start counting at 1 instead of 0 (first control point is anchor 1) (ref: Bazilevs 2010)
+        // in Bazilevs 2010, anchors start at 1, but mine start counting at 0
         void anchors(const VectorX<T>&          param,              // parameter value in each dim. of desired point
                      vector<vector<KnotIdx>>&   anchors)            // (output) anchor points in index space
         {
@@ -992,29 +992,32 @@ namespace mfa
 
             // convert param to target in index space
             vector<KnotIdx> target(dom_dim_);                       // center anchor in each dim.
-                                                                    // param(i) is in the knot span [target(i), target(i) + 1] (inclusively)
             for (auto i = 0; i < dom_dim_; i++)
             {
-                if (param(i) == 0.0)
-                    target[i] = p_(i);
-                else
-                {
-                    // start searching at the last repeating 0, which is at position p
-                    auto it     = upper_bound(all_knots[i].begin() + p_(i), all_knots[i].end(), param(i));
-                    target[i]   = it - all_knots[i].begin() - 1;
-                    while (all_knots[i][target[i]] == param(i))
-                        target[i]--;
-                }
+                    auto it     = upper_bound(all_knots[i].begin() + p_(i), all_knots[i].end() - p_(i) - 1, param(i));
+                    target[i]   = it - all_knots[i].begin() - p_(i) - 1;
+
+                    // fill anchors by extending a ray to the max side from the target and intersecting knots
+                    // TODO: skip knots not intersected by the ray
+                    // ie, write a version of knot_intersections for anchors (don't use knot_intersections for local knot vectors)
+                    anchors[i].resize(p_(i) + 1);
+                    for (auto j = 0; j < p_(i) + 1; j++)
+                        anchors[i][j] = target[i] + j;
             }
 
             // debug
-//             fprintf(stderr, "param=[%.2lf %.2lf] target=[%lu %lu]\n", param(0), param(1), target[0], target[1]);
+//             fprintf(stderr, "param=[%.2lf] target=[%lu]\n", param(0), target[0]);
+
+            return;
+
+            // TODO: below is not tested
 
             vector<NeighborTensor> neigh_hi_levels;                 // neighbor tensors of a higher level than tensor containing target
 
             // subtract 1 from degree so that same code as for local knot vectors can be reused
             // support for a decoded point is p+1 basis functions, while width of a local knot vector is p+2
-            knot_intersections(target, p_ - VectorXi::Ones(dom_dim_), anchor_cands, neigh_hi_levels);
+            // TODO: this is not right. Don't reuse knot_intersections for local knot vectors; write a new knot_intersections for anchors
+//             knot_intersections(target, p_ - VectorXi::Ones(dom_dim_), anchor_cands, neigh_hi_levels);
 
             if (neigh_hi_levels.size())
             {
@@ -1052,7 +1055,7 @@ namespace mfa
                 // copy central p+1 anchors from anchor_cands into anchors
                 for (auto i = 0; i < dom_dim_; i++)
                 {
-                    auto it = find (anchor_cands[i].begin(), anchor_cands[i].end(), target[i]);
+                    auto it = find(anchor_cands[i].begin(), anchor_cands[i].end(), target[i]);
                     if (it == anchor_cands[i].end())
                     {
                         fprintf(stderr, "Error: target %lu not found in anchor_cands[dim %d]\n", target[i], i);
