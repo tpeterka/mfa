@@ -134,7 +134,12 @@ namespace mfa
                 int         max_rounds)                // optional maximum number of rounds
         {
             Encoder<T> encoder(domain, *mfa, verbose);
+
+#ifndef TMESH               // original adaptive encode for one tensor product
+            encoder.OrigAdaptiveEncode(err_limit, weighted, extents, max_rounds);
+#else                       // adaptive encode for tmesh
             encoder.AdaptiveEncode(err_limit, weighted, extents, max_rounds);
+#endif
         }
 
         // decode values at all input points

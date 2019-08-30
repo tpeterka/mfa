@@ -193,7 +193,7 @@ namespace mfa
                 // compute approximated point for this parameter vector
                 VectorX<T> cpt(last + 1);               // evaluated point
 
-                // TODO: hard-coded for first tensor of tmesh
+#ifndef TMESH   // original version for one tensor product
 
                 // using old VolPt
 //                 VolPt(param, cpt, thread_decode_info.local(), mfa.tmesh.tensor_prods[0], derivs);  // faster improved VolPt
@@ -201,16 +201,19 @@ namespace mfa
 //                     fprintf(stderr, "Using VolPt\n");
 
                 // using VolPt for saved basis
-//                 if (i == 0)
-//                     fprintf(stderr, "Using VolPt_saved_basis\n");
-//                 VolPt_saved_basis(ijk, param, cpt, thread_decode_info.local(), mfa.tmesh.tensor_prods[0]);
+                if (i == 0)
+                    fprintf(stderr, "Using VolPt_saved_basis\n");
+                VolPt_saved_basis(ijk, param, cpt, thread_decode_info.local(), mfa.tmesh.tensor_prods[0]);
 
-                // using VolPt for tmesh
+#else           // tmesh version
+
                 // hard-coded for first tensor product
                 if (i == 0)
                     fprintf(stderr, "Using VolPt_tmesh\n");
                 VolPt_tmesh(param, mfa.tmesh.tensor_prods[0].nctrl_pts, mfa.tmesh.tensor_prods[0].ctrl_pts,
                         mfa.tmesh.tensor_prods[0].weights, cpt);
+
+#endif
 
                 approx.block(i, min_dim, 1, max_dim - min_dim + 1) = cpt.transpose();
             });
@@ -231,7 +234,8 @@ namespace mfa
                     param(j) = mfa.params[j][iter(j)];
 
                 // compute approximated point for this parameter vector
-                // TODO: hard-coded for first tensor of tmesh
+
+#ifndef TMESH   // original version for one tensor product
 
                 // using old VolPt
 //                 VolPt(param, cpt, decode_info, mfa.tmesh.tensor_prods[0], derivs);
@@ -239,16 +243,19 @@ namespace mfa
 //                     fprintf(stderr, "Using VolPt\n");
 
                 // using VolPt for saved basis
-//                 if (i == 0)
-//                     fprintf(stderr, "Using VolPt_saved_basis\n");
-//                 VolPt_saved_basis(iter, param, cpt, decode_info, mfa.tmesh.tensor_prods[0]);
+                if (i == 0)
+                    fprintf(stderr, "Using VolPt_saved_basis\n");
+                VolPt_saved_basis(iter, param, cpt, decode_info, mfa.tmesh.tensor_prods[0]);
 
-                // using VolPt for tmesh
+#else           // tmesh version
+
                 // hard-coded for first tensor product
                 if (i == 0)
                     fprintf(stderr, "Using VolPt_tmesh\n");
                 VolPt_tmesh(param, mfa.tmesh.tensor_prods[0].nctrl_pts, mfa.tmesh.tensor_prods[0].ctrl_pts,
                         mfa.tmesh.tensor_prods[0].weights, cpt);
+
+#endif
 
                 // update the indices in the linearized vector of all params for next input point
                 for (size_t j = 0; j < mfa.dom_dim; j++)
@@ -423,7 +430,7 @@ namespace mfa
             VectorX<T>          temp_denom = VectorX<T>::Zero(mfa.p.size());     // temporary rational NURBS denominator in each dim
 
             // basis funs
-            for (size_t i = 0; i < mfa.p.size(); i++)       // for all dims
+            for (size_t i = 0; i < mfa.dom_dim; i++)       // for all dims
             {
                 temp[i]    = VectorX<T>::Zero(last + 1);
                 iter[i]    = 0;
@@ -437,7 +444,13 @@ namespace mfa
 //                     N[i].row(0) = Ders.row(derivs(i));
                 }
                 else
-                    mfa.BasisFuns(tensor, i, param(i), span[i], N[i], 0);
+                {
+#ifndef TMESH       // original version for one tensor product
+                    mfa.OrigBasisFuns(i, param(i), span[i], N[i], 0);
+#else               // tmesh version
+                    mfa.BasisFuns(i, param(i), span[i], N[i], 0);
+#endif
+                }
             }
 
             // linear index of first control point
@@ -716,7 +729,13 @@ namespace mfa
 //                     di.N[i].row(0) = di.ders[i].row(derivs(i));
                 }
                 else
-                    mfa.BasisFuns(tensor, i, param(i), di.span[i], di.N[i], 0);
+                {
+#ifndef TMESH       // original version for one tensor product
+                    mfa.OrigBasisFuns(i, param(i), di.span[i], di.N[i], 0);
+#else               // tmesh version
+                    mfa.BasisFuns(i, param(i), di.span[i], di.N[i], 0);
+#endif
+                }
             }
 
             // linear index of first control point
@@ -789,7 +808,11 @@ namespace mfa
         {
             int span   = mfa.FindSpan(cur_dim, param, tensor);
             MatrixX<T> N = MatrixX<T>::Zero(1, temp_ctrl.rows());      // basis coefficients
+#ifndef TMESH                                           // original version for one tensor product
+            mfa.OrigBasisFuns(cur_dim, param, span, N, 0);
+#else                                                   // tmesh version
             mfa.BasisFuns(cur_dim, param, span, N, 0);
+#endif
             out_pt = VectorX<T>::Zero(temp_ctrl.cols());  // initializes and resizes
 
             for (int j = 0; j <= mfa.p(cur_dim); j++)

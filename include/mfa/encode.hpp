@@ -160,7 +160,11 @@ namespace mfa
                 for (int i = 0; i < mfa.N[k].rows(); i++)
                 {
                     int span = mfa.FindSpan(k, mfa.params[k][i], nctrl_pts(k));
+#ifndef TMESH       // original version for one tensor product
+                    mfa.OrigBasisFuns(k, mfa.params[k][i], span, mfa.N[k], i);
+#else               // tmesh version
                     mfa.BasisFuns(k, mfa.params[k][i], span, mfa.N[k], i);
+#endif
                 }
 
                 // TODO: NtN is going to be very sparse when it is large: switch to sparse representation
@@ -168,8 +172,8 @@ namespace mfa
                 MatrixX<T> NtN  = mfa.N[k].transpose() * mfa.N[k];
 
                 // debug
-                //                 cerr << "N[k]:\n" << mfa.N[k] << endl;
-                //                 cerr << "NtN:\n" << NtN << endl;
+                cerr << "N[k]:\n" << mfa.N[k] << endl;
+//                 cerr << "NtN:\n" << NtN << endl;
 
 #ifndef MFA_NO_TBB                                  // TBB version
 
@@ -226,7 +230,69 @@ namespace mfa
             }                                                      // domain dimensions
         }
 
-        // adaptive encoding
+        // original adaptive encoding for first tensor product only
+        void OrigAdaptiveEncode(
+                T           err_limit,              // maximum allowable normalized error
+                bool        weighted,               // solve for and use weights
+                VectorX<T>& extents,                // extents in each dimension, for normalizing error (size 0 means do not normalize)
+                int         max_rounds = 0)         // optional maximum number of rounds
+        {
+            vector<vector<T>> new_knots;                               // new knots in each dim.
+
+            // TODO: use weights for knot insertion
+            // for now, weights are only used for final full encode
+
+            // debug
+//             mfa.tmesh.print();
+
+            // loop until no change in knots
+            for (int iter = 0; ; iter++)
+            {
+                if (max_rounds > 0 && iter >= max_rounds)               // optional cap on number of rounds
+                    break;
+
+                if (verbose)
+                    fprintf(stderr, "Iteration %d...\n", iter);
+
+                // low-d w/ splitting spans in the middle
+                bool done = NewKnots_curve(new_knots, err_limit, extents, iter);
+
+                // no new knots to be added
+                if (done)
+                {
+                    if (verbose)
+                        fprintf(stderr, "\nKnot insertion done after %d iterations; no new knots added.\n\n", iter + 1);
+                    break;
+                }
+
+                // check if the new knots would make the number of control points >= number of input points in any dim
+                done = false;
+                for (auto k = 0; k < mfa.dom_dim; k++)
+                    // hard-coded for first tensor
+                    if (mfa.ndom_pts(k) <= mfa.tmesh.tensor_prods[0].nctrl_pts(k) + new_knots[k].size())
+                    {
+                        done = true;
+                        break;
+                    }
+                if (done)
+                {
+                    if (verbose)
+                        fprintf(stderr, "\nKnot insertion done after %d iterations; control points would outnumber input points.\n", iter + 1);
+                    break;
+                }
+
+                // debug
+//                 mfa.tmesh.print();
+            }
+
+            // final full encoding needed after last knot insertion above
+            if (verbose)
+                fprintf(stderr, "Encoding in full %ldD\n", mfa.p.size());
+            TensorProduct<T>&t = mfa.tmesh.tensor_prods[0];        // fixed encode assumes the tmesh has only one tensor product
+            Encode(t.nctrl_pts, t.ctrl_pts, t.weights, weighted);
+        }
+
+        // adaptive encoding for tmesh
         void AdaptiveEncode(
                 T                   err_limit,                  // maximum allowable normalized error
                 bool                weighted,                   // solve for and use weights
@@ -1050,6 +1116,7 @@ namespace mfa
             int     pt_dim          = mfa.tmesh.tensor_prods[0].ctrl_pts.cols();    // control point dimensonality
             size_t  tot_nnew_knots  = 0;                                            // total number of new knots found
             new_knots.resize(mfa.dom_dim);
+            vector<vector<int>> new_levels(mfa.dom_dim);
 
             for (TensorProduct<T>& t : mfa.tmesh.tensor_prods)             // for all tensor products in the tmesh
             {
@@ -1064,6 +1131,7 @@ namespace mfa
                 for (size_t k = 0; k < mfa.dom_dim; k++)                    // for all domain dimensions
                 {
                     new_knots[k].resize(0);
+                    new_levels[k].resize(0);
 
                     // for now set weights to 1, TODO: get weights from elsewhere
                     // NB: weights are for all n + 1 control points, not just the n -1 interior ones
@@ -1092,7 +1160,11 @@ namespace mfa
                     {
                         // TODO: hard-coded for single tensor
                         int span = mfa.FindSpan(k, mfa.params[k][i], mfa.tmesh.tensor_prods[0]);
+#ifndef TMESH           // original version for one tensor product
+                        mfa.OrigBasisFuns(k, mfa.params[k][i], span, N, i);
+#else                   // tmesh version
                         mfa.BasisFuns(k, mfa.params[k][i], span, N, i);
+#endif
                     }
 
                     // TODO: NtN is going to be very sparse when it is large: switch to sparse representation
@@ -1173,6 +1245,7 @@ namespace mfa
 
                     // add new knots in the middle of spans with errors
                     new_knots[k].resize(err_spans.size());
+                    new_levels[k].resize(new_knots[k].size());
                     tot_nnew_knots += new_knots[k].size();
                     size_t i = 0;                                           // index into new_knots
                     for (set<int>::iterator it = err_spans.begin(); it != err_spans.end(); ++it)
@@ -1181,6 +1254,7 @@ namespace mfa
                         assert(*it < t.nctrl_pts[k]);                       // not trying to go beyond the last span
 
                         new_knots[k][i] = (mfa.tmesh.all_knots[k][*it] + mfa.tmesh.all_knots[k][*it + 1]) / 2.0;
+                        new_levels[k][i] = t.level;
                         i++;
                     }
 
@@ -1188,8 +1262,20 @@ namespace mfa
                     //         fprintf(stderr, "\rdimension %ld of %d encoded\n", k + 1, mfa.dom_dim);
                 }                                                           // domain dimensions
 
+                // insert the new knots
                 mfa::NewKnots<T> nk(mfa);
-                nk.InsertKnots(t, new_knots);
+                vector<vector<KnotIdx>> unused(mfa.dom_dim);
+                nk.InsertKnots(new_knots, new_levels, unused);
+
+                // increase number of control points, weights, basis functions
+                for (auto k = 0; k < mfa.dom_dim; k++)
+                {
+                    t.nctrl_pts(k) += new_knots[k].size();
+                    mfa.N[k] = MatrixX<T>::Zero(mfa.N[k].rows(), t.nctrl_pts(k));
+                }
+                auto tot_nctrl_pts = t.nctrl_pts.prod();
+                t.ctrl_pts.resize(tot_nctrl_pts, t.ctrl_pts.cols());
+                t.weights =  VectorX<T>::Ones(tot_nctrl_pts);
             }                                                               // tensor products
 
             // debug

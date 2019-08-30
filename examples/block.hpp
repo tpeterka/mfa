@@ -521,7 +521,8 @@ struct Block
         cerr << "core_mins:\n" << core_mins << endl;
         cerr << "core_maxs:\n" << core_maxs << endl;
         cerr << "bounds_mins:\n" << bounds_mins << endl;
-        cerr << "bounds_maxs:\n" << bounds_maxs << "\n" << endl;
+        cerr << "bounds_maxs:\n" << bounds_maxs << endl;
+        cerr << "ndom_pts:\n" << ndom_pts << "\n" << endl;
 
 //         cerr << "domain:\n" << domain << endl;
     }
@@ -1172,11 +1173,9 @@ struct Block
 
         VectorXi nctrl_pts(a->dom_dim);
         VectorXi p(a->dom_dim);
-        VectorXi ndom_pts(a->dom_dim);
         for (auto j = 0; j < a->dom_dim; j++)
         {
             nctrl_pts(j)    = a->geom_nctrl_pts[j];
-            ndom_pts(j)     = a->ndom_pts[j];
             p(j)            = a->geom_p[j];
         }
 
@@ -1213,7 +1212,6 @@ struct Block
             vars[i].mfa->FixedEncode(domain, nctrl_pts, a->verbose, a->weighted);
         }
     }
-
 
     // adaptively encode block to desired error limit
     void adaptive_encode_block(
@@ -1532,7 +1530,7 @@ struct Block
             // for all dimensions except last, check if pt_idx is at the end, part of flattened loop logic
             for (auto k = 0; k < dom_dim - 1; k++)
             {
-                if (dom_idx[k] == a->ndom_pts[k])
+                if (dom_idx[k] == ndom_pts(k))
                 {
                     dom_idx[k] = 0;
                     dom_idx[k + 1]++;
@@ -1670,8 +1668,8 @@ struct Block
     {
         int ndom_dims = ndom_pts.size();                // domain dimensionality
 
-//         fprintf(stderr, "gid = %d\n", cp.gid());
-//         cerr << "domain\n" << domain << endl;
+        fprintf(stderr, "gid = %d\n", cp.gid());
+        cerr << "domain\n" << domain << endl;
 
         // geometry
         // TODO: hard-coded for one tensor product
@@ -1679,9 +1677,9 @@ struct Block
         cerr << "# output ctrl pts     = [ " << geometry.mfa->tmesh().tensor_prods[0].nctrl_pts.transpose() << " ]" << endl;
 
         //  debug: print control points and weights
-//         print_ctrl_weights(geometry.mfa->tmesh());
+        print_ctrl_weights(geometry.mfa->tmesh());
         // debug: print knots
-//         print_knots(geometry.mfa->tmesh());
+        print_knots(geometry.mfa->tmesh());
 
         fprintf(stderr, "# output knots        = [ ");
         for (auto j = 0 ; j < geometry.mfa->tmesh().all_knots.size(); j++)
@@ -1701,9 +1699,9 @@ struct Block
             cerr << "# ouput ctrl pts      = [ " << vars[i].mfa->tmesh().tensor_prods[0].nctrl_pts.transpose() << " ]" << endl;
 
             //  debug: print control points and weights
-//             print_ctrl_weights(vars[i].mfa->tmesh());
+            print_ctrl_weights(vars[i].mfa->tmesh());
             // debug: print knots
-//             print_knots(vars[i].mfa->tmesh());
+            print_knots(vars[i].mfa->tmesh());
 
 
             fprintf(stderr, "# output knots        = [ ");

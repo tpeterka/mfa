@@ -331,18 +331,18 @@ int main(int argc, char** argv)
 
     // debug: compute error field for visualization and max error to verify that it is below the threshold
     double decode_time = MPI_Wtime();
-//     if (error)
-//     {
-//         fprintf(stderr, "\nFinal decoding and computing max. error...\n");
-// #ifdef CURVE_PARAMS     // normal distance
-//         master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-//                 { b->error(cp, 1, true); });
-// #else                   // range coordinate difference
-//         master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-//                 { b->range_error(cp, 1, true); });
-// #endif
-//         decode_time = MPI_Wtime() - decode_time;
-//     }
+    if (error)
+    {
+        fprintf(stderr, "\nFinal decoding and computing max. error...\n");
+#ifdef CURVE_PARAMS     // normal distance
+        master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
+                { b->error(cp, 1, true); });
+#else                   // range coordinate difference
+        master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
+                { b->range_error(cp, 1, true); });
+#endif
+        decode_time = MPI_Wtime() - decode_time;
+    }
 
 //     // debug: write original and approximated data for reading into z-checker
 //     // only for one block (one file name used, ie, last block will overwrite earlier ones)

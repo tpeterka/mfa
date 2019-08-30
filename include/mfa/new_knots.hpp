@@ -46,7 +46,7 @@ namespace mfa
         void InsertKnots(
                 vector<vector<T>>&          new_knots,              // new knots
                 vector<vector<int>>&        new_levels,             // new knot levels
-                vector<vector<KnotIdx>>&    inserted_knot_idxs)     // indices in each dim. of inserted knots in full knot vector after insertion
+                vector<vector<KnotIdx>>&    inserted_knot_idxs)     // (output) indices in each dim. of inserted knots in full knot vector after insertion
         {
             vector<vector<T>> temp_knots(mfa.dom_dim);
             vector<vector<int>> temp_levels(mfa.dom_dim);

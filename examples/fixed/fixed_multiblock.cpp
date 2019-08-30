@@ -293,7 +293,7 @@ int main(int argc, char** argv)
 
         vector<vec3d> unused;
         master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-                { b->analytical_error(cp, input, L1, L2, Linf, d_args, true, false, unused, NULL, unused, NULL); });
+                { b->analytical_error(cp, input, L1, L2, Linf, d_args, false, unused, NULL, unused, NULL); });
 
         // print analytical errors
         fprintf(stderr, "\n------ Analytical error norms -------\n");

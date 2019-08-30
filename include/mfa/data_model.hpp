@@ -24,6 +24,9 @@
 // weighing the range coordinate only is the default if no method is specified
 // #define WEIGH_ALL_DIMS
 
+// comment out the following line for original single tensor product version
+// #define TMESH
+
 #include    <Eigen/Dense>
 #include    <vector>
 #include    <list>
@@ -424,16 +427,6 @@ namespace mfa
                 MatrixX<T>&             N,          // matrix of (output) basis function values
                 int                     row)        // row in N of result
         {
-            // DEPRECATED
-            // test OneBasisFun based on global knot vector
-//             for (auto j = 0; j < p(cur_dim) + 1; j++)
-//             {
-//                 N(row, span - p(cur_dim) + j) = OneBasisFun(cur_dim, u, span - p(cur_dim) + j);
-// 
-//                 // debug
-// //                 fprintf(stderr, "span = %d ith basis fun = %d row = %d\n", span, span - p(cur_dim) + j, row);
-//             }
-
             vector<T> loc_knots(p(cur_dim) + 2);
 
             for (auto j = 0; j < p(cur_dim) + 1; j++)
