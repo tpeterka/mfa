@@ -8,30 +8,44 @@
 #ifndef _MFA_HPP
 #define _MFA_HPP
 
-#include    <mfa/data_model.hpp>
-#include    <mfa/decode.hpp>
-#include    <mfa/encode.hpp>
-#include    <mfa/tmesh.hpp>
+// comment out the following line for unclamped knots (single knot at each end of knot vector)
+// clamped knots (repeated at ends) is the default method if no method is specified
+// #define UNCLAMPED_KNOTS
+
+// comment out the following line for domain parameterization
+// domain parameterization is the default method if no method is specified
+// #define CURVE_PARAMS
+
+// comment out the following line for low-d knot insertion
+// low-d is the default if no method is specified
+// #define HIGH_D
+
+// comment out the following line for applying weights to only the range dimension
+// weighing the range coordinate only is the default if no method is specified
+// #define WEIGH_ALL_DIMS
+
+// comment out the following line for original single tensor product version
+// #define TMESH
 
 #include    <Eigen/Dense>
 #include    <vector>
 #include    <list>
+#include    <iostream>
 
 #ifndef MFA_NO_TBB
-
 #include    <tbb/tbb.h>
 using namespace tbb;
-
 #endif
 
-typedef Eigen::MatrixXf MatrixXf;
-typedef Eigen::VectorXf VectorXf;
-typedef Eigen::MatrixXd MatrixXd;
-typedef Eigen::VectorXd VectorXd;
-typedef Eigen::VectorXi VectorXi;
-typedef Eigen::ArrayXXf ArrayXXf;
-typedef Eigen::ArrayXXd ArrayXXd;
+using namespace std;
 
+using MatrixXf = Eigen::MatrixXf;
+using VectorXf = Eigen::VectorXf;
+using MatrixXd = Eigen::MatrixXd;
+using VectorXd = Eigen::VectorXd;
+using VectorXi = Eigen::VectorXi;
+using ArrayXXf = Eigen::ArrayXXf;
+using ArrayXXd = Eigen::ArrayXXd;
 template <typename T>
 using MatrixX = Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic>;
 template <typename T>
@@ -41,128 +55,72 @@ using ArrayXX  = Eigen::Array<T, Eigen::Dynamic, Eigen::Dynamic>;
 template <typename T>
 using ArrayX   = Eigen::Array<T, Eigen::Dynamic, 1>;
 
-using namespace std;
-
-template <typename T>                       // float or double
-class Encoder;
-
-template <typename T>                       // float or double
-class Decoder;
+#include    <mfa/param.hpp>
+#include    <mfa/tmesh.hpp>
+#include    <mfa/mfa_data.hpp>
+#include    <mfa/decode.hpp>
+#include    <mfa/encode.hpp>
 
 namespace mfa
 {
-    template <typename T>                   // float or double
-    class MFA
+    template <typename T>                           // float or double
+    struct MFA
     {
-    public:
+        int                     dom_dim;            // domain dimensionality
+        Param<T>*               mfa_param;          // pointer to parameterization object
 
-        // constructor for creating an mfa from input points
         MFA(
-                VectorXi&           p_,             // polynomial degree in each dimension
-                VectorXi&           ndom_pts_,      // number of input data points in each dim
-                MatrixX<T>&         domain_,        // input data points (1st dim changes fastest)
-                VectorXi            nctrl_pts_,     // optional number of control points in each dim (size 0 means minimum p+1)
-                int                 min_dim_ = -1,  // starting coordinate for input data; -1 = use all coordinates
-                int                 max_dim_ = -1)  // ending coordinate for input data; -1 = use all coordinates
+            int                 dom_dim_,           // domain dimensionality (excluding science variables)
+            VectorXi&           ndom_pts_,          // number of input data points in each dim
+            MatrixX<T>&         domain_) :          // input data points (1st dim changes fastest)
+            dom_dim(dom_dim_)
         {
-            if (min_dim_ == -1)
-                min_dim_ = 0;
-            if (max_dim_ == -1)
-                max_dim_ = domain_.cols() - 1;
-            mfa = new MFA_Data<T>(p_, ndom_pts_, domain_, nctrl_pts_, min_dim_, max_dim_);
-        }
-
-        // constructor for reading in a solved mfa
-        MFA(
-                VectorXi&           p_,             // polynomial degree in each dimension
-                VectorXi&           ndom_pts_,      // number of input data points in each dim
-                Tmesh<T>&           tmesh_,         // solved tmesh
-                int                 min_dim_ = -1,  // starting coordinate for input data; -1 = use all coordinates
-                int                 max_dim_ = -1)  // ending coordinate for input data; -1 = use all coordinates
-        {
-            if (min_dim_ == -1)
-                min_dim_ = 0;
-            if (max_dim_ == -1)
-                max_dim_ = tmesh_.tensor_prods[0].ctrl_pts.cols() - 1;
-            mfa = new MFA_Data<T>(p_, ndom_pts_, tmesh_, min_dim_, max_dim_);
-        }
-
-        // constructor for reading in a solved mfa accompanied by parameterization of input points
-        MFA(
-                VectorXi&           p_,             // polynomial degree in each dimension
-                VectorXi&           ndom_pts_,      // number of input data points in each dim
-                vector<vector<T>>&  params_,        // parameters for input points[dimension][index]
-                Tmesh<T>&           tmesh_,         // solved tmesh
-                int                 min_dim_ = -1,  // starting coordinate for input data; -1 = use all coordinates
-                int                 max_dim_ = -1)  // ending coordinate for input data; -1 = use all coordinates
-        {
-            if (min_dim_ == -1)
-                min_dim_ = 0;
-            if (max_dim_ == -1)
-                max_dim_ = tmesh_.tensor_prods[0].ctrl_pts.cols() - 1;
-            mfa = new MFA_Data<T>(p_, ndom_pts_, params_, tmesh_, min_dim_, max_dim_);
-        }
-
-        // constructor when reading mfa in and knowing nothing about it yet except its degree and dimensionality
-        MFA(
-                VectorXi&           p_,             // polynomial degree in each dimension
-                size_t              ntensor_prods,  // number of tensor products to allocate in tmesh
-                int                 min_dim_ = -1,  // starting coordinate for input data; -1 = use all coordinates
-                int                 max_dim_ = -1)  // ending coordinate for input data; -1 = use all coordinates
-        {
-            if (min_dim_ == -1)
-                min_dim_ = 0;
-            if (max_dim_ == -1)
-                max_dim_ = 1;
-            mfa = new MFA_Data<T>(p_, ntensor_prods, min_dim_, max_dim_);
+            mfa_param = new Param<T>(dom_dim_, ndom_pts_, domain_);
         }
 
         ~MFA()
         {
-            delete mfa;
+            delete mfa_param;
         }
 
-        MFA_Data<T>& mfa_data()
-        {
-            return *mfa;
-        }
-
-        Tmesh<T>& tmesh()
-        {
-            return mfa->tmesh;
-        }
+        VectorXi&               ndom_pts()      { return mfa_param->ndom_pts; }
+        vector<vector<T>>&      params()        { return mfa_param->params; }
+        vector<size_t>&         ds()            { return mfa_param->ds; }
+        vector<vector<size_t>>& co()            { return mfa_param->co; }
 
         // fixed number of control points encode
         void FixedEncode(
-                MatrixX<T>& domain,                     // input points
-                VectorXi    nctrl_pts,                  // number of control points in each dim
-                int         verbose,                    // output level
-                bool        weighted)                   // solve for and use weights (default = true)
+                MFA_Data<T>&    mfa_data,               // mfa data model
+                MatrixX<T>&     domain,                 // input points
+                VectorXi        nctrl_pts,              // number of control points in each dim
+                int             verbose,                // debug level
+                bool            weighted)               // solve for and use weights (default = true)
         {
             // fixed encode assumes the tmesh has only one tensor product
-            TensorProduct<T>&t = mfa->tmesh.tensor_prods[0];
+            TensorProduct<T>&t = mfa_data.tmesh.tensor_prods[0];
 
             t.weights = VectorX<T>::Ones(t.nctrl_pts.prod());
-            Encoder<T> encoder(domain, *mfa, verbose);
+            Encoder<T> encoder(*this, mfa_data, domain, verbose);
             encoder.Encode(t.nctrl_pts, t.ctrl_pts, t.weights, weighted);
 
             // debug: try inserting a knot
-//             VectorX<T> new_knot(mfa->dom_dim);
-//             for (auto i = 0; i < mfa->dom_dim; i++)
-//                 new_knot(i) = 0.5;
-//             mfa->KnotInsertion(new_knot, tmesh().tensor_prods[0]);
+            //             VectorX<T> new_knot(mfa->dom_dim);
+            //             for (auto i = 0; i < mfa->dom_dim; i++)
+            //                 new_knot(i) = 0.5;
+            //             mfa->KnotInsertion(new_knot, tmesh().tensor_prods[0]);
         }
 
         // adaptive encode
         void AdaptiveEncode(
-                MatrixX<T>& domain,                    // input points
-                T           err_limit,                 // maximum allowable normalized error
-                int         verbose,                   // output level
-                bool        weighted,                  // solve for and use weights (default = true)
-                VectorX<T>& extents,                   // extents in each dimension, for normalizing error (size 0 means do not normalize)
-                int         max_rounds)                // optional maximum number of rounds
+                MFA_Data<T>&    mfa_data,               // mfa data model
+                MatrixX<T>&     domain,                 // input points
+                T               err_limit,              // maximum allowable normalized error
+                int             verbose,                // debug level
+                bool            weighted,               // solve for and use weights (default = true)
+                VectorX<T>&     extents,                // extents in each dimension, for normalizing error (size 0 means do not normalize)
+                int             max_rounds)             // optional maximum number of rounds
         {
-            Encoder<T> encoder(domain, *mfa, verbose);
+            Encoder<T> encoder(*this, mfa_data, domain, verbose);
 
 #ifndef TMESH               // original adaptive encode for one tensor product
             encoder.OrigAdaptiveEncode(err_limit, weighted, extents, max_rounds);
@@ -173,131 +131,73 @@ namespace mfa
 
         // decode values at all input points
         void DecodeDomain(
-                int         verbose,                // output level
-                MatrixX<T>& approx,                 // decoded points
-                int         min_dim,                // first dimension to decode
-                int         max_dim)                // last dimension to decode
+                MFA_Data<T>&    mfa_data,               // mfa data model
+                int             verbose,                // debug level
+                MatrixX<T>&     approx,                 // decoded points
+                int             min_dim,                // first dimension to decode
+                int             max_dim)                // last dimension to decode
         {
             VectorXi no_derivs;                     // size-0 means no derivatives
-            DecodeDomain(verbose, approx, min_dim, max_dim, no_derivs);
+            DecodeDomain(mfa_data, verbose, approx, min_dim, max_dim, no_derivs);
         }
 
         // decode derivatives at all input points
         void DecodeDomain(
-                int         verbose,                // output level
-                MatrixX<T>& approx,                 // decoded values
-                int         min_dim,                // first dimension to decode
-                int         max_dim,                // last dimension to decode
-                VectorXi&   derivs)                 // derivative to take in each domain dim. (0 = value, 1 = 1st deriv, 2 = 2nd deriv, ...)
-                                                    // pass size-0 vector if unused
+                MFA_Data<T>&    mfa_data,               // mfa data model
+                int             verbose,                // debug level
+                MatrixX<T>&     approx,                 // decoded values
+                int             min_dim,                // first dimension to decode
+                int             max_dim,                // last dimension to decode
+                VectorXi&       derivs)                 // derivative to take in each domain dim. (0 = value, 1 = 1st deriv, 2 = 2nd deriv, ...)
+            // pass size-0 vector if unused
         {
-            mfa::Decoder<T> decoder(*mfa, verbose);
+            mfa::Decoder<T> decoder(*this, mfa_data, verbose);
             decoder.DecodeDomain(approx, min_dim, max_dim, derivs);
         }
 
-        // compute the error (absolute value of distance in normal direction) of the mfa at a domain point
-        // error is not normalized by the data range (absolute, not relative error)
-        T Error(
-                size_t idx,               // index of domain point
-                int    verbose)           // output level
-        {
-            // convert linear idx to multidim. i,j,k... indices in each domain dimension
-            VectorXi ijk(mfa->p.size());
-            mfa->idx2ijk(idx, ijk);
-
-            // compute parameters for the vertices of the cell
-            VectorX<T> param(mfa->p.size());
-            for (int i = 0; i < mfa->p.size(); i++)
-                param(i) = mfa->params(ijk(i) + mfa->po[i]);
-
-            // approximated value
-            VectorX<T> cpt(mfa->ctrl_pts.cols());          // approximated point
-            Decoder<T> decoder(*mfa, verbose);
-            decoder.VolPt(param, cpt);
-
-            T err = fabs(mfa->NormalDistance(cpt, idx));
-
-            return err;
-        }
-
         // decode single point at the given parameter location
-        void DecodePt(VectorX<T>& param,        // parameters of point to decode
-                      VectorX<T>& cpt)          // (output) decoded point
+        void DecodePt(
+                MFA_Data<T>&    mfa_data,               // mfa data model
+                VectorX<T>&     param,                  // parameters of point to decode
+                VectorX<T>&     cpt)                    // (output) decoded point
         {
             int verbose = 0;
-            Decoder<T> decoder(*mfa, verbose);
+            Decoder<T> decoder(*this, mfa_data, verbose);
             // TODO: hard-coded for one tensor product
-            decoder.VolPt(param, cpt, mfa->tmesh.tensor_prods[0]);
+            decoder.VolPt(param, cpt, mfa_data.tmesh.tensor_prods[0]);
         }
 
         // compute the error (absolute value of coordinate-wise difference) of the mfa at a domain point
         // error is not normalized by the data range (absolute, not relative error)
         void AbsCoordError(
-                MatrixX<T>& domain,             // input points
-                size_t      idx,                // index of domain point
-                VectorX<T>& error,              // absolute value of error at each coordinate
-                int         verbose)            // output level
+                MFA_Data<T>&    mfa_data,               // mfa data model
+                MatrixX<T>&     domain,                 // input points
+                size_t          idx,                    // index of domain point
+                VectorX<T>&     error,                  // absolute value of error at each coordinate
+                int             verbose)                // debug level
         {
             // convert linear idx to multidim. i,j,k... indices in each domain dimension
-            VectorXi ijk(mfa->p.size());
-            mfa->idx2ijk(idx, ijk);
+            VectorXi ijk(dom_dim);
+            mfa_data.idx2ijk(ds(), idx, ijk);
 
             // compute parameters for the vertices of the cell
-            VectorX<T> param(mfa->p.size());
-            for (int i = 0; i < mfa->p.size(); i++)
-                param(i) = mfa->params[i][ijk(i)];
+            VectorX<T> param(dom_dim);
+            for (int i = 0; i < dom_dim; i++)
+                param(i) = mfa_param->params[i][ijk(i)];
 
             // NB, assumes at least one tensor product exists and that all have the same ctrl pt dimensionality
-            int pt_dim = mfa->tmesh.tensor_prods[0].ctrl_pts.cols();
+            int pt_dim = mfa_data.tmesh.tensor_prods[0].ctrl_pts.cols();
 
             // approximated value
             VectorX<T> cpt(pt_dim);          // approximated point
-            Decoder<T> decoder(*mfa, verbose);
-            decoder.VolPt(param, cpt, mfa->tmesh.tensor_prods[0]);      // TODO: hard-coded for first tensor product
+            Decoder<T> decoder(*this, mfa_data, verbose);
+            decoder.VolPt(param, cpt, mfa_data.tmesh.tensor_prods[0]);      // TODO: hard-coded for first tensor product
 
             for (auto i = 0; i < pt_dim; i++)
-                error(i) = fabs(cpt(i) - domain(idx, mfa->min_dim + i));
+                error(i) = fabs(cpt(i) - domain(idx, mfa_data.min_dim + i));
         }
-
-        // DEPRECATED, use AbsCoordError instead
-        // compute the error (absolute value of difference of range coordinates) of the mfa at a domain point
-        // error is not normalized by the data range (absolute, not relative error)
-//         T RangeError(
-//                 size_t idx,               // index of domain point
-//                 int    verbose)           // output level
-//         {
-//             // convert linear idx to multidim. i,j,k... indices in each domain dimension
-//             VectorXi ijk(mfa->p.size());
-//             mfa->idx2ijk(idx, ijk);
-// 
-//             // compute parameters for the vertices of the cell
-//             VectorX<T> param(mfa->p.size());
-//             for (int i = 0; i < mfa->p.size(); i++)
-//                 param(i) = mfa->params(ijk(i) + mfa->po[i]);
-// 
-//             // approximated value
-//             VectorX<T> cpt(mfa->ctrl_pts.cols());          // approximated point
-//             Decoder<T> decoder(*mfa, verbose);
-//             decoder.VolPt(param, cpt);
-// 
-//             int last = mfa->domain.cols() - 1;           // range coordinate
-//             T err = fabs(cpt(last) - mfa->domain(idx, last));
-// 
-//             return err;
-//         }
-
-        T NormalDistance(
-                VectorX<T>& pt,             // point whose distance from domain is desired
-                size_t      cell_idx)       // index of min. corner of cell in the domain
-        {
-            return mfa->NormalDistance(pt, cell_idx);
-        }
-
-    private:
-
-        MFA_Data<T>* mfa;                           // the mfa data model
     };
 
-}
+}                                           // namespace
 
 #endif

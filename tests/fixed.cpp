@@ -134,8 +134,6 @@ int main(int argc, char** argv)
 
     // set default args for diy foreach callback functions
     DomainArgs d_args;
-    d_args.pt_dim       = pt_dim;
-    d_args.dom_dim      = dom_dim;
     d_args.weighted     = weighted;
     d_args.multiblock   = false;
     d_args.verbose      = 1;
@@ -273,8 +271,7 @@ int main(int argc, char** argv)
 
     // check the results of the last (only) science variable
     Block<real_t>* b    = static_cast<Block<real_t>*>(master.block(0));
-    int ndom_dims       = b->ndom_pts.size();                // domain dimensionality
-    real_t range_extent = b->domain.col(ndom_dims).maxCoeff() - b->domain.col(ndom_dims).minCoeff();
+    real_t range_extent = b->domain.col(dom_dim).maxCoeff() - b->domain.col(dom_dim).minCoeff();
     real_t err_factor   = 1.0e-3;
     real_t expect_err;
     // for ./fixed-test -i sinc -d 3 -m 2 -p 1 -q 5 -v 20 -w 0

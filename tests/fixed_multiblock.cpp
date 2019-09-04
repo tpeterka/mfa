@@ -141,8 +141,6 @@ int main(int argc, char** argv)
     DomainArgs d_args;
 
     // set default args for diy foreach callback functions
-    d_args.pt_dim       = pt_dim;
-    d_args.dom_dim      = dom_dim;
     d_args.weighted     = weighted;
     d_args.multiblock   = true;
     d_args.verbose      = 0;
@@ -247,7 +245,7 @@ int main(int argc, char** argv)
     if (world.rank() == 0 && tot_blocks == 4)
     {
         Block<real_t>* b        = static_cast<Block<real_t>*>(master.block(0));
-        int     ndom_dims       = b->ndom_pts.size();               // domain dimensionality
+        int     ndom_dims       = b->mfa->ndom_pts().size();        // domain dimensionality
         real_t  range_extent    = b->domain.col(ndom_dims).maxCoeff() - b->domain.col(ndom_dims).minCoeff();
         real_t  err_factor      = 1.0e-3;
         real_t  our_err         = b->max_errs[0] / range_extent;    // actual normalized max_err

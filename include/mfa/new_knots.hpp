@@ -9,7 +9,7 @@
 #ifndef _NEW_KNOTS_HPP
 #define _NEW_KNOTS_HPP
 
-#include    <mfa/data_model.hpp>
+#include    <mfa/mfa_data.hpp>
 #include    <mfa/mfa.hpp>
 #include    <mfa/encode.hpp>
 #include    <mfa/decode.hpp>

@@ -41,12 +41,12 @@ void PrepRenderingData(
     vec3d p;
 
     // number of geometry dimensions and science variables
-    int ndom_dims   = block->geometry.mfa->tmesh().tensor_prods[0].ctrl_pts.cols();          // number of geometry dims
+    int ndom_dims   = block->geometry.mfa_data->tmesh.tensor_prods[0].ctrl_pts.cols();          // number of geometry dims
     nvars           = block->vars.size();                       // number of science variables
 
     // number of raw points
-    for (size_t j = 0; j < (size_t)(block->ndom_pts.size()); j++)
-        nraw_pts.push_back(block->ndom_pts(j));
+    for (size_t j = 0; j < (size_t)(block->mfa->ndom_pts().size()); j++)
+        nraw_pts.push_back(block->mfa->ndom_pts()(j));
 
     // raw geometry and science variables
     raw_data = new float*[nvars];
@@ -66,15 +66,15 @@ void PrepRenderingData(
 
     // number of geometry control points
     // TODO: hard-coded for one tensor product
-    for (size_t j = 0; j < (size_t)(block->geometry.mfa->tmesh().tensor_prods[0].nctrl_pts.size()); j++)
-        geom_nctrl_pts.push_back(block->geometry.mfa->tmesh().tensor_prods[0].nctrl_pts(j));
+    for (size_t j = 0; j < (size_t)(block->geometry.mfa_data->tmesh.tensor_prods[0].nctrl_pts.size()); j++)
+        geom_nctrl_pts.push_back(block->geometry.mfa_data->tmesh.tensor_prods[0].nctrl_pts(j));
 
     // number of science variable control points
     // TODO: hard-coded for one tensor product
     vars_nctrl_pts.resize(nvars);
     for (size_t i = 0; i < nvars; i++)
-        for (size_t j = 0; j < (size_t)(block->vars[i].mfa->tmesh().tensor_prods[0].nctrl_pts.size()); j++)
-            vars_nctrl_pts[i].push_back(block->vars[i].mfa->tmesh().tensor_prods[0].nctrl_pts(j));
+        for (size_t j = 0; j < (size_t)(block->vars[i].mfa_data->tmesh.tensor_prods[0].nctrl_pts.size()); j++)
+            vars_nctrl_pts[i].push_back(block->vars[i].mfa_data->tmesh.tensor_prods[0].nctrl_pts(j));
 
     // geometry control points
 
@@ -83,13 +83,13 @@ void PrepRenderingData(
     for (int k = 0; k < ndom_dims; k++)
     {
         // TODO: hard-coded for one tensor product
-        ctrl_pts_coords[k].resize(block->geometry.mfa->tmesh().tensor_prods[0].nctrl_pts(k));
-        for (size_t j = 0; j < (size_t)(block->geometry.mfa->tmesh().tensor_prods[0].nctrl_pts(k)); j++)
+        ctrl_pts_coords[k].resize(block->geometry.mfa_data->tmesh.tensor_prods[0].nctrl_pts(k));
+        for (size_t j = 0; j < (size_t)(block->geometry.mfa_data->tmesh.tensor_prods[0].nctrl_pts(k)); j++)
         {
             float tsum = 0.0;
-            for (int l = 1; l < block->geometry.mfa->mfa_data().p(k) + 1; l++)
-                tsum += block->geometry.mfa->tmesh().all_knots[k][j + l];
-            tsum /= float(block->geometry.mfa->mfa_data().p(k));
+            for (int l = 1; l < block->geometry.mfa_data->p(k) + 1; l++)
+                tsum += block->geometry.mfa_data->tmesh.all_knots[k][j + l];
+            tsum /= float(block->geometry.mfa_data->p(k));
             ctrl_pts_coords[k][j] = block->core_mins(k) + tsum * (block->core_maxs(k) - block->core_mins(k));
         }
     }
@@ -97,7 +97,7 @@ void PrepRenderingData(
     // form the tensor product of control points from the vectors of individual coordinates
     // TODO: hard-coded for one tensor product
     vector<size_t> ijk(ndom_dims);                              // indices of control point
-    for (size_t j = 0; j < (size_t)(block->geometry.mfa->tmesh().tensor_prods[0].ctrl_pts.rows()); j++)
+    for (size_t j = 0; j < (size_t)(block->geometry.mfa_data->tmesh.tensor_prods[0].ctrl_pts.rows()); j++)
     {
         // first 3 dims stored as mesh geometry
         p.x = ctrl_pts_coords[0][ijk[0]];
@@ -114,7 +114,7 @@ void PrepRenderingData(
         // update ijk of next point
         for (int k = 0; k < ndom_dims; k++)
         {
-            if (ijk[k] < block->geometry.mfa->tmesh().tensor_prods[0].nctrl_pts(k) - 1)
+            if (ijk[k] < block->geometry.mfa_data->tmesh.tensor_prods[0].nctrl_pts(k) - 1)
             {
                 ijk[k]++;
                 break;
@@ -130,19 +130,19 @@ void PrepRenderingData(
     vars_ctrl_data = new float*[nvars];
     for (size_t i = 0; i < nvars; i++)
     {
-        vars_ctrl_data[i] = new float[block->vars[i].mfa->tmesh().tensor_prods[0].ctrl_pts.rows()];
+        vars_ctrl_data[i] = new float[block->vars[i].mfa_data->tmesh.tensor_prods[0].ctrl_pts.rows()];
 
         // compute vectors of individual control point coordinates for the tensor product
         vector<vector<float>> ctrl_pts_coords(ndom_dims);
         for (int k = 0; k < ndom_dims; k++)
         {
-            ctrl_pts_coords[k].resize(block->vars[i].mfa->tmesh().tensor_prods[0].nctrl_pts(k));
-            for (size_t j = 0; j < (size_t)(block->vars[i].mfa->tmesh().tensor_prods[0].nctrl_pts(k)); j++)
+            ctrl_pts_coords[k].resize(block->vars[i].mfa_data->tmesh.tensor_prods[0].nctrl_pts(k));
+            for (size_t j = 0; j < (size_t)(block->vars[i].mfa_data->tmesh.tensor_prods[0].nctrl_pts(k)); j++)
             {
                 float tsum = 0.0;
-                for (int l = 1; l < block->vars[i].mfa->mfa_data().p(k) + 1; l++)
-                    tsum += block->vars[i].mfa->tmesh().all_knots[k][j + l];
-                tsum /= float(block->vars[i].mfa->mfa_data().p(k));
+                for (int l = 1; l < block->vars[i].mfa_data->p(k) + 1; l++)
+                    tsum += block->vars[i].mfa_data->tmesh.all_knots[k][j + l];
+                tsum /= float(block->vars[i].mfa_data->p(k));
                 ctrl_pts_coords[k][j] = block->core_mins(k) + tsum * (block->core_maxs(k) - block->core_mins(k));
             }
         }
@@ -150,33 +150,33 @@ void PrepRenderingData(
         // form the tensor product of control points from the vectors of individual coordinates
         // TODO: hard-coded for one tensor product
         vector<size_t> ijk(ndom_dims);                              // indices of control point
-        for (size_t j = 0; j < (size_t)(block->vars[i].mfa->tmesh().tensor_prods[0].ctrl_pts.rows()); j++)
+        for (size_t j = 0; j < (size_t)(block->vars[i].mfa_data->tmesh.tensor_prods[0].ctrl_pts.rows()); j++)
         {
             // first 3 dims stored as mesh geometry
             // control point position and optionally science variable, if the total fits in 3d
             p.x = ctrl_pts_coords[0][ijk[0]];
             if (ndom_dims < 2)
             {
-                p.y = block->vars[i].mfa->tmesh().tensor_prods[0].ctrl_pts(j, 0);
+                p.y = block->vars[i].mfa_data->tmesh.tensor_prods[0].ctrl_pts(j, 0);
                 p.z = 0.0;
             }
             else
             {
                 p.y = ctrl_pts_coords[1][ijk[1]];
                 if (ndom_dims < 3)
-                    p.z = block->vars[i].mfa->tmesh().tensor_prods[0].ctrl_pts(j, 0);
+                    p.z = block->vars[i].mfa_data->tmesh.tensor_prods[0].ctrl_pts(j, 0);
                 else
                     p.z = ctrl_pts_coords[2][ijk[2]];
             }
             vars_ctrl_pts[i].push_back(p);
 
             // science variable also stored as data
-            vars_ctrl_data[i][j] = block->vars[i].mfa->tmesh().tensor_prods[0].ctrl_pts(j, 0);
+            vars_ctrl_data[i][j] = block->vars[i].mfa_data->tmesh.tensor_prods[0].ctrl_pts(j, 0);
 
             // update ijk of next point
             for (int k = 0; k < ndom_dims; k++)
             {
-                if (ijk[k] < block->vars[i].mfa->tmesh().tensor_prods[0].nctrl_pts(k) - 1)
+                if (ijk[k] < block->vars[i].mfa_data->tmesh.tensor_prods[0].nctrl_pts(k) - 1)
                 {
                     ijk[k]++;
                     break;
@@ -427,7 +427,7 @@ void test_and_write(Block<real_t>*                      b,
 
     nvars = b->vars.size();
     if (!b->dom_dim)
-        b->dom_dim =  b->ndom_pts.size();
+        b->dom_dim =  b->mfa->ndom_pts().size();
 
     // default args for evaluating analytical functions
     for (auto i = 0; i < nvars; i++)
@@ -438,7 +438,6 @@ void test_and_write(Block<real_t>*                      b,
         if (input == "sinc")
             a->s[i] = 10.0 * (i + 1);
     }
-    a->dom_dim = b->dom_dim;
 
     // number of test points
     size_t tot_ntest = 1;

@@ -56,8 +56,6 @@ struct vec3d
 // arguments to block foreach functions
 struct DomainArgs
 {
-    int       pt_dim;                            // dimension of points
-    int       dom_dim;                           // dimension of domain (<= pt_dim)
     int       geom_p[MAX_DIM];                   // degree in each dimension of geometry
     int       vars_p[MAX_DIM];                   // degree in each dimension of science variables
     int       starts[MAX_DIM];                   // starting offsets of ndom_pts (optional, usually assumed 0)
@@ -89,9 +87,9 @@ struct ErrArgs
 template <typename T>
 struct Model
 {
-    int         min_dim;                        // starting coordinate of this model in full-dimensional data
-    int         max_dim;                        // ending coordinate of this model in full-dimensional data
-    mfa::MFA<T> *mfa;                           // MFA object
+    int                 min_dim;                // starting coordinate of this model in full-dimensional data
+    int                 max_dim;                // ending coordinate of this model in full-dimensional data
+    mfa::MFA_Data<T>    *mfa_data;             // MFA model data
 };
 
 // block
@@ -103,17 +101,18 @@ struct Block
     int                 pt_dim;                 // dimensionality of full point (geometry + science vars)
 
     // input data
-    VectorXi            ndom_pts;               // number of domain points in each dimension
     MatrixX<T>          domain;                 // input data (1st dim changes fastest)
-    vector<vector<T>>   params;                 // parameters for input points[dimension][index]
     VectorX<T>          bounds_mins;            // local domain minimum corner
     VectorX<T>          bounds_maxs;            // local domain maximum corner
     VectorX<T>          core_mins;              // local domain minimum corner w/o ghost
     VectorX<T>          core_maxs;              // local domain maximum corner w/o ghost
 
+    // MFA object
+    mfa::MFA<T>         *mfa;
+
     // MFA models
     Model<T>            geometry;               // geometry MFA
-    vector< Model<T> >  vars;                   // science variable MFAs
+    vector<Model<T>>    vars;                   // science variable MFAs
 
     // output data
     MatrixX<T>          approx;                 // points in approximated volume
@@ -129,7 +128,13 @@ struct Block
         void* create()          { return new Block; }
 
     static
-        void destroy(void* b)   { delete static_cast<Block*>(b); }
+        void destroy(void* b)
+        {
+            Block* block = static_cast<Block*>(b);
+            if (block->mfa)
+                delete block->mfa;
+            delete block;
+        }
 
     static
         void add(                               // add the block to the decomposition
@@ -173,6 +178,8 @@ struct Block
             b->core_mins(i) = core.min[i];
             b->core_maxs(i) = core.max[i];
         }
+
+        b->mfa = NULL;
     }
 
     static
@@ -182,9 +189,12 @@ struct Block
         {
             Block* b = (Block*)b_;
 
-            // TODO: don't save ndom_pts and domain in practice
-            diy::save(bb, b->ndom_pts);
+            // TODO: don't save domain in practice
             diy::save(bb, b->domain);
+
+            // top-level mfa data
+            diy::save(bb, b->dom_dim);
+            diy::save(bb, b->mfa->ndom_pts());
 
             diy::save(bb, b->bounds_mins);
             diy::save(bb, b->bounds_maxs);
@@ -192,37 +202,37 @@ struct Block
             diy::save(bb, b->core_maxs);
 
             // geometry
-            diy::save(bb, b->geometry.mfa->mfa_data().p);
-            diy::save(bb, b->geometry.mfa->tmesh().tensor_prods.size());
-            for (TensorProduct<T>& t: b->geometry.mfa->tmesh().tensor_prods)
+            diy::save(bb, b->geometry.mfa_data->p);
+            diy::save(bb, b->geometry.mfa_data->tmesh.tensor_prods.size());
+            for (TensorProduct<T>& t: b->geometry.mfa_data->tmesh.tensor_prods)
                 diy::save(bb, t.nctrl_pts);
-            for (TensorProduct<T>& t: b->geometry.mfa->tmesh().tensor_prods)
+            for (TensorProduct<T>& t: b->geometry.mfa_data->tmesh.tensor_prods)
                 diy::save(bb, t.ctrl_pts);
-            for (TensorProduct<T>& t: b->geometry.mfa->tmesh().tensor_prods)
+            for (TensorProduct<T>& t: b->geometry.mfa_data->tmesh.tensor_prods)
                 diy::save(bb, t.weights);
-            for (TensorProduct<T>& t: b->geometry.mfa->tmesh().tensor_prods)
+            for (TensorProduct<T>& t: b->geometry.mfa_data->tmesh.tensor_prods)
                 diy::save(bb, t.knot_mins);
-            for (TensorProduct<T>& t: b->geometry.mfa->tmesh().tensor_prods)
+            for (TensorProduct<T>& t: b->geometry.mfa_data->tmesh.tensor_prods)
                 diy::save(bb, t.knot_maxs);
-            diy::save(bb, b->geometry.mfa->tmesh().all_knots);
+            diy::save(bb, b->geometry.mfa_data->tmesh.all_knots);
 
             // science variables
             diy::save(bb, b->vars.size());
             for (auto i = 0; i < b->vars.size(); i++)
             {
-                diy::save(bb, b->vars[i].mfa->mfa_data().p);
-                diy::save(bb, b->vars[i].mfa->tmesh().tensor_prods.size());
-                for (TensorProduct<T>& t: b->vars[i].mfa->tmesh().tensor_prods)
+                diy::save(bb, b->vars[i].mfa_data->p);
+                diy::save(bb, b->vars[i].mfa_data->tmesh.tensor_prods.size());
+                for (TensorProduct<T>& t: b->vars[i].mfa_data->tmesh.tensor_prods)
                     diy::save(bb, t.nctrl_pts);
-                for (TensorProduct<T>& t: b->vars[i].mfa->tmesh().tensor_prods)
+                for (TensorProduct<T>& t: b->vars[i].mfa_data->tmesh.tensor_prods)
                     diy::save(bb, t.ctrl_pts);
-                for (TensorProduct<T>& t: b->vars[i].mfa->tmesh().tensor_prods)
+                for (TensorProduct<T>& t: b->vars[i].mfa_data->tmesh.tensor_prods)
                     diy::save(bb, t.weights);
-                for (TensorProduct<T>& t: b->vars[i].mfa->tmesh().tensor_prods)
+                for (TensorProduct<T>& t: b->vars[i].mfa_data->tmesh.tensor_prods)
                     diy::save(bb, t.knot_mins);
-                for (TensorProduct<T>& t: b->vars[i].mfa->tmesh().tensor_prods)
+                for (TensorProduct<T>& t: b->vars[i].mfa_data->tmesh.tensor_prods)
                     diy::save(bb, t.knot_maxs);
-                diy::save(bb, b->vars[i].mfa->tmesh().all_knots);
+                diy::save(bb, b->vars[i].mfa_data->tmesh.all_knots);
             }
 
             diy::save(bb, b->approx);
@@ -235,9 +245,14 @@ struct Block
         {
             Block* b = (Block*)b_;
 
-            // TODO: don't load ndom_pts and domain in practice
-            diy::load(bb, b->ndom_pts);
+            // TODO: don't load domain in practice
             diy::load(bb, b->domain);
+
+            // top-level mfa data
+            diy::load(bb, b->dom_dim);
+            VectorXi ndom_pts(b->dom_dim);
+            diy::load(bb, ndom_pts);
+            b->mfa = new mfa::MFA<T>(b->dom_dim, ndom_pts, b->domain);
 
             diy::load(bb, b->bounds_mins);
             diy::load(bb, b->bounds_maxs);
@@ -250,18 +265,18 @@ struct Block
             // geometry
             diy::load(bb, p);
             diy::load(bb, ntensor_prods);
-            b->geometry.mfa = new mfa::MFA<T>(p, ntensor_prods);
-            for (TensorProduct<T>& t: b->geometry.mfa->tmesh().tensor_prods)
+            b->geometry.mfa_data = new mfa::MFA_Data<T>(p, ntensor_prods);
+            for (TensorProduct<T>& t: b->geometry.mfa_data->tmesh.tensor_prods)
                 diy::load(bb, t.nctrl_pts);
-            for (TensorProduct<T>& t: b->geometry.mfa->tmesh().tensor_prods)
+            for (TensorProduct<T>& t: b->geometry.mfa_data->tmesh.tensor_prods)
                 diy::load(bb, t.ctrl_pts);
-            for (TensorProduct<T>& t: b->geometry.mfa->tmesh().tensor_prods)
+            for (TensorProduct<T>& t: b->geometry.mfa_data->tmesh.tensor_prods)
                 diy::load(bb, t.weights);
-            for (TensorProduct<T>& t: b->geometry.mfa->tmesh().tensor_prods)
+            for (TensorProduct<T>& t: b->geometry.mfa_data->tmesh.tensor_prods)
                 diy::load(bb, t.knot_mins);
-            for (TensorProduct<T>& t: b->geometry.mfa->tmesh().tensor_prods)
+            for (TensorProduct<T>& t: b->geometry.mfa_data->tmesh.tensor_prods)
                 diy::load(bb, t.knot_maxs);
-            diy::load(bb, b->geometry.mfa->tmesh().all_knots);
+            diy::load(bb, b->geometry.mfa_data->tmesh.all_knots);
 
             // science variables
             size_t nvars;
@@ -271,18 +286,18 @@ struct Block
             {
                 diy::load(bb, p);
                 diy::load(bb, ntensor_prods);
-                b->vars[i].mfa = new mfa::MFA<T>(p, ntensor_prods);
-                for (TensorProduct<T>& t: b->vars[i].mfa->tmesh().tensor_prods)
+                b->vars[i].mfa_data = new mfa::MFA_Data<T>(p, ntensor_prods);
+                for (TensorProduct<T>& t: b->vars[i].mfa_data->tmesh.tensor_prods)
                     diy::load(bb, t.nctrl_pts);
-                for (TensorProduct<T>& t: b->vars[i].mfa->tmesh().tensor_prods)
+                for (TensorProduct<T>& t: b->vars[i].mfa_data->tmesh.tensor_prods)
                     diy::load(bb, t.ctrl_pts);
-                for (TensorProduct<T>& t: b->vars[i].mfa->tmesh().tensor_prods)
+                for (TensorProduct<T>& t: b->vars[i].mfa_data->tmesh.tensor_prods)
                     diy::load(bb, t.weights);
-                for (TensorProduct<T>& t: b->vars[i].mfa->tmesh().tensor_prods)
+                for (TensorProduct<T>& t: b->vars[i].mfa_data->tmesh.tensor_prods)
                     diy::load(bb, t.knot_mins);
-                for (TensorProduct<T>& t: b->vars[i].mfa->tmesh().tensor_prods)
+                for (TensorProduct<T>& t: b->vars[i].mfa_data->tmesh.tensor_prods)
                     diy::load(bb, t.knot_maxs);
-                diy::load(bb, b->vars[i].mfa->tmesh().all_knots);
+                diy::load(bb, b->vars[i].mfa_data->tmesh.all_knots);
             }
 
             diy::load(bb, b->approx);
@@ -296,7 +311,7 @@ struct Block
     {
         DomainArgs* a = &args;
         T retval = 1.0;
-        for (auto i = 0; i < a->dom_dim; i++)
+        for (auto i = 0; i < dom_dim; i++)
             retval *= sin(domain_pt(i) * a->f[k]);
         retval *= a->s[k];
 
@@ -310,7 +325,7 @@ struct Block
     {
         DomainArgs* a = &args;
         T retval = 1.0;
-        for (auto i = 0; i < a->dom_dim; i++)
+        for (auto i = 0; i < dom_dim; i++)
         {
             if (domain_pt(i) != 0.0)
                 retval *= (sin(domain_pt(i) * a->f[k] ) / domain_pt(i));
@@ -367,20 +382,20 @@ struct Block
             DomainArgs&                         args)
     {
         DomainArgs* a   = &args;
-        int nvars       = a->pt_dim - a->dom_dim;             // number of science variables
+        int nvars       = pt_dim - dom_dim;             // number of science variables
         vars.resize(nvars);
         max_errs.resize(nvars);
         sum_sq_errs.resize(nvars);
         int tot_ndom_pts    = 1;
         geometry.min_dim = 0;
-        geometry.max_dim = a->dom_dim - 1;
+        geometry.max_dim = dom_dim - 1;
         for (int j = 0; j < nvars; j++)
         {
-            vars[j].min_dim = a->dom_dim + j;
+            vars[j].min_dim = dom_dim + j;
             vars[j].max_dim = vars[j].min_dim + 1;
         }
-        ndom_pts.resize(a->dom_dim);
-        for (int i = 0; i < a->dom_dim; i++)
+        VectorXi ndom_pts(dom_dim);
+        for (int i = 0; i < dom_dim; i++)
             ndom_pts(i) = a->ndom_pts[i];
 
         // get local block bounds
@@ -388,11 +403,11 @@ struct Block
         // if multiblock, they were decomposed by diy and are already in the block's bounds_mins, maxs
         if (!a->multiblock)
         {
-            bounds_mins.resize(a->pt_dim);
-            bounds_maxs.resize(a->pt_dim);
-            core_mins.resize(a->dom_dim);
-            core_maxs.resize(a->dom_dim);
-            for (int i = 0; i < a->dom_dim; i++)
+            bounds_mins.resize(pt_dim);
+            bounds_maxs.resize(pt_dim);
+            core_mins.resize(dom_dim);
+            core_maxs.resize(dom_dim);
+            for (int i = 0; i < dom_dim; i++)
             {
                 bounds_mins(i)  = a->min[i];
                 bounds_maxs(i)  = a->max[i];
@@ -402,10 +417,10 @@ struct Block
         }
 
         // adjust number of domain points and starting domain point for ghost
-        VectorX<T> d(a->dom_dim);               // step in domain points in each dimension
-        VectorX<T> p0(a->dom_dim);              // starting point in each dimension
+        VectorX<T> d(dom_dim);               // step in domain points in each dimension
+        VectorX<T> p0(dom_dim);              // starting point in each dimension
         int nghost_pts;                         // number of ghost points in current dimension
-        for (int i = 0; i < a->dom_dim; i++)
+        for (int i = 0; i < dom_dim; i++)
         {
             d(i) = (core_maxs(i) - core_mins(i)) / (ndom_pts(i) - 1);
             // min direction
@@ -418,7 +433,7 @@ struct Block
             tot_ndom_pts *= ndom_pts(i);
         }
 
-        domain.resize(tot_ndom_pts, a->pt_dim);
+        domain.resize(tot_ndom_pts, pt_dim);
 
         // assign values to the domain (geometry)
         vector<int> dom_idx(dom_dim);                   // current index of domain point in each dim, initialized to 0s
@@ -447,10 +462,10 @@ struct Block
 
         // assign values to the range (science variables)
         // hard-coded for 2 domain dimensions and 1 science variable
-        VectorX<T> dom_pt(a->dom_dim);
+        VectorX<T> dom_pt(dom_dim);
         for (int j = 0; j < tot_ndom_pts; j++)
         {
-            dom_pt = domain.block(j, 0, 1, a->dom_dim).transpose();
+            dom_pt = domain.block(j, 0, 1, dom_dim).transpose();
             T retval;
             for (auto k = 0; k < nvars; k++)        // for all science variables
             {
@@ -464,21 +479,21 @@ struct Block
                     retval = f17(dom_pt);
                 if (fun == "f18")
                     retval = f18(dom_pt);
-                domain(j, a->dom_dim + k) = retval;
+                domain(j, dom_dim + k) = retval;
             }
 
             // add some noise
             double noise = distribution(generator);
-            domain(j, a->dom_dim) *= (1.0 + a->n * noise);
+            domain(j, dom_dim) *= (1.0 + a->n * noise);
 
-            if (j == 0 || domain(j, a->dom_dim) > bounds_maxs(a->dom_dim))
-                bounds_maxs(a->dom_dim) = domain(j, a->dom_dim);
-            if (j == 0 || domain(j, a->dom_dim) < bounds_mins(a->dom_dim))
-                bounds_mins(a->dom_dim) = domain(j, a->dom_dim);
+            if (j == 0 || domain(j, dom_dim) > bounds_maxs(dom_dim))
+                bounds_maxs(dom_dim) = domain(j, dom_dim);
+            if (j == 0 || domain(j, dom_dim) < bounds_mins(dom_dim))
+                bounds_mins(dom_dim) = domain(j, dom_dim);
         }
 
         // optional wavy domain
-        if (a->t && a->pt_dim >= 3)
+        if (a->t && pt_dim >= 3)
         {
             for (auto j = 0; j < tot_ndom_pts; j++)
             {
@@ -498,7 +513,7 @@ struct Block
         }
 
         // optional rotation of the domain
-        if (a->r && a->pt_dim >= 3)
+        if (a->r && pt_dim >= 3)
         {
             for (auto j = 0; j < tot_ndom_pts; j++)
             {
@@ -516,6 +531,8 @@ struct Block
                     bounds_maxs(1) = domain(j, 1);
             }
         }
+
+        mfa = new mfa::MFA<T>(dom_dim, ndom_pts, domain);
 
         // extents
         fprintf(stderr, "gid = %d\n", cp.gid());
@@ -537,22 +554,22 @@ struct Block
         DomainArgs* a = &args;
         int tot_ndom_pts = 1;
         geometry.min_dim = 0;
-        geometry.max_dim = a->dom_dim - 1;
+        geometry.max_dim = dom_dim - 1;
         int nvars = 1;
         vars.resize(nvars);
         max_errs.resize(nvars);
         sum_sq_errs.resize(nvars);
-        vars[0].min_dim = a->dom_dim;
+        vars[0].min_dim = dom_dim;
         vars[0].max_dim = vars[0].min_dim + 1;
-        ndom_pts.resize(a->dom_dim);
-        bounds_mins.resize(a->pt_dim);
-        bounds_maxs.resize(a->pt_dim);
-        for (int i = 0; i < a->dom_dim; i++)
+        VectorXi ndom_pts(dom_dim);
+        bounds_mins.resize(pt_dim);
+        bounds_maxs.resize(pt_dim);
+        for (int i = 0; i < dom_dim; i++)
         {
             ndom_pts(i)                     =  a->ndom_pts[i];
             tot_ndom_pts                    *= ndom_pts(i);
         }
-        domain.resize(tot_ndom_pts, a->pt_dim);
+        domain.resize(tot_ndom_pts, pt_dim);
         vector<float> vel(3 * tot_ndom_pts);
 
         // rest is hard-coded for 1d
@@ -597,13 +614,15 @@ struct Block
         // extents
         bounds_mins(0) = 0.0;
         bounds_maxs(0) = domain(tot_ndom_pts - 1, 0);
-        core_mins.resize(a->dom_dim);
-        core_maxs.resize(a->dom_dim);
-        for (int i = 0; i < a->dom_dim; i++)
+        core_mins.resize(dom_dim);
+        core_maxs.resize(dom_dim);
+        for (int i = 0; i < dom_dim; i++)
         {
             core_mins(i) = bounds_mins(i);
             core_maxs(i) = bounds_maxs(i);
         }
+
+        mfa = new mfa::MFA<T>(dom_dim, ndom_pts, domain);
 
         // debug
         cerr << "domain extent:\n min\n" << bounds_mins << "\nmax\n" << bounds_maxs << endl;
@@ -618,22 +637,22 @@ struct Block
         DomainArgs* a = &args;
         int tot_ndom_pts = 1;
         geometry.min_dim = 0;
-        geometry.max_dim = a->dom_dim - 1;
+        geometry.max_dim = dom_dim - 1;
         int nvars = 1;
         vars.resize(nvars);
         max_errs.resize(nvars);
         sum_sq_errs.resize(nvars);
-        vars[0].min_dim = a->dom_dim;
+        vars[0].min_dim = dom_dim;
         vars[0].max_dim = vars[0].min_dim + 1;
-        ndom_pts.resize(a->dom_dim);
-        bounds_mins.resize(a->pt_dim);
-        bounds_maxs.resize(a->pt_dim);
-        for (int i = 0; i < a->dom_dim; i++)
+        VectorXi ndom_pts(dom_dim);
+        bounds_mins.resize(pt_dim);
+        bounds_maxs.resize(pt_dim);
+        for (int i = 0; i < dom_dim; i++)
         {
             ndom_pts(i)                     =  a->ndom_pts[i];
             tot_ndom_pts                    *= ndom_pts(i);
         }
-        domain.resize(tot_ndom_pts, a->pt_dim);
+        domain.resize(tot_ndom_pts, pt_dim);
         vector<float> vel(3 * tot_ndom_pts);
 
         // rest is hard-coded for 2d
@@ -683,13 +702,15 @@ struct Block
         bounds_mins(1) = 0.0;
         bounds_maxs(0) = domain(tot_ndom_pts - 1, 0);
         bounds_maxs(1) = domain(tot_ndom_pts - 1, 1);
-        core_mins.resize(a->dom_dim);
-        core_maxs.resize(a->dom_dim);
-        for (int i = 0; i < a->dom_dim; i++)
+        core_mins.resize(dom_dim);
+        core_maxs.resize(dom_dim);
+        for (int i = 0; i < dom_dim; i++)
         {
             core_mins(i) = bounds_mins(i);
             core_maxs(i) = bounds_maxs(i);
         }
+
+        mfa = new mfa::MFA<T>(dom_dim, ndom_pts, domain);
 
         // debug
         cerr << "domain extent:\n min\n" << bounds_mins << "\nmax\n" << bounds_maxs << endl;
@@ -704,22 +725,22 @@ struct Block
         DomainArgs* a = &args;
         int tot_ndom_pts = 1;
         geometry.min_dim = 0;
-        geometry.max_dim = a->dom_dim - 1;
+        geometry.max_dim = dom_dim - 1;
         int nvars = 1;
         vars.resize(nvars);
         max_errs.resize(nvars);
         sum_sq_errs.resize(nvars);
-        vars[0].min_dim = a->dom_dim;
+        vars[0].min_dim = dom_dim;
         vars[0].max_dim = vars[0].min_dim + 1;
-        ndom_pts.resize(a->dom_dim);
-        bounds_mins.resize(a->pt_dim);
-        bounds_maxs.resize(a->pt_dim);
-        for (int i = 0; i < a->dom_dim; i++)
+        VectorXi ndom_pts(dom_dim);
+        bounds_mins.resize(pt_dim);
+        bounds_maxs.resize(pt_dim);
+        for (int i = 0; i < dom_dim; i++)
         {
             ndom_pts(i)     =  a->ndom_pts[i];
             tot_ndom_pts    *= ndom_pts(i);
         }
-        domain.resize(tot_ndom_pts, a->pt_dim);
+        domain.resize(tot_ndom_pts, pt_dim);
         vector<float> vel(a->full_dom_pts[0] * a->full_dom_pts[1] * 3);
 
         FILE *fd = fopen(a->infile, "r");
@@ -792,13 +813,15 @@ struct Block
         bounds_mins(1) = domain(0, 1);
         bounds_maxs(0) = domain(tot_ndom_pts - 1, 0);
         bounds_maxs(1) = domain(tot_ndom_pts - 1, 1);
-        core_mins.resize(a->dom_dim);
-        core_maxs.resize(a->dom_dim);
-        for (int i = 0; i < a->dom_dim; i++)
+        core_mins.resize(dom_dim);
+        core_maxs.resize(dom_dim);
+        for (int i = 0; i < dom_dim; i++)
         {
             core_mins(i) = bounds_mins(i);
             core_maxs(i) = bounds_maxs(i);
         }
+
+        mfa = new mfa::MFA<T>(dom_dim, ndom_pts, domain);
 
         // debug
         cerr << "domain extent:\n min\n" << bounds_mins << "\nmax\n" << bounds_maxs << endl;
@@ -813,22 +836,22 @@ struct Block
         DomainArgs* a = &args;
         int tot_ndom_pts = 1;
         geometry.min_dim = 0;
-        geometry.max_dim = a->dom_dim - 1;
+        geometry.max_dim = dom_dim - 1;
         int nvars = 1;
         vars.resize(nvars);
         max_errs.resize(nvars);
         sum_sq_errs.resize(nvars);
-        vars[0].min_dim = a->dom_dim;
+        vars[0].min_dim = dom_dim;
         vars[0].max_dim = vars[0].min_dim + 1;
-        ndom_pts.resize(a->dom_dim);
-        bounds_mins.resize(a->pt_dim);
-        bounds_maxs.resize(a->pt_dim);
-        for (int i = 0; i < a->dom_dim; i++)
+        VectorXi ndom_pts(dom_dim);
+        bounds_mins.resize(pt_dim);
+        bounds_maxs.resize(pt_dim);
+        for (int i = 0; i < dom_dim; i++)
         {
             ndom_pts(i)                     =  a->ndom_pts[i];
             tot_ndom_pts                    *= ndom_pts(i);
         }
-        domain.resize(tot_ndom_pts, a->pt_dim);
+        domain.resize(tot_ndom_pts, pt_dim);
 
         vector<float> vel(3 * tot_ndom_pts);
 
@@ -880,13 +903,15 @@ struct Block
         bounds_maxs(0) = domain(tot_ndom_pts - 1, 0);
         bounds_maxs(1) = domain(tot_ndom_pts - 1, 1);
         bounds_maxs(2) = domain(tot_ndom_pts - 1, 2);
-        core_mins.resize(a->dom_dim);
-        core_maxs.resize(a->dom_dim);
-        for (int i = 0; i < a->dom_dim; i++)
+        core_mins.resize(dom_dim);
+        core_maxs.resize(dom_dim);
+        for (int i = 0; i < dom_dim; i++)
         {
             core_mins(i) = bounds_mins(i);
             core_maxs(i) = bounds_maxs(i);
         }
+
+        mfa = new mfa::MFA<T>(dom_dim, ndom_pts, domain);
 
         // debug
         cerr << "domain extent:\n min\n" << bounds_mins << "\nmax\n" << bounds_maxs << endl;
@@ -901,22 +926,22 @@ struct Block
         DomainArgs* a = &args;
         int tot_ndom_pts = 1;
         geometry.min_dim = 0;
-        geometry.max_dim = a->dom_dim - 1;
+        geometry.max_dim = dom_dim - 1;
         int nvars = 1;
         vars.resize(nvars);
         max_errs.resize(nvars);
         sum_sq_errs.resize(nvars);
-        vars[0].min_dim = a->dom_dim;
+        vars[0].min_dim = dom_dim;
         vars[0].max_dim = vars[0].min_dim + 1;
-        ndom_pts.resize(a->dom_dim);
-        bounds_mins.resize(a->pt_dim);
-        bounds_maxs.resize(a->pt_dim);
-        for (int i = 0; i < a->dom_dim; i++)
+        VectorXi ndom_pts(dom_dim);
+        bounds_mins.resize(pt_dim);
+        bounds_maxs.resize(pt_dim);
+        for (int i = 0; i < dom_dim; i++)
         {
             ndom_pts(i)     =  a->ndom_pts[i];
             tot_ndom_pts    *= ndom_pts(i);
         }
-        domain.resize(tot_ndom_pts, a->pt_dim);
+        domain.resize(tot_ndom_pts, pt_dim);
         vector<float> vel(a->full_dom_pts[0] * a->full_dom_pts[1] * a->full_dom_pts[2] * 3);
 
         FILE *fd = fopen(a->infile, "r");
@@ -992,13 +1017,15 @@ struct Block
         bounds_maxs(0) = domain(tot_ndom_pts - 1, 0);
         bounds_maxs(1) = domain(tot_ndom_pts - 1, 1);
         bounds_maxs(2) = domain(tot_ndom_pts - 1, 2);
-        core_mins.resize(a->dom_dim);
-        core_maxs.resize(a->dom_dim);
-        for (int i = 0; i < a->dom_dim; i++)
+        core_mins.resize(dom_dim);
+        core_maxs.resize(dom_dim);
+        for (int i = 0; i < dom_dim; i++)
         {
             core_mins(i) = bounds_mins(i);
             core_maxs(i) = bounds_maxs(i);
         }
+
+        mfa = new mfa::MFA<T>(dom_dim, ndom_pts, domain);
 
         // debug
         cerr << "domain extent:\n min\n" << bounds_mins << "\nmax\n" << bounds_maxs << endl;
@@ -1013,22 +1040,22 @@ struct Block
         DomainArgs* a = &args;
         int tot_ndom_pts = 1;
         geometry.min_dim = 0;
-        geometry.max_dim = a->dom_dim - 1;
+        geometry.max_dim = dom_dim - 1;
         int nvars = 1;
         vars.resize(nvars);
         max_errs.resize(nvars);
         sum_sq_errs.resize(nvars);
-        vars[0].min_dim = a->dom_dim;
+        vars[0].min_dim = dom_dim;
         vars[0].max_dim = vars[0].min_dim + 1;
-        ndom_pts.resize(a->dom_dim);
-        bounds_mins.resize(a->pt_dim);
-        bounds_maxs.resize(a->pt_dim);
-        for (int i = 0; i < a->dom_dim; i++)
+        VectorXi ndom_pts(dom_dim);
+        bounds_mins.resize(pt_dim);
+        bounds_maxs.resize(pt_dim);
+        for (int i = 0; i < dom_dim; i++)
         {
             ndom_pts(i)     =  a->ndom_pts[i];
             tot_ndom_pts    *= ndom_pts(i);
         }
-        domain.resize(tot_ndom_pts, a->pt_dim);
+        domain.resize(tot_ndom_pts, pt_dim);
 
         vector<float> val(tot_ndom_pts);
 
@@ -1070,13 +1097,15 @@ struct Block
         bounds_mins(1) = 0.0;
         bounds_maxs(0) = domain(tot_ndom_pts - 1, 0);
         bounds_maxs(1) = domain(tot_ndom_pts - 1, 1);
-        core_mins.resize(a->dom_dim);
-        core_maxs.resize(a->dom_dim);
-        for (int i = 0; i < a->dom_dim; i++)
+        core_mins.resize(dom_dim);
+        core_maxs.resize(dom_dim);
+        for (int i = 0; i < dom_dim; i++)
         {
             core_mins(i) = bounds_mins(i);
             core_maxs(i) = bounds_maxs(i);
         }
+
+        mfa = new mfa::MFA<T>(dom_dim, ndom_pts, domain);
 
         // debug
         cerr << "domain extent:\n min\n" << bounds_mins << "\nmax\n" << bounds_maxs << endl;
@@ -1091,22 +1120,22 @@ struct Block
         DomainArgs* a = &args;
         int tot_ndom_pts = 1;
         geometry.min_dim = 0;
-        geometry.max_dim = a->dom_dim - 1;
+        geometry.max_dim = dom_dim - 1;
         int nvars = 1;
         vars.resize(nvars);
         max_errs.resize(nvars);
         sum_sq_errs.resize(nvars);
-        vars[0].min_dim = a->dom_dim;
+        vars[0].min_dim = dom_dim;
         vars[0].max_dim = vars[0].min_dim + 1;
-        ndom_pts.resize(a->dom_dim);
-        bounds_mins.resize(a->pt_dim);
-        bounds_maxs.resize(a->pt_dim);
-        for (int i = 0; i < a->dom_dim; i++)
+        VectorXi ndom_pts(dom_dim);
+        bounds_mins.resize(pt_dim);
+        bounds_maxs.resize(pt_dim);
+        for (int i = 0; i < dom_dim; i++)
         {
             ndom_pts(i)     =  a->ndom_pts[i];
             tot_ndom_pts    *= ndom_pts(i);
         }
-        domain.resize(tot_ndom_pts, a->pt_dim);
+        domain.resize(tot_ndom_pts, pt_dim);
 
         vector<float> val(tot_ndom_pts);
 
@@ -1152,13 +1181,15 @@ struct Block
         bounds_maxs(0) = domain(tot_ndom_pts - 1, 0);
         bounds_maxs(1) = domain(tot_ndom_pts - 1, 1);
         bounds_maxs(2) = domain(tot_ndom_pts - 1, 2);
-        core_mins.resize(a->dom_dim);
-        core_maxs.resize(a->dom_dim);
-        for (int i = 0; i < a->dom_dim; i++)
+        core_mins.resize(dom_dim);
+        core_maxs.resize(dom_dim);
+        for (int i = 0; i < dom_dim; i++)
         {
             core_mins(i) = bounds_mins(i);
             core_maxs(i) = bounds_maxs(i);
         }
+
+        mfa = new mfa::MFA<T>(dom_dim, ndom_pts, domain);
 
         // debug
         cerr << "domain extent:\n min\n" << bounds_mins << "\nmax\n" << bounds_maxs << endl;
@@ -1170,11 +1201,10 @@ struct Block
             DomainArgs& args)
     {
         DomainArgs* a = &args;
-        int ndom_dims = a->dom_dim;                // domain dimensionality
 
-        VectorXi nctrl_pts(a->dom_dim);
-        VectorXi p(a->dom_dim);
-        for (auto j = 0; j < a->dom_dim; j++)
+        VectorXi nctrl_pts(dom_dim);
+        VectorXi p(dom_dim);
+        for (auto j = 0; j < dom_dim; j++)
         {
             nctrl_pts(j)    = a->geom_nctrl_pts[j];
             p(j)            = a->geom_p[j];
@@ -1183,18 +1213,19 @@ struct Block
         // encode geometry
         if (a->verbose && cp.master()->communicator().rank() == 0)
             fprintf(stderr, "\nEncoding geometry\n\n");
-        geometry.mfa = new mfa::MFA<T>(p,
-                                       ndom_pts,
+        geometry.mfa_data = new mfa::MFA_Data<T>(p,
+                                       mfa->ndom_pts(),
                                        domain,
+                                       mfa->params(),
                                        nctrl_pts,
                                        0,
-                                       ndom_dims - 1);
+                                       dom_dim - 1);
         // TODO: consider not weighting the geometry (only science variables), depends on geometry complexity
-        geometry.mfa->FixedEncode(domain, nctrl_pts, a->verbose, a->weighted);
+        mfa->FixedEncode(*geometry.mfa_data, domain, nctrl_pts, a->verbose, a->weighted);
 
         // encode science variables
         // same number of control points and same degree for all variables in this example
-        for (auto j = 0; j < a->dom_dim; j++)
+        for (auto j = 0; j < dom_dim; j++)
         {
             nctrl_pts(j)    = a->vars_nctrl_pts[j];
             p(j)            = a->vars_p[j];
@@ -1204,13 +1235,14 @@ struct Block
         {
             if (a->verbose && cp.master()->communicator().rank() == 0)
                 fprintf(stderr, "\nEncoding science variable %d\n\n", i);
-            vars[i].mfa = new mfa::MFA<T>(p,
-                                          ndom_pts,
+            vars[i].mfa_data = new mfa::MFA_Data<T>(p,
+                                          mfa->ndom_pts(),
                                           domain,
+                                          mfa->params(),
                                           nctrl_pts,
-                                          ndom_dims + i,        // assumes each variable is scalar
-                                          ndom_dims + i);
-            vars[i].mfa->FixedEncode(domain, nctrl_pts, a->verbose, a->weighted);
+                                          dom_dim + i,        // assumes each variable is scalar
+                                          dom_dim + i);
+            mfa->FixedEncode(*(vars[i].mfa_data), domain, nctrl_pts, a->verbose, a->weighted);
         }
     }
 
@@ -1222,12 +1254,11 @@ struct Block
             DomainArgs&                       args)
     {
         DomainArgs* a = &args;
-        int ndom_dims = a->dom_dim;                     // domain dimensionality
-        VectorXi nctrl_pts(a->dom_dim);
-        VectorXi p(ndom_dims);
-        VectorXi ndom_pts(ndom_dims);
+        VectorXi nctrl_pts(dom_dim);
+        VectorXi p(dom_dim);
+        VectorXi ndom_pts(dom_dim);
         VectorX<T> extents = bounds_maxs - bounds_mins;
-        for (auto j = 0; j < ndom_dims; j++)
+        for (auto j = 0; j < dom_dim; j++)
         {
             nctrl_pts(j)    = a->geom_nctrl_pts[j];
             ndom_pts(j)     = a->ndom_pts[j];
@@ -1237,17 +1268,18 @@ struct Block
         // encode geometry
         if (a->verbose && cp.master()->communicator().rank() == 0)
             fprintf(stderr, "\nEncoding geometry\n\n");
-        geometry.mfa = new mfa::MFA<T>(p,
-                                       ndom_pts,
+        geometry.mfa_data = new mfa::MFA_Data<T>(p,
+                                       mfa->ndom_pts(),
                                        domain,
+                                       mfa->params(),
                                        nctrl_pts,
                                        0,
-                                       ndom_dims - 1);
+                                       dom_dim - 1);
         // TODO: consider not weighting the geometry (only science variables), depends on geometry complexity
-        geometry.mfa->AdaptiveEncode(domain, err_limit, a->verbose, a->weighted, extents, max_rounds);
+        mfa->AdaptiveEncode(*geometry.mfa_data, domain, err_limit, a->verbose, a->weighted, extents, max_rounds);
 
         // encode science variables
-        for (auto j = 0; j < ndom_dims; j++)
+        for (auto j = 0; j < dom_dim; j++)
         {
             nctrl_pts(j)    = a->vars_nctrl_pts[j];
             p(j)            = a->vars_p[j];
@@ -1257,13 +1289,14 @@ struct Block
         {
             if (a->verbose && cp.master()->communicator().rank() == 0)
                 fprintf(stderr, "\nEncoding science variable %d\n\n", i);
-            vars[i].mfa = new mfa::MFA<T>(p,
-                                          ndom_pts,
+            vars[i].mfa_data = new mfa::MFA_Data<T>(p,
+                                          mfa->ndom_pts(),
                                           domain,
+                                          mfa->params(),
                                           nctrl_pts,
-                                          ndom_dims + i,        // assumes each variable is scalar
-                                          ndom_dims + i);
-            vars[i].mfa->AdaptiveEncode(domain, err_limit, a->verbose, a->weighted, extents, max_rounds);
+                                          dom_dim + i,        // assumes each variable is scalar
+                                          dom_dim + i);
+            mfa->AdaptiveEncode(*(vars[i].mfa_data), domain, err_limit, a->verbose, a->weighted, extents, max_rounds);
         }
     }
 
@@ -1272,13 +1305,12 @@ struct Block
     {
         approx.resize(domain.rows(), domain.cols());
 
-        int ndom_dims = ndom_pts.size();                // domain dimensionality
         // geometry
-        geometry.mfa->Decode(approx, 0, ndom_dims - 1);
+        geometry.mfa->Decode(approx, 0, dom_dim - 1);
 
         // science variables
         for (auto i = 0; i < vars.size(); i++)
-            vars[i].mfa->Decode(approx, ndom_dims + i, ndom_dims + i);  // assumes each variable is scalar
+            vars[i].mfa->Decode(approx, dom_dim + i, dom_dim + i);  // assumes each variable is scalar
     }
 
     // differentiate entire block
@@ -1290,16 +1322,15 @@ struct Block
             int                               var)      // differentiate only this one science variable (0 to nvars -1, -1 = all vars)
     {
         approx.resize(domain.rows(), domain.cols());
-        int ndom_dims = ndom_pts.size();                // domain dimensionality
-        VectorXi derivs(ndom_dims);
+        VectorXi derivs(dom_dim);
 
         for (auto i = 0; i < derivs.size(); i++)
             derivs(i) = deriv;
 
         // optional limit to one partial derivative
-        if (deriv && ndom_dims > 1 && partial >= 0)
+        if (deriv && dom_dim > 1 && partial >= 0)
         {
-            for (auto i = 0; i < ndom_dims; i++)
+            for (auto i = 0; i < dom_dim; i++)
             {
                 if (i != partial)
                     derivs(i) = 0;
@@ -1311,22 +1342,21 @@ struct Block
             if (var < 0 || var == i)
             {
                 // TODO: hard-coded for one tensor product
-                vars[i].mfa = new mfa::MFA<T>(vars[i].mfa->mfa_data().p,
-                                              ndom_pts,
-                                              vars[i].mfa->mfa_data().params,
-                                              vars[i].mfa->tmesh(),
-                                              ndom_dims + i,        // assumes each variable is scalar
-                                              ndom_dims + i);
-                vars[i].mfa->DecodeDomain(verbose, approx, ndom_dims + i, ndom_dims + i, derivs);  // assumes each variable is scalar
+                vars[i].mfa_data = new mfa::MFA_Data<T>(vars[i].mfa_data->p,
+                                              mfa->ndom_pts(),
+                                              vars[i].mfa_data->tmesh,
+                                              dom_dim + i,        // assumes each variable is scalar
+                                              dom_dim + i);
+                mfa->DecodeDomain(*(vars[i].mfa_data), verbose, approx, dom_dim + i, dom_dim + i, derivs);  // assumes each variable is scalar
             }
 
         // the derivative is a vector of same dimensionality as domain
         // derivative needs to be scaled by domain extent because u,v,... are in [0.0, 1.0]
         if (deriv)
         {
-            if (ndom_dims == 1 || partial >= 0) // TODO: not for mixed partials
+            if (dom_dim == 1 || partial >= 0) // TODO: not for mixed partials
             {
-                if (ndom_dims == 1)
+                if (dom_dim == 1)
                     partial = 0;
                 for (auto j = 0; j < approx.cols(); j++)
                     // scale once for each derivative
@@ -1337,7 +1367,7 @@ struct Block
 
         // for plotting, set the geometry coordinates to be the same as the input
         if (deriv)
-            for (auto i = 0; i < ndom_dims; i++)
+            for (auto i = 0; i < dom_dim; i++)
                 approx.col(i) = domain.col(i);
     }
 
@@ -1357,13 +1387,13 @@ struct Block
 //         {
 //             approx.resize(domain.rows(), domain.cols());
 // 
-//             int ndom_dims = ndom_pts.size();                // domain dimensionality
+//             int dom_dim = ndom_pts.size();                // domain dimensionality
 //             // geometry
-//             geometry.mfa->Decode(approx, 0, ndom_dims - 1);
+//             geometry.mfa->Decode(approx, 0, dom_dim - 1);
 // 
 //             // science variables
 //             for (auto i = 0; i < vars.size(); i++)
-//                 vars[i].mfa->Decode(approx, ndom_dims, ndom_dims + i);
+//                 vars[i].mfa->Decode(approx, dom_dim, dom_dim + i);
 //         }
 // 
 // #ifndef MFA_NO_TBB                                          // TBB version
@@ -1438,7 +1468,7 @@ struct Block
         T max_err       = -1.0;                                 // maximum absolute value of error (L-infinity norm)
 
         if (!dom_dim)
-            dom_dim = ndom_pts.size();
+            dom_dim = mfa->ndom_pts().size();
 
         size_t tot_ndom_pts = 1;
         for (auto i = 0; i < dom_dim; i++)
@@ -1483,7 +1513,7 @@ struct Block
 
             // evaluate MFA at dom_pt_param
             VectorX<T> cpt(1);                              // hard-coded for one science variable
-            vars[0].mfa->DecodePt(dom_pt_param, cpt);       // hard-coded for one science variable
+            mfa->DecodePt(*(vars[0].mfa_data), dom_pt_param, cpt);       // hard-coded for one science variable
             T test_val = cpt(0);
 
             // compute and accrue error
@@ -1529,7 +1559,7 @@ struct Block
             // for all dimensions except last, check if pt_idx is at the end, part of flattened loop logic
             for (auto k = 0; k < dom_dim - 1; k++)
             {
-                if (dom_idx[k] == ndom_pts(k))
+                if (dom_idx[k] == mfa->ndom_pts()(k))
                 {
                     dom_idx[k] = 0;
                     dom_idx[k + 1]++;
@@ -1551,7 +1581,6 @@ struct Block
     {
         errs.resize(domain.rows(), domain.cols());
         errs            = domain;
-        int ndom_dims   = ndom_pts.size();                // domain dimensionality
 
         if (decode_block)
         {
@@ -1559,12 +1588,12 @@ struct Block
 
             // geometry
             fmt::print(stderr, "Decoding geometry...\n");
-            geometry.mfa->DecodeDomain(verbose, approx, 0, ndom_dims - 1);
+            mfa->DecodeDomain(*geometry.mfa_data, verbose, approx, 0, dom_dim - 1);
 
             // science variables
             fmt::print(stderr, "Decoding science variables...\n");
             for (auto i = 0; i < vars.size(); i++)
-                vars[i].mfa->DecodeDomain(verbose, approx, ndom_dims + i, ndom_dims + i);     // assumes all variables are scalar
+                mfa->DecodeDomain(*(vars[i].mfa_data), verbose, approx, dom_dim + i, dom_dim + i);     // assumes all variables are scalar
         }
 
 #ifndef MFA_NO_TBB                                          // TBB version
@@ -1578,7 +1607,7 @@ struct Block
                         for (auto j = 0; j < domain.cols(); j++)
                         {
                             T err = fabs(cpt(j) - domain(i, j));
-                            if (j >= ndom_dims)
+                            if (j >= dom_dim)
                                 errs(i, j) = err;           // error for each science variable
                         }
                     });
@@ -1593,12 +1622,12 @@ struct Block
                             if (k == 0)                                 // geometry
                             {
                                 err.resize(geometry.max_dim - geometry.min_dim);
-                                geometry.mfa->AbsCoordError(domain, i, err, verbose);
+                                mfa->AbsCoordError(*geometry.mfa_data, domain, i, err, verbose);
                             }
                             else
                             {
                                 err.resize(vars[k - 1].max_dim - vars[k - 1].min_dim);
-                                vars[k - 1].mfa->AbsCoordError(domain, i, err, verbose);
+                                mfa->AbsCoordError(*(vars[k - 1].mfa_data), domain, i, err, verbose);
                             }
 
                             for (auto j = 0; j < err.size(); j++)
@@ -1618,7 +1647,7 @@ struct Block
                 for (auto j = 0; j < domain.cols(); j++)
                 {
                     T err = fabs(cpt(j) - domain(i, j));
-                    if (j >= ndom_dims)
+                    if (j >= dom_dim)
                         errs(i, j) = err;           // error for each science variable
                 }
             }
@@ -1630,12 +1659,12 @@ struct Block
                     if (k == 0)                                 // geometry
                     {
                         err.resize(geometry.max_dim - geometry.min_dim);
-                        geometry.mfa->AbsCoordError(domain, i, err, verbose);
+                        mfa->AbsCoordError(*geometry.mfa_data, domain, i, err, verbose);
                     }
                     else
                     {
                         err.resize(vars[k - 1].max_dim - vars[k - 1].min_dim);
-                        vars[k - 1].mfa->AbsCoordError(domain, i, err, verbose);
+                        mfa->AbsCoordError(*(vars[k - 1].mfa_data),domain, i, err, verbose);
                     }
 
                     for (auto j = 0; j < err.size(); j++)
@@ -1649,15 +1678,15 @@ struct Block
 
 #endif
 
-        for (auto j = ndom_dims; j < domain.cols(); j++)
-            sum_sq_errs[j - ndom_dims] = 0.0;
+        for (auto j = dom_dim; j < domain.cols(); j++)
+            sum_sq_errs[j - dom_dim] = 0.0;
         for (auto i = 0; i < domain.rows(); i++)
         {
-            for (auto j = ndom_dims; j < domain.cols(); j++)
+            for (auto j = dom_dim; j < domain.cols(); j++)
             {
-                sum_sq_errs[j - ndom_dims] += (errs(i, j) * errs(i, j));
-                if ((i == 0 && j == ndom_dims) || errs(i, j) > max_errs[j - ndom_dims])
-                    max_errs[j - ndom_dims] = errs(i, j);
+                sum_sq_errs[j - dom_dim] += (errs(i, j) * errs(i, j));
+                if ((i == 0 && j == dom_dim) || errs(i, j) > max_errs[j - dom_dim])
+                    max_errs[j - dom_dim] = errs(i, j);
             }
         }
     }
@@ -1665,25 +1694,23 @@ struct Block
     void print_block(const diy::Master::ProxyWithLink& cp,
                      bool                              error)       // error was computed
     {
-        int ndom_dims = ndom_pts.size();                // domain dimensionality
-
         fprintf(stderr, "gid = %d\n", cp.gid());
 //         cerr << "domain\n" << domain << endl;
 
         // geometry
         // TODO: hard-coded for one tensor product
         cerr << "\n------- geometry model -------" << endl;
-        cerr << "# output ctrl pts     = [ " << geometry.mfa->tmesh().tensor_prods[0].nctrl_pts.transpose() << " ]" << endl;
+        cerr << "# output ctrl pts     = [ " << geometry.mfa_data->tmesh.tensor_prods[0].nctrl_pts.transpose() << " ]" << endl;
 
         //  debug: print control points and weights
-//         print_ctrl_weights(geometry.mfa->tmesh());
+//         print_ctrl_weights(geometry.mfa_data->tmesh.;
         // debug: print knots
-//         print_knots(geometry.mfa->tmesh());
+//         print_knots(geometry.mfa_data->tmesh.;
 
         fprintf(stderr, "# output knots        = [ ");
-        for (auto j = 0 ; j < geometry.mfa->tmesh().all_knots.size(); j++)
+        for (auto j = 0 ; j < geometry.mfa_data->tmesh.all_knots.size(); j++)
         {
-            fprintf(stderr, "%ld ", geometry.mfa->tmesh().all_knots[j].size());
+            fprintf(stderr, "%ld ", geometry.mfa_data->tmesh.all_knots[j].size());
         }
         fprintf(stderr, "]\n");
 
@@ -1693,20 +1720,20 @@ struct Block
         cerr << "\n----- science variable models -----" << endl;
         for (auto i = 0; i < vars.size(); i++)
         {
-            real_t range_extent = domain.col(ndom_dims + i).maxCoeff() - domain.col(ndom_dims + i).minCoeff();
+            real_t range_extent = domain.col(dom_dim + i).maxCoeff() - domain.col(dom_dim + i).minCoeff();
             cerr << "\n---------- var " << i << " ----------" << endl;
-            cerr << "# ouput ctrl pts      = [ " << vars[i].mfa->tmesh().tensor_prods[0].nctrl_pts.transpose() << " ]" << endl;
+            cerr << "# ouput ctrl pts      = [ " << vars[i].mfa_data->tmesh.tensor_prods[0].nctrl_pts.transpose() << " ]" << endl;
 
             //  debug: print control points and weights
-//             print_ctrl_weights(vars[i].mfa->tmesh());
+//             print_ctrl_weights(vars[i].mfa_data->tmesh.;
             // debug: print knots
-//             print_knots(vars[i].mfa->tmesh());
+//             print_knots(vars[i].mfa_data->tmesh.;
 
 
             fprintf(stderr, "# output knots        = [ ");
-            for (auto j = 0 ; j < vars[i].mfa->tmesh().all_knots.size(); j++)
+            for (auto j = 0 ; j < vars[i].mfa_data->tmesh.all_knots.size(); j++)
             {
-                fprintf(stderr, "%ld ", vars[i].mfa->tmesh().all_knots[j].size());
+                fprintf(stderr, "%ld ", vars[i].mfa_data->tmesh.all_knots[j].size());
             }
             fprintf(stderr, "]\n");
 
@@ -1738,16 +1765,16 @@ struct Block
     {
         // TODO: hard-coded for one tensor product
         float in_coords = domain.rows() * domain.cols();
-        float out_coords = geometry.mfa->tmesh().tensor_prods[0].ctrl_pts.rows() *
-            geometry.mfa->tmesh().tensor_prods[0].ctrl_pts.cols();
-        for (auto j = 0; j < geometry.mfa->tmesh().all_knots.size(); j++)
-            out_coords += geometry.mfa->tmesh().all_knots[j].size();
+        float out_coords = geometry.mfa_data->tmesh.tensor_prods[0].ctrl_pts.rows() *
+            geometry.mfa_data->tmesh.tensor_prods[0].ctrl_pts.cols();
+        for (auto j = 0; j < geometry.mfa_data->tmesh.all_knots.size(); j++)
+            out_coords += geometry.mfa_data->tmesh.all_knots[j].size();
         for (auto i = 0; i < vars.size(); i++)
         {
-            out_coords += (vars[i].mfa->tmesh().tensor_prods[0].ctrl_pts.rows() *
-                    vars[i].mfa->tmesh().tensor_prods[0].ctrl_pts.cols());
-            for (auto j = 0; j < vars[i].mfa->tmesh().all_knots.size(); j++)
-                out_coords += vars[i].mfa->tmesh().all_knots[j].size();
+            out_coords += (vars[i].mfa_data->tmesh.tensor_prods[0].ctrl_pts.rows() *
+                    vars[i].mfa_data->tmesh.tensor_prods[0].ctrl_pts.cols());
+            for (auto j = 0; j < vars[i].mfa_data->tmesh.all_knots.size(); j++)
+                out_coords += vars[i].mfa_data->tmesh.all_knots[j].size();
         }
         return(in_coords / out_coords);
     }
@@ -1902,31 +1929,30 @@ struct Block
                     DomainArgs&                         args)
     {
         DomainArgs* a = &args;
-        int ndom_dims = ndom_pts.size();                // domain dimensionality
 
         // geometry mfa
         geometry.mfa = new mfa::MFA<T>(geometry.p,
-                                       ndom_pts,
+                                       mfa->ndom_pts(),
                                        domain,
                                        geometry.ctrl_pts,
                                        geometry.nctrl_pts,
                                        geometry.weights,
                                        geometry.knots,
                                        0,
-                                       ndom_dims - 1);
+                                       dom_dim - 1);
 
         // science variable mfas
         for (auto i = 0; i< vars.size(); i++)
         {
             vars[i].mfa = new mfa::MFA<T>(vars[i].p,
-                                          ndom_pts,
+                                          mfa->ndom_pts(),
                                           domain,
                                           vars[i].ctrl_pts,
                                           vars[i].nctrl_pts,
                                           vars[i].weights,
                                           vars[i].knots,
-                                          ndom_dims + i,        // assumes each variable is scalar
-                                          ndom_dims + i);
+                                          dom_dim + i,        // assumes each variable is scalar
+                                          dom_dim + i);
         }
 
         // pretend this tmesh is for the first science variable
