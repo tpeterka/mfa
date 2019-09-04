@@ -63,14 +63,44 @@ namespace mfa
                 MatrixX<T>&         domain_,        // input data points (1st dim changes fastest)
                 VectorXi            nctrl_pts_,     // optional number of control points in each dim (size 0 means minimum p+1)
                 int                 min_dim_ = -1,  // starting coordinate for input data; -1 = use all coordinates
-                int                 max_dim_ = -1,  // ending coordinate for input data; -1 = use all coordinates
-                T                   eps_ = 1.0e-6)  // minimum difference considered significant
+                int                 max_dim_ = -1)  // ending coordinate for input data; -1 = use all coordinates
         {
             if (min_dim_ == -1)
                 min_dim_ = 0;
             if (max_dim_ == -1)
                 max_dim_ = domain_.cols() - 1;
-            mfa = new MFA_Data<T>(p_, ndom_pts_, domain_, nctrl_pts_, min_dim_, max_dim_, eps_);
+            mfa = new MFA_Data<T>(p_, ndom_pts_, domain_, nctrl_pts_, min_dim_, max_dim_);
+        }
+
+        // constructor for reading in a solved mfa
+        MFA(
+                VectorXi&           p_,             // polynomial degree in each dimension
+                VectorXi&           ndom_pts_,      // number of input data points in each dim
+                Tmesh<T>&           tmesh_,         // solved tmesh
+                int                 min_dim_ = -1,  // starting coordinate for input data; -1 = use all coordinates
+                int                 max_dim_ = -1)  // ending coordinate for input data; -1 = use all coordinates
+        {
+            if (min_dim_ == -1)
+                min_dim_ = 0;
+            if (max_dim_ == -1)
+                max_dim_ = tmesh_.tensor_prods[0].ctrl_pts.cols() - 1;
+            mfa = new MFA_Data<T>(p_, ndom_pts_, tmesh_, min_dim_, max_dim_);
+        }
+
+        // constructor for reading in a solved mfa accompanied by parameterization of input points
+        MFA(
+                VectorXi&           p_,             // polynomial degree in each dimension
+                VectorXi&           ndom_pts_,      // number of input data points in each dim
+                vector<vector<T>>&  params_,        // parameters for input points[dimension][index]
+                Tmesh<T>&           tmesh_,         // solved tmesh
+                int                 min_dim_ = -1,  // starting coordinate for input data; -1 = use all coordinates
+                int                 max_dim_ = -1)  // ending coordinate for input data; -1 = use all coordinates
+        {
+            if (min_dim_ == -1)
+                min_dim_ = 0;
+            if (max_dim_ == -1)
+                max_dim_ = tmesh_.tensor_prods[0].ctrl_pts.cols() - 1;
+            mfa = new MFA_Data<T>(p_, ndom_pts_, params_, tmesh_, min_dim_, max_dim_);
         }
 
         // constructor when reading mfa in and knowing nothing about it yet except its degree and dimensionality
@@ -78,14 +108,13 @@ namespace mfa
                 VectorXi&           p_,             // polynomial degree in each dimension
                 size_t              ntensor_prods,  // number of tensor products to allocate in tmesh
                 int                 min_dim_ = -1,  // starting coordinate for input data; -1 = use all coordinates
-                int                 max_dim_ = -1,  // ending coordinate for input data; -1 = use all coordinates
-                T                   eps_ = 1.0e-6)  // minimum difference considered significant
+                int                 max_dim_ = -1)  // ending coordinate for input data; -1 = use all coordinates
         {
             if (min_dim_ == -1)
                 min_dim_ = 0;
             if (max_dim_ == -1)
                 max_dim_ = 1;
-            mfa = new MFA_Data<T>(p_, ntensor_prods, min_dim_, max_dim_, eps_);
+            mfa = new MFA_Data<T>(p_, ntensor_prods, min_dim_, max_dim_);
         }
 
         ~MFA()
@@ -144,28 +173,26 @@ namespace mfa
 
         // decode values at all input points
         void DecodeDomain(
-                MatrixX<T>& domain,                 // input points
                 int         verbose,                // output level
                 MatrixX<T>& approx,                 // decoded points
                 int         min_dim,                // first dimension to decode
                 int         max_dim)                // last dimension to decode
         {
             VectorXi no_derivs;                     // size-0 means no derivatives
-            DecodeDomain(domain, verbose, approx, min_dim, max_dim, no_derivs);
+            DecodeDomain(verbose, approx, min_dim, max_dim, no_derivs);
         }
 
         // decode derivatives at all input points
         void DecodeDomain(
-                MatrixX<T>& domain,                 // input points
                 int         verbose,                // output level
-                MatrixX<T>& approx,                 // decoded derivatives
+                MatrixX<T>& approx,                 // decoded values
                 int         min_dim,                // first dimension to decode
                 int         max_dim,                // last dimension to decode
                 VectorXi&   derivs)                 // derivative to take in each domain dim. (0 = value, 1 = 1st deriv, 2 = 2nd deriv, ...)
                                                     // pass size-0 vector if unused
         {
             mfa::Decoder<T> decoder(*mfa, verbose);
-            decoder.DecodeDomain(domain, approx, min_dim, max_dim, derivs);
+            decoder.DecodeDomain(approx, min_dim, max_dim, derivs);
         }
 
         // compute the error (absolute value of distance in normal direction) of the mfa at a domain point

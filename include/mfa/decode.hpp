@@ -150,20 +150,18 @@ namespace mfa
         // P&T eq. 9.77, p. 424
         // assumes all vectors have been correctly resized by the caller
         void DecodeDomain(
-                MatrixX<T>& domain,                 // input points (1st dim changes fastest)
                 MatrixX<T>& approx,                 // decoded output points (1st dim changes fastest)
                 int         min_dim,                // first dimension to decode
                 int         max_dim)                // last dimension to decode
         {
             VectorXi no_ders;                       // size 0 means no derivatives
-            Decode(domain, approx, min_dim, max_dim, no_ders);
+            Decode(approx, min_dim, max_dim, no_ders);
         }
 
         // computes approximated points from a given set of domain points and an n-d NURBS volume
         // P&T eq. 9.77, p. 424
         // assumes all vectors have been correctly resized by the caller
         void DecodeDomain(
-                MatrixX<T>& domain,                 // input points (1st dim changes fastest)
                 MatrixX<T>& approx,                 // decoded output points (1st dim changes fastest)
                 int         min_dim,                // first dimension to decode
                 int         max_dim,                // last dimension to decode
@@ -179,7 +177,7 @@ namespace mfa
             // ref: https://www.threadingbuildingblocks.org/tutorial-intel-tbb-thread-local-storage
             enumerable_thread_specific<DecodeInfo<T>> thread_decode_info(mfa, derivs);
 
-            parallel_for (size_t(0), (size_t)domain.rows(), [&] (size_t i)
+            parallel_for (size_t(0), (size_t)approx.rows(), [&] (size_t i)
             {
                 // convert linear idx to multidim. i,j,k... indices in each domain dimension
                 VectorXi ijk(mfa.dom_dim);
@@ -227,9 +225,9 @@ namespace mfa
             VectorX<T> cpt(last + 1);               // evaluated point
             VectorX<T> param(mfa.p.size());         // parameters for one point
 
-            for (size_t i = 0; i < domain.rows(); i++)
+            for (size_t i = 0; i < approx.rows(); i++)
             {
-                // extract parameter vector for one input point from the linearized vector of all params
+                // extract parameter vector for one input point of all params
                 for (size_t j = 0; j < mfa.dom_dim; j++)
                     param(j) = mfa.params[j][iter(j)];
 
@@ -273,8 +271,8 @@ namespace mfa
 
                 // print progress
                 if (verbose)
-                    if (i > 0 && domain.rows() >= 100 && i % (domain.rows() / 100) == 0)
-                        fprintf(stderr, "\r%.0f %% decoded", (T)i / (T)(domain.rows()) * 100);
+                    if (i > 0 && approx.rows() >= 100 && i % (approx.rows() / 100) == 0)
+                        fprintf(stderr, "\r%.0f %% decoded", (T)i / (T)(approx.rows()) * 100);
             }
 
 #endif
@@ -438,10 +436,11 @@ namespace mfa
                 N[i]       = MatrixX<T>::Zero(1, tensor.nctrl_pts(i));
                 if (derivs.size() && derivs(i))
                 {
+#ifndef TMESH       // original version for one tensor product
                     MatrixX<T> Ders = MatrixX<T>::Zero(derivs(i) + 1, tensor.nctrl_pts(i));
-                    // TODO: uncomment after DerBasisFuns converted to tmesh
-//                     mfa.DerBasisFuns(i, param(i), span[i], derivs(i), Ders);
-//                     N[i].row(0) = Ders.row(derivs(i));
+                    mfa.DerBasisFuns(i, param(i), span[i], derivs(i), Ders);
+                    N[i].row(0) = Ders.row(derivs(i));
+#endif
                 }
                 else
                 {
@@ -556,10 +555,11 @@ namespace mfa
                 span[i]    = mfa.FindSpan(i, param(i), tensor);
                 if (derivs.size() && derivs(i))
                 {
+#ifndef TMESH       // original version for one tensor product
                     MatrixX<T> Ders = MatrixX<T>::Zero(derivs(i) + 1, nctrl_pts(i));
-                    // TODO: uncomment after DerBasisFuns converted to tmesh
-//                     mfa.DerBasisFuns(i, param(i), span[i], derivs(i), Ders);
-//                     N[i].row(0) = Ders.row(derivs(i));
+                    mfa.DerBasisFuns(i, param(i), span[i], derivs(i), Ders);
+                    N[i].row(0) = Ders.row(derivs(i));
+#endif
                 }
             }
 
@@ -724,9 +724,10 @@ namespace mfa
 
                 if (derivs.size() && derivs(i))
                 {
-                    // TODO: uncomment after DerBasisFuns are converted to tmesh
-//                     mfa.DerBasisFuns(i, param(i), di.span[i], derivs(i), di.ders[i]);
-//                     di.N[i].row(0) = di.ders[i].row(derivs(i));
+#ifndef TMESH       // original version for one tensor product
+                    mfa.DerBasisFuns(i, param(i), di.span[i], derivs(i), di.ders[i]);
+                    di.N[i].row(0) = di.ders[i].row(derivs(i));
+#endif
                 }
                 else
                 {

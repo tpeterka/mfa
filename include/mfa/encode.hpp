@@ -172,7 +172,7 @@ namespace mfa
                 MatrixX<T> NtN  = mfa.N[k].transpose() * mfa.N[k];
 
                 // debug
-                cerr << "N[k]:\n" << mfa.N[k] << endl;
+//                 cerr << "N[k]:\n" << mfa.N[k] << endl;
 //                 cerr << "NtN:\n" << NtN << endl;
 
 #ifndef MFA_NO_TBB                                  // TBB version

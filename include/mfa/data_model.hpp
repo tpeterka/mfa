@@ -108,7 +108,6 @@ namespace mfa
 
        VectorXi                  p;             // polynomial degree in each domain dimension
        VectorXi                  ndom_pts;      // number of input data points in each domain dim
-
        vector<vector<T>>         params;        // parameters for input points[dimension][index]
        vector<MatrixX<T>>        N;             // vector of basis functions for each dimension
                                                 // for all input points (matrix rows) and control points (matrix cols)
@@ -118,7 +117,6 @@ namespace mfa
        vector<vector<size_t>>    co;            // starting offset for curves in each dim
 
        vector<size_t>            ds;            // stride for domain points in each dim
-       T                         eps;           // minimum difference considered significant
        T                         max_err;       // unnormalized absolute value of maximum error
        vector<KnotSpan<T>>       knot_spans;    // knot spans
        int                       min_dim;       // starting coordinate of this model in full-dimensional data
@@ -134,13 +132,11 @@ namespace mfa
                 MatrixX<T>&         domain_,        // input data points (1st dim changes fastest)
                 VectorXi            nctrl_pts_,     // optional number of control points in each dim (size 0 means minimum p+1)
                 int                 min_dim_,       // starting coordinate for input data
-                int                 max_dim_,       // ending coordinate for input data
-                T                   eps_ = 1.0e-6) :// minimum difference considered significant
+                int                 max_dim_) :     // ending coordinate for input data
             p(p_),
             ndom_pts(ndom_pts_),
             min_dim(min_dim_),
             max_dim(max_dim_),
-            eps(eps_),
             tmesh(p_.size(), p_, min_dim_, max_dim_),
             dom_dim(p_.size())
         {
@@ -226,18 +222,46 @@ namespace mfa
             }
         }
 
+        // constructor for reading in a solved mfa
+        MFA_Data(
+                VectorXi&           p_,             // polynomial degree in each dimension
+                VectorXi&           ndom_pts_,      // number of input data points in each dim
+                Tmesh<T>&           tmesh_,         // solved tmesh
+                int                 min_dim_,       // starting coordinate for input data
+                int                 max_dim_) :     // ending coordinate for input data
+            p(p_),
+            ndom_pts(ndom_pts_),
+            min_dim(min_dim_),
+            max_dim(max_dim_),
+            tmesh(tmesh_),
+            dom_dim(p_.size())  {}
+
+        // constructor for reading in a solved mfa accompanied by parameterization of input domain
+        MFA_Data(
+                VectorXi&           p_,             // polynomial degree in each dimension
+                VectorXi&           ndom_pts_,      // number of input data points in each dim
+                vector<vector<T>>&  params_,        // parameters for input points[dimension][index]
+                Tmesh<T>&           tmesh_,         // solved tmesh
+                int                 min_dim_,       // starting coordinate for input data
+                int                 max_dim_) :     // ending coordinate for input data
+            p(p_),
+            ndom_pts(ndom_pts_),
+            params(params_),
+            min_dim(min_dim_),
+            max_dim(max_dim_),
+            tmesh(tmesh_),
+            dom_dim(p_.size())  {}
+
         // constructor when reading mfa in and knowing nothing about it yet except its degree and dimensionality
         MFA_Data(
                 VectorXi&           p_,             // polynomial degree in each dimension
                 size_t              ntensor_prods,  // number of tensor products to allocate in tmesh
                 int                 min_dim_,       // starting coordinate for input data
-                int                 max_dim_,       // ending coordinate for input data
-                T                   eps_ = 1.0e-6) :// minimum difference considered significant
+                int                 max_dim_) :     // ending coordinate for input data
             p(p_),
             dom_dim(p_.size()),
             min_dim(min_dim_),
             max_dim(max_dim_),
-            eps(eps_),
             tmesh(p_.size(), p_, min_dim_, max_dim_, ntensor_prods) {}
 
         ~MFA_Data() {}
@@ -629,7 +653,6 @@ namespace mfa
                 N(row, span - p(cur_dim) + j) = scratch[j];
         }
 
-        // TODO: update to tmesh
         // computes one row of basis function values for a given parameter value
         // writes results in a row of N
         // computes first k derivatives of one row of basis function values for a given parameter value
@@ -637,108 +660,108 @@ namespace mfa
         // including origin basis functions (0-th derivatives)
         // assumes ders has been allocated by caller (nders + 1 rows, # control points cols)
         // Alg. 2.3, p. 72 of P&T
-//         void DerBasisFuns(
-//                 int         cur_dim,        // current dimension
-//                 T           u,              // parameter value
-//                 int         span,           // index of span in the knots vector containing u, relative to ko
-//                 int         nders,          // number of derivatives
-//                 MatrixX<T>& ders)           // output basis function derivatives
-//         {
-//             // matrix from p. 70 of P&T
-//             // upper triangle is basis functions
-//             // lower triangle is knot differences
-//             MatrixX<T> ndu(p(cur_dim) + 1, p(cur_dim) + 1);
-//             ndu(0, 0) = 1.0;
-// 
-//             // temporary recurrence results
-//             // left(j)  = u - knots(span + 1 - j)
-//             // right(j) = knots(span + j) - u
-//             VectorX<T> left(p(cur_dim) + 1);
-//             VectorX<T> right(p(cur_dim) + 1);
-// 
-//             // fill ndu
-//             for (int j = 1; j <= p(cur_dim); j++)
-//             {
-//                 left(j)  = u - knots(span + ko[cur_dim] + 1 - j);
-//                 right(j) = knots(span + ko[cur_dim] + j) - u;
-// 
-//                 T saved = 0.0;
-//                 for (int r = 0; r < j; r++)
-//                 {
-//                     // lower triangle
-//                     ndu(j, r) = right(r + 1) + left(j - r);
-//                     T temp = ndu(r, j - 1) / ndu(j, r);
-//                     // upper triangle
-//                     ndu(r, j) = saved + right(r + 1) * temp;
-//                     saved = left(j - r) * temp;
-//                 }
-//                 ndu(j, j) = saved;
-//             }
-// 
-//             // two most recently computed rows a_{k,j} and a_{k-1,j}
-//             MatrixX<T> a(2, p(cur_dim) + 1);
-// 
-//             // initialize ders and set 0-th row with the basis functions = 0-th derivatives
-//             ders = MatrixX<T>::Zero(ders.rows(), ders.cols());
-//             for (int j = 0; j <= p(cur_dim); j++)
-//                 ders(0, span - p(cur_dim) + j) = ndu(j, p(cur_dim));
-// 
-//             // compute derivatives according to eq. 2.10
-//             // 1st row = first derivative, 2nd row = 2nd derivative, ...
-//             for (int r = 0; r <= p(cur_dim); r++)
-//             {
-//                 int s1, s2;                             // alternate rows in array a
-//                 s1      = 0;
-//                 s2      = 1;
-//                 a(0, 0) = 1.0;
-// 
-//                 for (int k = 1; k <= nders; k++)        // over all the derivatives up to the d_th one
-//                 {
-//                     T d    = 0.0;
-//                     int rk = r - k;
-//                     int pk = p(cur_dim) - k;
-// 
-//                     if (r >= k)
-//                     {
-//                         a(s2, 0) = a(s1, 0) / ndu(pk + 1, rk);
-//                         d        = a(s2, 0) * ndu(rk, pk);
-//                     }
-// 
-//                     int j1, j2;
-//                     if (rk >= -1)
-//                         j1 = 1;
-//                     else
-//                         j1 = -rk;
-//                     if (r - 1 <= pk)
-//                         j2 = k - 1;
-//                     else
-//                         j2 = p(cur_dim) - r;
-// 
-//                     for (int j = j1; j <= j2; j++)
-//                     {
-//                         a(s2, j) = (a(s1, j) - a(s1, j - 1)) / ndu(pk + 1, rk + j);
-//                         d += a(s2, j) * ndu(rk + j, pk);
-//                     }
-// 
-//                     if (r <= pk)
-//                     {
-//                         a(s2, k) = -a(s1, k - 1) / ndu(pk + 1, r);
-//                         d += a(s2, k) * ndu(r, pk);
-//                     }
-// 
-//                     ders(k, span - p(cur_dim) + r) = d;
-//                     swap(s1, s2);
-//                 }                                       // for k
-//             }                                           // for r
-// 
-//             // multiply through by the correct factors in eq. 2.10
-//             int r = p(cur_dim);
-//             for (int k = 1; k <= nders; k++)
-//             {
-//                 ders.row(k) *= r;
-//                 r *= (p(cur_dim) - k);
-//             }
-//         }
+        void DerBasisFuns(
+                int         cur_dim,        // current dimension
+                T           u,              // parameter value
+                int         span,           // index of span in the knots vector containing u, relative to ko
+                int         nders,          // number of derivatives
+                MatrixX<T>& ders)           // output basis function derivatives
+        {
+            // matrix from p. 70 of P&T
+            // upper triangle is basis functions
+            // lower triangle is knot differences
+            MatrixX<T> ndu(p(cur_dim) + 1, p(cur_dim) + 1);
+            ndu(0, 0) = 1.0;
+
+            // temporary recurrence results
+            // left(j)  = u - knots(span + 1 - j)
+            // right(j) = knots(span + j) - u
+            VectorX<T> left(p(cur_dim) + 1);
+            VectorX<T> right(p(cur_dim) + 1);
+
+            // fill ndu
+            for (int j = 1; j <= p(cur_dim); j++)
+            {
+                left(j)  = u - tmesh.all_knots[cur_dim][span + 1 - j];
+                right(j) = tmesh.all_knots[cur_dim][span + j] - u;
+
+                T saved = 0.0;
+                for (int r = 0; r < j; r++)
+                {
+                    // lower triangle
+                    ndu(j, r) = right(r + 1) + left(j - r);
+                    T temp = ndu(r, j - 1) / ndu(j, r);
+                    // upper triangle
+                    ndu(r, j) = saved + right(r + 1) * temp;
+                    saved = left(j - r) * temp;
+                }
+                ndu(j, j) = saved;
+            }
+
+            // two most recently computed rows a_{k,j} and a_{k-1,j}
+            MatrixX<T> a(2, p(cur_dim) + 1);
+
+            // initialize ders and set 0-th row with the basis functions = 0-th derivatives
+            ders = MatrixX<T>::Zero(ders.rows(), ders.cols());
+            for (int j = 0; j <= p(cur_dim); j++)
+                ders(0, span - p(cur_dim) + j) = ndu(j, p(cur_dim));
+
+            // compute derivatives according to eq. 2.10
+            // 1st row = first derivative, 2nd row = 2nd derivative, ...
+            for (int r = 0; r <= p(cur_dim); r++)
+            {
+                int s1, s2;                             // alternate rows in array a
+                s1      = 0;
+                s2      = 1;
+                a(0, 0) = 1.0;
+
+                for (int k = 1; k <= nders; k++)        // over all the derivatives up to the d_th one
+                {
+                    T d    = 0.0;
+                    int rk = r - k;
+                    int pk = p(cur_dim) - k;
+
+                    if (r >= k)
+                    {
+                        a(s2, 0) = a(s1, 0) / ndu(pk + 1, rk);
+                        d        = a(s2, 0) * ndu(rk, pk);
+                    }
+
+                    int j1, j2;
+                    if (rk >= -1)
+                        j1 = 1;
+                    else
+                        j1 = -rk;
+                    if (r - 1 <= pk)
+                        j2 = k - 1;
+                    else
+                        j2 = p(cur_dim) - r;
+
+                    for (int j = j1; j <= j2; j++)
+                    {
+                        a(s2, j) = (a(s1, j) - a(s1, j - 1)) / ndu(pk + 1, rk + j);
+                        d += a(s2, j) * ndu(rk + j, pk);
+                    }
+
+                    if (r <= pk)
+                    {
+                        a(s2, k) = -a(s1, k - 1) / ndu(pk + 1, r);
+                        d += a(s2, k) * ndu(r, pk);
+                    }
+
+                    ders(k, span - p(cur_dim) + r) = d;
+                    swap(s1, s2);
+                }                                       // for k
+            }                                           // for r
+
+            // multiply through by the correct factors in eq. 2.10
+            int r = p(cur_dim);
+            for (int k = 1; k <= nders; k++)
+            {
+                ders.row(k) *= r;
+                r *= (p(cur_dim) - k);
+            }
+        }
 
         // compute rational (weighted) NtN from nonrational (unweighted) N
         // ie, convert basis function coefficients to rational ones with weights

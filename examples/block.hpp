@@ -105,6 +105,7 @@ struct Block
     // input data
     VectorXi            ndom_pts;               // number of domain points in each dimension
     MatrixX<T>          domain;                 // input data (1st dim changes fastest)
+    vector<vector<T>>   params;                 // parameters for input points[dimension][index]
     VectorX<T>          bounds_mins;            // local domain minimum corner
     VectorX<T>          bounds_maxs;            // local domain maximum corner
     VectorX<T>          core_mins;              // local domain minimum corner w/o ghost
@@ -522,8 +523,8 @@ struct Block
         cerr << "core_maxs:\n" << core_maxs << endl;
         cerr << "bounds_mins:\n" << bounds_mins << endl;
         cerr << "bounds_maxs:\n" << bounds_maxs << endl;
-        cerr << "ndom_pts:\n" << ndom_pts << "\n" << endl;
 
+//         cerr << "ndom_pts:\n" << ndom_pts << "\n" << endl;
 //         cerr << "domain:\n" << domain << endl;
     }
 
@@ -1309,16 +1310,14 @@ struct Block
         for (auto i = 0; i < vars.size(); i++)
             if (var < 0 || var == i)
             {
-                vars[i].mfa = new mfa::MFA<T>(vars[i].p,
+                // TODO: hard-coded for one tensor product
+                vars[i].mfa = new mfa::MFA<T>(vars[i].mfa->mfa_data().p,
                                               ndom_pts,
-                                              domain,
-                                              vars[i].ctrl_pts,
-                                              vars[i].nctrl_pts,
-                                              vars[i].weights,
-                                              vars[i].knots,
+                                              vars[i].mfa->mfa_data().params,
+                                              vars[i].mfa->tmesh(),
                                               ndom_dims + i,        // assumes each variable is scalar
                                               ndom_dims + i);
-                vars[i].mfa->Decode(verbose, approx, ndom_dims + i, ndom_dims + i, derivs);  // assumes each variable is scalar
+                vars[i].mfa->DecodeDomain(verbose, approx, ndom_dims + i, ndom_dims + i, derivs);  // assumes each variable is scalar
             }
 
         // the derivative is a vector of same dimensionality as domain
@@ -1560,12 +1559,12 @@ struct Block
 
             // geometry
             fmt::print(stderr, "Decoding geometry...\n");
-            geometry.mfa->DecodeDomain(domain, verbose, approx, 0, ndom_dims - 1);
+            geometry.mfa->DecodeDomain(verbose, approx, 0, ndom_dims - 1);
 
             // science variables
             fmt::print(stderr, "Decoding science variables...\n");
             for (auto i = 0; i < vars.size(); i++)
-                vars[i].mfa->DecodeDomain(domain, verbose, approx, ndom_dims + i, ndom_dims + i);     // assumes all variables are scalar
+                vars[i].mfa->DecodeDomain(verbose, approx, ndom_dims + i, ndom_dims + i);     // assumes all variables are scalar
         }
 
 #ifndef MFA_NO_TBB                                          // TBB version
@@ -1669,7 +1668,7 @@ struct Block
         int ndom_dims = ndom_pts.size();                // domain dimensionality
 
         fprintf(stderr, "gid = %d\n", cp.gid());
-        cerr << "domain\n" << domain << endl;
+//         cerr << "domain\n" << domain << endl;
 
         // geometry
         // TODO: hard-coded for one tensor product
@@ -1677,9 +1676,9 @@ struct Block
         cerr << "# output ctrl pts     = [ " << geometry.mfa->tmesh().tensor_prods[0].nctrl_pts.transpose() << " ]" << endl;
 
         //  debug: print control points and weights
-        print_ctrl_weights(geometry.mfa->tmesh());
+//         print_ctrl_weights(geometry.mfa->tmesh());
         // debug: print knots
-        print_knots(geometry.mfa->tmesh());
+//         print_knots(geometry.mfa->tmesh());
 
         fprintf(stderr, "# output knots        = [ ");
         for (auto j = 0 ; j < geometry.mfa->tmesh().all_knots.size(); j++)
@@ -1699,9 +1698,9 @@ struct Block
             cerr << "# ouput ctrl pts      = [ " << vars[i].mfa->tmesh().tensor_prods[0].nctrl_pts.transpose() << " ]" << endl;
 
             //  debug: print control points and weights
-            print_ctrl_weights(vars[i].mfa->tmesh());
+//             print_ctrl_weights(vars[i].mfa->tmesh());
             // debug: print knots
-            print_knots(vars[i].mfa->tmesh());
+//             print_knots(vars[i].mfa->tmesh());
 
 
             fprintf(stderr, "# output knots        = [ ");
