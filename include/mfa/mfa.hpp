@@ -135,10 +135,11 @@ namespace mfa
                 int             verbose,                // debug level
                 MatrixX<T>&     approx,                 // decoded points
                 int             min_dim,                // first dimension to decode
-                int             max_dim)                // last dimension to decode
+                int             max_dim,                // last dimension to decode
+                bool            saved_basis)            // whether basis functions were saved and can be reused
         {
             VectorXi no_derivs;                     // size-0 means no derivatives
-            DecodeDomain(mfa_data, verbose, approx, min_dim, max_dim, no_derivs);
+            DecodeDomain(mfa_data, verbose, approx, min_dim, max_dim, saved_basis, no_derivs);
         }
 
         // decode derivatives at all input points
@@ -148,11 +149,12 @@ namespace mfa
                 MatrixX<T>&     approx,                 // decoded values
                 int             min_dim,                // first dimension to decode
                 int             max_dim,                // last dimension to decode
+                bool            saved_basis,            // whether basis functions were saved and can be reused
                 VectorXi&       derivs)                 // derivative to take in each domain dim. (0 = value, 1 = 1st deriv, 2 = 2nd deriv, ...)
             // pass size-0 vector if unused
         {
             mfa::Decoder<T> decoder(*this, mfa_data, verbose);
-            decoder.DecodeDomain(approx, min_dim, max_dim, derivs);
+            decoder.DecodeDomain(approx, min_dim, max_dim, saved_basis, derivs);
         }
 
         // decode single point at the given parameter location

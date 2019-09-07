@@ -10,9 +10,9 @@ target_link_libraries       (fixed-multiblock-test                  ${libraries}
 add_executable              (adaptive-test                          adaptive.cpp)
 target_link_libraries       (adaptive-test                          ${libraries})
 
-# add_executable              (differentiate-test                     differentiate.cpp)
-# target_link_libraries       (differentiate-test                     ${libraries})
-# 
+add_executable              (differentiate-test                     differentiate.cpp)
+target_link_libraries       (differentiate-test                     ${libraries})
+
 add_executable              (write-vtk-test                         write_vtk.cpp ${CMAKE_SOURCE_DIR}/examples/convert/writer.cpp)
 target_link_libraries       (write-vtk-test                         ${libraries})
 
@@ -28,9 +28,9 @@ add_test                    (NAME fixed-s3d-2d-test
                              COMMAND fixed-test -i s3d -d 3 -m 2 -p 1 -q 3 -w 0 -f ${s3d_infile}
                             )
 
-# add_test                    (NAME differentiate-fixed-test
-#                              COMMAND differentiate-test -i approx.out -d 1
-#                             )
+add_test                    (NAME differentiate-fixed-test
+                             COMMAND differentiate-test -i approx.out -d 1
+                            )
 
 add_test                    (NAME write-vtk-fixed-test
                              COMMAND write-vtk-test approx.out
@@ -61,9 +61,9 @@ add_test                    (NAME adaptive-sinc-test
                              COMMAND adaptive-test -i sinc -d 3 -m 2 -p 1 -q 5 -e 1e-2 -w 0
                             )
 
-# add_test                    (NAME differentiate-adaptive-test
-#                              COMMAND differentiate-test -i approx.out -d 1
-#                             )
+add_test                    (NAME differentiate-adaptive-test
+                             COMMAND differentiate-test -i approx.out -d 1
+                            )
 
 add_test                    (NAME write-vtk-adaptive-test
                              COMMAND write-vtk-test approx.out

@@ -159,10 +159,11 @@ namespace mfa
         void DecodeDomain(
                 MatrixX<T>& approx,                 // decoded output points (1st dim changes fastest)
                 int         min_dim,                // first dimension to decode
-                int         max_dim)                // last dimension to decode
+                int         max_dim,                // last dimension to decode
+                bool        saved_basis)            // whether basis functions were saved and can be reused
         {
             VectorXi no_ders;                       // size 0 means no derivatives
-            Decode(approx, min_dim, max_dim, no_ders);
+            Decode(approx, min_dim, max_dim, saved_basis, no_ders);
         }
 
         // computes approximated points from a given set of domain points and an n-d NURBS volume
@@ -172,6 +173,7 @@ namespace mfa
                 MatrixX<T>& approx,                 // decoded output points (1st dim changes fastest)
                 int         min_dim,                // first dimension to decode
                 int         max_dim,                // last dimension to decode
+                bool        saved_basis,            // whether basis functions were saved and can be reused
                 VectorXi&   derivs)                 // derivative to take in each domain dim. (0 = value, 1 = 1st deriv, 2 = 2nd deriv, ...)
                                                     // pass size-0 vector if unused
         {
@@ -200,15 +202,22 @@ namespace mfa
 
 #ifndef TMESH   // original version for one tensor product
 
-                // using old VolPt
-//                 VolPt(param, cpt, thread_decode_info.local(), mfa_data.tmesh.tensor_prods[0], derivs);  // faster improved VolPt
-//                 if (i == 0)
-//                     fprintf(stderr, "Using VolPt\n");
+                if (saved_basis)
+                {
+                    VolPt_saved_basis(ijk, param, cpt, thread_decode_info.local(), mfa_data.tmesh.tensor_prods[0]);
 
-                // using VolPt for saved basis
-                if (i == 0)
-                    fprintf(stderr, "Using VolPt_saved_basis\n");
-                VolPt_saved_basis(ijk, param, cpt, thread_decode_info.local(), mfa_data.tmesh.tensor_prods[0]);
+                    // debug
+                    if (i == 0)
+                        fprintf(stderr, "Using VolPt_saved_basis\n");
+                }
+                else
+                {
+                    VolPt(param, cpt, thread_decode_info.local(), mfa_data.tmesh.tensor_prods[0], derivs);
+
+                    // debug
+                    if (i == 0)
+                        fprintf(stderr, "Using VolPt\n");
+                }
 
 #else           // tmesh version
 
@@ -242,15 +251,22 @@ namespace mfa
 
 #ifndef TMESH   // original version for one tensor product
 
-                // using old VolPt
-//                 VolPt(param, cpt, decode_info, mfa_data.tmesh.tensor_prods[0], derivs);
-//                 if (i == 0)
-//                     fprintf(stderr, "Using VolPt\n");
+                if (saved_basis)
+                {
+                    VolPt_saved_basis(iter, param, cpt, decode_info, mfa_data.tmesh.tensor_prods[0]);
 
-                // using VolPt for saved basis
-                if (i == 0)
-                    fprintf(stderr, "Using VolPt_saved_basis\n");
-                VolPt_saved_basis(iter, param, cpt, decode_info, mfa_data.tmesh.tensor_prods[0]);
+                    // debug
+                    if (i == 0)
+                        fprintf(stderr, "Using VolPt_saved_basis\n");
+                }
+                else
+                {
+                    VolPt(param, cpt, decode_info, mfa_data.tmesh.tensor_prods[0], derivs);
+
+                    // debug
+                    if (i == 0)
+                        fprintf(stderr, "Using VolPt\n");
+                }
 
 #else           // tmesh version
 

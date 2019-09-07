@@ -215,6 +215,7 @@ struct Block
             for (TensorProduct<T>& t: b->geometry.mfa_data->tmesh.tensor_prods)
                 diy::save(bb, t.knot_maxs);
             diy::save(bb, b->geometry.mfa_data->tmesh.all_knots);
+            diy::save(bb, b->geometry.mfa_data->tmesh.all_knot_levels);
 
             // science variables
             diy::save(bb, b->vars.size());
@@ -233,6 +234,7 @@ struct Block
                 for (TensorProduct<T>& t: b->vars[i].mfa_data->tmesh.tensor_prods)
                     diy::save(bb, t.knot_maxs);
                 diy::save(bb, b->vars[i].mfa_data->tmesh.all_knots);
+                diy::save(bb, b->vars[i].mfa_data->tmesh.all_knot_levels);
             }
 
             diy::save(bb, b->approx);
@@ -277,6 +279,7 @@ struct Block
             for (TensorProduct<T>& t: b->geometry.mfa_data->tmesh.tensor_prods)
                 diy::load(bb, t.knot_maxs);
             diy::load(bb, b->geometry.mfa_data->tmesh.all_knots);
+            diy::load(bb, b->geometry.mfa_data->tmesh.all_knot_levels);
 
             // science variables
             size_t nvars;
@@ -298,6 +301,7 @@ struct Block
                 for (TensorProduct<T>& t: b->vars[i].mfa_data->tmesh.tensor_prods)
                     diy::load(bb, t.knot_maxs);
                 diy::load(bb, b->vars[i].mfa_data->tmesh.all_knots);
+                diy::load(bb, b->vars[i].mfa_data->tmesh.all_knot_levels);
             }
 
             diy::load(bb, b->approx);
@@ -1301,22 +1305,25 @@ struct Block
     }
 
     // decode entire block
-    void decode_block(const diy::Master::ProxyWithLink& cp)
+    void decode_block(
+            const   diy::Master::ProxyWithLink& cp,
+            int                                 verbose,        // debug level
+            bool                                saved_basis)    // whether basis functions were saved and can be reused
     {
         approx.resize(domain.rows(), domain.cols());
 
         // geometry
-        geometry.mfa->Decode(approx, 0, dom_dim - 1);
+        mfa->DecodeDomain(*geometry.mfa_data, verbose, approx, 0, dom_dim - 1, saved_basis);
 
         // science variables
         for (auto i = 0; i < vars.size(); i++)
-            vars[i].mfa->Decode(approx, dom_dim + i, dom_dim + i);  // assumes each variable is scalar
+            mfa->DecodeDomain(*(vars[i].mfa_data), verbose, approx, dom_dim + i, dom_dim + i, saved_basis);  // assumes each variable is scalar
     }
 
     // differentiate entire block
     void differentiate_block(
             const diy::Master::ProxyWithLink& cp,
-            int                               verbose,  // output level
+            int                               verbose,  // debug level
             int                               deriv,    // which derivative to take (1 = 1st, 2 = 2nd, ...) in each domain dim.
             int                               partial,  // limit to partial derivative in just this dimension (-1 = no limit)
             int                               var)      // differentiate only this one science variable (0 to nvars -1, -1 = all vars)
@@ -1347,7 +1354,7 @@ struct Block
                                               vars[i].mfa_data->tmesh,
                                               dom_dim + i,        // assumes each variable is scalar
                                               dom_dim + i);
-                mfa->DecodeDomain(*(vars[i].mfa_data), verbose, approx, dom_dim + i, dom_dim + i, derivs);  // assumes each variable is scalar
+                mfa->DecodeDomain(*(vars[i].mfa_data), verbose, approx, dom_dim + i, dom_dim + i, false, derivs);  // assumes each variable is scalar
             }
 
         // the derivative is a vector of same dimensionality as domain
@@ -1576,30 +1583,20 @@ struct Block
     // uses coordinate-wise difference between values
     void range_error(
             const   diy::Master::ProxyWithLink& cp,
-            int     verbose,                                 // output level
-            bool    decode_block)                            // decode entire block first
+            int     verbose,                                // output level
+            bool    decode_block_,                          // decode entire block first
+            bool    saved_basis)                            // whether basis functions were saved and can be reused
     {
         errs.resize(domain.rows(), domain.cols());
         errs            = domain;
 
-        if (decode_block)
-        {
-            approx.resize(domain.rows(), domain.cols());
-
-            // geometry
-            fmt::print(stderr, "Decoding geometry...\n");
-            mfa->DecodeDomain(*geometry.mfa_data, verbose, approx, 0, dom_dim - 1);
-
-            // science variables
-            fmt::print(stderr, "Decoding science variables...\n");
-            for (auto i = 0; i < vars.size(); i++)
-                mfa->DecodeDomain(*(vars[i].mfa_data), verbose, approx, dom_dim + i, dom_dim + i);     // assumes all variables are scalar
-        }
+        if (decode_block_)
+            decode_block(cp, verbose, saved_basis);
 
 #ifndef MFA_NO_TBB                                          // TBB version
 
         // distance computation
-        if (decode_block)
+        if (decode_block_)
         {
             parallel_for (size_t(0), (size_t)domain.rows(), [&] (size_t i)
                     {
@@ -1641,7 +1638,7 @@ struct Block
 
         for (auto i = 0; i < (size_t)domain.rows(); i++)
         {
-            if (decode_block)
+            if (decode_block_)
             {
                 VectorX<T> cpt = approx.row(i);
                 for (auto j = 0; j < domain.cols(); j++)
