@@ -26,7 +26,7 @@
 
 using namespace std;
 
-typedef  diy::RegularDecomposer<Bounds> Decomposer;
+typedef  diy::RegularDecomposer<Bounds<real_t>> Decomposer;
 
 int main(int argc, char** argv)
 {
@@ -189,7 +189,7 @@ int main(int argc, char** argv)
     // even though this is a single-block example, we want diy to do a proper decomposition with a link
     // so that everything works downstream (reading file with links, e.g.)
     // therefore, set some dummy global domain bounds and decompose the domain
-    Bounds dom_bounds(dom_dim);
+    Bounds<real_t> dom_bounds(dom_dim);
     for (int i = 0; i < dom_dim; ++i)
     {
         dom_bounds.min[i] = 0.0;
@@ -198,11 +198,11 @@ int main(int argc, char** argv)
     Decomposer decomposer(dom_dim, dom_bounds, tot_blocks);
     decomposer.decompose(world.rank(),
                          assigner,
-                         [&](int gid, const Bounds& core, const Bounds& bounds, const Bounds& domain, const RCLink& link)
+                         [&](int gid, const Bounds<real_t>& core, const Bounds<real_t>& bounds, const Bounds<real_t>& domain, const RCLink<real_t>& link)
                          { Block<real_t>::add(gid, core, bounds, domain, link, master, dom_dim, pt_dim, 0.0); });
 
     // set default args for diy foreach callback functions
-    DomainArgs d_args;
+    DomainArgs d_args(dom_dim, pt_dim);
     d_args.weighted     = weighted;
     d_args.multiblock   = false;
     d_args.verbose      = 1;
@@ -210,7 +210,7 @@ int main(int argc, char** argv)
     d_args.t            = 0.0;
     for (int i = 0; i < pt_dim - dom_dim; i++)
         d_args.f[i] = 1.0;
-    for (int i = 0; i < MAX_DIM; i++)
+    for (int i = 0; i < dom_dim; i++)
     {
         d_args.geom_p[i]            = geom_degree;
         d_args.vars_p[i]            = vars_degree;
@@ -219,10 +219,82 @@ int main(int argc, char** argv)
         d_args.vars_nctrl_pts[i]    = vars_nctrl;
     }
 
+    // initialize input data
+
     // sine function f(x) = sin(x), f(x,y) = sin(x)sin(y), ...
     if (input == "sine")
     {
-        for (int i = 0; i < MAX_DIM; i++)
+        for (int i = 0; i < dom_dim; i++)
+        {
+            d_args.min[i]               = -4.0 * M_PI;
+            d_args.max[i]               = 4.0  * M_PI;
+        }
+        for (int i = 0; i < pt_dim - dom_dim; i++)      // for all science variables
+            d_args.s[i] = i + 1;                        // scaling factor on range
+        master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
+                { b->generate_analytical_data(cp, input, d_args); });
+    }
+
+    // sinc function f(x) = sin(x)/x, f(x,y) = sinc(x)sinc(y), ...
+    if (input == "sinc")
+    {
+        for (int i = 0; i < dom_dim; i++)
+        {
+            d_args.min[i]               = -4.0 * M_PI;
+            d_args.max[i]               = 4.0  * M_PI;
+        }
+        for (int i = 0; i < pt_dim - dom_dim; i++)      // for all science variables
+            d_args.s[i] = 10.0 * (i + 1);                 // scaling factor on range
+        d_args.r = rot * M_PI / 180.0;   // domain rotation angle in rads
+        d_args.t = twist;                // twist (waviness) of domain
+        master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
+                { b->generate_analytical_data(cp, input, d_args); });
+    }
+
+    // f16 function
+    if (input == "f16")
+    {
+        for (int i = 0; i < dom_dim; i++)
+        {
+            d_args.min[i]               = -1.0;
+            d_args.max[i]               = 1.0;
+        }
+        for (int i = 0; i < pt_dim - dom_dim; i++)      // for all science variables
+            d_args.s[i] = 1.0;                          // scaling factor on range
+        master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
+                { b->generate_analytical_data(cp, input, d_args); });
+    }
+
+    // f17 function
+    if (input == "f17")
+    {
+        d_args.min[0] = 80.0;   d_args.max[0] = 100.0;
+        d_args.min[1] = 5.0;    d_args.max[1] = 10.0;
+        d_args.min[2] = 90.0;   d_args.max[2] = 93.0;
+        for (int i = 0; i < pt_dim - dom_dim; i++)      // for all science variables
+            d_args.s[i] = 1.0;                          // scaling factor on range
+        master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
+                { b->generate_analytical_data(cp, input, d_args); });
+    }
+
+    // f18 function
+    if (input == "f18")
+    {
+        for (int i = 0; i < dom_dim; i++)
+        {
+            d_args.min[i]               = -0.95;
+            d_args.max[i]               = 0.95;
+        }
+        for (int i = 0; i < pt_dim - dom_dim; i++)      // for all science variables
+            d_args.s[i] = 1.0;                          // scaling factor on range
+        master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
+                { b->generate_analytical_data(cp, input, d_args); });
+    }
+
+    // sine function f(x) = sin(x), f(x,y) = sin(x)sin(y), ...
+    if (input == "sine")
+    {
+        for (int i = 0; i < dom_dim; i++)
         {
             d_args.min[i]       = -4.0 * M_PI;
             d_args.max[i]       = 4.0  * M_PI;
@@ -236,7 +308,7 @@ int main(int argc, char** argv)
     // sinc function f(x) = sin(x)/x, f(x,y) = sinc(x)sinc(y), ...
     if (input == "sinc")
     {
-        for (int i = 0; i < MAX_DIM; i++)
+        for (int i = 0; i < dom_dim; i++)
         {
             d_args.min[i]       = -4.0 * M_PI;
             d_args.max[i]       = 4.0  * M_PI;
@@ -252,7 +324,7 @@ int main(int argc, char** argv)
     // f16 function
     if (input == "f16")
     {
-        for (int i = 0; i < MAX_DIM; i++)
+        for (int i = 0; i < dom_dim; i++)
         {
             d_args.min[i]       = -1.0;
             d_args.max[i]       = 1.0;
@@ -278,7 +350,7 @@ int main(int argc, char** argv)
     // f18 function
     if (input == "f18")
     {
-        for (int i = 0; i < MAX_DIM; i++)
+        for (int i = 0; i < dom_dim; i++)
         {
             d_args.min[i]       = -0.95;
             d_args.max[i]       = 0.95;

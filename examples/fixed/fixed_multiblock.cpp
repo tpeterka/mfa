@@ -26,6 +26,8 @@
 
 using namespace std;
 
+typedef  diy::RegularDecomposer<Bounds<real_t>> Decomposer;
+
 int main(int argc, char** argv)
 {
     // initialize MPI
@@ -128,7 +130,7 @@ int main(int argc, char** argv)
     diy::ContiguousAssigner   assigner(world.size(), tot_blocks);
 
     // set global domain bounds
-    Bounds dom_bounds(dom_dim);
+    Bounds<real_t> dom_bounds(dom_dim);
     for (int i = 0; i < dom_dim; ++i)
     {
         dom_bounds.min[i] = -4.0 * M_PI;
@@ -139,13 +141,13 @@ int main(int argc, char** argv)
     Decomposer decomposer(dom_dim, dom_bounds, tot_blocks);
     decomposer.decompose(world.rank(),
                          assigner,
-                         [&](int gid, const Bounds& core, const Bounds& bounds, const Bounds& domain, const RCLink& link)
+                         [&](int gid, const Bounds<real_t>& core, const Bounds<real_t>& bounds, const Bounds<real_t>& domain, const RCLink<real_t>& link)
                          { Block<real_t>::add(gid, core, bounds, domain, link, master, dom_dim, pt_dim, ghost); });
 
     vector<int> divs(dom_dim);                          // number of blocks in each dimension
     decomposer.fill_divisions(divs);
 
-    DomainArgs d_args;
+    DomainArgs d_args(dom_dim, pt_dim);
 
     // set default args for diy foreach callback functions
     d_args.weighted     = weighted;
@@ -196,7 +198,7 @@ int main(int argc, char** argv)
     // f16 function
     if (input == "f16")
     {
-        for (int i = 0; i < MAX_DIM; i++)
+        for (int i = 0; i < dom_dim; i++)
         {
             d_args.min[i]               = -1.0;
             d_args.max[i]               = 1.0;
@@ -215,7 +217,7 @@ int main(int argc, char** argv)
         d_args.min[0] = 80.0;   d_args.max[0] = 100.0;
         d_args.min[1] = 5.0;    d_args.max[1] = 10.0;
         d_args.min[2] = 90.0;   d_args.max[2] = 93.0;
-        for (int i = 0; i < MAX_DIM; i++)
+        for (int i = 0; i < dom_dim; i++)
         {
             d_args.geom_nctrl_pts[i]    = geom_nctrl;
             d_args.vars_nctrl_pts[i]    = vars_nctrl;
@@ -229,7 +231,7 @@ int main(int argc, char** argv)
     // f18 function
     if (input == "f18")
     {
-        for (int i = 0; i < MAX_DIM; i++)
+        for (int i = 0; i < dom_dim; i++)
         {
             d_args.min[i]               = -0.95;
             d_args.max[i]               = 0.95;
@@ -286,7 +288,7 @@ int main(int argc, char** argv)
     {
         real_t L1, L2, Linf;                                // L-1, 2, infinity norms
 
-        for (int i = 0; i < MAX_DIM; i++)
+        for (int i = 0; i < dom_dim; i++)
             d_args.ndom_pts[i] = ntest;
 
         vector<vec3d> unused;

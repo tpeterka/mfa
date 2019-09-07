@@ -26,7 +26,7 @@
 
 using namespace std;
 
-typedef  diy::RegularDecomposer<Bounds> Decomposer;
+typedef  diy::RegularDecomposer<Bounds<real_t>> Decomposer;
 
 int main(int argc, char** argv)
 {
@@ -122,7 +122,7 @@ int main(int argc, char** argv)
     diy::ContiguousAssigner   assigner(world.size(), tot_blocks);
 
     // set global domain bounds
-    Bounds dom_bounds(dom_dim);
+    Bounds<real_t> dom_bounds(dom_dim);
     for (int i = 0; i < dom_dim; ++i)
     {
         dom_bounds.min[i] = -4.0 * M_PI;
@@ -130,15 +130,15 @@ int main(int argc, char** argv)
     }
 
     // decompose the domain into blocks
-    diy::RegularDecomposer<Bounds> decomposer(dom_dim, dom_bounds, tot_blocks);
+    Decomposer decomposer(dom_dim, dom_bounds, tot_blocks);
     decomposer.decompose(world.rank(),
                          assigner,
-                         [&](int gid, const Bounds& core, const Bounds& bounds, const Bounds& domain, const RCLink& link)
+                         [&](int gid, const Bounds<real_t>& core, const Bounds<real_t>& bounds, const Bounds<real_t>& domain, const RCLink<real_t>& link)
                          { Block<real_t>::add(gid, core, bounds, domain, link, master, dom_dim, pt_dim, ghost); });
     vector<int> divs(dom_dim);                          // number of blocks in each dimension
     decomposer.fill_divisions(divs);
 
-    DomainArgs d_args;
+    DomainArgs d_args(dom_dim, pt_dim);
 
     // set default args for diy foreach callback functions
     d_args.weighted     = weighted;

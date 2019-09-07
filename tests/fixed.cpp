@@ -26,7 +26,7 @@
 
 using namespace std;
 
-typedef  diy::RegularDecomposer<Bounds> Decomposer;
+typedef  diy::RegularDecomposer<Bounds<real_t>> Decomposer;
 
 int main(int argc, char** argv)
 {
@@ -120,7 +120,7 @@ int main(int argc, char** argv)
     // even though this is a single-block example, we want diy to do a proper decomposition with a link
     // so that everything works downstream (reading file with links, e.g.)
     // therefore, set some dummy global domain bounds and decompose the domain
-    Bounds dom_bounds(dom_dim);
+    Bounds<real_t> dom_bounds(dom_dim);
     for (int i = 0; i < dom_dim; ++i)
     {
         dom_bounds.min[i] = 0.0;
@@ -129,17 +129,17 @@ int main(int argc, char** argv)
     Decomposer decomposer(dom_dim, dom_bounds, tot_blocks);
     decomposer.decompose(world.rank(),
                          assigner,
-                         [&](int gid, const Bounds& core, const Bounds& bounds, const Bounds& domain, const RCLink& link)
+                         [&](int gid, const Bounds<real_t>& core, const Bounds<real_t>& bounds, const Bounds<real_t>& domain, const RCLink<real_t>& link)
                          { Block<real_t>::add(gid, core, bounds, domain, link, master, dom_dim, pt_dim, 0.0); });
 
     // set default args for diy foreach callback functions
-    DomainArgs d_args;
+    DomainArgs d_args(dom_dim, pt_dim);
     d_args.weighted     = weighted;
     d_args.multiblock   = false;
     d_args.verbose      = 1;
     for (int i = 0; i < pt_dim - dom_dim; i++)
         d_args.f[i] = 1.0;
-    for (int i = 0; i < MAX_DIM; i++)
+    for (int i = 0; i < dom_dim; i++)
     {
         d_args.geom_p[i]    = geom_degree;
         d_args.vars_p[i]    = vars_degree;
@@ -151,7 +151,7 @@ int main(int argc, char** argv)
     // sine function f(x) = sin(x), f(x,y) = sin(x)sin(y), ...
     if (input == "sine")
     {
-        for (int i = 0; i < MAX_DIM; i++)
+        for (int i = 0; i < dom_dim; i++)
         {
             d_args.min[i]               = -4.0 * M_PI;
             d_args.max[i]               = 4.0  * M_PI;
@@ -167,7 +167,7 @@ int main(int argc, char** argv)
     // sinc function f(x) = sin(x)/x, f(x,y) = sinc(x)sinc(y), ...
     if (input == "sinc")
     {
-        for (int i = 0; i < MAX_DIM; i++)
+        for (int i = 0; i < dom_dim; i++)
         {
             d_args.min[i]               = -4.0 * M_PI;
             d_args.max[i]               = 4.0  * M_PI;

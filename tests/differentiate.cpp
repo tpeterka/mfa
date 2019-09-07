@@ -25,7 +25,7 @@
 
 using namespace std;
 
-typedef  diy::RegularDecomposer<Bounds> Decomposer;
+typedef  diy::RegularDecomposer<Bounds<real_t>> Decomposer;
 
 int main(int argc, char** argv)
 {

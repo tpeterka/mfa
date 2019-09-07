@@ -36,13 +36,15 @@ void PrepRenderingData(
         vector<vec3d>&              approx_pts,
         float**&                    approx_data,
         vector<vec3d>&              err_pts,
-        Block<real_t>*              block)
+        Block<real_t>*              block,
+        int&                        pt_dim)                 // (output) dimensionality of point
 {
     vec3d p;
 
     // number of geometry dimensions and science variables
     int ndom_dims   = block->geometry.mfa_data->tmesh.tensor_prods[0].ctrl_pts.cols();          // number of geometry dims
     nvars           = block->vars.size();                       // number of science variables
+    pt_dim          = block->domain.cols();                     // dimensionality of point
 
     // number of raw points
     for (size_t j = 0; j < (size_t)(block->mfa->ndom_pts().size()); j++)
@@ -223,7 +225,9 @@ void PrepRenderingData(
 // write vtk files for initial, approximated, control points
 void write_vtk_files(
         Block<real_t>* b,
-        const          diy::Master::ProxyWithLink& cp)
+        const          diy::Master::ProxyWithLink& cp,
+        int&           dom_dim,                     // (output) domain dimensionality
+        int&           pt_dim)                      // (output) point dimensionality
 {
     int                         nvars;              // number of science variables (excluding geometry)
     vector<int>                 nraw_pts;           // number of input points in each dim.
@@ -251,11 +255,12 @@ void write_vtk_files(
                       approx_pts,
                       approx_data,
                       err_pts,
-                      b);
+                      b,
+                      pt_dim);
 
     // pad dimensions up to 3
-    size_t dom_dims = geom_nctrl_pts.size();
-    for (auto i = 0; i < 3 - dom_dims; i++)
+    dom_dim = geom_nctrl_pts.size();
+    for (auto i = 0; i < 3 - dom_dim; i++)
     {
         geom_nctrl_pts.push_back(1);
         nraw_pts.push_back(1);
@@ -263,8 +268,8 @@ void write_vtk_files(
 
     for (size_t j = 0; j < nvars; j++)
     {
-        dom_dims = vars_nctrl_pts[j].size();
-        for (auto i = 0; i < 3 - dom_dims; i++)
+        dom_dim = vars_nctrl_pts[j].size();
+        for (auto i = 0; i < 3 - dom_dim; i++)
             vars_nctrl_pts[j].push_back(1);
     }
 
@@ -550,6 +555,7 @@ int main(int argc, char ** argv)
     int                         ntest  = 0;             // number of input test points in each dim for analytical error tests
     string                      infile = "approx.out";  // diy input file
     bool                        help;                   // show help
+    int                         dom_dim, pt_dim;        // domain and point dimensionality, respectively
 
     // get command line arguments
     opts::Options ops;
@@ -591,7 +597,7 @@ int main(int argc, char ** argv)
 
     // write vtk files for initial and approximated points
     master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-            { write_vtk_files(b, cp); });
+            { write_vtk_files(b, cp, dom_dim, pt_dim); });
 
     // rest of the code tests analytical functions and writes those files
 
@@ -599,11 +605,11 @@ int main(int argc, char ** argv)
         exit(0);
 
     // arguments for analytical functions
-    DomainArgs d_args;
+    DomainArgs d_args(dom_dim, pt_dim);
 
     if (input == "sine")
     {
-        for (int i = 0; i < MAX_DIM; i++)
+        for (int i = 0; i < dom_dim; i++)
         {
             d_args.min[i]               = -4.0 * M_PI;
             d_args.max[i]               = 4.0  * M_PI;
@@ -613,7 +619,7 @@ int main(int argc, char ** argv)
     // sinc function f(x) = sin(x)/x, f(x,y) = sinc(x)sinc(y), ...
     if (input == "sinc")
     {
-        for (int i = 0; i < MAX_DIM; i++)
+        for (int i = 0; i < dom_dim; i++)
         {
             d_args.min[i]               = -4.0 * M_PI;
             d_args.max[i]               = 4.0  * M_PI;
@@ -623,7 +629,7 @@ int main(int argc, char ** argv)
     // f16 function
     if (input == "f16")
     {
-        for (int i = 0; i < MAX_DIM; i++)
+        for (int i = 0; i < dom_dim; i++)
         {
             d_args.min[i]               = -1.0;
             d_args.max[i]               = 1.0;
@@ -641,7 +647,7 @@ int main(int argc, char ** argv)
     // f18 function
     if (input == "f18")
     {
-        for (int i = 0; i < MAX_DIM; i++)
+        for (int i = 0; i < dom_dim; i++)
         {
             d_args.min[i]               = -0.95;
             d_args.max[i]               = 0.95;
@@ -650,7 +656,7 @@ int main(int argc, char ** argv)
 
     // compute the norms of analytical errors of synthetic function w/o noise at test points
     // and write true points and test points to vtk
-    for (int i = 0; i < MAX_DIM; i++)
+    for (int i = 0; i < dom_dim; i++)
         d_args.ndom_pts[i] = ntest;
 
     master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
