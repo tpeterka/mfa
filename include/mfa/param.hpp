@@ -34,8 +34,8 @@ namespace mfa
 
         Param(
             int                 dom_dim_,           // domain dimensionality (excluding science variables)
-            VectorXi&           ndom_pts_,          // number of input data points in each dim
-            MatrixX<T>&         domain_) :          // input data points (1st dim changes fastest)
+            const VectorXi&     ndom_pts_,          // number of input data points in each dim
+            const MatrixX<T>&   domain_) :          // input data points (1st dim changes fastest)
             dom_dim(dom_dim_),
             ndom_pts(ndom_pts_)
         {
@@ -96,7 +96,7 @@ namespace mfa
         // number of data points (which would be the product)
         // assumes params were allocated by caller
         void CurveParams(
-                MatrixX<T>&         domain,                 // input data points (1st dim changes fastest)
+                const MatrixX<T>&   domain,                 // input data points (1st dim changes fastest)
                 vector<vector<T>>&  params)                 // (output) parameters for input points[dimension][index]
         {
             T          tot_dist;                          // total chord length
@@ -170,7 +170,7 @@ namespace mfa
         // number of data points (which would be the product)
         // assumes params were allocated by caller
         void DomainParams(
-                MatrixX<T>&           domain,                   // input data points (1st dim changes fastest)
+                const MatrixX<T>&     domain,                   // input data points (1st dim changes fastest)
                 vector<vector<T>>&    params)                   // (output) parameters for input points[dimension][index]
         {
             size_t cs = 1;                                      // stride for domain points in current dim.

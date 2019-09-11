@@ -46,11 +46,11 @@ namespace mfa
         int                         min_dim_;           // starting coordinate of this model in full-dimensional data
         int                         max_dim_;           // ending coordinate of this model in full-dimensional data
 
-        Tmesh(int       dom_dim,                        // number of domain dimension
-              VectorXi& p,                              // degree in each dimension
-              int       min_dim,                        // starting coordinate of this model in full-dimensional data
-              int       max_dim,                        // ending coordinate of this model in full-dimensional data
-              size_t    ntensor_prods =  0) :           // number of tensor products to allocate
+        Tmesh(int               dom_dim,                // number of domain dimension
+              const VectorXi&   p,                      // degree in each dimension
+              int               min_dim,                // starting coordinate of this model in full-dimensional data
+              int               max_dim,                // ending coordinate of this model in full-dimensional data
+              size_t            ntensor_prods =  0) :   // number of tensor products to allocate
                 dom_dim_(dom_dim),
                 p_(p),
                 min_dim_(min_dim),

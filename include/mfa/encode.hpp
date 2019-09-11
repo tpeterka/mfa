@@ -50,24 +50,24 @@ namespace mfa
         template <typename>
         friend class NewKnots;
 
-        MatrixX<T>&     domain;                         // input points
-        MFA<T>&         mfa;                            // the mfa top-level object
-        MFA_Data<T>&    mfa_data;                       // the mfa data model
-        int             verbose;                        // output level
-        size_t          max_num_curves;                 // max num. curves per dimension to check in curve version
+        const MatrixX<T>&   domain;                         // input points
+        const MFA<T>&       mfa;                            // the mfa top-level object
+        MFA_Data<T>&        mfa_data;                       // the mfa data model
+        int                 verbose;                        // output level
+        size_t              max_num_curves;                 // max num. curves per dimension to check in curve version
 
     public:
 
         Encoder(
-                MFA<T>&         mfa_,                   // MFA top-level object
-                MFA_Data<T>&    mfa_data_,              // MFA data model
-                MatrixX<T>&     domain_,                // input points
-                int             verbose_) :             // output level
+                const MFA<T>&       mfa_,                   // MFA top-level object
+                MFA_Data<T>&        mfa_data_,              // MFA data model
+                const MatrixX<T>&   domain_,                // input points
+                int                 verbose_) :             // debug level
             mfa(mfa_),
             mfa_data(mfa_data_),
             verbose(verbose_),
             domain(domain_),
-            max_num_curves(1.0e4)                       // max num. curves to check in one dimension of curve version
+            max_num_curves(1.0e4)                           // max num. curves to check in one dimension of curve version
         {}
 
         ~Encoder() {}
@@ -77,8 +77,8 @@ namespace mfa
         // output control points can be specified by caller, does not have to be those in the tmesh
         // the output ctrl_pts are resized by this function;  caller need not resize them
         void Encode(const VectorXi& nctrl_pts,              // number of control points in each dim.
-                    MatrixX<T>&     ctrl_pts,               // output control points
-                    VectorX<T>&     weights,                // output weights
+                    MatrixX<T>&     ctrl_pts,               // (output) control points
+                    VectorX<T>&     weights,                // (output) weights
                     bool            weighted = true)        // solve for and use weights
         {
             // check and assign main quantities
@@ -129,6 +129,7 @@ namespace mfa
                 size_t coo = 0;                                 // co at start of contiguous sequence
                 size_t too = 0;                                 // to at start of contiguous sequence
 
+                // TODO: allocate P and R once for all curves in an EncodeInfo struct similar to DecodeInfo
                 for (auto j = 1; j < ncurves; j++)
                 {
                     if (j % cs)
@@ -238,10 +239,10 @@ namespace mfa
 
         // original adaptive encoding for first tensor product only
         void OrigAdaptiveEncode(
-                T           err_limit,              // maximum allowable normalized error
-                bool        weighted,               // solve for and use weights
-                VectorX<T>& extents,                // extents in each dimension, for normalizing error (size 0 means do not normalize)
-                int         max_rounds = 0)         // optional maximum number of rounds
+                T                   err_limit,              // maximum allowable normalized error
+                bool                weighted,               // solve for and use weights
+                const VectorX<T>&   extents,                // extents in each dimension, for normalizing error (size 0 means do not normalize)
+                int                 max_rounds = 0)         // optional maximum number of rounds
         {
             vector<vector<T>> new_knots;                               // new knots in each dim.
 
@@ -350,12 +351,12 @@ namespace mfa
 #ifndef      MFA_NO_WEIGHTS
 
         bool Weights(
-                int         k,              // current dimension
-                MatrixX<T>& Q,              // input points
-                MatrixX<T>& N,              // basis functions
-                MatrixX<T>& NtN,            // N^T * N
-                int         curve_id,       // debugging
-                VectorX<T>& weights)        // output weights
+                int                 k,              // current dimension
+                const MatrixX<T>&   Q,              // input points
+                const MatrixX<T>&   N,              // basis functions
+                const MatrixX<T>&   NtN,            // N^T * N
+                int                 curve_id,       // debugging
+                VectorX<T>&         weights)        // (output) weights
         {
             bool success;
 
@@ -523,11 +524,11 @@ namespace mfa
         // includes multiplication by weights
         // R is column vector of n + 1 elements, each element multiple coordinates of the input points
         void RHS(
-                int         cur_dim,  // current dimension
-                MatrixX<T>& N,        // matrix of basis function coefficients
-                MatrixX<T>& R,        // (output) residual matrix allocated by caller
-                VectorX<T>& weights,  // precomputed weights for n + 1 control points on this curve
-                int         co)       // index of starting domain pt in current curve
+                int                 cur_dim,  // current dimension
+                const MatrixX<T>&   N,        // matrix of basis function coefficients
+                MatrixX<T>&         R,        // (output) residual matrix allocated by caller
+                const VectorX<T>&   weights,  // precomputed weights for n + 1 control points on this curve
+                int                 co)       // index of starting domain pt in current curve
         {
             int last   = R.cols() - 1;                                  // column of range value TODO: weighing only the last column does not make much sense in the split model
             MatrixX<T> Rk(N.rows(), mfa_data.max_dim - mfa_data.min_dim + 1);     // one row for each input point
@@ -583,13 +584,13 @@ namespace mfa
         // includes multiplication by weights
         // R is column vector of n + 1 elements, each element multiple coordinates of the input points
         void RHS(
-                int         cur_dim,  // current dimension
-                MatrixX<T>& in_pts,   // input points (not the default domain stored in the mfa)
-                MatrixX<T>& N,        // matrix of basis function coefficients
-                MatrixX<T>& R,        // (output) residual matrix allocated by caller
-                VectorX<T>& weights,  // precomputed weights for n + 1 control points on this curve
-                int         co,       // index of starting input pt in current curve
-                int         cs)       // stride of input pts in current curve
+                int                 cur_dim,  // current dimension
+                const MatrixX<T>&   in_pts,   // input points (not the default domain stored in the mfa)
+                const MatrixX<T>&   N,        // matrix of basis function coefficients
+                MatrixX<T>&         R,        // (output) residual matrix allocated by caller
+                const VectorX<T>&   weights,  // precomputed weights for n + 1 control points on this curve
+                int                 co,       // index of starting input pt in current curve
+                int                 cs)       // stride of input pts in current curve
         {
             int last   = R.cols() - 1;                                  // column of range value TODO: weighing only the last column does not make much sense in the split model
             MatrixX<T> Rk(N.rows(), mfa_data.max_dim - mfa_data.min_dim + 1);     // one row for each input point
@@ -675,10 +676,10 @@ namespace mfa
         // solves for one curve of control points
         // outputs go to specified control points and weights matrix and vector rather than default mfa
         void CtrlCurve(
-                MatrixX<T>&         N,                  // basis functions for current dimension
-                MatrixX<T>&         NtN,                // Nt * N
-                MatrixX<T>&         R,                  // residual matrix for current dimension and curve
-                MatrixX<T>&         P,                  // solved points for current dimension and curve
+                const MatrixX<T>&   N,                  // basis functions for current dimension
+                const MatrixX<T>&   NtN,                // Nt * N
+                MatrixX<T>&         R,                  // (output) residual matrix for current dimension and curve
+                MatrixX<T>&         P,                  // (output) solved points for current dimension and curve
                 size_t              k,                  // current dimension
                 size_t              co,                 // starting ofst for reading domain pts
                 size_t              cs,                 // stride for reading domain points
@@ -686,8 +687,8 @@ namespace mfa
                 MatrixX<T>&         temp_ctrl0,         // first temporary control points buffer
                 MatrixX<T>&         temp_ctrl1,         // second temporary control points buffer
                 int                 curve_id,           // debugging
-                MatrixX<T>&         ctrl_pts,           // output control points
-                VectorX<T>&         weights,            // output weights
+                MatrixX<T>&         ctrl_pts,           // (output) control points
+                VectorX<T>&         weights,            // (output) weights
                 bool                weighted = true)    // solve for and use weights
         {
             // solve for weights
@@ -763,8 +764,8 @@ namespace mfa
 
         // solves for one curve of control points
         void CtrlCurve(
-                MatrixX<T>&         N,                  // basis functions for current dimension
-                MatrixX<T>&         NtN,                // Nt * N
+                const MatrixX<T>&   N,                  // basis functions for current dimension
+                const MatrixX<T>&   NtN,                // Nt * N
                 MatrixX<T>&         R,                  // residual matrix for current dimension and curve
                 MatrixX<T>&         P,                  // solved points for current dimension and curve
                 size_t              k,                  // current dimension
@@ -774,7 +775,7 @@ namespace mfa
                 MatrixX<T>&         temp_ctrl0,         // first temporary control points buffer
                 MatrixX<T>&         temp_ctrl1,         // second temporary control points buffer
                 int                 curve_id,           // debugging
-                TensorProduct<T>&   tensor,             // tensor product containing result
+                TensorProduct<T>&   tensor,             // (output) tensor product containing result
                 bool                weighted = true)    // solve for and use weights
         {
             // solve for weights
@@ -854,14 +855,14 @@ namespace mfa
         // This version specifies a location for ctrl_pts rather than default one in mfa
         // previous dimensions get copied to alternating double buffers
         void CopyCtrl(
-                MatrixX<T>&         P,              // solved points for current dimension and curve
+                const MatrixX<T>&   P,              // solved points for current dimension and curve
                 int                 k,              // current dimension
                 size_t              co,             // starting offset for reading domain points
                 size_t              cs,             // stride for reading domain points
                 size_t              to,             // starting offset for writing control points
-                MatrixX<T>&         ctrl_pts,       // output control points
-                MatrixX<T>&         temp_ctrl0,     // first temporary control points buffer
-                MatrixX<T>&         temp_ctrl1)     // second temporary control points buffer
+                MatrixX<T>&         ctrl_pts,       // (output) control points
+                MatrixX<T>&         temp_ctrl0,     // (output) first temporary control points buffer
+                MatrixX<T>&         temp_ctrl1)     // (output) second temporary control points buffer
         {
             int ndims = mfa.ndom_pts().size();    // number of domain dimensions
 
@@ -908,12 +909,12 @@ namespace mfa
         // last dimension gets copied to final control points
         // previous dimensions get copied to alternating double buffers
         void CopyCtrl(
-                MatrixX<T>&         P,              // solved points for current dimension and curve
+                const MatrixX<T>&   P,              // solved points for current dimension and curve
                 int                 k,              // current dimension
                 size_t              co,             // starting offset for reading domain points
                 size_t              cs,             // stride for reading domain points
                 size_t              to,             // starting offset for writing control points
-                TensorProduct<T>&   tensor,         // tensor product containing result
+                TensorProduct<T>&   tensor,         // (output) tensor product containing result
                 MatrixX<T>&         temp_ctrl0,     // first temporary control points buffer
                 MatrixX<T>&         temp_ctrl1)     // second temporary control points buffer
         {
@@ -966,10 +967,10 @@ namespace mfa
                 size_t                  k,          // current dimension
                 const TensorProduct<T>& tensor,     // current tensor product
                 size_t                  co,         // starting ofst for reading domain pts
-                MatrixX<T>&             ctrl_pts,   // control points
-                VectorX<T>&             weights,    // weights associated with control points
+                const MatrixX<T>&       ctrl_pts,   // control points
+                const VectorX<T>&       weights,    // weights associated with control points
                 VectorX<T>              extents,    // extents in each dimension, for normalizing error (size 0 means do not normalize)
-                set<int>&               err_spans,  // spans with error greater than err_limit
+                set<int>&               err_spans,  // (output) spans with error greater than err_limit
                 T                       err_limit)  // max allowable error
         {
             mfa::Decoder<T> decoder(mfa, mfa_data, verbose);
@@ -1038,7 +1039,7 @@ namespace mfa
         // returns 1 if knots were added, 0 if no knots were added, -1 if number of control points >= input points
         int NewKnots_full(
                 T                   err_limit,                   // max allowable error
-                VectorX<T>          extents,                     // extents in each dimension, for normalizing error (size 0 means do not normalize)
+                const VectorX<T>&   extents,                     // extents in each dimension, for normalizing error (size 0 means do not normalize)
                 int                 iter)                        // iteration number of caller (for debugging)
         {
             bool done = true;
@@ -1114,7 +1115,7 @@ namespace mfa
         // adds knots in middles of spans that have error higher than the limit
         // returns true if done, ie, no knots are inserted
         bool NewKnots_curve(
-                vector<vector<T>>&  new_knots,                              // new knots
+                vector<vector<T>>&  new_knots,                              // (output) new knots
                 T                   err_limit,                              // max allowable error
                 const VectorX<T>&   extents,                                // extents in each dimension, for normalizing error (size 0 means do not normalize)
                 int                 iter)                                   // iteration number of caller (for debugging)

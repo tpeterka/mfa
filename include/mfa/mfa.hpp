@@ -71,8 +71,8 @@ namespace mfa
 
         MFA(
             int                 dom_dim_,           // domain dimensionality (excluding science variables)
-            VectorXi&           ndom_pts_,          // number of input data points in each dim
-            MatrixX<T>&         domain_) :          // input data points (1st dim changes fastest)
+            const VectorXi&     ndom_pts_,          // number of input data points in each dim
+            const MatrixX<T>&   domain_) :          // input data points (1st dim changes fastest)
             dom_dim(dom_dim_)
         {
             mfa_param = new Param<T>(dom_dim_, ndom_pts_, domain_);
@@ -83,18 +83,18 @@ namespace mfa
             delete mfa_param;
         }
 
-        VectorXi&               ndom_pts()      { return mfa_param->ndom_pts; }
-        vector<vector<T>>&      params()        { return mfa_param->params; }
-        vector<size_t>&         ds()            { return mfa_param->ds; }
-        vector<vector<size_t>>& co()            { return mfa_param->co; }
+        VectorXi&               ndom_pts() const    { return mfa_param->ndom_pts; }
+        vector<vector<T>>&      params() const      { return mfa_param->params; }
+        vector<size_t>&         ds() const          { return mfa_param->ds; }
+        vector<vector<size_t>>& co() const          { return mfa_param->co; }
 
         // fixed number of control points encode
         void FixedEncode(
-                MFA_Data<T>&    mfa_data,               // mfa data model
-                MatrixX<T>&     domain,                 // input points
-                VectorXi        nctrl_pts,              // number of control points in each dim
-                int             verbose,                // debug level
-                bool            weighted)               // solve for and use weights (default = true)
+                MFA_Data<T>&        mfa_data,               // mfa data model
+                const MatrixX<T>&   domain,                 // input points
+                const VectorXi      nctrl_pts,              // number of control points in each dim
+                int                 verbose,                // debug level
+                bool                weighted) const         // solve for and use weights (default = true)
         {
             // fixed encode assumes the tmesh has only one tensor product
             TensorProduct<T>&t = mfa_data.tmesh.tensor_prods[0];
@@ -112,13 +112,13 @@ namespace mfa
 
         // adaptive encode
         void AdaptiveEncode(
-                MFA_Data<T>&    mfa_data,               // mfa data model
-                MatrixX<T>&     domain,                 // input points
-                T               err_limit,              // maximum allowable normalized error
-                int             verbose,                // debug level
-                bool            weighted,               // solve for and use weights (default = true)
-                VectorX<T>&     extents,                // extents in each dimension, for normalizing error (size 0 means do not normalize)
-                int             max_rounds)             // optional maximum number of rounds
+                MFA_Data<T>&        mfa_data,               // mfa data model
+                const MatrixX<T>&   domain,                 // input points
+                T                   err_limit,              // maximum allowable normalized error
+                int                 verbose,                // debug level
+                bool                weighted,               // solve for and use weights (default = true)
+                const VectorX<T>&   extents,                // extents in each dimension, for normalizing error (size 0 means do not normalize)
+                int                 max_rounds) const       // optional maximum number of rounds
         {
             Encoder<T> encoder(*this, mfa_data, domain, verbose);
 
@@ -131,27 +131,27 @@ namespace mfa
 
         // decode values at all input points
         void DecodeDomain(
-                MFA_Data<T>&    mfa_data,               // mfa data model
-                int             verbose,                // debug level
-                MatrixX<T>&     approx,                 // decoded points
-                int             min_dim,                // first dimension to decode
-                int             max_dim,                // last dimension to decode
-                bool            saved_basis)            // whether basis functions were saved and can be reused
+                const MFA_Data<T>&  mfa_data,               // mfa data model
+                int                 verbose,                // debug level
+                MatrixX<T>&         approx,                 // decoded points
+                int                 min_dim,                // first dimension to decode
+                int                 max_dim,                // last dimension to decode
+                bool                saved_basis) const      // whether basis functions were saved and can be reused
         {
-            VectorXi no_derivs;                     // size-0 means no derivatives
+            VectorXi no_derivs;                             // size-0 means no derivatives
             DecodeDomain(mfa_data, verbose, approx, min_dim, max_dim, saved_basis, no_derivs);
         }
 
         // decode derivatives at all input points
         void DecodeDomain(
-                MFA_Data<T>&    mfa_data,               // mfa data model
-                int             verbose,                // debug level
-                MatrixX<T>&     approx,                 // decoded values
-                int             min_dim,                // first dimension to decode
-                int             max_dim,                // last dimension to decode
-                bool            saved_basis,            // whether basis functions were saved and can be reused
-                VectorXi&       derivs)                 // derivative to take in each domain dim. (0 = value, 1 = 1st deriv, 2 = 2nd deriv, ...)
-            // pass size-0 vector if unused
+                const MFA_Data<T>&  mfa_data,               // mfa data model
+                int                 verbose,                // debug level
+                MatrixX<T>&         approx,                 // decoded values
+                int                 min_dim,                // first dimension to decode
+                int                 max_dim,                // last dimension to decode
+                bool                saved_basis,            // whether basis functions were saved and can be reused
+                const VectorXi&     derivs) const           // derivative to take in each domain dim. (0 = value, 1 = 1st deriv, 2 = 2nd deriv, ...)
+                                                            // pass size-0 vector if unused
         {
             mfa::Decoder<T> decoder(*this, mfa_data, verbose);
             decoder.DecodeDomain(approx, min_dim, max_dim, saved_basis, derivs);
@@ -159,9 +159,9 @@ namespace mfa
 
         // decode single point at the given parameter location
         void DecodePt(
-                MFA_Data<T>&    mfa_data,               // mfa data model
-                VectorX<T>&     param,                  // parameters of point to decode
-                VectorX<T>&     cpt)                    // (output) decoded point
+                const MFA_Data<T>&  mfa_data,               // mfa data model
+                const VectorX<T>&   param,                  // parameters of point to decode
+                VectorX<T>&         cpt) const              // (output) decoded point
         {
             int verbose = 0;
             Decoder<T> decoder(*this, mfa_data, verbose);
@@ -172,11 +172,11 @@ namespace mfa
         // compute the error (absolute value of coordinate-wise difference) of the mfa at a domain point
         // error is not normalized by the data range (absolute, not relative error)
         void AbsCoordError(
-                MFA_Data<T>&    mfa_data,               // mfa data model
-                MatrixX<T>&     domain,                 // input points
-                size_t          idx,                    // index of domain point
-                VectorX<T>&     error,                  // absolute value of error at each coordinate
-                int             verbose)                // debug level
+                const MFA_Data<T>&  mfa_data,               // mfa data model
+                const MatrixX<T>&   domain,                 // input points
+                size_t              idx,                    // index of domain point
+                VectorX<T>&         error,                  // (output) absolute value of error at each coordinate
+                int                 verbose) const          // debug level
         {
             // convert linear idx to multidim. i,j,k... indices in each domain dimension
             VectorXi ijk(dom_dim);

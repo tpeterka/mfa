@@ -67,13 +67,13 @@ namespace mfa
 
         // constructor for creating an mfa from input points
         MFA_Data(
-                VectorXi&           p_,             // polynomial degree in each dimension
-                VectorXi&           ndom_pts_,      // number of input data points in each dim
-                MatrixX<T>&         domain_,        // input data points (1st dim changes fastest)
-                vector<vector<T>>&  params_,        // parameters of input points
-                VectorXi            nctrl_pts_,     // optional number of control points in each dim (size 0 means minimum p+1)
-                int                 min_dim_ = -1,  // starting coordinate for input data
-                int                 max_dim_ = -1) :// ending coordinate for input data
+                const VectorXi&             p_,             // polynomial degree in each dimension
+                const VectorXi&             ndom_pts_,      // number of input data points in each dim
+                const MatrixX<T>&           domain_,        // input data points (1st dim changes fastest)
+                const vector<vector<T>>&    params_,        // parameters of input points
+                VectorXi                    nctrl_pts_,     // optional number of control points in each dim (size 0 means minimum p+1)
+                int                         min_dim_ = -1,  // starting coordinate for input data
+                int                         max_dim_ = -1) :// ending coordinate for input data
             p(p_),
             min_dim(min_dim_),
             max_dim(max_dim_),
@@ -84,13 +84,6 @@ namespace mfa
                 min_dim = 0;
             if (max_dim == -1)
                 max_dim = domain_.cols() - 1;
-
-//             // check dimensionality for sanity
-//             assert(dom_dim < domain_.cols());
-// 
-//             // max extent of input data points
-//             int last     = domain_.cols() - 1;
-//             range_extent = domain_.col(last).maxCoeff() - domain_.col(last).minCoeff();
 
             // set number of control points to the minimum, p + 1, if they have not been initialized
             if (!nctrl_pts_.size())
@@ -118,54 +111,18 @@ namespace mfa
             }
             tmesh.append_tensor(knot_mins, knot_maxs);
 
-//             // stride for domain points in different dimensions
-//             ds.resize(dom_dim, 1);                  // stride for domain points
-//             for (size_t i = 1; i < dom_dim; i++)
-//                 ds[i] = ds[i - 1] * ndom_pts_[i - 1];
-
-//             // precompute curve parameters and knots for input points
-//             params_.resize(dom_dim);
-// 
 #ifdef CURVE_PARAMS
             Knots(ndom_pts_, params_, tmesh);       // knots spaced according to parameters (per P&T)
 #else
             UniformKnots(ndom_pts_, tmesh);         // knots spaced uniformly
 #endif
-
-            // debug
-//             cerr << "Params:\n" << params_ << endl;
-//             cerr << "Knots:\n" << knots << endl;
-//             tmesh.print();
-
-//             // offsets for curve starting (domain) points in each dimension
-//             co.resize(dom_dim);
-//             for (auto k = 0; k < dom_dim; k++)
-//             {
-//                 size_t ncurves  = domain_.rows() / ndom_pts_(k);  // number of curves in this dimension
-//                 size_t coo      = 0;                            // co at start of contiguous sequence
-//                 co[k].resize(ncurves);
-// 
-//                 co[k][0] = 0;
-// 
-//                 for (auto j = 1; j < ncurves; j++)
-//                 {
-//                     // adjust offsets for the next curve
-//                     if (j % ds[k])
-//                         co[k][j] = co[k][j - 1] + 1;
-//                     else
-//                     {
-//                         co[k][j] = coo + ds[k] * ndom_pts_(k);
-//                         coo = co[k][j];
-//                     }
-//                 }
-//             }
         }
 
         // constructor for reading in a solved mfa
         MFA_Data(
-                VectorXi&           p_,             // polynomial degree in each dimension
-                VectorXi&           ndom_pts_,      // number of input data points in each dim
-                Tmesh<T>&           tmesh_,         // solved tmesh
+                const VectorXi&     p_,             // polynomial degree in each dimension
+                const VectorXi&     ndom_pts_,      // number of input data points in each dim
+                const Tmesh<T>&     tmesh_,         // solved tmesh
                 int                 min_dim_ = -1,  // starting coordinate for input data
                 int                 max_dim_ = -1) :// ending coordinate for input data
             p(p_),
@@ -182,7 +139,7 @@ namespace mfa
 
         // constructor when reading mfa in and knowing nothing about it yet except its degree and dimensionality
         MFA_Data(
-                VectorXi&           p_,             // polynomial degree in each dimension
+                const VectorXi&     p_,             // polynomial degree in each dimension
                 size_t              ntensor_prods,  // number of tensor products to allocate in tmesh
                 int                 min_dim_ = -1,  // starting coordinate for input data
                 int                 max_dim_ = -1) :// ending coordinate for input data
@@ -203,9 +160,9 @@ namespace mfa
         // convert linear domain point index into (i,j,k,...) multidimensional index
         // number of dimensions is the domain dimensionality
         void idx2ijk(
-                vector<size_t>&   ds,             // stride for domain points in each dim.
+                const vector<size_t>&   ds,             // stride for domain points in each dim.
                 size_t                  idx,            // linear cell indx
-                VectorXi&               ijk)            // (output) i,j,k,... indices in all dimensions
+                VectorXi&               ijk) const      // (output) i,j,k,... indices in all dimensions
         {
             if (dom_dim == 1)
             {
@@ -227,7 +184,7 @@ namespace mfa
         void ijk2idx(
                 const VectorXi& ndom_pts,               // number of input points in each dimension
                 const VectorXi& ijk,                    // i,j,k,... indices to all dimensions
-                size_t&         idx)                    // (output) linear index
+                size_t&         idx) const              // (output) linear index
         {
             idx           = 0;
             size_t stride = 1;
@@ -248,7 +205,7 @@ namespace mfa
         int FindSpan(
                 int                     cur_dim,            // current dimension
                 T                       u,                  // parameter value
-                int                     nctrl_pts)          // number of control points in current dim
+                int                     nctrl_pts) const    // number of control points in current dim
         {
             if (u == tmesh.all_knots[cur_dim][nctrl_pts])
                 return nctrl_pts - 1;
@@ -282,7 +239,7 @@ namespace mfa
         int FindSpan(
                 int                     cur_dim,            // current dimension
                 T                       u,                  // parameter value
-                const TensorProduct<T>& tensor)             // tensor product in tmesh
+                const TensorProduct<T>& tensor) const       // tensor product in tmesh
         {
             if (u < tmesh.all_knots[cur_dim][tensor.knot_mins[cur_dim]] ||
                     u > tmesh.all_knots[cur_dim][tensor.knot_maxs[cur_dim]])
@@ -336,7 +293,7 @@ namespace mfa
                 T                       u,          // parameter value
                 int                     span,       // index of span in the knots vector containing u
                 MatrixX<T>&             N,          // matrix of (output) basis function values
-                int                     row)        // row in N of result
+                int                     row) const  // row in N of result
         {
             // init
             vector<T> scratch(p(cur_dim) + 1);                  // scratchpad, same as N in P&T p. 70
@@ -385,7 +342,7 @@ namespace mfa
                 T                       u,          // parameter value
                 int                     span,       // index of span in the knots vector containing u
                 MatrixX<T>&             N,          // matrix of (output) basis function values
-                int                     row)        // row in N of result
+                int                     row) const  // row in N of result
         {
             vector<T> loc_knots(p(cur_dim) + 2);
 
@@ -413,7 +370,7 @@ namespace mfa
         T OneBasisFun(
                 int                     cur_dim,        // current dimension
                 T                       u,              // parameter value
-                int                     i)              // compute the ith basis function, 0 <= i <= p(cur_dim)
+                int                     i) const        // compute the ith basis function, 0 <= i <= p(cur_dim)
         {
             vector<T> N(p(cur_dim) + 1);                // triangular table result
             vector<T>& U = tmesh.all_knots[cur_dim];    // alias for knot vector for current dimension
@@ -467,9 +424,9 @@ namespace mfa
         // based on algorithm 2.4 of P&T, p. 74
         //
         T OneBasisFun(
-                int                     cur_dim,        // current dimension
-                T                       u,              // parameter value
-                vector<T>               loc_knots)      // local knot vector
+                int                     cur_dim,            // current dimension
+                T                       u,                  // parameter value
+                const vector<T>&        loc_knots) const    // local knot vector
         {
             vector<T> N(p(cur_dim) + 1);                // triangular table result
             vector<T>& U = loc_knots;                   // alias for knot vector for current dimension
@@ -539,7 +496,7 @@ namespace mfa
                 T                       u,          // parameter value
                 int                     span,       // index of span in the knots vector containing u, relative to ko
                 MatrixX<T>&             N,          // matrix of (output) basis function values
-                int                     row)        // row in N of result
+                int                     row) const  // row in N of result
         {
             // init
             vector<T> scratch(p(cur_dim) + 1);                  // scratchpad, same as N in P&T p. 70
@@ -601,7 +558,7 @@ namespace mfa
                 T           u,              // parameter value
                 int         span,           // index of span in the knots vector containing u, relative to ko
                 int         nders,          // number of derivatives
-                MatrixX<T>& ders)           // output basis function derivatives
+                MatrixX<T>& ders) const     // (output) basis function derivatives
         {
             // matrix from p. 70 of P&T
             // upper triangle is basis functions
@@ -702,10 +659,10 @@ namespace mfa
         // compute rational (weighted) NtN from nonrational (unweighted) N
         // ie, convert basis function coefficients to rational ones with weights
         void Rationalize(
-                int         k,                      // current dimension
-                VectorX<T>& weights,                // weights of control points
-                MatrixX<T>& N,                      // basis function coefficients
-                MatrixX<T>& NtN_rat)                // (output) rationalized Nt * N
+                int                 k,                      // current dimension
+                const VectorX<T>&   weights,                // weights of control points
+                const MatrixX<T>&   N,                      // basis function coefficients
+                MatrixX<T>&         NtN_rat) const          // (output) rationalized Nt * N
         {
             // compute rational denominators for input points
             VectorX<T> denom(N.rows());             // rational denomoninator for param of each input point
@@ -730,81 +687,10 @@ namespace mfa
             //         cerr << " NtN_rat:\n" << NtN_rat << endl;
         }
 
-        //         DEPRECATE
-//         // signed normal distance from a point to the domain
-//         // uses 2-point finite differences (first order linear) method to compute gradient and normal vector
-//         // approximates gradient from 2 points diagonally opposite each other in all
-//         // domain dimensions (not from 2 points in each dimension)
-//         T NormalDistance(
-//                 VectorX<T>& pt,          // point whose distance from domain is desired
-//                 MatrixX<T>& domain,      // input data points (1st dim changes fastest)
-//                 size_t      idx)         // index of min. corner of cell in the domain
-//             // that will be used to compute partial derivatives
-//         {
-//             // normal vector = [df/dx, df/dy, df/dz, ..., -1]
-//             // -1 is the last coordinate of the domain points, ie, the range value
-//             VectorX<T> normal(domain.cols());
-//             int      last = domain.cols() - 1;    // last coordinate of a domain pt, ie, the range value
-// 
-//             // convert linear idx to multidim. i,j,k... indices in each domain dimension
-//             VectorXi ijk(dom_dim);
-//             idx2ijk(idx, ijk);
-// 
-//             // compute i0 and i1 1d and ijk0 and ijk1 nd indices for two points in the cell in each dim.
-//             // even though the caller provided the minimum corner index as idx, it's
-//             // possible that idx is at the max end of the domain in some dimension
-//             // in this case we set i1 <- idx and i0 to be one less
-//             size_t i0, i1;                          // 1-d indices of min, max corner points
-//             VectorXi ijk0(dom_dim);                 // n-d ijk index of min corner
-//             VectorXi ijk1(dom_dim);                 // n-d ijk index of max corner
-//             for (int i = 0; i < dom_dim; i++)       // for all domain dimensions
-//             {
-//                 // at least 2 points needed in each dimension
-//                 // TODO: do something degenerate if not, but probably will never get to this point
-//                 // because there will be insufficient points to encode in the first place
-//                 assert(mfa->ndom_pts(i) >= 2);
-// 
-//                 // two opposite corners of the cell as i,j,k coordinates
-//                 if (ijk(i) + 1 < mfa->ndom_pts(i))
-//                 {
-//                     ijk0(i) = ijk(i);
-//                     ijk1(i) = ijk(i) + 1;
-//                 }
-//                 else
-//                 {
-//                     ijk0(i) = ijk(i) - 1;
-//                     ijk1(i) = ijk(i);
-//                 }
-//             }
-// 
-//             // set i0 and i1 to be the 1-d indices of the corner points
-//             ijk2idx(ijk0, i0);
-//             ijk2idx(ijk1, i1);
-// 
-//             // compute the normal to the domain at i0 and i1
-//             for (int i = 0; i < dom_dim; i++)      // for all domain dimensions
-//                 normal(i) = (domain(i1, last) - domain(i0, last)) / (domain(i1, i) - domain(i0, i));
-//             normal(last) = -1;
-//             normal /= normal.norm();
-// 
-//             // project distance from (pt - domain(idx)) to unit normal
-//             VectorX<T> dom_pt = domain.row(idx);
-// 
-//             // debug
-//             //     fprintf(stderr, "idx=%ld\n", idx);
-//             //     cerr << "unit normal\n" << normal << endl;
-//             // cerr << "point\n" << pt << endl;
-//             // cerr << "domain point:\n" << dom_pt << endl;
-//             // cerr << "pt - dom_pt:\n" << pt - dom_pt << endl;
-//             // fprintf(stderr, "projection = %e\n\n", normal.dot(pt - dom_pt));
-// 
-//             return normal.dot(pt - dom_pt);
-//         }
-
         // knot insertion into tensor product
         // TODO: expensive deep copies
         void KnotInsertion(const VectorX<T>&    param,              // new knot value to be inserted
-                           TensorProduct<T>&    tensor)         // tensor product for insertion
+                           TensorProduct<T>&    tensor) const       // (output) tensor product for insertion
         {
             vector<vector<T>>   new_knots;
             vector<vector<int>> new_knot_levels;
@@ -866,7 +752,7 @@ namespace mfa
                           vector<T>&            new_knots,          // (output) new knot vector in cur. dim.
                           vector<int>&          new_knot_levels,    // (output) new knot levels in cur. dim.
                           MatrixX<T>&           new_ctrl_pts,       // (output) new control points of curve
-                          VectorX<T>&           new_weights)        // (output) new control point weights of curve
+                          VectorX<T>&           new_weights) const  // (output) new control point weights of curve
         {
             new_knots.resize(old_knots.size() + 1);
             new_knot_levels.resize(old_knot_levels.size() + 1);
@@ -949,7 +835,7 @@ namespace mfa
                         vector<vector<int>>&        new_knot_levels,        // (output) new knot levels
                         MatrixX<T>&                 new_ctrl_pts,           // (output) new control points
                         VectorX<T>&                 new_weights,            // (output) new control point weights
-                        VectorXi&                   nctrl_pts)              // (input and output) number of control points in all dims
+                        VectorXi&                   nctrl_pts) const        // (input and output) number of control points in all dims
         {
             size_t old_cs, new_cs;                                          // stride for old and new control points in curve in cur. dim
 
@@ -1105,7 +991,7 @@ namespace mfa
                 const VectorXi&     nctrl_pts,          // number of control points in all dims
                 size_t              cur_dim,            // current dimension
                 size_t              co,                 // starting ofst for reading domain pts
-                size_t              cs)                 // stride for reading domain points
+                size_t              cs) const           // stride for reading domain points
         {
             curve_ctrl_pts.resize(nctrl_pts(cur_dim), all_ctrl_pts.cols());
             curve_weights.resize(nctrl_pts(cur_dim));
@@ -1128,7 +1014,7 @@ namespace mfa
                 const VectorXi&     nctrl_pts,          // number of control points in all dims
                 size_t              cur_dim,            // current dimension
                 size_t              co,                 // starting ofst for reading domain pts
-                size_t              cs)                 // stride for reading domain points
+                size_t              cs) const           // stride for reading domain points
         {
             for (auto i = 0; i < nctrl_pts(cur_dim); i++)
             {
@@ -1136,106 +1022,6 @@ namespace mfa
                 all_weights(co + i * cs)        = curve_weights(i);
             }
         }
-
-//         // precompute curve parameters for input data points using the chord-length method
-//         // n-d version of algorithm 9.3, P&T, p. 377
-//         // params are computed along curves and averaged over all curves at same data point index i,j,k,...
-//         // ie, resulting params for a data point i,j,k,... are same for all curves
-//         // and params are only stored once for each dimension (1st dim params, 2nd dim params, ...)
-//         // total number of params is the sum of ndom_pts over the dimensions, much less than the total
-//         // number of data points (which would be the product)
-//         // assumes params were allocated by caller
-//         void Params(MatrixX<T>&         domain,
-//                     vector<vector<T>>&  params)        // (output) parameters for input points[dimension][index]
-//         {
-//             T          tot_dist;                          // total chord length
-//             VectorX<T> dists(ndom_pts.maxCoeff() - 1);    // chord lengths of data point spans for any dim
-//             params = VectorX<T>::Zero(params.size());
-//             VectorX<T> d;                                 // current chord length
-// 
-//             // following are counters for slicing domain and params into curves in different dimensions
-//             size_t co = 0;                     // starting offset for curves in domain in current dim
-//             size_t cs = 1;                     // stride for domain points in curves in current dim
-// 
-//             for (size_t k = 0; k < ndom_pts.size(); k++)         // for all domain dimensions
-//             {
-//                 params[k].resize(ndom_pts(k));
-//                 co = 0;
-//                 size_t coo = 0;                                  // co at start of contiguous sequence
-//                 size_t ncurves = domain.rows() / ndom_pts(k);    // number of curves in this dimension
-//                 size_t nzero_length_curves = 0;                  // num curves with zero length
-//                 for (size_t j = 0; j < ncurves; j++)             // for all the curves in this dimension
-//                 {
-//                     tot_dist = 0.0;
-// 
-//                     // chord lengths
-//                     for (size_t i = 0; i < ndom_pts(k) - 1; i++) // for all spans in this curve
-//                     {
-//                         // TODO: normalize domain so that dimensions they have similar scales
-//                         d = domain.row(co + i * cs) - domain.row(co + (i + 1) * cs);
-//                         dists(i) = d.norm();                     // Euclidean distance (l-2 norm)
-//                         tot_dist += dists(i);
-//                     }
-// 
-//                     // accumulate (sum) parameters from this curve into the params for this dim.
-//                     if (tot_dist > 0.0)                          // skip zero length curves
-//                     {
-//                         params[k][0]                 = 0.0;      // first parameter is known
-//                         params[k][ndom_pts(k) - 1]   = 1.0;      // last parameter is known
-//                         T prev_param                 = 0.0;      // param value at previous iteration below
-//                         for (size_t i = 0; i < ndom_pts(k) - 2; i++)
-//                         {
-//                             T dfrac             = dists(i) / tot_dist;
-//                             params[k][i + 1]    += prev_param + dfrac;
-//                             prev_param += dfrac;
-//                         }
-//                     }
-//                     else
-//                         nzero_length_curves++;
-// 
-//                     if ((j + 1) % cs)
-//                         co++;
-//                     else
-//                     {
-//                         co = coo + cs * ndom_pts(k);
-//                         coo = co;
-//                     }
-//                 }                                                // curves in this dimension
-// 
-//                 // average the params for this dimension by dividing by the number of curves that
-//                 // contributed to the sum (skipped zero length curves)
-//                 for (size_t i = 0; i < ndom_pts(k) - 2; i++)
-//                     params[k][i + 1] /= (ncurves - nzero_length_curves);
-// 
-//                 cs *= ndom_pts(k);
-//             }                                                    // domain dimensions
-//             // debug
-//             //     cerr << "params:\n" << params << endl;
-//         }
-// 
-//         // precompute parameters for input data points using domain spacing only (not length along curve)
-//         // params are only stored once for each dimension (1st dim params, 2nd dim params, ...)
-//         // total number of params is the sum of ndom_pts over the dimensions, much less than the total
-//         // number of data points (which would be the product)
-//         // assumes params were allocated by caller
-//         void DomainParams(MatrixX<T>&           domain,         // input data points (1st dim changes fastest)
-//                           vector<vector<T>>&    params)         // (output) parameters for input points[dimension][index]
-//         {
-//             size_t cs = 1;                                      // stride for domain points in current dim.
-//             for (size_t k = 0; k < dom_dim; k++)                // for all domain dimensions
-//             {
-//                 params[k].resize(ndom_pts(k));
-//                 for (size_t i = 1; i < ndom_pts(k) - 1; i++)
-//                     params[k][i]= fabs( (domain(cs * i, k) - domain(0, k)) /
-//                             (domain(cs * (ndom_pts(k) - 1), k) - domain(0, k)) );
-// 
-//                 params[k][ndom_pts(k) - 1] = 1.0;
-//                 cs *= ndom_pts(k);
-//             }                                                    // domain dimensions
-// 
-//             // debug
-//             //     cerr << "params:\n" << params << endl;
-//         }
 
         // compute knots
         // n-d version of eqs. 9.68, 9.69, P&T
@@ -1255,9 +1041,9 @@ namespace mfa
         // total number of knots is the sum of number of knots over the dimensions, much less than the product
         // assumes knots were allocated by caller
         void Knots(
-                VectorXi&           ndom_pts,           // number of input points in each dim.
-                vector<vector<T>>&  params,             // parameters for input points[dimension][index]
-                Tmesh<T>&           tmesh)              // tmesh
+                const VectorXi&             ndom_pts,           // number of input points in each dim.
+                const vector<vector<T>>&    params,             // parameters for input points[dimension][index]
+                Tmesh<T>&                   tmesh) const        // (output) tmesh
         {
             for (size_t k = 0; k < dom_dim; k++)                    // for all domain dimensions
             {
@@ -1308,8 +1094,8 @@ namespace mfa
         // total number of knots is the sum of number of knots over the dimensions, much less than the product
         // assumes knots were allocated by caller
         void UniformKnots(
-                VectorXi&           ndom_pts,           // number of input points in each dim.
-                Tmesh<T>&           tmesh)              // tmesh
+                const VectorXi&     ndom_pts,           // number of input points in each dim.
+                Tmesh<T>&           tmesh) const        // (output) tmesh
         {
             for (size_t k = 0; k < dom_dim; k++)        // for all domain dimensions
             {

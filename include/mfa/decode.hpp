@@ -93,21 +93,21 @@ namespace mfa
     {
     private:
 
-        int             tot_iters;                      // total iterations in flattened decoding of all dimensions
-        MatrixXi        ct;                             // coordinates of first control point of curve for given iteration
+        int                 tot_iters;                  // total iterations in flattened decoding of all dimensions
+        MatrixXi            ct;                         // coordinates of first control point of curve for given iteration
                                                         // of decoding loop, relative to start of box of
                                                         // control points
-        vector<size_t>  cs;                             // control point stride (only in decoder, not mfa)
-        int             verbose;                        // output level
-        MFA<T>&         mfa;                            // the mfa top-level object
-        MFA_Data<T>&    mfa_data;                       // the mfa data model
+        vector<size_t>      cs;                         // control point stride (only in decoder, not mfa)
+        int                 verbose;                    // output level
+        const MFA<T>&       mfa;                        // the mfa top-level object
+        const MFA_Data<T>&  mfa_data;                   // the mfa data model
 
     public:
 
         Decoder(
-                MFA<T>&         mfa_,                   // MFA top-level object
-                MFA_Data<T>&    mfa_data_,              // MFA data model
-                int             verbose_) :             // output level
+                const MFA<T>&       mfa_,               // MFA top-level object
+                const MFA_Data<T>&  mfa_data_,          // MFA data model
+                int                 verbose_) :         // debug level
             mfa(mfa_),
             mfa_data(mfa_data_),
             verbose(verbose_)
@@ -170,12 +170,12 @@ namespace mfa
         // P&T eq. 9.77, p. 424
         // assumes all vectors have been correctly resized by the caller
         void DecodeDomain(
-                MatrixX<T>& approx,                 // decoded output points (1st dim changes fastest)
-                int         min_dim,                // first dimension to decode
-                int         max_dim,                // last dimension to decode
-                bool        saved_basis,            // whether basis functions were saved and can be reused
-                VectorXi&   derivs)                 // derivative to take in each domain dim. (0 = value, 1 = 1st deriv, 2 = 2nd deriv, ...)
-                                                    // pass size-0 vector if unused
+                MatrixX<T>&     approx,                 // decoded output points (1st dim changes fastest)
+                int             min_dim,                // first dimension to decode
+                int             max_dim,                // last dimension to decode
+                bool            saved_basis,            // whether basis functions were saved and can be reused
+                const VectorXi& derivs)                 // derivative to take in each domain dim. (0 = value, 1 = 1st deriv, 2 = 2nd deriv, ...)
+                                                        // pass size-0 vector if unused
         {
             VectorXi iter = VectorXi::Zero(mfa_data.dom_dim);                    // parameter index (iteration count, ie, ijk) in current dim.
             int last = mfa_data.tmesh.tensor_prods[0].ctrl_pts.cols() - 1;       // last coordinate of control point
@@ -306,8 +306,8 @@ namespace mfa
         // TODO: unoptimized; creates new DecodeInfo each time it is called
         void VolPt_tmesh(const VectorX<T>&      param,      // parameters of point to decode
                          const VectorXi&        nctrl_pts,  // number of control points
-                         MatrixX<T>&            ctrl_pts,   // control points
-                         VectorX<T>&            weights,    // control point weights
+                         const MatrixX<T>&      ctrl_pts,   // control points
+                         const VectorX<T>&      weights,    // control point weights
                          VectorX<T>&            out_pt)     // (output) point, allocated by caller
         {
             // compute range of anchor points for a given point to decode
@@ -396,9 +396,9 @@ namespace mfa
         // compute a point from a NURBS n-d volume at a given parameter value
         // slower version for single points
         void VolPt(
-                VectorX<T>&         param,      // parameter value in each dim. of desired point
-                VectorX<T>&         out_pt,     // (output) point, allocated by caller
-                TensorProduct<T>&   tensor)     // tensor product to use for decoding
+                const VectorX<T>&       param,      // parameter value in each dim. of desired point
+                VectorX<T>&             out_pt,     // (output) point, allocated by caller
+                const TensorProduct<T>& tensor)     // tensor product to use for decoding
         {
             VectorXi no_ders;                   // size 0 vector means no derivatives
             VolPt(param, out_pt, tensor, no_ders);
@@ -407,10 +407,10 @@ namespace mfa
         // compute a point from a NURBS n-d volume at a given parameter value
         // faster version for multiple points, reuses decode info
         void VolPt(
-                VectorX<T>&         param,      // parameter value in each dim. of desired point
-                VectorX<T>&         out_pt,     // (output) point, allocated by caller
-                DecodeInfo<T>&      di,         // reusable decode info allocated by caller (more efficient when calling VolPt multiple times)
-                TensorProduct<T>&   tensor)     // tensor product to use for decoding
+                const VectorX<T>&       param,      // parameter value in each dim. of desired point
+                VectorX<T>&             out_pt,     // (output) point, allocated by caller
+                DecodeInfo<T>&          di,         // reusable decode info allocated by caller (more efficient when calling VolPt multiple times)
+                const TensorProduct<T>& tensor)     // tensor product to use for decoding
         {
             VectorXi no_ders;                   // size 0 vector means no derivatives
             VolPt(param, out_pt, di, tensor, no_ders);
@@ -420,11 +420,11 @@ namespace mfa
         // slower version for single points
         // algorithm 4.3, Piegl & Tiller (P&T) p.134
         void VolPt(
-                VectorX<T>&         param,      // parameter value in each dim. of desired point
-                VectorX<T>&         out_pt,     // (output) point, allocated by caller
-                TensorProduct<T>&   tensor,     // tensor product to use for decoding
-                VectorXi&           derivs)     // derivative to take in each domain dim. (0 = value, 1 = 1st deriv, 2 = 2nd deriv, ...)
-                                                // pass size-0 vector if unused
+                const VectorX<T>&       param,      // parameter value in each dim. of desired point
+                VectorX<T>&             out_pt,     // (output) point, allocated by caller
+                const TensorProduct<T>& tensor,     // tensor product to use for decoding
+                const VectorXi&         derivs)     // derivative to take in each domain dim. (0 = value, 1 = 1st deriv, 2 = 2nd deriv, ...)
+                                                    // pass size-0 vector if unused
         {
             int last = mfa_data.tmesh.tensor_prods[0].ctrl_pts.cols() - 1;     // last coordinate of control point
             if (derivs.size())                  // extra check for derivatives, won't slow down normal point evaluation
@@ -537,15 +537,15 @@ namespace mfa
         // custom basis and control points provided as arguments
         // algorithm 4.3, Piegl & Tiller (P&T) p.134
         void VolPt(
-                const VectorX<T>&   param,      // parameter value in each dim. of desired point
-                VectorX<T>&         out_pt,     // (output) point, allocated by caller
-                TensorProduct<T>&   tensor,     // tensor product to use for decoding
-                VectorXi&           derivs,     // derivative to take in each domain dim. (0 = value, 1 = 1st deriv, 2 = 2nd deriv, ...)
-                                                // pass size-0 vector if unused
-                vector<MatrixX<T>>& N,          // basis functions in each dimension
-                const VectorXi&     nctrl_pts,  // number of control points
-                MatrixX<T>&         ctrl_pts,   // control points
-                VectorX<T>&         weights)    // weights
+                const VectorX<T>&           param,      // parameter value in each dim. of desired point
+                VectorX<T>&                 out_pt,     // (output) point, allocated by caller
+                const TensorProduct<T>&     tensor,     // tensor product to use for decoding
+                const VectorXi&             derivs,     // derivative to take in each domain dim. (0 = value, 1 = 1st deriv, 2 = 2nd deriv, ...)
+                                                        // pass size-0 vector if unused
+                const vector<MatrixX<T>>&   N,          // basis functions in each dimension
+                const VectorXi&             nctrl_pts,  // number of control points
+                const MatrixX<T>&           ctrl_pts,   // control points
+                const VectorX<T>&           weights)    // weights
         {
             int last = ctrl_pts.cols() - 1;     // last coordinate of control point
             if (derivs.size())                  // extra check for derivatives, won't slow down normal point evaluation
@@ -648,11 +648,11 @@ namespace mfa
         // only values, no derivatives, because basis functions were not saved for derivatives
         // algorithm 4.3, Piegl & Tiller (P&T) p.134
         void VolPt_saved_basis(
-                VectorXi&           ijk,        // ijk index of input domain point being decoded
-                VectorX<T>&         param,      // parameter value in each dim. of desired point
-                VectorX<T>&         out_pt,     // (output) point, allocated by caller
-                DecodeInfo<T>&      di,         // reusable decode info allocated by caller (more efficient when calling VolPt multiple times)
-                TensorProduct<T>&   tensor)     // tensor product to use for decoding
+                const VectorXi&             ijk,        // ijk index of input domain point being decoded
+                const VectorX<T>&           param,      // parameter value in each dim. of desired point
+                VectorX<T>&                 out_pt,     // (output) point, allocated by caller
+                DecodeInfo<T>&              di,         // reusable decode info allocated by caller (more efficient when calling VolPt multiple times)
+                const TensorProduct<T>&     tensor)     // tensor product to use for decoding
         {
             int last = tensor.ctrl_pts.cols() - 1;
 
@@ -717,12 +717,12 @@ namespace mfa
         // faster version for multiple points, reuses decode info, but recomputes basis functions
         // algorithm 4.3, Piegl & Tiller (P&T) p.134
         void VolPt(
-                VectorX<T>&         param,      // parameter value in each dim. of desired point
-                VectorX<T>&         out_pt,     // (output) point, allocated by caller
-                DecodeInfo<T>&      di,         // reusable decode info allocated by caller (more efficient when calling VolPt multiple times)
-                TensorProduct<T>&   tensor,     // tensor product to use for decoding
-                VectorXi&           derivs)     // derivative to take in each domain dim. (0 = value, 1 = 1st deriv, 2 = 2nd deriv, ...)
-                                                // pass size-0 vector if unused
+                const VectorX<T>&       param,      // parameter value in each dim. of desired point
+                VectorX<T>&             out_pt,     // (output) point, allocated by caller
+                DecodeInfo<T>&          di,         // reusable decode info allocated by caller (more efficient when calling VolPt multiple times)
+                const TensorProduct<T>& tensor,     // tensor product to use for decoding
+                const VectorXi&         derivs)     // derivative to take in each domain dim. (0 = value, 1 = 1st deriv, 2 = 2nd deriv, ...)
+                                                    // pass size-0 vector if unused
         {
             int last = tensor.ctrl_pts.cols() - 1;
             if (derivs.size())                  // extra check for derivatives, won't slow down normal point evaluation
@@ -823,12 +823,12 @@ namespace mfa
         // reading full n-d set of control points from the mfa
         // algorithm 4.1, Piegl & Tiller (P&T) p.124
         void CurvePt(
-                int                     cur_dim,        // current dimension
-                T                       param,          // parameter value of desired point
-                MatrixX<T>&             temp_ctrl,      // temporary control points
-                VectorX<T>&             temp_weights,   // weights associate with temporary control points
-                const TensorProduct<T>& tensor,         // current tensor product
-                VectorX<T>&             out_pt)         // (output) point
+                int                             cur_dim,        // current dimension
+                T                               param,          // parameter value of desired point
+                const MatrixX<T>&               temp_ctrl,      // temporary control points
+                const VectorX<T>&               temp_weights,   // weights associate with temporary control points
+                const TensorProduct<T>&   tensor,         // current tensor product
+                VectorX<T>&                     out_pt)         // (output) point
         {
             int span   = mfa_data.FindSpan(cur_dim, param, tensor);
             MatrixX<T> N = MatrixX<T>::Zero(1, temp_ctrl.rows());      // basis coefficients
