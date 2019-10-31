@@ -1115,7 +1115,7 @@ struct Block : public BlockBase<T>
             // for all dimensions except last, check if pt_idx is at the end, part of flattened loop logic
             for (auto k = 0; k < this->dom_dim - 1; k++)
             {
-                if (dom_idx[k] == this->mfa->ndom_pts()(k))
+                if (dom_idx[k] == a->ndom_pts[k])
                 {
                     dom_idx[k] = 0;
                     dom_idx[k + 1]++;
