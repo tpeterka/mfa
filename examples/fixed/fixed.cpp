@@ -191,6 +191,26 @@ int main(int argc, char** argv)
                 { b->generate_analytical_data(cp, input, d_args); });
     }
 
+    // Marschner-Lobb function [M&L]: Marschner & Lobb, IEEE Vis 1994
+    // only defined for 3d domain
+    if (input == "ml")
+    {
+        if (dom_dim != 3)
+        {
+            fprintf(stderr, "Error: Marschner-Lobb function is only defined for a 3d domain.\n");
+            exit(0);
+        }
+        for (int i = 0; i < dom_dim; i++)
+        {
+            d_args.min[i]               = -1.0;
+            d_args.max[i]               = 1.0;
+        }
+        d_args.f[0] = 6.0;                  // f_M in the M&L paper
+        d_args.s[0] = 0.25;                 // alpha in the M&L paper
+        master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
+                { b->generate_analytical_data(cp, input, d_args); });
+    }
+
     // f16 function
     if (input == "f16")
     {

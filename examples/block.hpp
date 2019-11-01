@@ -140,6 +140,28 @@ struct Block : public BlockBase<T>
         return retval;
     }
 
+    // evaluate Marschner-Lobb function [Marschner and Lobb, IEEE VIS, 1994]
+    // only for a 3d domain
+    // using args f[0] and s[0] for f_M and alpha, respectively, in the paper
+    T ml(VectorX<T>&  domain_pt,
+           DomainArgs&  args)
+    {
+        DomainArgs* a   = &args;
+        T& fm           = a->f[0];
+        T& alpha        = a->s[0];
+//         T fm = 6.0;
+//         T alpha = 0.25;
+        T& x            = domain_pt(0);
+        T& y            = domain_pt(1);
+        T& z            = domain_pt(2);
+
+        T rad       = sqrt(x * x + y * y + z * z);
+        T rho       = cos(2 * M_PI * fm * cos(M_PI * rad / 2.0));
+        T retval    = (1.0 - sin(M_PI * z / 2.0) + alpha * (1.0 + rho * sqrt(x * x + y * y))) / (2 * (1.0 + alpha));
+
+        return retval;
+    }
+
     // evaluate f16 function
     T f16(VectorX<T>&   domain_pt)
     {
@@ -266,7 +288,6 @@ struct Block : public BlockBase<T>
         normal_distribution<double> distribution(0.0, 1.0);
 
         // assign values to the range (science variables)
-        // hard-coded for 2 domain dimensions and 1 science variable
         VectorX<T> dom_pt(this->dom_dim);
         for (int j = 0; j < tot_ndom_pts; j++)
         {
@@ -278,6 +299,15 @@ struct Block : public BlockBase<T>
                     retval = sine(dom_pt, args, k);
                 if (fun == "sinc")
                     retval = sinc(dom_pt, args, k);
+                if (fun == "ml")
+                {
+                    if (this->dom_dim != 3)
+                    {
+                        fprintf(stderr, "Error: Marschner-Lobb function is only defined for a 3d domain.\n");
+                        exit(0);
+                    }
+                    retval = ml(dom_pt, args);
+                }
                 if (fun == "f16")
                     retval = f16(dom_pt);
                 if (fun == "f17")
