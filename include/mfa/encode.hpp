@@ -1284,7 +1284,7 @@ namespace mfa
                 }                                                           // domain dimensions
 
                 // insert the new knots
-                mfa::NewKnots<T> nk(mfa_data);
+                mfa::NewKnots<T> nk(mfa, mfa_data);
                 vector<vector<KnotIdx>> unused(mfa_data.dom_dim);
                 nk.InsertKnots(new_knots, new_levels, unused);
 

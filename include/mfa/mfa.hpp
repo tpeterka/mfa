@@ -25,7 +25,7 @@
 // #define WEIGH_ALL_DIMS
 
 // comment out the following line for original single tensor product version
-#define TMESH
+// #define TMESH
 
 #include    <Eigen/Dense>
 #include    <vector>
@@ -46,12 +46,13 @@ using VectorXd = Eigen::VectorXd;
 using VectorXi = Eigen::VectorXi;
 using ArrayXXf = Eigen::ArrayXXf;
 using ArrayXXd = Eigen::ArrayXXd;
+// NB, storing matrices and arrays in row-major order
 template <typename T>
-using MatrixX = Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic>;
+using MatrixX = Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>;
 template <typename T>
 using VectorX  = Eigen::Matrix<T, Eigen::Dynamic, 1>;
 template <typename T>
-using ArrayXX  = Eigen::Array<T, Eigen::Dynamic, Eigen::Dynamic>;
+using ArrayXX  = Eigen::Array<T, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>;
 template <typename T>
 using ArrayX   = Eigen::Array<T, Eigen::Dynamic, 1>;
 

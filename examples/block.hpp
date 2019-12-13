@@ -32,15 +32,6 @@ typedef float                          real_t;
 typedef double                         real_t;
 #endif
 
-typedef Eigen::MatrixXf                MatrixXf;
-typedef Eigen::VectorXf                VectorXf;
-typedef MatrixXf::Index                Index;
-
-template <typename T>
-using MatrixX = Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic>;
-template <typename T>
-using VectorX  = Eigen::Matrix<T, Eigen::Dynamic, 1>;
-
 // 3d point or vector
 struct vec3d
 {
