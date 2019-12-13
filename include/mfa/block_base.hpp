@@ -397,15 +397,18 @@ struct BlockBase
         fprintf(stderr, "gid = %d\n", cp.gid());
 //         cerr << "domain\n" << domain << endl;
 
+        VectorXi tot_nctrl_pts = VectorXi::Zero(geometry.mfa_data->dom_dim);
+
         // geometry
-        // TODO: hard-coded for one tensor product
         cerr << "\n------- geometry model -------" << endl;
-        cerr << "# output ctrl pts     = [ " << geometry.mfa_data->tmesh.tensor_prods[0].nctrl_pts.transpose() << " ]" << endl;
+        for (auto j = 0; j < geometry.mfa_data->tmesh.tensor_prods.size(); j++)
+            tot_nctrl_pts += geometry.mfa_data->tmesh.tensor_prods[j].nctrl_pts;
+        cerr << "# output ctrl pts     = [ " << tot_nctrl_pts.transpose() << " ]" << endl;
 
         //  debug: print control points and weights
-//         print_ctrl_weights(geometry.mfa_data->tmesh.;
+//         print_ctrl_weights(geometry.mfa_data->tmesh);
         // debug: print knots
-//         print_knots(geometry.mfa_data->tmesh.;
+//         print_knots(geometry.mfa_data->tmesh);
 
         fprintf(stderr, "# output knots        = [ ");
         for (auto j = 0 ; j < geometry.mfa_data->tmesh.all_knots.size(); j++)
@@ -422,12 +425,15 @@ struct BlockBase
         {
             T range_extent = domain.col(dom_dim + i).maxCoeff() - domain.col(dom_dim + i).minCoeff();
             cerr << "\n---------- var " << i << " ----------" << endl;
-            cerr << "# ouput ctrl pts      = [ " << vars[i].mfa_data->tmesh.tensor_prods[0].nctrl_pts.transpose() << " ]" << endl;
+            tot_nctrl_pts = VectorXi::Zero(vars[i].mfa_data->dom_dim);
+            for (auto j = 0; j < vars[i].mfa_data->tmesh.tensor_prods.size(); j++)
+                tot_nctrl_pts += vars[i].mfa_data->tmesh.tensor_prods[j].nctrl_pts;
+            cerr << "# ouput ctrl pts      = [ " << tot_nctrl_pts.transpose() << " ]" << endl;
 
             //  debug: print control points and weights
-//             print_ctrl_weights(vars[i].mfa_data->tmesh.;
+//             print_ctrl_weights(vars[i].mfa_data->tmesh);
             // debug: print knots
-//             print_knots(vars[i].mfa_data->tmesh.;
+//             print_knots(vars[i].mfa_data->tmesh);
 
 
             fprintf(stderr, "# output knots        = [ ");

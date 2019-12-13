@@ -777,7 +777,7 @@ namespace mfa
         // for dimension i, moves pt[i] to the center of the t-mesh cell if degree[i] is even
         bool in(const vector<KnotIdx>&  pt,
                 const TensorProduct<T>& tensor,
-                int                     skip_dim = -1)
+                int                     skip_dim = -1) const
         {
             for (auto i = 0; i < pt.size(); i++)
             {
@@ -796,11 +796,11 @@ namespace mfa
 
         // given a center point in index space, find intersecting knot lines in index space
         // in -/+ directions in all dimensions
-        void knot_intersections(const vector<KnotIdx>&      center,             // knot indices of anchor for odd degree or
-                                                                                // knot indices of start of rectangle containing anchor for even degree
-                                const VectorXi&             p,                  // local degree in each dimension
-                                vector<vector<KnotIdx>>&    loc_knots,          // (output) local knot vector in index space
-                                vector<NeighborTensor>&     neigh_hi_levels)    // (output) intersected neighbor tensors of higher level than center
+        void knot_intersections(const vector<KnotIdx>&      center,                 // knot indices of anchor for odd degree or
+                                                                                    // knot indices of start of rectangle containing anchor for even degree
+                                const VectorXi&             p,                      // local degree in each dimension
+                                vector<vector<KnotIdx>>&    loc_knots,              // (output) local knot vector in index space
+                                vector<NeighborTensor>&     neigh_hi_levels) const  // (output) intersected neighbor tensors of higher level than center
         {
             loc_knots.resize(dom_dim_);
             assert(center.size() == dom_dim_);
@@ -812,6 +812,13 @@ namespace mfa
                 if (in(center, tensor_prods[j], -1))
                         max_j = j;
             int max_level = tensor_prods[max_j].level;
+
+            // debug
+            if (center[0] == 2 && center[1] == 2 && max_j == 2)
+            {
+                fprintf(stderr, "center = 2,2 and max_j = 2\n");
+                in(center, tensor_prods[2], -1);
+            }
 
             // walk the t-mesh in all dimensions, min. and max. directions outward from the center
             // looking for interecting knot lines
@@ -842,13 +849,19 @@ namespace mfa
                     {
                         if (cur_knot_idx > 0)                               // more knots in the tmesh
                         {
+                            cur[i] = cur_knot_idx - 1;
+
                             // check which is the correct previous tensor
                             // if more than one tensor sharing the target, pick highest level
                             if (cur_knot_idx - 1 < tensor_prods[cur_tensor].knot_mins[i])
-                                neighbor_tensors(tensor_prods[cur_tensor].prev[i], i, center, cur_tensor, cur_level, neigh_hi_levels);
+                            {
+                                // debug
+                                if (tensor_prods[cur_tensor].prev[i].size() == 0)
+                                    fprintf(stderr, "Error: prev is empty. This should not happen.\n");
+                                neighbor_tensors(tensor_prods[cur_tensor].prev[i], i, cur, cur_tensor, cur_level, neigh_hi_levels);
+                            }
 
                             // check if next knot borders a higher level; if so, switch to higher level tensor
-                            cur[i] = cur_knot_idx - 1;
                             border_higher_level(cur, cur_tensor, cur_level);
 
                             // move to next knot
@@ -884,13 +897,19 @@ namespace mfa
                     {
                         if (cur_knot_idx + 1 < all_knots[i].size())         // more knots in the tmesh
                         {
+                            cur[i] = cur_knot_idx + 1;
+
                             // check which is the correct previous tensor
                             // if more than one tensor sharing the target, pick highest level
                             if (cur_knot_idx + 1 > tensor_prods[cur_tensor].knot_maxs[i])
-                                neighbor_tensors(tensor_prods[cur_tensor].next[i], i, center, cur_tensor, cur_level, neigh_hi_levels);
+                            {
+                                // debug
+                                if (tensor_prods[cur_tensor].next[i].size() == 0)
+                                    fprintf(stderr, "Error: next is empty. This should not happen.\n");
+                                neighbor_tensors(tensor_prods[cur_tensor].next[i], i, cur, cur_tensor, cur_level, neigh_hi_levels);
+                            }
 
                             // check if next knot borders a higher level; if so, switch to higher level tensor
-                            cur[i] = cur_knot_idx + 1;
                             border_higher_level(cur, cur_tensor, cur_level);
 
                             // move to next knot
@@ -922,7 +941,7 @@ namespace mfa
                               const vector<KnotIdx>&    target,                 // target knot indices
                               TensorIdx&                cur_tensor,             // (input / output) highest level neighbor tensor containing the target
                               int&                      cur_level,              // (input / output) level of current tensor
-                              vector<NeighborTensor>&   neigh_hi_levels)        // (input / output) neighbors with higher levels than current tensor
+                              vector<NeighborTensor>&   neigh_hi_levels) const  // (input / output) neighbors with higher levels than current tensor
         {
             int         temp_max_level;
             TensorIdx   temp_max_k;
@@ -959,9 +978,9 @@ namespace mfa
         }
 
         // check if target knot index borders a higher level; if so, switch to higher level tensor
-        void border_higher_level(const vector<KnotIdx>& target,         // target knot indices
-                                 TensorIdx&             cur_tensor,     // (input / output) highest level neighbor tensor containing the target
-                                 int&                   cur_level)      // (input / output) level of current tensor
+        void border_higher_level(const vector<KnotIdx>& target,             // target knot indices
+                                 TensorIdx&             cur_tensor,         // (input / output) highest level neighbor tensor containing the target
+                                 int&                   cur_level) const    // (input / output) level of current tensor
         {
             for (auto k = cur_tensor; k < tensor_prods.size(); k++) // start checking at current tensor because levels are monotonic nondecreasing
             {
@@ -975,8 +994,8 @@ namespace mfa
 
         // given an anchor point in index space, compute local knot vector in all dimensions in index space
         // in Bazilevs 2010, knot indices start at 1, but mine start counting at 0
-        void local_knot_vector(const vector<KnotIdx>&       center,             // knot indices of center of anchors
-                               vector<vector<KnotIdx>>&     loc_knot_idxs)      // (output) local knot vector in index space
+        void local_knot_vector(const vector<KnotIdx>&       center,                 // knot indices of center of anchors
+                               vector<vector<KnotIdx>>&     loc_knot_idxs) const    // (output) local knot vector in index space
         {
             vector<NeighborTensor> unused;
             knot_intersections(center, p_, loc_knot_idxs, unused);
@@ -985,7 +1004,7 @@ namespace mfa
         // given a point in parameter space to decode, compute range of anchor points in index space
         // in Bazilevs 2010, anchors start at 1, but mine start counting at 0
         void anchors(const VectorX<T>&          param,              // parameter value in each dim. of desired point
-                     vector<vector<KnotIdx>>&   anchors)            // (output) anchor points in index space
+                     vector<vector<KnotIdx>>&   anchors) const      // (output) anchor points in index space
         {
             anchors.resize(dom_dim_);
             vector<vector<KnotIdx>> anchor_cands(dom_dim_);         // anchor candidates (possibly more than necessary)
@@ -1085,6 +1104,42 @@ namespace mfa
                 // copy anchor_cands to anchors
                 for (auto i = 0; i < dom_dim_; i++)
                     anchors[i] = anchor_cands[i];
+            }
+        }
+
+        // extract linearized box (tensor) of (p + 1)^d control points and weights at the given anchors
+        void ctrl_pt_box(const vector<vector<KnotIdx>>& anchors,        // anchors
+                         MatrixX<T>&                    ctrl_pts,       // (output) linearized control points
+                         VectorX<T>&                    weights) const  // (output) linearized weights
+        {
+            vector<int> iter(dom_dim_);                         // iteration number in each dim.
+
+            // 1-d flattening of the iterations in the box
+            for (int i = 0; i < ctrl_pts.rows(); i++)                   // total number of iterations in the box
+            {
+                // debug: print anchor coords
+//                 fprintf(stderr, "iter [ ");
+//                 for (auto j = 0; j < dom_dim_; j++)
+//                     fprintf(stderr, "%d ", iter[j]);
+//                 fprintf(stderr, "]\n");
+//
+//                 fprintf(stderr, "anchor [ ");
+//                 for (auto j = 0; j < dom_dim_; j++)
+//                     fprintf(stderr, "%lu ", anchors[j][iter[j]]);
+//                 fprintf(stderr, "]\n");
+
+                iter[0]++;
+
+                // for all dimensions except last, check for last point
+                for (size_t k = 0; k < dom_dim_ - 1; k++)
+                {
+                    if (iter[k] - 1 == p_(k))
+                    {
+                        // reset iteration for current dim and increment next dim
+                        iter[k] = 0;
+                        iter[k + 1]++;
+                    }
+                }
             }
         }
 

@@ -428,8 +428,8 @@ namespace mfa
                 T                       u,                  // parameter value
                 const vector<T>&        loc_knots) const    // local knot vector
         {
-            vector<T> N(p(cur_dim) + 1);                // triangular table result
-            vector<T>& U = loc_knots;                   // alias for knot vector for current dimension
+            vector<T> N(p(cur_dim) + 1);                    // triangular table result
+            const vector<T>& U = loc_knots;                 // alias for knot vector for current dimension
 
             // corner case: 1 at right edge of local knot vector
             if (u == 1.0)

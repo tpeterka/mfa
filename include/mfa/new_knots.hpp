@@ -33,11 +33,15 @@ namespace mfa
     {
     private:
 
-        MFA_Data<T>& mfa;                                   // the mfa data
+        const MFA<T>&   mfa;                                // mfa top-level object
+        MFA_Data<T>&    mfa_data;                           // mfa data
 
     public:
 
-        NewKnots(MFA_Data<T>& mfa_) : mfa(mfa_) {}
+        NewKnots(const MFA<T>&  mfa_,
+                 MFA_Data<T>&   mfa_data_) :
+                 mfa(mfa_),
+                 mfa_data(mfa_data_) {}
 
         ~NewKnots() {}
 
@@ -56,17 +60,17 @@ namespace mfa
             for (size_t k = 0; k < mfa.dom_dim; k++)                // for all domain dimensions
             {
                 inserted_knot_idxs[k].clear();
-                auto ninserted = mfa.tmesh.all_knots[k].size();      // number of new knots inserted
+                auto ninserted = mfa_data.tmesh.all_knots[k].size();      // number of new knots inserted
 
                 // manual walk along old and new knots so that levels can be inserted along with knots
                 // ie, that's why std::set_union cannot be used
-                auto ak = mfa.tmesh.all_knots[k].begin();
-                auto al = mfa.tmesh.all_knot_levels[k].begin();
+                auto ak = mfa_data.tmesh.all_knots[k].begin();
+                auto al = mfa_data.tmesh.all_knot_levels[k].begin();
                 auto nk = new_knots[k].begin();
                 auto nl = new_levels[k].begin();
-                while (ak != mfa.tmesh.all_knots[k].end() || nk != new_knots[k].end())
+                while (ak != mfa_data.tmesh.all_knots[k].end() || nk != new_knots[k].end())
                 {
-                    if (ak == mfa.tmesh.all_knots[k].end())
+                    if (ak == mfa_data.tmesh.all_knots[k].end())
                     {
                         temp_knots[k].push_back(*nk++);
                         temp_levels[k].push_back(*nl++);
@@ -100,7 +104,7 @@ namespace mfa
                 for (auto i = 0; i < inserted_knot_idxs[k].size(); i++)
                 {
                     auto idx = inserted_knot_idxs[k][i];
-                    mfa.tmesh.insert_knot(k, idx, temp_levels[k][idx], temp_knots[k][idx]);
+                    mfa_data.tmesh.insert_knot(k, idx, temp_levels[k][idx], temp_knots[k][idx]);
                 }
             }   // for all domain dimensions
         }
@@ -114,41 +118,41 @@ namespace mfa
         // increment ijk in the loop over domain points instead of calling idx2ijk
         // TBB? (currently serial)
         bool FirstErrorSpan(
-                MatrixX<T>&                 domain,                 // input points
+                const MatrixX<T>&           domain,                 // input points
                 VectorX<T>                  extents,                // extents in each dimension, for normalizing error (size 0 means do not normalize)
                 T                           err_limit,              // max. allowed error
                 int                         iter,                   // iteration number
                 const VectorXi&             nctrl_pts,              // number of control points
-                MatrixX<T>&                 ctrl_pts,               // control points
-                VectorX<T>&                 weights,                // control point weights
+//                 MatrixX<T>&                 ctrl_pts,               // control points
+//                 VectorX<T>&                 weights,                // control point weights
                 vector<vector<KnotIdx>>&    inserted_knot_idxs)     // indices in each dim. of inserted knots in full knot vector after insertion
         {
-            Decoder<T>          decoder(mfa, 1);
+            Decoder<T>          decoder(mfa, mfa_data, 1);
             VectorXi            ijk(mfa.dom_dim);                   // i,j,k of domain point
             VectorX<T>          param(mfa.dom_dim);                 // parameters of domain point
             vector<int>         span(mfa.dom_dim);                  // knot span in each dimension
             VectorXi            derivs;                             // size 0 means unused
-            DecodeInfo<T>       decode_info(mfa, derivs);           // reusable decode point info for calling VolPt repeatedly
+            DecodeInfo<T>       decode_info(mfa_data, derivs);      // reusable decode point info for calling VolPt repeatedly
             vector<vector<T>>   new_knots(mfa.dom_dim);             // new knots
             vector<vector<int>> new_levels(mfa.dom_dim);            // new knot levels
 
             if (!extents.size())
                 extents = VectorX<T>::Ones(domain.cols());
 
-            for (auto i = 0; i < mfa.ndom_pts.prod(); i++)
+            for (auto i = 0; i < mfa.ndom_pts().prod(); i++)
             {
-                mfa.idx2ijk(i, ijk);
+                mfa_data.idx2ijk(mfa.ds(), i, ijk);
                 for (auto k = 0; k < mfa.dom_dim; k++)
-                    param(k) = mfa.params[k][ijk(k)];
+                    param(k) = mfa.params()[k][ijk(k)];
                 VectorX<T> cpt(domain.cols());                      // approximated point
-                decoder.VolPt_tmesh(param, nctrl_pts, ctrl_pts, weights, cpt);
+                decoder.VolPt_tmesh(param, cpt);
                 int last = domain.cols() - 1;                       // range coordinate
 
                 // error
                 T max_err = 0.0;
-                for (auto j = 0; j < mfa.max_dim - mfa.min_dim + 1; j++)
+                for (auto j = 0; j < mfa_data.max_dim - mfa_data.min_dim + 1; j++)
                 {
-                    T err = fabs(cpt(j) - domain(i, mfa.min_dim + j)) / extents(mfa.min_dim + j);
+                    T err = fabs(cpt(j) - domain(i, mfa_data.min_dim + j)) / extents(mfa_data.min_dim + j);
                     max_err = err > max_err ? err : max_err;
                 }
 
@@ -156,13 +160,13 @@ namespace mfa
                 {
                     for (auto k = 0; k < mfa.dom_dim; k++)
                     {
-                        span[k] = mfa.FindSpan(k, param(k), nctrl_pts(k));
+                        span[k] = mfa_data.FindSpan(k, param(k), nctrl_pts(k));
 
                         // span should never be the last knot because of the repeated knots at end
-                        assert(span[k] < mfa.tmesh.all_knots[k].size() - 1);
+                        assert(span[k] < mfa_data.tmesh.all_knots[k].size() - 1);
 
                         // new knot is the midpoint of the span containing the domain point parameters
-                        T new_knot_val = (mfa.tmesh.all_knots[k][span[k]] + mfa.tmesh.all_knots[k][span[k] + 1]) / 2.0;
+                        T new_knot_val = (mfa_data.tmesh.all_knots[k][span[k]] + mfa_data.tmesh.all_knots[k][span[k] + 1]) / 2.0;
                         new_knots[k].push_back(new_knot_val);
                         new_levels[k].push_back(iter + 1);  // adapt at the next level, for now every iteration is a new level
                     }

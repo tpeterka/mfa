@@ -1033,6 +1033,8 @@ namespace mfa
             return nerr;
         }
 
+#ifdef TMESH
+
         // this is the version used currently for tmesh
         // encodes at full dimensionality and decodes at full dimensionality
         // decodes full-d points in each knot span and adds new knot spans where error > err_limit
@@ -1047,8 +1049,7 @@ namespace mfa
             // indices in tensor, in each dim. of inserted knots in full knot vector after insertion
             vector<vector<KnotIdx>> inserted_knot_idxs(mfa_data.dom_dim);
 
-            if (!extents.size())
-                extents = VectorX<T>::Ones(mfa_data.tmesh.tensor_prods[0].ctrl_pts.cols());
+            VectorX<T> myextents = extents.size() ? extents : VectorX<T>::Ones(mfa_data.tmesh.tensor_prods[0].ctrl_pts.cols());
 
             // control points and weights
             VectorXi nctrl_pts(mfa_data.dom_dim);
@@ -1058,11 +1059,15 @@ namespace mfa
             VectorX<T> weights(ctrl_pts.rows());
 
             // full n-d encoding
+            // TODO: encode only most recently refined tensor product constrained by its neighbors (Youssef's algorithm)
             Encode(nctrl_pts, ctrl_pts, weights);
 
             // find new knots
-            mfa::NewKnots<T> nk(mfa_data);
-            done &= nk.FirstErrorSpan(domain, extents, err_limit, iter, nctrl_pts, ctrl_pts, weights, inserted_knot_idxs);
+            mfa::NewKnots<T> nk(mfa, mfa_data);
+            done &= nk.FirstErrorSpan(domain, myextents, err_limit, iter, nctrl_pts, inserted_knot_idxs);
+
+            if (done)
+                return 0;
 
             // append new tensors
             vector<KnotIdx> knot_mins(mfa_data.dom_dim);
@@ -1080,17 +1085,18 @@ namespace mfa
                         // inserted knot falls into the mins, maxs of this tensor
                         if (inserted_knot_idxs[j][k] - 1 >= t.knot_mins[k] && inserted_knot_idxs[j][k] <= t.knot_maxs[k])
                         {
-                            // expand knot mins and maxs by p-1 index lines on each side
-                            assert(inserted_knot_idxs[j][k] - (mfa_data.p(j) - 1) >= 0);
-                            assert(inserted_knot_idxs[j][k] + mfa_data.p(j) - 1 < mfa_data.tmesh.all_knots[j].size());
+                            // expand knot mins and maxs by 1 index line on each side
+                            // TODO: Not sure how much to expand: 1, 2, p, p + 1, ...?
+                            assert(inserted_knot_idxs[j][k] - 1 >= 0);
+                            assert(inserted_knot_idxs[j][k] + 1 < mfa_data.tmesh.all_knots[j].size());
                             if (k == 0 || inserted_knot_idxs[j][k] < min_idx)
                             {
-                                knot_mins[j] = inserted_knot_idxs[j][k] - (mfa_data.p(j) - 1);
+                                knot_mins[j] = inserted_knot_idxs[j][k] - 1;
                                 min_idx = inserted_knot_idxs[j][k];
                             }
                             if (k == 0 || inserted_knot_idxs[j][k] > max_idx)
                             {
-                                knot_maxs[j] = inserted_knot_idxs[j][k] + mfa_data.p(j) - 1;
+                                knot_maxs[j] = inserted_knot_idxs[j][k] + 1;
                                 max_idx = inserted_knot_idxs[j][k];
                             }
                         }
@@ -1098,7 +1104,13 @@ namespace mfa
                 }
 
                 // debug
-                fprintf(stderr, "appending tensor with knot_mins [%ld %ld] knot_maxs [%ld %ld]\n", knot_mins[0], knot_mins[1], knot_maxs[0], knot_maxs[1]);
+                if (mfa_data.dom_dim == 1)
+                    fprintf(stderr, "appending tensor with knot_mins [%ld] knot_maxs [%ld]\n", knot_mins[0], knot_maxs[0]);
+                else if (mfa_data.dom_dim == 2)
+                    fprintf(stderr, "appending tensor with knot_mins [%ld %ld] knot_maxs [%ld %ld]\n", knot_mins[0], knot_mins[1], knot_maxs[0], knot_maxs[1]);
+                else if (mfa_data.dom_dim == 3)
+                    fprintf(stderr, "appending tensor with knot_mins [%ld %ld %ld] knot_maxs [%ld %ld %ld]\n",
+                            knot_mins[0], knot_mins[1], knot_mins[2], knot_maxs[0], knot_maxs[1], knot_maxs[2]);
 
                 mfa_data.tmesh.append_tensor(knot_mins, knot_maxs);
             }
@@ -1107,8 +1119,10 @@ namespace mfa
                 if (mfa.ndom_pts()(k) <= nctrl_pts(k))
                     return -1;
 
-            return done;
+            return 1;
         }
+
+#endif      // TMESH
 
         // 1d encoding and 1d decoding
         // adds knots error spans from all curves in all directions (into a set)
