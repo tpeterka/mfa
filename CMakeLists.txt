@@ -1,9 +1,9 @@
 project                     (mfa)
-cmake_minimum_required      (VERSION 2.8)
+cmake_minimum_required      (VERSION 3.1)
 
-option                      (wrapped_mpi    "MPI compiler wrapper requires no further MPI libs"     OFF)
-option                      (tbb_thread     "Enable TBB threading"                                  ON)
-option                      (s3d_infile     "Path/filename of s3d dataset (for unit testing)"         )
+option                      (wrapped_mpi    "MPI compiler wrapper requires no further MPI libs"     OFF     )
+option                      (mfa_thread     "tbb, kokkos, sycl, or serial"                          serial  )
+option                      (s3d_infile     "Path/filename of s3d dataset (for unit testing)"               )
 
 # C++11
 set                         (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
@@ -45,23 +45,38 @@ endif                       (${CMAKE_SYSTEM_NAME} MATCHES      "Darwin")
      set                    (libraries ${libraries} ${MPI_C_LIBRARIES} ${MPI_CXX_LIBRARIES})
  endif                      ()
 
-# TBB
-if                          (tbb_thread)
+# MFA threading model
+if                          (mfa_thread MATCHES "tbb")
+    message                 ("Using TBB threading")
+    add_definitions         (-DMFA_TBB)
     find_package            (TBB QUIET)
     find_path               (TBB_INCLUDE_DIR        tbb/tbb.h)
     find_library            (TBB_LIBRARY NAMES      tbb)
     if                      (TBB_INCLUDE_DIR AND TBB_LIBRARY)
         include_directories ("${TBB_INCLUDE_DIR}")
-        set                 (libraries ${TBB_LIBRARY})
+        set                 (libraries ${libraries} ${TBB_LIBRARY})
         message             ("Found TBB in ${TBB_INCLUDE_DIR} and in ${TBB_LIBRARY}")
     else                    (TBB_INCLUDE_DIR AND TBB_LIBRARY)
-        message             ("Could not find TBB; TBB threading is disabled")
-        add_definitions     (-DMFA_NO_TBB)
-    endif                   (TBB_INCLUDE_DIR AND TBB_LIBRARY)
-else                        (tbb_thread)
-    message                 ("TBB threading is disabled")
-    add_definitions         (-DMFA_NO_TBB)
-endif                       (tbb_thread)
+        message             (FATAL_ERROR "Could not find TBB")
+    endif                   ()
+elseif                      (mfa_thread MATCHES "kokkos")
+    message                 ("Using Kokkos threading")
+    add_definitions         (-DMFA_KOKKOS)
+    # TODO: for cuda only; how to check for compiler==nvcc_wrapper?
+    set                     (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Xcudafe --diag_suppress=esa_on_defaulted_function_ignored")
+    set                     (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} --expt-relaxed-constexpr")
+    set                     (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} --expt-extended-lambda")
+    include_directories     (${KOKKOS_INCLUDE_DIRS})
+    set                     (libraries ${libraries} ${KOKKOS_LIBRARY} ${CMAKE_DL_LIBS})
+elseif                      (mfa_thread MATCHES "sycl")
+    message                 ("Using SYCL threading")
+    add_definitions         (-DMFA_SYCL)
+    set                     (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsycl")
+    set                     (CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -lsycl -lOpenCL")
+else                        ()
+    message                 ("Using no threading (serial)")
+    add_definitions         (-DMFA_SERIAL)
+endif                       ()
 
 # Threads
 find_package                (Threads)
@@ -81,10 +96,6 @@ if                          (NOT CLP_LIB OR NOT CLP_INCLUDE_DIRS)
 else                        ()
     message                 ("Coin-OR CLP found; weights are enabled")
 endif                       ()
-
-# DEPRECATE; not using boost in production (only a test)
-# Boost
-# find_package                (Boost 1.70.0 REQUIRED)
 
 # Include dirs
 set                         (CMAKE_INCLUDE_SYSTEM_FLAG_CXX "-isystem")

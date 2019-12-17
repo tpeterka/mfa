@@ -191,7 +191,7 @@ namespace mfa
 //                 int            iter)                        // iteration number
 //         {
 // 
-// #ifndef MFA_NO_TBB                                          // TBB version
+// #ifdef MFA_TBB                                          // TBB version
 // 
 //             Decoder<T> decoder(mfa, 1);
 // 
@@ -294,7 +294,9 @@ namespace mfa
 // 
 //             return !nnew_knots.sum();
 // 
-// #else                                                       // single-thread version
+// #endif               // end TBB version
+//
+// #ifdef MFA_SERIAL    // serial version
 // 
 //             Decoder<T> decoder(mfa, 1);
 // 
@@ -385,7 +387,7 @@ namespace mfa
 // 
 //             return !new_knot_found;
 // 
-// #endif
+// #endif       // end serial version
 // 
 //         }
 // 

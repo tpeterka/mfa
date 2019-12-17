@@ -180,7 +180,7 @@ namespace mfa
             VectorXi iter = VectorXi::Zero(mfa_data.dom_dim);                    // parameter index (iteration count, ie, ijk) in current dim.
             int last = mfa_data.tmesh.tensor_prods[0].ctrl_pts.cols() - 1;       // last coordinate of control point
 
-#ifndef MFA_NO_TBB                                  // TBB version, faster (~3X) than serial
+#ifdef MFA_TBB                                          // TBB version, faster (~3X) than serial
 
             // thread-local DecodeInfo
             // ref: https://www.threadingbuildingblocks.org/tutorial-intel-tbb-thread-local-storage
@@ -232,7 +232,9 @@ namespace mfa
             if (verbose)
                 fprintf(stderr, "100 %% decoded\n");
 
-#else                                               // serial version
+#endif              // end TBB version
+
+#ifdef MFA_SERIAL   // serial version
 
             DecodeInfo<T> decode_info(mfa_data, derivs);    // reusable decode point info for calling VolPt repeatedly
 
@@ -273,7 +275,7 @@ namespace mfa
                     fprintf(stderr, "Using VolPt_tmesh\n");
                 VolPt_tmesh(param, cpt);
 
-#endif
+#endif          // end serial version
 
                 // update the indices in the linearized vector of all params for next input point
                 for (size_t j = 0; j < mfa_data.dom_dim; j++)

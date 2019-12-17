@@ -32,7 +32,7 @@
 #include    <list>
 #include    <iostream>
 
-#ifndef MFA_NO_TBB
+#ifdef MFA_TBB
 #include    <tbb/tbb.h>
 using namespace tbb;
 #endif

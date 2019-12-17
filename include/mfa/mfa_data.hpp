@@ -904,7 +904,7 @@ namespace mfa
                     }
                 }
 
-#ifndef MFA_NO_TBB                                                              // TBB version
+#ifdef MFA_TBB      // TBB version
 
                 // thread-local DecodeInfo
                 // ref: https://www.threadingbuildingblocks.org/tutorial-intel-tbb-thread-local-storage
@@ -938,7 +938,9 @@ namespace mfa
                                     new_ctrl_pts1, new_weights1, new_nctrl_pts, k, new_co[j], new_cs);
                         });
 
-#else                                                                           // serial vesion
+#endif              // end TBB version
+
+#ifdef MFA_SERIAL   // serial vesion
 
                 MatrixX<T> old_curve_ctrl_pts, new_curve_ctrl_pts;              // old and new control points for one curve
                 VectorX<T> old_curve_weights, new_curve_weights;                // old and new weights for one curve
@@ -966,9 +968,9 @@ namespace mfa
                                 new_ctrl_pts1, new_weights1, new_nctrl_pts, k, new_co[j], new_cs);
                 }
 
-#endif
+#endif              // end serial version
 
-            }                                                                   // for all domain dimensions
+            }   // for all domain dimensions
 
             // update final output
             nctrl_pts = new_nctrl_pts;

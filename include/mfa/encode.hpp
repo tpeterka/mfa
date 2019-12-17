@@ -182,7 +182,7 @@ namespace mfa
 //                 cerr << "N[k]:\n" << mfa_data.N[k] << endl;
 //                 cerr << "NtN:\n" << NtN << endl;
 
-#ifndef MFA_NO_TBB                                  // TBB version
+#ifdef MFA_TBB  // TBB version
 
                 parallel_for (size_t(0), ncurves, [&] (size_t j)      // for all the curves in this dimension
                         {
@@ -201,7 +201,9 @@ namespace mfa
                         CtrlCurve(mfa_data.N[k], NtN, R, P, k, co[j], cs, to[j], temp_ctrl0, temp_ctrl1, -1, ctrl_pts, weights, weighted);
                         });                                                  // curves in this dimension
 
-#else                                       // serial vesion
+#endif              // end TBB version
+
+#ifdef MFA_SERIAL   // serial version
 
                 // R is the right hand side needed for solving NtN * P = R
                 MatrixX<T> R(mfa_data.N[k].cols(), pt_dim);
@@ -226,7 +228,8 @@ namespace mfa
                     CtrlCurve(mfa_data.N[k], NtN, R, P, k, co[j], cs, to[j], temp_ctrl0, temp_ctrl1, j, ctrl_pts, weights, weighted);
                 }
 
-#endif
+#endif          // end serial version
+
                 // adjust offsets and strides for next dimension
                 ntemp_ctrl(k) = nctrl_pts(k);
                 cs *= ntemp_ctrl(k);

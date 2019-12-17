@@ -289,7 +289,7 @@ struct BlockBase
         if (decode_block_)
             decode_block(cp, verbose, saved_basis);
 
-#ifndef MFA_NO_TBB                                          // TBB version
+#ifdef MFA_TBB      // TBB version
 
         // distance computation
         if (decode_block_)
@@ -330,7 +330,9 @@ struct BlockBase
                     });
         }
 
-#else                                               // single thread version
+#endif              // end TBB version
+
+#ifdef MFA_SERIAL   // serial version
 
         for (auto i = 0; i < (size_t)domain.rows(); i++)
         {
@@ -369,7 +371,7 @@ struct BlockBase
             }
         }
 
-#endif
+#endif              // end serial version
 
         for (auto j = dom_dim; j < domain.cols(); j++)
             sum_sq_errs[j - dom_dim] = 0.0;
