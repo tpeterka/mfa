@@ -325,6 +325,74 @@ namespace mfa
             Encode(t.nctrl_pts, t.ctrl_pts, t.weights, weighted);
         }
 
+        // adaptive local encoding
+        void OrigAdaptiveLocalEncode(
+                T                   err_limit,              // maximum allowable normalized error
+                bool                weighted,               // solve for and use weights
+                const VectorX<T>&   extents,                // extents in each dimension, for normalizing error (size 0 means do not normalize)
+                int                 max_rounds = 0)         // optional maximum number of rounds
+        {
+            // first full encoding before knot insertion below
+            if (verbose)
+                fprintf(stderr, "Encoding in full %ldD\n", mfa_data.p.size());
+            TensorProduct<T>&t = mfa_data.tmesh.tensor_prods[0];        // fixed encode assumes the tmesh has only one tensor product
+            mfa::NewKnots<T> nk(mfa, mfa_data);
+            // indices in tensor, in each dim. of inserted knots in full knot vector after insertion
+            vector<vector<KnotIdx>> inserted_knot_idxs(mfa_data.dom_dim);
+
+            Encode(t.nctrl_pts, t.ctrl_pts, t.weights, weighted);
+
+            // loop until no change in knots
+            for (int iter = 0; ; iter++)
+            {
+                if (max_rounds > 0 && iter >= max_rounds)               // optional cap on number of rounds
+                    break;
+
+                if (verbose)
+                    fprintf(stderr, "Iteration %d...\n", iter);
+                bool done = nk.FirstErrorSpan(domain,
+                                              extents,
+                                              err_limit,
+                                              iter,
+                                              t.nctrl_pts,
+                                              inserted_knot_idxs,
+                                              false);
+
+                // no new knots to be added
+                if (done)
+                {
+                    if (verbose)
+                        fprintf(stderr, "\nKnot insertion done after %d iterations; no new knots added.\n\n", iter + 1);
+                    break;
+                }
+//                // check if the new knots would make the number of control points >= number of input points in any dim
+//                for (auto k = 0; k < mfa_data.dom_dim; k++)
+//                    // hard-coded for first tensor
+//                    if (mfa.ndom_pts()(k) <= mfa_data.tmesh.tensor_prods[0].nctrl_pts(k) + new_knots[k].size())
+//                    {
+//                        done = true;
+//                        break;
+//                    }
+//                if (done)
+//                {
+//                    if (verbose)
+//                        fprintf(stderr, "\nKnot insertion done after %d iterations; control points would outnumber input points.\n", iter + 1);
+//                    break;
+//                }
+                VectorX<T> new_knot(mfa.dom_dim);
+                for (auto k = 0; k < mfa.dom_dim; k++)
+                {
+                    KnotIdx span = inserted_knot_idxs[0][k]; //only works for one knot at a time
+                    // new knot is the midpoint of the span containing the domain point parameters
+                    new_knot(k) = (mfa_data.tmesh.all_knots[k][span] + mfa_data.tmesh.all_knots[k][span + 1]) / 2.0;
+                }
+                mfa_data.KnotInsertion(new_knot, mfa_data.tmesh.tensor_prods[0]);
+
+            }
+        }
+
+         //
+
         // adaptive encoding for tmesh
         void AdaptiveEncode(
                 T                   err_limit,                  // maximum allowable normalized error

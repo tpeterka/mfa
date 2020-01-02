@@ -118,15 +118,22 @@ namespace mfa
                 T                   err_limit,              // maximum allowable normalized error
                 int                 verbose,                // debug level
                 bool                weighted,               // solve for and use weights (default = true)
+                bool                local,                  // solve locally (with constraints) each round (default = false)
                 const VectorX<T>&   extents,                // extents in each dimension, for normalizing error (size 0 means do not normalize)
                 int                 max_rounds) const       // optional maximum number of rounds
         {
             Encoder<T> encoder(*this, mfa_data, domain, verbose);
 
 #ifndef TMESH               // original adaptive encode for one tensor product
-            encoder.OrigAdaptiveEncode(err_limit, weighted, extents, max_rounds);
+            if(local)
+                encoder.OrigAdaptiveLocalEncode(err_limit, weighted, extents, max_rounds);
+            else
+                encoder.OrigAdaptiveEncode(err_limit, weighted, extents, max_rounds);
 #else                       // adaptive encode for tmesh
-            encoder.AdaptiveEncode(err_limit, weighted, extents, max_rounds);
+            if(local)
+                encoder.OrigAdaptiveLocalEncode(err_limit, weighted, extents, max_rounds);
+            else
+                encoder.AdaptiveEncode(err_limit, weighted, extents, max_rounds);
 #endif
         }
 

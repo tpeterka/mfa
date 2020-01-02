@@ -201,18 +201,18 @@ namespace mfa
                 T                           err_limit,              // max. allowed error
                 int                         iter,                   // iteration number
                 const VectorXi&             nctrl_pts,              // number of control points
-//                 MatrixX<T>&                 ctrl_pts,               // control points
-//                 VectorX<T>&                 weights,                // control point weights
-                vector<vector<KnotIdx>>&    inserted_knot_idxs)     // indices in each dim. of inserted knots in full knot vector after insertion
+//                MatrixX<T>&                 ctrl_pts,               // control points
+//                VectorX<T>&                 weights,                // control point weights
+                vector<vector<KnotIdx>>&    inserted_knot_idxs,     // indices in each dim. of inserted knots in full knot vector after insertion
+                bool                        insert=true)            // if insert is false inserted_knot_ids will contain the span to be split
         {
             Decoder<T>          decoder(mfa, mfa_data, 1);
             VectorXi            ijk(mfa.dom_dim);                   // i,j,k of domain point
             VectorX<T>          param(mfa.dom_dim);                 // parameters of domain point
-            vector<int>         span(mfa.dom_dim);                  // knot span in each dimension
-            VectorXi            derivs;                             // size 0 means unused
-            DecodeInfo<T>       decode_info(mfa_data, derivs);      // reusable decode point info for calling VolPt repeatedly
+            vector<KnotIdx>     span(mfa.dom_dim);                  // knot span in each dimension
             vector<vector<T>>   new_knots(mfa.dom_dim);             // new knots
             vector<vector<int>> new_levels(mfa.dom_dim);            // new knot levels
+            inserted_knot_idxs.clear();
 
             if (!extents.size())
                 extents = VectorX<T>::Ones(domain.cols());
@@ -224,7 +224,6 @@ namespace mfa
                     param(k) = mfa.params()[k][ijk(k)];
                 VectorX<T> cpt(domain.cols());                      // approximated point
                 decoder.VolPt_tmesh(param, cpt);
-                int last = domain.cols() - 1;                       // range coordinate
 
                 // error
                 T max_err = 0.0;
@@ -243,12 +242,18 @@ namespace mfa
                         // span should never be the last knot because of the repeated knots at end
                         assert(span[k] < mfa_data.tmesh.all_knots[k].size() - 1);
 
-                        // new knot is the midpoint of the span containing the domain point parameters
-                        T new_knot_val = (mfa_data.tmesh.all_knots[k][span[k]] + mfa_data.tmesh.all_knots[k][span[k] + 1]) / 2.0;
-                        new_knots[k].push_back(new_knot_val);
-                        new_levels[k].push_back(iter + 1);  // adapt at the next level, for now every iteration is a new level
+                        if(insert)
+                        {
+                            // new knot is the midpoint of the span containing the domain point parameters
+                            T new_knot_val = (mfa_data.tmesh.all_knots[k][span[k]] + mfa_data.tmesh.all_knots[k][span[k] + 1]) / 2.0;
+                            new_knots[k].push_back(new_knot_val);
+                            new_levels[k].push_back(iter + 1);  // adapt at the next level, for now every iteration is a new level
+                        }
                     }
-                    InsertKnots(new_knots, new_levels, inserted_knot_idxs);
+                    if(insert)
+                        InsertKnots(new_knots, new_levels, inserted_knot_idxs);
+                    else
+                        inserted_knot_idxs.push_back(span);
                     return false;
                 }
             }
