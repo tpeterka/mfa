@@ -690,7 +690,7 @@ namespace mfa
         // knot insertion into tensor product
         // TODO: expensive deep copies
         void KnotInsertion(const VectorX<T>&    param,              // new knot value to be inserted
-                           TensorProduct<T>&    tensor) const       // (output) tensor product for insertion
+                           TensorProduct<T>&    tensor)             // (output) tensor product for insertion
         {
             vector<vector<T>>   new_knots;
             vector<vector<int>> new_knot_levels;

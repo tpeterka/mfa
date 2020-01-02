@@ -52,6 +52,7 @@ struct ModelInfo
     vector<int>         geom_nctrl_pts;         // number of input points in each dimension of geometry
     vector<int>         vars_nctrl_pts;         // number of input points in each dimension of all science variables
     bool                weighted;               // solve for and use weights (default = true)
+    bool                local;                  // solve locally (with constraints) each round (default = false)
     int                 verbose;                // debug level
 };
 
@@ -177,7 +178,7 @@ struct BlockBase
                                        0,
                                        dom_dim - 1);
         // TODO: consider not weighting the geometry (only science variables), depends on geometry complexity
-        mfa->AdaptiveEncode(*geometry.mfa_data, domain, err_limit, a->verbose, a->weighted, extents, max_rounds);
+        mfa->AdaptiveEncode(*geometry.mfa_data, domain, err_limit, a->verbose, a->weighted, a->local, extents, max_rounds);
 
         // encode science variables
         for (auto j = 0; j < dom_dim; j++)
@@ -197,7 +198,7 @@ struct BlockBase
                                           nctrl_pts,
                                           dom_dim + i,        // assumes each variable is scalar
                                           dom_dim + i);
-            mfa->AdaptiveEncode(*(vars[i].mfa_data), domain, err_limit, a->verbose, a->weighted, extents, max_rounds);
+            mfa->AdaptiveEncode(*(vars[i].mfa_data), domain, err_limit, a->verbose, a->weighted, a->local, extents, max_rounds);
         }
     }
 
