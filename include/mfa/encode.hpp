@@ -1063,7 +1063,16 @@ namespace mfa
 
             // full n-d encoding
             // TODO: encode only most recently refined tensor product constrained by its neighbors (Youssef's algorithm)
+            // For now, encode a full tensor product of control points and weights
             Encode(nctrl_pts, ctrl_pts, weights);
+
+            // copy control points and weights into the tmesh
+            // TODO: remove this step once adaptive encoding is working correctly, only for temporary testing
+            // TODO: for 0th iteration only, copying all control points and weights into tensor_prods[0]
+            // TODO: for more iterations, need to copy control points into proper tensors
+            assert(mfa_data.tmesh.tensor_prods[0].nctrl_pts == nctrl_pts);          // sanity
+            mfa_data.tmesh.tensor_prods[0].ctrl_pts = ctrl_pts;
+            mfa_data.tmesh.tensor_prods[0].weights  = weights;
 
             // find new knots
             mfa::NewKnots<T> nk(mfa, mfa_data);

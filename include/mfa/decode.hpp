@@ -328,15 +328,15 @@ namespace mfa
 //             fprintf(stderr, "],\n");
 
             // debug: print anchors
-            fprintf(stderr, "\n--------------------------\n\n");
-            for (auto i = 0; i < mfa_data.dom_dim; i++)
-            {
-                fprintf(stderr, "VolPt_tmesh(): decoding point with dim %d anchors = [ ", i);
-                for (auto j = 0; j < anchors[i].size(); j++)
-                    fprintf(stderr, "%ld ", anchors[i][j]);
-                fprintf(stderr, "]\n");
-            }
-            fprintf(stderr, "\n--------------------------\n\n");
+//             fprintf(stderr, "\n--------------------------\n\n");
+//             for (auto i = 0; i < mfa_data.dom_dim; i++)
+//             {
+//                 fprintf(stderr, "VolPt_tmesh(): decoding point with dim %d anchors = [ ", i);
+//                 for (auto j = 0; j < anchors[i].size(); j++)
+//                     fprintf(stderr, "%ld ", anchors[i][j]);
+//                 fprintf(stderr, "]\n");
+//             }
+//             fprintf(stderr, "\n--------------------------\n\n");
 
             // TODO: insert any missing knots and control points
 
@@ -403,11 +403,15 @@ namespace mfa
             VectorX<T> weights(tot_nctrl_pts);
             mfa_data.tmesh.ctrl_pt_box(anchors, ctrl_pts, weights);
 
+            // debug
+//             cerr << "ctrl_pts: \n" << ctrl_pts << endl;
+//             cerr << "weights: \n" << weights << endl;
+
             // decode the point
             VolPt(param, out_pt, N, ctrl_pts, weights);
 
             // debug
-            cerr << "out_pt: " << out_pt.transpose() << "\n" << endl;
+//             cerr << "out_pt: " << out_pt.transpose() << "\n" << endl;
         }
 
 #endif      // TMESH

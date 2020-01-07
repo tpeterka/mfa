@@ -1178,8 +1178,9 @@ namespace mfa
 //                 if (ctrl_idx >= tensor_prods[tensor_idx].ctrl_pts.rows())
 //                     fprintf(stderr, "ctrl_idx %ld is out of bounds, only %ld ctrl points\n", ctrl_idx, tensor_prods[tensor_idx].ctrl_pts.rows());
 
-                // copy the control point
+                // copy the control point and weight
                 ctrl_pts.row(i) = tensor_prods[tensor_idx].ctrl_pts.row(ctrl_idx);
+                weights(i)      = tensor_prods[tensor_idx].weights(ctrl_idx);
 
                 // prepare for next iteration by increasing iteration count in first dimension and checking
                 // if iterations in dimensions exceed the size in each dimension, cascading dimensions as necessary
@@ -1233,7 +1234,7 @@ namespace mfa
                 assert(tensor_idx >= 0);                                    // sanity: anchor was found in some tensor
 
                 // debug
-                fprintf(stderr, "tensor_idx = %d\n", tensor_idx);
+//                 fprintf(stderr, "tensor_idx = %d\n", tensor_idx);
             }                                                               // total number of flattened iterations
         }
 

@@ -152,6 +152,10 @@ namespace mfa
                     param(k) = mfa.params()[k][ijk(k)];
                 VectorX<T> cpt(domain.cols());                      // approximated point
                 decoder.VolPt(param, cpt, nctrl_pts, ctrl_pts, weights);
+
+                // debug
+//                 cerr << "cpt: " << cpt.transpose() << endl;
+
                 int last = domain.cols() - 1;                       // range coordinate
 
                 // error
