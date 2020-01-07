@@ -160,7 +160,7 @@ namespace mfa
         // convert linear domain point index into (i,j,k,...) multidimensional index
         // number of dimensions is the domain dimensionality
         void idx2ijk(
-                const vector<size_t>&   ds,             // stride for domain points in each dim.
+                const vector<size_t>&   ds,             // stride for points in each dim.
                 size_t                  idx,            // linear cell indx
                 VectorXi&               ijk) const      // (output) i,j,k,... indices in all dimensions
         {

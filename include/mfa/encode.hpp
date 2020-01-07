@@ -1067,7 +1067,11 @@ namespace mfa
 
             // find new knots
             mfa::NewKnots<T> nk(mfa, mfa_data);
-            done &= nk.FirstErrorSpan(domain, myextents, err_limit, iter, nctrl_pts, inserted_knot_idxs);
+
+            // TODO: temporarily call TempFirstErrorSpan insted of FirstErrorSpan, passing full set of control points and weights
+            // Once adaptive algorithm is in place, call FirstErrorSpan instead
+//             done &= nk.FirstErrorSpan(domain, myextents, err_limit, iter, nctrl_pts, inserted_knot_idxs);
+            done &= nk.TempFirstErrorSpan(domain, myextents, err_limit, iter, nctrl_pts, ctrl_pts, weights, inserted_knot_idxs);
 
             if (done)
                 return 0;
