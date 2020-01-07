@@ -1154,6 +1154,7 @@ namespace mfa
 //                 for (auto j = 0; j < dom_dim_; j++)
 //                     fprintf(stderr, "%lu ", anchor[j]);
 //                 fprintf(stderr, "]\n");
+//                 fprintf(stderr, "found ctrl pt in tensor_idx = %d\n", tensor_idx);
 
                 // locate the control point in the current tensor
                 size_t ctrl_idx;                                            // index of desired control point
@@ -1191,27 +1192,31 @@ namespace mfa
                 bool reset_iter = false;                                    // reset iteration in some dimension
                 for (size_t k = 0; k < dom_dim_; k++)
                 {
-                    if (k < dom_dim_ - 1 && iter[k] - 1 == p_(k))           // reset iteration for current dim and increment next dim.
+                    // reset iteration for current dim and increment next dim.
+                    if (k < dom_dim_ - 1 && iter[k] - 1 == p_(k))
                     {
                         reset_iter = true;
                         iter[k] = 0;
                         iter[k + 1]++;
-                        for (auto j = 0; j < dom_dim_; j++)
-                            anchor[j] = anchors[j][iter[j]] + p_(j) - 1;    // add p - 1 to anchor to align with indices of all_knots
-
-                        // debug
-//                         fprintf(stderr, "ctrl_pt_box() 2: anchor [ ");
-//                         for (auto j = 0; j < dom_dim_; j++)
-//                             fprintf(stderr, "%lu ", anchor[j]);
-//                         fprintf(stderr, "]\n");
-
-                        // check for the anchor in the current tensor and in next pointers in next higher dim, starting back at last tensor of current dim
-                        tensor_idx = in_and_next(anchor, start_tensor_idx[k + 1], k + 1);
-                        if (tensor_idx >= 0)
+                        if (iter[k + 1] <= p_(k))
                         {
-                            // TODO: following is untested, need higher dimension example with multiple tensors
-                            start_tensor_idx[k + 1] = tensor_idx;           // adjust start tensor of next dim
-                            start_tensor_idx[k]     = start_tensor_idx[0];  // reset start tensor of current dim
+                            for (auto j = 0; j < dom_dim_; j++)
+                                anchor[j] = anchors[j][iter[j]] + p_(j) - 1;    // add p - 1 to anchor to align with indices of all_knots
+
+                            // debug
+//                             fprintf(stderr, "ctrl_pt_box() 2: anchor [ ");
+//                             for (auto j = 0; j < dom_dim_; j++)
+//                                 fprintf(stderr, "%lu ", anchor[j]);
+//                             fprintf(stderr, "]\n");
+
+                            // check for the anchor in the current tensor and in next pointers in next higher dim, starting back at last tensor of current dim
+                            tensor_idx = in_and_next(anchor, start_tensor_idx[k + 1], k + 1);
+                            if (tensor_idx >= 0)
+                            {
+                                // TODO: following is untested, need higher dimension example with multiple tensors
+                                start_tensor_idx[k + 1] = tensor_idx;           // adjust start tensor of next dim
+                                start_tensor_idx[k]     = start_tensor_idx[0];  // reset start tensor of current dim
+                            }
                         }
                     }
                 }
@@ -1232,9 +1237,6 @@ namespace mfa
                 }
 
                 assert(tensor_idx >= 0);                                    // sanity: anchor was found in some tensor
-
-                // debug
-//                 fprintf(stderr, "tensor_idx = %d\n", tensor_idx);
             }                                                               // total number of flattened iterations
         }
 
