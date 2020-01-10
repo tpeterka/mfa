@@ -500,8 +500,8 @@ struct Block : public BlockBase<T>
             this->domain(i, 2) = sqrt(vel[3 * i    ] * vel[3 * i    ] +
                     vel[3 * i + 1] * vel[3 * i + 1] +
                     vel[3 * i + 2] * vel[3 * i + 2]);
-            // fprintf(stderr, "vel [%.3f %.3f %.3f] mag %.3f\n",
-            //         vel[3 * i], vel[3 * i + 1], vel[3 * i + 2], range[i]);
+//              fprintf(stderr, "vel [%.3f %.3f %.3f]\n",
+//                      vel[3 * i], vel[3 * i + 1], vel[3 * i + 2]);
         }
 
         // find extent of range
@@ -695,8 +695,9 @@ struct Block : public BlockBase<T>
             this->domain(i, 3) = sqrt(vel[3 * i    ] * vel[3 * i    ] +
                     vel[3 * i + 1] * vel[3 * i + 1] +
                     vel[3 * i + 2] * vel[3 * i + 2]);
-            // fprintf(stderr, "vel [%.3f %.3f %.3f] mag %.3f\n",
-            //         vel[3 * i], vel[3 * i + 1], vel[3 * i + 2], range[i]);
+//             if (i < 1000)
+//              fprintf(stderr, "vel [%.3f %.3f %.3f]\n",
+//                      vel[3 * i], vel[3 * i + 1], vel[3 * i + 2]);
         }
 
         // rest is hard-coded for 3d

@@ -1071,8 +1071,9 @@ namespace mfa
             // TODO: for 0th iteration only, copying all control points and weights into tensor_prods[0]
             // TODO: for more iterations, need to copy control points into proper tensors
             assert(mfa_data.tmesh.tensor_prods[0].nctrl_pts == nctrl_pts);          // sanity
-            mfa_data.tmesh.tensor_prods[0].ctrl_pts = ctrl_pts;
-            mfa_data.tmesh.tensor_prods[0].weights  = weights;
+//             mfa_data.tmesh.tensor_prods[0].ctrl_pts = ctrl_pts;
+//             mfa_data.tmesh.tensor_prods[0].weights  = weights;
+            mfa_data.tmesh.scatter_ctrl_pts(nctrl_pts, ctrl_pts, weights);
 
             // find new knots
             mfa::NewKnots<T> nk(mfa, mfa_data);
