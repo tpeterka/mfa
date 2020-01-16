@@ -26,6 +26,11 @@
 
 #endif
 
+#include    <cppoptlib/problem.h>
+#include    <cppoptlib/boundedproblem.h>
+#include    <cppoptlib/solver/bfgssolver.h>
+#include    <cppoptlib/solver/lbfgsbsolver.h>
+
 typedef Eigen::MatrixXf MatrixXf;
 typedef Eigen::MatrixXi MatrixXi;
 typedef Eigen::VectorXf VectorXf;
@@ -39,6 +44,40 @@ class NewKnots;
 
 namespace mfa
 {
+using namespace cppoptlib;
+
+template <typename T>                        // float or double
+    class SqrError : public Problem<T>
+    {
+    private:
+        const MFA<T>&       mfa;         // the mfa object
+        MFA_Data<T>&        mfa_data;    // the mfa data object
+        const MatrixX<T>&   domain;      // input points
+        int                 verbose;     // more output
+        MatrixX<T>          approx;
+        Eigen::VectorX<T>   cons;
+
+    public:
+        SqrError(const MFA<T>&      mfa_,
+                 MFA_Data<T>&       mfa_data_,
+                 const MatrixX<T>&  domain_,
+                 int                verb_ ):    mfa(mfa_),
+                                                mfa_data(mfa_data_),
+                                                domain(domain_),
+                                                verbose(verb_),
+                                                approx(domain_)
+        {}
+
+        ~SqrError()
+        {}
+
+        using typename Problem<T>::TVector;
+
+        // objective function
+        T value(const TVector &x);
+//        void gradient(const TVector &x, TVector &grad);
+    };
+
     template <typename T>                               // float or double
     struct MFA;
 
@@ -340,55 +379,71 @@ namespace mfa
             // indices in tensor, in each dim. of inserted knots in full knot vector after insertion
             vector<vector<KnotIdx>> inserted_knot_idxs(mfa_data.dom_dim);
 
-            Encode(t.nctrl_pts, t.ctrl_pts, t.weights, weighted);
+            //Encode(t.nctrl_pts, t.ctrl_pts, t.weights, weighted);
 
-            // loop until no change in knots
-            for (int iter = 0; ; iter++)
-            {
-                if (max_rounds > 0 && iter >= max_rounds)               // optional cap on number of rounds
-                    break;
+/////////////// Test CPPOptLib ////////////////
+//            auto sizeX = W.size();
+            SqrError<T> f(mfa, mfa_data, domain, verbose);
+            BfgsSolver<SqrError<T>> solver;
 
-                if (verbose)
-                    fprintf(stderr, "Iteration %d...\n", iter);
-                bool done = nk.FirstErrorSpan(domain,
-                                              extents,
-                                              err_limit,
-                                              iter,
-                                              t.nctrl_pts,
-                                              inserted_knot_idxs,
-                                              false);
+//            auto stopCriteria = cppoptlib::BfgsSolver<SqrError<T>>::TCriteria::defaults();
+//            stopCriteria.iterations = 1;
+//            solver.setStopCriteria(stopCriteria);
+            if (verbose)
+                solver.setDebug(cppoptlib::DebugLevel::Low);
+            // minimize the function
+            VectorX<T> x1 (Eigen::Map< VectorX<T> >(t.ctrl_pts.data(), t.ctrl_pts.size()));
+            t.weights = VectorX<T>::Ones(t.ctrl_pts.rows());
+            solver.minimize(f, x1);
+/////////////// end test cppoptlib ////////////////
 
-                // no new knots to be added
-                if (done)
-                {
-                    if (verbose)
-                        fprintf(stderr, "\nKnot insertion done after %d iterations; no new knots added.\n\n", iter + 1);
-                    break;
-                }
-//                // check if the new knots would make the number of control points >= number of input points in any dim
-//                for (auto k = 0; k < mfa_data.dom_dim; k++)
-//                    // hard-coded for first tensor
-//                    if (mfa.ndom_pts()(k) <= mfa_data.tmesh.tensor_prods[0].nctrl_pts(k) + new_knots[k].size())
-//                    {
-//                        done = true;
-//                        break;
-//                    }
+
+//            // loop until no change in knots
+//            for (int iter = 0; ; iter++)
+//            {
+//                if (max_rounds > 0 && iter >= max_rounds)               // optional cap on number of rounds
+//                    break;
+
+//                if (verbose)
+//                    fprintf(stderr, "Iteration %d...\n", iter);
+//                bool done = nk.FirstErrorSpan(domain,
+//                                              extents,
+//                                              err_limit,
+//                                              iter,
+//                                              t.nctrl_pts,
+//                                              inserted_knot_idxs,
+//                                              false);
+
+//                // no new knots to be added
 //                if (done)
 //                {
 //                    if (verbose)
-//                        fprintf(stderr, "\nKnot insertion done after %d iterations; control points would outnumber input points.\n", iter + 1);
+//                        fprintf(stderr, "\nKnot insertion done after %d iterations; no new knots added.\n\n", iter + 1);
 //                    break;
 //                }
-                VectorX<T> new_knot(mfa.dom_dim);
-                for (auto k = 0; k < mfa.dom_dim; k++)
-                {
-                    KnotIdx span = inserted_knot_idxs[0][k]; //only works for one knot at a time
-                    // new knot is the midpoint of the span containing the domain point parameters
-                    new_knot(k) = (mfa_data.tmesh.all_knots[k][span] + mfa_data.tmesh.all_knots[k][span + 1]) / 2.0;
-                }
-                mfa_data.KnotInsertion(new_knot, mfa_data.tmesh.tensor_prods[0]);
-
-            }
+////                // check if the new knots would make the number of control points >= number of input points in any dim
+////                for (auto k = 0; k < mfa_data.dom_dim; k++)
+////                    // hard-coded for first tensor
+////                    if (mfa.ndom_pts()(k) <= mfa_data.tmesh.tensor_prods[0].nctrl_pts(k) + new_knots[k].size())
+////                    {
+////                        done = true;
+////                        break;
+////                    }
+////                if (done)
+////                {
+////                    if (verbose)
+////                        fprintf(stderr, "\nKnot insertion done after %d iterations; control points would outnumber input points.\n", iter + 1);
+////                    break;
+////                }
+//                VectorX<T> new_knot(mfa.dom_dim);
+//                for (auto k = 0; k < mfa.dom_dim; k++)
+//                {
+//                    KnotIdx span = inserted_knot_idxs[0][k]; //only works for one knot at a time
+//                    // new knot is the midpoint of the span containing the domain point parameters
+//                    new_knot(k) = (mfa_data.tmesh.all_knots[k][span] + mfa_data.tmesh.all_knots[k][span + 1]) / 2.0;
+//                }
+//                mfa_data.KnotInsertion(new_knot, mfa_data.tmesh.tensor_prods[0]);
+//            }
         }
 
          //
@@ -1420,6 +1475,25 @@ namespace mfa
             return(tot_nnew_knots ? 0 : 1);
         }
     };
+
+    template <typename T>
+    T SqrError<T>::value(const TVector &x)
+    {
+        size_t ctrl_rows = mfa_data.tmesh.tensor_prods[0].ctrl_pts.rows();
+        size_t ctrl_cols = mfa_data.tmesh.tensor_prods[0].ctrl_pts.cols();
+        mfa_data.tmesh.tensor_prods[0].ctrl_pts = x;
+        mfa_data.tmesh.tensor_prods[0].ctrl_pts.resize(ctrl_rows, ctrl_cols);
+        mfa.DecodeDomain(mfa_data, verbose, approx, mfa_data.min_dim, mfa_data.max_dim, false);
+
+        MatrixX<T> E = (approx.block(0, mfa_data.min_dim, approx.rows(), mfa_data.max_dim-mfa_data.min_dim+1) -
+                        domain.block(0, mfa_data.min_dim, domain.rows(), mfa_data.max_dim-mfa_data.min_dim+1)).rowwise().sum();
+        T sum_sq_err = E.squaredNorm();
+
+        //debug
+        fprintf(stderr, "least squares error: %e\n", sum_sq_err);
+
+        return sum_sq_err;
+    }
 }
 
 #endif
