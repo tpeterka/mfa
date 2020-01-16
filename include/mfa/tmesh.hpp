@@ -1009,7 +1009,10 @@ namespace mfa
         {
             anchors.resize(dom_dim_);
 
-            // convert param to target in index space
+            // convert param to target (center of p + 1 anchors) in index space
+            // TODO: the target is being computed on the global knot vector, without regarding the level of
+            // refinement of the tensor where the decoded point is. This still needs thought.
+
             vector<KnotIdx> target(dom_dim_);                       // center anchor in each dim.
             for (auto i = 0; i < dom_dim_; i++)
             {
@@ -1041,7 +1044,7 @@ namespace mfa
             }
 
             // debug
-//             fprintf(stderr, "anchors(): param=[%.2lf] target=[%lu]\n", param(0), target[0]);
+            fprintf(stderr, "anchors(): param=[%.2lf] target=[%lu]\n", param(0), target[0]);
 
             return;
         }
@@ -1092,6 +1095,10 @@ namespace mfa
                 VectorXi ijk(dom_dim_);                                     // ijk of desired control point
                 for (auto j = 0; j < dom_dim_; j++)
                 {
+                    // debug
+                    if (all_knot_levels[j][anchor[j]] > tensor_prods[tensor_idx].level)
+                        fprintf(stderr, "Error\n");
+
                     // sanity check: anchor values should correspond to knots in this level
                     assert(all_knot_levels[j][anchor[j]] <= tensor_prods[tensor_idx].level);
 
@@ -1114,7 +1121,7 @@ namespace mfa
                 ijk2idx(tensor_prods[tensor_idx].nctrl_pts, ijk, ctrl_idx);
 
                 // debug
-//                 cerr << "ijk: " << ijk.transpose() << endl;
+                cerr << "ijk: " << ijk.transpose() << endl;
 
                 // debug
                 if (ctrl_idx >= tensor_prods[tensor_idx].ctrl_pts.rows())

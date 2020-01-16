@@ -309,7 +309,7 @@ namespace mfa
                          VectorX<T>&            out_pt)     // (output) point, allocated by caller
         {
             // debug
-//             cerr << "VolPt_tmesh(): decoding point with param: " << param.transpose() << endl;
+            cerr << "VolPt_tmesh(): decoding point with param: " << param.transpose() << endl;
 
             // debug: print global knots
 //             for (auto i = 0; i < mfa_data.dom_dim; i++)
@@ -325,16 +325,16 @@ namespace mfa
             mfa_data.tmesh.anchors(param, anchors);
 
             // debug: print anchors
-//             fprintf(stderr, "\n--------------------------\n\n");
-//             cerr << "VolPt_tmesh(): decoding point with param: " << param.transpose() << endl;
-//             for (auto i = 0; i < mfa_data.dom_dim; i++)
-//             {
-//                 fprintf(stderr, "VolPt_tmesh(): decoding point with dim %d anchors = [ ", i);
-//                 for (auto j = 0; j < anchors[i].size(); j++)
-//                     fprintf(stderr, "%ld ", anchors[i][j]);
-//                 fprintf(stderr, "]\n");
-//             }
-//             fprintf(stderr, "\n--------------------------\n\n");
+            fprintf(stderr, "\n--------------------------\n\n");
+            cerr << "VolPt_tmesh(): decoding point with param: " << param.transpose() << endl;
+            for (auto i = 0; i < mfa_data.dom_dim; i++)
+            {
+                fprintf(stderr, "VolPt_tmesh(): decoding point with dim %d anchors = [ ", i);
+                for (auto j = 0; j < anchors[i].size(); j++)
+                    fprintf(stderr, "%ld ", anchors[i][j]);
+                fprintf(stderr, "]\n");
+            }
+            fprintf(stderr, "\n--------------------------\n\n");
 
             // TODO: insert any missing knots and control points, is this unnecessary?
 

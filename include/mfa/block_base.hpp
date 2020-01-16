@@ -210,11 +210,15 @@ struct BlockBase
         approx.resize(domain.rows(), domain.cols());
 
         // geometry
+        fprintf(stderr, "\n--- Decoding geometry ---\n\n");
         mfa->DecodeDomain(*geometry.mfa_data, verbose, approx, 0, dom_dim - 1, saved_basis);
 
         // science variables
         for (auto i = 0; i < vars.size(); i++)
+        {
+            fprintf(stderr, "\n--- Decoding science variable %d ---\n\n", i);
             mfa->DecodeDomain(*(vars[i].mfa_data), verbose, approx, dom_dim + i, dom_dim + i, saved_basis);  // assumes each variable is scalar
+        }
     }
 
     // differentiate entire block
