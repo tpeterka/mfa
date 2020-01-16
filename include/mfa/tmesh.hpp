@@ -183,8 +183,8 @@ namespace mfa
                                 tensor_inserted = true;
 
                             // debug
-                            fprintf(stderr, "\ntensors after intersection\n\n");
-                            print();
+//                             fprintf(stderr, "\ntensors after intersection\n\n");
+//                             print();
 
                             break;  // adding a tensor invalidates iterator, start iteration over
                         }
@@ -794,33 +794,33 @@ namespace mfa
             return true;
         }
 
-        // given a center point in index space, find intersecting knot lines in index space
+        // given an anchor in index space, find intersecting knot lines in index space
         // in -/+ directions in all dimensions
-        void knot_intersections(const vector<KnotIdx>&      center,                 // knot indices of anchor for odd degree or
+        void knot_intersections(const vector<KnotIdx>&      anchor,                 // knot indices of anchor for odd degree or
                                                                                     // knot indices of start of rectangle containing anchor for even degree
                                 const VectorXi&             p,                      // local degree in each dimension
                                 vector<vector<KnotIdx>>&    loc_knots,              // (output) local knot vector in index space
-                                vector<NeighborTensor>&     neigh_hi_levels) const  // (output) intersected neighbor tensors of higher level than center
+                                vector<NeighborTensor>&     neigh_hi_levels) const  // (output) intersected neighbor tensors of higher level than anchor
         {
             loc_knots.resize(dom_dim_);
-            assert(center.size() == dom_dim_);
+            assert(anchor.size() == dom_dim_);
 
-            // find most refined tensor product containing center and that level of refinement
+            // find most refined tensor product containing anchor and that level of refinement
             // levels monotonically nondecrease; hence, find last tensor product containing the anchor
             TensorIdx max_j = 0;
             for (auto j = 0; j < tensor_prods.size(); j++)
-                if (in(center, tensor_prods[j], -1))
+                if (in(anchor, tensor_prods[j], -1))
                         max_j = j;
             int max_level = tensor_prods[max_j].level;
 
             // debug
-            if (center[0] == 2 && center[1] == 2 && max_j == 2)
+            if (anchor[0] == 2 && anchor[1] == 2 && max_j == 2)
             {
-                fprintf(stderr, "center = 2,2 and max_j = 2\n");
-                in(center, tensor_prods[2], -1);
+                fprintf(stderr, "anchor = 2,2 and max_j = 2\n");
+                in(anchor, tensor_prods[2], -1);
             }
 
-            // walk the t-mesh in all dimensions, min. and max. directions outward from the center
+            // walk the t-mesh in all dimensions, min. and max. directions outward from the anchor
             // looking for interecting knot lines
 
             for (auto i = 0; i < dom_dim_; i++)                             // for all dims
@@ -835,14 +835,14 @@ namespace mfa
                     start = min = p(i) / 2;
                     max         = p(i) / 2 + 1;
                 }
-                loc_knots[i][start]             = center[i];                // start by center the center of the knot vector
+                loc_knots[i][start]             = anchor[i];                // start at the anchor
                 KnotIdx         cur_knot_idx    = loc_knots[i][start];
                 TensorIdx       cur_tensor      = max_j;
                 int             cur_level       = max_level;
-                vector<KnotIdx> cur             = center;                   // current knot location in the tmesh (index space)
+                vector<KnotIdx> cur             = anchor;                   // current knot location in the tmesh (index space)
 
-                // from the center in the min. direction
-                for (int j = 0; j < min; j++)                               // add 'min' more knots in minimum direction from the center
+                // from the anchor in the min. direction
+                for (int j = 0; j < min; j++)                               // add 'min' more knots in minimum direction from the anchor
                 {
                     bool done = false;
                     do
@@ -883,14 +883,14 @@ namespace mfa
                     } while (!done);
                 }
 
-                // reset back to center
+                // reset back to anchor
                 cur_knot_idx    = loc_knots[i][start];
                 cur_tensor      = max_j;
                 cur_level       = max_level;
-                cur             = center;
+                cur             = anchor;
 
-                // from the center in the max. direction
-                for (int j = 0; j < max; j++)                               // add 'max' more knots in maximum direction from the center
+                // from the anchor in the max. direction
+                for (int j = 0; j < max; j++)                               // add 'max' more knots in maximum direction from the anchor
                 {
                     bool done = false;
                     do
@@ -994,119 +994,56 @@ namespace mfa
 
         // given an anchor point in index space, compute local knot vector in all dimensions in index space
         // in Bazilevs 2010, knot indices start at 1, but mine start counting at 0
-        void local_knot_vector(const vector<KnotIdx>&       center,                 // knot indices of center of anchors
+        void local_knot_vector(const vector<KnotIdx>&       anchor,                 // knot indices of anchor
                                vector<vector<KnotIdx>>&     loc_knot_idxs) const    // (output) local knot vector in index space
         {
             vector<NeighborTensor> unused;
-            knot_intersections(center, p_, loc_knot_idxs, unused);
+            knot_intersections(anchor, p_, loc_knot_idxs, unused);
         }
 
-        // given a point in parameter space to decode, compute range of anchor points in index space
-        // in Bazilevs 2010, knot indices start at 1, but mine start counting at 0
-        // also, Bazilevs anchors start at p - 1 (assuming knot indices start at 0), but my anchors start at 0
-        // add (p - 1) to my anchors to get the equivalent of Bazilevs with 0-based knot indices
+        // given a point in parameter space to decode, compute p + 1 anchor points in all dims in knot index space
+        // anchors are the centers of basis functions and locations of corresponding control points, in knot index space
+        // in Bazilevs 2010, knot indices start at 1, but mine start at 0
         void anchors(const VectorX<T>&          param,              // parameter value in each dim. of desired point
                      vector<vector<KnotIdx>>&   anchors) const      // (output) anchor points in index space
         {
             anchors.resize(dom_dim_);
-            vector<vector<KnotIdx>> anchor_cands(dom_dim_);         // anchor candidates (possibly more than necessary)
 
             // convert param to target in index space
             vector<KnotIdx> target(dom_dim_);                       // center anchor in each dim.
             for (auto i = 0; i < dom_dim_; i++)
             {
+                if (param(i) < 1.0)
+                {
                     auto it     = upper_bound(all_knots[i].begin() + p_(i), all_knots[i].end() - p_(i) - 1, param(i));
-                    target[i]   = it - all_knots[i].begin() - p_(i) - 1;
+                    target[i]   = it - all_knots[i].begin() - 1;
+                }
+                else
+                    target[i] = all_knots[i].size() - (p_(i) + 2);
+            }
 
-                    // fill anchors by extending a ray to the max side from the target and intersecting knots
-                    // TODO: skip knots not intersected by the ray
-                    // ie, write a version of knot_intersections for anchors (don't use knot_intersections for local knot vectors)
-                    anchors[i].resize(p_(i) + 1);
-                    for (auto j = 0; j < p_(i) + 1; j++)
-                        anchors[i][j] = target[i] + j;
+            // find local knot vector (p + 2) knot intersections
+            vector<vector<KnotIdx>> loc_knots(dom_dim_);
+            vector<NeighborTensor>  unused;
+            knot_intersections(target, p_, loc_knots, unused);
+
+            // take correct p + 1 anchors out of the p + 2 found above
+            for (auto i = 0; i < dom_dim_; i++)
+            {
+                anchors[i].resize(p_(i) + 1);
+                for (auto j = 0; j < p_(i) + 1; j++)
+                {
+                    if (p_(i) % 2 == 0)                             // even degree
+                        anchors[i][j] = loc_knots[i][j];
+                    else                                            // odd degree
+                        anchors[i][j] = loc_knots[i][j + 1];
+                }
             }
 
             // debug
-//             fprintf(stderr, "param=[%.2lf] target=[%lu]\n", param(0), target[0]);
+//             fprintf(stderr, "anchors(): param=[%.2lf] target=[%lu]\n", param(0), target[0]);
 
             return;
-
-            // TODO: below is not tested
-
-            vector<NeighborTensor> neigh_hi_levels;                 // neighbor tensors of a higher level than tensor containing target
-
-            // subtract 1 from degree so that same code as for local knot vectors can be reused
-            // support for a decoded point is p+1 basis functions, while width of a local knot vector is p+2
-            // TODO: this is not right. Don't reuse knot_intersections for local knot vectors; write a new knot_intersections for anchors
-//             knot_intersections(target, p_ - VectorXi::Ones(dom_dim_), anchor_cands, neigh_hi_levels);
-
-            if (neigh_hi_levels.size())
-            {
-                // debug
-                fprintf(stderr, "%lu neigh_hi_levels:\n", neigh_hi_levels.size());
-
-                for (auto i = 0; i < neigh_hi_levels.size(); i++)
-                {
-                    // debug
-                    fprintf(stderr, "dim=%d level=%d tensor_idx=%lu\n",
-                            neigh_hi_levels[i].dim, neigh_hi_levels[i].level, neigh_hi_levels[i].tensor_idx);
-
-                    // knot intersections at center of neigh_hi_level
-                    vector<vector<KnotIdx>> temp_anchors(dom_dim_);
-                    vector<NeighborTensor>  unused;
-                    vector<KnotIdx>         temp_target(dom_dim_);
-                    for (auto j = 0; j < dom_dim_; j++)
-                        temp_target[j] = (tensor_prods[neigh_hi_levels[i].tensor_idx].knot_mins[j] +
-                                tensor_prods[neigh_hi_levels[i].tensor_idx].knot_maxs[j]) / 2;
-                    knot_intersections(temp_target, p_ - VectorXi::Ones(dom_dim_), temp_anchors, unused);
-
-                    // merge knot_intersections of neigh_hi_level with anchor_cands keeping sorted order, growing size of anchor_cands
-                    for (auto j = 0; j < dom_dim_; j++)
-                    {
-                        if (j == neigh_hi_levels[i].dim)
-                            continue;
-
-                        // anchor_cands[j] = set union of temp_anchors[j] and anchor_cands[j], maintaining sorted order
-                        vector<KnotIdx> union_anchors;
-                        set_union(temp_anchors[j].begin(), temp_anchors[j].end(), anchor_cands[j].begin(), anchor_cands[j].end(), back_inserter(union_anchors));
-                        anchor_cands[j] = union_anchors;
-                    }
-                }
-
-                // copy central p+1 anchors from anchor_cands into anchors
-                for (auto i = 0; i < dom_dim_; i++)
-                {
-                    auto it = find(anchor_cands[i].begin(), anchor_cands[i].end(), target[i]);
-                    if (it == anchor_cands[i].end())
-                    {
-                        fprintf(stderr, "Error: target %lu not found in anchor_cands[dim %d]\n", target[i], i);
-                        abort();
-                    }
-                    KnotIdx target_loc = it - anchor_cands[i].begin();           // index of target[i] in anchor_cands[i]
-                    KnotIdx start, min, max;                                     // starting index and number of items to copy in min and max direction
-                    if (p_(i) % 2)
-                    {
-                        start = min = p_(i) / 2;
-                        max = p_(i) / 2 + 1;
-                    }
-                    else
-                        start = min = max = p_(i) / 2;
-
-                    anchors[i].resize(p_(i) + 1);
-                    anchors[i][start] = anchor_cands[i][target_loc];
-
-                    for (int j = 0; j < min; j++)                               // add 'min' more knots in minimum direction from the center
-                        anchors[i][start - j - 1] = anchor_cands[i][target_loc - j - 1];
-                    for (int j = 0; j < max; j++)                               // add 'max' more knots in maximum direction from the center
-                        anchors[i][start + j + 1] = anchor_cands[i][target_loc + j + 1];
-                }
-            }
-            else
-            {
-                // copy anchor_cands to anchors
-                for (auto i = 0; i < dom_dim_; i++)
-                    anchors[i] = anchor_cands[i];
-            }
         }
 
         // extract linearized box (tensor) of (p + 1)^d control points and weights at the given anchors
@@ -1121,7 +1058,7 @@ namespace mfa
 
             vector<KnotIdx> anchor(dom_dim_);                               // current anchor in all dims
             for (auto j = 0; j < dom_dim_; j++)
-                anchor[j] = anchors[j][iter[j]] + p_(j) - 1;                // add p - 1 to anchor to align with indices of all_knots
+                anchor[j] = anchors[j][iter[j]];
 
             // naive linear search for tensor containing first anchor TODO: tree search
             for (auto j = 0; j < tensor_prods.size(); j++)
@@ -1143,12 +1080,6 @@ namespace mfa
             // 1-d flattening of the iterations in the box
             for (int i = 0; i < ctrl_pts.rows(); i++)                       // total number of iterations in the box
             {
-                // debug: print anchor coords
-//                 fprintf(stderr, "iter [ ");
-//                 for (auto j = 0; j < dom_dim_; j++)
-//                     fprintf(stderr, "%d ", iter[j]);
-//                 fprintf(stderr, "]\n");
-//
                 // debug
 //                 fprintf(stderr, "ctrl_pt_box() 1: anchor [ ");
 //                 for (auto j = 0; j < dom_dim_; j++)
@@ -1165,8 +1096,15 @@ namespace mfa
                     assert(all_knot_levels[j][anchor[j]] <= tensor_prods[tensor_idx].level);
 
                     // ijk is wrt to control points in current tensor
-                    // ie, subtract (p - 1) that was added into the anchor earlier (so that anchor 0 = ctrl pt 0)
-                    ijk(j) = anchor[j] - tensor_prods[tensor_idx].knot_mins[j] - (p_(j) - 1);
+                    ijk(j) = anchor[j] - tensor_prods[tensor_idx].knot_mins[j];
+                    // first control point for first tensor has anchor floor((p + 1) / 2)
+                    if (tensor_prods[tensor_idx].knot_mins[j] == 0)
+                        ijk(j) -= (p_(j) + 1) / 2;
+
+                    // debug
+                    if (ijk(j) < 0)
+                        fprintf(stderr, "Error\n");
+
                     // skip over knots in finer levels
                     for (auto k = tensor_prods[tensor_idx].knot_mins[j]; k < anchor[j]; k++)
                         if (all_knot_levels[j][k] > tensor_prods[tensor_idx].level)
@@ -1176,8 +1114,11 @@ namespace mfa
                 ijk2idx(tensor_prods[tensor_idx].nctrl_pts, ijk, ctrl_idx);
 
                 // debug
-//                 if (ctrl_idx >= tensor_prods[tensor_idx].ctrl_pts.rows())
-//                     fprintf(stderr, "ctrl_idx %ld is out of bounds, only %ld ctrl points\n", ctrl_idx, tensor_prods[tensor_idx].ctrl_pts.rows());
+//                 cerr << "ijk: " << ijk.transpose() << endl;
+
+                // debug
+                if (ctrl_idx >= tensor_prods[tensor_idx].ctrl_pts.rows())
+                    fprintf(stderr, "ctrl_idx %ld is out of bounds, only %ld ctrl points\n", ctrl_idx, tensor_prods[tensor_idx].ctrl_pts.rows());
 
                 // copy the control point and weight
                 ctrl_pts.row(i) = tensor_prods[tensor_idx].ctrl_pts.row(ctrl_idx);
@@ -1201,7 +1142,7 @@ namespace mfa
                         if (iter[k + 1] <= p_(k))
                         {
                             for (auto j = 0; j < dom_dim_; j++)
-                                anchor[j] = anchors[j][iter[j]] + p_(j) - 1;    // add p - 1 to anchor to align with indices of all_knots
+                                anchor[j] = anchors[j][iter[j]];
 
                             // debug
 //                             fprintf(stderr, "ctrl_pt_box() 2: anchor [ ");
@@ -1224,7 +1165,7 @@ namespace mfa
                 // normal next iteration in 0th dimension
                 if (!reset_iter && iter[0] < p_(0) + 1)                     // check for the anchor in the current tensor and in next pointers in current dim
                 {
-                    anchor[0] = anchors[0][iter[0]] + p_(0) - 1;            // add p - 1 to anchor to align with indices of all_knots
+                    anchor[0] = anchors[0][iter[0]];
 
                     // debug
 //                     fprintf(stderr, "ctrl_pt_box() 3: anchor [ ");
@@ -1247,21 +1188,15 @@ namespace mfa
                               const MatrixX<T>&         ctrl_pts,           // control points
                               const VectorX<T>&         weights)            // weights
         {
-            // debug: for 0th iteration only, copying all control points and weights into tensor_prods[0]
-            // TODO: remove this; for testing only
-            assert(tensor_prods[0].nctrl_pts == nctrl_pts);                 // sanity
-            tensor_prods[0].ctrl_pts    = ctrl_pts;
-            tensor_prods[0].weights     = weights;
-
             // 2-step algorithm:
             // 1. Count required number of control points required to be allocated in each tensor,
             // recording destination tensor. Skip control points that are extensions of refined tensors.
             // 2. Copy the control points to the tensors using the recorded destination tensor for each control point
 
             vector<int>         iter(dom_dim_);                             // iteration number in each dim.
+            vector<KnotIdx>     anchor(dom_dim_);                           // anchor in each dim. of control point in global tensor
             int                 tensor_idx = 0;                             // index of current tensor
             vector<int>         start_tensor_idx(dom_dim_, 0);              // index of starting tensor when dimension changes
-            vector<KnotIdx>     anchor(dom_dim_);                           // current anchor in all dims
             vector<size_t>      tensor_tot_nctrl_pts(tensor_prods.size());  // number of control points needed to allocate in each tensor
             vector<size_t>      tensor_cur_nctrl_pts(tensor_prods.size());  // current number of control points in each tensor so far
             vector<int>         tensor_idxs(ctrl_pts.rows());               // destination tensor for each control point, -1: skip the point
@@ -1269,18 +1204,17 @@ namespace mfa
             // 1-d flattening of the iterations in the box
             for (int i = 0; i < ctrl_pts.rows(); i++)                       // total number of iterations in the box
             {
-                // debug
-                //                 fprintf(stderr, "iter [ ");
-                //                 for (auto j = 0; j < dom_dim_; j++)
-                //                     fprintf(stderr, "%d ", iter[j]);
-                //                 fprintf(stderr, "]\n");
+                // first control point has anchor floor((p + 1) / 2)
+                for (auto j = 0; j < dom_dim_; j++)
+                    anchor[j] = iter[j] + (p_(j) + 1) / 2;
 
                 // debug
-                fprintf(stderr, "scatter_ctrl_pts() 1: anchor [ ");
-                for (auto j = 0; j < dom_dim_; j++)
-                    fprintf(stderr, "%lu ", anchor[j]);
-                fprintf(stderr, "]\n");
-                fprintf(stderr, "found ctrl pt in tensor_idx = %d\n", tensor_idx);
+//                 fprintf(stderr, "scatter_ctrl_pts() 1: anchor [ ");
+//                 for (auto j = 0; j < dom_dim_; j++)
+//                     fprintf(stderr, "%lu ", anchor[j]);
+//                 fprintf(stderr, "]\n");
+//                 cerr << "ctrl_pt(" << i << "): " << ctrl_pts.row(i) << endl;
+//                 fprintf(stderr, "found ctrl pt in tensor_idx = %d\n", tensor_idx);
 
                 // skip control point if it is an extension of a refined tensor at a deeper level of refinement
                 // ie, if in any dimension the (global) anchor of this control point corresponds to a knot whose level
@@ -1288,9 +1222,11 @@ namespace mfa
                 bool skip = false;
                 for (auto j = 0; j < dom_dim_; j++)
                 {
-                    anchor[j] = iter[j] + p_(j) - 1;                        // add p - 1 to anchor to align with indices of all_knots
                     if (all_knot_levels[j][anchor[j]] > tensor_prods[tensor_idx].level)
                     {
+                        // debug
+                        fprintf(stderr, "scatter_ctrl_pts: skipping ctrl pt idx %d\n", i);
+
                         skip = true;
                         break;
                     }
@@ -1306,6 +1242,7 @@ namespace mfa
                 }
 
                 iter[0]++;
+                anchor[0]++;
 
                 // for all dimensions, check for last point
                 bool reset_iter = false;                                    // reset iteration in some dimension
@@ -1317,17 +1254,16 @@ namespace mfa
                         reset_iter = true;
                         iter[k] = 0;
                         iter[k + 1]++;
+                        // first control point has anchor floor((p + 1) / 2)
+                        anchor[0] = (p_(0) + 1) / 2;
+                        anchor[k + 1]++;
                         if (iter[k + 1] < nctrl_pts(k))
                         {
-                            // anchor of ctrl pt, used to search for correct destination tensor
-                            for (auto j = 0; j < dom_dim_; j++)
-                                anchor[j] = iter[j] + p_(j) - 1;            // add p - 1 to anchor to align with indices of all_knots
-
                             // debug
-                            //                             fprintf(stderr, "ctrl_pt_box() 2: anchor [ ");
-                            //                             for (auto j = 0; j < dom_dim_; j++)
-                            //                                 fprintf(stderr, "%lu ", anchor[j]);
-                            //                             fprintf(stderr, "]\n");
+//                             fprintf(stderr, "scatter_ctrl_pts() 2: anchor [ ");
+//                             for (auto j = 0; j < dom_dim_; j++)
+//                                 fprintf(stderr, "%lu ", anchor[j]);
+//                             fprintf(stderr, "]\n");
 
                             // check for the anchor in the current tensor and in next pointers in next higher dim, starting back at last tensor of current dim
                             tensor_idx = in_and_next(anchor, start_tensor_idx[k + 1], k + 1);
@@ -1342,15 +1278,13 @@ namespace mfa
                 }
 
                 // normal next iteration in 0th dimension
-                if (!reset_iter && iter[0] < p_(0) + 1)                     // check for the anchor in the current tensor and in next pointers in current dim
+                if (!reset_iter && iter[0] < nctrl_pts(0))                  // check for the anchor in the current tensor and in next pointers in current dim
                 {
-                    anchor[0] = iter[0] + p_(0) - 1;                        // add p - 1 to anchor to align with indices of all_knots
-
                     // debug
-                    //                     fprintf(stderr, "ctrl_pt_box() 3: anchor [ ");
-                    //                     for (auto j = 0; j < dom_dim_; j++)
-                    //                         fprintf(stderr, "%lu ", anchor[j]);
-                    //                     fprintf(stderr, "]\n");
+//                     fprintf(stderr, "scatter_ctrl_pts() 3: anchor [ ");
+//                     for (auto j = 0; j < dom_dim_; j++)
+//                         fprintf(stderr, "%lu ", anchor[j]);
+//                     fprintf(stderr, "]\n");
 
                     // check for the anchor in the current tensor and in next pointers in current dim
                     tensor_idx = in_and_next(anchor, tensor_idx, 0);
@@ -1475,7 +1409,11 @@ namespace mfa
                     fprintf(stderr," ");
                 }
 
-                fprintf(stderr, "]\n\n");
+                fprintf(stderr, "]\n");
+
+                cerr << "ctrl_pts:\n" << t.ctrl_pts << endl;
+
+                fprintf(stderr, "\n");
             }
             fprintf(stderr, "\n");
         }

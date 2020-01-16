@@ -81,17 +81,36 @@ namespace mfa
                     VectorX<T>&     weights,                // (output) weights
                     bool            weighted = true)        // solve for and use weights
         {
-            // check and assign main quantities
-            VectorXi n;                                     // number of control point spans in each domain dim
-            VectorXi m;                                     // number of input data point spans in each domain dim
+            // check quantities
+            if (mfa_data.p.size() != mfa.ndom_pts().size())
+            {
+                fprintf(stderr, "Error: Encode() size of p must equal size of ndom_pts\n");
+                exit(1);
+            }
+            for (size_t i = 0; i < mfa_data.p.size(); i++)
+            {
+                if (nctrl_pts(i) <= mfa_data.p(i))
+                {
+                    fprintf(stderr, "Error: Encode() number of control points in dimension %ld "
+                            "must be at least p + 1 for dimension %ld\n", i, i);
+                    exit(1);
+                }
+                if (nctrl_pts(i) > mfa.ndom_pts()(i))
+                {
+                    fprintf(stderr, "Warning: Encode() number of control points (%d) in dimension %ld "
+                            "exceeds number of input data points (%d) in dimension %ld.\n", nctrl_pts(i), i, mfa.ndom_pts()(i), i);
+                }
+            }
+
             int      ndims  = mfa.ndom_pts().size();          // number of domain dimensions
             size_t   cs     = 1;                            // stride for input points in curve in cur. dim
             int      pt_dim = mfa_data.max_dim - mfa_data.min_dim + 1;// control point dimensonality
 
-            Quants(n, m);
-
+            // resize matrices in case number of control points changed
             ctrl_pts.resize(nctrl_pts.prod(), pt_dim);
-            weights.resize(nctrl_pts.prod());
+            weights.resize(ctrl_pts.rows());
+            for (auto k = 0; k < ndims; k++)
+                mfa_data.N[k].resize(mfa.ndom_pts()(k), nctrl_pts(k));
 
             // 2 buffers of temporary control points
             // double buffer needed to write output curves of current dim without changing its input pts
@@ -167,6 +186,7 @@ namespace mfa
                 for (int i = 0; i < mfa_data.N[k].rows(); i++)
                 {
                     int span = mfa_data.FindSpan(k, mfa.params()[k][i], nctrl_pts(k));
+
 #ifndef TMESH       // original version for one tensor product
                     mfa_data.OrigBasisFuns(k, mfa.params()[k][i], span, mfa_data.N[k], i);
 #else               // tmesh version
@@ -238,6 +258,9 @@ namespace mfa
                 if (verbose)
                     fprintf(stderr, "\ndimension %ld of %d encoded\n", k + 1, ndims);
             }                                                      // domain dimensions
+
+            // debug
+//             cerr << "Encode() ctrl_pts:\n" << ctrl_pts << endl;
         }
 
         // original adaptive encoding for first tensor product only
@@ -309,6 +332,24 @@ namespace mfa
                 const VectorX<T>&   extents,                    // extents in each dimension, for normalizing error (size 0 means do not normalize)
                 int                 max_rounds = 0)             // optional maximum number of rounds
         {
+            // temporary control points and weights for global encode
+            // TODO: replace for local encode
+            VectorXi nctrl_pts(mfa_data.dom_dim);
+            for (auto k = 0; k < mfa_data.dom_dim; k++)
+                nctrl_pts(k) = mfa_data.tmesh.all_knots[k].size() - mfa_data.p(k) - 1;
+            MatrixX<T> ctrl_pts(nctrl_pts.prod(), mfa_data.max_dim - mfa_data.min_dim + 1);
+            VectorX<T> weights(ctrl_pts.rows());
+
+            // Initial global encode and scattering of control points to tensors
+            // TODO: replace for local encode
+            Encode(nctrl_pts, ctrl_pts, weights);
+            mfa_data.tmesh.scatter_ctrl_pts(nctrl_pts, ctrl_pts, weights);
+
+            // debug: print tmesh
+            fprintf(stderr, "\n----- initial T-mesh -----\n\n");
+            mfa_data.tmesh.print();
+            fprintf(stderr, "--------------------------\n\n");
+
             // loop until no change in knots or number of control points >= input points
             for (int iter = 0; ; iter++)
             {
@@ -318,13 +359,18 @@ namespace mfa
                 if (verbose)
                     fprintf(stderr, "Iteration %d...\n", iter);
 
-                // debug: print tmesh
-                fprintf(stderr, "\n----- T-mesh at the start of iteration %d-----\n\n", iter);
-                mfa_data.tmesh.print();
-                fprintf(stderr, "--------------------------\n\n");
-
                 // using NewKnots_full high-d span splitting with tmesh (for now)
-                int retval = NewKnots_full(err_limit, extents, iter);
+                int retval = NewKnots_full(err_limit, extents, iter, nctrl_pts, ctrl_pts, weights);
+
+                // resize temporary control points and weights and global encode and scattering of control points to tensors
+                // TODO: replace for local encode
+                for (auto k = 0; k < mfa_data.dom_dim; k++)
+                    nctrl_pts(k) = mfa_data.tmesh.all_knots[k].size() - mfa_data.p(k) - 1;
+                ctrl_pts.resize(nctrl_pts.prod(), mfa_data.max_dim - mfa_data.min_dim + 1);
+                weights.resize(ctrl_pts.rows());
+
+                Encode(nctrl_pts, ctrl_pts, weights);
+                mfa_data.tmesh.scatter_ctrl_pts(nctrl_pts, ctrl_pts, weights);
 
                 // debug: print tmesh
                 fprintf(stderr, "\n----- T-mesh at the end of iteration %d-----\n\n", iter);
@@ -636,8 +682,9 @@ namespace mfa
 
         // Checks quantities needed for approximation
         void Quants(
-                VectorXi& n,          // (output) number of control point spans in each dim
-                VectorXi& m)          // (output) number of input data point spans in each dim
+                const VectorXi& nctrl_pts,      // number of control points
+                VectorXi&       n,              // (output) number of control point spans in each dim
+                VectorXi&       m)              // (output) number of input data point spans in each dim
         {
             if (mfa_data.p.size() != mfa.ndom_pts().size())
             {
@@ -646,23 +693,16 @@ namespace mfa
             }
             for (size_t i = 0; i < mfa_data.p.size(); i++)
             {
-                // TODO: hard-coded for one tensor
-                if (mfa_data.tmesh.tensor_prods[0].nctrl_pts(i) <= mfa_data.p(i))
+                if (nctrl_pts(i) <= mfa_data.p(i))
                 {
                     fprintf(stderr, "Error: Encode() number of control points in dimension %ld "
                             "must be at least p + 1 for dimension %ld\n", i, i);
                     exit(1);
                 }
-                // TODO: hard-coded for one tensor
-                if (mfa_data.tmesh.tensor_prods[0].nctrl_pts(i) > mfa.ndom_pts()(i))
+                if (nctrl_pts(i) > mfa.ndom_pts()(i))
                 {
-                    // TODO: hard-coded for one tensor
                     fprintf(stderr, "Warning: Encode() number of control points (%d) in dimension %ld "
-                            "exceeds number of input data points (%d) in dimension %ld. "
-                            "Technically, this is not an error, but it could be a sign something is wrong and "
-                            "probably not desired if you want compression. You may not be able to get the "
-                            "desired error limit and compression simultaneously. Try increasing error limit?\n",
-                            mfa_data.tmesh.tensor_prods[0].nctrl_pts(i), i, mfa.ndom_pts()(i), i);
+                            "exceeds number of input data points (%d) in dimension %ld.\n", nctrl_pts(i), i, mfa.ndom_pts()(i), i);
                 }
             }
 
@@ -670,8 +710,7 @@ namespace mfa
             m.resize(mfa_data.p.size());
             for (size_t i = 0; i < mfa_data.p.size(); i++)
             {
-                // TODO: hard-coded for one tensor
-                n(i)        =  mfa_data.tmesh.tensor_prods[0].nctrl_pts(i) - 1;
+                n(i)        =  nctrl_pts(i) - 1;
                 m(i)        =  mfa.ndom_pts()(i)  - 1;
             }
         }
@@ -1043,37 +1082,21 @@ namespace mfa
         // decodes full-d points in each knot span and adds new knot spans where error > err_limit
         // returns 1 if knots were added, 0 if no knots were added, -1 if number of control points >= input points
         int NewKnots_full(
-                T                   err_limit,                   // max allowable error
-                const VectorX<T>&   extents,                     // extents in each dimension, for normalizing error (size 0 means do not normalize)
-                int                 iter)                        // iteration number of caller (for debugging)
+                T                   err_limit,                  // max allowable error
+                const VectorX<T>&   extents,                    // extents in each dimension, for normalizing error (size 0 means do not normalize)
+                int                 iter,                       // iteration number of caller (for debugging)
+                const VectorXi&     nctrl_pts,                  // number of control points in each dimension
+                const MatrixX<T>&   ctrl_pts,                   // control points
+                const VectorX<T>&   weights)                    // weights
         {
+            // TODO: ctrl_pts and weights args should not be needed once TempFirstErrorspan is replaced with ErrorSpan below
+
             bool done = true;
 
             // indices in tensor, in each dim. of inserted knots in full knot vector after insertion
             vector<vector<KnotIdx>> inserted_knot_idxs(mfa_data.dom_dim);
 
             VectorX<T> myextents = extents.size() ? extents : VectorX<T>::Ones(mfa_data.tmesh.tensor_prods[0].ctrl_pts.cols());
-
-            // control points and weights
-            VectorXi nctrl_pts(mfa_data.dom_dim);
-            for (auto k = 0; k < mfa_data.dom_dim; k++)
-                nctrl_pts(k) = mfa_data.tmesh.all_knots[k].size() - mfa_data.p(k) - 1;
-            MatrixX<T> ctrl_pts(nctrl_pts.prod(), mfa_data.max_dim - mfa_data.min_dim + 1);
-            VectorX<T> weights(ctrl_pts.rows());
-
-            // full n-d encoding
-            // TODO: encode only most recently refined tensor product constrained by its neighbors (Youssef's algorithm)
-            // For now, encode a full tensor product of control points and weights
-            Encode(nctrl_pts, ctrl_pts, weights);
-
-            // copy control points and weights into the tmesh
-            // TODO: remove this step once adaptive encoding is working correctly, only for temporary testing
-            // TODO: for 0th iteration only, copying all control points and weights into tensor_prods[0]
-            // TODO: for more iterations, need to copy control points into proper tensors
-            assert(mfa_data.tmesh.tensor_prods[0].nctrl_pts == nctrl_pts);          // sanity
-//             mfa_data.tmesh.tensor_prods[0].ctrl_pts = ctrl_pts;
-//             mfa_data.tmesh.tensor_prods[0].weights  = weights;
-            mfa_data.tmesh.scatter_ctrl_pts(nctrl_pts, ctrl_pts, weights);
 
             // find new knots
             mfa::NewKnots<T> nk(mfa, mfa_data);

@@ -308,9 +308,8 @@ namespace mfa
         void VolPt_tmesh(const VectorX<T>&      param,      // parameters of point to decode
                          VectorX<T>&            out_pt)     // (output) point, allocated by caller
         {
-            // compute range of anchor points for a given point to decode
-            vector<vector<KnotIdx>> anchors(mfa_data.dom_dim);              // anchors affecting the decoding point
-            mfa_data.tmesh.anchors(param, anchors);
+            // debug
+//             cerr << "VolPt_tmesh(): decoding point with param: " << param.transpose() << endl;
 
             // debug: print global knots
 //             for (auto i = 0; i < mfa_data.dom_dim; i++)
@@ -321,14 +320,13 @@ namespace mfa
 //                 fprintf(stderr, "]\n");
 //             }
 
-            // debug: print decoding point
-//             fprintf(stderr, "for decoding point = [ ");
-//             for (auto i = 0; i < mfa_data.dom_dim; i++)
-//                 fprintf(stderr, "%.3lf ", param[i]);
-//             fprintf(stderr, "],\n");
+            // compute range of anchor points for a given point to decode
+            vector<vector<KnotIdx>> anchors(mfa_data.dom_dim);              // anchors affecting the decoding point
+            mfa_data.tmesh.anchors(param, anchors);
 
             // debug: print anchors
 //             fprintf(stderr, "\n--------------------------\n\n");
+//             cerr << "VolPt_tmesh(): decoding point with param: " << param.transpose() << endl;
 //             for (auto i = 0; i < mfa_data.dom_dim; i++)
 //             {
 //                 fprintf(stderr, "VolPt_tmesh(): decoding point with dim %d anchors = [ ", i);
@@ -338,12 +336,12 @@ namespace mfa
 //             }
 //             fprintf(stderr, "\n--------------------------\n\n");
 
-            // TODO: insert any missing knots and control points
+            // TODO: insert any missing knots and control points, is this unnecessary?
 
             // compute basis functions in each dimension
             vector<MatrixX<T>> N(mfa_data.dom_dim);                         // basis functions in each dimension
             vector<vector<KnotIdx>> local_knot_idxs(mfa_data.dom_dim);      // local knot indices
-            vector<size_t> center(mfa_data.dom_dim);                        // center of basis function in index space
+            vector<size_t> anchor(mfa_data.dom_dim);                        // one anchor
             for (auto i = 0; i < mfa_data.dom_dim; i++)
             {
                 N[i] = MatrixX<T>::Zero(1, mfa_data.p(i) + 1);              // p + 1 basis functions in current dim
@@ -351,39 +349,26 @@ namespace mfa
                 vector<T> local_knots(mfa_data.p(i) + 2);                   // local knot vector for current dim in parameter space
                 size_t local_ctrl_idx = 0;                                  // index into local control points
 
-                // locate anchors, ie, the locations in index space of the basis functions
-                // in Sederberg'03 and Bazilevs'10, the anchor is the center of the basis function
-                // I am using the left edge of the basis function as my "anchor," but my "center" variable is the same as their anchor
+                // local knot vector and basis function for each anchor
                 for (auto k = 0; k < anchors[i].size(); k++)                // p + 1 anchors, one per control point and basis func.
                 {
                     // anchor[j] = kth anchor in each dimension j
                     for (auto j = 0; j < mfa_data.dom_dim; j++)
-                        center[j] = anchors[j][k] + (mfa_data.p(j) + 1) / 2; // center is offset from anchor by (p + 1) / 2
-                    mfa_data.tmesh.local_knot_vector(center, local_knot_idxs);
+                        anchor[j] = anchors[j][k];
+
+                    // local knot vector
+                    mfa_data.tmesh.local_knot_vector(anchor, local_knot_idxs);
                     for (auto n = 0; n < local_knot_idxs[i].size(); n++)
                         local_knots[n] = mfa_data.tmesh.all_knots[i][local_knot_idxs[i][n]];
-
-#if 0               // write basis function into column corresponding to anchor position
-
-                    // debug
-                    if (anchors[i][k] >= N[i].cols())
-                        fprintf(stderr, "Error: trying to access column %ld but N only has %ld columns\n", anchors[i][k] - 1, N[i].cols());
-
-                    // writing basis function into column corresponding to anchor position makes it multiply correct control point
-                    N[i](0, anchors[i][k]) = mfa_data.OneBasisFun(i, param(i), local_knots);
-
-#else               // writing basis function into columns of N starting from 0
-
-                    // will figure out corresponding control points based on anchors in a separate step
-                    N[i](0, k) = mfa_data.OneBasisFun(i, param(i), local_knots);
-
-#endif
 
                     // debug: print local knot idxs
 //                     fprintf(stderr, "local knot idxs = [");
 //                     for (auto j = 0; j < local_knot_idxs[i].size(); j++)
 //                         fprintf(stderr, "%ld ", local_knot_idxs[i][j]);
 //                     fprintf(stderr, "]\n");
+
+                    // basis function
+                    N[i](0, k) = mfa_data.OneBasisFun(i, param(i), local_knots);
                 }
             }
 

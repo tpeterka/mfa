@@ -129,8 +129,8 @@ namespace mfa
                 T                           err_limit,              // max. allowed error
                 int                         iter,                   // iteration number
                 const VectorXi&             nctrl_pts,              // number of control points
-                MatrixX<T>&                 ctrl_pts,               // control points
-                VectorX<T>&                 weights,                // control point weights
+                const MatrixX<T>&           ctrl_pts,               // control points
+                const VectorX<T>&           weights,                // control point weights
                 vector<vector<KnotIdx>>&    inserted_knot_idxs)     // indices in each dim. of inserted knots in full knot vector after insertion
         {
             Decoder<T>          decoder(mfa, mfa_data, 1);
