@@ -46,7 +46,6 @@ namespace mfa
         ~NewKnots() {}
 
         // inserts a set of knots (in all dimensions) into the original knot set
-        // also increases the numbers of control points (in all dimensions) that will result
         void InsertKnots(
                 vector<vector<T>>&          new_knots,              // new knots
                 vector<vector<int>>&        new_levels,             // new knot levels
@@ -55,6 +54,97 @@ namespace mfa
             vector<vector<T>> temp_knots(mfa.dom_dim);
             vector<vector<int>> temp_levels(mfa.dom_dim);
             inserted_knot_idxs.resize(mfa.dom_dim);
+
+            // insert new_knots into knots: replace old knots with union of old and new (in temp_knots)
+            for (size_t k = 0; k < mfa.dom_dim; k++)                // for all domain dimensions
+            {
+                inserted_knot_idxs[k].clear();
+                auto ninserted = mfa_data.tmesh.all_knots[k].size();      // number of new knots inserted
+
+                // manual walk along old and new knots so that levels can be inserted along with knots
+                // ie, that's why std::set_union cannot be used
+                auto ak = mfa_data.tmesh.all_knots[k].begin();
+                auto al = mfa_data.tmesh.all_knot_levels[k].begin();
+                auto nk = new_knots[k].begin();
+                auto nl = new_levels[k].begin();
+                while (ak != mfa_data.tmesh.all_knots[k].end() || nk != new_knots[k].end())
+                {
+                    if (ak == mfa_data.tmesh.all_knots[k].end())
+                    {
+                        temp_knots[k].push_back(*nk++);
+                        temp_levels[k].push_back(*nl++);
+                        inserted_knot_idxs[k].push_back(temp_knots[k].size() - 1);
+                    }
+                    else if (nk == new_knots[k].end())
+                    {
+                        temp_knots[k].push_back(*ak++);
+                        temp_levels[k].push_back(*al++);
+                    }
+                    else if (*ak < *nk)
+                    {
+                        temp_knots[k].push_back(*ak++);
+                        temp_levels[k].push_back(*al++);
+                    }
+                    else if (*nk < *ak)
+                    {
+                        temp_knots[k].push_back(*nk++);
+                        temp_levels[k].push_back(*nl++);
+                        inserted_knot_idxs[k].push_back(temp_knots[k].size() - 1);
+                    }
+                    else if (*ak == *nk)
+                    {
+                        temp_knots[k].push_back(*ak++);
+                        temp_levels[k].push_back(*al++);
+                        nk++;
+                        nl++;
+                    }
+                }
+
+                for (auto i = 0; i < inserted_knot_idxs[k].size(); i++)
+                {
+                    auto idx = inserted_knot_idxs[k][i];
+                    mfa_data.tmesh.insert_knot(k, idx, temp_levels[k][idx], temp_knots[k][idx]);
+                }
+            }   // for all domain dimensions
+        }
+
+        // inserts a set of knots (in all dimensions) into the original knot set
+        // this version is for testing Youssef's local solve
+        void LocalInsertKnots(
+                vector<vector<T>>&          new_knots,              // new knots
+                vector<vector<int>>&        new_levels,             // new knot levels
+                vector<vector<KnotIdx>>&    inserted_knot_idxs,     // (output) indices in each dim. of inserted knots in full knot vector after insertion
+                vector<VectorXi>&           new_nctrl_pts,          // (output) new number of control points in each dim. from P&T knot insertion, one std::vector element for each knot inserted
+                vector<MatrixX<T>>&         new_ctrl_pts,           // (output) new control points from P&T knot insertion, one std::vector element for each knot inserted
+                vector<VectorX<T>>&         new_weights)            // (output) new weights from P&T knot insertion, one std::vector element for each knot inserted
+        {
+            // debug
+            fprintf(stderr, "*** LocalInsertKnots ***\n");
+
+            vector<vector<T>> temp_knots(mfa.dom_dim);
+            vector<vector<int>> temp_levels(mfa.dom_dim);
+            inserted_knot_idxs.resize(mfa.dom_dim);
+
+            int nnew_knots = new_knots[0].size();                   // number of new knots being inserted
+
+            // call P&T knot insertion
+            vector<vector<T>>   new_all_knots(mfa.dom_dim);
+            vector<vector<int>> new_all_knot_levels(mfa.dom_dim);
+            VectorX<T>          param(mfa.dom_dim);                 // current knot to be inserted
+            new_nctrl_pts.resize(nnew_knots);
+            new_ctrl_pts.resize(nnew_knots);
+            new_weights.resize(nnew_knots);
+
+            // TODO: parent tensor hard-coded to tensor_prods[0]
+            // will need to pass parent tensor into LocalInsertKnots or search for it in the tmesh
+            TensorProduct<T>& tensor = mfa_data.tmesh.tensor_prods[0];
+
+            for (auto i = 0; i < nnew_knots; i++)
+            {
+                for (auto j = 0; j < mfa.dom_dim; j++)
+                    param(j) = new_knots[j][i];
+                mfa_data.KnotInsertion(param, tensor, new_nctrl_pts[i], new_all_knots, new_all_knot_levels, new_ctrl_pts[i], new_weights[i]);
+            }
 
             // insert new_knots into knots: replace old knots with union of old and new (in temp_knots)
             for (size_t k = 0; k < mfa.dom_dim; k++)                // for all domain dimensions
@@ -131,7 +221,7 @@ namespace mfa
                 const VectorXi&             nctrl_pts,              // number of control points
                 const MatrixX<T>&           ctrl_pts,               // control points
                 const VectorX<T>&           weights,                // control point weights
-                vector<vector<KnotIdx>>&    inserted_knot_idxs)     // indices in each dim. of inserted knots in full knot vector after insertion
+                vector<vector<KnotIdx>>&    inserted_knot_idxs)     // (output) indices in each dim. of inserted knots in full knot vector after insertion
         {
             Decoder<T>          decoder(mfa, mfa_data, 1);
             VectorXi            ijk(mfa.dom_dim);                   // i,j,k of domain point
@@ -189,6 +279,92 @@ namespace mfa
 
         // computes error in knot spans and returns first new knot (in all dimensions at once) that should be inserted
         // returns true if all done, ie, no new knots inserted
+        //
+        // This is a temporary version for testing the tmesh
+        // It takes a full tensor product of ctrl_pts and weights of the same quantities as all_knots in the tmesh
+        // and decodes that in order to determine first error span.
+        // This should be replaced by FirstErrorSpan below once the adaptive encoding is done
+        //
+        // This version is for testing Youssef's local solve
+        //
+        // TODO: lots of optimizations possible; this is completely naive so far
+        // optimizations:
+        // each time called, resume search at next domain point
+        // step through domain points fineer each time the end is reached
+        // increment ijk in the loop over domain points instead of calling idx2ijk
+        // TBB? (currently serial)
+        bool LocalFirstErrorSpan(
+                const MatrixX<T>&           domain,                 // input points
+                VectorX<T>                  extents,                // extents in each dimension, for normalizing error (size 0 means do not normalize)
+                T                           err_limit,              // max. allowed error
+                int                         iter,                   // iteration number
+                const VectorXi&             nctrl_pts,              // number of control points
+                const MatrixX<T>&           ctrl_pts,               // control points
+                const VectorX<T>&           weights,                // control point weights
+                vector<vector<KnotIdx>>&    inserted_knot_idxs,     // (output) indices in each dim. of inserted knots in full knot vector after insertion
+                vector<VectorXi>&           new_nctrl_pts,          // (output) new number of control points in each dim. from P&T knot insertion, one std:vector element per knot inserted
+                vector<MatrixX<T>>&         new_ctrl_pts,           // (output) new control points from P&T knot insertion, one std::vector element per knot inserted
+                vector<VectorX<T>>&         new_weights)            // (output) new weights from P&T knot insertion, one std::vector element per knot inserted
+        {
+            // debug
+            fprintf(stderr, "*** LocalFirstErrorSpan ***\n");
+
+            Decoder<T>          decoder(mfa, mfa_data, 1);
+            VectorXi            ijk(mfa.dom_dim);                   // i,j,k of domain point
+            VectorX<T>          param(mfa.dom_dim);                 // parameters of domain point
+            vector<int>         span(mfa.dom_dim);                  // knot span in each dimension
+            VectorXi            derivs;                             // size 0 means unused
+            DecodeInfo<T>       decode_info(mfa_data, derivs);      // reusable decode point info for calling VolPt repeatedly
+            vector<vector<T>>   new_knots(mfa.dom_dim);             // new knots
+            vector<vector<int>> new_levels(mfa.dom_dim);            // new knot levels
+
+            if (!extents.size())
+                extents = VectorX<T>::Ones(domain.cols());
+
+            for (auto i = 0; i < mfa.ndom_pts().prod(); i++)
+            {
+                mfa_data.idx2ijk(mfa.ds(), i, ijk);
+                for (auto k = 0; k < mfa.dom_dim; k++)
+                    param(k) = mfa.params()[k][ijk(k)];
+                VectorX<T> cpt(domain.cols());                      // approximated point
+                decoder.VolPt(param, cpt, nctrl_pts, ctrl_pts, weights);
+
+                // debug
+//                 cerr << "cpt: " << cpt.transpose() << endl;
+
+                int last = domain.cols() - 1;                       // range coordinate
+
+                // error
+                T max_err = 0.0;
+                for (auto j = 0; j < mfa_data.max_dim - mfa_data.min_dim + 1; j++)
+                {
+                    T err = fabs(cpt(j) - domain(i, mfa_data.min_dim + j)) / extents(mfa_data.min_dim + j);
+                    max_err = err > max_err ? err : max_err;
+                }
+
+                if (max_err > err_limit)
+                {
+                    for (auto k = 0; k < mfa.dom_dim; k++)
+                    {
+                        span[k] = mfa_data.FindSpan(k, param(k), nctrl_pts(k));
+
+                        // span should never be the last knot because of the repeated knots at end
+                        assert(span[k] < mfa_data.tmesh.all_knots[k].size() - 1);
+
+                        // new knot is the midpoint of the span containing the domain point parameters
+                        T new_knot_val = (mfa_data.tmesh.all_knots[k][span[k]] + mfa_data.tmesh.all_knots[k][span[k] + 1]) / 2.0;
+                        new_knots[k].push_back(new_knot_val);
+                        new_levels[k].push_back(iter + 1);  // adapt at the next level, for now every iteration is a new level
+                    }
+                    LocalInsertKnots(new_knots, new_levels, inserted_knot_idxs, new_nctrl_pts, new_ctrl_pts, new_weights);
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        // computes error in knot spans and returns first new knot (in all dimensions at once) that should be inserted
+        // returns true if all done, ie, no new knots inserted
         // TODO: lots of optimizations possible; this is completely naive so far
         // optimizations:
         // each time called, resume search at next domain point
@@ -201,9 +377,7 @@ namespace mfa
                 T                           err_limit,              // max. allowed error
                 int                         iter,                   // iteration number
                 const VectorXi&             nctrl_pts,              // number of control points
-//                 MatrixX<T>&                 ctrl_pts,               // control points
-//                 VectorX<T>&                 weights,                // control point weights
-                vector<vector<KnotIdx>>&    inserted_knot_idxs)     // indices in each dim. of inserted knots in full knot vector after insertion
+                vector<vector<KnotIdx>>&    inserted_knot_idxs)     // (output) indices in each dim. of inserted knots in full knot vector after insertion
         {
             Decoder<T>          decoder(mfa, mfa_data, 1);
             VectorXi            ijk(mfa.dom_dim);                   // i,j,k of domain point

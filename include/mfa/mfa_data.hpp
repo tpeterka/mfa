@@ -736,6 +736,49 @@ namespace mfa
 //             cerr << "weights after insertion:\n" << tensor.weights << endl;
         }
 
+        // knot insertion into tensor product
+        // This version returns new knots, levels, control points, weights as arguments and does not copy them into tmesh
+        // TODO: expensive deep copies
+        void KnotInsertion(const VectorX<T>&        param,                  // new knot value to be inserted
+                           const TensorProduct<T>&  tensor,                 // tensor product for insertion
+                           VectorXi&                new_nctrl_pts,          // (output) new number of control points in each dim.
+                           vector<vector<T>>&       new_all_knots,          // (output) new global all knots
+                           vector<vector<int>>&     new_all_knot_levels,    // (output) new global all knot levels
+                           MatrixX<T>&              new_ctrl_pts,           // (output) new local control points for this tensor
+                           VectorX<T>&              new_weights) const      // (output) new local weights for this tensor
+        {
+            // debug
+            fprintf(stderr, "all_knots before insertion: ");
+            for (int i = 0; i < dom_dim; i++)
+            {
+                fprintf(stderr, "all_knots[dim %d] ", i);
+                for (auto j = 0; j < tmesh.all_knots[i].size(); j++)
+                    fprintf(stderr, "%.2lf (l%d) ", tmesh.all_knots[i][j], tmesh.all_knot_levels[i][j]);
+                fprintf(stderr, "\n");
+            }
+            fprintf(stderr, "\n");
+            cerr << "ctrl_pts before insertion:\n" << tensor.ctrl_pts << endl;
+            cerr << "weights before insertion:\n" << tensor.weights << endl;
+
+            new_nctrl_pts = tensor.nctrl_pts;
+
+            VolKnotIns(tmesh.all_knots, tmesh.all_knot_levels, tensor.ctrl_pts, tensor.weights, param, tensor.level,
+                    new_all_knots, new_all_knot_levels, new_ctrl_pts, new_weights, new_nctrl_pts);
+
+            // debug
+            fprintf(stderr, "new_all_knots after insertion: ");
+            for (int i = 0; i < dom_dim; i++)
+            {
+                fprintf(stderr, "new_all_knots[dim %d] ", i);
+                for (auto j = 0; j < new_all_knots[i].size(); j++)
+                    fprintf(stderr, "%.2lf (l%d) ", new_all_knots[i][j], new_all_knot_levels[i][j]);
+                fprintf(stderr, "\n");
+            }
+            fprintf(stderr, "\n");
+            cerr << "ctrl_pts after insertion:\n" << new_ctrl_pts << endl;
+            cerr << "weights after insertion:\n" << new_weights << endl;
+        }
+
         private:
 
         // curve knot insertion

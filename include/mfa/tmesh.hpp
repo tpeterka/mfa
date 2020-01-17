@@ -238,6 +238,168 @@ namespace mfa
                 tensor_prods.push_back(new_tensor);
         }
 
+        // Append a tensor product to the back of tensor_prods and copy control points and weights into it
+        // This version takes a (possibly larger) set of control points and weights to copy into the appended tensor
+        // If the input control points and weights are a superset of the tensor, the correct subset of them will be used
+        // The number of control points is the number of the input superset
+        void append_tensor(const vector<KnotIdx>&   knot_mins,      // indices in all_knots of min. corner of tensor to be inserted
+                           const vector<KnotIdx>&   knot_maxs,      // indices in all_knots of max. corner
+                           const VectorXi&          new_nctrl_pts,  // number of control points in each dim. for this tensor (possibly superset)
+                           const MatrixX<T>&        new_ctrl_pts,   // local control points for this tensor (possibly superset)
+                           const VectorX<T>&        new_weights)    // local weights for this tensor (possibly superset)
+        {
+            // debug
+            fprintf(stderr, "*** append_tensor with provided control points ***\n");
+
+            bool vec_grew;                          // vector of tensor_prods grew
+            bool tensor_inserted = false;           // the desired tensor was already inserted
+
+            // create a new tensor product
+            TensorProduct<T> new_tensor;
+            new_tensor.next.resize(dom_dim_);
+            new_tensor.prev.resize(dom_dim_);
+            new_tensor.knot_mins = knot_mins;
+            new_tensor.knot_maxs = knot_maxs;
+
+            // initialize control points
+            new_tensor.nctrl_pts.resize(dom_dim_);
+//             size_t tot_nctrl_pts = 1;
+            if (!tensor_prods.size())
+            {
+                new_tensor.level = 0;
+// 
+//                 // resize control points
+//                 // level 0 has only one box of control points
+//                 for (auto j = 0; j < dom_dim_; j++)
+//                 {
+//                     new_tensor.nctrl_pts[j] = all_knots[j].size() - p_[j] - 1;
+//                     tot_nctrl_pts *= new_tensor.nctrl_pts[j];
+//                 }
+//                 new_tensor.ctrl_pts.resize(tot_nctrl_pts, max_dim_ - min_dim_ + 1);
+//                 new_tensor.weights.resize(tot_nctrl_pts);
+            }
+            else
+            {
+                new_tensor.level = tensor_prods.back().level + 1;
+
+//                 // resize control points
+//                 for (auto j = 0; j < dom_dim_; j++)
+//                 {
+//                     // count number of knots in the new tensor in this dimension
+//                     // inserted tensor is at the deepest level of refinement, ie, all knots in the global knot vector between
+//                     // min and max knots are in this tensor (don't skip any knots)
+//                     size_t nknots   = 0;
+//                     size_t nanchors = 0;
+//                     for (auto i = knot_mins[j]; i <= knot_maxs[j]; i++)
+//                         nknots++;
+//                     if (p_[j] % 2 == 0)         // even degree: anchors are between knot lines
+//                         nanchors = nknots - 1;
+//                     else                            // odd degree: anchors are on knot lines
+//                         nanchors = nknots;
+//                     if (knot_mins[j] < p_[j] - 1)                       // skip up to p-1 anchors at start of global knots
+//                         nanchors -= (p_[j] - 1 - knot_mins[j]);
+//                     if (knot_maxs[j] > all_knots[j].size() - p_[j])     // skip up to p-1 anchors at end of global knots
+//                         nanchors -= (knot_maxs[j] + p_[j] - all_knots[j].size());
+//                     new_tensor.nctrl_pts[j] = nanchors;
+//                     tot_nctrl_pts *= nanchors;
+// 
+//                     // debug
+// //                     fprintf(stderr, "appending tensor with %ld knots and %d control points in dimension %d\n", nknots, new_tensor.nctrl_pts[j], j);
+//                 }
+//                 new_tensor.ctrl_pts.resize(tot_nctrl_pts, max_dim_ - min_dim_ + 1);
+//                 new_tensor.weights.resize(tot_nctrl_pts);
+            }
+
+            vector<int> split_side(dom_dim_);       // whether min (-1) or max (1) or both (2) sides of
+                                                    // new tensor are inside existing tensor (one value for each dim.)
+
+            // check for intersection of the new tensor with existing tensors
+            do
+            {
+                vec_grew = false;           // tensor_prods grew and iterator is invalid
+                bool knots_match;           // intersect resulted in a tensor with same knot mins, maxs as tensor to be added
+
+                for (auto j = 0; j < tensor_prods.size(); j++)
+                {
+                    // debug
+//                     fprintf(stderr, "checking for intersection between new tensor and existing tensor idx=%lu\n", j);
+
+                    if (nonempty_intersection(new_tensor, tensor_prods[j], split_side))
+                    {
+                        // debug
+//                         fprintf(stderr, "intersection found between new tensor and existing tensor idx=%lu split_side=[%d %d]\n",
+//                                 j, split_side[0], split_side[1]);
+//                         fprintf(stderr, "\ntensors before intersection\n\n");
+//                         print();
+
+                        if ((vec_grew = intersect(new_tensor, j, split_side, knots_match)) && vec_grew)
+                        {
+                            if (knots_match)
+                                tensor_inserted = true;
+
+                            // debug
+//                             fprintf(stderr, "\ntensors after intersection\n\n");
+//                             print();
+
+                            break;  // adding a tensor invalidates iterator, start iteration over
+                        }
+                    }
+                }
+            } while (vec_grew);   // keep checking until no more tensors are added
+
+            // the new tensor has either been added already or still needs to be added
+            // either way, create reference to new tensor and get its index at the end of vector of tensor prods.
+            TensorIdx           new_tensor_idx;
+            TensorProduct<T>&   new_tensor_ref = new_tensor;
+            if (!tensor_inserted)
+            {
+                // new tensor will go at the back of the vector
+                new_tensor_idx = tensor_prods.size();
+                new_tensor_ref = new_tensor;
+            }
+            else
+            {
+                // new tensor is already at the back of the vector
+                new_tensor_idx = tensor_prods.size() - 1;
+                new_tensor_ref = tensor_prods[new_tensor_idx];
+            }
+
+            // adjust next and prev pointers for new tensor
+            for (int j = 0; j < dom_dim_; j++)
+            {
+                for (auto k = 0; k < new_tensor_idx; k++)
+                {
+                    // debug
+//                     fprintf(stderr, "final add: cur_dim=%d new_tensor_idx=%lu checking existing_tensor_idx=%lu\n", j, new_tensor_idx, k);
+
+                    TensorProduct<T>& existing_tensor_ref = tensor_prods[k];
+                    int adjacent_retval = adjacent(new_tensor_ref, existing_tensor_ref, j);
+
+                    if (adjacent_retval == 1)
+                    {
+                        new_tensor_ref.next[j].push_back(k);
+                        existing_tensor_ref.prev[j].push_back(new_tensor_idx);
+                    }
+                    else if (adjacent_retval == -1)
+                    {
+                        new_tensor_ref.prev[j].push_back(k);
+                        existing_tensor_ref.next[j].push_back(new_tensor_idx);
+                    }
+                }
+            }
+
+            // add the tensor
+            if (!tensor_inserted)
+                tensor_prods.push_back(new_tensor);
+
+            // copy the control points
+            // TODO: deal with the case that the tensor was already inserted, check if it's possible to not be at the end
+            // following assumes the appended tensor is last
+            int tensor_idx = tensor_prods.size() - 1;
+            subset_ctrl_pts(new_nctrl_pts, new_ctrl_pts, new_weights, tensor_idx);
+
+        }
+
         // check if nonempty intersection exists in all dimensions between knot_mins, knot_maxs of two tensors
         // assumes new tensor cannot be larger than existing tensor in any dimension (continually refining smaller or equal)
         bool nonempty_intersection(TensorProduct<T>&    new_tensor,         // new tensor product to be added
@@ -1320,6 +1482,152 @@ namespace mfa
                     tensor_cur_nctrl_pts[tensor_idxs[i]]++;
                 }
             }
+        }
+
+        // copy subset of control points into a given tensor product in the tmesh
+        void subset_ctrl_pts(const VectorXi&           nctrl_pts,          // number of control points in each dim.
+                             const MatrixX<T>&         ctrl_pts,           // control points
+                             const VectorX<T>&         weights,            // weights
+                             int                       tensor_idx)         // index of destination tensor
+        {
+            // 2-step algorithm:
+            // 1. Count required number of control points required to be allocated in the tensor
+            // recording destination tensor. Skip control points that are extensions of refined tensors.
+            // 2. Copy the control points to the tensors using the recorded destination tensor for each control point
+
+            vector<int>         iter(dom_dim_);                             // iteration number in each dim.
+            vector<KnotIdx>     anchor(dom_dim_);                           // anchor in each dim. of control point in global tensor
+            vector<size_t>      tensor_tot_nctrl_pts(tensor_prods.size());  // number of control points needed to allocate in each tensor
+            vector<size_t>      tensor_cur_nctrl_pts(tensor_prods.size());  // current number of control points in each tensor so far
+            vector<int>         tensor_idxs(ctrl_pts.rows());               // destination tensor for each control point, -1: skip the point
+
+            VectorXi            sub_nctrl_pts(dom_dim_);                    // final number of control points in subset
+            for (auto j = 0; j < dom_dim_; j++)
+                sub_nctrl_pts(j) = 0;
+
+            // 1-d flattening of the iterations in the box
+            for (int i = 0; i < ctrl_pts.rows(); i++)                       // total number of iterations in the box
+            {
+                // first control point has anchor floor((p + 1) / 2)
+                for (auto j = 0; j < dom_dim_; j++)
+                    anchor[j] = iter[j] + (p_(j) + 1) / 2;
+
+                // debug
+//                 fprintf(stderr, "subset_ctrl_pts() 1: anchor [ ");
+//                 for (auto j = 0; j < dom_dim_; j++)
+//                     fprintf(stderr, "%lu ", anchor[j]);
+//                 fprintf(stderr, "]\n");
+//                 cerr << "ctrl_pt(" << i << "): " << ctrl_pts.row(i) << endl;
+//                 fprintf(stderr, "found ctrl pt in tensor_idx = %d\n", tensor_idx);
+
+                bool skip = false;              // skip the control point
+
+                // skip control point if not in tensor
+                if (!in(anchor, tensor_prods[tensor_idx]))
+                    skip = true;
+
+                // also skip control point if it is an extension of a refined tensor at a deeper level of refinement
+                // ie, if in any dimension the (global) anchor of this control point corresponds to a knot whose level
+                // is level is > the level of the target tensor, skip this control point
+                if (!skip)
+                {
+                    for (auto j = 0; j < dom_dim_; j++)
+                    {
+                        if (all_knot_levels[j][anchor[j]] > tensor_prods[tensor_idx].level)
+                        {
+                            // debug
+                            fprintf(stderr, "scatter_ctrl_pts: skipping ctrl pt idx %d\n", i);
+
+                            skip = true;
+                            break;
+                        }
+                    }
+                }
+
+                // set the destination tensor for the point
+                if (skip)
+                {
+                    tensor_idxs[i] = -1;
+                    for (auto j = 0; j < dom_dim_; j++)
+                        sub_nctrl_pts(j)--;
+                }
+                else
+                {
+                    tensor_tot_nctrl_pts[tensor_idx]++;
+                    tensor_idxs[i] = tensor_idx;
+                }
+
+                iter[0]++;
+                anchor[0]++;
+                sub_nctrl_pts(0)++;
+
+                // for all dimensions, check for last point
+                bool reset_iter = false;                                    // reset iteration in some dimension
+                for (size_t k = 0; k < dom_dim_; k++)
+                {
+                    // reset iteration for current dim and increment next dim.
+                    if (k < dom_dim_ - 1 && iter[k] == nctrl_pts(k))
+                    {
+                        reset_iter = true;
+                        iter[k] = 0;
+                        iter[k + 1]++;
+                        sub_nctrl_pts(k + 1)++;
+                        // first control point has anchor floor((p + 1) / 2)
+                        anchor[0] = (p_(0) + 1) / 2;
+                        anchor[k + 1]++;
+//                         if (iter[k + 1] < nctrl_pts(k))
+//                         {
+                            // debug
+//                             fprintf(stderr, "subset_ctrl_pts() 2: anchor [ ");
+//                             for (auto j = 0; j < dom_dim_; j++)
+//                                 fprintf(stderr, "%lu ", anchor[j]);
+//                             fprintf(stderr, "]\n");
+
+                            // check for the anchor in the current tensor and in next pointers in next higher dim, starting back at last tensor of current dim
+//                             tensor_idx = in_and_next(anchor, start_tensor_idx[k + 1], k + 1);
+//                             if (tensor_idx >= 0)
+//                             {
+//                                 // TODO: following is untested, need higher dimension example with multiple tensors
+//                                 start_tensor_idx[k + 1] = tensor_idx;           // adjust start tensor of next dim
+//                                 start_tensor_idx[k]     = start_tensor_idx[0];  // reset start tensor of current dim
+//                             }
+//                         }
+                    }
+                }
+
+                // normal next iteration in 0th dimension
+//                 if (!reset_iter && iter[0] < nctrl_pts(0))                  // check for the anchor in the current tensor and in next pointers in current dim
+//                 {
+                    // debug
+//                     fprintf(stderr, "subset_ctrl_pts() 3: anchor [ ");
+//                     for (auto j = 0; j < dom_dim_; j++)
+//                         fprintf(stderr, "%lu ", anchor[j]);
+//                     fprintf(stderr, "]\n");
+
+                    // check for the anchor in the current tensor and in next pointers in current dim
+//                     tensor_idx = in_and_next(anchor, tensor_idx, 0);
+//                 }
+
+//                 assert(tensor_idx >= 0);                                    // sanity: anchor was found in some tensor
+            }                                                               // total number of flattened iterations
+
+            // allocate control points in the tensor product
+            // TODO: assumes tensor_prods[0] has control points and gets number of columns from there (safe?)
+            tensor_prods[tensor_idx].ctrl_pts.resize(tensor_tot_nctrl_pts[tensor_idx], tensor_prods[0].ctrl_pts.cols());
+            tensor_prods[tensor_idx].weights.resize(tensor_tot_nctrl_pts[tensor_idx]);
+
+            // copy control points and weights to tensors
+            // their size should be correct already because they were resized elsewhere in append_tensor()
+            for (int i = 0; i < ctrl_pts.rows(); i++)
+            {
+                if (tensor_idxs[i] >= 0)                                    // < 0 means skip this point
+                {
+                    tensor_prods[tensor_idxs[i]].ctrl_pts.row(tensor_cur_nctrl_pts[tensor_idxs[i]]) = ctrl_pts.row(i);
+                    tensor_prods[tensor_idxs[i]].weights(tensor_cur_nctrl_pts[tensor_idxs[i]])      = weights(i);
+                    tensor_cur_nctrl_pts[tensor_idxs[i]]++;
+                }
+            }
+            tensor_prods[tensor_idx].nctrl_pts = sub_nctrl_pts;
         }
 
         // check tensor and next pointers of tensor looking for a tensor containing the point
