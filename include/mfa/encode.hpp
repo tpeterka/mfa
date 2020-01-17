@@ -53,19 +53,22 @@ template <typename T>                        // float or double
         const MFA<T>&       mfa;         // the mfa object
         MFA_Data<T>&        mfa_data;    // the mfa data object
         const MatrixX<T>&   domain;      // input points
+        MatrixX<T>          approx;      // decoded points
+        const MatrixX<T>&   cons;        // control point constraints Matrix
         int                 verbose;     // more output
-        MatrixX<T>          approx;
-        Eigen::VectorX<T>   cons;
 
     public:
         SqrError(const MFA<T>&      mfa_,
                  MFA_Data<T>&       mfa_data_,
                  const MatrixX<T>&  domain_,
-                 int                verb_ ):    mfa(mfa_),
-                                                mfa_data(mfa_data_),
-                                                domain(domain_),
-                                                verbose(verb_),
-                                                approx(domain_)
+                 const MatrixX<T>&  cons_,
+                 int                verb_): mfa(mfa_),
+                                            mfa_data(mfa_data_),
+                                            domain(domain_),
+                                            approx(domain_),
+                                            cons(cons_),
+                                            verbose(verb_)
+
         {}
 
         ~SqrError()
@@ -73,6 +76,7 @@ template <typename T>                        // float or double
 
         using typename Problem<T>::TVector;
 
+        void setConstraints(const MatrixX<T> c) {cons = c;}
         // objective function
         T value(const TVector &x);
 //        void gradient(const TVector &x, TVector &grad);
@@ -379,11 +383,11 @@ template <typename T>                        // float or double
             // indices in tensor, in each dim. of inserted knots in full knot vector after insertion
             vector<vector<KnotIdx>> inserted_knot_idxs(mfa_data.dom_dim);
 
-            //Encode(t.nctrl_pts, t.ctrl_pts, t.weights, weighted);
+//            Encode(t.nctrl_pts, t.ctrl_pts, t.weights, weighted);
 
 /////////////// Test CPPOptLib ////////////////
 //            auto sizeX = W.size();
-            SqrError<T> f(mfa, mfa_data, domain, verbose);
+            SqrError<T> f(mfa, mfa_data, domain, t.ctrl_pts, verbose);
             BfgsSolver<SqrError<T>> solver;
 
 //            auto stopCriteria = cppoptlib::BfgsSolver<SqrError<T>>::TCriteria::defaults();
@@ -1491,7 +1495,12 @@ template <typename T>                        // float or double
 
         //debug
         fprintf(stderr, "least squares error: %e\n", sum_sq_err);
-
+        if(cons.rows()==ctrl_rows && cons.cols()==ctrl_cols)
+        {
+            T cons_residual = (mfa_data.tmesh.tensor_prods[0].ctrl_pts - cons).squaredNorm();
+            fprintf(stderr, "constraints residual: %e\n", cons_residual);
+            sum_sq_err += 1e8*cons_residual;
+        }
         return sum_sq_err;
     }
 }
