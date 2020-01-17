@@ -102,15 +102,15 @@ namespace mfa
                 }
             }
 
-            int      ndims  = mfa.ndom_pts().size();          // number of domain dimensions
-            size_t   cs     = 1;                            // stride for input points in curve in cur. dim
-            int      pt_dim = mfa_data.max_dim - mfa_data.min_dim + 1;// control point dimensonality
+            int      ndims  = mfa.ndom_pts().size();                    // number of domain dimensions
+            size_t   cs     = 1;                                        // stride for input points in curve in cur. dim
+            int      pt_dim = mfa_data.max_dim - mfa_data.min_dim + 1;  // control point dimensonality
 
             // resize matrices in case number of control points changed
             ctrl_pts.resize(nctrl_pts.prod(), pt_dim);
             weights.resize(ctrl_pts.rows());
             for (auto k = 0; k < ndims; k++)
-                mfa_data.N[k].resize(mfa.ndom_pts()(k), nctrl_pts(k));
+                mfa_data.N[k] = MatrixX<T>::Zero(mfa.ndom_pts()(k), nctrl_pts(k));  // basis functions need to be resized and initialized to 0
 
             // 2 buffers of temporary control points
             // double buffer needed to write output curves of current dim without changing its input pts
@@ -124,9 +124,9 @@ namespace mfa
             MatrixX<T> temp_ctrl0 = MatrixX<T>::Zero(tot_ntemp_ctrl, pt_dim);
             MatrixX<T> temp_ctrl1 = MatrixX<T>::Zero(tot_ntemp_ctrl, pt_dim);
 
-            VectorXi ntemp_ctrl = mfa.ndom_pts();     // current num of temp control pts in each dim
+            VectorXi ntemp_ctrl = mfa.ndom_pts();                   // current num of temp control pts in each dim
 
-            for (size_t k = 0; k < ndims; k++)      // for all domain dimensions
+            for (size_t k = 0; k < ndims; k++)                      // for all domain dimensions
             {
                 // number of curves in this dimension
                 size_t ncurves;
@@ -188,9 +188,13 @@ namespace mfa
                     int span = mfa_data.FindSpan(k, mfa.params()[k][i], nctrl_pts(k));
 
 #ifndef TMESH       // original version for one tensor product
+
                     mfa_data.OrigBasisFuns(k, mfa.params()[k][i], span, mfa_data.N[k], i);
+
 #else               // tmesh version
+
                     mfa_data.BasisFuns(k, mfa.params()[k][i], span, mfa_data.N[k], i);
+
 #endif
                 }
 
@@ -261,6 +265,7 @@ namespace mfa
 
             // debug
 //             cerr << "Encode() ctrl_pts:\n" << ctrl_pts << endl;
+//             cerr << "Encode() weights:\n" << weights << endl;
         }
 
         // original adaptive encoding for first tensor product only
@@ -434,6 +439,7 @@ namespace mfa
                     fprintf(stderr, "Iteration %d...\n", iter);
 
                 // using NewKnots_full high-d span splitting with tmesh (for now)
+//                 int retval = NewKnots_full(err_limit, extents, iter, nctrl_pts, ctrl_pts, weights);
                 int retval = LocalNewKnots_full(err_limit, extents, iter, nctrl_pts, ctrl_pts, weights);
 
                 // debug: print tmesh
