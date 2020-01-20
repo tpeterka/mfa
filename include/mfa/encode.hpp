@@ -229,7 +229,6 @@ template <typename T>                        // float or double
                 for (int i = 0; i < mfa_data.N[k].rows(); i++)
                 {
                     int span = mfa_data.FindSpan(k, mfa.params()[k][i], nctrl_pts(k));
-
 #ifndef TMESH       // original version for one tensor product
                     mfa_data.OrigBasisFuns(k, mfa.params()[k][i], span, mfa_data.N[k], i);
 #else               // tmesh version
@@ -301,9 +300,6 @@ template <typename T>                        // float or double
                 if (verbose)
                     fprintf(stderr, "\ndimension %ld of %d encoded\n", k + 1, ndims);
             }                                                      // domain dimensions
-
-            // debug
-//             cerr << "Encode() ctrl_pts:\n" << ctrl_pts << endl;
         }
 
         // original adaptive encoding for first tensor product only
@@ -485,6 +481,11 @@ template <typename T>                        // float or double
 
                 if (verbose)
                     fprintf(stderr, "Iteration %d...\n", iter);
+
+                // debug: print tmesh
+                fprintf(stderr, "\n----- T-mesh at the start of iteration %d-----\n\n", iter);
+                mfa_data.tmesh.print();
+                fprintf(stderr, "--------------------------\n\n");
 
                 // using NewKnots_full high-d span splitting with tmesh (for now)
                 int retval = NewKnots_full(err_limit, extents, iter, nctrl_pts, ctrl_pts, weights);
@@ -828,6 +829,7 @@ template <typename T>                        // float or double
                 }
                 if (nctrl_pts(i) > mfa.ndom_pts()(i))
                 {
+                    // TODO: hard-coded for one tensor
                     fprintf(stderr, "Warning: Encode() number of control points (%d) in dimension %ld "
                             "exceeds number of input data points (%d) in dimension %ld.\n", nctrl_pts(i), i, mfa.ndom_pts()(i), i);
                 }
