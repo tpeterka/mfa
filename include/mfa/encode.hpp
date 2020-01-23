@@ -497,6 +497,11 @@ template <typename T>                        // float or double
                 // using NewKnots_full high-d span splitting with tmesh (for now)
                 int retval = NewKnots_full(err_limit, extents, iter, nctrl_pts, ctrl_pts, weights);
 
+                // debug: print tmesh
+                fprintf(stderr, "\n----- T-mesh after NewKnots_full -----\n\n");
+                mfa_data.tmesh.print();
+                fprintf(stderr, "--------------------------\n\n");
+
                 // resize temporary control points and weights and global encode and scattering of control points to tensors
                 // TODO: replace for local encode
                 for (auto k = 0; k < mfa_data.dom_dim; k++)
@@ -573,9 +578,9 @@ template <typename T>                        // float or double
                 int retval = LocalNewKnots_full(err_limit, extents, iter, nctrl_pts, ctrl_pts, weights);
 
                 // debug: print tmesh
-//                 fprintf(stderr, "\n----- T-mesh after LocalNewKnots_full -----\n\n");
-//                 mfa_data.tmesh.print();
-//                 fprintf(stderr, "--------------------------\n\n");
+                fprintf(stderr, "\n----- T-mesh after LocalNewKnots_full -----\n\n");
+                mfa_data.tmesh.print();
+                fprintf(stderr, "--------------------------\n\n");
 
                 // resize temporary control points and weights and global encode and scattering of control points to tensors
                 // TODO: replace for local encode
@@ -1338,20 +1343,20 @@ template <typename T>                        // float or double
                     for (auto k = 0; k < inserted_knot_idxs[j].size(); k++)
                     {
                         // inserted knot falls into the mins, maxs of this tensor
-                        if (inserted_knot_idxs[j][k] - 1 >= t.knot_mins[k] && inserted_knot_idxs[j][k] <= t.knot_maxs[k])
+                        if (inserted_knot_idxs[j][k] - mfa_data.p(j) / 2 >= t.knot_mins[k] && inserted_knot_idxs[j][k] + mfa_data.p(j) / 2 <= t.knot_maxs[k])
                         {
-                            // expand knot mins and maxs by 1 index line on each side
-                            // TODO: Not sure how much to expand: 1, 2, p, p + 1, ...?
-                            assert(inserted_knot_idxs[j][k] - 1 >= 0);
-                            assert(inserted_knot_idxs[j][k] + 1 < mfa_data.tmesh.all_knots[j].size());
+                            // expand knot mins and maxs by p / 2 index lines on each side of added knot
+                            // so that the new tensor has p anchors (control pts) in each dimension (needed for local adaptive solve)
+                            assert(inserted_knot_idxs[j][k] - mfa_data.p(j) / 2 >= 0);
+                            assert(inserted_knot_idxs[j][k] + mfa_data.p(j) / 2 < mfa_data.tmesh.all_knots[j].size());
                             if (k == 0 || inserted_knot_idxs[j][k] < min_idx)
                             {
-                                knot_mins[j] = inserted_knot_idxs[j][k] - 1;
+                                knot_mins[j] = inserted_knot_idxs[j][k] - mfa_data.p(j) / 2;
                                 min_idx = inserted_knot_idxs[j][k];
                             }
                             if (k == 0 || inserted_knot_idxs[j][k] > max_idx)
                             {
-                                knot_maxs[j] = inserted_knot_idxs[j][k] + 1;
+                                knot_maxs[j] = inserted_knot_idxs[j][k] + mfa_data.p(j) / 2;
                                 max_idx = inserted_knot_idxs[j][k];
                             }
                         }
@@ -1437,20 +1442,20 @@ template <typename T>                        // float or double
                         for (auto k = 0; k < inserted_knot_idxs[j].size(); k++)
                         {
                             // inserted knot falls into the mins, maxs of this tensor
-                            if (inserted_knot_idxs[j][k] - 1 >= t.knot_mins[k] && inserted_knot_idxs[j][k] <= t.knot_maxs[k])
+                            if (inserted_knot_idxs[j][k] - mfa_data.p(j) / 2 >= t.knot_mins[k] && inserted_knot_idxs[j][k] + mfa_data.p(j) / 2 <= t.knot_maxs[k])
                             {
-                                // expand knot mins and maxs by 1 index line on each side
-                                // TODO: Not sure how much to expand: 1, 2, p, p + 1, ...?
-                                assert(inserted_knot_idxs[j][k] - 1 >= 0);
-                                assert(inserted_knot_idxs[j][k] + 1 < mfa_data.tmesh.all_knots[j].size());
+                                // expand knot mins and maxs by p / 2 index lines on each side of added knot
+                                // so that the new tensor has p anchors (control pts) in each dimension (needed for local adaptive solve)
+                                assert(inserted_knot_idxs[j][k] - mfa_data.p(j) / 2 >= 0);
+                                assert(inserted_knot_idxs[j][k] + mfa_data.p(j) / 2 < mfa_data.tmesh.all_knots[j].size());
                                 if (k == 0 || inserted_knot_idxs[j][k] < min_idx)
                                 {
-                                    knot_mins[j] = inserted_knot_idxs[j][k] - 1;
+                                    knot_mins[j] = inserted_knot_idxs[j][k] - mfa_data.p(j) / 2;
                                     min_idx = inserted_knot_idxs[j][k];
                                 }
                                 if (k == 0 || inserted_knot_idxs[j][k] > max_idx)
                                 {
-                                    knot_maxs[j] = inserted_knot_idxs[j][k] + 1;
+                                    knot_maxs[j] = inserted_knot_idxs[j][k] + mfa_data.p(j) / 2;
                                     max_idx = inserted_knot_idxs[j][k];
                                 }
                             }

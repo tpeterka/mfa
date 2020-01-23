@@ -263,52 +263,10 @@ namespace mfa
 
             // initialize control points
             new_tensor.nctrl_pts.resize(dom_dim_);
-//             size_t tot_nctrl_pts = 1;
             if (!tensor_prods.size())
-            {
                 new_tensor.level = 0;
-// 
-//                 // resize control points
-//                 // level 0 has only one box of control points
-//                 for (auto j = 0; j < dom_dim_; j++)
-//                 {
-//                     new_tensor.nctrl_pts[j] = all_knots[j].size() - p_[j] - 1;
-//                     tot_nctrl_pts *= new_tensor.nctrl_pts[j];
-//                 }
-//                 new_tensor.ctrl_pts.resize(tot_nctrl_pts, max_dim_ - min_dim_ + 1);
-//                 new_tensor.weights.resize(tot_nctrl_pts);
-            }
             else
-            {
                 new_tensor.level = tensor_prods.back().level + 1;
-
-//                 // resize control points
-//                 for (auto j = 0; j < dom_dim_; j++)
-//                 {
-//                     // count number of knots in the new tensor in this dimension
-//                     // inserted tensor is at the deepest level of refinement, ie, all knots in the global knot vector between
-//                     // min and max knots are in this tensor (don't skip any knots)
-//                     size_t nknots   = 0;
-//                     size_t nanchors = 0;
-//                     for (auto i = knot_mins[j]; i <= knot_maxs[j]; i++)
-//                         nknots++;
-//                     if (p_[j] % 2 == 0)         // even degree: anchors are between knot lines
-//                         nanchors = nknots - 1;
-//                     else                            // odd degree: anchors are on knot lines
-//                         nanchors = nknots;
-//                     if (knot_mins[j] < p_[j] - 1)                       // skip up to p-1 anchors at start of global knots
-//                         nanchors -= (p_[j] - 1 - knot_mins[j]);
-//                     if (knot_maxs[j] > all_knots[j].size() - p_[j])     // skip up to p-1 anchors at end of global knots
-//                         nanchors -= (knot_maxs[j] + p_[j] - all_knots[j].size());
-//                     new_tensor.nctrl_pts[j] = nanchors;
-//                     tot_nctrl_pts *= nanchors;
-// 
-//                     // debug
-// //                     fprintf(stderr, "appending tensor with %ld knots and %d control points in dimension %d\n", nknots, new_tensor.nctrl_pts[j], j);
-//                 }
-//                 new_tensor.ctrl_pts.resize(tot_nctrl_pts, max_dim_ - min_dim_ + 1);
-//                 new_tensor.weights.resize(tot_nctrl_pts);
-            }
 
             vector<int> split_side(dom_dim_);       // whether min (-1) or max (1) or both (2) sides of
                                                     // new tensor are inside existing tensor (one value for each dim.)
@@ -651,10 +609,9 @@ namespace mfa
 
             // convert split_knot_idx to ctrl_pt_idx
             min_ctrl_idx = split_knot_idx;
-            if (p_[cur_dim] % 2 == 0)                       // even degree
-                max_ctrl_idx = split_knot_idx - 1;
-            else                                                // odd degree
-                max_ctrl_idx = split_knot_idx;
+            max_ctrl_idx = split_knot_idx;
+            if (p_[cur_dim] % 2 == 0)                           // even degree
+                min_ctrl_idx = split_knot_idx + 1;
 
             // if existing tensor starts at global minimum, the first p-1 knots do not have anchors
             if (existing_tensor.knot_mins[cur_dim] == 0)
@@ -1466,6 +1423,10 @@ namespace mfa
             // allocated space and product of nctrl_pts in the tensor
             for (int i = 0; i < tensor_prods.size(); i++)
             {
+                // debug
+                if (tensor_tot_nctrl_pts[i] != tensor_prods[i].ctrl_pts.rows())
+                    fprintf(stderr, "Error\n");
+
                 assert(tensor_tot_nctrl_pts[i] == tensor_prods[i].ctrl_pts.rows());
                 assert(tensor_tot_nctrl_pts[i] == tensor_prods[i].weights.size());
                 assert(tensor_tot_nctrl_pts[i] == tensor_prods[i].nctrl_pts.prod());
