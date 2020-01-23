@@ -611,13 +611,13 @@ namespace mfa
             min_ctrl_idx = split_knot_idx;
             max_ctrl_idx = split_knot_idx;
             if (p_[cur_dim] % 2 == 0)                           // even degree
-                min_ctrl_idx = split_knot_idx + 1;
+                max_ctrl_idx -= 1;
 
-            // if existing tensor starts at global minimum, the first p-1 knots do not have anchors
+            // if existing tensor starts at global minimum, skip the first (p + 1)/2 knots
             if (existing_tensor.knot_mins[cur_dim] == 0)
             {
-                min_ctrl_idx -= (p_[cur_dim] - 1);
-                max_ctrl_idx -= (p_[cur_dim] - 1);
+                min_ctrl_idx -= (p_[cur_dim] + 1) / 2;
+                max_ctrl_idx -= (p_[cur_dim] + 1) / 2;
             }
 
             // if max_ctrl_idx is past last existing control point, then split is too close to global edge and must be clamped to last control point
