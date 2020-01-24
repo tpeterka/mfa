@@ -913,6 +913,29 @@ namespace mfa
             return true;
         }
 
+        // checks if a point in index space is in the neighbors of a tensor product, for one dimension
+        void in_neighbors(const vector<KnotIdx>&    pt,                     // anchor point in index space
+                          int                       cur_dim,                // current dimension
+                          int                       tensor_idx,             // index of current tensor
+                          vector<int>&              neighbor_idxs) const    // (output) neighbor tensor idxs containing the point in cur_dim
+        {
+            const TensorProduct<T>& t = tensor_prods[tensor_idx];
+
+            for (auto i = 0; i < t.prev[cur_dim].size(); i++)
+            {
+                const TensorProduct<T>&   tp = tensor_prods[t.prev[cur_dim][i]];
+                if (pt[cur_dim] >= tp.knot_mins[cur_dim] && pt[cur_dim] <= tp.knot_maxs[cur_dim])
+                    neighbor_idxs.push_back(t.prev[cur_dim][i]);
+            }
+
+            for (auto i = 0; i < t.next[cur_dim].size(); i++)
+            {
+                const TensorProduct<T>&   tn = tensor_prods[t.next[cur_dim][i]];
+                if (pt[cur_dim] >= tn.knot_mins[cur_dim] && pt[cur_dim] <= tn.knot_maxs[cur_dim])
+                    neighbor_idxs.push_back(t.next[cur_dim][i]);
+            }
+        }
+
         // given an anchor in index space, find intersecting knot lines in index space
         // in -/+ directions in all dimensions
         void knot_intersections(const vector<KnotIdx>&      anchor,                 // knot indices of anchor for odd degree or
@@ -1325,7 +1348,7 @@ namespace mfa
             vector<int>         start_tensor_idx(dom_dim_, 0);              // index of starting tensor when dimension changes
             vector<size_t>      tensor_tot_nctrl_pts(tensor_prods.size());  // number of control points needed to allocate in each tensor
             vector<size_t>      tensor_cur_nctrl_pts(tensor_prods.size());  // current number of control points in each tensor so far
-            vector<int>         tensor_idxs(ctrl_pts.rows());               // destination tensor for each control point, -1: skip the point
+            vector<vector<int>> tensor_idxs(ctrl_pts.rows());               // destination tensors for each control point, empty if skipping point
 
             // 1-d flattening of the iterations in the box
             for (int i = 0; i < ctrl_pts.rows(); i++)                       // total number of iterations in the box
@@ -1359,12 +1382,27 @@ namespace mfa
                 }
 
                 // set the destination tensor for the point
-                if (skip)
-                    tensor_idxs[i] = -1;
-                else
+                if (!skip)
                 {
                     tensor_tot_nctrl_pts[tensor_idx]++;
-                    tensor_idxs[i] = tensor_idx;
+                    tensor_idxs[i].push_back(tensor_idx);
+                }
+
+                // if degree is odd, check borders of neighboring tensors
+                // because an anchor can lie on a line between tensors, in which case
+                // the control point is copied in multiple tensors
+                for (auto j = 0; j < dom_dim_; j++)
+                {
+                    if (p_(j) % 2)              // odd degree
+                    {
+                        vector<int> neighbor_idxs;
+                        in_neighbors(anchor, j, tensor_idx, neighbor_idxs);
+                        for (auto k = 0; k < neighbor_idxs.size(); k++)
+                        {
+                            tensor_tot_nctrl_pts[neighbor_idxs[k]]++;
+                            tensor_idxs[i].push_back(neighbor_idxs[k]);
+                        }
+                    }
                 }
 
                 iter[0]++;
@@ -1423,10 +1461,6 @@ namespace mfa
             // allocated space and product of nctrl_pts in the tensor
             for (int i = 0; i < tensor_prods.size(); i++)
             {
-                // debug
-                if (tensor_tot_nctrl_pts[i] != tensor_prods[i].ctrl_pts.rows())
-                    fprintf(stderr, "Error\n");
-
                 assert(tensor_tot_nctrl_pts[i] == tensor_prods[i].ctrl_pts.rows());
                 assert(tensor_tot_nctrl_pts[i] == tensor_prods[i].weights.size());
                 assert(tensor_tot_nctrl_pts[i] == tensor_prods[i].nctrl_pts.prod());
@@ -1436,11 +1470,11 @@ namespace mfa
             // their size should be correct already because they were resized elsewhere in append_tensor()
             for (int i = 0; i < ctrl_pts.rows(); i++)
             {
-                if (tensor_idxs[i] >= 0)                                    // < 0 means skip this point
+                for (auto j = 0; j < tensor_idxs[i].size(); j++)
                 {
-                    tensor_prods[tensor_idxs[i]].ctrl_pts.row(tensor_cur_nctrl_pts[tensor_idxs[i]]) = ctrl_pts.row(i);
-                    tensor_prods[tensor_idxs[i]].weights(tensor_cur_nctrl_pts[tensor_idxs[i]])      = weights(i);
-                    tensor_cur_nctrl_pts[tensor_idxs[i]]++;
+                    tensor_prods[tensor_idxs[i][j]].ctrl_pts.row(tensor_cur_nctrl_pts[tensor_idxs[i][j]]) = ctrl_pts.row(i);
+                    tensor_prods[tensor_idxs[i][j]].weights(tensor_cur_nctrl_pts[tensor_idxs[i][j]])      = weights(i);
+                    tensor_cur_nctrl_pts[tensor_idxs[i][j]]++;
                 }
             }
         }

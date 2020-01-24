@@ -341,7 +341,7 @@ namespace mfa
             // compute basis functions in each dimension
             vector<MatrixX<T>> N(mfa_data.dom_dim);                         // basis functions in each dimension
             vector<vector<KnotIdx>> local_knot_idxs(mfa_data.dom_dim);      // local knot indices
-            vector<size_t> anchor(mfa_data.dom_dim);                        // one anchor
+            vector<KnotIdx> anchor(mfa_data.dom_dim);                        // one anchor
             for (auto i = 0; i < mfa_data.dom_dim; i++)
             {
                 N[i] = MatrixX<T>::Zero(1, mfa_data.p(i) + 1);              // p + 1 basis functions in current dim
