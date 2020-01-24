@@ -46,6 +46,7 @@ namespace mfa
         ~NewKnots() {}
 
         // inserts a set of knots (in all dimensions) into the original knot set
+        // also increases the numbers of control points (in all dimensions) that will result
         void InsertKnots(
                 vector<vector<T>>&          new_knots,              // new knots
                 vector<vector<int>>&        new_levels,             // new knot levels

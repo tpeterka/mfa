@@ -149,15 +149,15 @@ template <typename T>                        // float or double
                 }
             }
 
-            int      ndims  = mfa.ndom_pts().size();                    // number of domain dimensions
-            size_t   cs     = 1;                                        // stride for input points in curve in cur. dim
-            int      pt_dim = mfa_data.max_dim - mfa_data.min_dim + 1;  // control point dimensonality
+            int      ndims  = mfa.ndom_pts().size();          // number of domain dimensions
+            size_t   cs     = 1;                            // stride for input points in curve in cur. dim
+            int      pt_dim = mfa_data.max_dim - mfa_data.min_dim + 1;// control point dimensonality
 
             // resize matrices in case number of control points changed
             ctrl_pts.resize(nctrl_pts.prod(), pt_dim);
             weights.resize(ctrl_pts.rows());
             for (auto k = 0; k < ndims; k++)
-                mfa_data.N[k] = MatrixX<T>::Zero(mfa.ndom_pts()(k), nctrl_pts(k));  // basis functions need to be resized and initialized to 0
+                mfa_data.N[k].resize(mfa.ndom_pts()(k), nctrl_pts(k));
 
             // 2 buffers of temporary control points
             // double buffer needed to write output curves of current dim without changing its input pts
@@ -171,9 +171,9 @@ template <typename T>                        // float or double
             MatrixX<T> temp_ctrl0 = MatrixX<T>::Zero(tot_ntemp_ctrl, pt_dim);
             MatrixX<T> temp_ctrl1 = MatrixX<T>::Zero(tot_ntemp_ctrl, pt_dim);
 
-            VectorXi ntemp_ctrl = mfa.ndom_pts();                   // current num of temp control pts in each dim
+            VectorXi ntemp_ctrl = mfa.ndom_pts();     // current num of temp control pts in each dim
 
-            for (size_t k = 0; k < ndims; k++)                      // for all domain dimensions
+            for (size_t k = 0; k < ndims; k++)      // for all domain dimensions
             {
                 // number of curves in this dimension
                 size_t ncurves;
@@ -312,7 +312,6 @@ template <typename T>                        // float or double
 
             // debug
 //             cerr << "Encode() ctrl_pts:\n" << ctrl_pts << endl;
-//             cerr << "Encode() weights:\n" << weights << endl;
         }
 
         // original adaptive encoding for first tensor product only
