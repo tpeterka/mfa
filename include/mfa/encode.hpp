@@ -47,31 +47,35 @@ namespace mfa
 using namespace cppoptlib;
 
 template <typename T>                        // float or double
-    class SqrError : public Problem<T>
+    class LocalLSQ : public Problem<T>
     {
     private:
         const MFA<T>&       mfa;         // the mfa object
         MFA_Data<T>&        mfa_data;    // the mfa data object
         const MatrixX<T>&   domain;      // input points
-        MatrixX<T>          approx;      // decoded points
         const MatrixX<T>&   cons;        // control point constraints Matrix
+        size_t              start_idx;   // start and end of the local subdomain
+        size_t              end_idx;     // in input point space (1D for now)
         int                 verbose;     // more output
 
     public:
-        SqrError(const MFA<T>&      mfa_,
+        LocalLSQ(const MFA<T>&      mfa_,
                  MFA_Data<T>&       mfa_data_,
                  const MatrixX<T>&  domain_,
                  const MatrixX<T>&  cons_,
+                 size_t             start_,
+                 size_t             end_,
                  int                verb_): mfa(mfa_),
                                             mfa_data(mfa_data_),
                                             domain(domain_),
-                                            approx(domain_),
                                             cons(cons_),
+                                            start_idx(start_),
+                                            end_idx(end_),
                                             verbose(verb_)
 
         {}
 
-        ~SqrError()
+        ~LocalLSQ()
         {}
 
         using typename Problem<T>::TVector;
@@ -392,8 +396,8 @@ template <typename T>                        // float or double
 
 /////////////// Test CPPOptLib ////////////////
 //            auto sizeX = W.size();
-            SqrError<T> f(mfa, mfa_data, domain, t.ctrl_pts, verbose);
-            BfgsSolver<SqrError<T>> solver;
+            LocalLSQ<T> f(mfa, mfa_data, domain, t.ctrl_pts, verbose);
+            BfgsSolver<LocalLSQ<T>> solver;
 
 //            auto stopCriteria = cppoptlib::BfgsSolver<SqrError<T>>::TCriteria::defaults();
 //            stopCriteria.iterations = 1;
@@ -1464,6 +1468,54 @@ template <typename T>                        // float or double
                                 knot_mins[0], knot_mins[1], knot_mins[2], knot_maxs[0], knot_maxs[1], knot_maxs[2]);
 
                     mfa_data.tmesh.append_tensor(knot_mins, knot_maxs, new_nctrl_pts[k], new_ctrl_pts[k], new_weights[k]);
+
+                    mfa_data.tmesh.print();
+                    //Local solve for the newly appended tensor
+
+                    //WARNING hard-coded for 1D and even degree
+                    int p = mfa_data.p[0];
+                    const TensorProduct<T>& tc= mfa_data.tmesh.tensor_prods.back();
+                    const TensorProduct<T>& tp= mfa_data.tmesh.tensor_prods[tc.prev[0][0]]; //previous tensor product
+                    const TensorProduct<T>& tn= mfa_data.tmesh.tensor_prods[tc.next[0][0]]; //next tensor product
+                    MatrixX<T> ctrlpts_tosolve(3*p, tc.ctrl_pts.cols());
+                    ctrlpts_tosolve.block(0,0, p,1)   = tp.ctrl_pts.block(tp.ctrl_pts.rows()-p,0, p,1);  //left constraint
+                    ctrlpts_tosolve.block(p,0, p,1)   = tc.ctrl_pts;                                     //unconstrained
+                    ctrlpts_tosolve.block(2*p,0, p,1) = tn.ctrl_pts.block(0,0, p,1);                     //right constraint
+
+                    //Set the constraints
+                    MatrixX<T> cons = ctrlpts_tosolve;
+                    cons.block(p,0, p,1) = MatrixX<T>::Zero(p,1);
+
+                    //Get subset of the domain
+
+                    //Anchors of the domain edges
+                    vector<KnotIdx> startAnchor, endAnchor;
+                    vector<vector<KnotIdx>> local_knot_idxs;
+
+                    startAnchor.push_back(tp.knot_maxs[0] - p);
+                    endAnchor.push_back(tn.knot_mins[0] + p - 1);
+                    mfa_data.tmesh.local_knot_vector(startAnchor, local_knot_idxs);
+                    KnotIdx start_knot_idx = local_knot_idxs[0][0];
+                    local_knot_idxs.clear();
+                    mfa_data.tmesh.local_knot_vector(endAnchor, local_knot_idxs);
+                    KnotIdx end_knot_idx = local_knot_idxs[0].back();
+                    T start_knot = mfa_data.tmesh.all_knots[0][start_knot_idx];
+                    T end_knot = mfa_data.tmesh.all_knots[0][end_knot_idx];
+                    //Search params for start and end knot values
+                    //TODO: use ijk2idx to get the actual indeces
+                    auto it = std::lower_bound(mfa.params()[0].begin(), mfa.params()[0].end(), start_knot);
+                    size_t subdomain_start_idx = it - mfa.params()[0].begin();
+                    it = std::upper_bound(mfa.params()[0].begin(), mfa.params()[0].end(), end_knot);
+                    size_t subdomain_end_idx = it - mfa.params()[0].begin() - 1;
+
+                    //Set up the optimization
+                    LocalLSQ<T> f(mfa, mfa_data, domain, cons,
+                                  subdomain_start_idx, subdomain_end_idx, verbose);
+                    BfgsSolver<LocalLSQ<T>> solver;
+//                    // minimize the function
+                    VectorX<T> x1 (Eigen::Map< VectorX<T> >(ctrlpts_tosolve.data(),
+                                                            ctrlpts_tosolve.size()));
+                    solver.minimize(f, x1);
                 }                                                           // for all existing tensors
             }                                                               // for new knots being inserted
 
@@ -1666,27 +1718,60 @@ template <typename T>                        // float or double
     };
 
     template <typename T>
-    T SqrError<T>::value(const TVector &x)
+    T LocalLSQ<T>::value(const TVector &x)
     {
-        size_t ctrl_rows = mfa_data.tmesh.tensor_prods[0].ctrl_pts.rows();
-        size_t ctrl_cols = mfa_data.tmesh.tensor_prods[0].ctrl_pts.cols();
-        mfa_data.tmesh.tensor_prods[0].ctrl_pts = x;
-        mfa_data.tmesh.tensor_prods[0].ctrl_pts.resize(ctrl_rows, ctrl_cols);
-        mfa.DecodeDomain(mfa_data, verbose, approx, mfa_data.min_dim, mfa_data.max_dim, false);
+        //upack the candidate solution vector x into tensor_prods
+        int p = mfa_data.p[0];
+        TensorProduct<T>& tc= mfa_data.tmesh.tensor_prods.back();
+        TensorProduct<T>& tp= mfa_data.tmesh.tensor_prods[tc.prev[0][0]]; //previous tensor product
+        TensorProduct<T>& tn= mfa_data.tmesh.tensor_prods[tc.next[0][0]]; //next tensor product
+        MatrixX<T> ctrlpts_tosolve(x);
+        ctrlpts_tosolve.resize(3*p, tc.ctrl_pts.cols());
+        tp.ctrl_pts.block(tp.ctrl_pts.rows()-p,0, p,1) = ctrlpts_tosolve.block(0,0, p,1);   //left constraint
+        tc.ctrl_pts                                    = ctrlpts_tosolve.block(p,0, p,1);   //unconstrained
+        tn.ctrl_pts.block(0,0, p,1)                    = ctrlpts_tosolve.block(2*p,0, p,1); //right constraint
 
-        MatrixX<T> E = (approx.block(0, mfa_data.min_dim, approx.rows(), mfa_data.max_dim-mfa_data.min_dim+1) -
-                        domain.block(0, mfa_data.min_dim, domain.rows(), mfa_data.max_dim-mfa_data.min_dim+1)).rowwise().sum();
-        T sum_sq_err = E.squaredNorm();
+        //loop from substart to subend, decode.volptTmesh(param(subIdx), cpt) - domain(ijk2idx(subIdx))
+        T sum_sq_err = 0;
+        mfa::Decoder<T> decoder(mfa, mfa_data, verbose);
+        VectorX<T> cpt(tc.ctrl_pts.cols());                         // decoded curve point
+        VectorX<T> param(mfa_data.p.size());                        // parameters for one point
 
-        //debug
-        fprintf(stderr, "least squares error: %e\n", sum_sq_err);
-        if(cons.rows()==ctrl_rows && cons.cols()==ctrl_cols)
+        for(size_t idx=start_idx; idx<=end_idx; ++idx)
         {
-            T cons_residual = (mfa_data.tmesh.tensor_prods[0].ctrl_pts - cons).squaredNorm();
+            param(0) = mfa.params()[0][idx];
+            decoder.VolPt_tmesh(param, cpt);
+            T diff = cpt[0] - domain(idx, 0);
+            sum_sq_err += (diff*diff);
+        }
+
+        fprintf(stderr, "least squares error: %e\n", sum_sq_err);
+        if(cons.rows()==ctrlpts_tosolve.rows() && cons.cols()==ctrlpts_tosolve.cols())
+        {
+            T cons_residual = (ctrlpts_tosolve - cons).squaredNorm();
             fprintf(stderr, "constraints residual: %e\n", cons_residual);
             sum_sq_err += 1e8*cons_residual;
         }
         return sum_sq_err;
+//        size_t ctrl_rows = mfa_data.tmesh.tensor_prods[0].ctrl_pts.rows();
+//        size_t ctrl_cols = mfa_data.tmesh.tensor_prods[0].ctrl_pts.cols();
+//        mfa_data.tmesh.tensor_prods[0].ctrl_pts = x;
+//        mfa_data.tmesh.tensor_prods[0].ctrl_pts.resize(ctrl_rows, ctrl_cols);
+//        mfa.DecodeDomain(mfa_data, verbose, approx, mfa_data.min_dim, mfa_data.max_dim, false);
+
+//        MatrixX<T> E = (approx.block(0, mfa_data.min_dim, approx.rows(), mfa_data.max_dim-mfa_data.min_dim+1) -
+//                        domain.block(0, mfa_data.min_dim, domain.rows(), mfa_data.max_dim-mfa_data.min_dim+1)).rowwise().sum();
+//        T sum_sq_err = E.squaredNorm();
+
+//        //debug
+//        fprintf(stderr, "least squares error: %e\n", sum_sq_err);
+//        if(cons.rows()==ctrl_rows && cons.cols()==ctrl_cols)
+//        {
+//            T cons_residual = (mfa_data.tmesh.tensor_prods[0].ctrl_pts - cons).squaredNorm();
+//            fprintf(stderr, "constraints residual: %e\n", cons_residual);
+//            sum_sq_err += 1e8*cons_residual;
+//        }
+//        return sum_sq_err;
     }
 }
 

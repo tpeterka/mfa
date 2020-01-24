@@ -130,10 +130,10 @@ namespace mfa
             else
                 encoder.OrigAdaptiveEncode(err_limit, weighted, extents, max_rounds);
 #else                       // adaptive encode for tmesh
-            if(local)
-                encoder.OrigAdaptiveLocalEncode(err_limit, weighted, extents, max_rounds);
-            else
-                encoder.LocalAdaptiveEncode(err_limit, weighted, extents, max_rounds);
+//            if(local)
+//                encoder.OrigAdaptiveLocalEncode(err_limit, weighted, extents, max_rounds);
+//            else
+            encoder.LocalAdaptiveEncode(err_limit, weighted, extents, max_rounds);
 #endif
         }
 
