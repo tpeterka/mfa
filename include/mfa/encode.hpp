@@ -157,7 +157,7 @@ template <typename T>                        // float or double
             ctrl_pts.resize(nctrl_pts.prod(), pt_dim);
             weights.resize(ctrl_pts.rows());
             for (auto k = 0; k < ndims; k++)
-                mfa_data.N[k].resize(mfa.ndom_pts()(k), nctrl_pts(k));
+                mfa_data.N[k] = MatrixX<T>::Zero(mfa.ndom_pts()(k), nctrl_pts(k));  // basis functions need to be resized and initialized to 0
 
             // 2 buffers of temporary control points
             // double buffer needed to write output curves of current dim without changing its input pts
