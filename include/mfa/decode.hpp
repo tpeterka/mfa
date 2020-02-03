@@ -303,97 +303,89 @@ namespace mfa
 
 #ifdef TMESH
 
-        // decode a point in the t-mesh for a given set of control points
+        // decode a point in the t-mesh using all the control points
         // TODO: unoptimized
+        // TODO: computes product of all basis functions and anchors, even those that are 0
+        // TODO: for coverage of local knot vectors to the decoded point and only use those anchors
+        // TODO: no derivatives as yet
+        // TODO: weighs all dims, whereas other versions of VolPt have a choice of all dims or only last dim
         void VolPt_tmesh(const VectorX<T>&      param,      // parameters of point to decode
                          VectorX<T>&            out_pt)     // (output) point, allocated by caller
         {
             // debug
-            cerr << "VolPt_tmesh(): decoding point with param: " << param.transpose() << endl;
+//             cerr << "VolPt_tmesh(): decoding point with param: " << param.transpose() << endl;
 
-            // debug: print global knots
-//             for (auto i = 0; i < mfa_data.dom_dim; i++)
-//             {
-//                 fprintf(stderr, "dim %d global knots = [", i);
-//                 for (auto j = 0; j < mfa_data.tmesh.all_knots[i].size(); j++)
-//                     fprintf(stderr, "%lf ", mfa_data.tmesh.all_knots[i][j]);
-//                 fprintf(stderr, "]\n");
-//             }
+            // init
+            out_pt = VectorX<T>::Zero(out_pt.size());
+            T B_sum = 0.0;                                                          // sum of multidim basis function products
+            T w_sum = 0.0;                                                          // sum of control point weights
 
-            // compute range of anchor points for a given point to decode
-            vector<vector<KnotIdx>> anchors(mfa_data.dom_dim);              // anchors affecting the decoding point
-            mfa_data.tmesh.anchors(param, anchors);
-
-            // debug: print anchors
-            fprintf(stderr, "\n--------------------------\n\n");
-            cerr << "VolPt_tmesh(): decoding point with param: " << param.transpose() << endl;
-            for (auto i = 0; i < mfa_data.dom_dim; i++)
+            for (auto k = 0; k < mfa_data.tmesh.tensor_prods.size(); k++)           // for all tensor products
             {
-                fprintf(stderr, "VolPt_tmesh(): decoding point with dim %d anchors = [ ", i);
-                for (auto j = 0; j < anchors[i].size(); j++)
-                    fprintf(stderr, "%ld ", anchors[i][j]);
-                fprintf(stderr, "]\n");
-            }
-            fprintf(stderr, "\n--------------------------\n\n");
+                const TensorProduct<T>& t = mfa_data.tmesh.tensor_prods[k];
 
-            // TODO: insert any missing knots and control points, is this unnecessary?
+                vector<int>         iter(mfa_data.dom_dim);                         // iteration number in each dim.
+                vector<KnotIdx>     anchor(mfa_data.dom_dim);                       // one anchor
 
-            // compute basis functions in each dimension
-            vector<MatrixX<T>> N(mfa_data.dom_dim);                         // basis functions in each dimension
-            vector<vector<KnotIdx>> local_knot_idxs(mfa_data.dom_dim);      // local knot indices
-            vector<KnotIdx> anchor(mfa_data.dom_dim);                        // one anchor
-            for (auto i = 0; i < mfa_data.dom_dim; i++)
-            {
-                N[i] = MatrixX<T>::Zero(1, mfa_data.p(i) + 1);              // p + 1 basis functions in current dim
-                local_knot_idxs[i].resize(mfa_data.p(i) + 2);               // local knot vector for current dim in index space
-                vector<T> local_knots(mfa_data.p(i) + 2);                   // local knot vector for current dim in parameter space
-                size_t local_ctrl_idx = 0;                                  // index into local control points
-
-                // local knot vector and basis function for each anchor
-                for (auto k = 0; k < anchors[i].size(); k++)                // p + 1 anchors, one per control point and basis func.
+                // compute anchor of first control point
+                for (auto j = 0; j < mfa_data.dom_dim; j++)
                 {
-                    // anchor[j] = kth anchor in each dimension j
-                    for (auto j = 0; j < mfa_data.dom_dim; j++)
-                        anchor[j] = anchors[j][k];
-
-                    // local knot vector
-                    mfa_data.tmesh.local_knot_vector(anchor, local_knot_idxs);
-                    for (auto n = 0; n < local_knot_idxs[i].size(); n++)
-                        local_knots[n] = mfa_data.tmesh.all_knots[i][local_knot_idxs[i][n]];
-
-                    // debug: print local knot idxs
-//                     fprintf(stderr, "local knot idxs = [");
-//                     for (auto j = 0; j < local_knot_idxs[i].size(); j++)
-//                         fprintf(stderr, "%ld ", local_knot_idxs[i][j]);
-//                     fprintf(stderr, "]\n");
-
-                    // basis function
-                    N[i](0, k) = mfa_data.OneBasisFun(i, param(i), local_knots);
+                    anchor[j] = iter[j];
+                    if (t.knot_mins[j] == 0)
+                        anchor[j] = (mfa_data.p(j) + 1) / 2;                        // first control point has anchor floor((p + 1) / 2)
                 }
-            }
 
-            // normalize sum of basis functions
-            for (auto i = 0; i < mfa_data.dom_dim; i++)
-            {
-                N[i].row(0) /= N[i].row(0).sum();
-                // debug
-//                 cerr << "N[" << i << "]: " << N[i].row(0) << endl;
-            }
+                for (auto j = 0; j < t.ctrl_pts.rows(); j++)                        // for all control points in the tensor
+                {
+                    // TODO: deal with odd degree duplicated control points
 
-            // linearized box of p + 1 control points and weights in each dim. for the decoding of the point
-            int tot_nctrl_pts = 1;                  // product of p + 1 in each dim.
-            for (auto i = 0; i < mfa_data.dom_dim; i++)
-                tot_nctrl_pts *= (mfa_data.p(i) + 1);
-            MatrixX<T> ctrl_pts(tot_nctrl_pts, mfa_data.tmesh.tensor_prods[0].ctrl_pts.cols());
-            VectorX<T> weights(tot_nctrl_pts);
-            mfa_data.tmesh.ctrl_pt_box(anchors, ctrl_pts, weights);
+                    // compute product of basis functions in each dimension
+                    T                       B = 1.0;                                // product of basis function values in each dimension
+                    vector<vector<KnotIdx>> local_knot_idxs(mfa_data.dom_dim);      // local knot indices
+                    for (auto i = 0; i < mfa_data.dom_dim; i++)
+                    {
+                        // local knot vector
+                        local_knot_idxs[i].resize(mfa_data.p(i) + 2);               // local knot vector for current dim in index space
+                        vector<T> local_knots(mfa_data.p(i) + 2);                   // local knot vector for current dim in parameter space
+                        mfa_data.tmesh.local_knot_vector(anchor, local_knot_idxs);
+                        for (auto n = 0; n < local_knot_idxs[i].size(); n++)
+                            local_knots[n] = mfa_data.tmesh.all_knots[i][local_knot_idxs[i][n]];
 
-            // debug
-//             cerr << "ctrl_pts: \n" << ctrl_pts << endl;
-//             cerr << "weights: \n" << weights << endl;
+                        // debug: print local knot idxs
+//                         fprintf(stderr, "local knot idxs = [");
+//                         for (auto j = 0; j < local_knot_idxs[i].size(); j++)
+//                             fprintf(stderr, "%ld ", local_knot_idxs[i][j]);
+//                         fprintf(stderr, "]\n");
 
-            // decode the point
-            VolPt(param, out_pt, N, ctrl_pts, weights);
+                        B *= mfa_data.OneBasisFun(i, param(i), local_knots);
+                    }       // dimensions
+
+                    out_pt += B * t.ctrl_pts.row(j) * t.weights(j);
+                    B_sum += B * t.weights(j);
+
+                    // adjust anchor for next iteration
+                    iter[0]++;
+                    anchor[0]++;
+
+                    // for all dimensions, check for last point
+                    for (size_t i = 0; i < mfa_data.dom_dim; i++)
+                    {
+                        // reset iteration for current dim and increment next dim.
+                        if (i < mfa_data.dom_dim - 1 && iter[i] == t.nctrl_pts(i))
+                        {
+                            iter[i] = 0;
+                            anchor[i] = iter[i];
+                            iter[i + 1]++;
+                            anchor[i + 1]++;
+                            if (t.knot_mins[i] == 0)
+                                anchor[i] = (mfa_data.p(0) + 1) / 2;                       // first control point has anchor floor((p + 1) / 2)
+                        }
+                    }
+                }       // control points in the tensor
+            }       // tensors
+
+            // divide by sum of weighted basis functions to make a partition of unity
+            out_pt /= B_sum;
 
             // debug
 //             cerr << "out_pt: " << out_pt.transpose() << "\n" << endl;
