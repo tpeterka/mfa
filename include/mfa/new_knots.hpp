@@ -110,8 +110,8 @@ namespace mfa
         }
 
         // inserts a set of knots (in all dimensions) into the original knot set
-        // this version is for testing Youssef's local solve
-        void LocalInsertKnots(
+        // this version is for local solve
+        void InsertKnots(
                 vector<vector<T>>&          new_knots,              // new knots
                 vector<vector<int>>&        new_levels,             // new knot levels
                 vector<vector<KnotIdx>>&    inserted_knot_idxs,     // (output) indices in each dim. of inserted knots in full knot vector after insertion
@@ -120,7 +120,7 @@ namespace mfa
                 vector<VectorX<T>>&         new_weights)            // (output) new weights from P&T knot insertion, one std::vector element for each knot inserted
         {
             // debug
-            fprintf(stderr, "*** LocalInsertKnots ***\n");
+            fprintf(stderr, "*** Using local solve in InsertKnots ***\n");
 
             vector<vector<T>> temp_knots(mfa.dom_dim);
             vector<vector<int>> temp_levels(mfa.dom_dim);
@@ -286,7 +286,7 @@ namespace mfa
         // and decodes that in order to determine first error span.
         // This should be replaced by FirstErrorSpan below once the adaptive encoding is done
         //
-        // This version is for testing Youssef's local solve
+        // This version is for local solve
         //
         // TODO: lots of optimizations possible; this is completely naive so far
         // optimizations:
@@ -294,7 +294,7 @@ namespace mfa
         // step through domain points fineer each time the end is reached
         // increment ijk in the loop over domain points instead of calling idx2ijk
         // TBB? (currently serial)
-        bool LocalFirstErrorSpan(
+        bool FirstErrorSpan(
                 const MatrixX<T>&           domain,                 // input points
                 VectorX<T>                  extents,                // extents in each dimension, for normalizing error (size 0 means do not normalize)
                 T                           err_limit,              // max. allowed error
@@ -308,7 +308,7 @@ namespace mfa
                 vector<VectorX<T>>&         new_weights)            // (output) new weights from P&T knot insertion, one std::vector element per knot inserted
         {
             // debug
-            fprintf(stderr, "*** LocalFirstErrorSpan ***\n");
+            fprintf(stderr, "*** Using local solve in FirstErrorSpan ***\n");
 
             Decoder<T>          decoder(mfa, mfa_data, 1);
             VectorXi            ijk(mfa.dom_dim);                   // i,j,k of domain point
@@ -358,7 +358,7 @@ namespace mfa
                         new_knots[k].push_back(new_knot_val);
                         new_levels[k].push_back(iter + 1);  // adapt at the next level, for now every iteration is a new level
                     }
-                    LocalInsertKnots(new_knots, new_levels, inserted_knot_idxs, new_nctrl_pts, new_ctrl_pts, new_weights);
+                    InsertKnots(new_knots, new_levels, inserted_knot_idxs, new_nctrl_pts, new_ctrl_pts, new_weights);
                     return false;
                 }
             }
