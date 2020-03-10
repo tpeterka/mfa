@@ -324,19 +324,19 @@ namespace mfa
             {
                 const TensorProduct<T>& t = mfa_data.tmesh.tensor_prods[k];
 
-                vector<int>         iter(mfa_data.dom_dim);                         // iteration number in each dim.
+                VolIterator         vol_iterator(t.nctrl_pts);                      // for iterating in a flat loop over n dimensions
                 vector<KnotIdx>     anchor(mfa_data.dom_dim);                       // one anchor
 
-                // compute anchor of first control point
-                for (auto j = 0; j < mfa_data.dom_dim; j++)
+                while (!vol_iterator.done())
                 {
-                    anchor[j] = iter[j];
-                    if (t.knot_mins[j] == 0)
-                        anchor[j] = (mfa_data.p(j) + 1) / 2;                        // first control point has anchor floor((p + 1) / 2)
-                }
+                    // get anchor
+                    for (auto j = 0; j < mfa_data.dom_dim; j++)
+                    {
+                        anchor[j] = vol_iterator.idx_dim(j);
+                        if (t.knot_mins[j] == 0)
+                            anchor[j] += (mfa_data.p(j) + 1) / 2;                   // first control point has anchor floor((p + 1) / 2)
+                    }
 
-                for (auto j = 0; j < t.ctrl_pts.rows(); j++)                        // for all control points in the tensor
-                {
                     // TODO: deal with odd degree duplicated control points
 
                     // compute product of basis functions in each dimension
@@ -358,30 +358,14 @@ namespace mfa
 //                         fprintf(stderr, "]\n");
 
                         B *= mfa_data.OneBasisFun(i, param(i), local_knots);
-                    }       // dimensions
-
-                    out_pt += B * t.ctrl_pts.row(j) * t.weights(j);
-                    B_sum += B * t.weights(j);
-
-                    // adjust anchor for next iteration
-                    iter[0]++;
-                    anchor[0]++;
-
-                    // for all dimensions, check for last point
-                    for (size_t i = 0; i < mfa_data.dom_dim; i++)
-                    {
-                        // reset iteration for current dim and increment next dim.
-                        if (i < mfa_data.dom_dim - 1 && iter[i] == t.nctrl_pts(i))
-                        {
-                            iter[i] = 0;
-                            anchor[i] = iter[i];
-                            iter[i + 1]++;
-                            anchor[i + 1]++;
-                            if (t.knot_mins[i] == 0)
-                                anchor[i] = (mfa_data.p(0) + 1) / 2;                       // first control point has anchor floor((p + 1) / 2)
-                        }
                     }
-                }       // control points in the tensor
+
+                    // compute the point
+                    out_pt += B * t.ctrl_pts.row(vol_iterator.cur_iter()) * t.weights(vol_iterator.cur_iter());
+                    B_sum += B * t.weights(vol_iterator.cur_iter());
+
+                    vol_iterator.incr_iter();                                       // must increment volume iterator at the bottom of the loop
+                }       // volume iterator
             }       // tensors
 
             // divide by sum of weighted basis functions to make a partition of unity
@@ -619,81 +603,82 @@ namespace mfa
 
         }
 
-#ifdef TMESH
-
-        // compute a point from a NURBS n-d volume at a given parameter value
-        // this version is used for tmesh
-        // slower version for single points
-        // for each dimension, takes custom p+1 basis functions, control points, and weights for just the one point being decoded
-        // does not compute derivatives for now
-        // algorithm 4.3, Piegl & Tiller (P&T) p.134
-        void VolPt(
-                const VectorX<T>&           param,      // parameter value in each dim. of desired point
-                VectorX<T>&                 out_pt,     // (output) point, allocated by caller
-                const vector<MatrixX<T>>&   N,          // p+1 basis functions in each dimension
-                const MatrixX<T>&           ctrl_pts,   // p+1 control points per dimension, linearized
-                const VectorX<T>&           weights)    // p+1 weights per dimension, linearized
-        {
-            int last = ctrl_pts.cols() - 1;             // last coordinate of control point
-
-            // init
-            vector<VectorX<T>>  temp(mfa_data.dom_dim);         // temporary point in each dim.
-            vector<int>         iter(mfa_data.dom_dim);         // iteration number in each dim., initialized to 0 by default
-            VectorX<T>          ctrl_pt(last + 1);              // one control point
-            VectorX<T>          temp_denom = VectorX<T>::Zero(mfa_data.dom_dim);     // temporary rational NURBS denominator in each dim
-
-            // init
-            for (size_t i = 0; i < mfa_data.dom_dim; i++)       // for all dims
-                temp[i]    = VectorX<T>::Zero(last + 1);
-
-            // 1-d flattening all n-d nested loop computations
-            for (int i = 0; i < tot_iters; i++)
-            {
-                // always compute the point in the first dimension
-                ctrl_pt = ctrl_pts.row(i);
-                T w     = weights(i);
-
-                // in this simplified version with only p + 1 basis funcs. and the p + 1 ctrl pts. in each dim.,
-                // there is no adding the span or subtracting the degree
-#ifdef WEIGH_ALL_DIMS                                           // weigh all dimensions
-                temp[0] += (N[0])(0, iter[0]) * ctrl_pt * w;
-#else                                                           // weigh only range dimension
-                for (auto j = 0; j < last; j++)
-                    (temp[0])(j) += (N[0])(0, iter[0]) * ctrl_pt(j);
-                (temp[0])(last) += (N[0])(0, iter[0]) * ctrl_pt(last) * w;
-#endif
-
-                temp_denom(0) += w * N[0](0, iter[0]);
-                iter[0]++;
-
-                // for all dimensions except last, check if span is finished
-                for (size_t k = 0; k < mfa_data.dom_dim; k++)
-                {
-                    if (k < mfa_data.dom_dim - 1 && iter[k] - 1 == mfa_data.p(k))
-                    {
-                        // compute point in next higher dimension and reset computation for current dim
-                        temp[k + 1]        += (N[k + 1])(0, iter[k + 1]) * temp[k];
-                        temp_denom(k + 1)  += temp_denom(k) * N[k + 1](0, iter[k + 1]);
-                        temp_denom(k)       = 0.0;
-                        temp[k]             = VectorX<T>::Zero(last + 1);
-                        iter[k]             = 0;
-                        iter[k + 1]++;
-                    }
-                }
-            }
-
-            T denom = temp_denom(mfa_data.dom_dim - 1);         // rational denomoinator
-
-#ifdef WEIGH_ALL_DIMS                                           // weigh all dimensions
-            out_pt = temp[mfa_data.dom_dim - 1] / denom;
-#else                                                           // weigh only range dimension
-            out_pt   = temp[mfa_data.dom_dim - 1];
-            out_pt(last) /= denom;
-#endif
-
-        }
-
-#endif      // TMESH
+        // DEPRECATED
+// #ifdef TMESH
+// 
+//         // compute a point from a NURBS n-d volume at a given parameter value
+//         // this version is used for tmesh
+//         // slower version for single points
+//         // for each dimension, takes custom p+1 basis functions, control points, and weights for just the one point being decoded
+//         // does not compute derivatives for now
+//         // algorithm 4.3, Piegl & Tiller (P&T) p.134
+//         void VolPt(
+//                 const VectorX<T>&           param,      // parameter value in each dim. of desired point
+//                 VectorX<T>&                 out_pt,     // (output) point, allocated by caller
+//                 const vector<MatrixX<T>>&   N,          // p+1 basis functions in each dimension
+//                 const MatrixX<T>&           ctrl_pts,   // p+1 control points per dimension, linearized
+//                 const VectorX<T>&           weights)    // p+1 weights per dimension, linearized
+//         {
+//             int last = ctrl_pts.cols() - 1;             // last coordinate of control point
+// 
+//             // init
+//             vector<VectorX<T>>  temp(mfa_data.dom_dim);         // temporary point in each dim.
+//             vector<int>         iter(mfa_data.dom_dim);         // iteration number in each dim., initialized to 0 by default
+//             VectorX<T>          ctrl_pt(last + 1);              // one control point
+//             VectorX<T>          temp_denom = VectorX<T>::Zero(mfa_data.dom_dim);     // temporary rational NURBS denominator in each dim
+// 
+//             // init
+//             for (size_t i = 0; i < mfa_data.dom_dim; i++)       // for all dims
+//                 temp[i]    = VectorX<T>::Zero(last + 1);
+// 
+//             // 1-d flattening all n-d nested loop computations
+//             for (int i = 0; i < tot_iters; i++)
+//             {
+//                 // always compute the point in the first dimension
+//                 ctrl_pt = ctrl_pts.row(i);
+//                 T w     = weights(i);
+// 
+//                 // in this simplified version with only p + 1 basis funcs. and the p + 1 ctrl pts. in each dim.,
+//                 // there is no adding the span or subtracting the degree
+// #ifdef WEIGH_ALL_DIMS                                           // weigh all dimensions
+//                 temp[0] += (N[0])(0, iter[0]) * ctrl_pt * w;
+// #else                                                           // weigh only range dimension
+//                 for (auto j = 0; j < last; j++)
+//                     (temp[0])(j) += (N[0])(0, iter[0]) * ctrl_pt(j);
+//                 (temp[0])(last) += (N[0])(0, iter[0]) * ctrl_pt(last) * w;
+// #endif
+// 
+//                 temp_denom(0) += w * N[0](0, iter[0]);
+//                 iter[0]++;
+// 
+//                 // for all dimensions except last, check if span is finished
+//                 for (size_t k = 0; k < mfa_data.dom_dim; k++)
+//                 {
+//                     if (k < mfa_data.dom_dim - 1 && iter[k] - 1 == mfa_data.p(k))
+//                     {
+//                         // compute point in next higher dimension and reset computation for current dim
+//                         temp[k + 1]        += (N[k + 1])(0, iter[k + 1]) * temp[k];
+//                         temp_denom(k + 1)  += temp_denom(k) * N[k + 1](0, iter[k + 1]);
+//                         temp_denom(k)       = 0.0;
+//                         temp[k]             = VectorX<T>::Zero(last + 1);
+//                         iter[k]             = 0;
+//                         iter[k + 1]++;
+//                     }
+//                 }
+//             }
+// 
+//             T denom = temp_denom(mfa_data.dom_dim - 1);         // rational denomoinator
+// 
+// #ifdef WEIGH_ALL_DIMS                                           // weigh all dimensions
+//             out_pt = temp[mfa_data.dom_dim - 1] / denom;
+// #else                                                           // weigh only range dimension
+//             out_pt   = temp[mfa_data.dom_dim - 1];
+//             out_pt(last) /= denom;
+// #endif
+// 
+//         }
+// 
+// #endif      // TMESH
 
         // compute a point from a NURBS n-d volume at a given parameter value
         // fastest version for multiple points, reuses saved basis functions
