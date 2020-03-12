@@ -159,17 +159,17 @@ int main(int argc, char** argv)
     for (int i = 0; i < dom_dim; i++)
     {
         d_args.geom_p[i]    = geom_degree;
-        d_args.vars_p[i]    = vars_degree;
+        d_args.vars_p[0][i] = vars_degree;      // assuming one science variable, vars_p[0]
         if (strong_sc)                          // strong scaling, reduced number of points per block
         {
             d_args.ndom_pts[i]          = ndomp      / divs[i];
             d_args.geom_nctrl_pts[i]    = geom_nctrl / divs[i] > geom_degree ? geom_nctrl / divs[i] : geom_degree + 1;
-            d_args.vars_nctrl_pts[i]    = vars_nctrl / divs[i];
+            d_args.vars_nctrl_pts[0][i] = vars_nctrl / divs[i];     // assuming one science variable, vars_nctrl_pts[0]
         } else                                  // weak scaling, same number of points per block
         {
             d_args.ndom_pts[i]          = ndomp;
             d_args.geom_nctrl_pts[i]    = geom_nctrl;
-            d_args.vars_nctrl_pts[i]    = vars_nctrl;
+            d_args.vars_nctrl_pts[0][i] = vars_nctrl;               // assuming one science variable, vars_nctrl_pts[0]
         }
     }
     for (int i = 0; i < pt_dim - dom_dim; i++)
@@ -203,7 +203,7 @@ int main(int argc, char** argv)
             d_args.min[i]               = -1.0;
             d_args.max[i]               = 1.0;
             d_args.geom_nctrl_pts[i]    = geom_nctrl;
-            d_args.vars_nctrl_pts[i]    = vars_nctrl;
+            d_args.vars_nctrl_pts[0][i] = vars_nctrl;               // assuming one science variable, vars_nctrl_pts[0]
         }
         for (int i = 0; i < pt_dim - dom_dim; i++)      // for all science variables
             d_args.s[i] = 1.0;                          // scaling factor on range
@@ -220,7 +220,7 @@ int main(int argc, char** argv)
         for (int i = 0; i < dom_dim; i++)
         {
             d_args.geom_nctrl_pts[i]    = geom_nctrl;
-            d_args.vars_nctrl_pts[i]    = vars_nctrl;
+            d_args.vars_nctrl_pts[0][i] = vars_nctrl;               // assuming one science variable, vars_nctrl_pts[0]
         }
         for (int i = 0; i < pt_dim - dom_dim; i++)      // for all science variables
             d_args.s[i] = 1.0;                          // scaling factor on range
@@ -236,7 +236,7 @@ int main(int argc, char** argv)
             d_args.min[i]               = -0.95;
             d_args.max[i]               = 0.95;
             d_args.geom_nctrl_pts[i]    = geom_nctrl;
-            d_args.vars_nctrl_pts[i]    = vars_nctrl;
+            d_args.vars_nctrl_pts[0][i] = vars_nctrl;               // assuming one science variable, vars_nctrl_pts[0]
         }
         for (int i = 0; i < pt_dim - dom_dim; i++)      // for all science variables
             d_args.s[i] = 1.0;                          // scaling factor on range

@@ -142,7 +142,7 @@ int main(int argc, char** argv)
     for (int i = 0; i < dom_dim; i++)
     {
         d_args.geom_p[i]    = geom_degree;
-        d_args.vars_p[i]    = vars_degree;
+        d_args.vars_p[0][i] = vars_degree;      // assuming one science variable, vars_p[0]
         d_args.ndom_pts[i]  = ndomp;
     }
 
@@ -156,7 +156,7 @@ int main(int argc, char** argv)
             d_args.min[i]               = -4.0 * M_PI;
             d_args.max[i]               = 4.0  * M_PI;
             d_args.geom_nctrl_pts[i]    = geom_nctrl;
-            d_args.vars_nctrl_pts[i]    = vars_nctrl;
+            d_args.vars_nctrl_pts[0][i] = vars_nctrl;               // assuming one science variable, vars_nctrl_pts[0]
         }
         for (int i = 0; i < pt_dim - dom_dim; i++)      // for all science variables
             d_args.s[i] = i + 1;                        // scaling factor on range
@@ -172,7 +172,7 @@ int main(int argc, char** argv)
             d_args.min[i]               = -4.0 * M_PI;
             d_args.max[i]               = 4.0  * M_PI;
             d_args.geom_nctrl_pts[i]    = geom_nctrl;
-            d_args.vars_nctrl_pts[i]    = vars_nctrl;
+            d_args.vars_nctrl_pts[0][i] = vars_nctrl;               // assuming one science variable, vars_nctrl_pts[0]
         }
         for (int i = 0; i < pt_dim - dom_dim; i++)      // for all science variables
             d_args.s[i] = 10.0 * (i + 1);                 // scaling factor on range
@@ -191,9 +191,9 @@ int main(int argc, char** argv)
         d_args.geom_nctrl_pts[0]    = geom_nctrl;
         d_args.geom_nctrl_pts[1]    = geom_nctrl;
         d_args.geom_nctrl_pts[2]    = geom_nctrl;
-        d_args.vars_nctrl_pts[0]    = 140;
-        d_args.vars_nctrl_pts[1]    = 108;
-        d_args.vars_nctrl_pts[2]    = 110;
+        d_args.vars_nctrl_pts[0][0] = 140;
+        d_args.vars_nctrl_pts[0][1] = 108;
+        d_args.vars_nctrl_pts[0][2] = 110;
         strncpy(d_args.infile, infile.c_str(), sizeof(d_args.infile));
 //         strncpy(d_args.infile, "/Users/tpeterka/datasets/flame/6_small.xyz", sizeof(d_args.infile));
         if (dom_dim == 1)
@@ -219,7 +219,7 @@ int main(int argc, char** argv)
         {
             d_args.ndom_pts[i]          = 200;
             d_args.geom_nctrl_pts[i]    = geom_nctrl;
-            d_args.vars_nctrl_pts[i]    = vars_nctrl;
+            d_args.vars_nctrl_pts[0][i] = vars_nctrl;               // assuming one science variable, vars_nctrl_pts[0]
         }
         strncpy(d_args.infile, infile.c_str(), sizeof(d_args.infile));
 //         strncpy(d_args.infile, "/Users/tpeterka/datasets/nek5000/200x200x200/0.xyz", sizeof(d_args.infile));

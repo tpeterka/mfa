@@ -153,10 +153,10 @@ int main(int argc, char** argv)
     for (int i = 0; i < dom_dim; i++)
     {
         d_args.geom_p[i]            = geom_degree;
-        d_args.vars_p[i]            = vars_degree;
+        d_args.vars_p[0][i]         = vars_degree;  // assuming one science variable, vars_p[0]
         d_args.ndom_pts[i]          = ndomp;
         d_args.geom_nctrl_pts[i]    = geom_nctrl;
-        d_args.vars_nctrl_pts[i]    = vars_nctrl;
+        d_args.vars_nctrl_pts[0][i] = vars_nctrl;       // assuming one science variable, vars_nctrl_pts[0]
     }
 
     // initialize input data
@@ -257,11 +257,11 @@ int main(int argc, char** argv)
         d_args.ndom_pts[0]          = 704;
         d_args.ndom_pts[1]          = 540;
         d_args.ndom_pts[2]          = 550;
-        d_args.vars_nctrl_pts[0]    = 140;
-        d_args.vars_nctrl_pts[1]    = 108;
-        d_args.vars_nctrl_pts[2]    = 110;
+        d_args.vars_nctrl_pts[0][0] = 140;
+        d_args.vars_nctrl_pts[0][1] = 108;
+        d_args.vars_nctrl_pts[0][2] = 110;
         strncpy(d_args.infile, infile.c_str(), sizeof(d_args.infile));
-//         strncpy(d_args.infile, "/Users/tpeterka/datasets/flame/6_small.xyz", sizeof(d_args.infile));
+        strncpy(d_args.infile, "/Users/tpeterka/datasets/flame/6_small.xyz", sizeof(d_args.infile));
         if (dom_dim == 1)
             master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
                     { b->read_1d_slice_3d_vector_data(cp, d_args); });
@@ -276,6 +276,22 @@ int main(int argc, char** argv)
             fprintf(stderr, "S3D data only available in 2 or 3d domain\n");
             exit(0);
         }
+
+        // for testing, hard-code a subset of a 3d domain, 1/2 the size in each dim and centered
+        // in this case, actual size is just under 1/2 size in each dim to satisfy DIY's (MPI's)
+        // limitation on the size of a file write
+        // (MPI uses int for the size, and DIY as yet does not chunk writes into smaller sizes)
+//         d_args.starts[0]            = 125;
+//         d_args.starts[1]            = 50;
+//         d_args.starts[2]            = 125;
+//         d_args.ndom_pts[0]          = 350;
+//         d_args.ndom_pts[1]          = 250;
+//         d_args.ndom_pts[2]          = 250;
+//         d_args.full_dom_pts[0]      = 704;
+//         d_args.full_dom_pts[1]      = 540;
+//         d_args.full_dom_pts[2]      = 550;
+//         master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
+//                 { b->read_3d_subset_3d_vector_data(cp, d_args); });
     }
 
     // nek5000 dataset
@@ -283,6 +299,8 @@ int main(int argc, char** argv)
     {
         for (int i = 0; i < 3; i++)
             d_args.ndom_pts[i] = 200;
+        for (int i = 0; i < 3; i++)
+            d_args.vars_nctrl_pts[0][i] = 100;
         strncpy(d_args.infile, infile.c_str(), sizeof(d_args.infile));
 //         strncpy(d_args.infile, "/Users/tpeterka/datasets/nek5000/200x200x200/0.xyz", sizeof(d_args.infile));
         if (dom_dim == 2)
@@ -294,6 +312,62 @@ int main(int argc, char** argv)
         else
         {
             fprintf(stderr, "nek5000 data only available in 2 or 3d domain\n");
+            exit(0);
+        }
+    }
+
+    // rti dataset
+    if (input == "rti")
+    {
+        d_args.ndom_pts[0]  = 288;
+        d_args.ndom_pts[1]  = 512;
+        d_args.ndom_pts[2]  = 512;
+        d_args.vars_nctrl_pts[0][0] = 72;
+        d_args.vars_nctrl_pts[0][1] = 128;
+        d_args.vars_nctrl_pts[0][2] = 128;
+        strncpy(d_args.infile, infile.c_str(), sizeof(d_args.infile));
+//         strncpy(d_args.infile, "/Users/tpeterka/datasets/rti/dd07g_xxsmall_le.xyz", sizeof(d_args.infile));
+        if (dom_dim == 2)
+            master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
+                    { b->read_2d_slice_3d_vector_data(cp, d_args); });
+        else if (dom_dim == 3)
+            master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
+                    { b->read_3d_vector_data(cp, d_args); });
+        else
+        {
+            fprintf(stderr, "rti data only available in 2 or 3d domain\n");
+            exit(0);
+        }
+
+//         // for testing, hard-code a subset of a 3d domain, 1/2 the size in each dim and centered
+//         d_args.starts[0]        = 72;
+//         d_args.starts[1]        = 128;
+//         d_args.starts[2]        = 128;
+//         d_args.ndom_pts[0]      = 144;
+//         d_args.ndom_pts[1]      = 256;
+//         d_args.ndom_pts[2]      = 256;
+//         d_args.full_dom_pts[0]  = 288;
+//         d_args.full_dom_pts[1]  = 512;
+//         d_args.full_dom_pts[2]  = 512;
+//         master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
+//                 { b->read_3d_subset_3d_vector_data(cp, d_args); });
+    }
+
+    // cesm dataset
+    if (input == "cesm")
+    {
+        d_args.ndom_pts[0]          = 1800;
+        d_args.ndom_pts[1]          = 3600;
+        d_args.vars_nctrl_pts[0][0] = 180;
+        d_args.vars_nctrl_pts[0][1] = 360;
+        strncpy(d_args.infile, infile.c_str(), sizeof(d_args.infile));
+//         strncpy(d_args.infile, "/Users/tpeterka/datasets/CESM-ATM-tylor/1800x3600/FLDSC_1_1800_3600.dat", sizeof(d_args.infile));
+        if (dom_dim == 2)
+            master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
+                    { b->read_2d_scalar_data(cp, d_args); });
+        else
+        {
+            fprintf(stderr, "cesm data only available in 2d domain\n");
             exit(0);
         }
     }

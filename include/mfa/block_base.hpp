@@ -39,18 +39,22 @@ struct ModelInfo
     {
         geom_p.resize(dom_dim);
         vars_p.resize(pt_dim - dom_dim);
+        for (auto i = 0; i < vars_p.size(); i++)
+            vars_p[i].resize(dom_dim);
         ndom_pts.resize(dom_dim);
         geom_nctrl_pts.resize(dom_dim);
-        vars_nctrl_pts.resize(dom_dim);
+        vars_nctrl_pts.resize(pt_dim - dom_dim);
+        for (auto i = 0; i < vars_nctrl_pts.size(); i++)
+            vars_nctrl_pts[i].resize(dom_dim);
     }
     virtual ~ModelInfo()                        {}
     int                 dom_dim;                // domain dimensionality
     int                 pt_dim;                 // point dimensionality (> dom_dim)
     vector<int>         geom_p;                 // degree in each dimension of geometry
-    vector<int>         vars_p;                 // degree in each dimension of science variables
+    vector<vector<int>> vars_p;                 // degree in each dimension of each science variable vars_p[var][dim]
     vector<int>         ndom_pts;               // number of input points in each dimension of domain
     vector<int>         geom_nctrl_pts;         // number of input points in each dimension of geometry
-    vector<int>         vars_nctrl_pts;         // number of input points in each dimension of all science variables
+    vector<vector<int>> vars_nctrl_pts;         // number of input pts in each dim of each science variable vars_nctrl_pts[var][dim]
     bool                weighted;               // solve for and use weights (default = true)
     bool                local;                  // solve locally (with constraints) each round (default = false)
     int                 verbose;                // debug level
@@ -116,34 +120,34 @@ struct BlockBase
         if (a->verbose && cp.master()->communicator().rank() == 0)
             fprintf(stderr, "\nEncoding geometry\n\n");
         geometry.mfa_data = new mfa::MFA_Data<T>(p,
-                                       mfa->ndom_pts(),
-                                       domain,
-                                       mfa->params(),
-                                       nctrl_pts,
-                                       0,
-                                       dom_dim - 1);
+                mfa->ndom_pts(),
+                domain,
+                mfa->params(),
+                nctrl_pts,
+                0,
+                dom_dim - 1);
         // TODO: consider not weighting the geometry (only science variables), depends on geometry complexity
         mfa->FixedEncode(*geometry.mfa_data, domain, nctrl_pts, a->verbose, a->weighted);
 
         // encode science variables
-        // same number of control points and same degree for all variables in this example
-        for (auto j = 0; j < dom_dim; j++)
-        {
-            nctrl_pts(j)    = a->vars_nctrl_pts[j];
-            p(j)            = a->vars_p[j];
-        }
-
         for (auto i = 0; i< vars.size(); i++)
         {
             if (a->verbose && cp.master()->communicator().rank() == 0)
                 fprintf(stderr, "\nEncoding science variable %d\n\n", i);
+
+            for (auto j = 0; j < dom_dim; j++)
+            {
+                p(j)            = a->vars_p[i][j];
+                nctrl_pts(j)    = a->vars_nctrl_pts[i][j];
+            }
+
             vars[i].mfa_data = new mfa::MFA_Data<T>(p,
-                                          mfa->ndom_pts(),
-                                          domain,
-                                          mfa->params(),
-                                          nctrl_pts,
-                                          dom_dim + i,        // assumes each variable is scalar
-                                          dom_dim + i);
+                    mfa->ndom_pts(),
+                    domain,
+                    mfa->params(),
+                    nctrl_pts,
+                    dom_dim + i,        // assumes each variable is scalar
+                    dom_dim + i);
             mfa->FixedEncode(*(vars[i].mfa_data), domain, nctrl_pts, a->verbose, a->weighted);
         }
     }
@@ -171,33 +175,34 @@ struct BlockBase
         if (a->verbose && cp.master()->communicator().rank() == 0)
             fprintf(stderr, "\nEncoding geometry\n\n");
         geometry.mfa_data = new mfa::MFA_Data<T>(p,
-                                       mfa->ndom_pts(),
-                                       domain,
-                                       mfa->params(),
-                                       nctrl_pts,
-                                       0,
-                                       dom_dim - 1);
+                mfa->ndom_pts(),
+                domain,
+                mfa->params(),
+                nctrl_pts,
+                0,
+                dom_dim - 1);
         // TODO: consider not weighting the geometry (only science variables), depends on geometry complexity
         mfa->AdaptiveEncode(*geometry.mfa_data, domain, err_limit, a->verbose, a->weighted, a->local, extents, max_rounds);
 
         // encode science variables
-        for (auto j = 0; j < dom_dim; j++)
-        {
-            nctrl_pts(j)    = a->vars_nctrl_pts[j];
-            p(j)            = a->vars_p[j];
-        }
-
         for (auto i = 0; i< vars.size(); i++)
         {
             if (a->verbose && cp.master()->communicator().rank() == 0)
                 fprintf(stderr, "\nEncoding science variable %d\n\n", i);
+
+            for (auto j = 0; j < dom_dim; j++)
+            {
+                p(j)            = a->vars_p[i][j];
+                nctrl_pts(j)    = a->vars_nctrl_pts[i][j];
+            }
+
             vars[i].mfa_data = new mfa::MFA_Data<T>(p,
-                                          mfa->ndom_pts(),
-                                          domain,
-                                          mfa->params(),
-                                          nctrl_pts,
-                                          dom_dim + i,        // assumes each variable is scalar
-                                          dom_dim + i);
+                    mfa->ndom_pts(),
+                    domain,
+                    mfa->params(),
+                    nctrl_pts,
+                    dom_dim + i,        // assumes each variable is scalar
+                    dom_dim + i);
             mfa->AdaptiveEncode(*(vars[i].mfa_data), domain, err_limit, a->verbose, a->weighted, a->local, extents, max_rounds);
         }
     }
@@ -252,10 +257,10 @@ struct BlockBase
             {
                 // TODO: hard-coded for one tensor product
                 vars[i].mfa_data = new mfa::MFA_Data<T>(vars[i].mfa_data->p,
-                                              mfa->ndom_pts(),
-                                              vars[i].mfa_data->tmesh,
-                                              dom_dim + i,        // assumes each variable is scalar
-                                              dom_dim + i);
+                        mfa->ndom_pts(),
+                        vars[i].mfa_data->tmesh,
+                        dom_dim + i,        // assumes each variable is scalar
+                        dom_dim + i);
                 mfa->DecodeDomain(*(vars[i].mfa_data), verbose, approx, dom_dim + i, dom_dim + i, false, derivs);  // assumes each variable is scalar
             }
 
@@ -301,37 +306,37 @@ struct BlockBase
         {
             parallel_for (size_t(0), (size_t)domain.rows(), [&] (size_t i)
                     {
-                        VectorX<T> cpt = approx.row(i);
-                        for (auto j = 0; j < domain.cols(); j++)
-                        {
-                            T err = fabs(cpt(j) - domain(i, j));
-                            if (j >= dom_dim)
-                                errs(i, j) = err;           // error for each science variable
-                        }
+                    VectorX<T> cpt = approx.row(i);
+                    for (auto j = 0; j < domain.cols(); j++)
+                    {
+                    T err = fabs(cpt(j) - domain(i, j));
+                    if (j >= dom_dim)
+                    errs(i, j) = err;           // error for each science variable
+                    }
                     });
         }
         else
         {
             parallel_for (size_t(0), (size_t)domain.rows(), [&] (size_t i)
                     {
-                        VectorX<T> err;                                 // errors for all coordinates in current model
-                        for (auto k = 0; k < vars.size() + 1; k++)      // for all models, geometry + science
-                        {
-                            if (k == 0)                                 // geometry
-                            {
-                                err.resize(geometry.max_dim - geometry.min_dim);
-                                mfa->AbsCoordError(*geometry.mfa_data, domain, i, err, verbose);
-                            }
-                            else
-                            {
-                                err.resize(vars[k - 1].max_dim - vars[k - 1].min_dim);
-                                mfa->AbsCoordError(*(vars[k - 1].mfa_data), domain, i, err, verbose);
-                            }
+                    VectorX<T> err;                                 // errors for all coordinates in current model
+                    for (auto k = 0; k < vars.size() + 1; k++)      // for all models, geometry + science
+                    {
+                    if (k == 0)                                 // geometry
+                    {
+                    err.resize(geometry.max_dim - geometry.min_dim);
+                    mfa->AbsCoordError(*geometry.mfa_data, domain, i, err, verbose);
+                    }
+                    else
+                    {
+                    err.resize(vars[k - 1].max_dim - vars[k - 1].min_dim);
+                    mfa->AbsCoordError(*(vars[k - 1].mfa_data), domain, i, err, verbose);
+                    }
 
-                            for (auto j = 0; j < err.size(); j++)
-                                if (k)                                              // science variables
-                                    errs(i, vars[k - 1].min_dim + j) = err(j); // error for each science variable
-                        }
+                    for (auto j = 0; j < err.size(); j++)
+                    if (k)                                              // science variables
+                    errs(i, vars[k - 1].min_dim + j) = err(j); // error for each science variable
+                    }
                     });
         }
 
@@ -392,10 +397,10 @@ struct BlockBase
     }
 
     void print_block(const diy::Master::ProxyWithLink& cp,
-                     bool                              error)       // error was computed
+            bool                              error)       // error was computed
     {
         fprintf(stderr, "gid = %d\n", cp.gid());
-//         cerr << "domain\n" << domain << endl;
+        //         cerr << "domain\n" << domain << endl;
 
         VectorXi tot_nctrl_pts = VectorXi::Zero(geometry.mfa_data->dom_dim);
 
@@ -406,9 +411,9 @@ struct BlockBase
         cerr << "# output ctrl pts     = [ " << tot_nctrl_pts.transpose() << " ]" << endl;
 
         //  debug: print control points and weights
-//         print_ctrl_weights(geometry.mfa_data->tmesh);
+        //         print_ctrl_weights(geometry.mfa_data->tmesh);
         // debug: print knots
-//         print_knots(geometry.mfa_data->tmesh);
+        //         print_knots(geometry.mfa_data->tmesh);
 
         fprintf(stderr, "# output knots        = [ ");
         for (auto j = 0 ; j < geometry.mfa_data->tmesh.all_knots.size(); j++)
@@ -431,9 +436,9 @@ struct BlockBase
             cerr << "# ouput ctrl pts      = [ " << tot_nctrl_pts.transpose() << " ]" << endl;
 
             //  debug: print control points and weights
-//             print_ctrl_weights(vars[i].mfa_data->tmesh);
+            //             print_ctrl_weights(vars[i].mfa_data->tmesh);
             // debug: print knots
-//             print_knots(vars[i].mfa_data->tmesh);
+            //             print_knots(vars[i].mfa_data->tmesh);
 
 
             fprintf(stderr, "# output knots        = [ ");
@@ -460,8 +465,8 @@ struct BlockBase
         cerr << "\n-----------------------------------" << endl;
 
         //  debug: print approximated points
-//         cerr << approx.rows() << " approximated points\n" << approx << endl;
-//         fprintf(stderr, "# input points        = %ld\n", domain.rows());
+        //         cerr << approx.rows() << " approximated points\n" << approx << endl;
+        //         fprintf(stderr, "# input points        = %ld\n", domain.rows());
 
         fprintf(stderr, "compression ratio     = %.2f\n", compute_compression());
     }
@@ -571,7 +576,7 @@ struct BlockBase
     // send decoded ghost points
     // assumes entire block was already decoded
     void send_ghost_pts(const diy::Master::ProxyWithLink&           cp,
-                        const diy::RegularDecomposer<Bounds<T>>&    decomposer)
+            const diy::RegularDecomposer<Bounds<T>>&    decomposer)
     {
         RCLink<T> *l = static_cast<RCLink<T> *>(cp.link());
         map<diy::BlockID, vector<VectorX<T> > > outgoing_pts;
@@ -635,27 +640,27 @@ struct BlockBase
     {
         // geometry mfa
         geometry.mfa = new mfa::MFA<T>(geometry.p,
-                                       mfa->ndom_pts(),
-                                       domain,
-                                       geometry.ctrl_pts,
-                                       geometry.nctrl_pts,
-                                       geometry.weights,
-                                       geometry.knots,
-                                       0,
-                                       dom_dim - 1);
+                mfa->ndom_pts(),
+                domain,
+                geometry.ctrl_pts,
+                geometry.nctrl_pts,
+                geometry.weights,
+                geometry.knots,
+                0,
+                dom_dim - 1);
 
         // science variable mfas
         for (auto i = 0; i< vars.size(); i++)
         {
             vars[i].mfa = new mfa::MFA<T>(vars[i].p,
-                                          mfa->ndom_pts(),
-                                          domain,
-                                          vars[i].ctrl_pts,
-                                          vars[i].nctrl_pts,
-                                          vars[i].weights,
-                                          vars[i].knots,
-                                          dom_dim + i,        // assumes each variable is scalar
-                                          dom_dim + i);
+                    mfa->ndom_pts(),
+                    domain,
+                    vars[i].ctrl_pts,
+                    vars[i].nctrl_pts,
+                    vars[i].weights,
+                    vars[i].knots,
+                    dom_dim + i,        // assumes each variable is scalar
+                    dom_dim + i);
         }
 
         // pretend this tmesh is for the first science variable
@@ -741,7 +746,7 @@ struct BlockBase
 
     // decode a point in the t-mesh
     void decode_tmesh(const diy::Master::ProxyWithLink&     cp,
-                      const VectorX<T>&                     param)      // parameters of point to decode
+            const VectorX<T>&                     param)      // parameters of point to decode
     {
         // pretend this tmesh is for the first science variable
         mfa::Tmesh<T>& tmesh = vars[0].mfa->mfa_data().tmesh;
@@ -824,189 +829,189 @@ struct BlockBase
 namespace mfa
 {
     template<typename B>                        // B = block object
-    void* create()          { return new B; }
+        void* create()          { return new B; }
 
     template<typename B>                        // B = block object
-    void destroy(void* b)
-    {
-        B* block = static_cast<B*>(b);
-        if (block->mfa)
-            delete block->mfa;
-        delete block;
-    }
-
-    template<typename B, typename T>                // B = block object,  T = float or double
-    void add(                                       // add the block to the decomposition
-            int                 gid,                // block global id
-            const Bounds<T>&    core,               // block bounds without any ghost added
-            const Bounds<T>&    bounds,             // block bounds including any ghost region added
-            const Bounds<T>&    domain,             // global data bounds
-            const RCLink<T>&    link,               // neighborhood
-            diy::Master&        master,             // diy master
-            int                 dom_dim,            // domain dimensionality
-            int                 pt_dim,             // point dimensionality
-            T                   ghost_factor = 0.0) // amount of ghost zone overlap as a factor of block size (0.0 - 1.0)
-    {
-        B*              b   = new B;
-        RCLink<T>*      l   = new RCLink<T>(link);
-        diy::Master&    m   = const_cast<diy::Master&>(master);
-        m.add(gid, b, l);
-
-        b->dom_dim = dom_dim;
-        b->pt_dim  = pt_dim;
-
-        // NB: using bounds to hold full point dimensionality, but using core to hold only domain dimensionality
-        b->bounds_mins.resize(pt_dim);
-        b->bounds_maxs.resize(pt_dim);
-        b->core_mins.resize(dom_dim);
-        b->core_maxs.resize(dom_dim);
-
-        // manually set ghosted block bounds as a factor increase of original core bounds
-        for (int i = 0; i < dom_dim; i++)
+        void destroy(void* b)
         {
-            T ghost_amount = ghost_factor * (core.max[i] - core.min[i]);
-            if (core.min[i] > domain.min[i])
-                b->bounds_mins(i) = core.min[i] - ghost_amount;
-            else
-                b->bounds_mins(i)= core.min[i];
-
-            if (core.max[i] < domain.max[i])
-                b->bounds_maxs(i) = core.max[i] + ghost_amount;
-            else
-                b->bounds_maxs(i) = core.max[i];
-            b->core_mins(i) = core.min[i];
-            b->core_maxs(i) = core.max[i];
+            B* block = static_cast<B*>(b);
+            if (block->mfa)
+                delete block->mfa;
+            delete block;
         }
 
-        b->mfa = NULL;
-    }
+    template<typename B, typename T>                // B = block object,  T = float or double
+        void add(                                       // add the block to the decomposition
+                int                 gid,                // block global id
+                const Bounds<T>&    core,               // block bounds without any ghost added
+                const Bounds<T>&    bounds,             // block bounds including any ghost region added
+                const Bounds<T>&    domain,             // global data bounds
+                const RCLink<T>&    link,               // neighborhood
+                diy::Master&        master,             // diy master
+                int                 dom_dim,            // domain dimensionality
+                int                 pt_dim,             // point dimensionality
+                T                   ghost_factor = 0.0) // amount of ghost zone overlap as a factor of block size (0.0 - 1.0)
+        {
+            B*              b   = new B;
+            RCLink<T>*      l   = new RCLink<T>(link);
+            diy::Master&    m   = const_cast<diy::Master&>(master);
+            m.add(gid, b, l);
+
+            b->dom_dim = dom_dim;
+            b->pt_dim  = pt_dim;
+
+            // NB: using bounds to hold full point dimensionality, but using core to hold only domain dimensionality
+            b->bounds_mins.resize(pt_dim);
+            b->bounds_maxs.resize(pt_dim);
+            b->core_mins.resize(dom_dim);
+            b->core_maxs.resize(dom_dim);
+
+            // manually set ghosted block bounds as a factor increase of original core bounds
+            for (int i = 0; i < dom_dim; i++)
+            {
+                T ghost_amount = ghost_factor * (core.max[i] - core.min[i]);
+                if (core.min[i] > domain.min[i])
+                    b->bounds_mins(i) = core.min[i] - ghost_amount;
+                else
+                    b->bounds_mins(i)= core.min[i];
+
+                if (core.max[i] < domain.max[i])
+                    b->bounds_maxs(i) = core.max[i] + ghost_amount;
+                else
+                    b->bounds_maxs(i) = core.max[i];
+                b->core_mins(i) = core.min[i];
+                b->core_maxs(i) = core.max[i];
+            }
+
+            b->mfa = NULL;
+        }
 
     template<typename B, typename T>                // B = block object,  T = float or double
-    void save(
-            const void*        b_,
-            diy::BinaryBuffer& bb)
-    {
-        B* b = (B*)b_;
-
-        // TODO: don't save domain in practice
-        diy::save(bb, b->domain);
-
-        // top-level mfa data
-        diy::save(bb, b->dom_dim);
-        diy::save(bb, b->mfa->ndom_pts());
-
-        diy::save(bb, b->bounds_mins);
-        diy::save(bb, b->bounds_maxs);
-        diy::save(bb, b->core_mins);
-        diy::save(bb, b->core_maxs);
-
-        // geometry
-        diy::save(bb, b->geometry.mfa_data->p);
-        diy::save(bb, b->geometry.mfa_data->tmesh.tensor_prods.size());
-        for (TensorProduct<T>& t: b->geometry.mfa_data->tmesh.tensor_prods)
-            diy::save(bb, t.nctrl_pts);
-        for (TensorProduct<T>& t: b->geometry.mfa_data->tmesh.tensor_prods)
-            diy::save(bb, t.ctrl_pts);
-        for (TensorProduct<T>& t: b->geometry.mfa_data->tmesh.tensor_prods)
-            diy::save(bb, t.weights);
-        for (TensorProduct<T>& t: b->geometry.mfa_data->tmesh.tensor_prods)
-            diy::save(bb, t.knot_mins);
-        for (TensorProduct<T>& t: b->geometry.mfa_data->tmesh.tensor_prods)
-            diy::save(bb, t.knot_maxs);
-        diy::save(bb, b->geometry.mfa_data->tmesh.all_knots);
-        diy::save(bb, b->geometry.mfa_data->tmesh.all_knot_levels);
-
-        // science variables
-        diy::save(bb, b->vars.size());
-        for (auto i = 0; i < b->vars.size(); i++)
+        void save(
+                const void*        b_,
+                diy::BinaryBuffer& bb)
         {
-            diy::save(bb, b->vars[i].mfa_data->p);
-            diy::save(bb, b->vars[i].mfa_data->tmesh.tensor_prods.size());
-            for (TensorProduct<T>& t: b->vars[i].mfa_data->tmesh.tensor_prods)
+            B* b = (B*)b_;
+
+            // TODO: don't save domain in practice
+            diy::save(bb, b->domain);
+
+            // top-level mfa data
+            diy::save(bb, b->dom_dim);
+            diy::save(bb, b->mfa->ndom_pts());
+
+            diy::save(bb, b->bounds_mins);
+            diy::save(bb, b->bounds_maxs);
+            diy::save(bb, b->core_mins);
+            diy::save(bb, b->core_maxs);
+
+            // geometry
+            diy::save(bb, b->geometry.mfa_data->p);
+            diy::save(bb, b->geometry.mfa_data->tmesh.tensor_prods.size());
+            for (TensorProduct<T>& t: b->geometry.mfa_data->tmesh.tensor_prods)
                 diy::save(bb, t.nctrl_pts);
-            for (TensorProduct<T>& t: b->vars[i].mfa_data->tmesh.tensor_prods)
+            for (TensorProduct<T>& t: b->geometry.mfa_data->tmesh.tensor_prods)
                 diy::save(bb, t.ctrl_pts);
-            for (TensorProduct<T>& t: b->vars[i].mfa_data->tmesh.tensor_prods)
+            for (TensorProduct<T>& t: b->geometry.mfa_data->tmesh.tensor_prods)
                 diy::save(bb, t.weights);
-            for (TensorProduct<T>& t: b->vars[i].mfa_data->tmesh.tensor_prods)
+            for (TensorProduct<T>& t: b->geometry.mfa_data->tmesh.tensor_prods)
                 diy::save(bb, t.knot_mins);
-            for (TensorProduct<T>& t: b->vars[i].mfa_data->tmesh.tensor_prods)
+            for (TensorProduct<T>& t: b->geometry.mfa_data->tmesh.tensor_prods)
                 diy::save(bb, t.knot_maxs);
-            diy::save(bb, b->vars[i].mfa_data->tmesh.all_knots);
-            diy::save(bb, b->vars[i].mfa_data->tmesh.all_knot_levels);
-        }
+            diy::save(bb, b->geometry.mfa_data->tmesh.all_knots);
+            diy::save(bb, b->geometry.mfa_data->tmesh.all_knot_levels);
 
-        diy::save(bb, b->approx);
-        diy::save(bb, b->errs);
-    }
+            // science variables
+            diy::save(bb, b->vars.size());
+            for (auto i = 0; i < b->vars.size(); i++)
+            {
+                diy::save(bb, b->vars[i].mfa_data->p);
+                diy::save(bb, b->vars[i].mfa_data->tmesh.tensor_prods.size());
+                for (TensorProduct<T>& t: b->vars[i].mfa_data->tmesh.tensor_prods)
+                    diy::save(bb, t.nctrl_pts);
+                for (TensorProduct<T>& t: b->vars[i].mfa_data->tmesh.tensor_prods)
+                    diy::save(bb, t.ctrl_pts);
+                for (TensorProduct<T>& t: b->vars[i].mfa_data->tmesh.tensor_prods)
+                    diy::save(bb, t.weights);
+                for (TensorProduct<T>& t: b->vars[i].mfa_data->tmesh.tensor_prods)
+                    diy::save(bb, t.knot_mins);
+                for (TensorProduct<T>& t: b->vars[i].mfa_data->tmesh.tensor_prods)
+                    diy::save(bb, t.knot_maxs);
+                diy::save(bb, b->vars[i].mfa_data->tmesh.all_knots);
+                diy::save(bb, b->vars[i].mfa_data->tmesh.all_knot_levels);
+            }
+
+            diy::save(bb, b->approx);
+            diy::save(bb, b->errs);
+        }
 
     template<typename B, typename T>                // B = block object, T = float or double
-    void load(
-            void*              b_,
-            diy::BinaryBuffer& bb)
-    {
-        B* b = (B*)b_;
-
-        // TODO: don't load domain in practice
-        diy::load(bb, b->domain);
-
-        // top-level mfa data
-        diy::load(bb, b->dom_dim);
-        VectorXi ndom_pts(b->dom_dim);
-        diy::load(bb, ndom_pts);
-        b->mfa = new mfa::MFA<T>(b->dom_dim, ndom_pts, b->domain);
-
-        diy::load(bb, b->bounds_mins);
-        diy::load(bb, b->bounds_maxs);
-        diy::load(bb, b->core_mins);
-        diy::load(bb, b->core_maxs);
-
-        VectorXi    p;                  // degree of the mfa
-        size_t      ntensor_prods;      // number of tensor products in the tmesh
-
-        // geometry
-        diy::load(bb, p);
-        diy::load(bb, ntensor_prods);
-        b->geometry.mfa_data = new mfa::MFA_Data<T>(p, ntensor_prods);
-        for (TensorProduct<T>& t: b->geometry.mfa_data->tmesh.tensor_prods)
-            diy::load(bb, t.nctrl_pts);
-        for (TensorProduct<T>& t: b->geometry.mfa_data->tmesh.tensor_prods)
-            diy::load(bb, t.ctrl_pts);
-        for (TensorProduct<T>& t: b->geometry.mfa_data->tmesh.tensor_prods)
-            diy::load(bb, t.weights);
-        for (TensorProduct<T>& t: b->geometry.mfa_data->tmesh.tensor_prods)
-            diy::load(bb, t.knot_mins);
-        for (TensorProduct<T>& t: b->geometry.mfa_data->tmesh.tensor_prods)
-            diy::load(bb, t.knot_maxs);
-        diy::load(bb, b->geometry.mfa_data->tmesh.all_knots);
-        diy::load(bb, b->geometry.mfa_data->tmesh.all_knot_levels);
-
-        // science variables
-        size_t nvars;
-        diy::load(bb, nvars);
-        b->vars.resize(nvars);
-        for (auto i = 0; i < b->vars.size(); i++)
+        void load(
+                void*              b_,
+                diy::BinaryBuffer& bb)
         {
+            B* b = (B*)b_;
+
+            // TODO: don't load domain in practice
+            diy::load(bb, b->domain);
+
+            // top-level mfa data
+            diy::load(bb, b->dom_dim);
+            VectorXi ndom_pts(b->dom_dim);
+            diy::load(bb, ndom_pts);
+            b->mfa = new mfa::MFA<T>(b->dom_dim, ndom_pts, b->domain);
+
+            diy::load(bb, b->bounds_mins);
+            diy::load(bb, b->bounds_maxs);
+            diy::load(bb, b->core_mins);
+            diy::load(bb, b->core_maxs);
+
+            VectorXi    p;                  // degree of the mfa
+            size_t      ntensor_prods;      // number of tensor products in the tmesh
+
+            // geometry
             diy::load(bb, p);
             diy::load(bb, ntensor_prods);
-            b->vars[i].mfa_data = new mfa::MFA_Data<T>(p, ntensor_prods);
-            for (TensorProduct<T>& t: b->vars[i].mfa_data->tmesh.tensor_prods)
+            b->geometry.mfa_data = new mfa::MFA_Data<T>(p, ntensor_prods);
+            for (TensorProduct<T>& t: b->geometry.mfa_data->tmesh.tensor_prods)
                 diy::load(bb, t.nctrl_pts);
-            for (TensorProduct<T>& t: b->vars[i].mfa_data->tmesh.tensor_prods)
+            for (TensorProduct<T>& t: b->geometry.mfa_data->tmesh.tensor_prods)
                 diy::load(bb, t.ctrl_pts);
-            for (TensorProduct<T>& t: b->vars[i].mfa_data->tmesh.tensor_prods)
+            for (TensorProduct<T>& t: b->geometry.mfa_data->tmesh.tensor_prods)
                 diy::load(bb, t.weights);
-            for (TensorProduct<T>& t: b->vars[i].mfa_data->tmesh.tensor_prods)
+            for (TensorProduct<T>& t: b->geometry.mfa_data->tmesh.tensor_prods)
                 diy::load(bb, t.knot_mins);
-            for (TensorProduct<T>& t: b->vars[i].mfa_data->tmesh.tensor_prods)
+            for (TensorProduct<T>& t: b->geometry.mfa_data->tmesh.tensor_prods)
                 diy::load(bb, t.knot_maxs);
-            diy::load(bb, b->vars[i].mfa_data->tmesh.all_knots);
-            diy::load(bb, b->vars[i].mfa_data->tmesh.all_knot_levels);
-        }
+            diy::load(bb, b->geometry.mfa_data->tmesh.all_knots);
+            diy::load(bb, b->geometry.mfa_data->tmesh.all_knot_levels);
 
-        diy::load(bb, b->approx);
-        diy::load(bb, b->errs);
-    }
+            // science variables
+            size_t nvars;
+            diy::load(bb, nvars);
+            b->vars.resize(nvars);
+            for (auto i = 0; i < b->vars.size(); i++)
+            {
+                diy::load(bb, p);
+                diy::load(bb, ntensor_prods);
+                b->vars[i].mfa_data = new mfa::MFA_Data<T>(p, ntensor_prods);
+                for (TensorProduct<T>& t: b->vars[i].mfa_data->tmesh.tensor_prods)
+                    diy::load(bb, t.nctrl_pts);
+                for (TensorProduct<T>& t: b->vars[i].mfa_data->tmesh.tensor_prods)
+                    diy::load(bb, t.ctrl_pts);
+                for (TensorProduct<T>& t: b->vars[i].mfa_data->tmesh.tensor_prods)
+                    diy::load(bb, t.weights);
+                for (TensorProduct<T>& t: b->vars[i].mfa_data->tmesh.tensor_prods)
+                    diy::load(bb, t.knot_mins);
+                for (TensorProduct<T>& t: b->vars[i].mfa_data->tmesh.tensor_prods)
+                    diy::load(bb, t.knot_maxs);
+                diy::load(bb, b->vars[i].mfa_data->tmesh.all_knots);
+                diy::load(bb, b->vars[i].mfa_data->tmesh.all_knot_levels);
+            }
+
+            diy::load(bb, b->approx);
+            diy::load(bb, b->errs);
+        }
 }                       // namespace
 
 namespace diy

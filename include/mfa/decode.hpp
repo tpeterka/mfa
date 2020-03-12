@@ -410,8 +410,8 @@ namespace mfa
                 const VectorXi&         derivs)     // derivative to take in each domain dim. (0 = value, 1 = 1st deriv, 2 = 2nd deriv, ...)
                                                     // pass size-0 vector if unused
         {
-            int last = mfa_data.tmesh.tensor_prods[0].ctrl_pts.cols() - 1;     // last coordinate of control point
-            if (derivs.size())                  // extra check for derivatives, won't slow down normal point evaluation
+            int last = mfa_data.tmesh.tensor_prods[0].ctrl_pts.cols() - 1;      // last coordinate of control point
+            if (derivs.size())                                                  // extra check for derivatives, won't slow down normal point evaluation
             {
                 if (derivs.size() != mfa_data.p.size())
                 {
@@ -425,19 +425,21 @@ namespace mfa
             }
 
             // init
-            vector <MatrixX<T>> N(mfa_data.p.size());              // basis functions in each dim.
-            vector<VectorX<T>>  temp(mfa_data.p.size());           // temporary point in each dim.
-            vector<int>         span(mfa_data.p.size());           // span in each dim.
-            vector<int>         iter(mfa_data.p.size());           // iteration number in each dim.
-            VectorX<T>          ctrl_pt(last + 1);            // one control point
-            int                 ctrl_idx;                     // control point linear ordering index
-            VectorX<T>          temp_denom = VectorX<T>::Zero(mfa_data.p.size());     // temporary rational NURBS denominator in each dim
+            vector <MatrixX<T>> N(mfa_data.p.size());                           // basis functions in each dim.
+            vector<VectorX<T>>  temp(mfa_data.p.size());                        // temporary point in each dim.
+            vector<int>         span(mfa_data.p.size());                        // span in each dim.
+            VectorX<T>          ctrl_pt(last + 1);                              // one control point
+            int                 ctrl_idx;                                       // control point linear ordering index
+            VectorX<T>          temp_denom = VectorX<T>::Zero(mfa_data.p.size());// temporary rational NURBS denominator in each dim
+
+            // set up the volume iterator
+            VectorXi npts = mfa_data.p + VectorXi::Ones(mfa_data.dom_dim);      // local support is p + 1 in each dim.
+            VolIterator vol_iter(npts);                                         // for iterating in a flat loop over n dimensions
 
             // basis funs
-            for (size_t i = 0; i < mfa_data.dom_dim; i++)       // for all dims
+            for (size_t i = 0; i < mfa_data.dom_dim; i++)                       // for all dims
             {
                 temp[i]    = VectorX<T>::Zero(last + 1);
-                iter[i]    = 0;
                 span[i]    = mfa_data.FindSpan(i, param(i), tensor);
                 N[i]       = MatrixX<T>::Zero(1, tensor.nctrl_pts(i));
                 if (derivs.size() && derivs(i))
@@ -464,51 +466,51 @@ namespace mfa
                 ctrl_idx += (span[j] - mfa_data.p(j) + ct(0, j)) * cs[j];
             size_t start_ctrl_idx = ctrl_idx;
 
-            for (int i = 0; i < tot_iters; i++)             // 1-d flattening all n-d nested loop computations
+            while (!vol_iter.done())
             {
                 // always compute the point in the first dimension
                 ctrl_pt = tensor.ctrl_pts.row(ctrl_idx);
                 T w     = tensor.weights(ctrl_idx);
 
-#ifdef WEIGH_ALL_DIMS                               // weigh all dimensions
-                temp[0] += (N[0])(0, iter[0] + span[0] - mfa_data.p(0)) * ctrl_pt * w;
-#else                                               // weigh only range dimension
+#ifdef WEIGH_ALL_DIMS                                                           // weigh all dimensions
+                temp[0] += (N[0])(0, vol_iter.idx_dim(0) + span[0] - mfa_data.p(0)) * ctrl_pt * w;
+#else                                                                           // weigh only range dimension
                 for (auto j = 0; j < last; j++)
-                    (temp[0])(j) += (N[0])(0, iter[0] + span[0] - mfa_data.p(0)) * ctrl_pt(j);
-                (temp[0])(last) += (N[0])(0, iter[0] + span[0] - mfa_data.p(0)) * ctrl_pt(last) * w;
+                    (temp[0])(j) += (N[0])(0, vol_iter.idx_dim(0) + span[0] - mfa_data.p(0)) * ctrl_pt(j);
+                (temp[0])(last) += (N[0])(0, vol_iter.idx_dim(0) + span[0] - mfa_data.p(0)) * ctrl_pt(last) * w;
 #endif
 
-                temp_denom(0) += w * N[0](0, iter[0] + span[0] - mfa_data.p(0));
-                iter[0]++;
+                temp_denom(0) += w * N[0](0, vol_iter.idx_dim(0) + span[0] - mfa_data.p(0));
+
+                vol_iter.incr_iter();                                           // must call near bottom of loop, but before checking for done span below
 
                 // for all dimensions except last, check if span is finished
                 ctrl_idx = start_ctrl_idx;
                 for (size_t k = 0; k < mfa_data.p.size(); k++)
                 {
-                    if (i < tot_iters - 1)
-                        ctrl_idx += ct(i + 1, k) * cs[k];        // ctrl_idx for the next iteration (i+1)
-                    if (k < mfa_data.p.size() - 1 && iter[k] - 1 == mfa_data.p(k))
+                    if (vol_iter.cur_iter() < vol_iter.tot_iters())
+                        ctrl_idx += ct(vol_iter.cur_iter(), k) * cs[k];         // ctrl_idx for the next iteration
+                    if (k < mfa_data.dom_dim - 1 && vol_iter.done(k))
                     {
                         // compute point in next higher dimension and reset computation for current dim
-                        temp[k + 1]        += (N[k + 1])(0, iter[k + 1] + span[k + 1] - mfa_data.p(k + 1)) * temp[k];
-                        temp_denom(k + 1)  += temp_denom(k) * N[k + 1](0, iter[k + 1] + span[k + 1] - mfa_data.p(k + 1));
+                        // use prev_idx_dim because iterator was already incremented above
+                        temp[k + 1]        += (N[k + 1])(0, vol_iter.prev_idx_dim(k + 1) + span[k + 1] - mfa_data.p(k + 1)) * temp[k];
+                        temp_denom(k + 1)  += temp_denom(k) * N[k + 1](0, vol_iter.prev_idx_dim(k + 1) + span[k + 1] - mfa_data.p(k + 1));
                         temp_denom(k)       = 0.0;
                         temp[k]             = VectorX<T>::Zero(last + 1);
-                        iter[k]             = 0;
-                        iter[k + 1]++;
                     }
                 }
             }
 
-            T denom;                                // rational denominator
+            T denom;                                                            // rational denominator
             if (derivs.size() && derivs.sum())
-                denom = 1.0;                        // TODO: weights for derivatives not implemented yet
+                denom = 1.0;                                                    // TODO: weights for derivatives not implemented yet
             else
                 denom = temp_denom(mfa_data.p.size() - 1);
 
-#ifdef WEIGH_ALL_DIMS                           // weigh all dimensions
+#ifdef WEIGH_ALL_DIMS                                                           // weigh all dimensions
             out_pt = temp[mfa_data.p.size() - 1] / denom;
-#else                                           // weigh only range dimension
+#else                                                                           // weigh only range dimension
             out_pt   = temp[mfa_data.p.size() - 1];
             out_pt(last) /= denom;
 #endif
@@ -533,16 +535,18 @@ namespace mfa
             vector <MatrixX<T>> N(mfa_data.p.size());       // basis functions in each dim.
             vector<VectorX<T>>  temp(mfa_data.p.size());    // temporary point in each dim.
             vector<int>         span(mfa_data.p.size());    // span in each dim.
-            vector<int>         iter(mfa_data.p.size());    // iteration number in each dim.
             VectorX<T>          ctrl_pt(last + 1);          // one control point
             int                 ctrl_idx;                   // control point linear ordering index
             VectorX<T>          temp_denom = VectorX<T>::Zero(mfa_data.p.size());     // temporary rational NURBS denominator in each dim
+
+            // set up the volume iterator
+            VectorXi npts = mfa_data.p + VectorXi::Ones(mfa_data.dom_dim);      // local support is p + 1 in each dim.
+            VolIterator vol_iter(npts);                                         // for iterating in a flat loop over n dimensions
 
             // basis funs
             for (size_t i = 0; i < mfa_data.dom_dim; i++)   // for all dims
             {
                 temp[i]    = VectorX<T>::Zero(last + 1);
-                iter[i]    = 0;
                 span[i]    = mfa_data.FindSpan(i, param(i), nctrl_pts(i));
                 N[i]       = MatrixX<T>::Zero(1, nctrl_pts(i));
 
@@ -555,38 +559,37 @@ namespace mfa
                 ctrl_idx += (span[j] - mfa_data.p(j) + ct(0, j)) * cs[j];
             size_t start_ctrl_idx = ctrl_idx;
 
-            for (int i = 0; i < tot_iters; i++)             // 1-d flattening all n-d nested loop computations
+            while (!vol_iter.done())
             {
                 // always compute the point in the first dimension
                 ctrl_pt = ctrl_pts.row(ctrl_idx);
                 T w     = weights(ctrl_idx);
 
 #ifdef WEIGH_ALL_DIMS                                       // weigh all dimensions
-                temp[0] += (N[0])(0, iter[0] + span[0] - mfa_data.p(0)) * ctrl_pt * w;
+                temp[0] += (N[0])(0, vol_iter.idx_dim(0) + span[0] - mfa_data.p(0)) * ctrl_pt * w;
 #else                                                       // weigh only range dimension
                 for (auto j = 0; j < last; j++)
-                    (temp[0])(j) += (N[0])(0, iter[0] + span[0] - mfa_data.p(0)) * ctrl_pt(j);
-                (temp[0])(last) += (N[0])(0, iter[0] + span[0] - mfa_data.p(0)) * ctrl_pt(last) * w;
+                    (temp[0])(j) += (N[0])(0, vol_iter.idx_dim(0) + span[0] - mfa_data.p(0)) * ctrl_pt(j);
+                (temp[0])(last) += (N[0])(0, vol_iter.idx_dim(0) + span[0] - mfa_data.p(0)) * ctrl_pt(last) * w;
 #endif
 
-                temp_denom(0) += w * N[0](0, iter[0] + span[0] - mfa_data.p(0));
-                iter[0]++;
+                temp_denom(0) += w * N[0](0, vol_iter.idx_dim(0) + span[0] - mfa_data.p(0));
+
+                vol_iter.incr_iter();                                           // must call near bottom of loop, but before checking for done span below
 
                 // for all dimensions except last, check if span is finished
                 ctrl_idx = start_ctrl_idx;
                 for (size_t k = 0; k < mfa_data.p.size(); k++)
                 {
-                    if (i < tot_iters - 1)
-                        ctrl_idx += ct(i + 1, k) * cs[k];   // ctrl_idx for the next iteration (i+1)
-                    if (k < mfa_data.p.size() - 1 && iter[k] - 1 == mfa_data.p(k))
+                    if (vol_iter.cur_iter() < vol_iter.tot_iters())
+                        ctrl_idx += ct(vol_iter.cur_iter(), k) * cs[k];         // ctrl_idx for the next iteration
+                    if (k < mfa_data.dom_dim - 1 && vol_iter.done(k))
                     {
                         // compute point in next higher dimension and reset computation for current dim
-                        temp[k + 1]        += (N[k + 1])(0, iter[k + 1] + span[k + 1] - mfa_data.p(k + 1)) * temp[k];
-                        temp_denom(k + 1)  += temp_denom(k) * N[k + 1](0, iter[k + 1] + span[k + 1] - mfa_data.p(k + 1));
+                        temp[k + 1]        += (N[k + 1])(0, vol_iter.prev_idx_dim(k + 1) + span[k + 1] - mfa_data.p(k + 1)) * temp[k];
+                        temp_denom(k + 1)  += temp_denom(k) * N[k + 1](0, vol_iter.prev_idx_dim(k + 1) + span[k + 1] - mfa_data.p(k + 1));
                         temp_denom(k)       = 0.0;
                         temp[k]             = VectorX<T>::Zero(last + 1);
-                        iter[k]             = 0;
-                        iter[k + 1]++;
                     }
                 }
             }
@@ -695,6 +698,10 @@ namespace mfa
 
             di.Reset_saved_basis(mfa_data);
 
+            // set up the volume iterator
+            VectorXi npts = mfa_data.p + VectorXi::Ones(mfa_data.dom_dim);      // local support is p + 1 in each dim.
+            VolIterator vol_iter(npts);                                         // for iterating in a flat loop over n dimensions
+
             // linear index of first control point
             di.ctrl_idx = 0;
             for (int j = 0; j < mfa_data.dom_dim; j++)
@@ -704,47 +711,47 @@ namespace mfa
             }
             size_t start_ctrl_idx = di.ctrl_idx;
 
-            for (int i = 0; i < tot_iters; i++)             // 1-d flattening all n-d nested loop computations
+            while (!vol_iter.done())
             {
                 // always compute the point in the first dimension
                 di.ctrl_pt  = tensor.ctrl_pts.row(di.ctrl_idx);
                 T w         = tensor.weights(di.ctrl_idx);
 
-#ifdef WEIGH_ALL_DIMS                               // weigh all dimensions
-                di.temp[0] += (mfa_data.N[0])(ijk(0), di.iter[0] + di.span[0] - mfa_data.p(0)) * di.ctrl_pt * w;
-#else                                               // weigh only range dimension
+#ifdef WEIGH_ALL_DIMS                                                           // weigh all dimensions
+                di.temp[0] += (mfa_data.N[0])(ijk(0), vol_iter.idx_dim(0) + di.span[0] - mfa_data.p(0)) * di.ctrl_pt * w;
+#else                                                                           // weigh only range dimension
                 for (auto j = 0; j < last; j++)
-                    (di.temp[0])(j) += (mfa_data.N[0])(ijk(0), di.iter[0] + di.span[0] - mfa_data.p(0)) * di.ctrl_pt(j);
-                (di.temp[0])(last) += (mfa_data.N[0])(ijk(0), di.iter[0] + di.span[0] - mfa_data.p(0)) * di.ctrl_pt(last) * w;
+                    (di.temp[0])(j) += (mfa_data.N[0])(ijk(0), vol_iter.idx_dim(0) + di.span[0] - mfa_data.p(0)) * di.ctrl_pt(j);
+                (di.temp[0])(last) += (mfa_data.N[0])(ijk(0), vol_iter.idx_dim(0) + di.span[0] - mfa_data.p(0)) * di.ctrl_pt(last) * w;
 #endif
 
-                di.temp_denom(0) += w * mfa_data.N[0](ijk(0), di.iter[0] + di.span[0] - mfa_data.p(0));
-                di.iter[0]++;
+                di.temp_denom(0) += w * mfa_data.N[0](ijk(0), vol_iter.idx_dim(0) + di.span[0] - mfa_data.p(0));
+
+                vol_iter.incr_iter();                                           // must call near bottom of loop, but before checking for done span below
 
                 // for all dimensions except last, check if span is finished
                 di.ctrl_idx = start_ctrl_idx;
                 for (size_t k = 0; k < mfa_data.dom_dim; k++)
                 {
-                    if (i < tot_iters - 1)
-                        di.ctrl_idx += ct(i + 1, k) * cs[k];        // ctrl_idx for the next iteration (i+1)
-                    if (k < mfa_data.dom_dim - 1 && di.iter[k] - 1 == mfa_data.p(k))
+                    if (vol_iter.cur_iter() < vol_iter.tot_iters())
+                        di.ctrl_idx += ct(vol_iter.cur_iter(), k) * cs[k];      // ctrl_idx for the next iteration
+                    if (k < mfa_data.dom_dim - 1 && vol_iter.done(k))
                     {
                         // compute point in next higher dimension and reset computation for current dim
-                        di.temp[k + 1]        += (mfa_data.N[k + 1])(ijk(k + 1), di.iter[k + 1] + di.span[k + 1] - mfa_data.p(k + 1)) * di.temp[k];
-                        di.temp_denom(k + 1)  += di.temp_denom(k) * mfa_data.N[k + 1](ijk(k + 1), di.iter[k + 1] + di.span[k + 1] - mfa_data.p(k + 1));
+                        // use prev_idx_dim because iterator was already incremented above
+                        di.temp[k + 1]        += (mfa_data.N[k + 1])(ijk(k + 1), vol_iter.prev_idx_dim(k + 1) + di.span[k + 1] - mfa_data.p(k + 1)) * di.temp[k];
+                        di.temp_denom(k + 1)  += di.temp_denom(k) * mfa_data.N[k + 1](ijk(k + 1), vol_iter.prev_idx_dim(k + 1) + di.span[k + 1] - mfa_data.p(k + 1));
                         di.temp_denom(k)       = 0.0;
                         di.temp[k].setZero();
-                        di.iter[k]             = 0;
-                        di.iter[k + 1]++;
                     }
                 }
             }
 
-            T denom = di.temp_denom(mfa_data.dom_dim - 1);   // rational denominator
+            T denom = di.temp_denom(mfa_data.dom_dim - 1);                      // rational denominator
 
-#ifdef WEIGH_ALL_DIMS                                   // weigh all dimensions
+#ifdef WEIGH_ALL_DIMS                                                           // weigh all dimensions
             out_pt = di.temp[mfa_data.dom_dim - 1] / denom;
-#else                                                   // weigh only range dimension
+#else                                                                           // weigh only range dimension
             out_pt   = di.temp[mfa_data.dom_dim - 1];
             out_pt(last) /= denom;
 #endif
@@ -762,7 +769,7 @@ namespace mfa
                                                     // pass size-0 vector if unused
         {
             int last = tensor.ctrl_pts.cols() - 1;
-            if (derivs.size())                  // extra check for derivatives, won't slow down normal point evaluation
+            if (derivs.size())                                                  // extra check for derivatives, won't slow down normal point evaluation
             {
                 if (derivs.size() != mfa_data.dom_dim)
                 {
@@ -777,8 +784,12 @@ namespace mfa
 
             di.Reset(mfa_data, derivs);
 
+            // set up the volume iterator
+            VectorXi npts = mfa_data.p + VectorXi::Ones(mfa_data.dom_dim);      // local support is p + 1 in each dim.
+            VolIterator vol_iter(npts);                                         // for iterating in a flat loop over n dimensions
+
             // basis funs
-            for (size_t i = 0; i < mfa_data.dom_dim; i++)       // for all dims
+            for (size_t i = 0; i < mfa_data.dom_dim; i++)                       // for all dims
             {
                 di.span[i]    = mfa_data.FindSpan(i, param(i), tensor);
 
@@ -805,51 +816,51 @@ namespace mfa
                 di.ctrl_idx += (di.span[j] - mfa_data.p(j) + ct(0, j)) * cs[j];
             size_t start_ctrl_idx = di.ctrl_idx;
 
-            for (int i = 0; i < tot_iters; i++)             // 1-d flattening all n-d nested loop computations
+            while (!vol_iter.done())
             {
                 // always compute the point in the first dimension
                 di.ctrl_pt  = tensor.ctrl_pts.row(di.ctrl_idx);
                 T w         = tensor.weights(di.ctrl_idx);
 
-#ifdef WEIGH_ALL_DIMS                               // weigh all dimensions
-                di.temp[0] += (di.N[0])(0, di.iter[0] + di.span[0] - mfa_data.p(0)) * di.ctrl_pt * w;
-#else                                               // weigh only range dimension
+#ifdef WEIGH_ALL_DIMS                                                           // weigh all dimensions
+                di.temp[0] += (di.N[0])(0, vol_iter.idx_dim(0) + di.span[0] - mfa_data.p(0)) * di.ctrl_pt * w;
+#else                                                                           // weigh only range dimension
                 for (auto j = 0; j < last; j++)
-                    (di.temp[0])(j) += (di.N[0])(0, di.iter[0] + di.span[0] - mfa_data.p(0)) * di.ctrl_pt(j);
-                (di.temp[0])(last) += (di.N[0])(0, di.iter[0] + di.span[0] - mfa_data.p(0)) * di.ctrl_pt(last) * w;
+                    (di.temp[0])(j) += (di.N[0])(0, vol_iter.idx_dim(0) + di.span[0] - mfa_data.p(0)) * di.ctrl_pt(j);
+                (di.temp[0])(last) += (di.N[0])(0, vol_iter.idx_dim(0) + di.span[0] - mfa_data.p(0)) * di.ctrl_pt(last) * w;
 #endif
 
-                di.temp_denom(0) += w * di.N[0](0, di.iter[0] + di.span[0] - mfa_data.p(0));
-                di.iter[0]++;
+                di.temp_denom(0) += w * di.N[0](0, vol_iter.idx_dim(0) + di.span[0] - mfa_data.p(0));
+
+                vol_iter.incr_iter();                                           // must call near bottom of loop, but before checking for done span below
 
                 // for all dimensions except last, check if span is finished
                 di.ctrl_idx = start_ctrl_idx;
                 for (size_t k = 0; k < mfa_data.dom_dim; k++)
                 {
-                    if (i < tot_iters - 1)
-                        di.ctrl_idx += ct(i + 1, k) * cs[k];        // ctrl_idx for the next iteration (i+1)
-                    if (k < mfa_data.dom_dim - 1 && di.iter[k] - 1 == mfa_data.p(k))
+                    if (vol_iter.cur_iter() < vol_iter.tot_iters())
+                        di.ctrl_idx += ct(vol_iter.cur_iter(), k) * cs[k];      // ctrl_idx for the next iteration
+                    if (k < mfa_data.dom_dim - 1 && vol_iter.done(k))
                     {
                         // compute point in next higher dimension and reset computation for current dim
-                        di.temp[k + 1]        += (di.N[k + 1])(0, di.iter[k + 1] + di.span[k + 1] - mfa_data.p(k + 1)) * di.temp[k];
-                        di.temp_denom(k + 1)  += di.temp_denom(k) * di.N[k + 1](0, di.iter[k + 1] + di.span[k + 1] - mfa_data.p(k + 1));
+                        // use prev_idx_dim because iterator was already incremented above
+                        di.temp[k + 1]        += (di.N[k + 1])(0, vol_iter.prev_idx_dim(k + 1) + di.span[k + 1] - mfa_data.p(k + 1)) * di.temp[k];
+                        di.temp_denom(k + 1)  += di.temp_denom(k) * di.N[k + 1](0, vol_iter.prev_idx_dim(k + 1) + di.span[k + 1] - mfa_data.p(k + 1));
                         di.temp_denom(k)       = 0.0;
                         di.temp[k].setZero();
-                        di.iter[k]             = 0;
-                        di.iter[k + 1]++;
                     }
                 }
             }
 
-            T denom;                                // rational denominator
+            T denom;                                                            // rational denominator
             if (derivs.size() && derivs.sum())
-                denom = 1.0;                        // TODO: weights for derivatives not implemented yet
+                denom = 1.0;                                                    // TODO: weights for derivatives not implemented yet
             else
                 denom = di.temp_denom(mfa_data.dom_dim - 1);
 
-#ifdef WEIGH_ALL_DIMS                           // weigh all dimensions
+#ifdef WEIGH_ALL_DIMS                                                           // weigh all dimensions
             out_pt = di.temp[mfa_data.dom_dim - 1] / denom;
-#else                                           // weigh only range dimension
+#else                                                                           // weigh only range dimension
             out_pt   = di.temp[mfa_data.dom_dim - 1];
             out_pt(last) /= denom;
 #endif

@@ -152,7 +152,6 @@ int main(int argc, char** argv)
     // set default args for diy foreach callback functions
     DomainArgs d_args(dom_dim, pt_dim);
     d_args.weighted     = weighted;
-    d_args.local        = local;
     d_args.n            = noise;
     d_args.multiblock   = false;
     d_args.verbose      = 1;
@@ -163,10 +162,10 @@ int main(int argc, char** argv)
     for (int i = 0; i < dom_dim; i++)
     {
         d_args.geom_p[i]            = geom_degree;
-        d_args.vars_p[i]            = vars_degree;
+        d_args.vars_p[0][i]         = vars_degree;      // assuming one science variable, vars_p[0]
         d_args.ndom_pts[i]          = ndomp;
         d_args.geom_nctrl_pts[i]    = geom_nctrl;
-        d_args.vars_nctrl_pts[i]    = vars_nctrl;
+        d_args.vars_nctrl_pts[0][i] = vars_nctrl;       // assuming one science variable, vars_nctrl_pts[0]
     }
 
     // sine function f(x) = sin(x), f(x,y) = sin(x)sin(y), ...
@@ -336,7 +335,7 @@ int main(int argc, char** argv)
                     { b->read_2d_scalar_data(cp, d_args); });
         else
         {
-            fprintf(stderr, "cesm data only available in 2 or 3d domain\n");
+            fprintf(stderr, "cesm data only available in 2d domain\n");
             exit(0);
         }
     }
@@ -360,7 +359,7 @@ int main(int argc, char** argv)
                 { b->error(cp, 1, true); });
 #else                   // range coordinate difference
         master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-                { b->range_error(cp, 1, true, false); });
+                { b->range_error(cp, 1, true, true); });
 #endif
         decode_time = MPI_Wtime() - decode_time;
     }
