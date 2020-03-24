@@ -424,19 +424,22 @@ template <typename T>                        // float or double
                 int retval = NewKnots_full(err_limit, extents, iter, local, nctrl_pts, ctrl_pts, weights);
 
                 // debug: print tmesh
-                fprintf(stderr, "\n----- T-mesh after LocalNewKnots_full -----\n\n");
+                fprintf(stderr, "\n----- T-mesh after NewKnots_full -----\n\n");
                 mfa_data.tmesh.print();
                 fprintf(stderr, "--------------------------\n\n");
 
-                // resize temporary control points and weights and global encode and scattering of control points to tensors
-                // TODO: replace for local encode
-                for (auto k = 0; k < mfa_data.dom_dim; k++)
-                    nctrl_pts(k) = mfa_data.tmesh.all_knots[k].size() - mfa_data.p(k) - 1;
-                ctrl_pts.resize(nctrl_pts.prod(), mfa_data.max_dim - mfa_data.min_dim + 1);
-                weights.resize(ctrl_pts.rows());
+                // if not doing local solve,
+                // resize temporary control points and weights and global encode and scatter of control points to tensors
+                if (!local)
+                {
+                    for (auto k = 0; k < mfa_data.dom_dim; k++)
+                        nctrl_pts(k) = mfa_data.tmesh.all_knots[k].size() - mfa_data.p(k) - 1;
+                    ctrl_pts.resize(nctrl_pts.prod(), mfa_data.max_dim - mfa_data.min_dim + 1);
+                    weights.resize(ctrl_pts.rows());
 
-                Encode(nctrl_pts, ctrl_pts, weights);
-                mfa_data.tmesh.scatter_ctrl_pts(nctrl_pts, ctrl_pts, weights);
+                    Encode(nctrl_pts, ctrl_pts, weights);
+                    mfa_data.tmesh.scatter_ctrl_pts(nctrl_pts, ctrl_pts, weights);
+                }
 
                 // debug: print tmesh
                 fprintf(stderr, "\n----- T-mesh at the end of iteration %d-----\n\n", iter);
@@ -1196,35 +1199,39 @@ template <typename T>                        // float or double
             vector<KnotIdx> knot_mins(mfa_data.dom_dim);
             vector<KnotIdx> knot_maxs(mfa_data.dom_dim);
             auto ntensors = mfa_data.tmesh.tensor_prods.size();         // number of tensors before any additional appends
+
+            // search existing tensors to find which one is being refined; break after finding a tensor to refine
+            bool found_tensor = false;
             for (auto i = 0; i < ntensors; i++)                         // for all existing tensors
             {
                 TensorProduct<T>& t = mfa_data.tmesh.tensor_prods[i];
 
-                for (auto j = 0; j < mfa_data.dom_dim; j++)
+                int j;
+                for (j = 0; j < mfa_data.dom_dim; j++)
                 {
-                    KnotIdx min_idx, max_idx;
-                    for (auto k = 0; k < inserted_knot_idxs[j].size(); k++)
+                    // inserted knot falls into the mins, maxs of this tensor
+                    // assuming only one inserted knot, hence the zero subscript inserted_knot_idxs[j][0]
+                    // adding, subtracting p / 2 to the inserted knot to ensure that p knots and control points are in the tensor to be appended
+                    if (inserted_knot_idxs[j][0] - mfa_data.p(j) / 2 >= t.knot_mins[j] && inserted_knot_idxs[j][0] + mfa_data.p(j) / 2 <= t.knot_maxs[j])
                     {
-                        // inserted knot falls into the mins, maxs of this tensor
-                        if (inserted_knot_idxs[j][k] - mfa_data.p(j) / 2 >= t.knot_mins[k] && inserted_knot_idxs[j][k] + mfa_data.p(j) / 2 <= t.knot_maxs[k])
-                        {
-                            // expand knot mins and maxs by p / 2 index lines on each side of added knot
-                            // so that the new tensor has p anchors (control pts) in each dimension (needed for local adaptive solve)
-                            assert(inserted_knot_idxs[j][k] - mfa_data.p(j) / 2 >= 0);
-                            assert(inserted_knot_idxs[j][k] + mfa_data.p(j) / 2 < mfa_data.tmesh.all_knots[j].size());
-                            if (k == 0 || inserted_knot_idxs[j][k] < min_idx)
-                            {
-                                knot_mins[j] = inserted_knot_idxs[j][k] - mfa_data.p(j) / 2;
-                                min_idx = inserted_knot_idxs[j][k];
-                            }
-                            if (k == 0 || inserted_knot_idxs[j][k] > max_idx)
-                            {
-                                knot_maxs[j] = inserted_knot_idxs[j][k] + mfa_data.p(j) / 2;
-                                max_idx = inserted_knot_idxs[j][k];
-                            }
-                        }
+                        // expand knot mins and maxs by p / 2 index lines on each side of added knot
+                        // so that the new tensor has p anchors (control pts) in each dimension (needed for local adaptive solve)
+                        assert(inserted_knot_idxs[j][0] - mfa_data.p(j) / 2 >= 0);
+                        assert(inserted_knot_idxs[j][0] + mfa_data.p(j) / 2 < mfa_data.tmesh.all_knots[j].size());
+                        knot_mins[j] = inserted_knot_idxs[j][0] - mfa_data.p(j) / 2;
+                        knot_maxs[j] = inserted_knot_idxs[j][0] + mfa_data.p(j) / 2;
                     }
+                    else
+                        break;
                 }
+
+                if (j == mfa_data.dom_dim)
+                    found_tensor = true;
+
+                if (!found_tensor)
+                    continue;
+
+                // following: a tensor to refine was found
 
                 // debug
                 if (mfa_data.dom_dim == 1)
@@ -1241,67 +1248,74 @@ template <typename T>                        // float or double
                 // debug
                 mfa_data.tmesh.print();
 
-                if (local)      // local solve for the newly appended tensor
-                {
-                    // TODO hard-coded for 1D and even degree
-                    // TODO: check all of the below when p is odd (not too bad)
-                    // TODO: expand all of the below for higher dimensions (considerably more work)
-                    int p = mfa_data.p[0];
-                    const TensorProduct<T>& tc = mfa_data.tmesh.tensor_prods.back();            // current (newly appended) tensor
-                    const TensorProduct<T>& tp = mfa_data.tmesh.tensor_prods[tc.prev[0][0]];    // previous tensor
-                    const TensorProduct<T>& tn = mfa_data.tmesh.tensor_prods[tc.next[0][0]];    // next tensor
-                    MatrixX<T> ctrlpts_tosolve(3 * p, tc.ctrl_pts.cols());                      // control points to solve, p interior and p constraints on each side
-                    ctrlpts_tosolve.block(0, 0, p, 1)       = tp.ctrl_pts.block(tp.ctrl_pts.rows() - p, 0, p, 1);   // left constraint
-                    ctrlpts_tosolve.block(p, 0, p, 1)       = tc.ctrl_pts;                                          // unconstrained interior
-                    ctrlpts_tosolve.block(2 * p, 0, p, 1)   = tn.ctrl_pts.block(0, 0, p, 1);                        // right constraint
+                if (local)
+                    LocalSolve();
 
-                    // set the constraints
-                    MatrixX<T> cons         = ctrlpts_tosolve;
-                    cons.block(p, 0, p, 1)  = MatrixX<T>::Zero(p, 1);       // zero out the unconstrained interior
-
-                    // get the subset of the domain points needed for the local solve
-
-                    vector<KnotIdx> anchor;                                 // anchor for the edge basis functions of the new tensor
-                    vector<vector<KnotIdx>> local_knot_idxs;                // local knot vector for an anchor
-
-                    // left edge
-                    anchor.push_back(tp.knot_maxs[0] - p);
-                    mfa_data.tmesh.local_knot_vector(anchor, local_knot_idxs);
-                    KnotIdx start_knot_idx = local_knot_idxs[0][0];
-                    T start_knot = mfa_data.tmesh.all_knots[0][start_knot_idx];
-
-                    anchor.clear();
-                    local_knot_idxs.clear();
-
-                    // right edge
-                    anchor.push_back(tn.knot_mins[0] + p - 1);
-                    mfa_data.tmesh.local_knot_vector(anchor, local_knot_idxs);
-                    KnotIdx end_knot_idx = local_knot_idxs[0].back();
-                    T end_knot = mfa_data.tmesh.all_knots[0][end_knot_idx];
-
-                    // search params for start and end knot values
-                    // TODO: use ijk2idx to get the actual indices
-                    auto it = std::lower_bound(mfa.params()[0].begin(), mfa.params()[0].end(), start_knot);
-                    size_t subdomain_start_idx = it - mfa.params()[0].begin();
-                    it = std::upper_bound(mfa.params()[0].begin(), mfa.params()[0].end(), end_knot);
-                    size_t subdomain_end_idx = it - mfa.params()[0].begin() - 1;
-
-                    // set up the optimization
-                    LocalLSQ<T> f(mfa, mfa_data, domain, cons, subdomain_start_idx, subdomain_end_idx, verbose);
-                    BfgsSolver<LocalLSQ<T>> solver;
-
-                    // minimize the function
-                    VectorX<T> x1(Eigen::Map<VectorX<T>>(ctrlpts_tosolve.data(), ctrlpts_tosolve.size()));
-                    solver.minimize(f, x1);
-
-                }       // local solve for the newly appended tensor
-            }       // for all existing tensors
+                if (found_tensor)
+                    break;
+            }   // for all existing tensors
 
             for (auto k = 0; k < mfa_data.dom_dim; k++)
                 if (mfa.ndom_pts()(k) <= nctrl_pts(k))
                     return -1;
 
             return 1;
+        }
+
+        // set up and run iterative solver for constrained local solve
+        // of a previously added tensor to the back of the tensor products in the tmesh
+        void LocalSolve()
+        {
+            // TODO hard-coded for 1D and even degree
+            // TODO: check all of the below when p is odd (not too bad)
+            // TODO: expand all of the below for higher dimensions (considerably more work)
+            int p = mfa_data.p[0];
+            const TensorProduct<T>& tc = mfa_data.tmesh.tensor_prods.back();            // current (newly appended) tensor
+            const TensorProduct<T>& tp = mfa_data.tmesh.tensor_prods[tc.prev[0][0]];    // previous tensor
+            const TensorProduct<T>& tn = mfa_data.tmesh.tensor_prods[tc.next[0][0]];    // next tensor
+            MatrixX<T> ctrlpts_tosolve(3 * p, tc.ctrl_pts.cols());                      // control points to solve, p interior and p constraints on each side
+            ctrlpts_tosolve.block(0, 0, p, 1)       = tp.ctrl_pts.block(tp.ctrl_pts.rows() - p, 0, p, 1);   // left constraint
+            ctrlpts_tosolve.block(p, 0, p, 1)       = tc.ctrl_pts;                                          // unconstrained interior
+            ctrlpts_tosolve.block(2 * p, 0, p, 1)   = tn.ctrl_pts.block(0, 0, p, 1);                        // right constraint
+
+            // set the constraints
+            MatrixX<T> cons         = ctrlpts_tosolve;
+            cons.block(p, 0, p, 1)  = MatrixX<T>::Zero(p, 1);       // zero out the unconstrained interior
+
+            // get the subset of the domain points needed for the local solve
+
+            vector<KnotIdx> anchor;                                 // anchor for the edge basis functions of the new tensor
+            vector<vector<KnotIdx>> local_knot_idxs;                // local knot vector for an anchor
+
+            // left edge
+            anchor.push_back(tp.knot_maxs[0] - p);
+            mfa_data.tmesh.local_knot_vector(anchor, local_knot_idxs);
+            KnotIdx start_knot_idx = local_knot_idxs[0][0];
+            T start_knot = mfa_data.tmesh.all_knots[0][start_knot_idx];
+
+            anchor.clear();
+            local_knot_idxs.clear();
+
+            // right edge
+            anchor.push_back(tn.knot_mins[0] + p - 1);
+            mfa_data.tmesh.local_knot_vector(anchor, local_knot_idxs);
+            KnotIdx end_knot_idx = local_knot_idxs[0].back();
+            T end_knot = mfa_data.tmesh.all_knots[0][end_knot_idx];
+
+            // search params for start and end knot values
+            // TODO: use ijk2idx to get the actual indices
+            auto it = std::lower_bound(mfa.params()[0].begin(), mfa.params()[0].end(), start_knot);
+            size_t subdomain_start_idx = it - mfa.params()[0].begin();
+            it = std::upper_bound(mfa.params()[0].begin(), mfa.params()[0].end(), end_knot);
+            size_t subdomain_end_idx = it - mfa.params()[0].begin() - 1;
+
+            // set up the optimization
+            LocalLSQ<T> f(mfa, mfa_data, domain, cons, subdomain_start_idx, subdomain_end_idx, verbose);
+            BfgsSolver<LocalLSQ<T>> solver;
+
+            // minimize the function
+            VectorX<T> x1(Eigen::Map<VectorX<T>>(ctrlpts_tosolve.data(), ctrlpts_tosolve.size()));
+            solver.minimize(f, x1);
         }
 
 #endif      // TMESH

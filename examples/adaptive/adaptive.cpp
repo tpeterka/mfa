@@ -152,6 +152,7 @@ int main(int argc, char** argv)
     // set default args for diy foreach callback functions
     DomainArgs d_args(dom_dim, pt_dim);
     d_args.weighted     = weighted;
+    d_args.local        = local;
     d_args.n            = noise;
     d_args.multiblock   = false;
     d_args.verbose      = 1;
