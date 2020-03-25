@@ -360,7 +360,7 @@ int main(int argc, char** argv)
                 { b->error(cp, 1, true); });
 #else                   // range coordinate difference
         master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-                { b->range_error(cp, 1, true, true); });
+                { b->range_error(cp, 1, true, false); });   // saved_basis =  false; saved basis functions do not apply to t-mesh
 #endif
         decode_time = MPI_Wtime() - decode_time;
     }

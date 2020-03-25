@@ -270,7 +270,6 @@ namespace mfa
 
 #else           // tmesh version
 
-                // hard-coded for first tensor product
                 if (i == 0)
                     fprintf(stderr, "Using VolPt_tmesh\n");
                 VolPt_tmesh(param, cpt);
@@ -313,7 +312,7 @@ namespace mfa
                          VectorX<T>&            out_pt)     // (output) point, allocated by caller
         {
             // debug
-//             cerr << "VolPt_tmesh(): decoding point with param: " << param.transpose() << endl;
+            cerr << "VolPt_tmesh(): decoding point with param: " << param.transpose() << endl;
 
             // init
             out_pt = VectorX<T>::Zero(out_pt.size());
@@ -325,14 +324,14 @@ namespace mfa
                 const TensorProduct<T>& t = mfa_data.tmesh.tensor_prods[k];
 
                 VolIterator         vol_iterator(t.nctrl_pts);                      // for iterating in a flat loop over n dimensions
-                vector<KnotIdx>     anchor(mfa_data.dom_dim);                       // one anchor
+                vector<KnotIdx>     anchor(mfa_data.dom_dim);                       // one anchor in (global, ie, over all tensors) index space
 
                 while (!vol_iterator.done())
                 {
                     // get anchor
                     for (auto j = 0; j < mfa_data.dom_dim; j++)
                     {
-                        anchor[j] = vol_iterator.idx_dim(j);
+                        anchor[j] = vol_iterator.idx_dim(j) + t.knot_mins[j];       // add knot_mins to get from local (in this tensor) to global (in the t-mesh) anchor
                         if (t.knot_mins[j] == 0)
                             anchor[j] += (mfa_data.p(j) + 1) / 2;                   // first control point has anchor floor((p + 1) / 2)
                     }
@@ -352,10 +351,13 @@ namespace mfa
                             local_knots[n] = mfa_data.tmesh.all_knots[i][local_knot_idxs[i][n]];
 
                         // debug: print local knot idxs
-//                         fprintf(stderr, "local knot idxs = [");
+//                         fprintf(stderr, "tensor = %d iter = %ld anchor[0] = %ld local knot idxs = [", k, vol_iterator.cur_iter(), anchor[0]);
 //                         for (auto j = 0; j < local_knot_idxs[i].size(); j++)
 //                             fprintf(stderr, "%ld ", local_knot_idxs[i][j]);
 //                         fprintf(stderr, "]\n");
+
+                        // debug
+//                         cerr << "OneBasisFun: " << mfa_data.OneBasisFun(i, param(i), local_knots) << endl;
 
                         B *= mfa_data.OneBasisFun(i, param(i), local_knots);
                     }
@@ -368,11 +370,14 @@ namespace mfa
                 }       // volume iterator
             }       // tensors
 
+            // debug
+//             cerr << "out_pt: " << out_pt.transpose() << " B_sum: " << B_sum << "\n" << endl;
+
             // divide by sum of weighted basis functions to make a partition of unity
             out_pt /= B_sum;
 
             // debug
-//             cerr << "out_pt: " << out_pt.transpose() << "\n" << endl;
+            cerr << "out_pt: " << out_pt.transpose() << "\n" << endl;
         }
 
 #endif      // TMESH

@@ -45,8 +45,9 @@ namespace mfa
 
         ~NewKnots() {}
 
-        // inserts a set of knots (in all dimensions) into the original knot set
+        // inserts a set of knots (in all dimensions) into all_knots of the tmesh
         // also increases the numbers of control points (in all dimensions) that will result
+        // this version is for global solve
         void InsertKnots(
                 vector<vector<T>>&          new_knots,              // new knots
                 vector<vector<int>>&        new_levels,             // new knot levels
@@ -200,13 +201,14 @@ namespace mfa
             }   // for all domain dimensions
         }
 
+#ifdef TMESH
+
         // computes error in knot spans and returns first new knot (in all dimensions at once) that should be inserted
         // returns true if all done, ie, no new knots inserted
         //
-        // This is a temporary version for testing the tmesh
+        // This version is for the tmesh with global solve
         // It takes a full tensor product of ctrl_pts and weights of the same quantities as all_knots in the tmesh
         // and decodes that in order to determine first error span.
-        // This should be replaced by FirstErrorSpan below once the adaptive encoding is done
         //
         // TODO: lots of optimizations possible; this is completely naive so far
         // optimizations:
@@ -214,7 +216,7 @@ namespace mfa
         // step through domain points fineer each time the end is reached
         // increment ijk in the loop over domain points instead of calling idx2ijk
         // TBB? (currently serial)
-        bool TempFirstErrorSpan(
+        bool FirstErrorSpan(
                 const MatrixX<T>&           domain,                 // input points
                 VectorX<T>                  extents,                // extents in each dimension, for normalizing error (size 0 means do not normalize)
                 T                           err_limit,              // max. allowed error
@@ -224,6 +226,9 @@ namespace mfa
                 const VectorX<T>&           weights,                // control point weights
                 vector<vector<KnotIdx>>&    inserted_knot_idxs)     // (output) indices in each dim. of inserted knots in full knot vector after insertion
         {
+            // debug
+            fprintf(stderr, "*** Using global solve in FirstErrorSpan ***\n");
+
             Decoder<T>          decoder(mfa, mfa_data, 1);
             VectorXi            ijk(mfa.dom_dim);                   // i,j,k of domain point
             VectorX<T>          param(mfa.dom_dim);                 // parameters of domain point
@@ -281,12 +286,7 @@ namespace mfa
         // computes error in knot spans and returns first new knot (in all dimensions at once) that should be inserted
         // returns true if all done, ie, no new knots inserted
         //
-        // This is a temporary version for testing the tmesh
-        // It takes a full tensor product of ctrl_pts and weights of the same quantities as all_knots in the tmesh
-        // and decodes that in order to determine first error span.
-        // This should be replaced by FirstErrorSpan below once the adaptive encoding is done
-        //
-        // This version is for local solve
+        // This version is for tmesh with local solve
         //
         // TODO: lots of optimizations possible; this is completely naive so far
         // optimizations:
@@ -364,6 +364,8 @@ namespace mfa
             }
             return true;
         }
+
+#endif      // TMESH
 
         // computes error in knot spans and returns first new knot (in all dimensions at once) that should be inserted
         // returns true if all done, ie, no new knots inserted

@@ -312,13 +312,13 @@ template <typename T>                        // float or double
 
             // debug
 //             cerr << "Encode() ctrl_pts:\n" << ctrl_pts << endl;
+//             cerr << "Encode() weights:\n" << weights << endl;
         }
 
         // original adaptive encoding for first tensor product only
         void OrigAdaptiveEncode(
                 T                   err_limit,              // maximum allowable normalized error
                 bool                weighted,               // solve for and use weights
-                bool                local,                  // solve locally (with constraints) each round
                 const VectorX<T>&   extents,                // extents in each dimension, for normalizing error (size 0 means do not normalize)
                 int                 max_rounds = 0)         // optional maximum number of rounds
         {
@@ -326,13 +326,6 @@ template <typename T>                        // float or double
 
             // TODO: use weights for knot insertion
             // for now, weights are only used for final full encode
-
-            // debug
-//             mfa_data.tmesh.print();
-
-            // debug: local not being used in OrigAdaptiveEncode (no tmesh, no local solve)
-            if (local)
-                fprintf(stderr, "*** Not using local solve in OrigAdaptiveEncode ***\n");
 
             // loop until no change in knots
             for (int iter = 0; ; iter++)
@@ -402,7 +395,6 @@ template <typename T>                        // float or double
             VectorX<T> weights(ctrl_pts.rows());
 
             // Initial global encode and scattering of control points to tensors
-            // TODO: replace for local encode
             Encode(nctrl_pts, ctrl_pts, weights);
             mfa_data.tmesh.scatter_ctrl_pts(nctrl_pts, ctrl_pts, weights);
 
@@ -1162,6 +1154,8 @@ template <typename T>                        // float or double
             // debug
             if (local)
                 fprintf(stderr, "*** Using local solve in NewKnots_full ***\n");
+            else
+                fprintf(stderr, "*** Using global solve in NewKnots_full ***\n");
 
             bool done = true;
 
@@ -1182,12 +1176,7 @@ template <typename T>                        // float or double
             if (local)
                 done &= nk.FirstErrorSpan(domain, myextents, err_limit, iter, nctrl_pts, ctrl_pts, weights, inserted_knot_idxs, new_nctrl_pts, new_ctrl_pts, new_weights);
             else
-            {
-            // TODO: temporarily call TempFirstErrorSpan insted of FirstErrorSpan, passing full set of control points and weights
-            // Once adaptive algorithm is in place, call FirstErrorSpan instead
-//             done &= nk.FirstErrorSpan(domain, myextents, err_limit, iter, nctrl_pts, inserted_knot_idxs);
-                done &= nk.TempFirstErrorSpan(domain, myextents, err_limit, iter, nctrl_pts, ctrl_pts, weights, inserted_knot_idxs);
-            }
+                done &= nk.FirstErrorSpan(domain, myextents, err_limit, iter, nctrl_pts, ctrl_pts, weights, inserted_knot_idxs);
 
             if (local)
                 assert(inserted_knot_idxs[0].size() == new_ctrl_pts.size());     // sanity, number of inserted knots is consistent across things that depend on it
@@ -1242,8 +1231,12 @@ template <typename T>                        // float or double
                     fprintf(stderr, "appending tensor with knot_mins [%ld %ld %ld] knot_maxs [%ld %ld %ld]\n",
                             knot_mins[0], knot_mins[1], knot_mins[2], knot_maxs[0], knot_maxs[1], knot_maxs[2]);
 
+                // append the tensor
                 // only doing one new knot insertion, hence the [0] index on new_nctrl_pts, new_ctrl_pts, new_weights
-                mfa_data.tmesh.append_tensor(knot_mins, knot_maxs, new_nctrl_pts[0], new_ctrl_pts[0], new_weights[0]);
+                if (local)
+                    mfa_data.tmesh.append_tensor(knot_mins, knot_maxs, new_nctrl_pts[0], new_ctrl_pts[0], new_weights[0]);
+                else
+                    mfa_data.tmesh.append_tensor(knot_mins, knot_maxs);
 
                 // debug
                 mfa_data.tmesh.print();
