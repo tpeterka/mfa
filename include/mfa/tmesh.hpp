@@ -515,76 +515,13 @@ namespace mfa
             // check if tensor will be added before adding a next pointer to it
             if (!subset(max_side_tensor.knot_mins, max_side_tensor.knot_maxs, new_tensor.knot_mins, new_tensor.knot_maxs))
             {
-                // adjust next and prev pointers for existing_tensor and max_side_tensor in the current dimension
-                for (int i = 0; i < existing_tensor.next[cur_dim].size(); i++)
-                {
-                    if (adjacent(max_side_tensor, tensor_prods[existing_tensor.next[cur_dim][i]], cur_dim))
-                    {
-                        max_side_tensor.next[cur_dim].push_back(existing_tensor.next[cur_dim][i]);
-                        vector<TensorIdx>& prev = tensor_prods[existing_tensor.next[cur_dim][i]].prev[cur_dim];
-                        auto it                 = find(prev.begin(), prev.end(), existing_tensor_idx);
-                        assert(it != prev.end());
-                        size_t k                = distance(prev.begin(), it);
-                        prev[k]                 = max_side_tensor_idx;
-                    }
-                }
-
-                // connect next and prev pointers of existing and new max side tensors only if
-                // the new tensor will not completely separate the two
-                if (!occluded(new_tensor, existing_tensor, cur_dim))
-                {
-                    existing_tensor.next[cur_dim].push_back(max_side_tensor_idx);
-                    max_side_tensor.prev[cur_dim].push_back(existing_tensor_idx);
-                }
-
-                // adjust next and prev pointers for existing_tensor and max_side_tensor in other dimensions
-                for (int j = 0; j < dom_dim_; j++)
-                {
-                    if (j == cur_dim)
-                        continue;
-
-                    // next pointer
-                    for (int i = 0; i < existing_tensor.next[j].size(); i++)
-                    {
-                        // debug
-                        int retval = adjacent(max_side_tensor, tensor_prods[existing_tensor.next[j][i]], j);
-
-                        // add new next pointers
-                        if (adjacent(max_side_tensor, tensor_prods[existing_tensor.next[j][i]], j))
-                        {
-                            max_side_tensor.next[j].push_back(existing_tensor.next[j][i]);
-                            tensor_prods[existing_tensor.next[j][i]].prev[j].push_back(max_side_tensor_idx);
-
-                            // debug
-                            assert(retval == 1);
-                        }
-
-                    }
-
-                    // prev pointer
-                    for (int i = 0; i < existing_tensor.prev[j].size(); i++)
-                    {
-                        // debug
-                        int retval = adjacent(max_side_tensor, tensor_prods[existing_tensor.prev[j][i]], j);
-
-                        // add new prev pointers
-                        if (adjacent(max_side_tensor, tensor_prods[existing_tensor.prev[j][i]], j))
-                        {
-                            max_side_tensor.prev[j].push_back(existing_tensor.prev[j][i]);
-                            tensor_prods[existing_tensor.prev[j][i]].next[j].push_back(max_side_tensor_idx);
-
-                            // debug
-                            assert(retval == -1);
-                        }
-
-                    }
-                }
+                // adjust prev and nex pointers
+                adjust_prev_next(existing_tensor, max_side_tensor, new_tensor, existing_tensor_idx, max_side_tensor_idx, cur_dim);
 
                 // convert global knot_idx to local_knot_idx in existing_tensor
                 KnotIdx local_knot_idx = global2local_knot_idx(knot_idx, existing_tensor_idx, cur_dim);
 
                 //  split control points between existing and max side tensors
-                //  TODO: hard-coded knot_idx - 1 for split knot idx in current tensor (not global knot idx); not a robust solution
 
 //                 // debug
 //                 fprintf(stderr, "1: calling split_ctrl_pts existing_tensor_idx=%lu local_knot_idx=%lu\n", existing_tensor_idx, local_knot_idx);
@@ -619,6 +556,80 @@ namespace mfa
             delete_old_pointers(existing_tensor_idx);
 
             return false;
+        }
+
+        // adjust prev and next pointers for splitting a tensor into two
+        void adjust_prev_next(TensorProduct<T>& min_side_tensor,        // new minimum side tensor after split
+                              TensorProduct<T>& max_side_tensor,        // new maximum side tensor after split
+                              TensorProduct<T>& new_tensor,             // new tensor product that caused the split
+                              TensorIdx         min_side_tensor_idx,    // idx of min side tensor after split
+                              TensorIdx         max_side_tensor_idx,    // idx of max side tensor after split
+                              int               cur_dim)                // current dimension to intersect
+        {
+            // adjust next and prev pointers for min_side_tensor and max_side_tensor in the current dimension
+            for (int i = 0; i < min_side_tensor.next[cur_dim].size(); i++)
+            {
+                if (adjacent(max_side_tensor, tensor_prods[min_side_tensor.next[cur_dim][i]], cur_dim))
+                {
+                    max_side_tensor.next[cur_dim].push_back(min_side_tensor.next[cur_dim][i]);
+                    vector<TensorIdx>& prev = tensor_prods[min_side_tensor.next[cur_dim][i]].prev[cur_dim];
+                    auto it                 = find(prev.begin(), prev.end(), min_side_tensor_idx);
+                    assert(it != prev.end());
+                    size_t k                = distance(prev.begin(), it);
+                    prev[k]                 = max_side_tensor_idx;
+                }
+            }
+
+            // connect next and prev pointers of existing and new max side tensors only if
+            // the new tensor will not completely separate the two
+            if (!occluded(new_tensor, min_side_tensor, cur_dim))
+            {
+                min_side_tensor.next[cur_dim].push_back(max_side_tensor_idx);
+                max_side_tensor.prev[cur_dim].push_back(min_side_tensor_idx);
+            }
+
+            // adjust next and prev pointers for min_side_tensor and max_side_tensor in other dimensions
+            for (int j = 0; j < dom_dim_; j++)
+            {
+                if (j == cur_dim)
+                    continue;
+
+                // next pointer
+                for (int i = 0; i < min_side_tensor.next[j].size(); i++)
+                {
+                    // debug
+                    int retval = adjacent(max_side_tensor, tensor_prods[min_side_tensor.next[j][i]], j);
+
+                    // add new next pointers
+                    if (adjacent(max_side_tensor, tensor_prods[min_side_tensor.next[j][i]], j))
+                    {
+                        max_side_tensor.next[j].push_back(min_side_tensor.next[j][i]);
+                        tensor_prods[min_side_tensor.next[j][i]].prev[j].push_back(max_side_tensor_idx);
+
+                        // debug
+                        assert(retval == 1);
+                    }
+
+                }
+
+                // prev pointer
+                for (int i = 0; i < min_side_tensor.prev[j].size(); i++)
+                {
+                    // debug
+                    int retval = adjacent(max_side_tensor, tensor_prods[min_side_tensor.prev[j][i]], j);
+
+                    // add new prev pointers
+                    if (adjacent(max_side_tensor, tensor_prods[min_side_tensor.prev[j][i]], j))
+                    {
+                        max_side_tensor.prev[j].push_back(min_side_tensor.prev[j][i]);
+                        tensor_prods[min_side_tensor.prev[j][i]].next[j].push_back(max_side_tensor_idx);
+
+                        // debug
+                        assert(retval == -1);
+                    }
+
+                }
+            }
         }
 
         // convert global knot_idx to local_knot_idx in existing_tensor
