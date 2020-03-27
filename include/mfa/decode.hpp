@@ -312,7 +312,7 @@ namespace mfa
                          VectorX<T>&            out_pt)     // (output) point, allocated by caller
         {
             // debug
-            cerr << "VolPt_tmesh(): decoding point with param: " << param.transpose() << endl;
+//             cerr << "VolPt_tmesh(): decoding point with param: " << param.transpose() << endl;
 
             // init
             out_pt = VectorX<T>::Zero(out_pt.size());
@@ -377,7 +377,7 @@ namespace mfa
             out_pt /= B_sum;
 
             // debug
-            cerr << "out_pt: " << out_pt.transpose() << "\n" << endl;
+//             cerr << "out_pt: " << out_pt.transpose() << "\n" << endl;
         }
 
 #endif      // TMESH

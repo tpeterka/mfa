@@ -622,6 +622,9 @@ namespace mfa
                       int                   split_side,             // whether min (-1) or max or both sides (1) of new tensor split the existing tensor
                       bool&                 knots_match)            // (output) interection resulted in a tensor whose knot mins, max match new tensor's
         {
+            // convert global knot_idx to local_knot_idx in exist_tensor
+            KnotIdx local_knot_idx = global2local_knot_idx(knot_idx, exist_tensor_idx, cur_dim);
+
             TensorProduct<T>& exist_tensor  = tensor_prods[exist_tensor_idx];
 
             // intialize a new side_tensor for the minimum or maximum side of the existing tensor
@@ -650,15 +653,16 @@ namespace mfa
                 // adjust prev and nex pointers
                 adjust_prev_next(exist_tensor, side_tensor, new_tensor, exist_tensor_idx, side_tensor_idx, cur_dim);
 
-                // convert global knot_idx to local_knot_idx in exist_tensor
-                KnotIdx local_knot_idx = global2local_knot_idx(knot_idx, exist_tensor_idx, cur_dim);
-
                 //  split control points between existing and max side tensors
 
                 // debug
-                fprintf(stderr, "1: calling split_ctrl_pts exist_tensor_idx=%lu local_knot_idx=%lu\n", exist_tensor_idx, local_knot_idx);
+//                 fprintf(stderr, "1: calling split_ctrl_pts exist_tensor_idx=%lu global knot_idx = %lu local_knot_idx=%lu\n",
+//                         exist_tensor_idx, knot_idx, local_knot_idx);
 
-                split_ctrl_pts(exist_tensor_idx, side_tensor, cur_dim, local_knot_idx, false);
+                if (split_side == -1 || split_side == 2)
+                    split_ctrl_pts(exist_tensor_idx, side_tensor, cur_dim, local_knot_idx, false, true);
+                else
+                    split_ctrl_pts(exist_tensor_idx, side_tensor, cur_dim, local_knot_idx, false, false);
 
                 // add the new max side tensor
                 tensor_prods.push_back(side_tensor);
@@ -677,13 +681,14 @@ namespace mfa
             // new side tensor will not be added
             else
             {
-                // convert global knot_idx to local_knot_idx in exist_tensor
-                KnotIdx local_knot_idx = global2local_knot_idx(knot_idx, exist_tensor_idx, cur_dim);
-
                 // debug
-                fprintf(stderr, "2: calling split_ctrl_pts exist_tensor_idx=%lu local_knot_idx=%lu\n", exist_tensor_idx, local_knot_idx);
+//                 fprintf(stderr, "2: calling split_ctrl_pts exist_tensor_idx=%lu global knot_idx = %lu local_knot_idx=%lu\n",
+//                         exist_tensor_idx, knot_idx, local_knot_idx);
 
-                split_ctrl_pts(exist_tensor_idx, new_tensor, cur_dim, local_knot_idx, true);
+                if (split_side == -1 || split_side == 2)
+                    split_ctrl_pts(exist_tensor_idx, new_tensor, cur_dim, local_knot_idx, true, true);
+                else
+                    split_ctrl_pts(exist_tensor_idx, new_tensor, cur_dim, local_knot_idx, true, false);
 
                 // delete next and prev pointers of existing tensor that are no longer valid as a result of adding new max side
                 delete_old_pointers(exist_tensor_idx);
@@ -791,40 +796,47 @@ namespace mfa
             return local_knot_idx;
         }
 
-        // split control points between existing and max side tensors
+        // split control points between existing and new side tensors
         void split_ctrl_pts(TensorIdx            existing_tensor_idx,    // index in tensor_prods of existing tensor
-                            TensorProduct<T>&    max_side_tensor,        // new max side tensor
+                            TensorProduct<T>&    new_side_tensor,        // new max side tensor
                             int                  cur_dim,                // current dimension to intersect
                             KnotIdx              split_knot_idx,         // local (not global!) knot index in current dim of split point in existing tensor
-                            bool                 skip_max_side)          // don't add control points to max_side tensor, only adjust exsiting tensor control points
+                            bool                 skip_new_side,          // don't add control points to new_side tensor, only adjust exsiting tensor control points
+                            bool                 max_side)               // new side is in the max. direction (false = min. direction)
         {
             TensorProduct<T>& existing_tensor = tensor_prods[existing_tensor_idx];
 
-            // index of min (in new max side) and max (in existing tensor) control points in current dim
+            // index of min (max_side = true: in new side)in existing tensor) and max (in new side) control points in current dim
             // allowed to be negative in order for the logic below to partition correctly (long long instead of size_t)
-            long long min_ctrl_idx, max_ctrl_idx;
+            long long min_ctrl_idx; // index of min (max_side = true: in new side; max_side = false: in existing tensor) control points in current dim
+            long long max_ctrl_idx; // index of max (max_side = true: in existing tensor; max_side = false: in new side) control points in current dim
 
             // convert split_knot_idx to ctrl_pt_idx
             min_ctrl_idx = split_knot_idx;
             max_ctrl_idx = split_knot_idx;
-            if (p_[cur_dim] % 2 == 0)                           // even degree
-                max_ctrl_idx -= 1;
 
-            // if existing tensor starts at global minimum, skip the first (p + 1)/2 knots
-            if (existing_tensor.knot_mins[cur_dim] == 0)
+            // TODO: unclear why the following is needed, but things break if we don't do this
+            if (p_[cur_dim] % 2 == 0)                           // even degree
+                max_ctrl_idx--;
+
+            // if tensor starts at global minimum, skip the first (p + 1) / 2 knots
+            if ((max_side  && existing_tensor.knot_mins[cur_dim] == 0) ||
+                (!max_side && new_side_tensor.knot_mins[cur_dim] == 0))
             {
                 min_ctrl_idx -= (p_[cur_dim] + 1) / 2;
                 max_ctrl_idx -= (p_[cur_dim] + 1) / 2;
             }
 
             // if max_ctrl_idx is past last existing control point, then split is too close to global edge and must be clamped to last control point
-            if (max_ctrl_idx >= existing_tensor.nctrl_pts[cur_dim])
+            if (max_side && max_ctrl_idx >= existing_tensor.nctrl_pts[cur_dim])
                 max_ctrl_idx = existing_tensor.nctrl_pts[cur_dim] - 1;
+            if (!max_side && min_ctrl_idx >= new_side_tensor.nctrl_pts[cur_dim])
+                min_ctrl_idx = new_side_tensor.nctrl_pts[cur_dim] - 1;
 
             // debug
-//             fprintf(stderr, "splitting ctrl points in dim %d split_knot_idx=%lu max_ctrl_idx=%lu min_ctrl_idx=%lu\n",
-//                     cur_dim, split_knot_idx, max_ctrl_idx, min_ctrl_idx);
-//             fprintf(stderr, "old existing tensor tot_nctrl_pts=%lu = [%d %d]\n", existing_tensor.ctrl_pts.rows(), existing_tensor.nctrl_pts[0], existing_tensor.nctrl_pts[1]);
+//             fprintf(stderr, "splitting ctrl points in dim %d max_side %d split_knot_idx=%lu max_ctrl_idx=%lld min_ctrl_idx=%lld\n",
+//                     cur_dim, max_side, split_knot_idx, max_ctrl_idx, min_ctrl_idx);
+//             fprintf(stderr, "old existing tensor tot_nctrl_pts=%lu = [%d]\n", existing_tensor.ctrl_pts.rows(), existing_tensor.nctrl_pts[0]);
 
             // allocate new control point matrix for existing tensor
             size_t tot_nctrl_pts = 1;
@@ -832,78 +844,74 @@ namespace mfa
             for (auto i = 0; i < dom_dim_; i++)
             {
                 if (i != cur_dim)
-                {
-                    new_exist_nctrl_pts(i)  = existing_tensor.nctrl_pts(i);
-                    tot_nctrl_pts           *= new_exist_nctrl_pts(i);
-                }
+                    new_exist_nctrl_pts(i) = existing_tensor.nctrl_pts(i);
                 else
                 {
-                    new_exist_nctrl_pts(i)  = max_ctrl_idx + 1;
-                    tot_nctrl_pts           *= new_exist_nctrl_pts(i);
+                    if (max_side)
+                        new_exist_nctrl_pts(i) = max_ctrl_idx + 1;
+                    else
+                        new_exist_nctrl_pts(i) = existing_tensor.nctrl_pts(i) - min_ctrl_idx;
                 }
+                tot_nctrl_pts *= new_exist_nctrl_pts(i);
             }
             MatrixX<T> new_exist_ctrl_pts(tot_nctrl_pts, max_dim_ - min_dim_ + 1);
             VectorX<T> new_exist_weights(tot_nctrl_pts);
 
-            // allocate new control point matrix for new max side tensor
-            if (!skip_max_side)
+            // allocate new control point matrix for new side tensor
+            if (!skip_new_side)
             {
                 tot_nctrl_pts = 1;
                 for (auto i = 0; i < dom_dim_; i++)
                 {
                     if (i != cur_dim)
-                        max_side_tensor.nctrl_pts(i) = existing_tensor.nctrl_pts(i);
+                        new_side_tensor.nctrl_pts(i) = existing_tensor.nctrl_pts(i);
                     else
-                        max_side_tensor.nctrl_pts(i) = existing_tensor.nctrl_pts(i) - min_ctrl_idx;
-                    tot_nctrl_pts *= max_side_tensor.nctrl_pts(i);
+                    {
+                        if (max_side)
+                            new_side_tensor.nctrl_pts(i) = existing_tensor.nctrl_pts(i) - min_ctrl_idx;
+                        else
+                            new_side_tensor.nctrl_pts(i) = max_ctrl_idx + 1;
+                    }
+                    tot_nctrl_pts *= new_side_tensor.nctrl_pts(i);
                 }
-                max_side_tensor.ctrl_pts.resize(tot_nctrl_pts, max_dim_ - min_dim_ + 1);
-                max_side_tensor.weights.resize(tot_nctrl_pts);
+                new_side_tensor.ctrl_pts.resize(tot_nctrl_pts, max_dim_ - min_dim_ + 1);
+                new_side_tensor.weights.resize(tot_nctrl_pts);
             }
 
             // split the control points
-            vector<int> dim_idx(dom_dim_);                              // current index in each dim, initialized to 0s
-            size_t cur_exist_idx    = 0;                                // current index into new_exist_ctrl_pts and weights
-            size_t cur_max_side_idx = 0;                                // current index into max_side_tensor.ctrl_pts and weights
-            for (auto j = 0; j < existing_tensor.ctrl_pts.rows(); j++)  // flattened loop over all the points in a domain in dimension dom_dim
+            VolIterator vol_iter(existing_tensor.nctrl_pts);            // for iterating in a flat loop over n dimensions
+            size_t      cur_exist_idx    = 0;                           // current index into new_exist_ctrl_pts and weights
+            size_t      cur_new_side_idx = 0;                           // current index into new_side_tensor.ctrl_pts and weights
+            while (!vol_iter.done())
             {
-                // debug
-//                 fprintf(stderr, "dim_idx=[%d %d]\n", dim_idx[0], dim_idx[1]);
+                // control point goes either to existing or new side tensor depending on index in current dimension
 
-                // control point goes either to existing or max side tensor depending on index in current dimension
-                if (dim_idx[cur_dim] <= max_ctrl_idx)
+                // control point goes to existing tensor
+                if ((max_side && vol_iter.idx_dim(cur_dim) <= max_ctrl_idx) || (!max_side && vol_iter.idx_dim(cur_dim) >= min_ctrl_idx))
                 {
                     // debug
 //                     fprintf(stderr, "moving to new_exist_ctrl_pts[%lu]\n", cur_exist_idx);
 
-                    new_exist_ctrl_pts.row(cur_exist_idx) = existing_tensor.ctrl_pts.row(j);
-                    new_exist_weights(cur_exist_idx) = existing_tensor.weights(j);
+                    new_exist_ctrl_pts.row(cur_exist_idx) = existing_tensor.ctrl_pts.row(vol_iter.cur_iter());
+                    new_exist_weights(cur_exist_idx) = existing_tensor.weights(vol_iter.cur_iter());
                     cur_exist_idx++;
                 }
-                if (dim_idx[cur_dim] >= min_ctrl_idx)
+
+                // control point goes to new side tensor
+                if ((max_side && vol_iter.idx_dim(cur_dim) >= min_ctrl_idx) || (!max_side && vol_iter.idx_dim(cur_dim) <= max_ctrl_idx))
                 {
-                    if (!skip_max_side)
+                    if (!skip_new_side)
                     {
                         // debug
-//                         fprintf(stderr, "moving to max_side_tensor.ctrl_pts[%lu]\n", cur_max_side_idx);
+//                         fprintf(stderr, "moving to new_side_tensor.ctrl_pts[%lu]\n", cur_new_side_idx);
 
-                        max_side_tensor.ctrl_pts.row(cur_max_side_idx) = existing_tensor.ctrl_pts.row(j);
-                        max_side_tensor.weights(cur_max_side_idx) = existing_tensor.weights(j);
+                        new_side_tensor.ctrl_pts.row(cur_new_side_idx) = existing_tensor.ctrl_pts.row(vol_iter.cur_iter());
+                        new_side_tensor.weights(cur_new_side_idx) = existing_tensor.weights(vol_iter.cur_iter());
                     }
-                    cur_max_side_idx++;
+                    cur_new_side_idx++;
                 }
 
-                dim_idx[0]++;
-
-                // for all dimensions except last, check for end of the line, part of flattened loop logic
-                for (auto k = 0; k < dom_dim_ - 1; k++)
-                {
-                    if (dim_idx[k] == existing_tensor.nctrl_pts(k))
-                    {
-                        dim_idx[k] = 0;
-                        dim_idx[k + 1]++;
-                    }
-                }
+                vol_iter.incr_iter();                                   // must increment volume iterator at the bottom of the loop
             }
 
             // copy new_exist_ctrl_pts and weights to existing_tensor.ctrl_pts and weights, resizes automatically
@@ -913,8 +921,8 @@ namespace mfa
 
             // debug
 //             fprintf(stderr, "new existing tensor tot_nctrl_pts=%lu = [%d %d]\n", existing_tensor.ctrl_pts.rows(), existing_tensor.nctrl_pts[0], existing_tensor.nctrl_pts[1]);
-//             if (!skip_max_side)
-//                 fprintf(stderr, "max side tensor tot_nctrl_pts=%lu = [%d %d]\n\n", max_side_tensor.ctrl_pts.rows(), max_side_tensor.nctrl_pts[0], max_side_tensor.nctrl_pts[1]);
+//             if (!skip_new_side)
+//                 fprintf(stderr, "max side tensor tot_nctrl_pts=%lu = [%d %d]\n\n", new_side_tensor.ctrl_pts.rows(), new_side_tensor.nctrl_pts[0], new_side_tensor.nctrl_pts[1]);
         }
 
         // delete pointers that are no longer valid as a result of adding a new max side tensor

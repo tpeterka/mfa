@@ -57,6 +57,7 @@ using ArrayXX  = Eigen::Array<T, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor
 template <typename T>
 using ArrayX   = Eigen::Array<T, Eigen::Dynamic, 1>;
 
+#include    <mfa/util.hpp>
 #include    <mfa/param.hpp>
 #include    <mfa/tmesh.hpp>
 #include    <mfa/mfa_data.hpp>
