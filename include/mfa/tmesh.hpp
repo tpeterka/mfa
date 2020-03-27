@@ -398,6 +398,8 @@ namespace mfa
             return retval;
         }
 
+#if 0
+
         // intersect in one dimension a new tensor product with an existing tensor product, if the intersection exists
         // returns true if intersection found (and the vector of tensor products grew as a result of the intersection, ie, an existing tensor was split into two)
         // sets knots_match to true if during the course of intersecting, one of the tensors in tensor_prods was added or modified to match the new tensor
@@ -437,6 +439,54 @@ namespace mfa
             }
             return retval;
         }
+
+#else
+
+        // intersect in one dimension a new tensor product with an existing tensor product, if the intersection exists
+        // returns true if intersection found (and the vector of tensor products grew as a result of the intersection, ie, an existing tensor was split into two)
+        // sets knots_match to true if during the course of intersecting, one of the tensors in tensor_prods was added or modified to match the new tensor
+        // ie, the caller should not add the tensor later if knots_match
+        bool intersect(TensorProduct<T>&    new_tensor,             // new tensor product to be inserted
+                       TensorIdx            existing_tensor_idx,    // index in tensor_prods of existing tensor
+                       vector<int>&         split_side,             // whether min (-1) or max (1) or both (2) sides of
+                                                                    // new tensor are inside existing tensor (one value for each dim.)
+                       bool&                knots_match)            // (output) interection resulted in a tensor whose knot mins, max match new tensor's
+        {
+            knots_match             = false;
+            bool    retval          = false;
+            KnotIdx split_knot_idx;
+
+            for (int k = 0; k < dom_dim_; k++)      // for all domain dimensions
+            {
+                if (!split_side[k])
+                    continue;
+
+                split_knot_idx                      = (split_side[k] == -1 ? new_tensor.knot_mins[k] : new_tensor.knot_maxs[k]);
+                TensorProduct<T>&   existing_tensor = tensor_prods[existing_tensor_idx];
+                vector<KnotIdx>     temp_maxs       = existing_tensor.knot_maxs;
+                vector<KnotIdx>     temp_mins       = existing_tensor.knot_mins;
+                if (split_side[k] == -1)
+                    temp_maxs[k] = split_knot_idx;
+                else
+                    temp_mins[k] = split_knot_idx;
+
+                // split existing_tensor at the knot index knot_idx as long as doing so would not create
+                // a tensor that is a subset of new_tensor being inserted
+                // existing_tensor is modified to be the min. side of the previous existing_tensor
+                // a new max_side_tensor is appended to be the max. side of existing_tensor
+                if (!subset(temp_mins, temp_maxs, new_tensor.knot_mins, new_tensor.knot_maxs))
+                {
+                    retval |= new_max_side(new_tensor, existing_tensor_idx, k, split_knot_idx, knots_match);
+
+                    // if there is a new tensor, return and start checking again for intersections
+                    if (retval)
+                        return true;
+                }
+            }
+            return retval;
+        }
+
+#endif
 
         // split existing tensor product creating extra tensor on maximum side of current dimension
         // returns true if a an extra tensor product was inserted
