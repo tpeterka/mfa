@@ -413,7 +413,8 @@ template <typename T>                        // float or double
                     fprintf(stderr, "Iteration %d...\n", iter);
 
                 // using NewKnots_full high-d span splitting with tmesh (for now)
-                int retval = NewKnots_full(err_limit, extents, iter, local, nctrl_pts, ctrl_pts, weights);
+                bool temp_local = local;                        // ability to do local solve temporarily for this round depends on whether new knots permits local solve
+                int retval = NewKnots_full(err_limit, extents, iter, temp_local, nctrl_pts, ctrl_pts, weights);
 
                 // debug: print tmesh
                 fprintf(stderr, "\n----- T-mesh after NewKnots_full -----\n\n");
@@ -422,7 +423,7 @@ template <typename T>                        // float or double
 
                 // if not doing local solve,
                 // resize temporary control points and weights and global encode and scatter of control points to tensors
-                if (!local)
+                if (!local || !temp_local)
                 {
                     for (auto k = 0; k < mfa_data.dom_dim; k++)
                         nctrl_pts(k) = mfa_data.tmesh.all_knots[k].size() - mfa_data.p(k) - 1;
@@ -1146,7 +1147,7 @@ template <typename T>                        // float or double
                 T                   err_limit,                  // max allowable error
                 const VectorX<T>&   extents,                    // extents in each dimension, for normalizing error (size 0 means do not normalize)
                 int                 iter,                       // iteration number of caller (for debugging)
-                bool                local,                      // solve locally (with constraints) each round
+                bool&               local,                      // (input, output) solve locally (with constraints)
                 const VectorXi&     nctrl_pts,                  // number of control points in each dimension
                 const MatrixX<T>&   ctrl_pts,                   // control points
                 const VectorX<T>&   weights)                    // weights
@@ -1174,9 +1175,27 @@ template <typename T>                        // float or double
             vector<VectorX<T>>  new_weights;
 
             if (local)
-                done &= nk.FirstErrorSpan(domain, myextents, err_limit, iter, nctrl_pts, ctrl_pts, weights, inserted_knot_idxs, new_nctrl_pts, new_ctrl_pts, new_weights);
+                done &= nk.FirstErrorSpan(domain,
+                                          myextents,
+                                          err_limit,
+                                          iter,
+                                          nctrl_pts,
+                                          ctrl_pts,
+                                          weights,
+                                          inserted_knot_idxs,
+                                          new_nctrl_pts,
+                                          new_ctrl_pts,
+                                          new_weights,
+                                          local);
             else
-                done &= nk.FirstErrorSpan(domain, myextents, err_limit, iter, nctrl_pts, ctrl_pts, weights, inserted_knot_idxs);
+                done &= nk.FirstErrorSpan(domain,
+                                          myextents,
+                                          err_limit,
+                                          iter,
+                                          nctrl_pts,
+                                          ctrl_pts,
+                                          weights,
+                                          inserted_knot_idxs);
 
             if (local)
                 assert(inserted_knot_idxs[0].size() == new_ctrl_pts.size());     // sanity, number of inserted knots is consistent across things that depend on it

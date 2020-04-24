@@ -305,7 +305,8 @@ namespace mfa
                 vector<vector<KnotIdx>>&    inserted_knot_idxs,     // (output) indices in each dim. of inserted knots in full knot vector after insertion
                 vector<VectorXi>&           new_nctrl_pts,          // (output) new number of control points in each dim. from P&T knot insertion, one std:vector element per knot inserted
                 vector<MatrixX<T>>&         new_ctrl_pts,           // (output) new control points from P&T knot insertion, one std::vector element per knot inserted
-                vector<VectorX<T>>&         new_weights)            // (output) new weights from P&T knot insertion, one std::vector element per knot inserted
+                vector<VectorX<T>>&         new_weights,            // (output) new weights from P&T knot insertion, one std::vector element per knot inserted
+                bool&                       local)                  // (output) span allows local solve to proceed (sufficient constraints exist)
         {
             // debug
             fprintf(stderr, "*** Using local solve in FirstErrorSpan ***\n");
@@ -313,7 +314,6 @@ namespace mfa
             Decoder<T>          decoder(mfa, mfa_data, 1);
             VectorXi            ijk(mfa.dom_dim);                   // i,j,k of domain point
             VectorX<T>          param(mfa.dom_dim);                 // parameters of domain point
-            vector<int>         span(mfa.dom_dim);                  // knot span in each dimension
             VectorXi            derivs;                             // size 0 means unused
             DecodeInfo<T>       decode_info(mfa_data, derivs);      // reusable decode point info for calling VolPt repeatedly
             vector<vector<T>>   new_knots(mfa.dom_dim);             // new knots
@@ -347,18 +347,31 @@ namespace mfa
                 {
                     for (auto k = 0; k < mfa.dom_dim; k++)
                     {
-                        //WARNING: TODO: uncomment the FindSpan function, currently hardcoded span for Youssef
-                        span[k] = 3;//mfa_data.FindSpan(k, param(k), nctrl_pts(k));
+                        int span = mfa_data.FindSpan(k, param(k), nctrl_pts(k));
+
+                        // debug: hard-code span to trigger local solve
+//                         int span = 3;
+
+                        // check if sufficient constraints exist to do local solve
+                        // if too close to the edge in any dimension, disable local solve
+                        if (span <= mfa_data.p(k) || span >= mfa_data.tmesh.all_knots[k].size() - mfa_data.p(k) - 2)
+                            local = false;
+
+                        // debug
+                        fprintf(stderr, "span = %d local = %d\n", span, local);
 
                         // span should never be the last knot because of the repeated knots at end
-                        assert(span[k] < mfa_data.tmesh.all_knots[k].size() - 1);
+                        assert(span < mfa_data.tmesh.all_knots[k].size() - 1);
 
                         // new knot is the midpoint of the span containing the domain point parameters
-                        T new_knot_val = (mfa_data.tmesh.all_knots[k][span[k]] + mfa_data.tmesh.all_knots[k][span[k] + 1]) / 2.0;
+                        T new_knot_val = (mfa_data.tmesh.all_knots[k][span] + mfa_data.tmesh.all_knots[k][span + 1]) / 2.0;
                         new_knots[k].push_back(new_knot_val);
                         new_levels[k].push_back(iter + 1);  // adapt at the next level, for now every iteration is a new level
                     }
-                    InsertKnots(new_knots, new_levels, inserted_knot_idxs, new_nctrl_pts, new_ctrl_pts, new_weights);
+                    if (local)
+                        InsertKnots(new_knots, new_levels, inserted_knot_idxs, new_nctrl_pts, new_ctrl_pts, new_weights);
+                    else
+                        InsertKnots(new_knots, new_levels, inserted_knot_idxs);
                     return false;
                 }
             }
