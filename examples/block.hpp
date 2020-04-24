@@ -210,7 +210,7 @@ struct Block : public BlockBase<T>
         for (int j = 0; j < nvars; j++)
         {
             this->vars[j].min_dim = this->dom_dim + j;
-            this->vars[j].max_dim = this->vars[j].min_dim + 1;
+            this->vars[j].max_dim = this->vars[j].min_dim;
         }
         VectorXi ndom_pts(this->dom_dim);
         for (int i = 0; i < this->dom_dim; i++)
@@ -386,7 +386,7 @@ struct Block : public BlockBase<T>
         this->max_errs.resize(nvars);
         this->sum_sq_errs.resize(nvars);
         this->vars[0].min_dim = this->dom_dim;
-        this->vars[0].max_dim = this->vars[0].min_dim + 1;
+        this->vars[0].max_dim = this->vars[0].min_dim;
         VectorXi ndom_pts(this->dom_dim);
         this->bounds_mins.resize(this->pt_dim);
         this->bounds_maxs.resize(this->pt_dim);
@@ -469,7 +469,7 @@ struct Block : public BlockBase<T>
         this->max_errs.resize(nvars);
         this->sum_sq_errs.resize(nvars);
         this->vars[0].min_dim = this->dom_dim;
-        this->vars[0].max_dim = this->vars[0].min_dim + 1;
+        this->vars[0].max_dim = this->vars[0].min_dim;
         VectorXi ndom_pts(this->dom_dim);
         this->bounds_mins.resize(this->pt_dim);
         this->bounds_maxs.resize(this->pt_dim);
@@ -557,7 +557,7 @@ struct Block : public BlockBase<T>
         this->max_errs.resize(nvars);
         this->sum_sq_errs.resize(nvars);
         this->vars[0].min_dim = this->dom_dim;
-        this->vars[0].max_dim = this->vars[0].min_dim + 1;
+        this->vars[0].max_dim = this->vars[0].min_dim;
         VectorXi ndom_pts(this->dom_dim);
         this->bounds_mins.resize(this->pt_dim);
         this->bounds_maxs.resize(this->pt_dim);
@@ -668,7 +668,7 @@ struct Block : public BlockBase<T>
         this->max_errs.resize(nvars);
         this->sum_sq_errs.resize(nvars);
         this->vars[0].min_dim = this->dom_dim;
-        this->vars[0].max_dim = this->vars[0].min_dim + 1;
+        this->vars[0].max_dim = this->vars[0].min_dim;
         VectorXi ndom_pts(this->dom_dim);
         this->bounds_mins.resize(this->pt_dim);
         this->bounds_maxs.resize(this->pt_dim);
@@ -759,7 +759,7 @@ struct Block : public BlockBase<T>
         this->max_errs.resize(nvars);
         this->sum_sq_errs.resize(nvars);
         this->vars[0].min_dim = this->dom_dim;
-        this->vars[0].max_dim = this->vars[0].min_dim + 1;
+        this->vars[0].max_dim = this->vars[0].min_dim;
         VectorXi ndom_pts(this->dom_dim);
         this->bounds_mins.resize(this->pt_dim);
         this->bounds_maxs.resize(this->pt_dim);
@@ -873,7 +873,7 @@ struct Block : public BlockBase<T>
         this->max_errs.resize(nvars);
         this->sum_sq_errs.resize(nvars);
         this->vars[0].min_dim = this->dom_dim;
-        this->vars[0].max_dim = this->vars[0].min_dim + 1;
+        this->vars[0].max_dim = this->vars[0].min_dim;
         VectorXi ndom_pts(this->dom_dim);
         this->bounds_mins.resize(this->pt_dim);
         this->bounds_maxs.resize(this->pt_dim);
@@ -953,7 +953,7 @@ struct Block : public BlockBase<T>
         this->max_errs.resize(nvars);
         this->sum_sq_errs.resize(nvars);
         this->vars[0].min_dim = this->dom_dim;
-        this->vars[0].max_dim = this->vars[0].min_dim + 1;
+        this->vars[0].max_dim = this->vars[0].min_dim;
         VectorXi ndom_pts(this->dom_dim);
         this->bounds_mins.resize(this->pt_dim);
         this->bounds_maxs.resize(this->pt_dim);

@@ -200,7 +200,8 @@ namespace mfa
             {
                 // new tensor will go at the back of the vector
                 new_tensor_idx = tensor_prods.size();
-                new_tensor_ref = new_tensor;
+                // DEPRECATE: initialized above already
+//                 new_tensor_ref = new_tensor;
             }
             else
             {

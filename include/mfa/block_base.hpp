@@ -227,6 +227,27 @@ struct BlockBase
         }
     }
 
+    // decode one point
+    void decode_point(
+            const   diy::Master::ProxyWithLink& cp,
+            const VectorX<T>&                   param,          // parameters of point to decode
+            VectorX<T>&                         cpt)            // (output) decoded point
+    {
+        // geometry
+        VectorX<T> geom_cpt(dom_dim);
+        mfa->DecodePt(*geometry.mfa_data, param, geom_cpt);
+        for (auto i = 0; i < dom_dim; i++)
+            cpt(i) = geom_cpt(i);
+
+        // science variables
+        VectorX<T> var_cpt(1);                                  // each variable is a scalar
+        for (auto i = 0; i < vars.size(); i++)
+        {
+            mfa->DecodePt(*(vars[i].mfa_data), param, var_cpt);
+            cpt(dom_dim + i) = var_cpt(0);
+        }
+    }
+
     // differentiate entire block
     void differentiate_block(
             const diy::Master::ProxyWithLink& cp,

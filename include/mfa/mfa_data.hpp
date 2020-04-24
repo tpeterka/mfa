@@ -193,7 +193,7 @@ namespace mfa
 #ifdef CURVE_PARAMS
             Knots(ndom_pts_, params_, tmesh);       // knots spaced according to parameters (per P&T)
 #else
-            UniformKnots(ndom_pts_, tmesh);         // knots spaced uniformly
+            UniformKnots(tmesh);         // knots spaced uniformly
 #endif
         }
 
@@ -1217,9 +1217,7 @@ namespace mfa
         // resulting knots are same for all curves and stored once for each dimension (1st dim knots, 2nd dim, ...)
         // total number of knots is the sum of number of knots over the dimensions, much less than the product
         // assumes knots were allocated by caller
-        void UniformKnots(
-                const VectorXi&     ndom_pts,           // number of input points in each dim.
-                Tmesh<T>&           tmesh) const        // (output) tmesh
+        void UniformKnots(Tmesh<T>& tmesh) const        // (output) tmesh
         {
             for (size_t k = 0; k < dom_dim; k++)        // for all domain dimensions
             {
