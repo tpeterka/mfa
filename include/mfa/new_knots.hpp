@@ -350,15 +350,17 @@ namespace mfa
                         int span = mfa_data.FindSpan(k, param(k), nctrl_pts(k));
 
                         // debug: hard-code span to trigger local solve
-//                         int span = 3;
+//                         span = 3;
 
                         // check if sufficient constraints exist to do local solve
                         // if too close to the edge in any dimension, disable local solve
                         if (span <= mfa_data.p(k) || span >= mfa_data.tmesh.all_knots[k].size() - mfa_data.p(k) - 2)
+                        {
                             local = false;
 
-                        // debug
-                        fprintf(stderr, "span = %d local = %d\n", span, local);
+                            // debug
+                            fprintf(stderr, "FirstErrorSpan: span = %d does not allow enough constraints for local solve, switching to global solve\n", span);
+                        }
 
                         // span should never be the last knot because of the repeated knots at end
                         assert(span < mfa_data.tmesh.all_knots[k].size() - 1);
