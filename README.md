@@ -30,15 +30,15 @@ git clone https://github.com/tpeterka/mfa
 spack repo add mfa
 ```
 
-You can confirm that Spack can find mfa:
+You can confirm that Spack can find MFA:
 ```
 spack info mfa
 ```
 
-Then install mfa. This could take some time depending on whether you already have a Spack system with MPI
+Then install MFA. This could take some time depending on whether you already have a Spack system with MPI
 installed. The first time you use Spack, many dependencies need to be satisfied, which by default are installed from
 scratch. If you are an experienced Spack user, you can tell Spack to use existing dependencies from
-elsewhere on your system.
+elsewhere in your system.
 
 ```
 spack install mfa
