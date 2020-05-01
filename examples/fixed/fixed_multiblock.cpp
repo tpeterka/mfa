@@ -20,7 +20,7 @@
 #include <diy/assigner.hpp>
 #include <diy/io/block.hpp>
 
-#include <diy/../../examples/opts.h>
+#include "opts.h"
 
 #include "block.hpp"
 

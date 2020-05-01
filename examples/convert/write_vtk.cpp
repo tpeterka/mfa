@@ -17,7 +17,7 @@
 #include    <diy/master.hpp>
 #include    <diy/io/block.hpp>
 
-#include    <diy/../../examples/opts.h>
+#include    "opts.h"
 
 #include    "writer.hpp"
 #include    "block.hpp"
