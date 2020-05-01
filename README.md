@@ -18,6 +18,34 @@ MFA is [public domain](./COPYING) software.
 
 # Installation
 
+You can either install MFA using [Spack](https://spack.readthedocs.io/en/latest/) (recommended), or manually.
+
+## Installing with Spack
+
+First, install Spack as explained [here](https://spack.readthedocs.io/en/latest/getting_started.html). Once Spack is
+installed and available in your path, clone the mfa repository and add it to your local Spack repositories:
+
+```
+git clone https://github.com/tpeterka/mfa
+spack repo add mfa
+```
+
+You can confirm that Spack can find mfa:
+```
+spack info mfa
+```
+
+Then install mfa. This could take some time depending on whether you already have a Spack system with MPI
+installed. The first time you use Spack, many dependencies need to be satisfied, which by default are installed from
+scratch. If you are an experienced Spack user, you can tell Spack to use existing dependencies from
+elsewhere on your system.
+
+```
+spack install mfa
+```
+
+## Installing manually
+
 Build dependencies
 
 - C++11 compiler
@@ -30,7 +58,7 @@ Build dependencies
 Build mfa
 
 ```
-git clone https://bitbucket.org/tpeterka1/mfa
+git clone https://github.com/tpeterka/mfa
 cd mfa
 mkdir build
 cd build
