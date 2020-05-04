@@ -41,7 +41,7 @@ Or, change directory into MFA on your machine and then add it to Spack:
 ```
 cd /path/to/mfa
 spack repo add .
-`````
+```
 
 You can confirm that Spack can find MFA:
 ```
