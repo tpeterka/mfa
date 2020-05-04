@@ -22,13 +22,26 @@ You can either install MFA using [Spack](https://spack.readthedocs.io/en/latest/
 
 ## Installing with Spack
 
-First, install Spack as explained [here](https://spack.readthedocs.io/en/latest/getting_started.html). Once Spack is
-installed and available in your path, clone the mfa repository and add it to your local Spack repositories:
+First, install Spack as explained [here](https://spack.readthedocs.io/en/latest/getting_started.html) and add Spack to
+your path. Next, clone the MFA repository:
 
 ```
 git clone https://github.com/tpeterka/mfa
-spack repo add mfa
 ```
+
+Add MFA to your local Spack installation in one of two ways. Either specify the full path to MFA on your
+machine:
+
+```
+spack repo add /path/to/mfa
+```
+
+Or, change directory into MFA on your machine and then add it to Spack:
+
+```
+cd /path/to/mfa
+spack repo add .
+`````
 
 You can confirm that Spack can find MFA:
 ```
