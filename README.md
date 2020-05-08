@@ -56,7 +56,7 @@ The default installation is single-threaded (serial), but you can specify differ
 spack install mfa thread=tbb
 ```
 
-TBB is the only threading currently implemented, but other threading models such as SYCL and Kokkos are being developed.
+TBB is the only threading model currently implemented, but other threading models such as SYCL and Kokkos are being developed.
 
 ## Installing manually
 
@@ -78,12 +78,13 @@ mkdir build
 cd build
 
 cmake .. \
--DCMAKE_CXX_COMPILER=mpicxx \
 -DCMAKE_INSTALL_PREFIX=/path/to/mfa/install \
 -DDIY_INCLUDE_DIRS=/path/to/diy/include \
 -DEIGEN_INCLUDE_DIRS=/path/to/eigen3 \
--DTBB_INCLUDE_DIR=/path/to/tbb/include \                        # optional
--DTBB_LIBRARY=/path/to/tbb/library \                            # optional
+-DCMAKE_CXX_COMPILER=mpicxx \                                   # optional, set to CC on Cray, default or g++ also works if MPI is correctly found
+-Dmfa_thread=tbb \                                              # optional TBB threading, serial (no threading) is the default
+-DTBB_INCLUDE_DIR=/path/to/tbb/include \                        # optional, will try to find TBB automatically if mfa_thread=tbb
+-DTBB_LIBRARY=/path/to/tbb/library \                            # optional, will try to find TBB automatically if mfa_thread=tbb
 -DCLP_INCLUDE_DIRS=/path/to/Clp/include \                       # optional, only needed for weights
 -DCLP_LIB=/path/to/Clp/lib/libClp.a (.so, .dylib) \             # optional, only needed for weights
 -DCOIN_UTILS_LIB=/path/to/Clp/lib/libCoinUtils.a (.so, .dylib)  # optional, only needed for weights
