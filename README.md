@@ -14,7 +14,7 @@ The key features are:
 
 # Licensing
 
-MFA is [public domain](./COPYING) software.
+MFA is licensed [here](./COPYING).
 
 # Installation
 
@@ -29,14 +29,7 @@ your path. Next, clone the MFA repository:
 git clone https://github.com/tpeterka/mfa
 ```
 
-Add MFA to your local Spack installation in one of two ways. Either specify the full path to MFA on your
-machine:
-
-```
-spack repo add /path/to/mfa
-```
-
-Or, change directory into MFA on your machine and then add it to Spack:
+Add MFA to your local Spack installation:
 
 ```
 cd /path/to/mfa
@@ -56,6 +49,14 @@ elsewhere in your system.
 ```
 spack install mfa
 ```
+
+The default installation is single-threaded (serial), but you can specify different threading models like this:
+
+```
+spack install mfa thread=tbb
+```
+
+TBB is the only threading currently implemented, but other threading models such as SYCL and Kokkos are being developed.
 
 ## Installing manually
 

@@ -58,10 +58,17 @@ int main(int argc, char** argv)
     fprintf(stderr, "\n--------- Input arguments ----------\n");
     cerr <<
         "deriv = "    << deriv << endl;
-#ifdef MFA_NO_TBB
-    cerr << "TBB: off" << endl;
-#else
-    cerr << "TBB: on" << endl;
+#ifdef MFA_TBB
+    cerr << "threading: TBB" << endl;
+#endif
+#ifdef MFA_KOKKOS
+    cerr << "threading: Kokkos" << endl;
+#endif
+#ifdef MFA_SYCL
+    cerr << "threading: SYCL" << endl;
+#endif
+#ifdef MFA_SERIAL
+    cerr << "threading: serial" << endl;
 #endif
     fprintf(stderr, "-------------------------------------\n\n");
 

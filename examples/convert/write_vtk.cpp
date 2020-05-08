@@ -576,10 +576,17 @@ int main(int argc, char ** argv)
     cerr << "infile = " << infile << " test_points = "    << ntest <<        endl;
     if (ntest)
         cerr << "input = "          << input     << endl;
-#ifdef MFA_NO_TBB
-    cerr << "TBB: off" << endl;
-#else
-    cerr << "TBB: on" << endl;
+#ifdef MFA_TBB
+    cerr << "threading: TBB" << endl;
+#endif
+#ifdef MFA_KOKKOS
+    cerr << "threading: Kokkos" << endl;
+#endif
+#ifdef MFA_SYCL
+    cerr << "threading: SYCL" << endl;
+#endif
+#ifdef MFA_SERIAL
+    cerr << "threading: serial" << endl;
 #endif
     fprintf(stderr, "-------------------------------------\n\n");
 
