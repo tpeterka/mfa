@@ -1198,74 +1198,42 @@ template <typename T>                        // float or double
                                           inserted_knot_idxs);
 
             if (local)
-                assert(inserted_knot_idxs[0].size() == new_ctrl_pts.size());     // sanity, number of inserted knots is consistent across things that depend on it
+                assert(inserted_knot_idxs[0].size() == new_ctrl_pts.size());    // sanity check: number of inserted knots is consistent across things that depend on it
 
-            if (done)
+            if (done)                                                           // nothing inserted
                 return 0;
 
-            // append new tensors
+            // knot mins and maxs of tensor to be appended
             vector<KnotIdx> knot_mins(mfa_data.dom_dim);
             vector<KnotIdx> knot_maxs(mfa_data.dom_dim);
-            auto ntensors = mfa_data.tmesh.tensor_prods.size();         // number of tensors before any additional appends
-
-            // search existing tensors to find which one is being refined; break after finding a tensor to refine
-            bool found_tensor = false;
-            for (auto i = 0; i < ntensors; i++)                         // for all existing tensors
+            for (auto j = 0; j < mfa_data.dom_dim; j++)
             {
-                TensorProduct<T>& t = mfa_data.tmesh.tensor_prods[i];
+                knot_mins[j] = inserted_knot_idxs[j][0] - mfa_data.p(j) / 2;
+                knot_maxs[j] = inserted_knot_idxs[j][0] + mfa_data.p(j) / 2;
+            }
 
-                int j;
-                for (j = 0; j < mfa_data.dom_dim; j++)
-                {
-                    // inserted knot falls into the mins, maxs of this tensor
-                    // assuming only one inserted knot, hence the zero subscript inserted_knot_idxs[j][0]
-                    // adding, subtracting p / 2 to the inserted knot to ensure that p knots and control points are in the tensor to be appended
-                    if (inserted_knot_idxs[j][0] - mfa_data.p(j) / 2 >= t.knot_mins[j] && inserted_knot_idxs[j][0] + mfa_data.p(j) / 2 <= t.knot_maxs[j])
-                    {
-                        // expand knot mins and maxs by p / 2 index lines on each side of added knot
-                        // so that the new tensor has p anchors (control pts) in each dimension (needed for local adaptive solve)
-                        assert(inserted_knot_idxs[j][0] - mfa_data.p(j) / 2 >= 0);
-                        assert(inserted_knot_idxs[j][0] + mfa_data.p(j) / 2 < mfa_data.tmesh.all_knots[j].size());
-                        knot_mins[j] = inserted_knot_idxs[j][0] - mfa_data.p(j) / 2;
-                        knot_maxs[j] = inserted_knot_idxs[j][0] + mfa_data.p(j) / 2;
-                    }
-                    else
-                        break;
-                }
+            // debug
+            if (mfa_data.dom_dim == 1)
+                fprintf(stderr, "appending tensor with knot_mins [%ld] knot_maxs [%ld]\n", knot_mins[0], knot_maxs[0]);
+            else if (mfa_data.dom_dim == 2)
+                fprintf(stderr, "appending tensor with knot_mins [%ld %ld] knot_maxs [%ld %ld]\n", knot_mins[0], knot_mins[1], knot_maxs[0], knot_maxs[1]);
+            else if (mfa_data.dom_dim == 3)
+                fprintf(stderr, "appending tensor with knot_mins [%ld %ld %ld] knot_maxs [%ld %ld %ld]\n",
+                        knot_mins[0], knot_mins[1], knot_mins[2], knot_maxs[0], knot_maxs[1], knot_maxs[2]);
 
-                if (j == mfa_data.dom_dim)
-                    found_tensor = true;
+            // append the tensor
+            // only doing one new knot insertion, hence the [0] index on new_nctrl_pts, new_ctrl_pts, new_weights
+            if (local)
+                mfa_data.tmesh.append_tensor(knot_mins, knot_maxs, new_nctrl_pts[0], new_ctrl_pts[0], new_weights[0]);
+            else
+                mfa_data.tmesh.append_tensor(knot_mins, knot_maxs);
 
-                if (!found_tensor)
-                    continue;
+            // debug
+            mfa_data.tmesh.print();
 
-                // following: a tensor to refine was found
-
-                // debug
-                if (mfa_data.dom_dim == 1)
-                    fprintf(stderr, "appending tensor with knot_mins [%ld] knot_maxs [%ld]\n", knot_mins[0], knot_maxs[0]);
-                else if (mfa_data.dom_dim == 2)
-                    fprintf(stderr, "appending tensor with knot_mins [%ld %ld] knot_maxs [%ld %ld]\n", knot_mins[0], knot_mins[1], knot_maxs[0], knot_maxs[1]);
-                else if (mfa_data.dom_dim == 3)
-                    fprintf(stderr, "appending tensor with knot_mins [%ld %ld %ld] knot_maxs [%ld %ld %ld]\n",
-                            knot_mins[0], knot_mins[1], knot_mins[2], knot_maxs[0], knot_maxs[1], knot_maxs[2]);
-
-                // append the tensor
-                // only doing one new knot insertion, hence the [0] index on new_nctrl_pts, new_ctrl_pts, new_weights
-                if (local)
-                    mfa_data.tmesh.append_tensor(knot_mins, knot_maxs, new_nctrl_pts[0], new_ctrl_pts[0], new_weights[0]);
-                else
-                    mfa_data.tmesh.append_tensor(knot_mins, knot_maxs);
-
-                // debug
-                mfa_data.tmesh.print();
-
-                if (local)
-                    LocalSolve();
-
-                if (found_tensor)
-                    break;
-            }   // for all existing tensors
+            // local solve newly appended tensor
+            if (local)
+                LocalSolve();
 
             for (auto k = 0; k < mfa_data.dom_dim; k++)
                 if (mfa.ndom_pts()(k) <= nctrl_pts(k))

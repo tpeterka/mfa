@@ -47,8 +47,9 @@ namespace mfa
 
         // inserts a set of knots (in all dimensions) into all_knots of the tmesh
         // also increases the numbers of control points (in all dimensions) that will result
-        // this version is for global solve
-        void InsertKnots(
+        // this version is for global solve, also called inside of local solve
+        // returns idx of parent tensor containing new knot to be inserted (assuming single knot insertion)
+        int InsertKnots(
                 vector<vector<T>>&          new_knots,              // new knots
                 vector<vector<int>>&        new_levels,             // new knot levels
                 vector<vector<KnotIdx>>&    inserted_knot_idxs)     // (output) indices in each dim. of inserted knots in full knot vector after insertion
@@ -108,6 +109,12 @@ namespace mfa
                     mfa_data.tmesh.insert_knot(k, idx, temp_levels[k][idx], temp_knots[k][idx]);
                 }
             }   // for all domain dimensions
+
+            // find parent tensor (assumes only on knot being inserted)
+            vector<KnotIdx> inserted_knot_idx(mfa_data.dom_dim);
+            for (auto j = 0; j < mfa_data.dom_dim; j++)
+                inserted_knot_idx[j] = inserted_knot_idxs[j][0];    // there is only one inserted knot, index 0, but dimensions are switched, hence the copy
+            return mfa_data.tmesh.search_tensors(inserted_knot_idx, mfa_data.p / 2);
         }
 
         // inserts a set of knots (in all dimensions) into the original knot set
@@ -123,13 +130,11 @@ namespace mfa
             // debug
             fprintf(stderr, "*** Using local solve in InsertKnots ***\n");
 
-            vector<vector<T>> temp_knots(mfa.dom_dim);
-            vector<vector<int>> temp_levels(mfa.dom_dim);
-            inserted_knot_idxs.resize(mfa.dom_dim);
-
-            int nnew_knots = new_knots[0].size();                   // number of new knots being inserted
+            // insert new_knots into knots: replace old knots with union of old and new (in temp_knots)
+            int parent_tensor_idx = InsertKnots(new_knots, new_levels, inserted_knot_idxs);
 
             // call P&T knot insertion
+            int nnew_knots = new_knots[0].size();                   // number of new knots being inserted
             vector<vector<T>>   new_all_knots(mfa.dom_dim);
             vector<vector<int>> new_all_knot_levels(mfa.dom_dim);
             VectorX<T>          param(mfa.dom_dim);                 // current knot to be inserted
@@ -137,68 +142,18 @@ namespace mfa
             new_ctrl_pts.resize(nnew_knots);
             new_weights.resize(nnew_knots);
 
-            // TODO: parent tensor hard-coded to tensor_prods[0]
-            // will need to pass parent tensor into LocalInsertKnots or search for it in the tmesh
-            TensorProduct<T>& tensor = mfa_data.tmesh.tensor_prods[0];
-
             for (auto i = 0; i < nnew_knots; i++)
             {
                 for (auto j = 0; j < mfa.dom_dim; j++)
                     param(j) = new_knots[j][i];
-                mfa_data.KnotInsertion(param, tensor, new_nctrl_pts[i], new_all_knots, new_all_knot_levels, new_ctrl_pts[i], new_weights[i]);
+                mfa_data.KnotInsertion(param,
+                                       mfa_data.tmesh.tensor_prods[parent_tensor_idx],
+                                       new_nctrl_pts[i],
+                                       new_all_knots,
+                                       new_all_knot_levels,
+                                       new_ctrl_pts[i],
+                                       new_weights[i]);
             }
-
-            // insert new_knots into knots: replace old knots with union of old and new (in temp_knots)
-            for (size_t k = 0; k < mfa.dom_dim; k++)                // for all domain dimensions
-            {
-                inserted_knot_idxs[k].clear();
-                auto ninserted = mfa_data.tmesh.all_knots[k].size();      // number of new knots inserted
-
-                // manual walk along old and new knots so that levels can be inserted along with knots
-                // ie, that's why std::set_union cannot be used
-                auto ak = mfa_data.tmesh.all_knots[k].begin();
-                auto al = mfa_data.tmesh.all_knot_levels[k].begin();
-                auto nk = new_knots[k].begin();
-                auto nl = new_levels[k].begin();
-                while (ak != mfa_data.tmesh.all_knots[k].end() || nk != new_knots[k].end())
-                {
-                    if (ak == mfa_data.tmesh.all_knots[k].end())
-                    {
-                        temp_knots[k].push_back(*nk++);
-                        temp_levels[k].push_back(*nl++);
-                        inserted_knot_idxs[k].push_back(temp_knots[k].size() - 1);
-                    }
-                    else if (nk == new_knots[k].end())
-                    {
-                        temp_knots[k].push_back(*ak++);
-                        temp_levels[k].push_back(*al++);
-                    }
-                    else if (*ak < *nk)
-                    {
-                        temp_knots[k].push_back(*ak++);
-                        temp_levels[k].push_back(*al++);
-                    }
-                    else if (*nk < *ak)
-                    {
-                        temp_knots[k].push_back(*nk++);
-                        temp_levels[k].push_back(*nl++);
-                        inserted_knot_idxs[k].push_back(temp_knots[k].size() - 1);
-                    }
-                    else if (*ak == *nk)
-                    {
-                        temp_knots[k].push_back(*ak++);
-                        temp_levels[k].push_back(*al++);
-                        nk++;
-                        nl++;
-                    }
-                }
-
-                for (auto i = 0; i < inserted_knot_idxs[k].size(); i++)
-                {
-                    auto idx = inserted_knot_idxs[k][i];
-                    mfa_data.tmesh.insert_knot(k, idx, temp_levels[k][idx], temp_knots[k][idx]);
-                }
-            }   // for all domain dimensions
         }
 
 #ifdef TMESH
@@ -396,7 +351,8 @@ namespace mfa
                        T                           err_limit,              // max. allowed error
                        int                         iter,                   // iteration number
                        const VectorXi&             nctrl_pts,              // number of control points
-                       vector<vector<KnotIdx>>&    inserted_knot_idxs)     // (output) indices in each dim. of inserted knots in full knot vector after insertion
+                       vector<vector<KnotIdx>>&    inserted_knot_idxs,     // (output) indices in each dim. of inserted knots in full knot vector after insertion
+                       int&                        parent_tensor_idx)      // (output) parent tensor containing new knot to be inserted (assuming only one insertion)
        {
            Decoder<T>          decoder(mfa, mfa_data, 1);
            VectorXi            ijk(mfa.dom_dim);                   // i,j,k of domain point
@@ -441,7 +397,7 @@ namespace mfa
                        new_knots[k].push_back(new_knot_val);
                        new_levels[k].push_back(iter + 1);  // adapt at the next level, for now every iteration is a new level
                    }
-                   InsertKnots(new_knots, new_levels, inserted_knot_idxs);
+                   InsertKnots(new_knots, new_levels, inserted_knot_idxs, parent_tensor_idx);
                    return false;
                }
            }

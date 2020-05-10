@@ -767,6 +767,8 @@ namespace mfa
         }
 
         // knot insertion into tensor product
+        // Boehm's knot insertion algorithm
+        // assumes all control points needed are contained within one tensor
         // TODO: expensive deep copies
         void KnotInsertion(const VectorX<T>&    param,              // new knot value to be inserted
                            TensorProduct<T>&    tensor)             // (output) tensor product for insertion
@@ -816,6 +818,8 @@ namespace mfa
         }
 
         // knot insertion into tensor product
+        // Boehm's knot insertion algorithm
+        // assumes all control points needed are contained within one tensor
         // This version returns new knots, levels, control points, weights as arguments and does not copy them into tmesh
         // TODO: expensive deep copies
         void KnotInsertion(const VectorX<T>&        param,                  // new knot value to be inserted
@@ -861,7 +865,7 @@ namespace mfa
         private:
 
         // curve knot insertion
-        // Algorithm 5.1 from P&T p. 151
+        // Algorithm 5.1 from P&T p. 151 (Boehm's knot insertion algorithm)
         // not for inserting a duplicate knot (does not handle knot multiplicity > 1)
         // original algorithm from P&T did handle multiplicity, but I simplified
         void CurveKnotIns(int                   cur_dim,            // current dimension
@@ -943,7 +947,7 @@ namespace mfa
         }
 
         // volume knot insertion
-        // n-dimensional generalization of Algorithm 5.3 from P&T p. 155
+        // n-dimensional generalization of Algorithm 5.3 from P&T p. 155 (Boehm's knot insertion algorithm)
         // but without the performance optimizations for now (TODO)
         // not for inserting a duplicate knot (does not handle knot multiplicity > 1)
         // original algorithm from P&T did handle multiplicity, but I simplified
