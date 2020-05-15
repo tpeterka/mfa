@@ -300,28 +300,36 @@ namespace mfa
 
                 if (max_err > err_limit)
                 {
+                    vector<KnotIdx> span(mfa.dom_dim);              // index space coordinates of span where knot will be inserted
+                    for (auto k = 0; k < mfa.dom_dim; k++)
+                        span[k] = mfa_data.FindSpan(k, param(k), nctrl_pts(k));
+
+                    // find tensor containing the span
+                    VectorXi unused;
+                    int parent_tensor_idx = mfa_data.tmesh.search_tensors(span, unused);
+
+                    // debug
+//                     fprintf(stderr, "FirstErrorSpan: span[0] = %lu found parent_tensor_idx = %d\n", span[0], parent_tensor_idx);
+
+                    // check if there are sufficient constraints for the local solve, or we need to revert to global solve
                     for (auto k = 0; k < mfa.dom_dim; k++)
                     {
-                        int span = mfa_data.FindSpan(k, param(k), nctrl_pts(k));
-
-                        // debug: hard-code span to trigger local solve
-//                         span = 3;
-
-                        // check if sufficient constraints exist to do local solve
-                        // if too close to the edge in any dimension, disable local solve
-                        if (span <= mfa_data.p(k) || span >= mfa_data.tmesh.all_knots[k].size() - mfa_data.p(k) - 2)
+                        vector<KnotIdx>& knot_mins = mfa_data.tmesh.tensor_prods[parent_tensor_idx].knot_mins;
+                        vector<KnotIdx>& knot_maxs = mfa_data.tmesh.tensor_prods[parent_tensor_idx].knot_maxs;
+                        if (span[k] <= mfa_data.p(k) || span[k] >= mfa_data.tmesh.all_knots[k].size() - mfa_data.p(k) - 2 ||
+                                span[k] - knot_mins[k] < mfa_data.p(k) || knot_maxs[k] - span[k] < mfa_data.p(k))
                         {
                             local = false;
 
                             // debug
-                            fprintf(stderr, "FirstErrorSpan: span = %d does not allow enough constraints for local solve, switching to global solve\n", span);
+                            fprintf(stderr, "FirstErrorSpan: span = %lu does not allow enough constraints for local solve, switching to global solve\n", span[k]);
                         }
 
                         // span should never be the last knot because of the repeated knots at end
-                        assert(span < mfa_data.tmesh.all_knots[k].size() - 1);
+                        assert(span[k] < mfa_data.tmesh.all_knots[k].size() - 1);
 
                         // new knot is the midpoint of the span containing the domain point parameters
-                        T new_knot_val = (mfa_data.tmesh.all_knots[k][span] + mfa_data.tmesh.all_knots[k][span + 1]) / 2.0;
+                        T new_knot_val = (mfa_data.tmesh.all_knots[k][span[k]] + mfa_data.tmesh.all_knots[k][span[k] + 1]) / 2.0;
                         new_knots[k].push_back(new_knot_val);
                         new_levels[k].push_back(iter + 1);  // adapt at the next level, for now every iteration is a new level
                     }

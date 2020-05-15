@@ -1685,7 +1685,7 @@ namespace mfa
 
         // search for tensor containing point in index space
         // returns index of tensor containing the point, or -1 if not found
-        int search_tensors(const vector<KnotIdx>&   pt,                     // target point in index spac
+        int search_tensors(const vector<KnotIdx>&   pt,                     // target point in index space
                            const VectorXi&          pad)                    // padding in each dim. between target and extents of tensor, zero size -> unused
         {
             for (auto i = 0; i < tensor_prods.size(); i++)                  // for all existing tensors
