@@ -1567,7 +1567,7 @@ namespace mfa
                         if (all_knot_levels[j][anchor[j]] > tensor_prods[tensor_idx].level)
                         {
                             // debug
-                            fprintf(stderr, "scatter_ctrl_pts: skipping ctrl pt idx %d\n", i);
+                            fprintf(stderr, "subset_ctrl_pts: skipping ctrl pt idx %d\n", i);
 
                             skip = true;
                             break;
