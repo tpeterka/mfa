@@ -22,6 +22,7 @@ namespace mfa
         size_t                  cur_iter_;                  // current flattened iteration number
         size_t                  tot_iters_;                 // total number of flattened iterations
         vector<bool>            done_dim_;                  // whether row, col, etc. in each dimension is done
+        vector<size_t>          ds_;                        // stride for domain points in each dim.
 
         public:
 
@@ -33,6 +34,9 @@ namespace mfa
             idx_dim_.resize(dom_dim_);
             prev_idx_dim_.resize(dom_dim_);
             done_dim_.resize(dom_dim_);
+            ds_.resize(dom_dim_, 1);
+            for (size_t i = 1; i < dom_dim_; i++)
+                ds_[i] = ds_[i - 1] * npts_dim_(i - 1);
         }
 
         // return total number of iterations in the volume
@@ -52,6 +56,26 @@ namespace mfa
 
         // return current total iteration count
         size_t cur_iter()           { return cur_iter_; }
+
+        // convert linear domain point index into (i,j,k,...) multidimensional index
+        void idx_ijk(
+                size_t                  idx,            // linear cell indx
+                VectorXi&               ijk) const      // (output) i,j,k,... indices in all dimensions
+        {
+            if (dom_dim_ == 1)
+            {
+                ijk(0) = idx;
+                return;
+            }
+
+            for (int i = 0; i < dom_dim_; i++)
+            {
+                if (i < dom_dim_ - 1)
+                    ijk(i) = (idx % ds_[i + 1]) / ds_[i];
+                else
+                    ijk(i) = idx / ds_[i];
+            }
+        }
 
         // increment iteration; user must call incr_iter() near the bottom of the flattened loop
         void incr_iter()
