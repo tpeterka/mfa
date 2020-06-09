@@ -14,7 +14,7 @@
 #include    <diy/assigner.hpp>
 #include    <diy/io/block.hpp>
 #include    <diy/pick.hpp>
-#include    <diy/fmt/format.h>
+#include    <diy/thirdparty/fmt/format.h>
 
 #include    <stdio.h>
 
