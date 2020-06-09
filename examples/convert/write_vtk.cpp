@@ -67,127 +67,167 @@ void PrepRenderingData(
     }
 
     // number of geometry control points
-    // TODO: hard-coded for one tensor product
-    for (size_t j = 0; j < (size_t)(block->geometry.mfa_data->tmesh.tensor_prods[0].nctrl_pts.size()); j++)
-        geom_nctrl_pts.push_back(block->geometry.mfa_data->tmesh.tensor_prods[0].nctrl_pts(j));
+    geom_nctrl_pts.resize(ndom_dims);
+    for (auto i = 0; i < block->geometry.mfa_data->tmesh.tensor_prods.size(); i++)
+        for (auto j = 0; j < ndom_dims; j++)
+            geom_nctrl_pts[j] += block->geometry.mfa_data->tmesh.tensor_prods[i].nctrl_pts(j);
 
     // number of science variable control points
-    // TODO: hard-coded for one tensor product
     vars_nctrl_pts.resize(nvars);
-    for (size_t i = 0; i < nvars; i++)
-        for (size_t j = 0; j < (size_t)(block->vars[i].mfa_data->tmesh.tensor_prods[0].nctrl_pts.size()); j++)
-            vars_nctrl_pts[i].push_back(block->vars[i].mfa_data->tmesh.tensor_prods[0].nctrl_pts(j));
+    for (auto k = 0; k < nvars; k++)
+        vars_nctrl_pts[k].resize(ndom_dims);
+    for (auto k = 0; k < nvars; k++)
+        for (auto i = 0; i < block->vars[k].mfa_data->tmesh.tensor_prods.size(); i++)
+            for (auto j = 0; j < ndom_dims; j++)
+                vars_nctrl_pts[k][j] += block->vars[k].mfa_data->tmesh.tensor_prods[i].nctrl_pts(j);
 
-    // geometry control points
+    // --- geometry control points ---
 
     // compute vectors of individual control point coordinates for the tensor product
     vector<vector<float>> ctrl_pts_coords(ndom_dims);
-    for (int k = 0; k < ndom_dims; k++)
+    for (auto k = 0; k < ndom_dims; k++)
+        ctrl_pts_coords[k].resize(geom_nctrl_pts[k]);
+    size_t n    = 0;            // index into control points
+    size_t n0   = n;            // index into control points in current dimension
+    for (auto t = 0; t < block->geometry.mfa_data->tmesh.tensor_prods.size(); t++)                      // tensor products
     {
-        // TODO: hard-coded for one tensor product
-        ctrl_pts_coords[k].resize(block->geometry.mfa_data->tmesh.tensor_prods[0].nctrl_pts(k));
-        for (size_t j = 0; j < (size_t)(block->geometry.mfa_data->tmesh.tensor_prods[0].nctrl_pts(k)); j++)
+        for (auto k = 0; k < ndom_dims; k++)                                                            // domain dimensions
         {
-            float tsum = 0.0;
-            for (int l = 1; l < block->geometry.mfa_data->p(k) + 1; l++)
-                tsum += block->geometry.mfa_data->tmesh.all_knots[k][j + l];
-            tsum /= float(block->geometry.mfa_data->p(k));
-            ctrl_pts_coords[k][j] = block->core_mins(k) + tsum * (block->core_maxs(k) - block->core_mins(k));
-        }
-    }
-
-    // form the tensor product of control points from the vectors of individual coordinates
-    // TODO: hard-coded for one tensor product
-    vector<size_t> ijk(ndom_dims);                              // indices of control point
-    for (size_t j = 0; j < (size_t)(block->geometry.mfa_data->tmesh.tensor_prods[0].ctrl_pts.rows()); j++)
-    {
-        // first 3 dims stored as mesh geometry
-        p.x = ctrl_pts_coords[0][ijk[0]];
-        if (ndom_dims < 2)
-            p.y = 0.0;
-        else
-            p.y = ctrl_pts_coords[1][ijk[1]];
-        if (ndom_dims < 3)
-            p.z = 0.0;
-        else
-            p.z = ctrl_pts_coords[2][ijk[2]];
-        geom_ctrl_pts.push_back(p);
-
-        // update ijk of next point
-        for (int k = 0; k < ndom_dims; k++)
-        {
-            if (ijk[k] < block->geometry.mfa_data->tmesh.tensor_prods[0].nctrl_pts(k) - 1)
-            {
-                ijk[k]++;
-                break;
-            }
-            else
-                ijk[k] = 0;
-        }
-    }
-
-    // science variable control points
-    // TODO: hard-coded for one tensor product
-    vars_ctrl_pts.resize(nvars);
-    vars_ctrl_data = new float*[nvars];
-    for (size_t i = 0; i < nvars; i++)
-    {
-        vars_ctrl_data[i] = new float[block->vars[i].mfa_data->tmesh.tensor_prods[0].ctrl_pts.rows()];
-
-        // compute vectors of individual control point coordinates for the tensor product
-        vector<vector<float>> ctrl_pts_coords(ndom_dims);
-        for (int k = 0; k < ndom_dims; k++)
-        {
-            ctrl_pts_coords[k].resize(block->vars[i].mfa_data->tmesh.tensor_prods[0].nctrl_pts(k));
-            for (size_t j = 0; j < (size_t)(block->vars[i].mfa_data->tmesh.tensor_prods[0].nctrl_pts(k)); j++)
+            n0 = n;
+            KnotIdx knot_min = block->geometry.mfa_data->tmesh.tensor_prods[t].knot_mins[k];
+            if (knot_min)
+                knot_min -= (block->geometry.mfa_data->p(k) - 1);
+            for (auto j = 0; j < block->geometry.mfa_data->tmesh.tensor_prods[t].nctrl_pts(k); j++)     // control points
             {
                 float tsum = 0.0;
-                for (int l = 1; l < block->vars[i].mfa_data->p(k) + 1; l++)
-                    tsum += block->vars[i].mfa_data->tmesh.all_knots[k][j + l];
-                tsum /= float(block->vars[i].mfa_data->p(k));
-                ctrl_pts_coords[k][j] = block->core_mins(k) + tsum * (block->core_maxs(k) - block->core_mins(k));
-            }
-        }
+                // TODO: skip knots in the loop below that are at a deeper level than the tensor
+                for (int l = 1; l < block->geometry.mfa_data->p(k) + 1; l++)
+                    tsum += block->geometry.mfa_data->tmesh.all_knots[k][knot_min + j + l];
+                tsum /= float(block->geometry.mfa_data->p(k));
+                ctrl_pts_coords[k][n0++] = block->core_mins(k) + tsum * (block->core_maxs(k) - block->core_mins(k));
+            }   // control points
+        }   // domain dimensions
+        n = n0;
+    }   // tensor products
 
-        // form the tensor product of control points from the vectors of individual coordinates
-        // TODO: hard-coded for one tensor product
-        vector<size_t> ijk(ndom_dims);                              // indices of control point
-        for (size_t j = 0; j < (size_t)(block->vars[i].mfa_data->tmesh.tensor_prods[0].ctrl_pts.rows()); j++)
+    // form the tensor product of control points from the vectors of individual coordinates
+    vector<size_t> ijk(ndom_dims);                              // indices of control point local to one tensor
+    vector<size_t> ijk_ofst(ndom_dims);                         // offset of indices for current tensor
+    for (auto i = 0; i < block->geometry.mfa_data->tmesh.tensor_prods.size(); i++)                      // tensor products
+    {
+        for (auto j = 0; j < block->geometry.mfa_data->tmesh.tensor_prods[i].ctrl_pts.rows(); j++)      // control points
         {
             // first 3 dims stored as mesh geometry
-            // control point position and optionally science variable, if the total fits in 3d
-            p.x = ctrl_pts_coords[0][ijk[0]];
+            p.x = ctrl_pts_coords[0][ijk[0] + ijk_ofst[0]];
             if (ndom_dims < 2)
-            {
-                p.y = block->vars[i].mfa_data->tmesh.tensor_prods[0].ctrl_pts(j, 0);
-                p.z = 0.0;
-            }
+                p.y = 0.0;
             else
-            {
-                p.y = ctrl_pts_coords[1][ijk[1]];
-                if (ndom_dims < 3)
-                    p.z = block->vars[i].mfa_data->tmesh.tensor_prods[0].ctrl_pts(j, 0);
-                else
-                    p.z = ctrl_pts_coords[2][ijk[2]];
-            }
-            vars_ctrl_pts[i].push_back(p);
-
-            // science variable also stored as data
-            vars_ctrl_data[i][j] = block->vars[i].mfa_data->tmesh.tensor_prods[0].ctrl_pts(j, 0);
+                p.y = ctrl_pts_coords[1][ijk[1] + ijk_ofst[1]];
+            if (ndom_dims < 3)
+                p.z = 0.0;
+            else
+                p.z = ctrl_pts_coords[2][ijk[2] + ijk_ofst[2]];
+            geom_ctrl_pts.push_back(p);
 
             // update ijk of next point
-            for (int k = 0; k < ndom_dims; k++)
+            for (auto k = 0; k < ndom_dims; k++)                    // domain dimensionas
             {
-                if (ijk[k] < block->vars[i].mfa_data->tmesh.tensor_prods[0].nctrl_pts(k) - 1)
+                if (ijk[k] < block->geometry.mfa_data->tmesh.tensor_prods[i].nctrl_pts(k) - 1)
                 {
                     ijk[k]++;
                     break;
                 }
                 else
                     ijk[k] = 0;
-            }
-        }
-    }
+            }       // domain dimensions
+        }       // control points
+
+        for (auto k = 0; k < ndom_dims; k++)
+            ijk_ofst[k] += block->geometry.mfa_data->tmesh.tensor_prods[i].nctrl_pts(k);
+    }       // tensor products
+
+    // --- science variable control points ---
+
+    vars_ctrl_pts.resize(nvars);
+    vars_ctrl_data = new float*[nvars];
+    for (size_t i = 0; i < nvars; i++)                              // science variables
+    {
+        size_t nctrl_pts = 1;
+        for (auto k = 0; k < ndom_dims; k++)
+            nctrl_pts *= vars_nctrl_pts[i][k];
+        vars_ctrl_data[i] = new float[nctrl_pts];
+
+        // compute vectors of individual control point coordinates for the tensor product
+        vector<vector<float>> ctrl_pts_coords(ndom_dims);
+        size_t n    = 0;            // index into control points
+        size_t n0   = n;            // index into control points in current dimension
+        for (auto t = 0; t < block->vars[i].mfa_data->tmesh.tensor_prods.size(); t++)                   // tensor products
+        {
+            for (auto k = 0; k < ndom_dims; k++)                                                        // domain dimensions
+            {
+                n0 = n;
+                ctrl_pts_coords[k].resize(vars_nctrl_pts[i][k]);
+                KnotIdx knot_min = block->vars[i].mfa_data->tmesh.tensor_prods[t].knot_mins[k];
+                if (knot_min)
+                    knot_min -= (block->vars[i].mfa_data->p(k) - 1);
+                for (auto j = 0; j < block->vars[i].mfa_data->tmesh.tensor_prods[t].nctrl_pts(k); j++)  // control points
+                {
+                    float tsum = 0.0;
+                    // TODO: skip knots in the loop below that are at a deeper level than the tensor
+                    for (auto l = 1; l < block->vars[i].mfa_data->p(k) + 1; l++)
+                        tsum += block->vars[i].mfa_data->tmesh.all_knots[k][knot_min + j + l];
+                    tsum /= float(block->vars[i].mfa_data->p(k));
+                    ctrl_pts_coords[k][n0++] = block->core_mins(k) + tsum * (block->core_maxs(k) - block->core_mins(k));
+                }   // control points
+            }   // domain dimensions
+            n = n0;
+        }   // tensor products
+
+        // form the tensor product of control points from the vectors of individual coordinates
+        vector<size_t> ijk(ndom_dims);                              // indices of control point local to one tensor
+        vector<size_t> ijk_ofst(ndom_dims);                         // offset of indices for current tensor
+        for (auto t = 0; t < block->vars[i].mfa_data->tmesh.tensor_prods.size(); t++)                  // tensor products
+        {
+            for (auto j = 0; j < block->vars[i].mfa_data->tmesh.tensor_prods[t].ctrl_pts.rows(); j++)   // control points
+            {
+                // first 3 dims stored as mesh geometry
+                // control point position and optionally science variable, if the total fits in 3d
+                p.x = ctrl_pts_coords[0][ijk[0] + ijk_ofst[0]];
+                if (ndom_dims < 2)
+                {
+                    p.y = block->vars[i].mfa_data->tmesh.tensor_prods[t].ctrl_pts(j, 0);
+                    p.z = 0.0;
+                }
+                else
+                {
+                    p.y = ctrl_pts_coords[1][ijk[1] + ijk_ofst[1]];
+                    if (ndom_dims < 3)
+                        p.z = block->vars[i].mfa_data->tmesh.tensor_prods[t].ctrl_pts(j, 0);
+                    else
+                        p.z = ctrl_pts_coords[2][ijk[2] + ijk_ofst[2]];
+                }
+                vars_ctrl_pts[i].push_back(p);
+
+                // science variable also stored as data
+                vars_ctrl_data[i][j] = block->vars[i].mfa_data->tmesh.tensor_prods[t].ctrl_pts(j, 0);
+
+                // update ijk of next point
+                for (auto k = 0; k < ndom_dims; k++)
+                {
+                    if (ijk[k] < block->vars[i].mfa_data->tmesh.tensor_prods[t].nctrl_pts(k) - 1)
+                    {
+                        ijk[k]++;
+                        break;
+                    }
+                    else
+                        ijk[k] = 0;
+                }
+            }   // control points
+
+            for (auto k = 0; k < ndom_dims; k++)
+                ijk_ofst[k] += block->vars[i].mfa_data->tmesh.tensor_prods[t].nctrl_pts(k);
+        }   // tensor products
+    }   // science variables
 
     // approximated points
     approx_data = new float*[nvars];
