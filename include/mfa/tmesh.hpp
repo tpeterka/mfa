@@ -12,6 +12,7 @@ using namespace std;
 
 using KnotIdx   = size_t;
 using TensorIdx = size_t;
+using ParamIdx  = size_t;
 
 struct NeighborTensor                                   // neighboring tensor product
 {
@@ -40,6 +41,8 @@ namespace mfa
     {
         vector<vector<T>>           all_knots;          // all_knots[dimension][index]
         vector<vector<int>>         all_knot_levels;    // refinement levels of all_knots[dimension][index]
+        vector<vector<ParamIdx>>    all_knot_param_idxs;// span in input point parameters containing knot value in all_knots[dimension][idx] (same layout as all_knots)
+                                                        // params[dim][idx] <= knot_value < params[dim][idx + 1]
         vector<TensorProduct<T>>    tensor_prods;       // all tensor products
         int                         dom_dim_;           // domain dimensionality
         VectorXi                    p_;                 // degree in each dimension
@@ -58,6 +61,7 @@ namespace mfa
         {
             all_knots.resize(dom_dim_);
             all_knot_levels.resize(dom_dim_);
+            all_knot_param_idxs.resize(dom_dim_);
 
             if (ntensor_prods)
                 tensor_prods.resize(ntensor_prods);
@@ -70,17 +74,36 @@ namespace mfa
             {
                 all_knots[i].resize(nctrl_pts(i) + p_(i) + 1);
                 all_knot_levels[i].resize(nctrl_pts(i) + p_(i) + 1);
+                all_knot_param_idxs[i].resize(nctrl_pts(i) + p_(i) + 1);
             }
         }
 
         // insert a knot into all_knots
-        void insert_knot(int        dim,                // dimension of knot vector
-                         KnotIdx    pos,                // new position in all_knots[dim] of inserted knot
-                         int        level,              // refinement level of inserted knot
-                         T          knot)               // knot value to be inserted
+        void insert_knot(int                dim,            // current dimension
+                         KnotIdx            pos,            // new position in all_knots[dim] of inserted knot
+                         int                level,          // refinement level of inserted knot
+                         T                  knot,           // knot value to be inserted
+                         vector<vector<T>>& params)         // params of input points
         {
+            // insert knot and level
             all_knots[dim].insert(all_knots[dim].begin() + pos, knot);
             all_knot_levels[dim].insert(all_knot_levels[dim].begin() + pos, level);
+
+            // insert param idx
+            auto        param_it = params[dim].begin();     // iterator into params (for one dim.)
+            // uninitialized values, search entire params
+            if (pos > 0 && all_knot_param_idxs[dim][pos - 1] == all_knot_param_idxs[dim][pos])
+                param_it = lower_bound(params[dim].begin(), params[dim].end(), all_knots[dim][pos]);
+            else if (pos > 0)       // search for the param idx within the bounds of existing knot values
+            {
+                ParamIdx low    = all_knot_param_idxs[dim][pos - 1];
+                ParamIdx high   = all_knot_param_idxs[dim][pos];
+                param_it        = lower_bound(params[dim].begin() + low, params[dim].begin() + high, all_knots[dim][pos]);
+            }
+            ParamIdx param_idx = param_it - params[dim].begin();
+            if (param_idx == params[dim].size() - 1 || knot < params[dim][param_idx])
+                param_idx--;
+            all_knot_param_idxs[dim].insert(all_knot_param_idxs[dim].begin() + pos, param_idx);
 
             // adjust tensor product knot_mins and knot_maxs
             for (TensorProduct<T>& t: tensor_prods)
@@ -1731,7 +1754,8 @@ namespace mfa
             {
                 fprintf(stderr, "all_knots[dim %d] ", i);
                 for (auto j = 0; j < all_knots[i].size(); j++)
-                    fprintf(stderr, "%.2lf (l%d) ", all_knots[i][j], all_knot_levels[i][j]);
+                    fprintf(stderr, "%.2lf (l %d) [p %lu] | ",
+                            all_knots[i][j], all_knot_levels[i][j], all_knot_param_idxs[i][j]);
                 fprintf(stderr, "\n");
             }
             fprintf(stderr, "\n");

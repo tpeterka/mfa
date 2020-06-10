@@ -386,8 +386,7 @@ template <typename T>                        // float or double
             if (local)
                 fprintf(stderr, "*** Using local solve in AdaptiveEncode ***\n");
 
-            // temporary control points and weights for global encode
-            // TODO: replace for local encode
+            // temporary control points and weights for global encode or first round of local encode
             VectorXi nctrl_pts(mfa_data.dom_dim);
             for (auto k = 0; k < mfa_data.dom_dim; k++)
                 nctrl_pts(k) = mfa_data.tmesh.all_knots[k].size() - mfa_data.p(k) - 1;
@@ -396,6 +395,10 @@ template <typename T>                        // float or double
 
             // Initial global encode and scattering of control points to tensors
             Encode(nctrl_pts, ctrl_pts, weights);
+
+            // debug
+//             cerr << "-----\nnctrl_pts: " << ctrl_pts.rows() << " global ctrl_pts:\n" << ctrl_pts << "\n-----" << endl;
+
             mfa_data.tmesh.scatter_ctrl_pts(nctrl_pts, ctrl_pts, weights);
 
             // debug: print tmesh
@@ -431,6 +434,10 @@ template <typename T>                        // float or double
                     weights.resize(ctrl_pts.rows());
 
                     Encode(nctrl_pts, ctrl_pts, weights);
+
+                    // debug
+//                     cerr << "-----\nnctrl_pts: " << ctrl_pts.rows() << " global ctrl_pts:\n" << ctrl_pts << "\n-----" << endl;
+
                     mfa_data.tmesh.scatter_ctrl_pts(nctrl_pts, ctrl_pts, weights);
                 }
 

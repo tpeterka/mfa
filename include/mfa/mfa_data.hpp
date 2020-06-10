@@ -35,20 +35,21 @@
 //
 // ------------------
 
-template <typename T>                       // float or double
-struct KnotSpan
-{
-    VectorX<T> min_knot;                  // parameter vector of min knot in this span
-    VectorX<T> max_knot;                  // parameter vector of max knot in this span
-    VectorXi   min_knot_ijk;              // i,j,k indices of minimum knot in this span
-    VectorXi   max_knot_ijk;              // i,j,k indices of maximum knot in this span
-    VectorX<T> min_param;                 // parameter vector of minimum domain point in this span
-    VectorX<T> max_param;                 // parameter vector of maximum domain point in this span
-    VectorXi   min_param_ijk;             // i,j,k indices of minimum domain point in this span
-    VectorXi   max_param_ijk;             // i,j,k indices of maximum domain point in this span
-    int        last_split_dim;            // last dimension in which this span was subdivided
-    bool       done;                      // whether the span has converged (<= error_limit everywhere)
-};
+// DEPRECATED
+// template <typename T>                       // float or double
+// struct KnotSpan
+// {
+//     VectorX<T> min_knot;                  // parameter vector of min knot in this span
+//     VectorX<T> max_knot;                  // parameter vector of max knot in this span
+//     VectorXi   min_knot_ijk;              // i,j,k indices of minimum knot in this span
+//     VectorXi   max_knot_ijk;              // i,j,k indices of maximum knot in this span
+//     VectorX<T> min_param;                 // parameter vector of minimum domain point in this span
+//     VectorX<T> max_param;                 // parameter vector of maximum domain point in this span
+//     VectorXi   min_param_ijk;             // i,j,k indices of minimum domain point in this span
+//     VectorXi   max_param_ijk;             // i,j,k indices of maximum domain point in this span
+//     int        last_split_dim;            // last dimension in which this span was subdivided
+//     bool       done;                      // whether the span has converged (<= error_limit everywhere)
+// };
 
 namespace mfa
 {
@@ -139,7 +140,8 @@ namespace mfa
                                                  // for all input points (matrix rows) and control points (matrix cols)
         Tmesh<T>                  tmesh;         // t-mesh of knots, control points, weights
         T                         max_err;       // unnormalized absolute value of maximum error
-        vector<KnotSpan<T>>       knot_spans;    // knot spans
+        //         DEPRECATED
+//         vector<KnotSpan<T>>       knot_spans;    // knot spans
         int                       min_dim;       // starting coordinate of this model in full-dimensional data
         int                       max_dim;       // ending coordinate of this model in full-dimensional data
         int                       dom_dim;       // number of domain dimensions
@@ -193,7 +195,7 @@ namespace mfa
 #ifdef CURVE_PARAMS
             Knots(ndom_pts_, params_, tmesh);       // knots spaced according to parameters (per P&T)
 #else
-            UniformKnots(tmesh);         // knots spaced uniformly
+            UniformKnots(params_, tmesh);                    // knots spaced uniformly
 #endif
         }
 
@@ -1169,16 +1171,16 @@ namespace mfa
         // total number of knots is the sum of number of knots over the dimensions, much less than the product
         // assumes knots were allocated by caller
         void Knots(
-                const VectorXi&             ndom_pts,           // number of input points in each dim.
-                const vector<vector<T>>&    params,             // parameters for input points[dimension][index]
-                Tmesh<T>&                   tmesh) const        // (output) tmesh
+                const VectorXi&             ndom_pts,               // number of input points in each dim.
+                const vector<vector<T>>&    params,                 // parameters for input points[dimension][index]
+                Tmesh<T>&                   tmesh) const            // (output) tmesh
         {
             for (size_t k = 0; k < dom_dim; k++)                    // for all domain dimensions
             {
                 // TODO: hard-coded for first tensor product of the tmesh
                 int nctrl_pts = tmesh.tensor_prods[0].nctrl_pts(k);
 
-                int nknots = nctrl_pts + p(k) + 1;         // number of knots in current dim
+                int nknots = nctrl_pts + p(k) + 1;                  // number of knots in current dim
 
                 // in P&T, d is the ratio of number of input points (r+1) to internal knot spans (n-p+1)
                 //         T d = (T)(ndom_pts(k)) / (nctrl_pts - p(k));         // eq. 9.68, r is P&T's m
@@ -1186,7 +1188,8 @@ namespace mfa
                 T d = (T)(ndom_pts(k) - 1) / (nctrl_pts - p(k));
 
                 // compute n - p internal knots
-                for (int j = 1; j <= nctrl_pts - p(k) - 1; j++)  // eq. 9.69
+                size_t param_idx = 0;                               // index into params
+                for (int j = 1; j <= nctrl_pts - p(k) - 1; j++)     // eq. 9.69
                 {
                     int   i = j * d;                                // integer part of j steps of d
                     T a = j * d - i;                                // fractional part of j steps of d, P&T's alpha
@@ -1196,6 +1199,13 @@ namespace mfa
 
                     // when using my version of d, use the following
                     tmesh.all_knots[k][p(k) + j] = (1.0 - a) * params[k][i] + a * params[k][i + 1];
+
+                    // parameter span containing the knot
+                    while (params[k][param_idx] < tmesh.all_knots[k][p(k) + j])
+                        param_idx++;
+                    if (param_idx == params[k].size() - 1 || tmesh.all_knots[k][p(k) + j]  < params[k][param_idx])
+                        param_idx--;
+                    tmesh.all_knot_param_idxs[k][p(k) + j] = param_idx;
                 }
 
                 // set external knots
@@ -1203,6 +1213,7 @@ namespace mfa
                 {
                     tmesh.all_knots[k][i] = 0.0;
                     tmesh.all_knots[k][nknots - 1 - i] = 1.0;
+                    tmesh.all_knot_param_idxs[k][nknots - 1 - i] = params[k].size() - 2;
                 }
             }
         }
@@ -1221,26 +1232,39 @@ namespace mfa
         // resulting knots are same for all curves and stored once for each dimension (1st dim knots, 2nd dim, ...)
         // total number of knots is the sum of number of knots over the dimensions, much less than the product
         // assumes knots were allocated by caller
-        void UniformKnots(Tmesh<T>& tmesh) const        // (output) tmesh
+        void UniformKnots(
+                const vector<vector<T>>&    params,             // parameters for input points[dimension][index]
+                Tmesh<T>&                   tmesh) const        // (output) tmesh
         {
-            for (size_t k = 0; k < dom_dim; k++)        // for all domain dimensions
+            for (size_t k = 0; k < dom_dim; k++)                // for all domain dimensions
             {
                 // TODO: hard-coded for first tensor product of the tmesh
                 int nctrl_pts = tmesh.tensor_prods[0].nctrl_pts(k);
 
-                int nknots = nctrl_pts + p(k) + 1;    // number of knots in current dim
+                int nknots = nctrl_pts + p(k) + 1;              // number of knots in current dim
 
                 // set p + 1 external knots at each end
                 for (int i = 0; i < p(k) + 1; i++)
                 {
                     tmesh.all_knots[k][i] = 0.0;
                     tmesh.all_knots[k][nknots - 1 - i] = 1.0;
+                    tmesh.all_knot_param_idxs[k][nknots - 1 - i] = params[k].size() - 2;
                 }
 
                 // compute remaining n - p internal knots
-                T step = 1.0 / (nctrl_pts - p(k));               // size of internal knot span
+                T step = 1.0 / (nctrl_pts - p(k));              // size of internal knot span
+                size_t param_idx = 0;                           // index into params
                 for (int j = 1; j <= nctrl_pts - p(k) - 1; j++)
+                {
                     tmesh.all_knots[k][p(k) + j] = tmesh.all_knots[k][p(k) + j - 1] + step;
+
+                    // parameter span containing the knot
+                    while (params[k][param_idx] < tmesh.all_knots[k][p(k) + j])
+                        param_idx++;
+                    if (param_idx == params[k].size() - 1 || tmesh.all_knots[k][p(k) + j]  < params[k][param_idx])
+                        param_idx--;
+                    tmesh.all_knot_param_idxs[k][p(k) + j] = param_idx;
+                }
             }
         }
 

@@ -106,11 +106,11 @@ namespace mfa
                 for (auto i = 0; i < inserted_knot_idxs[k].size(); i++)
                 {
                     auto idx = inserted_knot_idxs[k][i];
-                    mfa_data.tmesh.insert_knot(k, idx, temp_levels[k][idx], temp_knots[k][idx]);
+                    mfa_data.tmesh.insert_knot(k, idx, temp_levels[k][idx], temp_knots[k][idx], mfa.params());
                 }
             }   // for all domain dimensions
 
-            // find parent tensor (assumes only on knot being inserted)
+            // find parent tensor (assumes only one knot being inserted)
             vector<KnotIdx> inserted_knot_idx(mfa_data.dom_dim);
             for (auto j = 0; j < mfa_data.dom_dim; j++)
                 inserted_knot_idx[j] = inserted_knot_idxs[j][0];    // there is only one inserted knot, index 0, but dimensions are switched, hence the copy
@@ -196,7 +196,7 @@ namespace mfa
             if (!extents.size())
                 extents = VectorX<T>::Ones(domain.cols());
 
-            for (auto i = 0; i < mfa.ndom_pts().prod(); i++)
+            for (auto i = 0; i < mfa.ndom_pts().prod(); i++)        // for all input points
             {
                 mfa_data.idx2ijk(mfa.ds(), i, ijk);
                 for (auto k = 0; k < mfa.dom_dim; k++)
@@ -219,6 +219,8 @@ namespace mfa
 
                 if (max_err > err_limit)
                 {
+                    // check that new spans will contain at least one input point
+                    bool empty_span = false;
                     for (auto k = 0; k < mfa.dom_dim; k++)
                     {
                         span[k] = mfa_data.FindSpan(k, param(k), nctrl_pts(k));
@@ -226,15 +228,47 @@ namespace mfa
                         // span should never be the last knot because of the repeated knots at end
                         assert(span[k] < mfa_data.tmesh.all_knots[k].size() - 1);
 
+                        // current span must contain at least two input points
+                        size_t low_idx  = mfa_data.tmesh.all_knot_param_idxs[k][span[k]];
+                        size_t high_idx = mfa_data.tmesh.all_knot_param_idxs[k][span[k] + 1];
+                        if (high_idx - low_idx < 3 &&
+                                (high_idx - low_idx < 2 || mfa_data.tmesh.all_knots[k][span[k]] > mfa.params()[k][low_idx]))
+                        {
+                            empty_span = true;
+                            break;
+                        }
+
+                        // new knot would be the midpoint of the span containing the domain point parameters
+                        T new_knot_val = (mfa_data.tmesh.all_knots[k][span[k]] + mfa_data.tmesh.all_knots[k][span[k] + 1]) / 2.0;
+
+                        // if the current span were to be split, check whether the resulting spans will have an input point
+                        auto param_it       = lower_bound(mfa.params()[k].begin() + low_idx, mfa.params()[k].begin() + high_idx, new_knot_val);
+                        ParamIdx param_idx  = param_it - mfa.params()[k].begin();
+                        if (param_idx == mfa.params()[k].size() - 1 || new_knot_val < mfa.params()[k][param_idx])
+                            param_idx--;
+                        if (param_idx - low_idx == 0 || high_idx - param_idx == 0)
+                        {
+                            empty_span =  true;
+                            break;
+                        }
+                    }
+
+                    if (empty_span)
+                        continue;               // next input point
+
+                    for (auto k = 0; k < mfa.dom_dim; k++)
+                    {
                         // new knot is the midpoint of the span containing the domain point parameters
                         T new_knot_val = (mfa_data.tmesh.all_knots[k][span[k]] + mfa_data.tmesh.all_knots[k][span[k] + 1]) / 2.0;
                         new_knots[k].push_back(new_knot_val);
                         new_levels[k].push_back(iter + 1);  // adapt at the next level, for now every iteration is a new level
                     }
+
                     InsertKnots(new_knots, new_levels, inserted_knot_idxs);
                     return false;
-                }
-            }
+                }   // max_err > err_limit
+            }   // for all input points
+
             return true;
         }
 
@@ -277,7 +311,7 @@ namespace mfa
             if (!extents.size())
                 extents = VectorX<T>::Ones(domain.cols());
 
-            for (auto i = 0; i < mfa.ndom_pts().prod(); i++)
+            for (auto i = 0; i < mfa.ndom_pts().prod(); i++)        // for all input points
             {
                 mfa_data.idx2ijk(mfa.ds(), i, ijk);
                 for (auto k = 0; k < mfa.dom_dim; k++)
@@ -303,6 +337,38 @@ namespace mfa
                     vector<KnotIdx> span(mfa.dom_dim);              // index space coordinates of span where knot will be inserted
                     for (auto k = 0; k < mfa.dom_dim; k++)
                         span[k] = mfa_data.FindSpan(k, param(k), nctrl_pts(k));
+
+                    // check that new spans will contain at least one input point
+                    bool empty_span = false;
+                    for (auto k = 0; k < mfa.dom_dim; k++)
+                    {
+                        // current span must contain at least two input points
+                        size_t low_idx  = mfa_data.tmesh.all_knot_param_idxs[k][span[k]];
+                        size_t high_idx = mfa_data.tmesh.all_knot_param_idxs[k][span[k] + 1];
+                        if (high_idx - low_idx < 3 &&
+                                (high_idx - low_idx < 2 || mfa_data.tmesh.all_knots[k][span[k]] > mfa.params()[k][low_idx]))
+                        {
+                            empty_span = true;
+                            break;
+                        }
+
+                        // new knot would be the midpoint of the span containing the domain point parameters
+                        T new_knot_val = (mfa_data.tmesh.all_knots[k][span[k]] + mfa_data.tmesh.all_knots[k][span[k] + 1]) / 2.0;
+
+                        // if the current span were to be split, check whether the resulting spans will have an input point
+                        auto param_it       = lower_bound(mfa.params()[k].begin() + low_idx, mfa.params()[k].begin() + high_idx, new_knot_val);
+                        ParamIdx param_idx  = param_it - mfa.params()[k].begin();
+                        if (param_idx == mfa.params()[k].size() - 1 || new_knot_val < mfa.params()[k][param_idx])
+                            param_idx--;
+                        if (param_idx - low_idx == 0 || high_idx - param_idx == 0)
+                        {
+                            empty_span =  true;
+                            break;
+                        }
+                    }
+
+                    if (empty_span)
+                        continue;               // next input point
 
                     // find tensor containing the span
                     VectorXi unused;
@@ -333,13 +399,16 @@ namespace mfa
                         new_knots[k].push_back(new_knot_val);
                         new_levels[k].push_back(iter + 1);  // adapt at the next level, for now every iteration is a new level
                     }
+
                     if (local)
                         InsertKnots(new_knots, new_levels, inserted_knot_idxs, new_nctrl_pts, new_ctrl_pts, new_weights);
                     else
                         InsertKnots(new_knots, new_levels, inserted_knot_idxs);
+
                     return false;
-                }
-            }
+                }   // max_err > err_limit
+            }   // for all input points
+
             return true;
         }
 
