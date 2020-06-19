@@ -1752,9 +1752,9 @@ namespace mfa
             // all_knots
             for (int i = 0; i < dom_dim_; i++)
             {
-                fprintf(stderr, "all_knots[dim %d] ", i);
+                fprintf(stderr, "all_knots[dim %d]\n", i);
                 for (auto j = 0; j < all_knots[i].size(); j++)
-                    fprintf(stderr, "%.2lf (l %d) [p %lu] | ",
+                    fprintf(stderr, "%.3lf (l %d) [p %lu]\n",
                             all_knots[i][j], all_knot_levels[i][j], all_knot_param_idxs[i][j]);
                 fprintf(stderr, "\n");
             }

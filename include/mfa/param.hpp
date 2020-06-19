@@ -61,14 +61,14 @@ namespace mfa
 #endif
 
             // debug
-            fprintf(stderr, "----- params -----\n");
-            for (auto i = 0; i < params.size(); i++)
-            {
-                fprintf(stderr, "dimension %d:\n", i);
-                for (auto j = 0; j < params[i].size(); j++)
-                    fprintf(stderr, "params[%d][%d] = %.3lf\n", i, j, params[i][j]);
-            }
-            fprintf(stderr, "-----\n");
+//             fprintf(stderr, "----- params -----\n");
+//             for (auto i = 0; i < params.size(); i++)
+//             {
+//                 fprintf(stderr, "dimension %d:\n", i);
+//                 for (auto j = 0; j < params[i].size(); j++)
+//                     fprintf(stderr, "params[%d][%d] = %.3lf\n", i, j, params[i][j]);
+//             }
+//             fprintf(stderr, "-----\n");
 
             // offsets for curve starting (domain) points in each dimension
             co.resize(dom_dim);

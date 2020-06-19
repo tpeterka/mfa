@@ -127,17 +127,12 @@ namespace mfa
                 vector<MatrixX<T>>&         new_ctrl_pts,           // (output) new control points from P&T knot insertion, one std::vector element for each knot inserted
                 vector<VectorX<T>>&         new_weights)            // (output) new weights from P&T knot insertion, one std::vector element for each knot inserted
         {
-            // debug
-            fprintf(stderr, "*** Using local solve in InsertKnots ***\n");
-
             // insert new_knots into knots: replace old knots with union of old and new (in temp_knots)
             int parent_tensor_idx = InsertKnots(new_knots, new_levels, inserted_knot_idxs);
 
             // call P&T knot insertion
             int nnew_knots = new_knots[0].size();                   // number of new knots being inserted
-            vector<vector<T>>   new_all_knots(mfa.dom_dim);
-            vector<vector<int>> new_all_knot_levels(mfa.dom_dim);
-            VectorX<T>          param(mfa.dom_dim);                 // current knot to be inserted
+            VectorX<T> param(mfa.dom_dim);                          // current knot to be inserted
             new_nctrl_pts.resize(nnew_knots);
             new_ctrl_pts.resize(nnew_knots);
             new_weights.resize(nnew_knots);
@@ -146,13 +141,11 @@ namespace mfa
             {
                 for (auto j = 0; j < mfa.dom_dim; j++)
                     param(j) = new_knots[j][i];
-                mfa_data.KnotInsertion(param,
-                                       mfa_data.tmesh.tensor_prods[parent_tensor_idx],
-                                       new_nctrl_pts[i],
-                                       new_all_knots,
-                                       new_all_knot_levels,
-                                       new_ctrl_pts[i],
-                                       new_weights[i]);
+                mfa_data.ExistKnotInsertion(param,
+                                            mfa_data.tmesh.tensor_prods[parent_tensor_idx],
+                                            new_nctrl_pts[i],
+                                            new_ctrl_pts[i],
+                                            new_weights[i]);
             }
         }
 
@@ -231,8 +224,7 @@ namespace mfa
                         // current span must contain at least two input points
                         size_t low_idx  = mfa_data.tmesh.all_knot_param_idxs[k][span[k]];
                         size_t high_idx = mfa_data.tmesh.all_knot_param_idxs[k][span[k] + 1];
-                        if (high_idx - low_idx < 3 &&
-                                (high_idx - low_idx < 2 || mfa_data.tmesh.all_knots[k][span[k]] > mfa.params()[k][low_idx]))
+                        if (high_idx - low_idx < 2)
                         {
                             empty_span = true;
                             break;
@@ -345,9 +337,12 @@ namespace mfa
                         // current span must contain at least two input points
                         size_t low_idx  = mfa_data.tmesh.all_knot_param_idxs[k][span[k]];
                         size_t high_idx = mfa_data.tmesh.all_knot_param_idxs[k][span[k] + 1];
-                        if (high_idx - low_idx < 3 &&
-                                (high_idx - low_idx < 2 || mfa_data.tmesh.all_knots[k][span[k]] > mfa.params()[k][low_idx]))
+                        if (high_idx - low_idx < 2)
                         {
+                            // debug
+//                             fprintf(stderr, "Insufficient input points when attempting to split span %lu: low_idx = %lu high_idx = %lu\n",
+//                                     span[k], low_idx, high_idx);
+
                             empty_span = true;
                             break;
                         }
@@ -362,6 +357,10 @@ namespace mfa
                             param_idx--;
                         if (param_idx - low_idx == 0 || high_idx - param_idx == 0)
                         {
+                            // debug
+//                             fprintf(stderr, "Insufficient input points when attempting to split span %lu: low_idx = %lu param_idx = %lu high_idx = %lu\n",
+//                                     span[k], low_idx, param_idx, high_idx);
+
                             empty_span =  true;
                             break;
                         }
