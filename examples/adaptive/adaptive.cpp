@@ -197,6 +197,10 @@ int main(int argc, char** argv)
         {
             d_args.min[i]       = -4.0 * M_PI;
             d_args.max[i]       = 4.0  * M_PI;
+
+            // debug: shifted to be asymmetrical
+//             d_args.min[i]       = -1.0 * M_PI;
+//             d_args.max[i]       = 7.0 * M_PI;
         }
         for (int i = 0; i < pt_dim - dom_dim; i++)      // for all science variables
             d_args.s[i] = 10.0 * (i + 1);                 // scaling factor on range
