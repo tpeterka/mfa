@@ -16,6 +16,9 @@ target_link_libraries       (differentiate-test                     ${libraries}
 add_executable              (write-vtk-test                         write_vtk.cpp ${CMAKE_SOURCE_DIR}/examples/convert/writer.cpp)
 target_link_libraries       (write-vtk-test                         ${libraries})
 
+add_executable              (vol-iterator-test                      vol_iterator.cpp)
+target_link_libraries       (vol-iterator-test                      ${libraries})
+
 add_test                    (NAME fixed-sinc-2d-test
                              COMMAND fixed-test -i sinc -d 3 -m 2 -p 1 -q 5 -v 20 -w 0
                             )
@@ -34,6 +37,10 @@ add_test                    (NAME differentiate-fixed-test
 
 add_test                    (NAME write-vtk-fixed-test
                              COMMAND write-vtk-test approx.out
+                            )
+
+add_test                    (NAME vol-iterator-test
+                             COMMAND vol-iterator-test
                             )
 
 foreach                     (p 1 3 4)
