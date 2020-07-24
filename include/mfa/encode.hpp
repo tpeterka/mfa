@@ -1693,16 +1693,17 @@ template <typename T>                        // float or double
         {
             param(0) = mfa.params()[0][idx];
             decoder.VolPt_tmesh(param, cpt);
-            T diff = cpt[0] - domain(idx, 0);
-            sum_sq_err += (diff * diff);
+            for (auto j = 0; j < mfa_data.max_dim - mfa_data.min_dim + 1; j++)
+            {
+                T diff = cpt[j] - domain(idx, mfa.dom_dim + j);
+                sum_sq_err += (diff * diff);
+            }
         }
 
         fprintf(stderr, "least squares error: %e\n", sum_sq_err);
         if (cons.rows() == ctrlpts_tosolve.rows() && cons.cols() == ctrlpts_tosolve.cols())
         {
             // zero out diff in unconstrained middle by setting ctrlpts_solve = cons = 0 there
-            // TODO: I added this to Youssef's code
-            // I think it belongs, but it makes the overall error worse and takes more iterations
             ctrlpts_tosolve.block(p, 0, p, cols)  = MatrixX<T>::Zero(p, cols);
 
             T cons_residual = (ctrlpts_tosolve - cons).squaredNorm();
@@ -1781,7 +1782,7 @@ template <typename T>                        // float or double
             decoder.VolPt_tmesh(param, cpt);
             for (auto j = 0; j < mfa_data.max_dim - mfa_data.min_dim + 1; j++)
             {
-                T diff = cpt[j] - domain(vol_iter.cur_iter(), j);
+                T diff = cpt[j] - domain(vol_iter.cur_iter(), mfa_data.dom_dim + j);
                 lsq_error += (diff * diff);
             }
             vol_iter.incr_iter();
