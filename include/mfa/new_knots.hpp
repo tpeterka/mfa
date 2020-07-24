@@ -130,18 +130,23 @@ namespace mfa
             // insert new_knots into knots: replace old knots with union of old and new (in temp_knots)
             int parent_tensor_idx = InsertKnots(new_knots, new_levels, inserted_knot_idxs);
 
-            // call P&T knot insertion
             int nnew_knots = new_knots[0].size();                   // number of new knots being inserted
             VectorX<T> param(mfa.dom_dim);                          // current knot to be inserted
             new_nctrl_pts.resize(nnew_knots);
             new_ctrl_pts.resize(nnew_knots);
             new_weights.resize(nnew_knots);
+            vector<KnotIdx> inserted_idx(mfa.dom_dim);
 
+            // call P&T knot insertion
             for (auto i = 0; i < nnew_knots; i++)
             {
                 for (auto j = 0; j < mfa.dom_dim; j++)
+                {
                     param(j) = new_knots[j][i];
-                mfa_data.ExistKnotInsertion(param,
+                    inserted_idx[j] = inserted_knot_idxs[j][i];
+                }
+                mfa_data.ExistKnotInsertion(inserted_idx,
+                                            param,
                                             mfa_data.tmesh.tensor_prods[parent_tensor_idx],
                                             new_nctrl_pts[i],
                                             new_ctrl_pts[i],

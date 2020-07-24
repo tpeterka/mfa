@@ -1261,7 +1261,7 @@ template <typename T>                        // float or double
             return 1;
         }
 
-#if 0
+#if 1
 
         // set up and run iterative solver for constrained local solve
         // of a previously added tensor to the back of the tensor products in the tmesh
@@ -1648,7 +1648,7 @@ template <typename T>                        // float or double
         }
     };
 
-#if 0
+#if 1
 
     // objective function evaluation
     // original 1-d version, DEPRECATE

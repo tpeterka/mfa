@@ -925,19 +925,22 @@ namespace mfa
         // This version returns new control points, weights as arguments and does not copy them into tmesh
         // This version is for a knot already added to the tmesh
         // TODO: expensive deep copies
-        void ExistKnotInsertion(const VectorX<T>&        param,                  // new knot value to be inserted
+        void ExistKnotInsertion(const vector<KnotIdx>    inserted_idx,           // index of inserted knot in new all_knots
+                                const VectorX<T>&        param,                  // new knot value to be inserted
                                 const TensorProduct<T>&  tensor,                 // tensor product for insertion
                                 VectorXi&                new_nctrl_pts,          // (output) new number of control points in each dim.
                                 MatrixX<T>&              new_ctrl_pts,           // (output) new local control points for this tensor
                                 VectorX<T>&              new_weights) const      // (output) new local weights for this tensor
         {
             // debug
-            cerr << "ctrl_pts before insertion:\n" << tensor.ctrl_pts << endl;
-            cerr << "weights before insertion:\n" << tensor.weights << endl;
+            fprintf(stderr, "Using local solve version of ExistKnotInsertion\n");
+//             cerr << "ctrl_pts before insertion:\n" << tensor.ctrl_pts << endl;
+//             cerr << "weights before insertion:\n" << tensor.weights << endl;
 
             new_nctrl_pts = tensor.nctrl_pts;
 
-            ExistVolKnotIns(tensor.ctrl_pts,
+            ExistVolKnotIns(inserted_idx,
+                            tensor.ctrl_pts,
                             tensor.weights,
                             param,
                             tensor.level,
@@ -946,8 +949,8 @@ namespace mfa
                             new_nctrl_pts);
 
             // debug
-            cerr << "ctrl_pts after insertion:\n" << new_ctrl_pts << endl;
-            cerr << "weights after insertion:\n" << new_weights << endl;
+//             cerr << "ctrl_pts after insertion:\n" << new_ctrl_pts << endl;
+//             cerr << "weights after insertion:\n" << new_weights << endl;
         }
 
         private:
@@ -1042,10 +1045,11 @@ namespace mfa
         // not for inserting a duplicate knot (does not handle knot multiplicity > 1)
         // original algorithm from P&T did handle multiplicity, but I simplified
         void ExistCurveKnotIns(int                   cur_dim,            // current dimension
+                               KnotIdx               inserted_knot_idx,  // index of inserted knot in new all_knots
                                const MatrixX<T>&     old_ctrl_pts,       // old control points of curve
                                const VectorX<T>&     old_weights,        // old control point weights of curve
-                               T                     u,                  // new knot value to be inserted
-                               int                   level,              // level of new knot to be inserted
+                               T                     u,                  // new knot value that was inserted
+                               int                   level,              // level of new knot that was inserted
                                MatrixX<T>&           new_ctrl_pts,       // (output) new control points of curve
                                VectorX<T>&           new_weights) const  // (output) new control point weights of curve
         {
@@ -1054,7 +1058,8 @@ namespace mfa
             MatrixX<T> temp_ctrl_pts(p(cur_dim) + 1, old_ctrl_pts.cols());
             VectorX<T> temp_weights(p(cur_dim) + 1);
 
-            int span = FindSpan(cur_dim, u, old_ctrl_pts.rows());
+            // span is supposed to be prior to insertion; subtract 1 from span because knot was already inserted into all_knots
+            int span = inserted_knot_idx - 1;
 
             // save unaltered control points and weights
             for (auto i = 0; i <= span - p(cur_dim); i++)
@@ -1077,7 +1082,9 @@ namespace mfa
             auto L = span - p(cur_dim) + 1;
             for (auto i = 0; i <= p(cur_dim) - 1; i++)
             {
-                T alpha                 = (u - tmesh.all_knots[cur_dim][L + i]) / (tmesh.all_knots[cur_dim][i + span + 1] - tmesh.all_knots[cur_dim][L + i]);
+                // because knot is already inserted, [i + span + 1] is changed to [i + span + 2]
+                // in index of first term of denominator, compared with NewCurveKnotIns() and P&T
+                T alpha                 = (u - tmesh.all_knots[cur_dim][L + i]) / (tmesh.all_knots[cur_dim][i + span + 2] - tmesh.all_knots[cur_dim][L + i]);
                 temp_ctrl_pts.row(i)    = alpha * temp_ctrl_pts.row(i + 1) + (1.0 - alpha) * temp_ctrl_pts.row(i);
                 temp_weights(i)         = alpha * temp_weights(i + 1) + (1.0 - alpha) * temp_weights(i);
             }
@@ -1264,7 +1271,8 @@ namespace mfa
         // not for inserting a duplicate knot (does not handle knot multiplicity > 1)
         // original algorithm from P&T did handle multiplicity, but I simplified
         // this version assumes the new knot already exists in the tmesh, updates only control points
-        void ExistVolKnotIns(const MatrixX<T>&           old_ctrl_pts,           // old control points
+        void ExistVolKnotIns(const vector<KnotIdx>       inserted_idx,           // index of inserted knot in new all_knots
+                             const MatrixX<T>&           old_ctrl_pts,           // old control points
                              const VectorX<T>&           old_weights,            // old control point weights
                              const VectorX<T>&           param,                  // new knot value to be inserted
                              int                         level,                  // level of new knot to be inserted
@@ -1356,6 +1364,7 @@ namespace mfa
 
                         // insert a knot in one curve of control points
                         ExistCurveKnotIns(k,
+                                          inserted_idx[k],
                                           old_curve_ctrl_pts.local(),
                                           old_curve_weights.local(),
                                           param(k),
@@ -1391,6 +1400,7 @@ namespace mfa
 
                     // insert a knot in one curve of control points
                     ExistCurveKnotIns(k,
+                                      inserted_idx[k],
                                       old_curve_ctrl_pts,
                                       old_curve_weights,
                                       param(k),
