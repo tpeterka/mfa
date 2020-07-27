@@ -1261,7 +1261,7 @@ template <typename T>                        // float or double
             return 1;
         }
 
-#if 1
+#if 0
 
         // set up and run iterative solver for constrained local solve
         // of a previously added tensor to the back of the tensor products in the tmesh
@@ -1354,38 +1354,9 @@ template <typename T>                        // float or double
             const TensorProduct<T>& tc      = tmesh.tensor_prods.back();                                    // current (newly appended) tensor
             int                     cols    = tc.ctrl_pts.cols();
 
-            // get required sizes
-            int rows = tc.ctrl_pts.rows();          // number of rows required in ctrlpts_tosolve
-            for (auto k = 0; k < mfa_data.dom_dim; k++)
-            {
-                for (auto j = 0; j < tc.prev[k].size(); j++)
-                    rows += tmesh.tensor_prods[tc.prev[k][j]].ctrl_pts.rows();
-                for (auto j = 0; j < tc.next[k].size(); j++)
-                    rows += tmesh.tensor_prods[tc.next[k][j]].ctrl_pts.rows();
-            }
-            MatrixX<T> ctrlpts_tosolve(rows, cols);
-
-            // copy original control points into ctrlpts_tosolve
-            ctrlpts_tosolve.block(0, 0, tc.ctrl_pts.rows(), cols) = tc.ctrl_pts;
-
-            // copy constraints into ctrlpts_tosolve
-            // TODO: for now copying entire prev and next, not trimming to size p
-            int cur_row = tc.ctrl_pts.rows();
-            for (auto k = 0; k < mfa_data.dom_dim; k++)
-            {
-                for (auto j = 0; j < tc.prev[k].size(); j++)
-                {
-                    ctrlpts_tosolve.block(cur_row, 0, tmesh.tensor_prods[tc.prev[k][j]].ctrl_pts.rows(), cols) =
-                        tmesh.tensor_prods[tc.prev[k][j]].ctrl_pts;
-                    cur_row += tmesh.tensor_prods[tc.prev[k][j]].ctrl_pts.rows();
-                }
-                for (auto j = 0; j < tc.next[k].size(); j++)
-                {
-                    ctrlpts_tosolve.block(cur_row, 0, tmesh.tensor_prods[tc.next[k][j]].ctrl_pts.rows(), cols) =
-                        tmesh.tensor_prods[tc.next[k][j]].ctrl_pts;
-                    cur_row += tmesh.tensor_prods[tc.next[k][j]].ctrl_pts.rows();
-                }
-            }
+            // fill control points to solve (both interior and constraints)
+            MatrixX<T> ctrlpts_tosolve;
+            LocalSolveCtrlPts(tc, ctrlpts_tosolve);
 
             // set the constraints
             MatrixX<T> cons = ctrlpts_tosolve.block(tc.ctrl_pts.rows(), 0, ctrlpts_tosolve.rows() - tc.ctrl_pts.rows(), cols);              // set the constraints
@@ -1399,8 +1370,6 @@ template <typename T>                        // float or double
             // left edge
             for (auto k = 0; k < mfa.dom_dim; k++)
                 min_anchor[k] = tc.knot_mins[k] - mfa_data.p(k);
-            // debug
-//             min_anchor = tc.knot_mins;                                  // try restricting domain to only current tensor; doesn't change much
             tmesh.local_knot_vector(min_anchor, local_knot_idxs);
             vector<KnotIdx> start_knot_idxs(mfa_data.dom_dim);
             for (auto k = 0; k < mfa.dom_dim; k++)
@@ -1416,8 +1385,6 @@ template <typename T>                        // float or double
                 else
                     max_anchor[k] = tc.knot_maxs[k] + mfa_data.p(k);
             }
-            // debug
-//             max_anchor = tc.knot_maxs;                                  // try restricting domain to only current tensor; doesn't change much
             tmesh.local_knot_vector(max_anchor, local_knot_idxs);
             vector<KnotIdx> end_knot_idxs(mfa_data.dom_dim);
             for (auto k = 0; k < mfa.dom_dim; k++)
@@ -1453,6 +1420,121 @@ template <typename T>                        // float or double
 
             // debug
             fprintf(stderr, "Solver converged in %lu iterations.\n", llsq.iters());
+        }
+
+        // set up control points to solve for local solver
+        // n-d version
+        void LocalSolveCtrlPts(const TensorProduct<T>&  tc,                 // current tensor product being solved
+                               MatrixX<T>&              ctrlpts_tosolve)    // (output) control points to solv
+        {
+            const Tmesh<T>&         tmesh   = mfa_data.tmesh;
+            int                     cols    = tc.ctrl_pts.cols();
+
+            // get required sizes
+            // TODO: does not check if prev/next extends beyond the current tensor
+            // TODO: duplicates constraints for odd degree (constraints should skip border points and go one wider)
+            int rows = tc.ctrl_pts.rows();          // number of rows required in ctrlpts_tosolve
+            VectorXi npts(mfa_data.dom_dim);
+            for (auto k = 0; k < mfa_data.dom_dim; k++)
+            {
+                for (auto j = 0; j < tc.prev[k].size(); j++)
+                {
+                    const TensorProduct<T>& tp = tmesh.tensor_prods[tc.prev[k][j]];
+                    for (auto i = 0; i < mfa_data.dom_dim; i++)
+                    {
+                        if (i == k)             // direction of prev or next
+                            npts(i) = mfa_data.p(i);
+                        else                    // direction orthogonal to prev or next
+                            npts(i) = tp.nctrl_pts(i);
+                    }
+                    rows += npts.prod();
+                }
+                for (auto j = 0; j < tc.next[k].size(); j++)
+                {
+                    const TensorProduct<T>& tn = tmesh.tensor_prods[tc.next[k][j]];
+                    for (auto i = 0; i < mfa_data.dom_dim; i++)
+                    {
+                        if (i == k)             // direction of prev or next
+                            npts(i) = mfa_data.p(i);
+                        else                    // direction orthogonal to prev or next
+                            npts(i) = tn.nctrl_pts(i);
+                    }
+                    rows += npts.prod();
+                }
+            }
+            ctrlpts_tosolve.resize(rows, cols);
+
+            // ctrlpts_tosolve has the new control points being solved at the front
+            // followed by the constraint control points that are intended to be held constant
+
+            // copy original control points into the front of ctrlpts_tosolve
+            ctrlpts_tosolve.block(0, 0, tc.ctrl_pts.rows(), cols) = tc.ctrl_pts;
+
+            // copy constraints into ctrlpts_tosolve after the original control points
+            // TODO: does not check if prev/next extends beyond the current tensor
+            // TODO: duplicates constraints for odd degree (constraints should skip border points and go one wider)
+            // TODO: factor out into a separate function
+            int cur_row = tc.ctrl_pts.rows();
+            VectorXi sub_starts(mfa_data.dom_dim);
+            VectorXi sub_npts(mfa_data.dom_dim);
+            VectorXi all_npts(mfa_data.dom_dim);
+            for (auto k = 0; k < mfa_data.dom_dim; k++)
+            {
+                // previous tensors
+                for (auto j = 0; j < tc.prev[k].size(); j++)
+                {
+                    const TensorProduct<T>& tp = tmesh.tensor_prods[tc.prev[k][j]];
+                    for (auto i = 0; i < mfa_data.dom_dim; i++)
+                    {
+                        if (i == k)             // direction of prev or next
+                        {
+                            sub_starts(i)   = tp.nctrl_pts(i) - mfa_data.p(i);
+                            sub_npts(i)     = mfa_data.p(i);
+                        }
+                        else                    // direction orthogonal to prev or next
+                        {
+                            sub_starts(i)   = 0;
+                            sub_npts(i)     = tp.nctrl_pts(i);
+                        }
+                        all_npts(i)         = tp.nctrl_pts(i);
+                    }
+                    VolIterator voliter_prev(sub_npts, sub_starts, all_npts);
+                    while (!voliter_prev.done())
+                    {
+                        // debug
+//                         fprintf(stderr, "prev sub_full_idx(%lu) = %lu\n", voliter_prev.cur_iter(), voliter_prev.sub_full_idx(voliter_prev.cur_iter()));
+
+                        ctrlpts_tosolve.row(cur_row) = tp.ctrl_pts.row(voliter_prev.sub_full_idx(voliter_prev.cur_iter()));
+                        cur_row++;
+                        voliter_prev.incr_iter();
+                    }
+                }
+
+                // next tensors
+                for (auto j = 0; j < tc.next[k].size(); j++)
+                {
+                    const TensorProduct<T>& tn = tmesh.tensor_prods[tc.next[k][j]];
+                    for (auto i = 0; i < mfa_data.dom_dim; i++)
+                    {
+                        if (i == k)             // direction of prev or next
+                            sub_npts(i)     = mfa_data.p(i);
+                        else                    // direction orthogonal to prev or next
+                            sub_npts(i)     = tn.ctrl_pts(i);
+                        sub_starts(i)       = 0;
+                        all_npts(i)         = tn.nctrl_pts(i);
+                    }
+                    VolIterator voliter_next(sub_npts, sub_starts, all_npts);
+                    while (!voliter_next.done())
+                    {
+                        // debug
+//                         fprintf(stderr, "next sub_full_idx(%lu) = %lu\n", voliter_next.cur_iter(), voliter_next.sub_full_idx(voliter_next.cur_iter()));
+
+                        ctrlpts_tosolve.row(cur_row) = tn.ctrl_pts.row(voliter_next.sub_full_idx(voliter_next.cur_iter()));
+                        cur_row++;
+                        voliter_next.incr_iter();
+                    }
+                }
+            }
         }
 
 #endif      // original / latest version
@@ -1648,7 +1730,7 @@ template <typename T>                        // float or double
         }
     };
 
-#if 1
+#if 0
 
     // objective function evaluation
     // original 1-d version, DEPRECATE
@@ -1674,9 +1756,10 @@ template <typename T>                        // float or double
 //         cerr << "ctrlpts_to_solve ( " << ctrlpts_tosolve.rows() << " x " << ctrlpts_tosolve.cols() << " ):\n" << ctrlpts_tosolve << endl;
 
         // upack the candidate solution matrix into tensor_prods
-        tp.ctrl_pts.block(tp.ctrl_pts.rows() - p, 0, p, cols)   = ctrlpts_tosolve.block(0, 0, p, cols);         // left constraint
+        // unnecessary to copy back constraints because they shouldn't change
+//         tp.ctrl_pts.block(tp.ctrl_pts.rows() - p, 0, p, cols)   = ctrlpts_tosolve.block(0, 0, p, cols);         // left constraint
         tc.ctrl_pts                                             = ctrlpts_tosolve.block(p, 0, p, cols);         // unconstrained
-        tn.ctrl_pts.block(0, 0, p, cols)                        = ctrlpts_tosolve.block(2 * p, 0, p, cols);     // right constraint
+//         tn.ctrl_pts.block(0, 0, p, cols)                        = ctrlpts_tosolve.block(2 * p, 0, p, cols);     // right constraint
 
         // debug
 //         cerr << "tp.ctrl_pts:\n" << tp.ctrl_pts << endl;
@@ -1741,24 +1824,25 @@ template <typename T>                        // float or double
         // copy candidate solution back to current tensor control points
         tc.ctrl_pts = ctrlpts_tosolve.block(0, 0, tc.ctrl_pts.rows(), cols);
 
-        // copy candidate solution back to prev and next tensors control points
-        // TODO: for now copying entire prev and next, not trimming to size p
-        int cur_row = tc.ctrl_pts.rows();
-        for (auto k = 0; k < mfa_data.dom_dim; k++)
-        {
-            for (auto j = 0; j < tc.prev[k].size(); j++)
-            {
-                tmesh.tensor_prods[tc.prev[k][j]].ctrl_pts =
-                ctrlpts_tosolve.block(cur_row, 0, tmesh.tensor_prods[tc.prev[k][j]].ctrl_pts.rows(), cols);
-                cur_row += tmesh.tensor_prods[tc.prev[k][j]].ctrl_pts.rows();
-            }
-            for (auto j = 0; j < tc.next[k].size(); j++)
-            {
-                tmesh.tensor_prods[tc.next[k][j]].ctrl_pts =
-                ctrlpts_tosolve.block(cur_row, 0, tmesh.tensor_prods[tc.next[k][j]].ctrl_pts.rows(), cols);
-                cur_row += tmesh.tensor_prods[tc.next[k][j]].ctrl_pts.rows();
-            }
-        }
+        // DEPRECATE: no need to copy constraints back to tensor products because they are not supposed to change
+//         // copy candidate solution back to prev and next tensors control points
+//         // TODO: for now copying entire prev and next, not trimming to size p
+//         int cur_row = tc.ctrl_pts.rows();
+//         for (auto k = 0; k < mfa_data.dom_dim; k++)
+//         {
+//             for (auto j = 0; j < tc.prev[k].size(); j++)
+//             {
+//                 tmesh.tensor_prods[tc.prev[k][j]].ctrl_pts =
+//                 ctrlpts_tosolve.block(cur_row, 0, tmesh.tensor_prods[tc.prev[k][j]].ctrl_pts.rows(), cols);
+//                 cur_row += tmesh.tensor_prods[tc.prev[k][j]].ctrl_pts.rows();
+//             }
+//             for (auto j = 0; j < tc.next[k].size(); j++)
+//             {
+//                 tmesh.tensor_prods[tc.next[k][j]].ctrl_pts =
+//                 ctrlpts_tosolve.block(cur_row, 0, tmesh.tensor_prods[tc.next[k][j]].ctrl_pts.rows(), cols);
+//                 cur_row += tmesh.tensor_prods[tc.next[k][j]].ctrl_pts.rows();
+//             }
+//         }
 
         // debug
 //         cerr << "x:\n" << x << endl;

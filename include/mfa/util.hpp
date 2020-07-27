@@ -123,6 +123,28 @@ namespace mfa
             ijk += starts_dim_;
         }
 
+        // convert (i,j,k,...) multidimensional index into linear index into domain
+        // in the case of subvolume (slice), both ijk and idx are w.r.t. entire volume
+        size_t ijk_idx(const VectorXi& ijk) const       // i,j,k,... indices to all dimensions
+        {
+            size_t idx          = 0;
+            size_t stride       = 1;
+            for (int i = 0; i < dom_dim_; i++)
+            {
+                idx     += ijk(i) * stride;
+                stride  *= all_npts_dim_(i);
+            }
+            return idx;
+        }
+
+        // convert subvolume index into full volume index
+        size_t sub_full_idx(size_t sub_idx) const
+        {
+            VectorXi ijk(dom_dim_);
+            idx_ijk(sub_idx, ijk);
+            return ijk_idx(ijk);
+        }
+
         // increment iteration; user must call incr_iter() near the bottom of the flattened loop
         void incr_iter()
         {
