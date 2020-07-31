@@ -336,7 +336,15 @@ namespace mfa
                             anchor[j] += (mfa_data.p(j) + 1) / 2;                   // first control point has anchor floor((p + 1) / 2)
                     }
 
-                    // TODO: deal with odd degree duplicated control points
+                    // skip odd degree duplicated control points, indicated by invalid weight
+                    if (t.weights(vol_iterator.cur_iter()) == MFA_NAW)
+                    {
+                        // debug
+//                         cerr << "skipping ctrl pt " << t.ctrl_pts.row(vol_iterator.cur_iter()) << endl;
+
+                        vol_iterator.incr_iter();
+                        continue;
+                    }
 
                     // compute product of basis functions in each dimension
                     T                       B = 1.0;                                // product of basis function values in each dimension

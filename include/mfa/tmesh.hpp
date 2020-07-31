@@ -144,7 +144,7 @@ namespace mfa
                     tot_nctrl_pts *= new_tensor.nctrl_pts[j];
                 }
                 new_tensor.ctrl_pts.resize(tot_nctrl_pts, max_dim_ - min_dim_ + 1);
-                new_tensor.weights.resize(tot_nctrl_pts);
+                new_tensor.weights.resize(tot_nctrl_pts);               // will get initialized to 1 later
             }
             else
             {
@@ -175,7 +175,7 @@ namespace mfa
 //                     fprintf(stderr, "appending tensor with %ld knots and %d control points in dimension %d\n", nknots, new_tensor.nctrl_pts[j], j);
                 }
                 new_tensor.ctrl_pts.resize(tot_nctrl_pts, max_dim_ - min_dim_ + 1);
-                new_tensor.weights.resize(tot_nctrl_pts);
+                new_tensor.weights.resize(tot_nctrl_pts);               // will get initialized to 1 later
             }
 
             vector<int> split_side(dom_dim_);       // whether min (-1), max (1), or both (2) sides of
@@ -223,8 +223,6 @@ namespace mfa
             {
                 // new tensor will go at the back of the vector
                 new_tensor_idx = tensor_prods.size();
-                // DEPRECATE: initialized above already
-//                 new_tensor_ref = new_tensor;
             }
             else
             {
@@ -256,6 +254,11 @@ namespace mfa
                     }
                 }
             }
+
+            // initialize the new tensor weights to 1
+            // done here, relatively late, because it's possible for it to have changed, eg, set to MFA_NAW earlier
+            // this is how we ensure the new tensor has all valid weights
+            new_tensor.weights = VectorX<T>::Ones(new_tensor.weights.size());
 
             // add the tensor
             if (!tensor_inserted)
@@ -748,6 +751,14 @@ namespace mfa
 
                     new_exist_ctrl_pts.row(cur_exist_idx) = existing_tensor.ctrl_pts.row(vol_iter.cur_iter());
                     new_exist_weights(cur_exist_idx) = existing_tensor.weights(vol_iter.cur_iter());
+
+                    // when degree is odd, set the ctrl point to nan, real value is in the added tensor
+                    // TODO: check for being outside the new tensor bounds in the other dims
+                    if (p_(cur_dim) % 2 &&
+                            ((max_side && vol_iter.idx_dim(cur_dim) == max_ctrl_idx) ||
+                             (!max_side && vol_iter.idx_dim(cur_dim) == min_ctrl_idx)))
+                        new_exist_weights(cur_exist_idx, 0) = MFA_NAW;
+
                     cur_exist_idx++;
                 }
 
@@ -761,7 +772,15 @@ namespace mfa
 
                         new_side_tensor.ctrl_pts.row(cur_new_side_idx) = existing_tensor.ctrl_pts.row(vol_iter.cur_iter());
                         new_side_tensor.weights(cur_new_side_idx) = existing_tensor.weights(vol_iter.cur_iter());
+
+                        // when degree is odd, set the ctrl point to nan, real value is in the added tensor
+                        // TODO: check for being outside the new tensor bounds in the other dims
+                        if (p_(cur_dim) % 2 &&
+                                ((max_side && vol_iter.idx_dim(cur_dim) == min_ctrl_idx) ||
+                                 (!max_side && vol_iter.idx_dim(cur_dim) == max_ctrl_idx)))
+                            new_side_tensor.weights(cur_new_side_idx, 0) = MFA_NAW;
                     }
+
                     cur_new_side_idx++;
                 }
 
@@ -1531,8 +1550,12 @@ namespace mfa
             {
                 for (auto j = 0; j < tensor_idxs[i].size(); j++)
                 {
-                    tensor_prods[tensor_idxs[i][j]].ctrl_pts.row(tensor_cur_nctrl_pts[tensor_idxs[i][j]]) = ctrl_pts.row(i);
-                    tensor_prods[tensor_idxs[i][j]].weights(tensor_cur_nctrl_pts[tensor_idxs[i][j]])      = weights(i);
+                    // don't lose the MFA_NAW label on control points by overwriting it
+                    if (tensor_prods[tensor_idxs[i][j]].weights(tensor_cur_nctrl_pts[tensor_idxs[i][j]]) != MFA_NAW)
+                    {
+                        tensor_prods[tensor_idxs[i][j]].ctrl_pts.row(tensor_cur_nctrl_pts[tensor_idxs[i][j]]) = ctrl_pts.row(i);
+                        tensor_prods[tensor_idxs[i][j]].weights(tensor_cur_nctrl_pts[tensor_idxs[i][j]])      = weights(i);
+                    }
                     tensor_cur_nctrl_pts[tensor_idxs[i][j]]++;
                 }
             }
@@ -1807,6 +1830,7 @@ namespace mfa
                 fprintf(stderr, "]\n");
 
                 cerr << "ctrl_pts:\n" << t.ctrl_pts << endl;
+                cerr << "weights:\n" << t.weights << endl;
 
                 fprintf(stderr, "\n");
             }

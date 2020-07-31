@@ -8,6 +8,8 @@
 #ifndef _MFA_HPP
 #define _MFA_HPP
 
+#define MFA_NAW -1          // an invalid weight, indicating skip this control point
+
 // comment out the following line for unclamped knots (single knot at each end of knot vector)
 // clamped knots (repeated at ends) is the default method if no method is specified
 // #define UNCLAMPED_KNOTS

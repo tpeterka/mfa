@@ -224,7 +224,7 @@ namespace mfa
                         span[k] = mfa_data.FindSpan(k, param(k), nctrl_pts(k));
 
                         // debug: hard code span
-//                         span[k] = 4;
+                        span[k] = 5;
 
                         // span should never be the last knot because of the repeated knots at end
                         assert(span[k] < mfa_data.tmesh.all_knots[k].size() - 1);
@@ -385,21 +385,29 @@ namespace mfa
 //                     fprintf(stderr, "FirstErrorSpan: span[0] = %lu found parent_tensor_idx = %d\n", span[0], parent_tensor_idx);
 
                     // debug: hard code span
-//                     span[0] = 4;
+                    span[0] = 5;
 
                     // check if there are sufficient constraints for the local solve, or we need to revert to global solve
                     for (auto k = 0; k < mfa.dom_dim; k++)
                     {
                         vector<KnotIdx>& knot_mins = mfa_data.tmesh.tensor_prods[parent_tensor_idx].knot_mins;
                         vector<KnotIdx>& knot_maxs = mfa_data.tmesh.tensor_prods[parent_tensor_idx].knot_maxs;
-                        if (span[k] <= mfa_data.p(k) || span[k] >= mfa_data.tmesh.all_knots[k].size() - mfa_data.p(k) - 2 ||
-                                span[k] - knot_mins[k] < mfa_data.p(k) || knot_maxs[k] - span[k] < mfa_data.p(k))
+                        if (mfa_data.p(k) % 2 == 0)                         // even degree
                         {
-                            local = false;
-
-                            // debug
-                            fprintf(stderr, "FirstErrorSpan: span = %lu does not allow enough constraints for local solve, switching to global solve\n", span[k]);
+                            if (span[k] <= mfa_data.p(k) || span[k] >= mfa_data.tmesh.all_knots[k].size() - mfa_data.p(k) - 2 ||
+                                span[k] - knot_mins[k] < mfa_data.p(k) || knot_maxs[k] - span[k] < mfa_data.p(k))
+                                local = false;
                         }
+                        if (mfa_data.p(k) % 2 == 1)                         // odd degree, skip border points
+                        {
+                            if (span[k] <= mfa_data.p(k) + 1 || span[k] >= mfa_data.tmesh.all_knots[k].size() - mfa_data.p(k) - 3 ||
+                                span[k] - knot_mins[k] < mfa_data.p(k) + 1 || knot_maxs[k] - span[k] < mfa_data.p(k) + 1)
+                                local = false;
+                        }
+
+                        // debug
+                        if (!local)
+                            fprintf(stderr, "FirstErrorSpan: span = %lu does not allow enough constraints for local solve, switching to global solve\n", span[k]);
 
                         // span should never be the last knot because of the repeated knots at end
                         assert(span[k] < mfa_data.tmesh.all_knots[k].size() - 1);

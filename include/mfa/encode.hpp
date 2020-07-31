@@ -1431,9 +1431,9 @@ template <typename T>                        // float or double
             int                     cols    = tc.ctrl_pts.cols();
 
             // get required sizes
+
             // TODO: does not check if prev/next extends beyond the current tensor
-            // TODO: duplicates constraints for odd degree (constraints should skip border points and go one wider)
-            int rows = tc.ctrl_pts.rows();          // number of rows required in ctrlpts_tosolve
+            int rows = tc.ctrl_pts.rows();                      // number of rows required in ctrlpts_tosolve
             VectorXi npts(mfa_data.dom_dim);
             for (auto k = 0; k < mfa_data.dom_dim; k++)
             {
@@ -1442,9 +1442,9 @@ template <typename T>                        // float or double
                     const TensorProduct<T>& tp = tmesh.tensor_prods[tc.prev[k][j]];
                     for (auto i = 0; i < mfa_data.dom_dim; i++)
                     {
-                        if (i == k)             // direction of prev or next
+                        if (i == k)                             // direction of prev
                             npts(i) = mfa_data.p(i);
-                        else                    // direction orthogonal to prev or next
+                        else                                    // direction orthogonal to prev
                             npts(i) = tp.nctrl_pts(i);
                     }
                     rows += npts.prod();
@@ -1454,9 +1454,9 @@ template <typename T>                        // float or double
                     const TensorProduct<T>& tn = tmesh.tensor_prods[tc.next[k][j]];
                     for (auto i = 0; i < mfa_data.dom_dim; i++)
                     {
-                        if (i == k)             // direction of prev or next
+                        if (i == k)                             // direction of next
                             npts(i) = mfa_data.p(i);
-                        else                    // direction orthogonal to prev or next
+                        else                                    // direction orthogonal to next
                             npts(i) = tn.nctrl_pts(i);
                     }
                     rows += npts.prod();
@@ -1471,9 +1471,8 @@ template <typename T>                        // float or double
             ctrlpts_tosolve.block(0, 0, tc.ctrl_pts.rows(), cols) = tc.ctrl_pts;
 
             // copy constraints into ctrlpts_tosolve after the original control points
+
             // TODO: does not check if prev/next extends beyond the current tensor
-            // TODO: duplicates constraints for odd degree (constraints should skip border points and go one wider)
-            // TODO: factor out into a separate function
             int cur_row = tc.ctrl_pts.rows();
             VectorXi sub_starts(mfa_data.dom_dim);
             VectorXi sub_npts(mfa_data.dom_dim);
@@ -1486,12 +1485,14 @@ template <typename T>                        // float or double
                     const TensorProduct<T>& tp = tmesh.tensor_prods[tc.prev[k][j]];
                     for (auto i = 0; i < mfa_data.dom_dim; i++)
                     {
-                        if (i == k)             // direction of prev or next
+                        if (i == k)                             // direction of prev
                         {
                             sub_starts(i)   = tp.nctrl_pts(i) - mfa_data.p(i);
+                            if (mfa_data.p(i) % 2)              // odd degree, skip border point
+                                sub_starts(i)--;
                             sub_npts(i)     = mfa_data.p(i);
                         }
-                        else                    // direction orthogonal to prev or next
+                        else                                    // direction orthogonal to prev
                         {
                             sub_starts(i)   = 0;
                             sub_npts(i)     = tp.nctrl_pts(i);
@@ -1501,9 +1502,6 @@ template <typename T>                        // float or double
                     VolIterator voliter_prev(sub_npts, sub_starts, all_npts);
                     while (!voliter_prev.done())
                     {
-                        // debug
-//                         fprintf(stderr, "prev sub_full_idx(%lu) = %lu\n", voliter_prev.cur_iter(), voliter_prev.sub_full_idx(voliter_prev.cur_iter()));
-
                         ctrlpts_tosolve.row(cur_row) = tp.ctrl_pts.row(voliter_prev.sub_full_idx(voliter_prev.cur_iter()));
                         cur_row++;
                         voliter_prev.incr_iter();
@@ -1516,19 +1514,24 @@ template <typename T>                        // float or double
                     const TensorProduct<T>& tn = tmesh.tensor_prods[tc.next[k][j]];
                     for (auto i = 0; i < mfa_data.dom_dim; i++)
                     {
-                        if (i == k)             // direction of prev or next
+                        if (i == k)                             // direction of next
+                        {
+                            if (mfa_data.p(i) % 2)              // odd degree, skip border point
+                                sub_starts(i) = 1;
+                            else
+                                sub_starts(i) = 0;
                             sub_npts(i)     = mfa_data.p(i);
-                        else                    // direction orthogonal to prev or next
+                        }
+                        else                                    // direction orthogonal to next
+                        {
+                            sub_starts(i)   = 0;
                             sub_npts(i)     = tn.ctrl_pts(i);
-                        sub_starts(i)       = 0;
+                        }
                         all_npts(i)         = tn.nctrl_pts(i);
                     }
                     VolIterator voliter_next(sub_npts, sub_starts, all_npts);
                     while (!voliter_next.done())
                     {
-                        // debug
-//                         fprintf(stderr, "next sub_full_idx(%lu) = %lu\n", voliter_next.cur_iter(), voliter_next.sub_full_idx(voliter_next.cur_iter()));
-
                         ctrlpts_tosolve.row(cur_row) = tn.ctrl_pts.row(voliter_next.sub_full_idx(voliter_next.cur_iter()));
                         cur_row++;
                         voliter_next.incr_iter();

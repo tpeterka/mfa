@@ -844,7 +844,7 @@ namespace mfa
 //             cerr << "ctrl_pts before insertion:\n" << tensor.ctrl_pts << endl;
 //             cerr << "weights before insertion:\n" << tensor.weights << endl;
 
-            VolKnotIns(tensor.ctrl_pts,
+            ExistVolKnotIns(tensor.ctrl_pts,
                        tensor.weights,
                        param,
                        tensor.level,
@@ -1274,8 +1274,8 @@ namespace mfa
         void ExistVolKnotIns(const vector<KnotIdx>       inserted_idx,           // index of inserted knot in new all_knots
                              const MatrixX<T>&           old_ctrl_pts,           // old control points
                              const VectorX<T>&           old_weights,            // old control point weights
-                             const VectorX<T>&           param,                  // new knot value to be inserted
-                             int                         level,                  // level of new knot to be inserted
+                             const VectorX<T>&           param,                  // new knot value that was inserted
+                             int                         level,                  // level of new knot that was inserted
                              MatrixX<T>&                 new_ctrl_pts,           // (output) new control points
                              VectorX<T>&                 new_weights,            // (output) new control point weights
                              VectorXi&                   nctrl_pts) const        // (input and output) number of control points in all dims
