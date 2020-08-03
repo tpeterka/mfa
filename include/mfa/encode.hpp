@@ -1261,90 +1261,6 @@ template <typename T>                        // float or double
             return 1;
         }
 
-#if 0
-
-        // set up and run iterative solver for constrained local solve
-        // of a previously added tensor to the back of the tensor products in the tmesh
-        // original 1-d version, DEPRECATE
-        void LocalSolve()
-        {
-            const Tmesh<T>&         tmesh   = mfa_data.tmesh;
-
-            // TODO hard-coded for 1D, expand for higher dimensions
-
-            int p = mfa_data.p[0];
-            const TensorProduct<T>& tc      = tmesh.tensor_prods.back();                                    // current (newly appended) tensor
-            // TODO: only considering first prev and next tensors; expand to all
-            const TensorProduct<T>& tp      = tmesh.tensor_prods[tc.prev[0][0]];                            // previous tensor
-            const TensorProduct<T>& tn      = tmesh.tensor_prods[tc.next[0][0]];                            // next tensor
-            MatrixX<T> ctrlpts_tosolve(3 * p, tc.ctrl_pts.cols());                                          // control points to solve, p interior and p constraints on each side
-            ctrlpts_tosolve.block(0, 0, p, 1)       = tp.ctrl_pts.block(tp.ctrl_pts.rows() - p, 0, p, 1);   // left constraint
-            ctrlpts_tosolve.block(p, 0, p, 1)       = tc.ctrl_pts;                                          // unconstrained interior
-            ctrlpts_tosolve.block(2 * p, 0, p, 1)   = tn.ctrl_pts.block(0, 0, p, 1);                        // right constraint
-
-            // set the constraints
-            MatrixX<T> cons         = ctrlpts_tosolve;              // set the constraints
-            cons.block(p, 0, p, 1)  = MatrixX<T>::Zero(p, 1);       // zero out the unconstrained interior
-
-            // get the subset of the domain points needed for the local solve
-
-            vector<KnotIdx> anchor;                                 // anchor for the edge basis functions of the new tensor
-            vector<vector<KnotIdx>> local_knot_idxs;                // local knot vector for an anchor
-
-            // left edge
-//             anchor.push_back(tc.knot_mins[0] - p);
-            anchor.push_back(tc.knot_mins[0]);                      // try restricting domain to only current tensor; doesn't change much
-            tmesh.local_knot_vector(anchor, local_knot_idxs);
-            KnotIdx start_knot_idx = local_knot_idxs[0][0];
-            T start_knot = tmesh.all_knots[0][start_knot_idx];
-
-            anchor.clear();
-            local_knot_idxs.clear();
-
-            // right edge
-//             if (p % 2 == 0)
-//                 anchor.push_back(tc.knot_maxs[0] + p - 1);
-//             else
-//                 anchor.push_back(tc.knot_maxs[0] + p);
-            anchor.push_back(tc.knot_maxs[0]);                      // try restricting domain to only current tensor; doesn't change much
-            tmesh.local_knot_vector(anchor, local_knot_idxs);
-            KnotIdx end_knot_idx    = local_knot_idxs[0].back();
-            T end_knot              = tmesh.all_knots[0][end_knot_idx];
-
-            // input points corresponding to start and end knot values
-            vector<size_t> start_idxs(1);
-            vector<size_t> end_idxs(1);
-            start_idxs[0]  = tmesh.all_knot_param_idxs[0][start_knot_idx];
-            end_idxs[0]    = tmesh.all_knot_param_idxs[0][end_knot_idx];
-
-            // debug: decode entire domain
-//             start_idxs[0]   = 0;
-//             end_idxs[0]     = domain.rows() - 1;
-
-            // debug
-            fprintf(stderr, "start_idx = %lu end_idx = %lu\n", start_idxs[0], end_idxs[0]);
-
-            // set up the optimization
-            LocalLSQ<T> llsq(mfa, mfa_data, domain, cons, start_idxs, end_idxs, verbose);
-            // trying various different solvers
-            BfgsSolver<LocalLSQ<T>> solver;
-            //             LbfgsSolver<LocalLSQ<T>> solver;
-            //             NewtonDescentSolver<LocalLSQ<T>> solver;
-            //             CMAesSolver<LocalLSQ<T>> solver;         // does not compile
-            //             NelderMeadSolver<LocalLSQ<T>> solver;
-            //             ConjugatedGradientDescentSolver<LocalLSQ<T>> solver;
-            //             GradientDescentSolver<LocalLSQ<T>> solver;
-
-            // minimize the function
-            VectorX<T> x1(Eigen::Map<VectorX<T>>(ctrlpts_tosolve.data(), ctrlpts_tosolve.size()));  // size() = rows() * cols()
-            solver.minimize(llsq, x1);
-
-            // debug
-            fprintf(stderr, "Solver converged in %lu iterations.\n", llsq.iters());
-        }
-
-#else
-
         // set up and run iterative solver for constrained local solve
         // of a previously added tensor to the back of the tensor products in the tmesh
         // n-d version
@@ -1540,8 +1456,6 @@ template <typename T>                        // float or double
             }
         }
 
-#endif      // original / latest version
-
 #endif      // TMESH
 
         // 1d encoding and 1d decoding
@@ -1733,83 +1647,6 @@ template <typename T>                        // float or double
         }
     };
 
-#if 0
-
-    // objective function evaluation
-    // original 1-d version, DEPRECATE
-    template <typename T>
-    T LocalLSQ<T>::value(const TVector &x)
-    {
-        // TODO: hard-coded for 1-d
-
-        niters++;
-
-        int                 p   = mfa_data.p[0];
-        TensorProduct<T>&   tc  = mfa_data.tmesh.tensor_prods.back();           // current (newly appended) tensor
-        TensorProduct<T>&   tp  = mfa_data.tmesh.tensor_prods[tc.prev[0][0]];   // previous tensor TODO: assumes only one previous tensor
-        TensorProduct<T>&   tn  = mfa_data.tmesh.tensor_prods[tc.next[0][0]];   // next tensor TODO: assumes only one next tensor
-
-        // convert candidate solution vector back to a matrix
-        VectorX<T>  x1      = x;                                                // need non-const vector to pass to Map, cannot find other way than deep copy
-        int         cols    = tc.ctrl_pts.cols();
-        Eigen::Map<MatrixX<T>> ctrlpts_tosolve(x1.data(), 3 * p, cols);         // matrix version of the vector x
-
-        // debug
-//         cerr << "x:\n" << x << endl;
-//         cerr << "ctrlpts_to_solve ( " << ctrlpts_tosolve.rows() << " x " << ctrlpts_tosolve.cols() << " ):\n" << ctrlpts_tosolve << endl;
-
-        // upack the candidate solution matrix into tensor_prods
-        // unnecessary to copy back constraints because they shouldn't change
-//         tp.ctrl_pts.block(tp.ctrl_pts.rows() - p, 0, p, cols)   = ctrlpts_tosolve.block(0, 0, p, cols);         // left constraint
-        tc.ctrl_pts                                             = ctrlpts_tosolve.block(p, 0, p, cols);         // unconstrained
-//         tn.ctrl_pts.block(0, 0, p, cols)                        = ctrlpts_tosolve.block(2 * p, 0, p, cols);     // right constraint
-
-        // debug
-//         cerr << "tp.ctrl_pts:\n" << tp.ctrl_pts << endl;
-//         cerr << "tc.ctrl_pts:\n" << tc.ctrl_pts << endl;
-//         cerr << "tn.ctrl_pts:\n" << tn.ctrl_pts << endl;
-
-        // loop from substart to subend, decode.VolPt_tmesh(param(idx), cpt) - domain(idx)
-        T sum_sq_err = 0.0;
-        mfa::Decoder<T> decoder(mfa, mfa_data, verbose);
-        VectorX<T> cpt(cols);                                               // decoded curve point
-        VectorX<T> param(mfa_data.dom_dim);                                 // parameters for one point
-
-        for (auto idx = start_idxs[0]; idx <= end_idxs[0]; ++idx)
-        {
-            param(0) = mfa.params()[0][idx];
-            decoder.VolPt_tmesh(param, cpt);
-            for (auto j = 0; j < mfa_data.max_dim - mfa_data.min_dim + 1; j++)
-            {
-                T diff = cpt[j] - domain(idx, mfa.dom_dim + j);
-                sum_sq_err += (diff * diff);
-            }
-        }
-
-        fprintf(stderr, "least squares error: %e\n", sum_sq_err);
-        if (cons.rows() == ctrlpts_tosolve.rows() && cons.cols() == ctrlpts_tosolve.cols())
-        {
-            // zero out diff in unconstrained middle by setting ctrlpts_solve = cons = 0 there
-            ctrlpts_tosolve.block(p, 0, p, cols)  = MatrixX<T>::Zero(p, cols);
-
-            T cons_residual = (ctrlpts_tosolve - cons).squaredNorm();
-
-            // debug
-//             cerr << "ctrlpts_tosolve:\n" << ctrlpts_tosolve << endl;
-//             cerr << "cons:\n" << cons << endl;
-//             cerr << "ctrlpts_tosolve - cons:\n" << ctrlpts_tosolve - cons << endl;
-
-            fprintf(stderr, "constraints residual: %e\n", cons_residual);
-            T cons_weight = 1.0e8;                                          // multiplying by large weight forces constraints to be satisfied 1e8 was Youssef's factor when interior not 0'd
-            sum_sq_err += cons_weight * cons_residual;
-            fprintf(stderr, "overall error (least squares + weight * constr. res. = %e\n", sum_sq_err);
-        }
-        return sum_sq_err;
-    }
-}
-
-#else
-
     // objective function evaluation
     // n-d version
     template <typename T>
@@ -1826,26 +1663,6 @@ template <typename T>                        // float or double
 
         // copy candidate solution back to current tensor control points
         tc.ctrl_pts = ctrlpts_tosolve.block(0, 0, tc.ctrl_pts.rows(), cols);
-
-        // DEPRECATE: no need to copy constraints back to tensor products because they are not supposed to change
-//         // copy candidate solution back to prev and next tensors control points
-//         // TODO: for now copying entire prev and next, not trimming to size p
-//         int cur_row = tc.ctrl_pts.rows();
-//         for (auto k = 0; k < mfa_data.dom_dim; k++)
-//         {
-//             for (auto j = 0; j < tc.prev[k].size(); j++)
-//             {
-//                 tmesh.tensor_prods[tc.prev[k][j]].ctrl_pts =
-//                 ctrlpts_tosolve.block(cur_row, 0, tmesh.tensor_prods[tc.prev[k][j]].ctrl_pts.rows(), cols);
-//                 cur_row += tmesh.tensor_prods[tc.prev[k][j]].ctrl_pts.rows();
-//             }
-//             for (auto j = 0; j < tc.next[k].size(); j++)
-//             {
-//                 tmesh.tensor_prods[tc.next[k][j]].ctrl_pts =
-//                 ctrlpts_tosolve.block(cur_row, 0, tmesh.tensor_prods[tc.next[k][j]].ctrl_pts.rows(), cols);
-//                 cur_row += tmesh.tensor_prods[tc.next[k][j]].ctrl_pts.rows();
-//             }
-//         }
 
         // debug
 //         cerr << "x:\n" << x << endl;
@@ -1893,7 +1710,5 @@ template <typename T>                        // float or double
         return tot_error;
     }
 }
-
-#endif      // original / latest version
 
 #endif
