@@ -1323,12 +1323,12 @@ template <typename T>                        // float or double
             LocalLSQ<T> llsq(mfa, mfa_data, domain, cons, start_idxs, end_idxs, verbose);
             // trying various different solvers
             BfgsSolver<LocalLSQ<T>> solver;
-            //             LbfgsSolver<LocalLSQ<T>> solver;
-            //             NewtonDescentSolver<LocalLSQ<T>> solver;
-            //             CMAesSolver<LocalLSQ<T>> solver;         // does not compile
-            //             NelderMeadSolver<LocalLSQ<T>> solver;
-            //             ConjugatedGradientDescentSolver<LocalLSQ<T>> solver;
-            //             GradientDescentSolver<LocalLSQ<T>> solver;
+//             LbfgsSolver<LocalLSQ<T>> solver;
+//             NewtonDescentSolver<LocalLSQ<T>> solver;
+//             CMAesSolver<LocalLSQ<T>> solver;         // does not compile
+//             NelderMeadSolver<LocalLSQ<T>> solver;
+//             ConjugatedGradientDescentSolver<LocalLSQ<T>> solver;
+//             GradientDescentSolver<LocalLSQ<T>> solver;
 
             // minimize the function
             VectorX<T> x1(Eigen::Map<VectorX<T>>(ctrlpts_tosolve.data(), ctrlpts_tosolve.size()));  // size() = rows() * cols()
