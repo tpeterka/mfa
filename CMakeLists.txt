@@ -4,6 +4,7 @@ cmake_minimum_required      (VERSION 3.1)
 option                      (wrapped_mpi    "MPI compiler wrapper requires no further MPI libs"     OFF     )
 option                      (mfa_thread     "tbb, kokkos, sycl, or serial"                          serial  )
 option                      (s3d_infile     "Path/filename of s3d dataset (for unit testing)"               )
+option                      (python         "Build Python bindings"                                 OFF     )
 
 # C++11
 set                         (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
@@ -131,6 +132,11 @@ if                          (DIY_INCLUDE_DIRS AND EIGEN_INCLUDE_DIRS)
 else                        ()
     message                 (ERROR "Need diy2 and eigen in order to build mfa")
 endif                       ()
+if                          (python)
+    add_subdirectory        (include/pybind11)
+    add_subdirectory        (python)
+endif                       ()
+
 
 # Install the headers
 file                        (GLOB DEPLOY_FILES_AND_DIRS "${PROJECT_SOURCE_DIR}/include/*")
