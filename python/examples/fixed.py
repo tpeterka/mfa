@@ -1,52 +1,77 @@
 # example illustrating encoding/decoding with fixed number of control points
 
 import diy
+import mfa
+import math
 
+class PyBlock(mfa.Block):
+    # debug
+    def test(self, cp, caps=False):
+        if caps:
+            print("HELLO")
+        else:
+            print("hello")
+
+# default program arguments
+fun             = "sinc"
+error           = True
+dom_dim         = 1
+pt_dim          = 2
+geom_degree     = 1
+vars_degree     = 3
+ndom_pts        = 20
+geom_nctrl_pts  = geom_degree + 1
+vars_nctrl_pts  = 10
+
+# default dataset arguments
+d_args                  = mfa.DomainArgs(dom_dim, pt_dim)
+d_args.weighted         = 0
+d_args.n                = 0.0
+d_args.multiblock       = False
+d_args.verbose          = 1
+# NB, arrays bound to STL vectors must be assigned wholesale, not modified elementwise
+d_args.f                = [1.0]
+d_args.geom_p           = [geom_degree]
+d_args.vars_p           = [[vars_degree]]
+d_args.ndom_pts         = [ndom_pts]
+d_args.geom_nctrl_pts   = [geom_nctrl_pts]
+d_args.vars_nctrl_pts   = [[vars_nctrl_pts]]
+d_args.min              = [-4.0 * math.pi]
+d_args.max              = [4.0 * math.pi]
+d_args.s                = [10.0, 1.0]
+
+# debug
+# print(d_args)
+# print(d_args.dom_dim, d_args.pt_dim, d_args.min, d_args.max, d_args.s)
+
+# MPI, DIY world and master
 w = diy.mpi.MPIComm()           # world
-
 m = diy.Master(w)               # master
 
-class Block:
-    def __init__(self, core):
-        self.core = core
-
-    def show(self, cp):
-        print(w.rank, cp.gid(), self.core)
-        #cp.enqueue(diy.BlockID(1, 0), "abc")
-
-    def send(self, cp):
-        link = cp.link()
-        for i in range(len(link)):
-            target = link.target(i)
-            o = [cp.gid(), target.gid]
-            dir = link.direction(i)
-            print("%d sending to %d: %s to direction %s" % (cp.gid(), target.gid, o, dir))
-            cp.enqueue(target, o)
-
-    def recv(self, cp):
-        link = cp.link()
-        for i in range(len(link)):
-            gid = link.target(i).gid
-            o = cp.dequeue(gid)
-            dir = link.direction(i)
-            print("%d received from %d: %s from direction %s" % (cp.gid(), gid, o, dir))
-
 def add_block(gid, core, bounds, domain, link):
-    #print(gid, core, bounds, domain)
-    m.add(gid, Block(core), link)
+    b = PyBlock()
+    b.init(core, domain, dom_dim, pt_dim, float(0.0))
+    m.add(gid, b, link)
 
 nblocks = w.size
-domain = diy.DiscreteBounds([0,0,0], [100, 100, 100])
-d = diy.DiscreteDecomposer(3, domain, nblocks)
+domain = diy.ContinuousBounds(d_args.min, d_args.max)
+d = diy.ContinuousDecomposer(dom_dim, domain, nblocks)
 a = diy.ContiguousAssigner(w.size, nblocks)
 d.decompose(w.rank, a, add_block)
 
-# print(m)
-# 
-# m.foreach(Block.show)
-# m.foreach(Block.send)
-# m.exchange()
-# 
-# m.foreach(Block.recv)
+# initialize input data
+m.foreach(lambda b, cp: b.generate_analytical_data(cp, fun, d_args))
 
+# compute the MFA
+m.foreach(lambda b, cp: b.fixed_encode_block(cp, d_args))
+
+# debug: compute error field
+if error:
+    m.foreach(lambda b, cp: b.range_error(cp, 1, True, True))
+
+# print results
+m.foreach(lambda b, cp: b.print_block(cp, True))
+
+# save the results
+diy.write_blocks("approx.out", m)
 

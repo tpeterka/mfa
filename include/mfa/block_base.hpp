@@ -121,6 +121,50 @@ struct BlockBase
     vector<int>         map_dir;                // will map current directions with global directions
     vector<T>           max_errs_reduce;        // max_errs used in the reduce operations, plus location (2 T vals per entry)
 
+    // initialize an empty block previously added (instead of using mfa.add())
+    // not sure if we will keep this, needed for PyMFA for now
+    void init(
+            const Bounds<T>&    core,               // block bounds without any ghost added
+            const Bounds<T>&    domain,             // global data bounds
+            int                 dom_dim_,           // domain dimensionality
+            int                 pt_dim_,            // point dimensionality
+            T                   ghost_factor = 0.0) // amount of ghost zone overlap as a factor of block size (0.0 - 1.0)
+    {
+        dom_dim = dom_dim_;
+        pt_dim  = pt_dim_;
+
+        // NB: using bounds to hold full point dimensionality, but using core to hold only domain dimensionality
+        bounds_mins.resize(pt_dim);
+        bounds_maxs.resize(pt_dim);
+        core_mins.resize(dom_dim);
+        core_maxs.resize(dom_dim);
+
+        // manually set ghosted block bounds as a factor increase of original core bounds
+        for (int i = 0; i < dom_dim; i++)
+        {
+            T ghost_amount = ghost_factor * (core.max[i] - core.min[i]);
+            if (core.min[i] > domain.min[i])
+                bounds_mins(i) = core.min[i] - ghost_amount;
+            else
+                bounds_mins(i)= core.min[i];
+
+            if (core.max[i] < domain.max[i])
+                bounds_maxs(i) = core.max[i] + ghost_amount;
+            else
+                bounds_maxs(i) = core.max[i];
+            core_mins(i) = core.min[i];
+            core_maxs(i) = core.max[i];
+        }
+
+        // debug
+//         cerr << "core_mins: " << core_mins.transpose() << endl;
+//         cerr << "core_maxs: " << core_maxs.transpose() << endl;
+//         cerr << "bounds_mins: " << bounds_mins.transpose() << endl;
+//         cerr << "bounds_maxs: " << bounds_maxs.transpose() << endl;
+
+        mfa = NULL;
+    }
+
     // fixed number of control points encode block
     void fixed_encode_block(
             const       diy::Master::ProxyWithLink& cp,
