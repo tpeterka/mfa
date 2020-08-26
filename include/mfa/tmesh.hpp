@@ -1770,6 +1770,54 @@ namespace mfa
             }
         }
 
+        // determine starting and ending indices of domain input points covered by one tensor product
+        // coverage extends to edge of basis functions corresponding to control points in the tensor product
+        void domain_pts(const TensorProduct<T>& tc,                 // current tensor product
+                        vector<size_t>&         start_idxs,         // (output) starting idxs of input points
+                        vector<size_t>&         end_idxs) const     // (output) ending idxs of input points
+        {
+            start_idxs.resize(dom_dim_);
+            end_idxs.resize(dom_dim_);
+            vector<KnotIdx> min_anchor(dom_dim_);                // anchor for the min. edge basis functions of the new tensor
+            vector<KnotIdx> max_anchor(dom_dim_);                // anchor for the mas. edge basis functions of the new tensor
+            vector<vector<KnotIdx>> local_knot_idxs;                // local knot vector for an anchor
+
+            // left edge
+            for (auto k = 0; k < dom_dim_; k++)
+                min_anchor[k] = tc.knot_mins[k] - p_(k);
+            local_knot_vector(min_anchor, local_knot_idxs);
+            vector<KnotIdx> start_knot_idxs(dom_dim_);
+            for (auto k = 0; k < dom_dim_; k++)
+                start_knot_idxs[k] = local_knot_idxs[k][0];
+
+            local_knot_idxs.clear();
+
+            // right edge
+            for (auto k = 0; k < dom_dim_; k++)
+            {
+                if (p_(k) % 2 == 0)
+                    max_anchor[k] = tc.knot_maxs[k] + p_(k) - 1;
+                else
+                    max_anchor[k] = tc.knot_maxs[k] + p_(k);
+            }
+            local_knot_vector(max_anchor, local_knot_idxs);
+            vector<KnotIdx> end_knot_idxs(dom_dim_);
+            for (auto k = 0; k < dom_dim_; k++)
+                end_knot_idxs[k] = local_knot_idxs[k].back();
+
+            // input points corresponding to start and end knot values
+            for (auto k = 0; k < dom_dim_; k++)
+            {
+                start_idxs[k]   = all_knot_param_idxs[k][start_knot_idxs[k]];
+                end_idxs[k]     = all_knot_param_idxs[k][end_knot_idxs[k]];
+            }
+
+            // debug
+            for (auto k = 0; k < dom_dim_; k++)
+                fprintf(stderr, "start_idx[%d] = %lu end_idx[%d] = %lu\n", k, start_idxs[k], k, end_idxs[k]);
+
+}
+
         void print() const
         {
             // all_knots

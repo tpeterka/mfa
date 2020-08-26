@@ -1278,46 +1278,9 @@ template <typename T>                        // float or double
             MatrixX<T> cons = ctrlpts_tosolve.block(tc.ctrl_pts.rows(), 0, ctrlpts_tosolve.rows() - tc.ctrl_pts.rows(), cols);              // set the constraints
 
             // get the subset of the domain points needed for the local solve
-
-            vector<KnotIdx> min_anchor(mfa.dom_dim);                // anchor for the min. edge basis functions of the new tensor
-            vector<KnotIdx> max_anchor(mfa.dom_dim);                // anchor for the mas. edge basis functions of the new tensor
-            vector<vector<KnotIdx>> local_knot_idxs;                // local knot vector for an anchor
-
-            // left edge
-            for (auto k = 0; k < mfa.dom_dim; k++)
-                min_anchor[k] = tc.knot_mins[k] - mfa_data.p(k);
-            tmesh.local_knot_vector(min_anchor, local_knot_idxs);
-            vector<KnotIdx> start_knot_idxs(mfa_data.dom_dim);
-            for (auto k = 0; k < mfa.dom_dim; k++)
-                start_knot_idxs[k] = local_knot_idxs[k][0];
-
-            local_knot_idxs.clear();
-
-            // right edge
-            for (auto k = 0; k < mfa_data.dom_dim; k++)
-            {
-                if (mfa_data.p(k) % 2 == 0)
-                    max_anchor[k] = tc.knot_maxs[k] + mfa_data.p(k) - 1;
-                else
-                    max_anchor[k] = tc.knot_maxs[k] + mfa_data.p(k);
-            }
-            tmesh.local_knot_vector(max_anchor, local_knot_idxs);
-            vector<KnotIdx> end_knot_idxs(mfa_data.dom_dim);
-            for (auto k = 0; k < mfa.dom_dim; k++)
-                end_knot_idxs[k] = local_knot_idxs[k].back();
-
-            // input points corresponding to start and end knot values
             vector<size_t> start_idxs(mfa_data.dom_dim);
             vector<size_t> end_idxs(mfa_data.dom_dim);
-            for (auto k = 0; k < mfa_data.dom_dim; k++)
-            {
-                start_idxs[k]   = tmesh.all_knot_param_idxs[k][start_knot_idxs[k]];
-                end_idxs[k]     = tmesh.all_knot_param_idxs[k][end_knot_idxs[k]];
-            }
-
-            // debug
-            for (auto k = 0; k < mfa_data.dom_dim; k++)
-                fprintf(stderr, "start_idx[%d] = %lu end_idx[%d] = %lu\n", k, start_idxs[k], k, end_idxs[k]);
+            tmesh.domain_pts(tc, start_idxs, end_idxs);
 
             // set up the optimization
             LocalLSQ<T> llsq(mfa, mfa_data, domain, cons, start_idxs, end_idxs, verbose);
