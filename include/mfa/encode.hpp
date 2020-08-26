@@ -1674,9 +1674,13 @@ template <typename T>                        // float or double
         VectorX<T> cpt(cols);                                               // decoded curve point
         VectorX<T> param(mfa_data.dom_dim);                                 // parameters for one point
         VectorXi npts(mfa_data.dom_dim);                                    // number of points to decode
+        VectorXi starts(mfa_data.dom_dim);                                  // starting indices of points to decode
         for (auto k = 0; k < mfa_data.dom_dim; k++)
-            npts(k) = end_idxs[k] - start_idxs[k] + 1;
-        VolIterator vol_iter(npts);
+        {
+            starts(k)   = start_idxs[k];
+            npts(k)     = end_idxs[k] - start_idxs[k] + 1;
+        }
+        VolIterator vol_iter(npts, starts, mfa.ndom_pts());
 
         while(!vol_iter.done())
         {
@@ -1692,10 +1696,17 @@ template <typename T>                        // float or double
             vol_iter.incr_iter();
         }
 
+        // "normalize" lsq_error to be RMSE (optional, see if improves accuracy or speeds up convergence)
+//         lsq_error = sqrt(lsq_error / vol_iter.tot_iters());
+
         fprintf(stderr, "least squares error: %e\n", lsq_error);
         if (cons.rows() && cons.cols())                                     // nonzero size indicates constraints are being used
         {
-            cons_error = (ctrlpts_tosolve.block(tc.ctrl_pts.rows(), 0, ctrlpts_tosolve.rows() - tc.ctrl_pts.rows(), cols) - cons).squaredNorm();
+            cons_error =
+                (ctrlpts_tosolve.block(tc.ctrl_pts.rows(), 0, ctrlpts_tosolve.rows() - tc.ctrl_pts.rows(), cols) - cons).squaredNorm();
+
+            // "normalize" cons_error to be RMSE (optional, see if improves accuracy or speeds up convergence)
+//             cons_error = sqrt(cons_error / cons.size());
 
             // debug
 //             cerr << "ctrlpts_tosolve:\n" << ctrlpts_tosolve << endl;
