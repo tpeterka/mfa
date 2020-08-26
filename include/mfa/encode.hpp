@@ -262,8 +262,8 @@ template <typename T>                        // float or double
                 MatrixX<T> NtN  = mfa_data.N[k].transpose() * mfa_data.N[k];
 
                 // debug
-//                 cerr << "N[k]:\n" << mfa_data.N[k] << endl;
-//                 cerr << "NtN:\n" << NtN << endl;
+                cerr << "N[k]:\n" << mfa_data.N[k] << endl;
+                cerr << "NtN:\n" << NtN << endl;
 
 #ifdef MFA_TBB  // TBB version
 
@@ -325,6 +325,160 @@ template <typename T>                        // float or double
             // debug
 //             cerr << "Encode() ctrl_pts:\n" << ctrl_pts << endl;
 //             cerr << "Encode() weights:\n" << weights << endl;
+        }
+
+        // encodes the control points for one tensor product of a tmesh
+        // takes a subset of input points from the global domain, covered by basis functions of this tensor product
+        // solves all dimensions together (not separably)
+        // does not encode weights for now
+        void EncodeTensor(TensorProduct<T>&         t,                      // tensor product being encoded
+                          bool                      constrained,            // whether to impose p control point constraints on each side
+                          bool                      weighted = true)        // solve for and use weights
+        {
+            // debug
+            fprintf(stderr, "EncodeTensor\n");
+
+            // get input domain points covered by the tensor
+            vector<size_t> start_idxs(mfa_data.dom_dim);
+            vector<size_t> end_idxs(mfa_data.dom_dim);
+            mfa_data.tmesh.domain_pts(t, start_idxs, end_idxs);
+            // TODO: start_idxs and end_idxs can be a lot tighter, although nothing changes if they are loose
+            // debug: hard-code start and end idxs
+            start_idxs[0] = 7;
+            end_idxs[0] = 15;
+            VectorXi ndom_pts(mfa_data.dom_dim);
+            for (auto k = 0; k < mfa_data.dom_dim; k++)
+                ndom_pts(k) = end_idxs[k] - start_idxs[k] + 1;
+
+            // debug: try unconstrained
+//             constrained = false;
+
+            // get constraints
+            MatrixX<T>  cons;
+            if (constrained)
+            {
+                MatrixX<T> ctrlpts_tosolve;
+                // TODO: make a version of LocalSolverCtrlPts that only finds the constraints
+                LocalSolveCtrlPts(t, ctrlpts_tosolve);
+                cons = ctrlpts_tosolve.block(t.nctrl_pts.prod(), 0, ctrlpts_tosolve.rows() - t.ctrl_pts.rows(), ctrlpts_tosolve.cols());
+            }
+
+            // debug
+            cerr << "cons:\n" << cons << endl;
+
+            // resize matrices in case number of control points changed
+            int pt_dim = mfa_data.max_dim - mfa_data.min_dim + 1;                           // control point dimensonality
+            t.ctrl_pts.resize(t.nctrl_pts.prod(), pt_dim);
+            t.weights.resize(t.ctrl_pts.rows());
+
+            // matrix of basis functions
+            // using 0th dimension for full-d
+            // N is a matrix of m x n scalars that are the basis function coefficients
+            //  _                                      _
+            // |  N_0(u[0])     ...     N_n-1(u[0])     |
+            // |     ...        ...      ...            |
+            // |  N_0(u[m-1])   ...     N_n-1(u[m-1])   |
+            //  -                                      -
+            MatrixX<T>& N = mfa_data.N[0];
+            N = MatrixX<T>::Constant(ndom_pts.prod(), t.nctrl_pts.prod(), -1);              // basis functions, -1 means unassigned so far
+            VectorXi dom_starts(mfa_data.dom_dim);
+            for (auto k = 0; k < mfa_data.dom_dim; k++)
+                dom_starts(k) = start_idxs[k];
+
+            vector<int>         spans(mfa_data.dom_dim);
+            vector<MatrixX<T>>  B(mfa_data.dom_dim);
+            for (auto k = 0; k < mfa_data.dom_dim; k++)
+                B[k].resize(1, t.nctrl_pts(k));
+            VolIterator dom_vol_iter(ndom_pts, dom_starts, mfa.ndom_pts());                 // iterator over input points
+            while (!dom_vol_iter.done())
+            {
+                for (auto k = 0; k < mfa_data.dom_dim; k++)
+                {
+                    int p   = mfa_data.p(k);
+                    spans[k] = mfa_data.FindSpan(k, mfa.params()[k][dom_vol_iter.idx_dim(k)]);
+
+                    // basis functions
+                    vector<T> loc_knots(p + 2);
+                    B[k].row(0).setZero();
+                    T u = mfa.params()[k][dom_vol_iter.idx_dim(k)];                         // parameter of current input point
+
+                    for (auto j = 0; j < p + 1; j++)
+                    {
+                        for (auto i = 0; i < p + 2; i++)
+                            loc_knots[i] = mfa_data.tmesh.all_knots[k][spans[k] - p + j + i];
+                        int col = spans[k] - p + j - t.knot_mins[k];
+                        if (col >= 0 && col < B[k].cols())
+                            B[k](0, col) = mfa_data.OneBasisFun(k, u, loc_knots);
+                    }
+                }
+
+                VolIterator ctrl_vol_iter(t.nctrl_pts);                                     // iterator over control points
+                while (!ctrl_vol_iter.done())
+                {
+                    for (auto k = 0; k < mfa_data.dom_dim; k++)
+                    {
+                        int p   = mfa_data.p(k);
+                        int idx = ctrl_vol_iter.idx_dim(k);                                 // index in current dim of this control point
+                        for (auto j = 0; j < p + 1; j++)                                    // nonzero basis function values at this parameter
+                        {
+                            int col = spans[k] - p + j - t.knot_mins[k];
+                            if (idx == col)                                                 // index in cur. dim. of this ctrl. point is affected by this basis fun. value
+                            {
+                                if (N(dom_vol_iter.cur_iter(), ctrl_vol_iter.cur_iter()) == -1.0)   // unassigned so far
+                                    N(dom_vol_iter.cur_iter(), ctrl_vol_iter.cur_iter()) = B[k](0, col);
+                                else
+                                    N(dom_vol_iter.cur_iter(), ctrl_vol_iter.cur_iter()) *= B[k](0, col);
+                            }
+                        }
+                    }
+                    ctrl_vol_iter.incr_iter();
+                }
+                dom_vol_iter.incr_iter();
+            }
+
+            // set any unassigned values in N to 0
+            for (auto i = 0; i < N.rows(); i++)
+                for (auto j = 0; j < N.cols(); j++)
+                    if (N(i, j) == -1.0)
+                        N(i, j) = 0.0;
+
+            // debug
+            cerr << "N:\n" << mfa_data.N[0] << endl;
+
+            // normal form
+            MatrixX<T> NtN = N.transpose() * N;
+
+            // pad NtN on the right and bottom for the constraints
+            if (constrained)
+            {
+                int pad_rows = NtN.rows() + cons.rows();
+                int pad_cols = NtN.cols() + cons.rows();
+                NtN.conservativeResize(pad_rows, pad_cols);
+                // 1's along diagonal of NtN for constraints, rest of padding is 0
+                NtN.block(0, t.ctrl_pts.rows(), NtN.rows(), cons.rows()) =
+                    MatrixX<T>::Zero(NtN.rows(), cons.rows());
+                NtN.block(t.ctrl_pts.rows(), 0, cons.rows(), t.ctrl_pts.rows()) =
+                    MatrixX<T>::Zero(cons.rows(), t.ctrl_pts.rows());
+                for (auto i = 0; i < cons.rows(); i++)
+                    NtN(t.ctrl_pts.rows() + i, t.ctrl_pts.rows() + i) = 1.0;
+            }
+
+            // debug
+            cerr << "NtN:\n" << NtN << endl;
+
+            // R is the right hand side needed for solving NtN * P = R
+            MatrixX<T> R(NtN.cols(), pt_dim);
+            RHSTensor(N, start_idxs, end_idxs, t, cons, R);
+
+            // P is the solution vector
+            MatrixX<T> P(NtN.cols(), pt_dim);
+            P = NtN.ldlt().solve(R);
+            t.ctrl_pts = P.block(0, 0, t.ctrl_pts.rows(), pt_dim);
+
+            // debug
+            cerr << "EncodeTensor() P:\n" << P << endl;
+            cerr << "EncodeTensor() ctrl_pts:\n" << t.ctrl_pts << endl;
+            cerr << "EncodeTensor() weights:\n" << t.weights << endl;
         }
 
         // original adaptive encoding for first tensor product only
@@ -705,7 +859,8 @@ template <typename T>                        // float or double
 #endif
 
             // debug
-//             cerr << "R:\n" << R << endl;
+            cerr << "Rk:\n" << Rk << endl;
+            cerr << "R:\n" << R << endl;
         }
 
 
@@ -759,6 +914,56 @@ template <typename T>                        // float or double
 
             // debug
             //     cerr << "R:\n" << R << endl;
+        }
+
+        // computes right hand side vector for encoding one tensor product of control points
+        // takes subset of original input points
+        // solves all dimensions at once (not seperable dimensions)
+        // allows for additional constraints
+        // no weights as yet
+        // R is column vector of n elements, each element multiple coordinates of the input points
+        void RHSTensor(
+                const MatrixX<T>&       N,          // matrix of basis function coefficients
+                const vector<size_t>&   start_idxs, // starting indices of subset of domain points
+                const vector<size_t>&   end_idxs,   // ending indices of subset of domain points
+                const TensorProduct<T>& t,          // current tensor product
+                const MatrixX<T>&       cons,       // constraints
+                MatrixX<T>&             R)          // (output) residual matrix allocated by caller
+        {
+            VectorXi ndom_pts(mfa_data.dom_dim);
+            VectorXi dom_starts(mfa_data.dom_dim);
+            for (auto k = 0; k < mfa_data.dom_dim; k++)
+            {
+                ndom_pts(k)     = end_idxs[k] - start_idxs[k] + 1;
+                dom_starts(k)   = start_idxs[k];
+            }
+
+            // fill Rk, the matrix of input points
+            MatrixX<T> Rk(N.rows(), mfa_data.max_dim - mfa_data.min_dim + 1);           // one row for each input point
+            VolIterator vol_iter(ndom_pts, dom_starts, mfa.ndom_pts());                 // iterator over input points
+            VectorXi ijk(mfa_data.dom_dim);
+            while (!vol_iter.done())
+            {
+                vol_iter.idx_ijk(vol_iter.cur_iter(), ijk);
+                Rk.row(vol_iter.cur_iter()) = domain.block(vol_iter.ijk_idx(ijk), mfa_data.min_dim, 1, mfa_data.max_dim - mfa_data.min_dim + 1);
+                vol_iter.incr_iter();
+            }
+
+            // compute the matrix R (one row for each control point)
+            for (int i = 0; i < N.cols(); i++)
+                for (int j = 0; j < R.cols(); j++)
+                    // using array() for element-wise multiplication, which is what we want (not matrix mult.)
+                    R(i, j) =
+                        (N.col(i).array() *                 // ith basis functions for input pts
+                         Rk.col(j).array()).sum();          // input points
+
+            // append the constraints to R
+            for (auto i = 0; i < R.rows() - N.cols(); i++)
+                R.row(N.cols() + i) = cons.row(i);
+
+            // debug
+            cerr << "Rk:\n" << Rk << endl;
+            cerr << "R:\n" << R << endl;
         }
 
         // Checks quantities needed for approximation
@@ -1223,22 +1428,29 @@ template <typename T>                        // float or double
                 return 0;
 
             // knot mins and maxs of tensor to be appended
+            // this is where we decide how many knots and control points the added tensor has
             vector<KnotIdx> knot_mins(mfa_data.dom_dim);
             vector<KnotIdx> knot_maxs(mfa_data.dom_dim);
             for (auto j = 0; j < mfa_data.dom_dim; j++)
             {
+                // following makes p control points in the added tensor
                 knot_mins[j] = inserted_knot_idxs[j][0] - mfa_data.p(j) / 2;
                 knot_maxs[j] = inserted_knot_idxs[j][0] + mfa_data.p(j) / 2;
+
+                // debug: try making a bigger tensor with p + 1 control points
+                knot_maxs[j]++;             // correct for both even and odd degree
             }
 
             // debug
             if (mfa_data.dom_dim == 1)
-                fprintf(stderr, "appending tensor with knot_mins [%ld] knot_maxs [%ld]\n", knot_mins[0], knot_maxs[0]);
+                fprintf(stderr, "inserting knot with idxs [%ld] and appending tensor with knot_mins [%ld] knot_maxs [%ld]\n",
+                        inserted_knot_idxs[0][0], knot_mins[0], knot_maxs[0]);
             else if (mfa_data.dom_dim == 2)
-                fprintf(stderr, "appending tensor with knot_mins [%ld %ld] knot_maxs [%ld %ld]\n", knot_mins[0], knot_mins[1], knot_maxs[0], knot_maxs[1]);
+                fprintf(stderr, "inserting knot with idxs [%ld %ld] and appending tensor with knot_mins [%ld %ld] knot_maxs [%ld %ld]\n",
+                        inserted_knot_idxs[0][0], inserted_knot_idxs[1][0], knot_mins[0], knot_mins[1], knot_maxs[0], knot_maxs[1]);
             else if (mfa_data.dom_dim == 3)
-                fprintf(stderr, "appending tensor with knot_mins [%ld %ld %ld] knot_maxs [%ld %ld %ld]\n",
-                        knot_mins[0], knot_mins[1], knot_mins[2], knot_maxs[0], knot_maxs[1], knot_maxs[2]);
+                fprintf(stderr, "inserting knot with idxs [%ld %ld %ld] and appending tensor with knot_mins [%ld %ld %ld] knot_maxs [%ld %ld %ld]\n",
+                        inserted_knot_idxs[0][0], inserted_knot_idxs[1][0], inserted_knot_idxs[2][0], knot_mins[0], knot_mins[1], knot_mins[2], knot_maxs[0], knot_maxs[1], knot_maxs[2]);
 
             // append the tensor
             // only doing one new knot insertion, hence the [0] index on new_nctrl_pts, new_ctrl_pts, new_weights
@@ -1251,8 +1463,14 @@ template <typename T>                        // float or double
             mfa_data.tmesh.print();
 
             // local solve newly appended tensor
+            // TODO: experimenting with the difference between iterative and linear least squares
+#if 0
             if (local)
                 LocalSolve();
+#else
+            if (local)
+                EncodeTensor(mfa_data.tmesh.tensor_prods.back(), true);
+#endif
 
             for (auto k = 0; k < mfa_data.dom_dim; k++)
                 if (mfa.ndom_pts()(k) <= nctrl_pts(k))
@@ -1644,6 +1862,7 @@ template <typename T>                        // float or double
             npts(k)     = end_idxs[k] - start_idxs[k] + 1;
         }
         VolIterator vol_iter(npts, starts, mfa.ndom_pts());
+        VectorXi ijk(mfa_data.dom_dim);
 
         while(!vol_iter.done())
         {
@@ -1651,9 +1870,11 @@ template <typename T>                        // float or double
                 param(k) = mfa.params()[k][vol_iter.idx_dim(k)];
 
             decoder.VolPt_tmesh(param, cpt);
+            vol_iter.idx_ijk(vol_iter.cur_iter(), ijk);                     // multi-dim index into domain points
+            size_t dom_idx = vol_iter.ijk_idx(ijk);                         // linear index into domain points
             for (auto j = 0; j < mfa_data.max_dim - mfa_data.min_dim + 1; j++)
             {
-                T diff = cpt[j] - domain(vol_iter.cur_iter(), mfa_data.dom_dim + j);
+                T diff = cpt[j] - domain(dom_idx, mfa_data.dom_dim + j);
                 lsq_error += (diff * diff);
             }
             vol_iter.incr_iter();
@@ -1662,7 +1883,7 @@ template <typename T>                        // float or double
         // "normalize" lsq_error to be RMSE (optional, see if improves accuracy or speeds up convergence)
 //         lsq_error = sqrt(lsq_error / vol_iter.tot_iters());
 
-        fprintf(stderr, "least squares error: %e\n", lsq_error);
+//         fprintf(stderr, "least squares error: %e\n", lsq_error);
         if (cons.rows() && cons.cols())                                     // nonzero size indicates constraints are being used
         {
             cons_error =
@@ -1676,10 +1897,10 @@ template <typename T>                        // float or double
 //             cerr << "cons:\n" << cons << endl;
 //             cerr << "ctrlpts_tosolve - cons:\n" << ctrlpts_tosolve.block(p, 0, ctrlpts_tosolve.rows() - p) - cons << endl;
 
-            fprintf(stderr, "constraints error: %e\n", cons_error);
+//             fprintf(stderr, "constraints error: %e\n", cons_error);
             T cons_weight = 1.0e8;                                          // multiplying by large weight forces constraints to be satisfied 1e8 was Youssef's factor when interior not 0'd
             tot_error = lsq_error + cons_weight * cons_error;
-            fprintf(stderr, "total error (lsq_error + weight * cons_error = %e\n", tot_error);
+//             fprintf(stderr, "total error (lsq_error + weight * cons_error = %e\n", tot_error);
         }
         return tot_error;
     }

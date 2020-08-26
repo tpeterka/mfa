@@ -310,6 +310,43 @@ namespace mfa
         // binary search to find the span in the knots vector containing a given parameter value
         // returns span index i s.t. u is in [ knots[i], knots[i + 1] )
         // NB closed interval at left and open interval at right
+        //
+        // i will be in the range [p, n], where n = number of control points - 1 because there are
+        // p + 1 repeated knots at start and end of knot vector
+        // algorithm 2.1, P&T, p. 68
+        //
+        // number of control points computed from number of knots
+        int FindSpan(
+                int                     cur_dim,            // current dimension
+                T                       u) const            // parameter value
+        {
+            int nctrl_pts = tmesh.all_knots[cur_dim].size() - p(cur_dim) - 1;
+
+            if (u == tmesh.all_knots[cur_dim][nctrl_pts])
+                return nctrl_pts - 1;
+
+            // binary search
+            int low = p(cur_dim);
+            int high = nctrl_pts;
+            int mid = (low + high) / 2;
+            while (u < tmesh.all_knots[cur_dim][mid] || u >= tmesh.all_knots[cur_dim][mid + 1])
+            {
+                if (u < tmesh.all_knots[cur_dim][mid])
+                    high = mid;
+                else
+                    low = mid;
+                mid = (low + high) / 2;
+            }
+
+            // debug
+            cerr << "u = " << u << " span = " << mid << endl;
+
+            return mid;
+        }
+
+        // binary search to find the span in the knots vector containing a given parameter value
+        // returns span index i s.t. u is in [ knots[i], knots[i + 1] )
+        // NB closed interval at left and open interval at right
         // tmesh version
         //
         // i will be in the range [p, n], where n = number of control points - 1 because there are
@@ -376,6 +413,9 @@ namespace mfa
                 MatrixX<T>&             N,          // matrix of (output) basis function values
                 int                     row) const  // row in N of result
         {
+            // initialize row to 0
+            N.row(row).setZero();
+
             // init
             vector<T> scratch(p(cur_dim) + 1);                  // scratchpad, same as N in P&T p. 70
             scratch[0] = 1.0;
@@ -427,6 +467,9 @@ namespace mfa
         {
             vector<T> loc_knots(p(cur_dim) + 2);
 
+            // initialize row to 0
+            N.row(row).setZero();
+
             for (auto j = 0; j < p(cur_dim) + 1; j++)
             {
                 for (auto i = 0; i < p(cur_dim) + 2; i++)
@@ -438,7 +481,9 @@ namespace mfa
 //                     fprintf(stderr, "%.3lf ", loc_knots[i]);
 //                 fprintf(stderr, "\n");
 
-                N(row, span - p(cur_dim) + j) = OneBasisFun(cur_dim, u, loc_knots);
+                // TODO: this is a hack for not having p+1 control points, not sure if this is right
+//                 if (span - p(cur_dim) + j >= 0 && span - p(cur_dim) + j < N.cols())
+                    N(row, span - p(cur_dim) + j) = OneBasisFun(cur_dim, u, loc_knots);
             }
 
             // debug
@@ -579,6 +624,9 @@ namespace mfa
                 MatrixX<T>&             N,          // matrix of (output) basis function values
                 int                     row) const  // row in N of result
         {
+            // initialize row to 0
+            N.row(row).setZero();
+
             // init
             vector<T> scratch(p(cur_dim) + 1);                  // scratchpad, same as N in P&T p. 70
             scratch[0] = 1.0;
@@ -1534,7 +1582,7 @@ namespace mfa
                 {
                     tmesh.all_knots[k][i] = 0.0;
                     tmesh.all_knots[k][nknots - 1 - i] = 1.0;
-                    tmesh.all_knot_param_idxs[k][nknots - 1 - i] = params[k].size() - 2;
+                    tmesh.all_knot_param_idxs[k][nknots - 1 - i] = params[k].size() - 1;
                 }
             }
         }
@@ -1569,7 +1617,7 @@ namespace mfa
                 {
                     tmesh.all_knots[k][i] = 0.0;
                     tmesh.all_knots[k][nknots - 1 - i] = 1.0;
-                    tmesh.all_knot_param_idxs[k][nknots - 1 - i] = params[k].size() - 2;
+                    tmesh.all_knot_param_idxs[k][nknots - 1 - i] = params[k].size() - 1;
                 }
 
                 // compute remaining n - p internal knots

@@ -106,7 +106,13 @@ namespace mfa
 
             t.weights = VectorX<T>::Ones(t.nctrl_pts.prod());
             Encoder<T> encoder(*this, mfa_data, domain, verbose);
+
+            // experiment with separable, unified dimension encoding
+#if 0
             encoder.Encode(t.nctrl_pts, t.ctrl_pts, t.weights, weighted);
+#else
+            encoder.EncodeTensor(t, false, weighted);
+#endif
 
             // debug: try inserting a knot
             //             VectorX<T> new_knot(mfa->dom_dim);
