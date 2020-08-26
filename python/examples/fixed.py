@@ -4,13 +4,13 @@ import diy
 import mfa
 import math
 
-class PyBlock(mfa.Block):
-    # debug
-    def test(self, cp, caps=False):
-        if caps:
-            print("HELLO")
-        else:
-            print("hello")
+# class PyBlock(mfa.Block):
+#     # debug
+#     def test(self, cp, caps=False):
+#         if caps:
+#             print("HELLO")
+#         else:
+#             print("hello")
 
 # default program arguments
 fun             = "sinc"
@@ -49,12 +49,17 @@ w = diy.mpi.MPIComm()           # world
 m = diy.Master(w)               # master
 
 def add_block(gid, core, bounds, domain, link):
-    b = PyBlock()
+#     b = PyBlock()
+    b = mfa.Block()
     b.init(core, domain, dom_dim, pt_dim, float(0.0))
     m.add(gid, b, link)
 
 nblocks = w.size
+# TODO: this doesn't work
+# domain = diy.DoubleContinuousBounds(d_args.min, d_args.max)
 domain = diy.ContinuousBounds(d_args.min, d_args.max)
+# TODO: this doesn't work
+# d = diy.DoubleContinuousDecomposer(dom_dim, domain, nblocks)
 d = diy.ContinuousDecomposer(dom_dim, domain, nblocks)
 a = diy.ContiguousAssigner(w.size, nblocks)
 d.decompose(w.rank, a, add_block)
@@ -73,5 +78,5 @@ if error:
 m.foreach(lambda b, cp: b.print_block(cp, True))
 
 # save the results
-diy.write_blocks("approx.out", m)
+# diy.write_blocks("approx.out", m)
 

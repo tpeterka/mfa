@@ -1,13 +1,15 @@
 #include    <pybind11/pybind11.h>
 #include    <pybind11/stl.h>
+#include    <pybind11/eigen.h>
 namespace py = pybind11;
 
 #include    <../examples/block.hpp>
 
-void init_block(py::module& m)
+template <typename T>
+void init_block(py::module& m, std::string name)
 {
-    using Bounds    = diy::Bounds<real_t>;
-    using RCLink    = diy::RegularLink<diy::Bounds<real_t>>;
+    using Bounds    = diy::Bounds<T>;
+    using RCLink    = diy::RegularLink<diy::Bounds<T>>;
     using Master    = diy::Master;
 
     py::class_<ModelInfo> (m, "ModelInfo")
@@ -23,17 +25,17 @@ void init_block(py::module& m)
         .def_readwrite("verbose",           &ModelInfo::verbose)
     ;
 
-    py::class_<Model<real_t>> (m, "Model")
+    py::class_<Model<T>> (m, "Model")
         .def(py::init<>())
     ;
 
-    py::class_<BlockBase<real_t>> (m, "BlockBase")
+    py::class_<BlockBase<T>> (m, "BlockBase")
         .def(py::init<>())
         // TODO: not sure if these will be needed
-//         .def_readwrite("bounds_mins",   &BlockBase<real_t>::bounds_mins)
-//         .def_readwrite("bounds_maxs",   &BlockBase<real_t>::bounds_maxs)
-//         .def_readwrite("core_mins",     &BlockBase<real_t>::core_mins)
-//         .def_readwrite("core_maxs",     &BlockBase<real_t>::core_maxs)
+//         .def_readwrite("bounds_mins",   &BlockBase<T>::bounds_mins)
+//         .def_readwrite("bounds_maxs",   &BlockBase<T>::bounds_maxs)
+//         .def_readwrite("core_mins",     &BlockBase<T>::core_mins)
+//         .def_readwrite("core_maxs",     &BlockBase<T>::core_maxs)
     ;
 
     py::class_<DomainArgs, ModelInfo>(m, "DomainArgs")
@@ -52,24 +54,20 @@ void init_block(py::module& m)
         .def_readwrite("multiblock",    &DomainArgs::multiblock)
     ;
 
-    py::class_<Block<real_t>, BlockBase<real_t>>(m, "Block")
+    py::class_<Block<T>, BlockBase<T>>(m, "Block")
         .def(py::init<>())
-        .def("generate_analytical_data", &Block<real_t>::generate_analytical_data)
-//         .def("generate_analytical_data", [](Block<real_t>& b, const diy::Master::ProxyWithLink& cp, string& fun, DomainArgs& args)
-//                 {
-//                     b.generate_analytical_data(cp, fun, args);
-//                 })
-        .def("print_block", &Block<real_t>::print_block)
+        .def("generate_analytical_data", &Block<T>::generate_analytical_data)
+        .def("print_block", &Block<T>::print_block)
         // TODO: added this because mfa.add did not work
-//         .def("init",        &Block<real_t>::init)
+//         .def("init",        &Block<T>::init)
         // TODO: folllowing should not be needed, but ContinousBounds are float and Bounds are double
         .def("init",    [](
-                        Block<real_t>&                  b,
+                        Block<T>&                  b,
                         const diy::ContinuousBounds&    core,
                         const diy::ContinuousBounds&    domain,
                         int                             dom_dim,
                         int                             pt_dim,
-                        real_t                          ghost_factor)
+                        T                          ghost_factor)
                 {
                     Bounds core_(dom_dim);
                     Bounds domain_(dom_dim);
@@ -85,8 +83,52 @@ void init_block(py::module& m)
                     }
                     b.init(core_, domain_, dom_dim, pt_dim, ghost_factor);
                 })
-        .def("fixed_encode_block",  &Block<real_t>::fixed_encode_block)
-        .def("range_error",         &Block<real_t>::range_error)
+        .def("fixed_encode_block",  &Block<T>::fixed_encode_block)
+        .def("range_error",         &Block<T>::range_error)
+        .def(py::pickle(
+            [](const Block<T>& b)      // __getstate__
+            {
+                return py::make_tuple(b.domain,             // TODO: debugging only; don't save input pts in practice
+                                      b.dom_dim,
+                                      b.pt_dim,
+                                      b.mfa->ndom_pts(),
+                                      b.bounds_mins,
+                                      b.bounds_maxs,
+                                      b.core_mins,
+                                      b.core_maxs,
+                                      b.geometry.mfa_data->p,
+                                      b.geometry.mfa_data->tmesh.tensor_prods.size());
+                // TODO: how to add a variable number of items to the tuple?
+                // TODO: get the rest of the state
+            },
+            [](py::tuple t)                 // __setstate__
+            {
+                Block<T> b;
+
+                // TODO: don't load domain in practice, for debugging only
+                b.domain                = t[0].cast<MatrixX<T>>();
+
+                // top-level MFA data
+                b.dom_dim               = t[1].cast<int>();
+                b.pt_dim                = t[2].cast<int>();
+                VectorXi ndom_pts       = t[3].cast<VectorXi>();
+                b.mfa                   = new mfa::MFA<T>(b.dom_dim, ndom_pts, b.domain);
+
+                // extents
+                b.bounds_mins           = t[4].cast<VectorX<T>>();
+                b.bounds_maxs           = t[5].cast<VectorX<T>>();
+                b.core_mins             = t[6].cast<VectorX<T>>();
+                b.core_maxs             = t[7].cast<VectorX<T>>();
+
+                // geometry
+                VectorXi p              = t[8].cast<VectorXi>();
+                size_t ntensor_prods    = t[9].cast<size_t>();
+                b.geometry.mfa_data     = new mfa::MFA_Data<T>(p, ntensor_prods);
+
+                // TODO: set the rest of the state
+
+                return b;
+            }))
     ;
 
     // TODO: crashes at runtime
@@ -98,10 +140,15 @@ void init_block(py::module& m)
 //                     Master&         master,
 //                     int             dom_dim,
 //                     int             pt_dim,
-//                     real_t          ghost_factor)
+//                     T          ghost_factor)
 //             {
-//                 mfa::add<Block<real_t>, real_t>(gid, core, bounds, domain, link, master, dom_dim, pt_dim, ghost_factor);
+//                 mfa::add<Block<T>, T>(gid, core, bounds, domain, link, master, dom_dim, pt_dim, ghost_factor);
 //             });
 
 }
 
+void init_block(py::module& m)
+{
+    // NB: real_t is defined in examples/block.hpp
+    init_block<real_t>(m, "Block_double");
+}
