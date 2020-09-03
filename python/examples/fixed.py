@@ -47,6 +47,8 @@ d_args.s                = [10.0, 1.0]
 # MPI, DIY world and master
 w = diy.mpi.MPIComm()           # world
 m = diy.Master(w)               # master
+# TODO: this doesn't work
+# m = diy.Master(w, 1, -1, mfa.Block.create, mfa.Block.destroy, 0, mfa.Block.save, mfa.Block.load)               # master
 
 def add_block(gid, core, bounds, domain, link):
 #     b = PyBlock()
@@ -78,5 +80,6 @@ if error:
 m.foreach(lambda b, cp: b.print_block(cp, True))
 
 # save the results
-# diy.write_blocks("approx.out", m)
+# TODO: giving a specific save function doesn't work
+diy.write_blocks("approx.out", m, save=mfa.Block.save)
 

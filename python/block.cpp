@@ -85,6 +85,10 @@ void init_block(py::module& m, std::string name)
                 })
         .def("fixed_encode_block",  &Block<T>::fixed_encode_block)
         .def("range_error",         &Block<T>::range_error)
+        .def("create",              &Block<T>::create)
+        .def("destroy",             &Block<T>::destroy)
+        .def("save",                &Block<T>::save)
+        .def("load",                &Block<T>::load)
         .def(py::pickle(
             [](const Block<T>& b)      // __getstate__
             {

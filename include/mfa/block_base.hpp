@@ -121,6 +121,12 @@ struct BlockBase
     vector<int>         map_dir;                // will map current directions with global directions
     vector<T>           max_errs_reduce;        // max_errs used in the reduce operations, plus location (2 T vals per entry)
 
+    ~BlockBase()
+    {
+        if (mfa)
+            delete mfa;
+    }
+
     // initialize an empty block previously added (instead of using mfa.add())
     // not sure if we will keep this, needed for PyMFA for now
     void init(
@@ -1413,13 +1419,15 @@ namespace mfa
         void* create()          { return new B; }
 
     template<typename B>                        // B = block object
-        void destroy(void* b)
-        {
-            B* block = static_cast<B*>(b);
-            if (block->mfa)
-                delete block->mfa;
-            delete block;
-        }
+    void destroy(void* b)
+    {
+        //         DEPRECATE, moved to ~BlockBase()
+//         B* block = static_cast<B*>(b);
+//         if (block->mfa)
+//             delete block->mfa;
+//         delete block;
+        delete static_cast<B*>(b);
+    }
 
     template<typename B, typename T>                // B = block object,  T = float or double
         void add(                                       // add the block to the decomposition
