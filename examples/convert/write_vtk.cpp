@@ -28,8 +28,6 @@ void PrepRenderingData(
         vector<vec3d>&              raw_pts,
         float**&                    raw_data,
         int&                        nvars,
-        vector<int>&                geom_nctrl_pts,
-        vector< vector <int> >&     vars_nctrl_pts,
         vector<vec3d>&              geom_ctrl_pts,
         vector< vector <vec3d> >&   vars_ctrl_pts,
         float**&                    vars_ctrl_data,
@@ -66,34 +64,14 @@ void PrepRenderingData(
             raw_data[k][j] = block->domain(j, ndom_dims + k);
     }
 
-    // number of geometry control points
-    geom_nctrl_pts.resize(ndom_dims);
-    for (auto i = 0; i < block->geometry.mfa_data->tmesh.tensor_prods.size(); i++)
-        for (auto j = 0; j < ndom_dims; j++)
-            geom_nctrl_pts[j] += block->geometry.mfa_data->tmesh.tensor_prods[i].nctrl_pts(j);
-
-    // number of science variable control points
-    vars_nctrl_pts.resize(nvars);
-    for (auto k = 0; k < nvars; k++)
-        vars_nctrl_pts[k].resize(ndom_dims);
-    for (auto k = 0; k < nvars; k++)
-        for (auto i = 0; i < block->vars[k].mfa_data->tmesh.tensor_prods.size(); i++)
-            for (auto j = 0; j < ndom_dims; j++)
-                vars_nctrl_pts[k][j] += block->vars[k].mfa_data->tmesh.tensor_prods[i].nctrl_pts(j);
-
     // --- geometry control points ---
 
     // compute vectors of individual control point coordinates for the tensor product
     vector<vector<float>> ctrl_pts_coords(ndom_dims);
-    for (auto k = 0; k < ndom_dims; k++)
-        ctrl_pts_coords[k].resize(geom_nctrl_pts[k]);
-    size_t n    = 0;            // index into control points
-    size_t n0   = n;            // index into control points in current dimension
     for (auto t = 0; t < block->geometry.mfa_data->tmesh.tensor_prods.size(); t++)                      // tensor products
     {
         for (auto k = 0; k < ndom_dims; k++)                                                            // domain dimensions
         {
-            n0 = n;
             KnotIdx knot_min = block->geometry.mfa_data->tmesh.tensor_prods[t].knot_mins[k];
             if (knot_min)
                 knot_min -= (block->geometry.mfa_data->p(k) - 1);
@@ -104,10 +82,9 @@ void PrepRenderingData(
                 for (int l = 1; l < block->geometry.mfa_data->p(k) + 1; l++)
                     tsum += block->geometry.mfa_data->tmesh.all_knots[k][knot_min + j + l];
                 tsum /= float(block->geometry.mfa_data->p(k));
-                ctrl_pts_coords[k][n0++] = block->core_mins(k) + tsum * (block->core_maxs(k) - block->core_mins(k));
+                ctrl_pts_coords[k].push_back(block->core_mins(k) + tsum * (block->core_maxs(k) - block->core_mins(k)));
             }   // control points
         }   // domain dimensions
-        n = n0;
     }   // tensor products
 
     // form the tensor product of control points from the vectors of individual coordinates
@@ -152,21 +129,22 @@ void PrepRenderingData(
     vars_ctrl_data = new float*[nvars];
     for (size_t i = 0; i < nvars; i++)                              // science variables
     {
-        size_t nctrl_pts = 1;
-        for (auto k = 0; k < ndom_dims; k++)
-            nctrl_pts *= vars_nctrl_pts[i][k];
+        size_t nctrl_pts = 0;
+        for (auto t = 0; t < block->vars[i].mfa_data->tmesh.tensor_prods.size(); t++)                   // tensor products
+        {
+            size_t prod = 1;
+            for (auto k = 0; k < ndom_dims; k++)                                                        // domain dimensions
+                prod *= block->vars[i].mfa_data->tmesh.tensor_prods[t].nctrl_pts(k);
+            nctrl_pts += prod;
+        }
         vars_ctrl_data[i] = new float[nctrl_pts];
 
         // compute vectors of individual control point coordinates for the tensor product
         vector<vector<float>> ctrl_pts_coords(ndom_dims);
-        size_t n    = 0;            // index into control points
-        size_t n0   = n;            // index into control points in current dimension
         for (auto t = 0; t < block->vars[i].mfa_data->tmesh.tensor_prods.size(); t++)                   // tensor products
         {
             for (auto k = 0; k < ndom_dims; k++)                                                        // domain dimensions
             {
-                n0 = n;
-                ctrl_pts_coords[k].resize(vars_nctrl_pts[i][k]);
                 KnotIdx knot_min = block->vars[i].mfa_data->tmesh.tensor_prods[t].knot_mins[k];
                 if (knot_min)
                     knot_min -= (block->vars[i].mfa_data->p(k) - 1);
@@ -177,10 +155,10 @@ void PrepRenderingData(
                     for (auto l = 1; l < block->vars[i].mfa_data->p(k) + 1; l++)
                         tsum += block->vars[i].mfa_data->tmesh.all_knots[k][knot_min + j + l];
                     tsum /= float(block->vars[i].mfa_data->p(k));
-                    ctrl_pts_coords[k][n0++] = block->core_mins(k) + tsum * (block->core_maxs(k) - block->core_mins(k));
+
+                    ctrl_pts_coords[k].push_back(block->core_mins(k) + tsum * (block->core_maxs(k) - block->core_mins(k)));
                 }   // control points
             }   // domain dimensions
-            n = n0;
         }   // tensor products
 
         // form the tensor product of control points from the vectors of individual coordinates
@@ -273,8 +251,6 @@ void write_vtk_files(
     vector<int>                 nraw_pts;           // number of input points in each dim.
     vector<vec3d>               raw_pts;            // input raw data points (<= 3d)
     float**                     raw_data;           // input raw data values (4d)
-    vector <int>                geom_nctrl_pts;     // number of control pts in each dim of geometry
-    vector < vector <int> >     vars_nctrl_pts;     // number of control pts in each dim. of each science variable
     vector<vec3d>               geom_ctrl_pts;      // control points (<= 3d) in geometry
     vector < vector <vec3d> >   vars_ctrl_pts;      // control points (<= 3d) in science variables
     float**                     vars_ctrl_data;     // control point data values (4d)
@@ -287,8 +263,6 @@ void write_vtk_files(
                       raw_pts,
                       raw_data,
                       nvars,
-                      geom_nctrl_pts,
-                      vars_nctrl_pts,
                       geom_ctrl_pts,
                       vars_ctrl_pts,
                       vars_ctrl_data,
@@ -299,19 +273,9 @@ void write_vtk_files(
                       pt_dim);
 
     // pad dimensions up to 3
-    dom_dim = geom_nctrl_pts.size();
+    dom_dim = b->dom_dim;
     for (auto i = 0; i < 3 - dom_dim; i++)
-    {
-        geom_nctrl_pts.push_back(1);
         nraw_pts.push_back(1);
-    }
-
-    for (size_t j = 0; j < nvars; j++)
-    {
-        dom_dim = vars_nctrl_pts[j].size();
-        for (auto i = 0; i < 3 - dom_dim; i++)
-            vars_nctrl_pts[j].push_back(1);
-    }
 
     // copy error as a new variable (z dimension, or maybe magnitude?)
     vector<float> errm(err_pts.size());
@@ -336,14 +300,13 @@ void write_vtk_files(
     // write geometry control points
     char filename[256];
     sprintf(filename, "geom_control_points_gid_%d.vtk", cp.gid());
-    write_curvilinear_mesh(
+    write_point_mesh(
             /* const char *filename */                      filename,
             /* int useBinary */                             0,
-            /* int *dims */                                 &geom_nctrl_pts[0],
+            /* int npts */                                  geom_ctrl_pts.size(),
             /* float *pts */                                &(geom_ctrl_pts[0].x),
             /* int nvars */                                 0,
             /* int *vardim */                               NULL,
-            /* int *centering */                            NULL,
             /* const char * const *varnames */              NULL,
             /* float **vars */                              NULL);
 
@@ -351,14 +314,13 @@ void write_vtk_files(
     for (auto i = 0; i < nvars; i++)
     {
         sprintf(filename, "var%d_control_points_gid_%d.vtk", i, cp.gid());
-        write_curvilinear_mesh(
+        write_point_mesh(
             /* const char *filename */                      filename,
             /* int useBinary */                             0,
-            /* int *dims */                                 &vars_nctrl_pts[i][0],
+            /* int npts */                                  vars_ctrl_pts[i].size(),
             /* float *pts */                                &(vars_ctrl_pts[i][0].x),
             /* int nvars */                                 nvars,
             /* int *vardim */                               vardims,
-            /* int *centering */                            centerings,
             /* const char * const *varnames */              varnames,
             /* float **vars */                              vars_ctrl_data);
     }
@@ -583,8 +545,6 @@ int main(int argc, char ** argv)
     vector<int>                 nraw_pts;           // number of input points in each dim.
     vector<vec3d>               raw_pts;            // input raw data points (<= 3d)
     float**                     raw_data;           // input raw data values (4d)
-    vector <int>                geom_nctrl_pts;     // number of control pts in each dim of geometry
-    vector < vector <int> >     vars_nctrl_pts;     // number of control pts in each dim. of each science variable
     vector<vec3d>               geom_ctrl_pts;      // control points (<= 3d) in geometry
     vector < vector <vec3d> >   vars_ctrl_pts;      // control points (<= 3d) in science variables
     float**                     vars_ctrl_data;     // control point data values (4d)
