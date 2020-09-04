@@ -1468,7 +1468,7 @@ template <typename T>                        // float or double
             // TODO: experimenting with the difference between iterative and linear least squares
             if (local)
 #ifdef MFA_ITERATIVE_SOLVE
-//                 LocalSolve();
+                LocalSolve();
 #else
                 EncodeTensor(mfa_data.tmesh.tensor_prods.back(), true);
 #endif

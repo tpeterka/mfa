@@ -224,7 +224,7 @@ namespace mfa
                         span[k] = mfa_data.FindSpan(k, param(k), nctrl_pts(k));
 
                         // debug: hard code span
-                        span[k] = 5;
+//                         span[k] = 5;
 
                         // span should never be the last knot because of the repeated knots at end
                         assert(span[k] < mfa_data.tmesh.all_knots[k].size() - 1);
@@ -385,8 +385,8 @@ namespace mfa
 //                     fprintf(stderr, "FirstErrorSpan: span[0] = %lu found parent_tensor_idx = %d\n", span[0], parent_tensor_idx);
 
                     // debug: hard code span
-                    for (auto k = 0; k < mfa.dom_dim; k++)
-                        span[k] = 5;
+//                     for (auto k = 0; k < mfa.dom_dim; k++)
+//                         span[k] = 5;
 
                     // check if there are sufficient constraints for the local solve, or we need to revert to global solve
                     for (auto k = 0; k < mfa.dom_dim; k++)

@@ -148,14 +148,19 @@ void PrepRenderingData(
                 KnotIdx knot_min = block->vars[i].mfa_data->tmesh.tensor_prods[t].knot_mins[k];
                 if (knot_min)
                     knot_min -= (block->vars[i].mfa_data->p(k) - 1);
+                int skip    = 0;        // number of knots at a deeper level that should be skipped
                 for (auto j = 0; j < block->vars[i].mfa_data->tmesh.tensor_prods[t].nctrl_pts(k); j++)  // control points
                 {
-                    float tsum = 0.0;
-                    // TODO: skip knots in the loop below that are at a deeper level than the tensor
+                    float tsum  = 0.0;
                     for (auto l = 1; l < block->vars[i].mfa_data->p(k) + 1; l++)
-                        tsum += block->vars[i].mfa_data->tmesh.all_knots[k][knot_min + j + l];
+                    {
+                        // skip knots at a deeper level than the tensor
+                        while (block->vars[i].mfa_data->tmesh.all_knot_levels[k][knot_min + j + l + skip] >
+                                block->vars[i].mfa_data->tmesh.tensor_prods[t].level)
+                            skip++;
+                        tsum += block->vars[i].mfa_data->tmesh.all_knots[k][knot_min + j + l + skip];
+                    }
                     tsum /= float(block->vars[i].mfa_data->p(k));
-
                     ctrl_pts_coords[k].push_back(block->core_mins(k) + tsum * (block->core_maxs(k) - block->core_mins(k)));
                 }   // control points
             }   // domain dimensions

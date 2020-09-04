@@ -423,13 +423,20 @@ struct BlockBase
         fprintf(stderr, "gid = %d\n", cp.gid());
 //         cerr << "domain\n" << domain << endl;
 
-        VectorXi tot_nctrl_pts = VectorXi::Zero(geometry.mfa_data->dom_dim);
+        VectorXi tot_nctrl_pts_dim = VectorXi::Zero(geometry.mfa_data->dom_dim);        // total num. ctrl. pts. per dim.
+        size_t tot_nctrl_pts = 0;                                                       // total number of control points
 
         // geometry
         cerr << "\n------- geometry model -------" << endl;
         for (auto j = 0; j < geometry.mfa_data->tmesh.tensor_prods.size(); j++)
-            tot_nctrl_pts += geometry.mfa_data->tmesh.tensor_prods[j].nctrl_pts;
-        cerr << "# output ctrl pts     = [ " << tot_nctrl_pts.transpose() << " ]" << endl;
+        {
+            tot_nctrl_pts_dim += geometry.mfa_data->tmesh.tensor_prods[j].nctrl_pts;
+            tot_nctrl_pts += geometry.mfa_data->tmesh.tensor_prods[j].nctrl_pts.prod();
+        }
+        // print number of control points per dimension only if there is one tensor
+        if (geometry.mfa_data->tmesh.tensor_prods.size() == 1)
+            cerr << "# output ctrl pts     = [ " << tot_nctrl_pts_dim.transpose() << " ]" << endl;
+        cerr << "tot # output ctrl pts = " << tot_nctrl_pts << endl;
 
         //  debug: print control points and weights
         //         print_ctrl_weights(geometry.mfa_data->tmesh);
@@ -451,10 +458,17 @@ struct BlockBase
         {
             T range_extent = domain.col(dom_dim + i).maxCoeff() - domain.col(dom_dim + i).minCoeff();
             cerr << "\n---------- var " << i << " ----------" << endl;
-            tot_nctrl_pts = VectorXi::Zero(vars[i].mfa_data->dom_dim);
+            tot_nctrl_pts_dim   = VectorXi::Zero(vars[i].mfa_data->dom_dim);
+            tot_nctrl_pts       = 0;
             for (auto j = 0; j < vars[i].mfa_data->tmesh.tensor_prods.size(); j++)
-                tot_nctrl_pts += vars[i].mfa_data->tmesh.tensor_prods[j].nctrl_pts;
-            cerr << "# ouput ctrl pts      = [ " << tot_nctrl_pts.transpose() << " ]" << endl;
+            {
+                tot_nctrl_pts_dim   += vars[i].mfa_data->tmesh.tensor_prods[j].nctrl_pts;
+                tot_nctrl_pts       += vars[i].mfa_data->tmesh.tensor_prods[j].nctrl_pts.prod();
+            }
+            // print number of control points per dimension only if there is one tensor
+            if (vars[i].mfa_data->tmesh.tensor_prods.size() == 1)
+                cerr << "# ouput ctrl pts      = [ " << tot_nctrl_pts_dim.transpose() << " ]" << endl;
+            cerr << "tot # output ctrl pts = " << tot_nctrl_pts << endl;
 
             //  debug: print control points and weights
             //             print_ctrl_weights(vars[i].mfa_data->tmesh);
@@ -939,6 +953,8 @@ namespace mfa
                 diy::save(bb, t.knot_mins);
             for (TensorProduct<T>& t: b->geometry.mfa_data->tmesh.tensor_prods)
                 diy::save(bb, t.knot_maxs);
+            for (TensorProduct<T>& t: b->geometry.mfa_data->tmesh.tensor_prods)
+                diy::save(bb, t.level);
             diy::save(bb, b->geometry.mfa_data->tmesh.all_knots);
             diy::save(bb, b->geometry.mfa_data->tmesh.all_knot_levels);
 
@@ -958,6 +974,8 @@ namespace mfa
                     diy::save(bb, t.knot_mins);
                 for (TensorProduct<T>& t: b->vars[i].mfa_data->tmesh.tensor_prods)
                     diy::save(bb, t.knot_maxs);
+                for (TensorProduct<T>& t: b->vars[i].mfa_data->tmesh.tensor_prods)
+                    diy::save(bb, t.level);
                 diy::save(bb, b->vars[i].mfa_data->tmesh.all_knots);
                 diy::save(bb, b->vars[i].mfa_data->tmesh.all_knot_levels);
             }
@@ -1004,6 +1022,8 @@ namespace mfa
                 diy::load(bb, t.knot_mins);
             for (TensorProduct<T>& t: b->geometry.mfa_data->tmesh.tensor_prods)
                 diy::load(bb, t.knot_maxs);
+            for (TensorProduct<T>& t: b->geometry.mfa_data->tmesh.tensor_prods)
+                diy::load(bb, t.level);
             diy::load(bb, b->geometry.mfa_data->tmesh.all_knots);
             diy::load(bb, b->geometry.mfa_data->tmesh.all_knot_levels);
 
@@ -1026,6 +1046,8 @@ namespace mfa
                     diy::load(bb, t.knot_mins);
                 for (TensorProduct<T>& t: b->vars[i].mfa_data->tmesh.tensor_prods)
                     diy::load(bb, t.knot_maxs);
+                for (TensorProduct<T>& t: b->vars[i].mfa_data->tmesh.tensor_prods)
+                    diy::load(bb, t.level);
                 diy::load(bb, b->vars[i].mfa_data->tmesh.all_knots);
                 diy::load(bb, b->vars[i].mfa_data->tmesh.all_knot_levels);
             }
