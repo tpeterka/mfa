@@ -385,7 +385,8 @@ namespace mfa
 //                     fprintf(stderr, "FirstErrorSpan: span[0] = %lu found parent_tensor_idx = %d\n", span[0], parent_tensor_idx);
 
                     // debug: hard code span
-                    span[0] = 5;
+                    for (auto k = 0; k < mfa.dom_dim; k++)
+                        span[k] = 5;
 
                     // check if there are sufficient constraints for the local solve, or we need to revert to global solve
                     for (auto k = 0; k < mfa.dom_dim; k++)

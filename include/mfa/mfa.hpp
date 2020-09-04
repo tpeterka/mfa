@@ -29,6 +29,12 @@
 // comment out the following line for original single tensor product version
 #define TMESH
 
+// comment out the following line for separable dimension solve
+// #define MFA_UNIFIED_DIMS
+
+// comment out the following line for linear least squares local solve
+#define MFA_ITERATIVE_SOLVE
+
 #include    <Eigen/Dense>
 #include    <vector>
 #include    <list>
@@ -108,10 +114,10 @@ namespace mfa
             Encoder<T> encoder(*this, mfa_data, domain, verbose);
 
             // experiment with separable, unified dimension encoding
-#if 0
-            encoder.Encode(t.nctrl_pts, t.ctrl_pts, t.weights, weighted);
-#else
+#ifdef MFA_UNIFIED_DIMS
             encoder.EncodeTensor(t, false, weighted);
+#else
+            encoder.Encode(t.nctrl_pts, t.ctrl_pts, t.weights, weighted);
 #endif
 
             // debug: try inserting a knot

@@ -262,8 +262,8 @@ template <typename T>                        // float or double
                 MatrixX<T> NtN  = mfa_data.N[k].transpose() * mfa_data.N[k];
 
                 // debug
-                cerr << "N[k]:\n" << mfa_data.N[k] << endl;
-                cerr << "NtN:\n" << NtN << endl;
+//                 cerr << "N[k]:\n" << mfa_data.N[k] << endl;
+//                 cerr << "NtN:\n" << NtN << endl;
 
 #ifdef MFA_TBB  // TBB version
 
@@ -342,10 +342,12 @@ template <typename T>                        // float or double
             vector<size_t> start_idxs(mfa_data.dom_dim);
             vector<size_t> end_idxs(mfa_data.dom_dim);
             mfa_data.tmesh.domain_pts(t, start_idxs, end_idxs);
+
             // TODO: start_idxs and end_idxs can be a lot tighter, although nothing changes if they are loose
             // debug: hard-code start and end idxs
-            start_idxs[0] = 7;
-            end_idxs[0] = 15;
+//             start_idxs[0] = 7;
+//             end_idxs[0] = 15;
+
             VectorXi ndom_pts(mfa_data.dom_dim);
             for (auto k = 0; k < mfa_data.dom_dim; k++)
                 ndom_pts(k) = end_idxs[k] - start_idxs[k] + 1;
@@ -859,8 +861,8 @@ template <typename T>                        // float or double
 #endif
 
             // debug
-            cerr << "Rk:\n" << Rk << endl;
-            cerr << "R:\n" << R << endl;
+//             cerr << "Rk:\n" << Rk << endl;
+//             cerr << "R:\n" << R << endl;
         }
 
 
@@ -1438,7 +1440,7 @@ template <typename T>                        // float or double
                 knot_maxs[j] = inserted_knot_idxs[j][0] + mfa_data.p(j) / 2;
 
                 // debug: try making a bigger tensor with p + 1 control points
-                knot_maxs[j]++;             // correct for both even and odd degree
+//                 knot_maxs[j]++;             // correct for both even and odd degree
             }
 
             // debug
@@ -1464,11 +1466,10 @@ template <typename T>                        // float or double
 
             // local solve newly appended tensor
             // TODO: experimenting with the difference between iterative and linear least squares
-#if 0
             if (local)
-                LocalSolve();
+#ifdef MFA_ITERATIVE_SOLVE
+//                 LocalSolve();
 #else
-            if (local)
                 EncodeTensor(mfa_data.tmesh.tensor_prods.back(), true);
 #endif
 
@@ -1900,7 +1901,7 @@ template <typename T>                        // float or double
 //             fprintf(stderr, "constraints error: %e\n", cons_error);
             T cons_weight = 1.0e8;                                          // multiplying by large weight forces constraints to be satisfied 1e8 was Youssef's factor when interior not 0'd
             tot_error = lsq_error + cons_weight * cons_error;
-//             fprintf(stderr, "total error (lsq_error + weight * cons_error = %e\n", tot_error);
+            fprintf(stderr, "niters = %lu total error (lsq_error + weight * cons_error = %e\n", niters, tot_error);
         }
         return tot_error;
     }
