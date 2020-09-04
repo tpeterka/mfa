@@ -334,13 +334,19 @@ namespace mfa
                         anchor[j] = vol_iterator.idx_dim(j) + t.knot_mins[j];       // add knot_mins to get from local (in this tensor) to global (in the t-mesh) anchor
                         if (t.knot_mins[j] == 0)
                             anchor[j] += (mfa_data.p(j) + 1) / 2;                   // first control point has anchor floor((p + 1) / 2)
+                        // check for any knots at a higher level of refinement that would add to the anchor index (anchor is global over all knots)
+                        for (auto i = t.knot_mins[j]; i <= t.knot_maxs[j]; i++)
+                        {
+                            if (mfa_data.tmesh.all_knot_levels[j][i] > t.level && anchor[j] >= i)
+                                anchor[j]++;
+                        }
                     }
 
                     // skip odd degree duplicated control points, indicated by invalid weight
                     if (t.weights(vol_iterator.cur_iter()) == MFA_NAW)
                     {
                         // debug
-//                         cerr << "skipping ctrl pt " << t.ctrl_pts.row(vol_iterator.cur_iter()) << endl;
+                        cerr << "skipping ctrl pt " << t.ctrl_pts.row(vol_iterator.cur_iter()) << endl;
 
                         vol_iterator.incr_iter();
                         continue;
@@ -359,20 +365,23 @@ namespace mfa
                             local_knots[n] = mfa_data.tmesh.all_knots[i][local_knot_idxs[i][n]];
 
                         // debug: print local knot idxs
-//                         fprintf(stderr, "tensor = %d iter = %ld anchor[0] = %ld local knot idxs = [", k, vol_iterator.cur_iter(), anchor[0]);
+//                         fprintf(stderr, "tensor = %d iter = %ld anchor[%d] = %ld local knot idxs = [", k, vol_iterator.cur_iter(), i, anchor[i]);
 //                         for (auto j = 0; j < local_knot_idxs[i].size(); j++)
 //                             fprintf(stderr, "%ld ", local_knot_idxs[i][j]);
 //                         fprintf(stderr, "]\n");
 
                         // debug
-//                         cerr << "OneBasisFun: " << mfa_data.OneBasisFun(i, param(i), local_knots) << endl;
+//                         cerr << "OneBasisFun[dim " << i << " ]: " << mfa_data.OneBasisFun(i, param(i), local_knots) << endl;
 
                         B *= mfa_data.OneBasisFun(i, param(i), local_knots);
                     }
-
                     // compute the point
                     out_pt += B * t.ctrl_pts.row(vol_iterator.cur_iter()) * t.weights(vol_iterator.cur_iter());
+
                     B_sum += B * t.weights(vol_iterator.cur_iter());
+                    // debug
+//                     cerr << "Tensor: " << k << " CtrlPt: " << vol_iterator.cur_iter() << " B[all dims]: " << B << " B_sum: " << B_sum << endl;
+
 
                     vol_iterator.incr_iter();                                       // must increment volume iterator at the bottom of the loop
                 }       // volume iterator

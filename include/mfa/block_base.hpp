@@ -421,7 +421,7 @@ struct BlockBase
             bool                              error)       // error was computed
     {
         fprintf(stderr, "gid = %d\n", cp.gid());
-        //         cerr << "domain\n" << domain << endl;
+//         cerr << "domain\n" << domain << endl;
 
         VectorXi tot_nctrl_pts = VectorXi::Zero(geometry.mfa_data->dom_dim);
 
@@ -486,9 +486,9 @@ struct BlockBase
         cerr << "\n-----------------------------------" << endl;
 
         //  debug: print approximated points
-        //         cerr << approx.rows() << " approximated points\n" << approx << endl;
-        //         fprintf(stderr, "# input points        = %ld\n", domain.rows());
+//         cerr << approx.rows() << " approximated points\n" << approx << endl;
 
+        fprintf(stderr, "# input points        = %ld\n", domain.rows());
         fprintf(stderr, "compression ratio     = %.2f\n", compute_compression());
     }
 
