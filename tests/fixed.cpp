@@ -8,6 +8,7 @@
 //--------------------------------------------------------------
 
 #include <mfa/mfa.hpp>
+#include <mfa/util.hpp>
 
 #include <vector>
 #include <iostream>
@@ -25,8 +26,6 @@
 #include "block.hpp"
 
 using namespace std;
-
-typedef  diy::RegularDecomposer<Bounds<real_t>> Decomposer;
 
 int main(int argc, char** argv)
 {
@@ -53,7 +52,8 @@ int main(int argc, char** argv)
     real_t twist        = 0.0;                  // twist (waviness) of domain (0.0-1.0)
     int    error        = 1;                    // decode all input points and check error (bool 0 or 1)
     string infile;                              // input file name
-    bool   help;                                // show help
+    bool   help         = false;                // show help
+    int    resolutionGrid = 0;
 
     // get command line arguments
     opts::Options ops;
@@ -69,6 +69,8 @@ int main(int argc, char** argv)
     ops >> opts::Option('r', "rotate",      rot,        " rotation angle of domain in degrees");
     ops >> opts::Option('t', "twist",       twist,      " twist (waviness) of domain (0.0-1.0)");
     ops >> opts::Option('f', "infile",      infile,     " input file name");
+    ops >> opts::Option('h', "help",        help,       " show help");
+    ops >> opts::Option('u', "resolution",  resolutionGrid,    " resolution for grid test ");
 
     if (!ops.parse(argc, argv) || help)
     {
@@ -126,7 +128,7 @@ int main(int argc, char** argv)
         dom_bounds.min[i] = 0.0;
         dom_bounds.max[i] = 1.0;
     }
-    Decomposer decomposer(dom_dim, dom_bounds, tot_blocks);
+    Decomposer<real_t> decomposer(dom_dim, dom_bounds, tot_blocks);
     decomposer.decompose(world.rank(),
                          assigner,
                          [&](int gid, const Bounds<real_t>& core, const Bounds<real_t>& bounds, const Bounds<real_t>& domain, const RCLink<real_t>& link)
@@ -290,4 +292,44 @@ int main(int argc, char** argv)
         abort();
     }
 
+    if (resolutionGrid > 0 && input == "sinc" && dom_dim == 2) {
+        // do an extra test for decode grid
+        VectorXi ndom_pts;
+        std::vector<int> counts;
+        ndom_pts.resize(2);
+        ndom_pts[0] = resolutionGrid;
+        ndom_pts[1] = resolutionGrid;
+        counts.push_back(resolutionGrid); counts.push_back(resolutionGrid);
+        master.foreach( [&](Block<real_t> *b, const diy::Master::ProxyWithLink &cp) {
+                    b->decode_core_ures(cp, counts); });
+        // now look at some values of the blend matrix
+
+        // b still points to the first block !! Block<real_t>* b    = static_cast<Block<real_t>*>(master.block(0));
+        MatrixX<real_t> result = b->blend;
+
+        // evaluate at 0,0 using decodeatpoint
+        VectorX<real_t> param(2); // dom dim is 2, initialize with 0
+        VectorX<real_t> var_cpt(1);
+        // loop over all points in the resulted grid, and compare with the DecodePt
+        // we have 2 dimensions, each direction has resolutionGrid points
+
+        mfa::VolIterator vol_it(ndom_pts);
+        while (!vol_it.done()) {
+            int jj = (int) vol_it.cur_iter();
+            for (auto ii = 0; ii < 2; ii++) {
+                int ix = vol_it.idx_dim(ii); // index along direction ii in grid
+                param[ii] = ix / (resolutionGrid - 1.);
+            }
+            b->mfa->DecodePt(*(b->vars[0].mfa_data), param, var_cpt);
+            // compare with our blend result
+            if (fabs(var_cpt(0) - result(jj, 2)) > 1.e-10) {
+                fprintf(stderr, " %e != %e , params: %f %f, ix: %d %d \n",
+                        var_cpt(0), result(jj, 2), param[0], param[1],
+                        vol_it.idx_dim(0), vol_it.idx_dim(1));
+                abort();
+            }
+            vol_it.incr_iter();
+        }
+
+    }
 }

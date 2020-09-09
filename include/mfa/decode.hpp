@@ -302,6 +302,126 @@ namespace mfa
 
 #ifdef TMESH
 
+        // decode at a regular grid using saved basis that is computed once by this function
+        // and then used to decode all the points in the grid
+        void DecodeGrid(MatrixX<T>&         result,         // output
+                        int                 min_dim,        // min dimension to decode
+                        int                 max_dim,        // max dimension to decode
+                        const VectorX<T>&   min_params,     // lower corner of decoding points
+                        const VectorX<T>&   max_params,     // upper corner of decoding points
+                        const VectorXi&     ndom_pts)       // number of points to decode in each direction
+        {
+            // precompute basis functions
+            vector<vector<T>>   params(mfa_data.dom_dim);   // params for points to be decoded
+            const VectorXi&     nctrl_pts = mfa_data.tmesh.tensor_prods[0].nctrl_pts;   // reference to control points (assume only one tensor)
+            vector<MatrixX<T>>  NN(mfa_data.dom_dim);       // basis functions for points to be decoded
+            for (int k = 0; k < mfa_data.dom_dim; k++)
+                NN[k] = MatrixX<T>::Zero(ndom_pts(k), nctrl_pts(k));
+
+            // compute params for points to be decoded
+            for (int k = 0; k < mfa_data.dom_dim; k++)
+            {
+                params[k].resize(ndom_pts(k));
+                T step = 0;
+                if (ndom_pts(k) > 1)
+                    step = (max_params(k) - min_params(k)) / (ndom_pts(k) - 1);
+                params[k][0] = min_params(k);
+                for (int i = 1; i < ndom_pts(k); i++)
+                {
+                    params[k][i] = min_params(k) + i * step;
+                    // make sure we are between 0 and 1 !!
+                    if (params[k][i] < 0)
+                        params[k][i] = 0.;
+                    if (params[k][i] > 1.0)
+                        params[k][i] = 1.0;
+                }
+            }
+
+            // compute basis functions for points to be decoded
+            for (int k = 0; k < mfa_data.dom_dim; k++)
+            {
+                for (int i = 0; i < NN[k].rows(); i++)
+                {
+                    int span = mfa_data.FindSpan(k, params[k][i], nctrl_pts(k));
+#ifndef TMESH       // original version for one tensor product
+
+                    mfa_data.OrigBasisFuns(k, params[k][i], span, NN[k], i);
+
+#else               // tmesh version
+
+                    // TODO: TBD
+
+#endif              // tmesh version
+                }
+            }
+
+            VectorXi    derivs;                             // do not use derivatives yet, pass size 0
+            VolIterator vol_it(ndom_pts);
+
+#ifdef MFA_SERIAL   // serial version
+
+            DecodeInfo<T>   decode_info(mfa_data, derivs);  // reusable decode point info for calling VolPt repeatedly
+            VectorX<T>      cpt(mfa_data.tmesh.tensor_prods[0].ctrl_pts.cols());                      // evaluated point
+            VectorX<T>      param(mfa_data.p.size());       // parameters for one point
+            VectorXi        ijk(mfa_data.dom_dim);          // multidim index in grid
+
+            while (!vol_it.done())
+            {
+                int j = (int) vol_it.cur_iter();
+                for (auto i = 0; i < mfa_data.dom_dim; i++)
+                {
+                    ijk[i] = vol_it.idx_dim(i);             // index along direction i in grid
+                    param(i) = params[i][ijk[i]];
+                }
+
+#ifndef TMESH       // original version for one tensor product
+
+                VolPt_saved_basis_grid(ijk, param, cpt, decode_info, mfa_data.tmesh.tensor_prods[0], NN);
+
+#else               // tmesh version
+
+                    // TODO: TBD
+
+#endif              // tmesh version
+
+                vol_it.incr_iter();
+                result.block(j, min_dim, 1, max_dim - min_dim + 1) = cpt.transpose();
+            }
+
+#endif              // serial version
+
+#ifdef MFA_TBB      // TBB version
+
+            // thread-local objects
+            // ref: https://www.threadingbuildingblocks.org/tutorial-intel-tbb-thread-local-storage
+            enumerable_thread_specific<DecodeInfo<T>>   thread_decode_info(mfa_data, derivs);
+            enumerable_thread_specific<VectorXi>        thread_ijk(mfa_data.dom_dim);              // multidim index in grid
+            enumerable_thread_specific<VectorX<T>>      thread_cpt(mfa_data.tmesh.tensor_prods[0].ctrl_pts.cols());                      // evaluated point
+            enumerable_thread_specific<VectorX<T>>      thread_param(mfa_data.p.size());           // parameters for one point
+
+            parallel_for (size_t(0), (size_t)vol_it.tot_iters(), [&] (size_t j)
+            {
+                vol_it.idx_ijk(j, thread_ijk.local());
+                for (auto i = 0; i < mfa_data.dom_dim; i++)
+                    thread_param.local()(i)    = params[i][thread_ijk.local()[i]];
+
+#ifndef TMESH   // original version for one tensor product
+
+                VolPt_saved_basis_grid(thread_ijk.local(), thread_param.local(), thread_cpt.local(), thread_decode_info.local(), mfa_data.tmesh.tensor_prods[0], NN);
+
+#else           // tmesh version
+
+                // TODO: TBD
+
+#endif          // tmesh version
+
+                result.block(j, min_dim, 1, max_dim - min_dim + 1) = thread_cpt.local().transpose();
+            });
+
+#endif      // TBB version
+
+        }
+
         // decode a point in the t-mesh using all the control points
         // TODO: unoptimized
         // TODO: computes product of all basis functions and anchors, even those that are 0
@@ -628,83 +748,6 @@ namespace mfa
 
         }
 
-        // DEPRECATED
-// #ifdef TMESH
-// 
-//         // compute a point from a NURBS n-d volume at a given parameter value
-//         // this version is used for tmesh
-//         // slower version for single points
-//         // for each dimension, takes custom p+1 basis functions, control points, and weights for just the one point being decoded
-//         // does not compute derivatives for now
-//         // algorithm 4.3, Piegl & Tiller (P&T) p.134
-//         void VolPt(
-//                 const VectorX<T>&           param,      // parameter value in each dim. of desired point
-//                 VectorX<T>&                 out_pt,     // (output) point, allocated by caller
-//                 const vector<MatrixX<T>>&   N,          // p+1 basis functions in each dimension
-//                 const MatrixX<T>&           ctrl_pts,   // p+1 control points per dimension, linearized
-//                 const VectorX<T>&           weights)    // p+1 weights per dimension, linearized
-//         {
-//             int last = ctrl_pts.cols() - 1;             // last coordinate of control point
-// 
-//             // init
-//             vector<VectorX<T>>  temp(mfa_data.dom_dim);         // temporary point in each dim.
-//             vector<int>         iter(mfa_data.dom_dim);         // iteration number in each dim., initialized to 0 by default
-//             VectorX<T>          ctrl_pt(last + 1);              // one control point
-//             VectorX<T>          temp_denom = VectorX<T>::Zero(mfa_data.dom_dim);     // temporary rational NURBS denominator in each dim
-// 
-//             // init
-//             for (size_t i = 0; i < mfa_data.dom_dim; i++)       // for all dims
-//                 temp[i]    = VectorX<T>::Zero(last + 1);
-// 
-//             // 1-d flattening all n-d nested loop computations
-//             for (int i = 0; i < tot_iters; i++)
-//             {
-//                 // always compute the point in the first dimension
-//                 ctrl_pt = ctrl_pts.row(i);
-//                 T w     = weights(i);
-// 
-//                 // in this simplified version with only p + 1 basis funcs. and the p + 1 ctrl pts. in each dim.,
-//                 // there is no adding the span or subtracting the degree
-// #ifdef WEIGH_ALL_DIMS                                           // weigh all dimensions
-//                 temp[0] += (N[0])(0, iter[0]) * ctrl_pt * w;
-// #else                                                           // weigh only range dimension
-//                 for (auto j = 0; j < last; j++)
-//                     (temp[0])(j) += (N[0])(0, iter[0]) * ctrl_pt(j);
-//                 (temp[0])(last) += (N[0])(0, iter[0]) * ctrl_pt(last) * w;
-// #endif
-// 
-//                 temp_denom(0) += w * N[0](0, iter[0]);
-//                 iter[0]++;
-// 
-//                 // for all dimensions except last, check if span is finished
-//                 for (size_t k = 0; k < mfa_data.dom_dim; k++)
-//                 {
-//                     if (k < mfa_data.dom_dim - 1 && iter[k] - 1 == mfa_data.p(k))
-//                     {
-//                         // compute point in next higher dimension and reset computation for current dim
-//                         temp[k + 1]        += (N[k + 1])(0, iter[k + 1]) * temp[k];
-//                         temp_denom(k + 1)  += temp_denom(k) * N[k + 1](0, iter[k + 1]);
-//                         temp_denom(k)       = 0.0;
-//                         temp[k]             = VectorX<T>::Zero(last + 1);
-//                         iter[k]             = 0;
-//                         iter[k + 1]++;
-//                     }
-//                 }
-//             }
-// 
-//             T denom = temp_denom(mfa_data.dom_dim - 1);         // rational denomoinator
-// 
-// #ifdef WEIGH_ALL_DIMS                                           // weigh all dimensions
-//             out_pt = temp[mfa_data.dom_dim - 1] / denom;
-// #else                                                           // weigh only range dimension
-//             out_pt   = temp[mfa_data.dom_dim - 1];
-//             out_pt(last) /= denom;
-// #endif
-// 
-//         }
-// 
-// #endif      // TMESH
-
         // compute a point from a NURBS n-d volume at a given parameter value
         // fastest version for multiple points, reuses saved basis functions
         // only values, no derivatives, because basis functions were not saved for derivatives
@@ -763,6 +806,81 @@ namespace mfa
                         // use prev_idx_dim because iterator was already incremented above
                         di.temp[k + 1]        += (mfa_data.N[k + 1])(ijk(k + 1), vol_iter.prev_idx_dim(k + 1) + di.span[k + 1] - mfa_data.p(k + 1)) * di.temp[k];
                         di.temp_denom(k + 1)  += di.temp_denom(k) * mfa_data.N[k + 1](ijk(k + 1), vol_iter.prev_idx_dim(k + 1) + di.span[k + 1] - mfa_data.p(k + 1));
+                        di.temp_denom(k)       = 0.0;
+                        di.temp[k].setZero();
+                    }
+                }
+            }
+
+            T denom = di.temp_denom(mfa_data.dom_dim - 1);                      // rational denominator
+
+#ifdef WEIGH_ALL_DIMS                                                           // weigh all dimensions
+            out_pt = di.temp[mfa_data.dom_dim - 1] / denom;
+#else                                                                           // weigh only range dimension
+            out_pt   = di.temp[mfa_data.dom_dim - 1];
+            out_pt(last) /= denom;
+#endif
+        }
+
+        // compute a point from a NURBS n-d volume at a given parameter value
+        // fastest version for multiple points, reuses computed basis functions
+        // only values, no derivatives, because basis functions were not saved for derivatives
+        // algorithm 4.3, Piegl & Tiller (P&T) p.134
+        void VolPt_saved_basis_grid(
+                const VectorXi&             ijk,        // ijk index of grid domain point being decoded
+                const VectorX<T>&           param,      // parameter value in each dim. of desired point
+                VectorX<T>&                 out_pt,     // (output) point, allocated by caller
+                DecodeInfo<T>&              di,         // reusable decode info allocated by caller (more efficient when calling VolPt multiple times)
+                const TensorProduct<T>&     tensor,     // tensor product to use for decoding
+                vector<MatrixX<T>>&         NN )        // precomputed basis functions at grid
+        {
+            int last = tensor.ctrl_pts.cols() - 1;
+
+            di.Reset_saved_basis(mfa_data);
+
+            // set up the volume iterator
+            VectorXi npts = mfa_data.p + VectorXi::Ones(mfa_data.dom_dim);      // local support is p + 1 in each dim.
+            VolIterator vol_iter(npts);                                         // for iterating in a flat loop over n dimensions
+
+            // linear index of first control point
+            di.ctrl_idx = 0;
+            for (int j = 0; j < mfa_data.dom_dim; j++)
+            {
+                di.span[j]    = mfa_data.FindSpan(j, param(j), tensor);
+                di.ctrl_idx += (di.span[j] - mfa_data.p(j) + ct(0, j)) * cs[j];
+            }
+            size_t start_ctrl_idx = di.ctrl_idx;
+
+            while (!vol_iter.done())
+            {
+                // always compute the point in the first dimension
+                di.ctrl_pt  = tensor.ctrl_pts.row(di.ctrl_idx);
+                T w         = tensor.weights(di.ctrl_idx);
+
+#ifdef WEIGH_ALL_DIMS                                                           // weigh all dimensions
+                di.temp[0] += (NN[0])(ijk(0), vol_iter.idx_dim(0) + di.span[0] - mfa_data.p(0)) * di.ctrl_pt * w;
+#else                                                                           // weigh only range dimension
+                for (auto j = 0; j < last; j++)
+                    (di.temp[0])(j) += (NN[0])(ijk(0), vol_iter.idx_dim(0) + di.span[0] - mfa_data.p(0)) * di.ctrl_pt(j);
+                (di.temp[0])(last) += (NN[0])(ijk(0), vol_iter.idx_dim(0) + di.span[0] - mfa_data.p(0)) * di.ctrl_pt(last) * w;
+#endif
+
+                di.temp_denom(0) += w * NN[0](ijk(0), vol_iter.idx_dim(0) + di.span[0] - mfa_data.p(0));
+
+                vol_iter.incr_iter();                                           // must call near bottom of loop, but before checking for done span below
+
+                // for all dimensions except last, check if span is finished
+                di.ctrl_idx = start_ctrl_idx;
+                for (size_t k = 0; k < mfa_data.dom_dim; k++)
+                {
+                    if (vol_iter.cur_iter() < vol_iter.tot_iters())
+                        di.ctrl_idx += ct(vol_iter.cur_iter(), k) * cs[k];      // ctrl_idx for the next iteration
+                    if (k < mfa_data.dom_dim - 1 && vol_iter.done(k))
+                    {
+                        // compute point in next higher dimension and reset computation for current dim
+                        // use prev_idx_dim because iterator was already incremented above
+                        di.temp[k + 1]        += (NN[k + 1])(ijk(k + 1), vol_iter.prev_idx_dim(k + 1) + di.span[k + 1] - mfa_data.p(k + 1)) * di.temp[k];
+                        di.temp_denom(k + 1)  += di.temp_denom(k) * NN[k + 1](ijk(k + 1), vol_iter.prev_idx_dim(k + 1) + di.span[k + 1] - mfa_data.p(k + 1));
                         di.temp_denom(k)       = 0.0;
                         di.temp[k].setZero();
                     }

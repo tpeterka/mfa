@@ -14,6 +14,7 @@
 #include    <diy/decomposition.hpp>
 #include    <diy/assigner.hpp>
 #include    <diy/io/block.hpp>
+#include    <diy/io/bov.hpp>
 #include    <diy/pick.hpp>
 
 #include    <stdio.h>
@@ -248,29 +249,29 @@ struct Block : public BlockBase<T>
             nghost_pts = floor((this->bounds_maxs(i) - this->core_maxs(i)) / d(i));
             ndom_pts(i) += nghost_pts;
             tot_ndom_pts *= ndom_pts(i);
+
+            // decide overlap in each direction; they should be symmetric for neighbors
+            // so if block a overlaps block b, block b overlaps a the same area
+            this->overlaps(i) = fabs(this->core_mins(i) - this->bounds_mins(i));
+            T m2 = fabs(this->bounds_maxs(i) - this->core_maxs(i));
+            if (m2 > this->overlaps(i))
+                this->overlaps(i) = m2;
         }
 
         this->domain.resize(tot_ndom_pts, this->pt_dim);
 
         // assign values to the domain (geometry)
-        vector<int> dom_idx(this->dom_dim);                   // current index of domain point in each dim, initialized to 0s
-        for (auto j = 0; j < tot_ndom_pts; j++)         // flattened loop over all the points in a domain in dimension dom_dim
+        mfa::VolIterator vol_it(ndom_pts);
+        // current index of domain point in each dim, initialized to 0s
+        // flattened loop over all the points in a domain
+        while (!vol_it.done())
         {
+            int j = (int)vol_it.cur_iter();
             // compute geometry coordinates of domain point
             for (auto i = 0; i < this->dom_dim; i++)
-                this->domain(j, i) = p0(i) + dom_idx[i] * d(i);
+                this->domain(j, i) = p0(i) + vol_it.idx_dim(i) * d(i);
 
-            dom_idx[0]++;
-
-            // for all dimensions except last, check for end of the line, part of flattened loop logic
-            for (auto k = 0; k < this->dom_dim - 1; k++)
-            {
-                if (dom_idx[k] == ndom_pts(k))
-                {
-                    dom_idx[k] = 0;
-                    dom_idx[k + 1]++;
-                }
-            }
+            vol_it.incr_iter();
         }
 
         // normal distribution for generating noise
@@ -355,6 +356,13 @@ struct Block : public BlockBase<T>
                 if (j == 0 || this->domain(j, 1) > this->bounds_maxs(1))
                     this->bounds_maxs(1) = this->domain(j, 1);
             }
+        }
+
+        // map_dir is used in blending discrete, but because we need to aggregate the discrete logic, we have to use
+        // it even for continuous bounds, so in analytical data
+        // this is used in s3d data because the actual domain dim is derived
+        for (int k = 0; k < this->dom_dim; k++) {
+            this->map_dir.push_back(k);
         }
 
         this->mfa = new mfa::MFA<T>(this->dom_dim, ndom_pts, this->domain);
@@ -1051,8 +1059,6 @@ struct Block : public BlockBase<T>
         for (auto i = 0; i < this->dom_dim; i++)
             tot_ndom_pts *= a->ndom_pts[i];
 
-        vector<int> dom_idx(this->dom_dim);                           // current index of domain point in each dim, initialized to 0s
-
         // steps in each dimension in paramater space and real space
         vector<T> dom_step_real(this->dom_dim);                       // spacing between domain points in real space
         vector<T> dom_step_param(this->dom_dim);                      // spacing between domain points in parameter space
@@ -1063,16 +1069,21 @@ struct Block : public BlockBase<T>
         }
 
         // flattened loop over all the points in a domain in dimension dom_dim
+        VectorXi ndom_pts(this->dom_dim);
+        for (int i = 0; i < this->dom_dim; i++)
+            ndom_pts(i) = a->ndom_pts[i];
+        mfa::VolIterator vol_it(ndom_pts);
         fmt::print(stderr, "Testing analytical error norms over a total of {} points\n", tot_ndom_pts);
-        for (auto j = 0; j < tot_ndom_pts; j++)
+        while(!vol_it.done())
         {
+            int j= vol_it.cur_iter();
             // compute current point in real and parameter space
             VectorX<T> dom_pt_real(this->dom_dim);                // one domain point in real space
             VectorX<T> dom_pt_param(this->dom_dim);               // one domain point in parameter space
             for (auto i = 0; i < this->dom_dim; i++)
             {
-                dom_pt_real(i) = a->min[i] + dom_idx[i] * dom_step_real[i];
-                dom_pt_param(i) = dom_idx[i] * dom_step_param[i];
+                dom_pt_real(i) = a->min[i] + vol_it.idx_dim(i) * dom_step_real[i];
+                dom_pt_param(i) = vol_it.idx_dim(i) * dom_step_param[i];
             }
 
             // evaluate function at dom_pt_real
@@ -1130,22 +1141,256 @@ struct Block : public BlockBase<T>
 
 //                 fmt::print(stderr, "x={} y={} true_val={} test_val={}\n", test_pt.x, test_pt.y, true_val, test_val);
             }
-
-            dom_idx[0]++;
-
-            // for all dimensions except last, check if pt_idx is at the end, part of flattened loop logic
-            for (auto k = 0; k < this->dom_dim - 1; k++)
-            {
-                if (dom_idx[k] == a->ndom_pts[k])
-                {
-                    dom_idx[k] = 0;
-                    dom_idx[k + 1]++;
-                }
-            }
+            vol_it.incr_iter();
         }                                                   // for all points in flattened loop
 
         L1    = sum_errs;
         L2    = sqrt(sum_sq_errs);
         Linf  = max_err;
     }
+
+
+    static
+    void readfile(                          // add the block to the decomposition
+            int gid,                        // block global id
+            const Bounds<int> &core,        // block bounds without any ghost added
+            const Bounds<int> &bounds,      // block bounds including any ghost region added
+            const RCLink<int> &link,        // neighborhood
+            diy::Master &master,            // diy master
+            std::vector<int> &mapDimension, // domain dimensionality map;
+            std::string &s3dfile,           // input file with data
+            std::vector<unsigned> &shape,   // important, shape of the block
+            int chunk,                      // vector dimension for data input (usually 2 or 3)
+            int transpose,                  // diy is MPI_C_ORDER always; offer option to transpose
+            DomainArgs &args)               // input args
+    {
+        Block<T> *b = new Block<T>;
+        RCLink<int> *l = new RCLink<int>(link);
+        diy::Master & m = const_cast<diy::Master&>(master);
+        // write core and bounds only for first block
+        if (0 == gid) {
+            std::cout << "block:" << gid << "\n  core \t\t  bounds \n";
+            for (int j = 0; j < 3; j++)
+                std::cout << " " << core.min[j] << ":" << core.max[j] << "\t\t"
+                    << " " << bounds.min[j] << ":" << bounds.max[j] << "\n";
+        }
+        m.add(gid, b, l);
+
+        b->dom_dim = (int) mapDimension.size();
+        diy::mpi::io::file in(master.communicator(), s3dfile, diy::mpi::io::file::rdonly);
+        diy::io::BOV reader(in, shape);
+
+        int size_data_read = 1;
+        for (int j = 0; j < 3; j++)  // we know how the s3d data is organized
+            size_data_read *= (bounds.max[j] - bounds.min[j] + 1);
+        std::vector<float> data;
+        data.resize(size_data_read * chunk);
+        // read bounds will be multiplied by 3 in first direction
+        Bounds<int> extBounds = bounds;
+        extBounds.min[2] *= chunk; // multiply by 3
+        extBounds.max[2] *= chunk; // multiply by 3
+        extBounds.max[2] += chunk - 1; // the last coordinate is larger!!
+        bool collective = true; //
+        reader.read(extBounds, &data[0], collective);
+
+        b->geometry.min_dim = 0;
+        b->geometry.max_dim = b->dom_dim - 1;
+        int nvars = 1;
+        b->vars.resize(nvars);
+        b->max_errs.resize(nvars);
+        b->sum_sq_errs.resize(nvars);
+        b->vars[0].min_dim = b->dom_dim;
+        b->vars[0].max_dim = b->vars[0].min_dim + 1;
+        b->bounds_mins.resize(b->dom_dim);
+        b->bounds_maxs.resize(b->dom_dim);
+        VectorXi ndom_pts;  // this will be local now, and used in def of mfa
+        ndom_pts.resize(mapDimension.size());
+        int tot_ndom_pts = 1;
+        for (size_t j = 0; j < mapDimension.size(); j++) {
+            int dir = mapDimension[j];
+            int size_in_dir = -bounds.min[dir] + bounds.max[dir] + 1;
+            tot_ndom_pts *= size_in_dir;
+            ndom_pts(j) = size_in_dir;
+            if (0 == gid)
+                cerr << "  dimension " << j << " " << size_in_dir << endl;
+        }
+        b->domain.resize(tot_ndom_pts, mapDimension.size() + 1);
+        if (0 == gid)
+            cerr << " total local size : " << tot_ndom_pts << endl;
+        if (b->dom_dim == 1) // 1d problem, the dimension would be x direction
+        {
+            int dir0 = mapDimension[0];
+            b->map_dir.push_back(dir0); // only one dimension, rest are not varying
+            for (int i = 0; i < tot_ndom_pts; i++) {
+                b->domain(i, 0) = bounds.min[dir0] + i;
+                int idx = 3 * i;
+                float val = 0;
+                for (int k = 0; k < chunk; k++)
+                    val += data[idx + k] * data[idx + k];
+                val = sqrt(val);
+                b->domain(i, 1) = val;
+            }
+            args.vars_nctrl_pts[0][0] = args.vars_nctrl_pts[0][dir0]; // only one direction that matters
+        } else if (b->dom_dim == 2) // 2d problem, second direction would be x, first would be y
+        {
+            if (transpose) {
+                int n = 0;
+                int idx = 0;
+                int dir0 = mapDimension[0]; // so now y would vary to 704 in 2d 1 block similar case for s3d (transpose)
+                int dir1 = mapDimension[1];
+                // we do not transpose anymore
+                b->map_dir.push_back(dir0);
+                b->map_dir.push_back(dir1);
+                for (int i = 0; i < ndom_pts(0); i++) {
+                    for (int j = 0; j < ndom_pts(1); j++) {
+                        n = j * ndom_pts(0) + i;
+                        b->domain(n, 0) = bounds.min[dir0] + i; //
+                        b->domain(n, 1) = bounds.min[dir1] + j;
+                        float val = 0;
+                        for (int k = 0; k < chunk; k++)
+                            val += data[idx + k] * data[idx + k];
+                        val = sqrt(val);
+                        b->domain(n, 2) = val;
+                        idx += 3;
+                    }
+                }
+            } else {
+                // keep the order as Paraview, x would be the first that varies
+                // corresponds to original implementation, which needs to transpose dimensions
+                int n = 0;
+                int idx = 0;
+                int dir0 = mapDimension[1]; // so x would vary to 704 in 2d 1 block similar case
+                int dir1 = mapDimension[0];
+                int tmp = ndom_pts(0);
+                ndom_pts(0) = ndom_pts(1);
+                ndom_pts(1) = tmp;
+                b->map_dir.push_back(dir0);
+                b->map_dir.push_back(dir1);
+                for (int j = 0; j < ndom_pts(1); j++) {
+                    for (int i = 0; i < ndom_pts(0); i++) {
+                        b->domain(n, 1) = bounds.min[dir1] + j;
+                        b->domain(n, 0) = bounds.min[dir0] + i;
+                        float val = 0;
+                        for (int k = 0; k < chunk; k++)
+                            val += data[idx + k] * data[idx + k];
+                        b->domain(n, 2) = sqrt(val);
+                        n++;
+                        idx += 3;
+                    }
+                }
+            }
+        }
+
+        else if (b->dom_dim == 3) {
+            if (transpose) {
+                int n = 0;
+                int idx = 0;
+                b->map_dir.push_back(mapDimension[0]);
+                b->map_dir.push_back(mapDimension[1]);
+                b->map_dir.push_back(mapDimension[2]);
+                // last dimension would correspond to x, as in the 2d example
+                for (int i = 0; i < ndom_pts(0); i++)
+                    for (int j = 0; j < ndom_pts(1); j++)
+                        for (int k = 0; k < ndom_pts(2); k++) {
+                            // max is ndom_pts(0)*ndom_pts(1)*(ndom_pts(2)-1)+ ndom_pts(0)*(ndom_pts(1)-1)+(ndom_pts(0)-1)
+                            //  = ndom_pts(0)*ndom_pts(1)*ndom_pts(2) -ndom_pts(0)*ndom_pts(1) + ndom_pts(0)*ndom_pts(1)
+                            //             -ndom_pts(0) + ndom_pts(0)-1 =   ndom_pts(0)*ndom_pts(1)*ndom_pts(2) - 1;
+                            n = k * ndom_pts(0) * ndom_pts(1) + j * ndom_pts(0)
+                                + i;
+                            b->domain(n, 0) = bounds.min[0] + i;
+                            b->domain(n, 1) = bounds.min[1] + j;
+                            b->domain(n, 2) = bounds.min[2] + k;
+                            float val = 0;
+                            for (int k = 0; k < chunk; k++)
+                                val += data[idx + k] * data[idx + k];
+                            val = sqrt(val);
+                            b->domain(n, 3) = val;
+                            idx += 3;
+                        }
+            } else // visualization order
+            {
+                int n = 0;
+                int idx = 0;
+                b->map_dir.push_back(mapDimension[2]); // reverse
+                b->map_dir.push_back(mapDimension[1]);
+                b->map_dir.push_back(mapDimension[0]);
+                int tmp = ndom_pts(2);
+                ndom_pts(2) = ndom_pts(0);
+                ndom_pts(0) = tmp; // reverse counting
+                // last dimension would correspond to x, as in the 2d example
+                for (int k = 0; k < ndom_pts(2); k++)
+                    for (int j = 0; j < ndom_pts(1); j++)
+                        for (int i = 0; i < ndom_pts(0); i++) {
+                            b->domain(n, 2) = bounds.min[0] + k;
+                            b->domain(n, 1) = bounds.min[1] + j;
+                            b->domain(n, 0) = bounds.min[2] + i; // this now corresponds to x
+                            float val = 0;
+                            for (int k = 0; k < chunk; k++)
+                                val += data[idx + k] * data[idx + k];
+                            b->domain(n, 3) = sqrt(val);
+                            n++;
+                            idx += 3;
+                        }
+            }
+        }
+        b->core_mins.resize(b->dom_dim);
+        b->core_maxs.resize(b->dom_dim);
+        b->overlaps.resize(b->dom_dim);
+        for (int i = 0; i < b->dom_dim; i++) {
+            //int index = b->dom_dim-1-i;
+            int index = i;
+            if (!transpose)
+                index = b->dom_dim - 1 - i;
+            b->bounds_mins(i) = bounds.min[mapDimension[index]];
+            b->bounds_maxs(i) = bounds.max[mapDimension[index]];
+            b->core_mins(i) = core.min[mapDimension[index]];
+            b->core_maxs(i) = core.max[mapDimension[index]];
+            // decide overlap in each direction; they should be symmetric for neighbors
+            // so if block a overlaps block b, block b overlaps a the same area
+            b->overlaps(i) = fabs(b->core_mins(i) - b->bounds_mins(i));
+            T m2 = fabs(b->bounds_maxs(i) - b->core_maxs(i));
+            if (m2 > b->overlaps(i))
+                b->overlaps(i) = m2;
+        }
+
+        b->mfa = new mfa::MFA<T>(b->dom_dim, ndom_pts, b->domain);
+    }
+
 };
+
+
+void max_err_cb(Block<real_t> *b,                  // local block
+        const diy::ReduceProxy &rp,                // communication proxy
+        const diy::RegularMergePartners &partners) // partners of the current block
+{
+    unsigned round = rp.round();    // current round number
+
+    // step 1: dequeue and merge
+    for (int i = 0; i < rp.in_link().size(); ++i) {
+        int nbr_gid = rp.in_link().target(i).gid;
+        if (nbr_gid == rp.gid()) {
+
+            continue;
+        }
+
+        std::vector<real_t> in_vals;
+        rp.dequeue(nbr_gid, in_vals);
+
+        for (size_t j = 0; j < in_vals.size() / 2; ++j) {
+            if (b->max_errs_reduce[2 * j] < in_vals[2 * j]) {
+                b->max_errs_reduce[2 * j] = in_vals[2 * j];
+                b->max_errs_reduce[2 * j + 1] = in_vals[2 * j + 1]; // received from this block
+            }
+        }
+    }
+
+    // step 2: enqueue
+    for (int i = 0; i < rp.out_link().size(); ++i) // redundant since size should equal to 1
+    {
+        // only send to root of group, but not self
+        if (rp.out_link().target(i).gid != rp.gid()) {
+            rp.enqueue(rp.out_link().target(i), b->max_errs_reduce);
+        } //else
+        //fmt::print(stderr, "[{}:{}] Skipping sending to self\n", rp.gid(), round);
+    }
+}

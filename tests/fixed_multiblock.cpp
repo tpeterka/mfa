@@ -26,8 +26,6 @@
 
 using namespace std;
 
-typedef  diy::RegularDecomposer<Bounds<real_t>> Decomposer;
-
 int main(int argc, char** argv)
 {
     // initialize MPI
@@ -130,7 +128,7 @@ int main(int argc, char** argv)
     }
 
     // decompose the domain into blocks
-    Decomposer decomposer(dom_dim, dom_bounds, tot_blocks);
+    Decomposer<real_t> decomposer(dom_dim, dom_bounds, tot_blocks);
     decomposer.decompose(world.rank(),
                          assigner,
                          [&](int gid, const Bounds<real_t>& core, const Bounds<real_t>& bounds, const Bounds<real_t>& domain, const RCLink<real_t>& link)
@@ -211,17 +209,6 @@ int main(int argc, char** argv)
                 { b->range_error(cp, 0, true, true); });
 #endif
         decode_time = MPI_Wtime() - decode_time;
-    }
-
-    // exchange ghost zone of decoded blocks
-    // assumes all points have been decoded already
-    // TODO: don't assume decoded points and decode inside the send_ghost_pts function
-    if (ghost > 0.0)           // 0 signifies skip the exchange, need some overlap to compute blend
-    {
-        master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-                { b->send_ghost_pts(cp, decomposer); });
-        master.exchange();
-        master.foreach(&Block<real_t>::recv_ghost_pts);
     }
 
     // print block results

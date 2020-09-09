@@ -26,8 +26,6 @@
 
 using namespace std;
 
-typedef  diy::RegularDecomposer<Bounds<real_t>> Decomposer;
-
 int main(int argc, char** argv)
 {
     diy::create_logger("trace");
@@ -195,7 +193,7 @@ int main(int argc, char** argv)
         dom_bounds.min[i] = 0.0;
         dom_bounds.max[i] = 1.0;
     }
-    Decomposer decomposer(dom_dim, dom_bounds, tot_blocks);
+    Decomposer<real_t> decomposer(dom_dim, dom_bounds, tot_blocks);
     decomposer.decompose(world.rank(),
                          assigner,
                          [&](int gid, const Bounds<real_t>& core, const Bounds<real_t>& bounds, const Bounds<real_t>& domain, const RCLink<real_t>& link)

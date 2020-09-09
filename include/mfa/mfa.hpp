@@ -187,6 +187,20 @@ namespace mfa
             decoder.VolPt(param, cpt, mfa_data.tmesh.tensor_prods[0]);
         }
 
+        // method to decode at grid, in parameter space
+        void DecodeAtGrid(  const MFA_Data<T>&      mfa_data,               // mfa_data
+                            int                     min_dim,                // min index to decode
+                            int                     max_dim,                // max index to decode
+                            const VectorX<T>&       par_min,                // lower corner of domain in param space
+                            const VectorX<T>&       par_max,                // upper corner of domain in param space
+                            const VectorXi&         ndom_pts,              // number of points per direction
+                            MatrixX<T>&             result)                 // decoded result
+        {
+            int verbose = 0;
+            Decoder<T> decoder(*this, mfa_data, verbose);
+            decoder.DecodeGrid(result, min_dim, max_dim, par_min, par_max, ndom_pts);
+        }
+
         // compute the error (absolute value of coordinate-wise difference) of the mfa at a domain point
         // error is not normalized by the data range (absolute, not relative error)
         void AbsCoordError(

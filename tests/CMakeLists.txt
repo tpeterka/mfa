@@ -4,8 +4,14 @@ include_directories         (${CMAKE_SOURCE_DIR}/examples/convert)  # needed for
 add_executable              (fixed-test                             fixed.cpp)
 target_link_libraries       (fixed-test                             ${libraries})
 
+add_executable              (decode-grid-test                       decode_grid.cpp)
+target_link_libraries       (decode-grid-test                       ${libraries})
+
 add_executable              (fixed-multiblock-test                  fixed_multiblock.cpp)
 target_link_libraries       (fixed-multiblock-test                  ${libraries})
+
+add_executable              (fixed-s3d-blend                        s3d_blend_test.cpp)
+target_link_libraries       (fixed-s3d-blend                        ${libraries})
 
 add_executable              (adaptive-test                          adaptive.cpp)
 target_link_libraries       (adaptive-test                          ${libraries})
@@ -23,12 +29,20 @@ add_test                    (NAME fixed-sinc-2d-test
                              COMMAND fixed-test -i sinc -d 3 -m 2 -p 1 -q 5 -v 20 -w 0
                             )
 
+add_test                    (NAME fixed-sinc-2d-test-grid
+                             COMMAND fixed-test -i sinc -d 3 -m 2 -p 1 -q 5 -v 20 -w 0 -u 20 -u 20
+                            )
+
 add_test                    (NAME fixed-s3d-1d-test
                              COMMAND fixed-test -i s3d -d 2 -m 1 -p 1 -q 3 -w 0 -f ${s3d_infile}
                             )
 
 add_test                    (NAME fixed-s3d-2d-test
                              COMMAND fixed-test -i s3d -d 3 -m 2 -p 1 -q 3 -w 0 -f ${s3d_infile}
+                            )
+
+add_test                    (NAME decode-grid1
+                             COMMAND decode-grid-test -a 10 -b 0 -c 0 -r 10 -s 30 -t 25 -x 1 -y 1 -z 1 -v 6 -W -f ${s3d_infile} -u 20 -u 20 -u 20
                             )
 
 add_test                    (NAME differentiate-fixed-test
@@ -63,6 +77,31 @@ endforeach                  (p)
 add_test                    (NAME write-vtk-multiblock-fixed-test
                              COMMAND write-vtk-test approx.out
                             )
+
+foreach                     (p 1 2 3 6)
+    add_test                (NAME s3d-blend-p${p}
+                            COMMAND ${MPIEXEC} -np ${p} $<TARGET_FILE:fixed-s3d-blend> -a 10 -b 0 -c 0 -r 10 -s 100 -t 60 -x 1 -y 2 -z 3 -v 6 -u 30 -u 30 -u 30 -f ${s3d_infile}
+                            )
+endforeach                  (p)
+
+foreach                     (p 1 2 3 6)
+    add_test                (NAME s3d-blend-t-p${p}
+                            COMMAND ${MPIEXEC} -np ${p} $<TARGET_FILE:fixed-s3d-blend> -a 10 -b 0 -c 0 -r 10 -s 100 -t 60 -x 1 -y 2 -z 3 -v 6 -u 30 -u 30 -u 30 -T 1 -f ${s3d_infile}
+                            )
+endforeach                  (p)
+
+
+foreach                     (p 1 2 3 6)
+    add_test                (NAME s3d-blend-3d-p${p}
+                            COMMAND ${MPIEXEC} -np ${p} $<TARGET_FILE:fixed-s3d-blend> -a 10 -b 0 -c 0 -r 40 -s 50 -t 60 -x 1 -y 2 -z 3 -v 6 -u 30 -u 30 -u 30 -T 0 -f ${s3d_infile}
+                            )
+endforeach                  (p)
+
+foreach                     (p 1 2 3 6)
+    add_test                (NAME s3d-blend-3d-t-p${p}
+                            COMMAND ${MPIEXEC} -np ${p} $<TARGET_FILE:fixed-s3d-blend> -a 10 -b 0 -c 0 -r 40 -s 50 -t 60 -x 1 -y 2 -z 3 -v 6 -u 30 -u 30 -u 30 -T 1 -f ${s3d_infile}
+                            )
+endforeach                  (p)
 
 add_test                    (NAME adaptive-sinc-test
                              COMMAND adaptive-test -i sinc -d 3 -m 2 -p 1 -q 5 -e 1e-2 -w 0

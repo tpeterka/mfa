@@ -15,6 +15,8 @@
 #include    <diy/io/block.hpp>
 #include    <diy/pick.hpp>
 #include    <diy/thirdparty/fmt/format.h>
+#include    <diy/reduce.hpp>
+#include    <diy/partners/merge.hpp>
 
 #include    <stdio.h>
 
@@ -30,6 +32,9 @@ template <typename T>
 using Bounds = diy::Bounds<T>;
 template <typename T>
 using RCLink = diy::RegularLink<diy::Bounds<T>>;
+
+template <typename T>
+using Decomposer = diy::RegularDecomposer<Bounds<T>>;
 
 struct ModelInfo
 {
@@ -100,6 +105,21 @@ struct BlockBase
 
     // error field for last science variable only
     MatrixX<T>          errs;                   // error field (abs. value, not normalized by data range)
+
+    VectorX<T>          overlaps;               // local domain overlaps in each direction
+
+    // blending output
+    // will be computed only in core, for each block, using neighboring approximations if necessary
+    //  needed only at decoding stage
+    VectorXi            ndom_outpts;            // number of output points in each dimension
+    MatrixX<T>          blend;                  // output result of blending (lexicographic order)
+    vector<Bounds<T>>   neighOverlaps;          // only the overlapping part of the neighbors to current core is important
+                                                // will store the actual overlap of neighbors
+    vector<Bounds<T>>   overNeighCore;          // part of current domain over neighbor core;
+                                                // will send decoded values for this patch, in the resolution
+                                                //  needed according to that core; symmetric with neighOverlaps
+    vector<int>         map_dir;                // will map current directions with global directions
+    vector<T>           max_errs_reduce;        // max_errs used in the reduce operations, plus location (2 T vals per entry)
 
     // fixed number of control points encode block
     void fixed_encode_block(
@@ -415,6 +435,14 @@ struct BlockBase
                     max_errs[j - dom_dim] = errs(i, j);
             }
         }
+
+        // copy the computed error in a new array for reduce operations
+        max_errs_reduce.resize(max_errs.size() * 2);
+        for (auto i = 0; i < max_errs.size(); i++)
+        {
+            max_errs_reduce[2 * i] = max_errs[i];
+            max_errs_reduce[2 * i + 1] = cp.gid(); // use converter from type T to integer
+        }
     }
 
     void print_block(const diy::Master::ProxyWithLink& cp,
@@ -608,66 +636,6 @@ struct BlockBase
 #endif
     }
 
-    // send decoded ghost points
-    // assumes entire block was already decoded
-    void send_ghost_pts(const diy::Master::ProxyWithLink&           cp,
-            const diy::RegularDecomposer<Bounds<T>>&    decomposer)
-    {
-        RCLink<T> *l = static_cast<RCLink<T> *>(cp.link());
-        map<diy::BlockID, vector<VectorX<T> > > outgoing_pts;
-        vector<T>   dom_pt(dom_dim);                    // only domain coords of point, for checking neighbor bounds
-        VectorX<T>  full_pt(approx.cols());             // full coordinates of point
-        T eps = 1.0e-6;
-
-        // check decoded points whether they fall into neighboring block bounds (including ghost)
-        for (auto i = 0; i < (size_t)approx.rows(); i++)
-        {
-            vector<int> dests;                      // link neighbor targets (not gids)
-            auto it = dests.begin();
-            insert_iterator<vector<int> > insert_it(dests, it);
-            for (auto j = 0; j < dom_dim; j++)
-                dom_pt[j] = approx(i, j);
-            diy::near(*l, dom_pt, eps, insert_it, decomposer.domain);
-            if (dests.size())
-                full_pt = approx.row(i);
-
-            // prepare map of pts going to each neighbor
-            for (auto j = 0; j < dests.size(); j++)
-            {
-                diy::BlockID bid = l->target(dests[j]);
-                outgoing_pts[bid].push_back(full_pt);
-                // debug: print the point
-                cerr << "gid " << cp.gid() << " sent " << full_pt.transpose() << " to gid " << bid.gid << endl;
-            }
-        }
-
-        // enqueue the vectors of points to send to each neighbor block
-        for (auto it = outgoing_pts.begin(); it != outgoing_pts.end(); it++)
-            for (auto i = 0; i < it->second.size(); i++)
-                cp.enqueue(it->first, it->second[i]);
-    }
-
-    void recv_ghost_pts(const diy::Master::ProxyWithLink& cp)
-    {
-        VectorX<T> pt(approx.cols());                   // incoming point
-
-        // gids of incoming neighbors in the link
-        std::vector<int> in;
-        cp.incoming(in);
-
-        // for all neighbor blocks
-        // dequeue data received from this neighbor block in the last exchange
-        for (unsigned i = 0; i < in.size(); ++i)
-        {
-            while (cp.incoming(in[i]))
-            {
-                cp.dequeue(in[i], pt);
-                // debug: print the point
-                cerr << "gid " << cp.gid() << " received " << pt.transpose() << endl;
-            }
-        }
-    }
-
     // ----- t-mesh methods -----
 
     // initialize t-mesh with some test data
@@ -779,85 +747,619 @@ struct BlockBase
         tmesh.print();
     }
 
-    // decode a point in the t-mesh
-    void decode_tmesh(const diy::Master::ProxyWithLink&     cp,
-            const VectorX<T>&                     param)      // parameters of point to decode
+    // DEPRECATE
+//     // decode a point in the t-mesh
+//     void decode_tmesh(const diy::Master::ProxyWithLink&     cp,
+//             const VectorX<T>&                     param)      // parameters of point to decode
+//     {
+//         // pretend this tmesh is for the first science variable
+//         mfa::Tmesh<T>& tmesh = vars[0].mfa->mfa_data().tmesh;
+// 
+//         // compute range of anchor points for a given point to decode
+//         vector<vector<size_t>> anchors(dom_dim);                        // anchors affecting the decoding point
+//         tmesh.anchors(param, anchors);
+// 
+//         // print anchors
+//         fmt::print(stderr, "for decoding point = [ ");
+//         for (auto i = 0; i < dom_dim; i++)
+//             fmt::print(stderr, "{} ", param[i]);
+//         fmt::print(stderr, "],\n");
+// 
+//         for (auto i = 0; i < dom_dim; i++)
+//         {
+//             fmt::print(stderr, "dim {} local anchors = [", i);
+//             for (auto j = 0; j < anchors[i].size(); j++)
+//                 fmt::print(stderr, "{} ", anchors[i][j]);
+//             fmt::print(stderr, "]\n");
+//         }
+//         fmt::print(stderr, "\n--------------------------\n\n");
+// 
+//         // compute local knot vectors for each anchor in Cartesian product of anchors
+// 
+//         int tot_nanchors = 1;                                               // total number of anchors in flattened space
+//         for (auto i = 0; i < dom_dim; i++)
+//             tot_nanchors *= anchors[i].size();
+//         vector<int> anchor_idx(dom_dim);                                    // current index of anchor in each dim, initialized to 0s
+// 
+//         for (auto j = 0; j < tot_nanchors; j++)
+//         {
+//             vector<size_t> anchor(dom_dim);                                 // one anchor from anchors
+//             for (auto i = 0; i < dom_dim; i++)
+//                 anchor[i] = anchors[i][anchor_idx[i]];
+//             anchor_idx[0]++;
+// 
+//             // for all dimensions except last, check if anchor_idx is at the end
+//             for (auto k = 0; k < dom_dim - 1; k++)
+//             {
+//                 if (anchor_idx[k] == anchors[k].size())
+//                 {
+//                     anchor_idx[k] = 0;
+//                     anchor_idx[k + 1]++;
+//                 }
+//             }
+// 
+//             vector<vector<size_t>> loc_knot_vec(dom_dim);                   // local knot vector
+//             tmesh.local_knot_vector(anchor, loc_knot_vec);
+// 
+//             // print local knot vectors
+//             fmt::print(stderr, "for anchor = [ ");
+//             for (auto i = 0; i < dom_dim; i++)
+//                 fmt::print(stderr, "{} ", anchor[i]);
+//             fmt::print(stderr, "],\n");
+// 
+//             for (auto i = 0; i < dom_dim; i++)
+//             {
+//                 fmt::print(stderr, "dim {} local knot vector = [", i);
+//                 for (auto j = 0; j < loc_knot_vec[i].size(); j++)
+//                     fmt::print(stderr, "{} ", loc_knot_vec[i][j]);
+//                 fmt::print(stderr, "]\n");
+//             }
+//             fmt::print(stderr, "\n--------------------------\n\n");
+// 
+//             // TODO: insert any missing knots and control points (port Youssef's knot insertion algorithm)
+//             // TODO: insert missing knots into tmesh so that knot lines will be intersected
+// 
+//             // TODO: compute basis function in each dimension
+// 
+//             // TODO: locate corresponding control point
+// 
+//             // TODO: multiply basis function by control point and add to current sum
+//         }
+// 
+//         // TODO: normalize sum of basis functions * control points
+//     }
+
+//#define BLEND_VERBOSE
+
+    void DecodeRequestGrid(int verbose,
+                           MatrixX<T> &localBlock) // local block is in a grid, in lexicographic order
     {
-        // pretend this tmesh is for the first science variable
-        mfa::Tmesh<T>& tmesh = vars[0].mfa->mfa_data().tmesh;
+        VectorXi &ndpts = mfa->ndom_pts();
 
-        // compute range of anchor points for a given point to decode
-        vector<vector<size_t>> anchors(dom_dim);                        // anchors affecting the decoding point
-        tmesh.anchors(param, anchors);
-
-        // print anchors
-        fmt::print(stderr, "for decoding point = [ ");
-        for (auto i = 0; i < dom_dim; i++)
-            fmt::print(stderr, "{} ", param[i]);
-        fmt::print(stderr, "],\n");
-
-        for (auto i = 0; i < dom_dim; i++)
-        {
-            fmt::print(stderr, "dim {} local anchors = [", i);
-            for (auto j = 0; j < anchors[i].size(); j++)
-                fmt::print(stderr, "{} ", anchors[i][j]);
-            fmt::print(stderr, "]\n");
+        VectorX<T> min_bd(this->dom_dim);
+        VectorX<T> max_bd(this->dom_dim);
+        size_t cs = 1;
+        for (int i = 0; i < this->dom_dim; i++) {
+            min_bd(i) = this->domain(0, i);
+            max_bd(i) = domain(cs * (ndpts(i) - 1), i);
+            cs *= ndpts(i);
         }
-        fmt::print(stderr, "\n--------------------------\n\n");
+        if (verbose) {
+            std::cerr << " actual bounds, for full local decoded domain:\n";
+            for (int i = 0; i < this->dom_dim; i++) {
+                std::cerr << "   " << min_bd(i) << " " << max_bd(i) << "\n";
+            }
 
-        // compute local knot vectors for each anchor in Cartesian product of anchors
-
-        int tot_nanchors = 1;                                               // total number of anchors in flattened space
-        for (auto i = 0; i < dom_dim; i++)
-            tot_nanchors *= anchors[i].size();
-        vector<int> anchor_idx(dom_dim);                                    // current index of anchor in each dim, initialized to 0s
-
-        for (auto j = 0; j < tot_nanchors; j++)
+            std:: cout << localBlock << "\n";
+        }
+        // determine the max and min extension of localBlock, and dimensions of localBlock
+        // it is an inverse problem, from the block extensions, find out the maximum and index
+        //
+        VectorXi grid_counts(this->dom_dim);
+        VectorX<T> min_block(this->dom_dim);
+        VectorX<T> max_block(this->dom_dim);
+        VectorXi index_max(this->dom_dim);
+        for (int i=0; i<dom_dim; i++)
         {
-            vector<size_t> anchor(dom_dim);                                 // one anchor from anchors
-            for (auto i = 0; i < dom_dim; i++)
-                anchor[i] = anchors[i][anchor_idx[i]];
-            anchor_idx[0]++;
-
-            // for all dimensions except last, check if anchor_idx is at the end
-            for (auto k = 0; k < dom_dim - 1; k++)
+            min_block[i] = localBlock(0,i);
+            max_block[i] = localBlock(0,i); // this will be modified in the next loop
+        }
+        int num_rows = (int) localBlock.rows();
+        for (int k=0; k < num_rows; k++)
+        {
+            for (int i=0; i < dom_dim; i++)
             {
-                if (anchor_idx[k] == anchors[k].size())
+                if (max_block[i] < localBlock(k,i))
                 {
-                    anchor_idx[k] = 0;
-                    anchor_idx[k + 1]++;
+                    max_block[i] = localBlock(k,i);
+                    index_max[i] = k; // first index to this extent !
                 }
             }
+        }
+        cs = 1;
+        for (int i=0; i < dom_dim; i++)
+        {
+            grid_counts[i] = index_max[i] / cs + 1;
+            cs = cs * grid_counts[i];
+        }
+        // assert product (grid_counts[i] ) == num_rows ?
+        //use domain parametrization logic to compute actual par for block within bounds,
+        // to be able to use DecodeAtGrid
+        VectorX<T> p_min(dom_dim); // initially, these are for the whole decoded domain
+        VectorX<T> p_max(dom_dim);
+#ifdef CURVE_PARAMS
+                 // it is not possible
+#else
+        // use same logic as DomainParams(domain_, params);          // params spaced according to domain spacing
+        // compute the par min and par max from bounds and core (core is embedded in bounds)
 
-            vector<vector<size_t>> loc_knot_vec(dom_dim);                   // local knot vector
-            tmesh.local_knot_vector(anchor, loc_knot_vec);
-
-            // print local knot vectors
-            fmt::print(stderr, "for anchor = [ ");
-            for (auto i = 0; i < dom_dim; i++)
-                fmt::print(stderr, "{} ", anchor[i]);
-            fmt::print(stderr, "],\n");
-
-            for (auto i = 0; i < dom_dim; i++)
+        for (int i = 0; i < dom_dim; i++) {
+            T diff = bounds_maxs[i] - bounds_mins[i];
+            p_min[i] = (min_block[i] - bounds_mins[i]) / diff;
+            p_max[i] = (max_block[i] - bounds_mins[i]) / diff;
+        }
+#endif
+        // geometry first
+        /*mfa->DecodeAtGrid(*geometry.mfa_data, 0, dom_dim - 1, p_min, p_max,
+                grid_counts, griddom); */
+        for (size_t j = 0; j < vars.size(); j++) {
+            mfa->DecodeAtGrid(*(this->vars[j].mfa_data), dom_dim + j,
+                    dom_dim + j, p_min, p_max, grid_counts, localBlock);
+        }
+    }
+//#define BLEND_VERBOSE
+    void decode_core_ures(const diy::Master::ProxyWithLink &cp,
+            std::vector<int> &resolutions) // we already know the core, decode at desired resolution, without any requests sent to neighbors
             {
-                fmt::print(stderr, "dim {} local knot vector = [", i);
-                for (auto j = 0; j < loc_knot_vec[i].size(); j++)
-                    fmt::print(stderr, "{} ", loc_knot_vec[i][j]);
-                fmt::print(stderr, "]\n");
+        // dom_dim  actual geo dimension for output points
+        int tot_core_pts = 1;
+
+        ndom_outpts.resize(dom_dim);
+        for (int i = 0; i < dom_dim; i++) {
+            ndom_outpts[i] = resolutions[map_dir[i]];
+            tot_core_pts *= resolutions[map_dir[i]];
+        }
+        // get local core bounds are decided already:  core_mins, core_maxs
+        blend.resize(tot_core_pts, dom_dim + 1); // these are just the evaluation points (core domain pts)
+
+        // deltas in each direction
+        VectorX<T> d(dom_dim);
+        // starting point in each dimension will be core_mins
+        int nghost_pts;           // number of ghost points in current dimension
+        for (int i = 0; i < dom_dim; i++)
+            d(i) = (core_maxs(i) - core_mins(i)) / (ndom_outpts(i) - 1);
+
+        // assign values to the domain (geometry)
+        int cs = 1;                        // stride of a coordinate in this dim
+        T eps = 1.0e-10;                  // floating point roundoff error
+        for (int i = 0; i < dom_dim; i++)  // all dimensions in the domain
+                {
+            int k = 0;
+            int co = 0;            // j index of start of a new coordinate value
+            for (int j = 0; j < tot_core_pts; j++) {
+                if (core_mins(i) + k * d(i) > core_maxs(i) + eps)
+                    k = 0;
+                blend(j, i) = core_mins(i) + k * d(i);
+                if (j + 1 - co >= cs) {
+                    k++;
+                    co = j + 1;
+                }
             }
-            fmt::print(stderr, "\n--------------------------\n\n");
+            cs *= ndom_outpts(i);
+        }
+        // now decode at resolution
+        this->DecodeRequestGrid(0, blend); // so just compute the value, without any further blending
+        //mfa->DecodeDomain(*(vars[0].mfa_data), 0, blend, dom_dim, dom_dim, false);
+#ifdef BLEND_VERBOSE
+       cerr << " block: " << cp.gid() << " decode no blend:" << blend << "\n";
+#endif
+    }
 
-            // TODO: insert any missing knots and control points (port Youssef's knot insertion algorithm)
-            // TODO: insert missing knots into tmesh so that knot lines will be intersected
+#undef BLEND_VERBOSE
+    // each block will store the relevant neighbors' encroachment in its core domain
+    // will be used to see if a point should be decoded by the neighbor block
+    // we can also compute the bounds of the patch that will be sent to each neighbor
+    void compute_neighbor_overlaps(const diy::Master::ProxyWithLink &cp) {
+        RCLink<T> *l = static_cast<RCLink<T>*>(cp.link());
+        // compute the overlaps of the neighbors outside main loop, and keep them in a vector
+        Bounds<T> neigh_overlaps(dom_dim); // neighbor overlaps have the same dimension as domain , core
+        Bounds<T> overNeigh(dom_dim); // over neigh core have the same dimension as domain , core
+                                      // these bounds are symmetric to neigh overlaps
+                                      // these cover the core of neigh [k] , and will be decoded and sent for blending
+                                      // local grid is decided by that core [k] and resolutions
+        diy::Direction dirc(dom_dim, 0); // neighbor direction
+        diy::BlockID bid;  // this is stored for debugging purposes
+        // if negative direction, correct min, if positive, correct max
+        for (auto k = 0; k < l->size(); k++) {
+            // start from current core, and restrict it
+            //neigh_overlaps = l->bounds(k);
+            dirc = l->direction(k);
+            bid = l->target(k);
+            //Bounds<T> boundsk = l->bounds(k);
+            //Bounds<T> corek = l->core(k);
+            for (int di = 0; di < dom_dim; di++) {
+                int gdir = map_dir[di];
+                // start with full core, then restrict it based on direction
+                neigh_overlaps.max[di] = core_maxs[di];
+                neigh_overlaps.min[di] = core_mins[di];
+                // start with full bounds, then restrict to neigh core, based on direction
+                overNeigh.max[di] = bounds_maxs[di];
+                overNeigh.min[di] = bounds_mins[di];
+                if (dirc[gdir] < 0) {
+                    // it is reciprocity; if my bounds extended, neighbor bounds extended too in opposite direction
+                    neigh_overlaps.max[di] = core_mins[di]
+                            + (core_mins[di] - bounds_mins[di]);
+                    overNeigh.max[di] = core_mins[di];
+                }
+                else if (dirc[gdir] > 0) {
+                    neigh_overlaps.min[di] = core_maxs[di]
+                            - (bounds_maxs[di] - core_maxs[di]);
+                    overNeigh.min[di] = core_maxs[di];
+                }
+                else // if (dirc[gdir] == 0 )
+                {
+                    overNeigh.max[di] = core_maxs[di];
+                    overNeigh.min[di] = core_mins[di];
 
-            // TODO: compute basis function in each dimension
+                }
+#ifdef BLEND_VERBOSE
+          cerr << "overlaps block:" << cp.gid() << " nb:" << bid.gid << " di:" << di << " min:" <<
+              neigh_overlaps.min[di] << " max:"<< neigh_overlaps.max[di] <<"\n";
 
-            // TODO: locate corresponding control point
-
-            // TODO: multiply basis function by control point and add to current sum
+#endif
+            }
+            neighOverlaps.push_back(neigh_overlaps);
+            overNeighCore.push_back(overNeigh);
         }
 
-        // TODO: normalize sum of basis functions * control points
+    }
+
+    void affected_neighbors(vector<T> &dom_pt, T &eps, vector<int> &dests) {
+        Bounds<T> overlap(dom_dim); // neighbor overlap
+        // for all neighbors of this block
+        for (size_t i = 0; i < neighOverlaps.size(); i++) {
+            overlap = neighOverlaps[i];
+            bool insideDomain = true;
+            for (int j = 0; j < dom_dim; j++) {
+                T val = dom_pt[j];
+                if (val + eps <= overlap.min[j]
+                        || val - eps >= overlap.max[j]) {
+                    insideDomain = false;
+                    break;
+                }
+            }
+            if (insideDomain)
+                dests.push_back(i);
+        }
+
+    }
+
+    // receive requests , decode, and send back to the requester only the decoded value
+    // entire block was already encoded, we just need to decode at a grid of points
+    void decode_patches(const diy::Master::ProxyWithLink &cp,
+                        std::vector<int> &resolutions)
+    {
+        T eps = 1.0e-10;
+        int verbose = 0;
+        diy::Direction dirc(dom_dim, 0); // neighbor direction
+
+        RCLink<T> *l = static_cast<RCLink<T>*>(cp.link());
+        for (auto k = 0; k < l->size(); k++) {
+            diy::BlockID bid = l->target(k);
+
+            // alternatively, build local block for neighbor k using its core, global resolutions and overlap over core
+            MatrixX<T> localBlockOverCoreK;
+            Bounds<T>  domainK = overNeighCore[k]; //
+            auto  coreK = l->core(k);
+            dirc = l->direction(k);
+            VectorXi counts(dom_dim);      // how many core points in overNeigh, per direction
+            int  sizeBlock = 1;
+            Bounds<T> resol(dom_dim);
+            VectorX<T> d(dom_dim);                 // step in domain points in each dimension
+            for (int j = 0; j < dom_dim; j++)
+            {
+                int dirGlob = map_dir[j];
+                T deltaCore = coreK.max[dirGlob] - coreK.min[dirGlob];
+                d(j) = deltaCore / ( resolutions[j] - 1 );
+                T deltaOver = domainK.max[j] - domainK.min[j];
+                counts[j]  = (int)( (deltaOver + 2 * eps) / d(j) ) + 1; // to account for some roundoff errors at the boundaries
+
+                if (dirc[dirGlob] < 0 )
+                {
+                    resol.min[j] = coreK.max[dirGlob] - (counts[j] - 1) * d(j);
+                    resol.max[j] = coreK.max[dirGlob];
+                }
+                else if (dirc[dirGlob] > 0 )
+                {
+                    resol.min[j] = coreK.min[dirGlob];
+                    resol.max[j] = coreK.min[dirGlob] + (counts[j] - 1) * d(j);
+                }
+                else // dirc[dirGlob] == 0
+                {
+                    resol.min[j] = coreK.min[dirGlob]; // full extents
+                    resol.max[j] = coreK.max[dirGlob];
+                    counts[j] = resolutions[j]; // there should be no question about it
+                }
+                sizeBlock *= counts[j];
+            }
+
+
+            localBlockOverCoreK.resize(sizeBlock, dom_dim + 1);
+            //assert(sizeBlock == num_points_received);
+            // we know the bounds (resol) and counts, we can form the grid
+            // assign values to the domain (geometry)
+            mfa::VolIterator vol_it(counts);
+            // current index of domain point in each dim, initialized to 0s
+            // flattened loop over all the points in a domain
+            while (!vol_it.done())
+            {
+                int j = (int)vol_it.cur_iter();
+                // compute geometry coordinates of domain point
+                for (auto i = 0; i < dom_dim; i++)
+                    localBlockOverCoreK(j, i) = resol.min[i] + vol_it.idx_dim(i) * d(i);
+
+                vol_it.incr_iter();
+            }
+
+            //this->DecodeRequestGrid(0, localBlock); //
+            this->DecodeRequestGrid(0, localBlockOverCoreK);
+            //mfa->DecodeDomain(*(vars[0].mfa_data), 0, localBlock, dom_dim, dom_dim, false);
+            // local block localBlock(:, dom_dim) will have the decoded  values for science variable
+            vector<T> computed_values(sizeBlock);
+            for (int k = 0; k < sizeBlock; k++) {
+                computed_values[k] = localBlockOverCoreK(k, dom_dim); // just last dimension
+            }
+#ifdef BLEND_VERBOSE
+        cerr << "   block gid " << cp.gid() << " for block " << bid.gid << "\n" << localBlockOverCoreK << endl;
+#endif
+            cp.enqueue(bid, computed_values);
+        }
+    }
+    // receive requests , decode, and send back to the requester only the decoded value
+    // entire block was already encoded, we just need to decode at a grid of points
+    void decode_patches_discrete(const diy::Master::ProxyWithLink &cp,
+                            std::vector<int> &resolutions)
+    {
+        T eps = 1.0e-10;
+        int verbose = 0;
+        diy::Direction dirc(dom_dim, 0); // neighbor direction
+
+        RCLink<int> *l = static_cast<RCLink<int>*>(cp.link());
+        for (auto k = 0; k < l->size(); k++) {
+            diy::BlockID bid = l->target(k);
+
+            // alternatively, build local block for neighbor k using its core, global resolutions and overlap over core
+            MatrixX<T> localBlockOverCoreK;
+            Bounds<T>  domainK = overNeighCore[k]; //
+            auto  coreK = l->core(k);
+            dirc = l->direction(k);
+            VectorXi counts(dom_dim);      // how many core points in overNeigh, per direction
+            int  sizeBlock = 1;
+            Bounds<T> resol(dom_dim);
+            VectorX<T> d(dom_dim);                 // step in domain points in each dimension
+            for (int j = 0; j < dom_dim; j++)
+            {
+                int dirGlob = map_dir[j];
+                T deltaCore = coreK.max[dirGlob] - coreK.min[dirGlob];
+                d(j) = deltaCore / ( resolutions[j] - 1 );
+                T deltaOver = domainK.max[j] - domainK.min[j];
+                counts[j]  = (int)( (deltaOver + 2 * eps) / d(j) ) + 1; // to account for some roundoff errors at the boundaries
+
+                if (dirc[dirGlob] < 0 )
+                {
+                    resol.min[j] = coreK.max[dirGlob] - (counts[j] - 1) * d(j);
+                    resol.max[j] = coreK.max[dirGlob];
+                }
+                else if (dirc[dirGlob] > 0 )
+                {
+                    resol.min[j] = coreK.min[dirGlob];
+                    resol.max[j] = coreK.min[dirGlob] + (counts[j] - 1) * d(j);
+                }
+                else // dirc[dirGlob] == 0
+                {
+                    resol.min[j] = coreK.min[dirGlob]; // full extents
+                    resol.max[j] = coreK.max[dirGlob];
+                    counts[j] = resolutions[j]; // there should be no question about it
+                }
+                sizeBlock *= counts[j];
+            }
+
+
+            localBlockOverCoreK.resize(sizeBlock, dom_dim + 1);
+            //assert(sizeBlock == num_points_received);
+            // we know the bounds (resol) and counts, we can form the grid
+            // assign values to the domain (geometry)
+            mfa::VolIterator vol_it(counts);
+            // current index of domain point in each dim, initialized to 0s
+            // flattened loop over all the points in a domain
+            while (!vol_it.done())
+            {
+                int j = (int)vol_it.cur_iter();
+                // compute geometry coordinates of domain point
+                for (auto i = 0; i < dom_dim; i++)
+                    localBlockOverCoreK(j, i) = resol.min[i] + vol_it.idx_dim(i) * d(i);
+
+                vol_it.incr_iter();
+            }
+
+            //this->DecodeRequestGrid(0, localBlock); //
+            this->DecodeRequestGrid(0, localBlockOverCoreK);
+            //mfa->DecodeDomain(*(vars[0].mfa_data), 0, localBlock, dom_dim, dom_dim, false);
+            // local block localBlock(:, dom_dim) will have the decoded  values for science variable
+            vector<T> computed_values(sizeBlock);
+            for (int k = 0; k < sizeBlock; k++) {
+                computed_values[k] = localBlockOverCoreK(k, dom_dim); // just last dimension
+            }
+#ifdef BLEND_VERBOSE
+        cerr << "   block gid " << cp.gid() << " for block " << bid.gid << "\n" << localBlockOverCoreK << endl;
+#endif
+            cp.enqueue(bid, computed_values);
+        }
+    }
+    // receive requests , decode, and send back
+
+
+    // blending in 1d, on interval -inf, [a , b] +inf, -inf < a < b < +inf
+    T blend_1d(T t, T a, T b) {
+        if (a == b)
+            return 1; // assume t is also a and b
+        assert(a < b);
+        T x = (t - a) / (b - a);
+        if (x < 0)
+            return (T) 1.;
+        if (x >= 1.)
+            return (T) 0.;
+        T tmp = x * x * x;
+        tmp = 1 - tmp * (6 * x * x - 15 * x + 10);
+        return tmp;
+    }
+
+    T alfa(T x, T border, T overlap) {
+        return blend_1d(x, border - overlap, border + overlap);
+    }
+
+    T one_alfa(T x, T border, T overlap) {
+        return 1 - alfa(x, border, overlap);
+    }
+
+    // now we know we need to receive requested values decoded by neighbors
+    void recv_and_blend(const diy::Master::ProxyWithLink &cp) {
+
+        T eps = 1.0e-10;
+        RCLink<T> *l = static_cast<RCLink<T>*>(cp.link());
+        vector<T> dom_pt(dom_dim);   // only domain coords of point
+        std::vector<diy::Direction> directions;
+        diy::BlockID bid;
+        std::vector<int> in;
+        cp.incoming(in);
+        // receive all values ,
+        std::map<int, std::vector<T>> incoming_values;
+        std::map<int, int> pointer_in_incoming; // values will be processed one by one in the incoming vector,
+        /// in the same order they were first processed, then sent, then received
+        for (auto k = 0; k < l->size(); k++) {
+            bid = l->target(k);
+            cp.dequeue(bid.gid, incoming_values[bid.gid]);
+            pointer_in_incoming[bid.gid] = 0;
+        }
+#ifdef BLEND_VERBOSE
+      for (typename std::map<int, std::vector<T>>::iterator mit= incoming_values.begin(); mit!=incoming_values.end(); mit++)
+      {
+        int from_gid = mit->first;
+        std::vector<T> & vectVals = mit->second;
+        cerr << "on block" << cp.gid() << " receive from block " << from_gid << " values: \n";
+        for (size_t j=0; j<vectVals.size(); j++)
+        {
+          cerr << " " << vectVals[j] ;
+        }
+        cerr << "\n";
+      }
+#endif
+
+        Bounds<T> neigh_bounds(dom_dim); // neighbor block bounds
+        diy::Direction dirc(dom_dim, 0); // neighbor direction
+
+        for (auto i = 0; i < (size_t) blend.rows(); i++) {
+            vector<int> dests;               // link neighbor targets (not gids)
+            for (int j = 0; j < dom_dim; j++)
+                dom_pt[j] = blend(i, j);
+            // decide if a point is inside a neighbor domain;
+            // return a list of destinations , similar to diy::near(*l, dom_pt, eps, insert_it, decomposer.domain);
+            // this logic will be used at decoding too
+            affected_neighbors(dom_pt, eps, dests);
+            // skip blending if there are no affected neighbors! blend value will stay unmodified
+            if (dests.empty())
+                continue;
+            diy::Direction genDir(dom_dim, 0);
+            for (size_t k = 0; k < dests.size(); k++) {
+                dirc = l->direction(dests[k]);
+                for (int kk = 0; kk < dom_dim; kk++) {
+                    int gdir = map_dir[kk];
+                    if (dirc[gdir] != 0)
+                        genDir[kk] = dirc[gdir];
+                }
+            }
+            VectorX<T> border(dom_dim); // one variable only right now
+            VectorX<T> myBlend(dom_dim); // should be 1 in general
+
+            for (int kk = 0; kk < dom_dim; kk++) {
+                if (genDir[kk] < 0) {
+                    border(kk) = core_mins(kk);
+                    myBlend(kk) = one_alfa(dom_pt[kk], border(kk),
+                            overlaps(kk));
+                } else if (genDir[kk] > 0) {
+                    border(kk) = core_maxs(kk);
+                    myBlend(kk) = alfa(dom_pt[kk], border(kk), overlaps(kk));
+                } else {
+                    border(kk) = -1.e20; // better to be unset, actually, or nan, to be sure we will not use it
+                    myBlend(kk) = 1.;
+                }
+            }
+            // now, finally, add contribution from each neighbor
+            // my contribution is already set, by product of blends
+            // other points will be the same product of blends, but with (1-blend) if the direction is
+            // active, otherwise it is just 1
+
+            // current point value, assume 1 variable
+            // this needs to be blended
+            T val = blend(i, dom_dim);
+#ifdef BLEND_VERBOSE
+        cerr << " blend point " << dom_pt[0] << " " << dom_pt[1] << " val:" << val << " factors: " << myBlend(0) <<
+            " " << myBlend(1) << "\n";
+        cerr << " destinations: " << dests.size() << " " ;
+        for (size_t i1=0; i1<dests.size(); i1++)
+          cerr << " " << dests[i1];
+        cerr << "\n";
+#endif
+            for (int kk = 0; kk < dom_dim; kk++)
+                val = val * myBlend(kk); // some might be 1, but all should be greater than 1/2., because local contribution is
+                                         //  the biggest
+                // now contributions from the neighbors
+            for (size_t k = 0; k < dests.size(); k++) {
+                T factor = 1;
+                dirc = l->direction(dests[k]);
+                for (int kk = 0; kk < dom_dim; kk++) {
+                    int gdir = map_dir[kk];
+                    if (dirc[gdir] != 0)
+                        factor = factor * (1 - myBlend(kk)); // we know that the other blend should be less than .5
+                    else
+                        factor = factor * myBlend(kk); // similar with my own contribution,
+                                                       // because it is too far from the boundary in this direction
+                }
+                // now process the value!!
+                bid = l->target(dests[k]);
+                int index = pointer_in_incoming[bid.gid];
+                T incomingValue = incoming_values[bid.gid][index];
+                pointer_in_incoming[bid.gid]++;
+#ifdef BLEND_VERBOSE
+          cerr << "  incoming value " << incomingValue << " from block: " << bid.gid << " index: " <<index <<
+             " factor: " << factor << endl;
+#endif
+                val = val + incomingValue * factor;
+            }
+            // finally, new corrected value for ptc:
+            blend(i, dom_dim) = val;
+#ifdef BLEND_VERBOSE
+        cerr << "     general direction: " << genDir << " border: " << border.transpose() <<
+                         "  blending: "<< myBlend.transpose() << " new val:" << val << endl;
+#endif
+        }
+
+    }
+    void print_brief_block(const diy::Master::ProxyWithLink &cp, bool error) // error was computed
+            {
+
+        for (auto i = 0; i < vars.size(); i++) {
+            cerr << "block gid = " << cp.gid() << " var: " << i
+                    << " max error: " << max_errs[i] << "\n";
+        }
+
+        if (0 == cp.gid()) {
+            for (auto i = 0; i < vars.size(); i++) {
+                cerr << " \n Maximum error:" << max_errs_reduce[2 * i]
+                        << " at block id::" << max_errs_reduce[2 * i + 1]
+                        << "\n";
+            }
+        }
     }
 };
 
@@ -900,6 +1402,8 @@ namespace mfa
             b->bounds_maxs.resize(pt_dim);
             b->core_mins.resize(dom_dim);
             b->core_maxs.resize(dom_dim);
+            // blending
+            b->overlaps.resize(dom_dim);
 
             // manually set ghosted block bounds as a factor increase of original core bounds
             for (int i = 0; i < dom_dim; i++)
@@ -982,6 +1486,10 @@ namespace mfa
 
             diy::save(bb, b->approx);
             diy::save(bb, b->errs);
+
+            // output for blending
+            diy::save(bb, b->ndom_outpts);
+            diy::save(bb, b->blend);
         }
 
     template<typename B, typename T>                // B = block object, T = float or double
@@ -1054,6 +1562,10 @@ namespace mfa
 
             diy::load(bb, b->approx);
             diy::load(bb, b->errs);
+
+            // output for blending
+            diy::load(bb, b->ndom_outpts);
+            diy::load(bb, b->blend);
         }
 }                       // namespace
 
