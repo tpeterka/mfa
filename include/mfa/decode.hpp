@@ -300,8 +300,6 @@ namespace mfa
 
         }
 
-#ifdef TMESH
-
         // decode at a regular grid using saved basis that is computed once by this function
         // and then used to decode all the points in the grid
         void DecodeGrid(MatrixX<T>&         result,         // output
@@ -421,6 +419,8 @@ namespace mfa
 #endif      // TBB version
 
         }
+
+#ifdef TMESH
 
         // decode a point in the t-mesh using all the control points
         // TODO: unoptimized

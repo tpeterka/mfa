@@ -45,6 +45,70 @@ namespace mfa
 
         ~NewKnots() {}
 
+        // inserts a set of knots (in all dimensions) into the original knot set
+        // also increases the numbers of control points (in all dimensions) that will result
+        void OrigInsertKnots(
+                vector<vector<T>>&          new_knots,              // new knots
+                vector<vector<int>>&        new_levels,             // new knot levels
+                vector<vector<KnotIdx>>&    inserted_knot_idxs)     // (output) indices in each dim. of inserted knots in full knot vector after insertion
+        {
+            vector<vector<T>> temp_knots(mfa.dom_dim);
+            vector<vector<int>> temp_levels(mfa.dom_dim);
+            inserted_knot_idxs.resize(mfa.dom_dim);
+
+            // insert new_knots into knots: replace old knots with union of old and new (in temp_knots)
+            for (size_t k = 0; k < mfa.dom_dim; k++)                // for all domain dimensions
+            {
+                inserted_knot_idxs[k].clear();
+                auto ninserted = mfa_data.tmesh.all_knots[k].size();      // number of new knots inserted
+
+                // manual walk along old and new knots so that levels can be inserted along with knots
+                // ie, that's why std::set_union cannot be used
+                auto ak = mfa_data.tmesh.all_knots[k].begin();
+                auto al = mfa_data.tmesh.all_knot_levels[k].begin();
+                auto nk = new_knots[k].begin();
+                auto nl = new_levels[k].begin();
+                while (ak != mfa_data.tmesh.all_knots[k].end() || nk != new_knots[k].end())
+                {
+                    if (ak == mfa_data.tmesh.all_knots[k].end())
+                    {
+                        temp_knots[k].push_back(*nk++);
+                        temp_levels[k].push_back(*nl++);
+                        inserted_knot_idxs[k].push_back(temp_knots[k].size() - 1);
+                    }
+                    else if (nk == new_knots[k].end())
+                    {
+                        temp_knots[k].push_back(*ak++);
+                        temp_levels[k].push_back(*al++);
+                    }
+                    else if (*ak < *nk)
+                    {
+                        temp_knots[k].push_back(*ak++);
+                        temp_levels[k].push_back(*al++);
+                    }
+                    else if (*nk < *ak)
+                    {
+                        temp_knots[k].push_back(*nk++);
+                        temp_levels[k].push_back(*nl++);
+                        inserted_knot_idxs[k].push_back(temp_knots[k].size() - 1);
+                    }
+                    else if (*ak == *nk)
+                    {
+                        temp_knots[k].push_back(*ak++);
+                        temp_levels[k].push_back(*al++);
+                        nk++;
+                        nl++;
+                    }
+                }
+
+                for (auto i = 0; i < inserted_knot_idxs[k].size(); i++)
+                {
+                    auto idx = inserted_knot_idxs[k][i];
+                    mfa_data.tmesh.insert_knot(k, idx, temp_levels[k][idx], temp_knots[k][idx], mfa.params());
+                }
+            }   // for all domain dimensions
+        }
+
         // inserts a set of knots (in all dimensions) into all_knots of the tmesh
         // also increases the numbers of control points (in all dimensions) that will result
         // this version is for global solve, also called inside of local solve

@@ -141,7 +141,7 @@ namespace mfa
             Encoder<T> encoder(*this, mfa_data, domain, verbose);
 
 #ifndef TMESH               // original adaptive encode for one tensor product
-            encoder.OrigAdaptiveEncode(err_limit, weighted, local, extents, max_rounds);
+            encoder.OrigAdaptiveEncode(err_limit, weighted, extents, max_rounds);
 #else                       // adaptive encode for tmesh
             encoder.AdaptiveEncode(err_limit, weighted, local, extents, max_rounds);
 #endif

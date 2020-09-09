@@ -505,7 +505,7 @@ template <typename T>                        // float or double
                     fprintf(stderr, "Iteration %d...\n", iter);
 
                 // low-d w/ splitting spans in the middle
-                bool done = NewKnots_curve(new_knots, err_limit, extents, iter);
+                bool done = OrigNewKnots_curve(new_knots, err_limit, extents, iter);
 
                 // no new knots to be added
                 if (done)
@@ -1644,7 +1644,7 @@ template <typename T>                        // float or double
         // adds knots error spans from all curves in all directions (into a set)
         // adds knots in middles of spans that have error higher than the limit
         // returns true if done, ie, no knots are inserted
-        bool NewKnots_curve(
+        bool OrigNewKnots_curve(
                 vector<vector<T>>&  new_knots,                              // (output) new knots
                 T                   err_limit,                              // max allowable error
                 const VectorX<T>&   extents,                                // extents in each dimension, for normalizing error (size 0 means do not normalize)
@@ -1802,7 +1802,7 @@ template <typename T>                        // float or double
                 // insert the new knots
                 mfa::NewKnots<T> nk(mfa, mfa_data);
                 vector<vector<KnotIdx>> unused(mfa_data.dom_dim);
-                nk.InsertKnots(new_knots, new_levels, unused);
+                nk.OrigInsertKnots(new_knots, new_levels, unused);
 
                 // increase number of control points, weights, basis functions
                 for (auto k = 0; k < mfa_data.dom_dim; k++)
