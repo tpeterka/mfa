@@ -131,6 +131,44 @@ struct Block : public BlockBase<T>
         return retval;
     }
 
+    // evaluate 2d poly-sinc function version 1
+    T polysinc1(VectorX<T>& domain_pt,
+                DomainArgs& args)
+    {
+        // only for 2d
+        if (this->dom_dim != 2)
+        {
+            fprintf(stderr, "Polysinc 1 function only defined for 2d. Aborting.\n");
+            exit(0);
+        }
+        T x = domain_pt(0);
+        T y = domain_pt(1);
+        T a = (x + 1) * (x + 1) + (y - 1) * (y - 1);
+        T b = (x - 1) * (x - 1) + (y + 1) * (y + 1);
+        T a1 = (a == 0.0 ? 1.0 : sin(a) / a);
+        T b1 = (b == 0.0 ? 1.0 : sin(b) / b);
+        return args.s[0] * (a1 + b1);
+    }
+
+    // evaluate 2d poly-sinc function version 2
+    T polysinc2(VectorX<T>& domain_pt,
+                DomainArgs& args)
+    {
+        // only for 2d
+        if (this->dom_dim != 2)
+        {
+            fprintf(stderr, "Polysinc 2 function only defined for 2d. Aborting.\n");
+            exit(0);
+        }
+        T x = domain_pt(0);
+        T y = domain_pt(1);
+        T a = x * x + y * y;
+        T b = 2 * (x - 2) * (x - 2) + (y + 2) * (y + 2);
+        T a1 = (a == 0.0 ? 1.0 : sin(a) / a);
+        T b1 = (b == 0.0 ? 1.0 : sin(b) / b);
+        return args.s[0] * (a1 + b1);
+    }
+
     // evaluate Marschner-Lobb function [Marschner and Lobb, IEEE VIS, 1994]
     // only for a 3d domain
     // using args f[0] and s[0] for f_M and alpha, respectively, in the paper
@@ -290,6 +328,10 @@ struct Block : public BlockBase<T>
                     retval = sine(dom_pt, args, k);
                 if (fun == "sinc")
                     retval = sinc(dom_pt, args, k);
+                if (fun == "psinc1")
+                    retval = polysinc1(dom_pt, args);
+                if (fun == "psinc2")
+                    retval = polysinc2(dom_pt, args);
                 if (fun == "ml")
                 {
                     if (this->dom_dim != 3)
@@ -361,9 +403,8 @@ struct Block : public BlockBase<T>
         // map_dir is used in blending discrete, but because we need to aggregate the discrete logic, we have to use
         // it even for continuous bounds, so in analytical data
         // this is used in s3d data because the actual domain dim is derived
-        for (int k = 0; k < this->dom_dim; k++) {
+        for (int k = 0; k < this->dom_dim; k++)
             this->map_dir.push_back(k);
-        }
 
         this->mfa = new mfa::MFA<T>(this->dom_dim, ndom_pts, this->domain);
 

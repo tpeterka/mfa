@@ -196,6 +196,20 @@ int main(int argc, char** argv)
                 { b->generate_analytical_data(cp, input, d_args); });
     }
 
+    // polysinc functions
+    if (input == "psinc1" || input == "psinc2")
+    {
+        for (int i = 0; i < dom_dim; i++)
+        {
+            d_args.min[i]               = -4.0 * M_PI;
+            d_args.max[i]               = 4.0  * M_PI;
+        }
+        for (int i = 0; i < pt_dim - dom_dim; i++)      // for all science variables
+            d_args.s[i] = 10.0 * (i + 1);                 // scaling factor on range
+        master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
+                { b->generate_analytical_data(cp, input, d_args); });
+    }
+
     // Marschner-Lobb function [M&L]: Marschner & Lobb, IEEE Vis 1994
     // only defined for 3d domain
     if (input == "ml")
