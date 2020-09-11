@@ -1832,10 +1832,13 @@ namespace mfa
             // left edge
             for (auto k = 0; k < dom_dim_; k++)
             {
-                if (tc.knot_mins[k] >= p_(k))
-                    min_anchor[k] = tc.knot_mins[k] - p_(k);
-                else
-                    min_anchor[k] = 0;
+                // TODO: I don't remember why I expanded by p, but let's try without expanding
+//                 if (tc.knot_mins[k] >= p_(k))
+//                     min_anchor[k] = tc.knot_mins[k] - p_(k);
+//                 else
+//                     min_anchor[k] = 0;
+
+                min_anchor[k] = tc.knot_mins[k];
             }
             local_knot_vector(min_anchor, local_knot_idxs);
             vector<KnotIdx> start_knot_idxs(dom_dim_);
@@ -1849,17 +1852,23 @@ namespace mfa
             {
                 if (p_(k) % 2 == 0)
                 {
-                    if (tc.knot_maxs[k] + p_(k) - 1 < all_knots[k].size())
-                        max_anchor[k] = tc.knot_maxs[k] + p_(k) - 1;
-                    else
-                        max_anchor[k] = all_knots[k].size() - 1;
+                // TODO: I don't remember why I expanded by p, but let's try without expanding
+//                     if (tc.knot_maxs[k] + p_(k) - 1 < all_knots[k].size())
+//                         max_anchor[k] = tc.knot_maxs[k] + p_(k) - 1;
+//                     else
+//                         max_anchor[k] = all_knots[k].size() - 1;
+
+                    max_anchor[k] = tc.knot_maxs[k] - 1;
                 }
                 else
                 {
-                    if (tc.knot_maxs[k] + p_(k) < all_knots[k].size())
-                        max_anchor[k] = tc.knot_maxs[k] + p_(k);
-                    else
-                        max_anchor[k] = all_knots[k].size() - 1;
+                // TODO: I don't remember why I expanded by p, but let's try without expanding
+//                     if (tc.knot_maxs[k] + p_(k) < all_knots[k].size())
+//                         max_anchor[k] = tc.knot_maxs[k] + p_(k);
+//                     else
+//                         max_anchor[k] = all_knots[k].size() - 1;
+
+                    max_anchor[k] = tc.knot_maxs[k];
                 }
             }
             local_knot_vector(max_anchor, local_knot_idxs);
@@ -1876,8 +1885,10 @@ namespace mfa
 
             // debug
             for (auto k = 0; k < dom_dim_; k++)
-                fprintf(stderr, "start_idx[%d] = %lu end_idx[%d] = %lu\n", k, start_idxs[k], k, end_idxs[k]);
-
+            {
+                fprintf(stderr, "start_knot_idx[%d] = %lu end_knot_idx[%d] = %lu\n", k, start_knot_idxs[k], k, end_knot_idxs[k]);
+                fprintf(stderr, "start_input_pt_idx[%d] = %lu end_input_pt_idx[%d] = %lu\n", k, start_idxs[k], k, end_idxs[k]);
+            }
         }
 
         void print() const

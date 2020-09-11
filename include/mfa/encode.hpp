@@ -1523,8 +1523,14 @@ template <typename T>                        // float or double
             MatrixX<T> ctrlpts_tosolve;
             LocalSolveCtrlPts(tc, ctrlpts_tosolve);
 
+            // debug
+//             cerr << "ctrlpts_tosolve:\n" << ctrlpts_tosolve << endl;
+
             // set the constraints
             MatrixX<T> cons = ctrlpts_tosolve.block(tc.ctrl_pts.rows(), 0, ctrlpts_tosolve.rows() - tc.ctrl_pts.rows(), cols);              // set the constraints
+
+            // debug
+            cerr << "cons:\n" << cons << endl;
 
             // get the subset of the domain points needed for the local solve
             vector<size_t> start_idxs(mfa_data.dom_dim);
@@ -1653,7 +1659,7 @@ template <typename T>                        // float or double
                         else                                    // direction orthogonal to next
                         {
                             sub_starts(i)   = 0;
-                            sub_npts(i)     = tn.ctrl_pts(i);
+                            sub_npts(i)     = tn.nctrl_pts(i);
                         }
                         all_npts(i)         = tn.nctrl_pts(i);
                     }
@@ -1911,7 +1917,8 @@ template <typename T>                        // float or double
             vol_iter.incr_iter();
         }
 
-        // "normalize" lsq_error to be RMSE (optional, see if improves accuracy or speeds up convergence)
+        // try making lsq_error RMSE
+        // don't do this: doubles number of iterations without changing result
 //         lsq_error = sqrt(lsq_error / vol_iter.tot_iters());
 
 //         fprintf(stderr, "least squares error: %e\n", lsq_error);
@@ -1920,7 +1927,8 @@ template <typename T>                        // float or double
             cons_error =
                 (ctrlpts_tosolve.block(tc.ctrl_pts.rows(), 0, ctrlpts_tosolve.rows() - tc.ctrl_pts.rows(), cols) - cons).squaredNorm();
 
-            // "normalize" cons_error to be RMSE (optional, see if improves accuracy or speeds up convergence)
+            // try making cons_error RMSE
+            // don't do this: doubles number of iterations without changing result
 //             cons_error = sqrt(cons_error / cons.size());
 
             // debug
@@ -1928,10 +1936,12 @@ template <typename T>                        // float or double
 //             cerr << "cons:\n" << cons << endl;
 //             cerr << "ctrlpts_tosolve - cons:\n" << ctrlpts_tosolve.block(p, 0, ctrlpts_tosolve.rows() - p) - cons << endl;
 
-//             fprintf(stderr, "constraints error: %e\n", cons_error);
+//             fprintf(stderr, " lsq error: %e constraints error: %e\n", lsq_error, cons_error);
             T cons_weight = 1.0e8;                                          // multiplying by large weight forces constraints to be satisfied 1e8 was Youssef's factor when interior not 0'd
             tot_error = lsq_error + cons_weight * cons_error;
-            fprintf(stderr, "niters = %lu total error (lsq_error + weight * cons_error = %e\n", niters, tot_error);
+
+            // debug
+//             fprintf(stderr, "niters = %lu total error (lsq_error + weight * cons_error = %e\n", niters, tot_error);
         }
         return tot_error;
     }
