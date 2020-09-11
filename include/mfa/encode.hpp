@@ -1530,7 +1530,7 @@ template <typename T>                        // float or double
             MatrixX<T> cons = ctrlpts_tosolve.block(tc.ctrl_pts.rows(), 0, ctrlpts_tosolve.rows() - tc.ctrl_pts.rows(), cols);              // set the constraints
 
             // debug
-            cerr << "cons:\n" << cons << endl;
+//             cerr << "cons:\n" << cons << endl;
 
             // get the subset of the domain points needed for the local solve
             vector<size_t> start_idxs(mfa_data.dom_dim);
@@ -1553,7 +1553,7 @@ template <typename T>                        // float or double
             solver.minimize(llsq, x1);
 
             // debug
-            fprintf(stderr, "Solver converged in %lu iterations.\n", llsq.iters());
+            fprintf(stderr, "\nSolver converged in %lu iterations.\n", llsq.iters());
         }
 
         // set up control points to solve for local solver
