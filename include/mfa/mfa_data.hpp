@@ -339,7 +339,7 @@ namespace mfa
             }
 
             // debug
-            cerr << "u = " << u << " span = " << mid << endl;
+//             cerr << "u = " << u << " span = " << mid << endl;
 
             return mid;
         }

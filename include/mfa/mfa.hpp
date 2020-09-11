@@ -27,7 +27,7 @@
 // #define WEIGH_ALL_DIMS
 
 // comment out the following line for original single tensor product version
-// #define TMESH
+#define TMESH
 
 // comment out the following line for separable dimension solve
 // #define MFA_UNIFIED_DIMS
@@ -157,7 +157,16 @@ namespace mfa
                 bool                saved_basis) const      // whether basis functions were saved and can be reused
         {
             VectorXi no_derivs;                             // size-0 means no derivatives
+
+#ifdef MFA_UNIFIED_DIMS
+
+            DecodeDomain(mfa_data, verbose, approx, min_dim, max_dim, false, no_derivs);
+
+#else
+
             DecodeDomain(mfa_data, verbose, approx, min_dim, max_dim, saved_basis, no_derivs);
+
+#endif
         }
 
         // decode derivatives at all input points

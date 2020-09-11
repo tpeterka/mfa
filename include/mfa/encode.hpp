@@ -357,6 +357,9 @@ template <typename T>                        // float or double
 
             // get constraints
             MatrixX<T>  cons;
+
+#ifdef TMESH
+
             if (constrained)
             {
                 MatrixX<T> ctrlpts_tosolve;
@@ -365,8 +368,10 @@ template <typename T>                        // float or double
                 cons = ctrlpts_tosolve.block(t.nctrl_pts.prod(), 0, ctrlpts_tosolve.rows() - t.ctrl_pts.rows(), ctrlpts_tosolve.cols());
             }
 
+#endif
+
             // debug
-            cerr << "cons:\n" << cons << endl;
+//             cerr << "cons:\n" << cons << endl;
 
             // resize matrices in case number of control points changed
             int pt_dim = mfa_data.max_dim - mfa_data.min_dim + 1;                           // control point dimensonality
@@ -412,27 +417,52 @@ template <typename T>                        // float or double
                         if (col >= 0 && col < B[k].cols())
                             B[k](0, col) = mfa_data.OneBasisFun(k, u, loc_knots);
                     }
+
+                    // debug
+//                     cerr << "B[" << k <<"]: " << B[k] << endl;
                 }
 
                 VolIterator ctrl_vol_iter(t.nctrl_pts);                                     // iterator over control points
                 while (!ctrl_vol_iter.done())
                 {
+                    VectorXi ijk(mfa_data.dom_dim);                                         // ijk of current control point
+                    ctrl_vol_iter.idx_ijk(ctrl_vol_iter.cur_iter(), ijk);
+
+                    // check if current control point is covered by the basis funcs. in all dims
+                    bool local_support = true;
                     for (auto k = 0; k < mfa_data.dom_dim; k++)
                     {
-                        int p   = mfa_data.p(k);
-                        int idx = ctrl_vol_iter.idx_dim(k);                                 // index in current dim of this control point
-                        for (auto j = 0; j < p + 1; j++)                                    // nonzero basis function values at this parameter
+                        if (ijk(k) < spans[k] - mfa_data.p(k) - t.knot_mins[k] || ijk(k) > spans[k] - t.knot_mins[k])
                         {
-                            int col = spans[k] - p + j - t.knot_mins[k];
-                            if (idx == col)                                                 // index in cur. dim. of this ctrl. point is affected by this basis fun. value
+                            local_support = false;
+                            break;
+                        }
+                    }
+
+                    if (local_support)
+                    {
+                        for (auto k = 0; k < mfa_data.dom_dim; k++)
+                        {
+                            for (auto j = 0; j < mfa_data.p(k) + 1; j++)                    // nonzero basis function values at this parameter, in this dim.
                             {
-                                if (N(dom_vol_iter.cur_iter(), ctrl_vol_iter.cur_iter()) == -1.0)   // unassigned so far
-                                    N(dom_vol_iter.cur_iter(), ctrl_vol_iter.cur_iter()) = B[k](0, col);
-                                else
-                                    N(dom_vol_iter.cur_iter(), ctrl_vol_iter.cur_iter()) *= B[k](0, col);
+                                int col = spans[k] - mfa_data.p(k) + j - t.knot_mins[k];
+                                if (ijk(k) == col)
+                                {
+                                    // debug
+//                                     cerr << "ctrl_cur_iter = " << ctrl_vol_iter.cur_iter() << " k = " << k << " ijk(k) = col = " << col << endl;
+
+                                    if (N(dom_vol_iter.cur_iter(), ctrl_vol_iter.cur_iter()) == -1.0)   // unassigned so far
+                                        N(dom_vol_iter.cur_iter(), ctrl_vol_iter.cur_iter()) = B[k](0, col);
+                                    else
+                                        N(dom_vol_iter.cur_iter(), ctrl_vol_iter.cur_iter()) *= B[k](0, col);
+                                }
                             }
                         }
                     }
+
+                    // debug
+//                     cerr << "N.row(" << dom_vol_iter.cur_iter() << "): " << N.row(dom_vol_iter.cur_iter()) << endl;
+
                     ctrl_vol_iter.incr_iter();
                 }
                 dom_vol_iter.incr_iter();
@@ -445,7 +475,7 @@ template <typename T>                        // float or double
                         N(i, j) = 0.0;
 
             // debug
-            cerr << "N:\n" << mfa_data.N[0] << endl;
+//             cerr << "N:\n" << mfa_data.N[0] << endl;
 
             // normal form
             MatrixX<T> NtN = N.transpose() * N;
@@ -466,7 +496,7 @@ template <typename T>                        // float or double
             }
 
             // debug
-            cerr << "NtN:\n" << NtN << endl;
+//             cerr << "NtN:\n" << NtN << endl;
 
             // R is the right hand side needed for solving NtN * P = R
             MatrixX<T> R(NtN.cols(), pt_dim);
@@ -478,9 +508,9 @@ template <typename T>                        // float or double
             t.ctrl_pts = P.block(0, 0, t.ctrl_pts.rows(), pt_dim);
 
             // debug
-            cerr << "EncodeTensor() P:\n" << P << endl;
-            cerr << "EncodeTensor() ctrl_pts:\n" << t.ctrl_pts << endl;
-            cerr << "EncodeTensor() weights:\n" << t.weights << endl;
+//             cerr << "\nEncodeTensor() P:\n" << P << endl;
+//             cerr << "\nEncodeTensor() ctrl_pts:\n" << t.ctrl_pts << endl;
+//             cerr << "\nEncodeTensor() weights:\n" << t.weights << endl;
         }
 
         // original adaptive encoding for first tensor product only
@@ -964,8 +994,8 @@ template <typename T>                        // float or double
                 R.row(N.cols() + i) = cons.row(i);
 
             // debug
-            cerr << "Rk:\n" << Rk << endl;
-            cerr << "R:\n" << R << endl;
+//             cerr << "Rk:\n" << Rk << endl;
+//             cerr << "\nR:\n" << R << endl;
         }
 
         // Checks quantities needed for approximation
