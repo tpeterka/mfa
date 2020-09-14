@@ -1431,7 +1431,8 @@ template <typename T>                        // float or double
             vector<VectorX<T>>  new_weights;
 
             if (local)
-                done &= nk.FirstErrorSpan(domain,
+//                 done &= nk.FirstErrorSpan(domain,
+                done &=   nk.MaxErrorSpan(domain,
                                           myextents,
                                           err_limit,
                                           iter,
@@ -1444,7 +1445,8 @@ template <typename T>                        // float or double
                                           new_weights,
                                           local);
             else
-                done &= nk.FirstErrorSpan(domain,
+//                 done &= nk.FirstErrorSpan(domain,
+                done &=   nk.MaxErrorSpan(domain,
                                           myextents,
                                           err_limit,
                                           iter,
@@ -1550,6 +1552,7 @@ template <typename T>                        // float or double
 
             // minimize the function
             VectorX<T> x1(Eigen::Map<VectorX<T>>(ctrlpts_tosolve.data(), ctrlpts_tosolve.size()));  // size() = rows() * cols()
+            fprintf(stderr, "\nIterative solver optimizing control points...");
             solver.minimize(llsq, x1);
 
             // debug

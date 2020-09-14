@@ -443,24 +443,15 @@ namespace mfa
             {
                 const TensorProduct<T>& t = mfa_data.tmesh.tensor_prods[k];
 
-                VolIterator         vol_iterator(t.nctrl_pts);                      // for iterating in a flat loop over n dimensions
+                VolIterator         vol_iterator(t.nctrl_pts);                      // iterator over control points in the current tensor
                 vector<KnotIdx>     anchor(mfa_data.dom_dim);                       // one anchor in (global, ie, over all tensors) index space
+                VectorXi            ijk(mfa_data.dom_dim);                          // multidim index of current control point
 
                 while (!vol_iterator.done())
                 {
-                    // get anchor
-                    for (auto j = 0; j < mfa_data.dom_dim; j++)
-                    {
-                        anchor[j] = vol_iterator.idx_dim(j) + t.knot_mins[j];       // add knot_mins to get from local (in this tensor) to global (in the t-mesh) anchor
-                        if (t.knot_mins[j] == 0)
-                            anchor[j] += (mfa_data.p(j) + 1) / 2;                   // first control point has anchor floor((p + 1) / 2)
-                        // check for any knots at a higher level of refinement that would add to the anchor index (anchor is global over all knots)
-                        for (auto i = t.knot_mins[j]; i <= t.knot_maxs[j]; i++)
-                        {
-                            if (mfa_data.tmesh.all_knot_levels[j][i] > t.level && anchor[j] >= i)
-                                anchor[j]++;
-                        }
-                    }
+                    // get anchor of the current control point
+                    vol_iterator.idx_ijk(vol_iterator.cur_iter(), ijk);
+                    mfa_data.tmesh.ctrl_pt_anchor(t, ijk, anchor);
 
                     // skip odd degree duplicated control points, indicated by invalid weight
                     if (t.weights(vol_iterator.cur_iter()) == MFA_NAW)

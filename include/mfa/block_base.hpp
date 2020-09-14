@@ -729,118 +729,118 @@ struct BlockBase
 #endif
     }
 
-    // ----- t-mesh methods -----
-
-    // initialize t-mesh with some test data
-    void init_tmesh(const diy::Master::ProxyWithLink&   cp)
-    {
-        // geometry mfa
-        geometry.mfa = new mfa::MFA<T>(geometry.p,
-                mfa->ndom_pts(),
-                domain,
-                geometry.ctrl_pts,
-                geometry.nctrl_pts,
-                geometry.weights,
-                geometry.knots,
-                0,
-                dom_dim - 1);
-
-        // science variable mfas
-        for (auto i = 0; i< vars.size(); i++)
-        {
-            vars[i].mfa = new mfa::MFA<T>(vars[i].p,
-                    mfa->ndom_pts(),
-                    domain,
-                    vars[i].ctrl_pts,
-                    vars[i].nctrl_pts,
-                    vars[i].weights,
-                    vars[i].knots,
-                    dom_dim + i,        // assumes each variable is scalar
-                    dom_dim + i);
-        }
-
-        // pretend this tmesh is for the first science variable
-        mfa::Tmesh<T>& tmesh = vars[0].mfa->mfa_data().tmesh;
-
-        // initialize all_knots
-        tmesh.all_knots.resize(dom_dim);
-        tmesh.all_knot_levels.resize(dom_dim);
-
-        for (auto i = 0; i < dom_dim; i++)
-        {
-            tmesh.all_knots[i].resize(6);       // hard-coded to match diagram
-            tmesh.all_knot_levels[i].resize(6);
-            for (auto j = 0; j < tmesh.all_knots[i].size(); j++)
-            {
-                tmesh.all_knots[i][j] = j / static_cast<T>(tmesh.all_knots[i].size() - 1);
-                tmesh.all_knot_levels[i][j] = 0;
-            }
-        }
-
-        // initialize first tensor product
-        vector<KnotIdx> knot_mins(dom_dim);
-        vector<KnotIdx> knot_maxs(dom_dim);
-        for (auto i = 0; i < dom_dim; i++)
-        {
-            knot_mins[i] = 0;
-            knot_maxs[i] = 5;
-        }
-
-        tmesh.append_tensor(knot_mins, knot_maxs);
-    }
-
-    // refine the t-mesh the first time
-    void refine1_tmesh(const diy::Master::ProxyWithLink&   cp)
-    {
-        // pretend this tmesh is for the first science variable
-        mfa::Tmesh<T>& tmesh = vars[0].mfa->mfa_data().tmesh;
-
-        // insert new knots into all_knots
-        tmesh.insert_knot(0, 2, 1, 0.3);
-        tmesh.insert_knot(1, 3, 1, 0.5);
-
-        // insert tensor product
-        vector<KnotIdx> knot_mins(dom_dim);
-        vector<KnotIdx> knot_maxs(dom_dim);
-        assert(dom_dim == 2);           // testing 2d for now
-        knot_mins[0] = 0;
-        knot_mins[1] = 1;
-        knot_maxs[0] = 4;
-        knot_maxs[1] = 5;
-        tmesh.append_tensor(knot_mins, knot_maxs);
-    }
-
-    // refine the t-mesh the second time
-    void refine2_tmesh(const diy::Master::ProxyWithLink&   cp)
-    {
-        // pretend this tmesh is for the first science variable
-        mfa::Tmesh<T>& tmesh = vars[0].mfa->mfa_data().tmesh;
-
-        // insert new knots into all_knots
-        tmesh.insert_knot(0, 4, 2, 0.5);
-        tmesh.insert_knot(1, 4, 2, 0.55);
-
-        // insert tensor product
-        vector<size_t> knot_mins(dom_dim);
-        vector<size_t> knot_maxs(dom_dim);
-        assert(dom_dim == 2);           // testing 2d for now
-        knot_mins[0] = 2;
-        knot_mins[1] = 2;
-        knot_maxs[0] = 6;
-        knot_maxs[1] = 6;
-        tmesh.append_tensor(knot_mins, knot_maxs);
-    }
-
-    // print the t-mesh
-    void print_tmesh(const diy::Master::ProxyWithLink&      cp)
-    {
-        // pretend this tmesh is for the first science variable
-        mfa::Tmesh<T>& tmesh = vars[0].mfa->mfa_data().tmesh;
-
-        tmesh.print();
-    }
-
     // DEPRECATE
+//     // ----- t-mesh methods -----
+// 
+//     // initialize t-mesh with some test data
+//     void init_tmesh(const diy::Master::ProxyWithLink&   cp)
+//     {
+//         // geometry mfa
+//         geometry.mfa = new mfa::MFA<T>(geometry.p,
+//                 mfa->ndom_pts(),
+//                 domain,
+//                 geometry.ctrl_pts,
+//                 geometry.nctrl_pts,
+//                 geometry.weights,
+//                 geometry.knots,
+//                 0,
+//                 dom_dim - 1);
+// 
+//         // science variable mfas
+//         for (auto i = 0; i< vars.size(); i++)
+//         {
+//             vars[i].mfa = new mfa::MFA<T>(vars[i].p,
+//                     mfa->ndom_pts(),
+//                     domain,
+//                     vars[i].ctrl_pts,
+//                     vars[i].nctrl_pts,
+//                     vars[i].weights,
+//                     vars[i].knots,
+//                     dom_dim + i,        // assumes each variable is scalar
+//                     dom_dim + i);
+//         }
+// 
+//         // pretend this tmesh is for the first science variable
+//         mfa::Tmesh<T>& tmesh = vars[0].mfa->mfa_data().tmesh;
+// 
+//         // initialize all_knots
+//         tmesh.all_knots.resize(dom_dim);
+//         tmesh.all_knot_levels.resize(dom_dim);
+// 
+//         for (auto i = 0; i < dom_dim; i++)
+//         {
+//             tmesh.all_knots[i].resize(6);       // hard-coded to match diagram
+//             tmesh.all_knot_levels[i].resize(6);
+//             for (auto j = 0; j < tmesh.all_knots[i].size(); j++)
+//             {
+//                 tmesh.all_knots[i][j] = j / static_cast<T>(tmesh.all_knots[i].size() - 1);
+//                 tmesh.all_knot_levels[i][j] = 0;
+//             }
+//         }
+// 
+//         // initialize first tensor product
+//         vector<KnotIdx> knot_mins(dom_dim);
+//         vector<KnotIdx> knot_maxs(dom_dim);
+//         for (auto i = 0; i < dom_dim; i++)
+//         {
+//             knot_mins[i] = 0;
+//             knot_maxs[i] = 5;
+//         }
+// 
+//         tmesh.append_tensor(knot_mins, knot_maxs);
+//     }
+// 
+//     // refine the t-mesh the first time
+//     void refine1_tmesh(const diy::Master::ProxyWithLink&   cp)
+//     {
+//         // pretend this tmesh is for the first science variable
+//         mfa::Tmesh<T>& tmesh = vars[0].mfa->mfa_data().tmesh;
+// 
+//         // insert new knots into all_knots
+//         tmesh.insert_knot(0, 2, 1, 0.3);
+//         tmesh.insert_knot(1, 3, 1, 0.5);
+// 
+//         // insert tensor product
+//         vector<KnotIdx> knot_mins(dom_dim);
+//         vector<KnotIdx> knot_maxs(dom_dim);
+//         assert(dom_dim == 2);           // testing 2d for now
+//         knot_mins[0] = 0;
+//         knot_mins[1] = 1;
+//         knot_maxs[0] = 4;
+//         knot_maxs[1] = 5;
+//         tmesh.append_tensor(knot_mins, knot_maxs);
+//     }
+// 
+//     // refine the t-mesh the second time
+//     void refine2_tmesh(const diy::Master::ProxyWithLink&   cp)
+//     {
+//         // pretend this tmesh is for the first science variable
+//         mfa::Tmesh<T>& tmesh = vars[0].mfa->mfa_data().tmesh;
+// 
+//         // insert new knots into all_knots
+//         tmesh.insert_knot(0, 4, 2, 0.5);
+//         tmesh.insert_knot(1, 4, 2, 0.55);
+// 
+//         // insert tensor product
+//         vector<size_t> knot_mins(dom_dim);
+//         vector<size_t> knot_maxs(dom_dim);
+//         assert(dom_dim == 2);           // testing 2d for now
+//         knot_mins[0] = 2;
+//         knot_mins[1] = 2;
+//         knot_maxs[0] = 6;
+//         knot_maxs[1] = 6;
+//         tmesh.append_tensor(knot_mins, knot_maxs);
+//     }
+// 
+//     // print the t-mesh
+//     void print_tmesh(const diy::Master::ProxyWithLink&      cp)
+//     {
+//         // pretend this tmesh is for the first science variable
+//         mfa::Tmesh<T>& tmesh = vars[0].mfa->mfa_data().tmesh;
+// 
+//         tmesh.print();
+//     }
+// 
 //     // decode a point in the t-mesh
 //     void decode_tmesh(const diy::Master::ProxyWithLink&     cp,
 //             const VectorX<T>&                     param)      // parameters of point to decode
