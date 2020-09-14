@@ -96,6 +96,8 @@ namespace mfa
         int prev_idx_dim(int dim)   { return prev_idx_dim_[dim]; }
 
         // return whether a row, col, etc. in a dimension is done
+        // call after incr_iter(), not before, because incr_iter()
+        // updates the done flags
         bool done(int dim)          { return done_dim_[dim]; }
 
         // return current total iteration count
