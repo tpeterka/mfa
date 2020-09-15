@@ -432,12 +432,16 @@ namespace mfa
                          VectorX<T>&            out_pt)     // (output) point, allocated by caller
         {
             // debug
-//             cerr << "VolPt_tmesh(): decoding point with param: " << param.transpose() << endl;
+            cerr << "VolPt_tmesh(): decoding point with param: " << param.transpose() << endl;
 
             // init
             out_pt = VectorX<T>::Zero(out_pt.size());
             T B_sum = 0.0;                                                          // sum of multidim basis function products
             T w_sum = 0.0;                                                          // sum of control point weights
+
+            // compute range of anchors covering decoded point
+            vector<vector<KnotIdx>> anchors(mfa_data.dom_dim);
+            mfa_data.tmesh.anchors(param, anchors);
 
             for (auto k = 0; k < mfa_data.tmesh.tensor_prods.size(); k++)           // for all tensor products
             {
@@ -457,7 +461,17 @@ namespace mfa
                     if (t.weights(vol_iterator.cur_iter()) == MFA_NAW)
                     {
                         // debug
-                        cerr << "skipping ctrl pt " << t.ctrl_pts.row(vol_iterator.cur_iter()) << endl;
+//                         cerr << "skipping ctrl pt (MFA_NAW) " << t.ctrl_pts.row(vol_iterator.cur_iter()) << endl;
+
+                        vol_iterator.incr_iter();
+                        continue;
+                    }
+
+                    // skip control points too far away from the decoded point
+                    if (!mfa_data.tmesh.in_anchors(anchor, anchors))
+                    {
+                        // debug
+                        cerr << "skipping ctrl pt (too far away) " << t.ctrl_pts.row(vol_iterator.cur_iter()) << endl;
 
                         vol_iterator.incr_iter();
                         continue;

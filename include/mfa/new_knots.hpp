@@ -603,11 +603,11 @@ namespace mfa
             }   // for all input points
 
             // debug: hard code span
-//             if (Max_err >= 0.0)
-//             {
-//                 for (auto k = 0; k < mfa.dom_dim; k++)
-//                     Max_span[k] = 5;
-//             }
+            if (Max_err >= 0.0)
+            {
+                for (auto k = 0; k < mfa.dom_dim; k++)
+                    Max_span[k] = 5;
+            }
 
             if (Max_err >= 0.0)
             {
@@ -741,11 +741,11 @@ namespace mfa
             }   // for all input points
 
             // debug: hard code span
-//             if (Max_err >= 0.0)
-//             {
-//                 for (auto k = 0; k < mfa.dom_dim; k++)
-//                     Max_span[k] = 5;
-//             }
+            if (Max_err >= 0.0)
+            {
+                for (auto k = 0; k < mfa.dom_dim; k++)
+                    Max_span[k] = 5;
+            }
 
             if (Max_err >= 0.0)
             {

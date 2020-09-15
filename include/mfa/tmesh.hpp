@@ -1265,9 +1265,25 @@ namespace mfa
             }
 
             // debug
-            fprintf(stderr, "anchors(): param=[%.2lf] target=[%lu]\n", param(0), target[0]);
+//             if (dom_dim_ == 1)
+//                 fprintf(stderr, "anchors(): param=[%.2lf] target=[%lu]\n", param(0), target[0]);
+//             if (dom_dim_ == 2)
+//                 fprintf(stderr, "anchors(): param=[%.2lf %.2lf] target=[%lu %lu]\n", param(0), param(1), target[0], target[1]);
 
             return;
+        }
+
+        // checks if a target point in index space is in the multidim range of anchors
+        bool in_anchors(const vector<KnotIdx>&          target,             // target point
+                        const vector<vector<KnotIdx>>&  anchors) const
+        {
+            // assumes anchor indices are sorted from low to high, which should always be true
+            for (auto k = 0; k < anchors.size(); k++)
+            {
+                if (target[k] < anchors[k].front() || target[k] > anchors[k].back())
+                    return false;
+            }
+            return true;
         }
 
         // scatter global set of control points into their proper tensor products in the tmesh
@@ -1300,6 +1316,10 @@ namespace mfa
                 for (auto j = 0; j < dom_dim_; j++)
                     anchor[j] = ijk(j) + (p_(j) + 1) / 2;                  // first control point has anchor floor((p + 1) / 2)
 
+                // debug
+//                 cerr << "ctrl_pt(" << vol_iter.cur_iter() << "): " << ctrl_pts.row(vol_iter.cur_iter()) << endl;
+//                 fprintf(stderr, "found ctrl pt in tensor_idx = %d\n", tensor_idx);
+
                 // skip control point if it is an extension of a refined tensor at a deeper level of refinement
                 // ie, if in any dimension the (global) anchor of this control point corresponds to a knot whose level
                 // is level is > the level of the target tensor, skip this control point
@@ -1309,7 +1329,7 @@ namespace mfa
                     if (all_knot_levels[j][anchor[j]] > tensor_prods[tensor_idx].level)
                     {
                         // debug
-                        fprintf(stderr, "scatter_ctrl_pts: skipping ctrl pt idx %lu\n", vol_iter.cur_iter());
+//                         fprintf(stderr, "scatter_ctrl_pts: skipping ctrl pt idx %lu\n", vol_iter.cur_iter());
 
                         skip = true;
                         break;
@@ -1321,6 +1341,9 @@ namespace mfa
                 {
                     tensor_tot_nctrl_pts[tensor_idx]++;
                     tensor_idxs[vol_iter.cur_iter()].push_back(tensor_idx);
+
+                    // debug
+                    fprintf(stderr, "tensor_tot_nctrl_pts[%d] = %lu\n", tensor_idx, tensor_tot_nctrl_pts[tensor_idx]);
                 }
 
                 // if degree is odd, check borders of neighboring tensors
@@ -1340,12 +1363,13 @@ namespace mfa
                     }
                 }
 
+                anchor[0]++;
                 vol_iter.incr_iter();                       // increment vol_iter
 
                 // update tensor_idx and start_tensor_idx, dealing with boundary conditions
-                for (auto k = 0; k < dom_dim_ - 1; k++)
+                for (auto k = 0; k < dom_dim_; k++)
                 {
-                    if (vol_iter.done(k))
+                    if (k < dom_dim_ - 1 && vol_iter.done(k))
                     {
                         anchor[0] = (p_(0) + 1) / 2;
                         anchor[k + 1]++;
@@ -1361,11 +1385,8 @@ namespace mfa
                             }
                         }
                     }
-                    else
-                    {
-                        anchor[0]++;
+                    if (!vol_iter.done(k))
                         tensor_idx = in_and_next(anchor, tensor_idx, 0);
-                    }
                 }
             }       // vol_iter not done
 
