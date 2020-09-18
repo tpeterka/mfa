@@ -169,15 +169,15 @@ namespace mfa
                 tot_error = lsq_error + cons_weight * cons_error;
 
                 // debug
-                fprintf(stderr, "niters = %lu lsq_error = %.3e cons_error = %.3e tot_error (lsq_error + %.3e * cons_error) = %e\n",
-                        niters, lsq_error, cons_error, cons_weight, tot_error);
+//                 fprintf(stderr, "niters = %lu lsq_error = %.3e cons_error = %.3e tot_error (lsq_error + %.3e * cons_error) = %e\n",
+//                         niters, lsq_error, cons_error, cons_weight, tot_error);
             }
             else
             {
                 tot_error = lsq_error;
 
                 // debug
-                fprintf(stderr, "niters = %lu lsq_error = tot_error = %e\n", niters, tot_error);
+//                 fprintf(stderr, "niters = %lu lsq_error = tot_error = %e\n", niters, tot_error);
             }
             return tot_error;
         }
@@ -1614,12 +1614,7 @@ namespace mfa
 
             // control points to solve are only free control points
             // constraints come from decoding input points that are covered by the constrained control points
-#if 1
             ctrlpts_tosolve = tc.ctrl_pts;
-#else
-            // DEPRECATE
-            LocalSolveCtrlPts(tc, ctrlpts_tosolve);
-#endif
 
             // debug
 //             cerr << "ctrlpts_tosolve:\n" << ctrlpts_tosolve << endl;
@@ -1633,12 +1628,7 @@ namespace mfa
             // get the subset of the domain points needed for the local solve
             vector<size_t> start_idxs(mfa_data.dom_dim);
             vector<size_t> end_idxs(mfa_data.dom_dim);
-#if 1
             tmesh.domain_pts(tmesh.tensor_prods.size() - 1, true, start_idxs, end_idxs);        // true = pad by degree on each side
-#else
-            // DEPRECATE
-            tmesh.domain_pts(tmesh.tensor_prods.size() - 1, false, start_idxs, end_idxs);
-#endif
 
             // debug: decode all domain points
 //             fprintf(stderr, "Debug: overriding domain points to include all: ");

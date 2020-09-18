@@ -1146,146 +1146,6 @@ namespace mfa
             }                                                               // for all dims.
         }
 
-//         // DEPRECATE
-//         // given an anchor in index space, find intersecting knot lines in index space
-//         // in -/+ directions in all dimensions
-//         void knot_intersections(const vector<KnotIdx>&      anchor,                 // knot indices of anchor for odd degree or
-//                                                                                     // knot indices of start of rectangle containing anchor for even degree
-//                                 const VectorXi&             p,                      // local degree in each dimension
-//                                 vector<vector<KnotIdx>>&    loc_knots,              // (output) local knot vector in index space
-//                                 vector<NeighborTensor>&     neigh_hi_levels) const  // (output) intersected neighbor tensors of higher level than anchor
-//         {
-//             loc_knots.resize(dom_dim_);
-//             assert(anchor.size() == dom_dim_);
-// 
-//             // find most refined tensor product containing anchor and that level of refinement
-//             // levels monotonically nondecrease; hence, find last tensor product containing the anchor
-//             TensorIdx max_j = 0;
-//             for (auto j = 0; j < tensor_prods.size(); j++)
-//                 if (in(anchor, tensor_prods[j], -1))
-//                         max_j = j;
-//             int max_level = tensor_prods[max_j].level;
-// 
-//             // debug
-//             if (anchor[0] == 2 && anchor[1] == 2 && max_j == 2)
-//             {
-//                 fprintf(stderr, "anchor = 2,2 and max_j = 2\n");
-//                 in(anchor, tensor_prods[2], -1);
-//             }
-// 
-//             // walk the t-mesh in all dimensions, min. and max. directions outward from the anchor
-//             // looking for interecting knot lines
-// 
-//             for (auto i = 0; i < dom_dim_; i++)                             // for all dims
-//             {
-//                 loc_knots[i].resize(p(i) + 2);                              // support of basis func. is p+2 by definition
-// 
-//                 KnotIdx start, min, max;
-//                 if (p(i) % 2)                                               // odd degree
-//                     start = min = max = (p(i) + 1) / 2;
-//                 else                                                        // even degree
-//                 {
-//                     start = min = p(i) / 2;
-//                     max         = p(i) / 2 + 1;
-//                 }
-//                 loc_knots[i][start]             = anchor[i];                // start at the anchor
-//                 KnotIdx         cur_knot_idx    = loc_knots[i][start];
-//                 TensorIdx       cur_tensor      = max_j;
-//                 int             cur_level       = max_level;
-//                 vector<KnotIdx> cur             = anchor;                   // current knot location in the tmesh (index space)
-// 
-//                 // from the anchor in the min. direction
-//                 for (int j = 0; j < min; j++)                               // add 'min' more knots in minimum direction from the anchor
-//                 {
-//                     bool done = false;
-//                     do
-//                     {
-//                         if (cur_knot_idx > 0)                               // more knots in the tmesh
-//                         {
-//                             cur[i] = cur_knot_idx - 1;
-// 
-//                             // check which is the correct previous tensor
-//                             // if more than one tensor sharing the target, pick highest level
-//                             if (cur_knot_idx - 1 < tensor_prods[cur_tensor].knot_mins[i])
-//                             {
-//                                 // debug
-//                                 if (tensor_prods[cur_tensor].prev[i].size() == 0)
-//                                     fprintf(stderr, "Error: prev is empty. This should not happen.\n");
-//                                 neighbor_tensors(tensor_prods[cur_tensor].prev[i], i, cur, cur_tensor, cur_level, neigh_hi_levels);
-//                             }
-// 
-//                             // check if next knot borders a higher level; if so, switch to higher level tensor
-//                             border_higher_level(cur, cur_tensor, cur_level);
-// 
-//                             // move to next knot
-//                             if (all_knot_levels[i][cur_knot_idx - 1] > cur_level)
-//                                 cur_knot_idx--;
-//                             if (cur_knot_idx > 0                                            &&
-//                                 cur_knot_idx - 1 >= tensor_prods[cur_tensor].knot_mins[i]   &&
-//                                 all_knot_levels[i][cur_knot_idx - 1] <= cur_level)
-//                             {
-//                                 loc_knots[i][start - j - 1] = --cur_knot_idx;
-//                                 done = true;
-//                             }
-//                         }
-//                         else                                                // no more knots in the tmesh
-//                         {
-//                             loc_knots[i][start - j - 1] = cur_knot_idx;     // repeat last knot as many times as needed
-//                             done = true;
-//                         }
-//                     } while (!done);
-//                 }
-// 
-//                 // reset back to anchor
-//                 cur_knot_idx    = loc_knots[i][start];
-//                 cur_tensor      = max_j;
-//                 cur_level       = max_level;
-//                 cur             = anchor;
-// 
-//                 // from the anchor in the max. direction
-//                 for (int j = 0; j < max; j++)                               // add 'max' more knots in maximum direction from the anchor
-//                 {
-//                     bool done = false;
-//                     do
-//                     {
-//                         if (cur_knot_idx + 1 < all_knots[i].size())         // more knots in the tmesh
-//                         {
-//                             cur[i] = cur_knot_idx + 1;
-// 
-//                             // check which is the correct previous tensor
-//                             // if more than one tensor sharing the target, pick highest level
-//                             if (cur_knot_idx + 1 > tensor_prods[cur_tensor].knot_maxs[i])
-//                             {
-//                                 // debug
-//                                 if (tensor_prods[cur_tensor].next[i].size() == 0)
-//                                     fprintf(stderr, "Error: next is empty. This should not happen.\n");
-//                                 neighbor_tensors(tensor_prods[cur_tensor].next[i], i, cur, cur_tensor, cur_level, neigh_hi_levels);
-//                             }
-// 
-//                             // check if next knot borders a higher level; if so, switch to higher level tensor
-//                             border_higher_level(cur, cur_tensor, cur_level);
-// 
-//                             // move to next knot
-//                             if (all_knot_levels[i][cur_knot_idx + 1] > cur_level)
-//                                 cur_knot_idx++;
-//                             if (cur_knot_idx + 1 < all_knots[i].size()                      &&
-//                                 cur_knot_idx + 1 <= tensor_prods[cur_tensor].knot_maxs[i]   &&
-//                                 all_knot_levels[i][cur_knot_idx + 1] <= cur_level)
-//                             {
-//                                 loc_knots[i][start + j + 1] = ++cur_knot_idx;
-//                                 done = true;
-//                             }
-//                         }
-//                         else                                                // no more knots in the tmesh
-//                         {
-//                             loc_knots[i][start + j + 1] = cur_knot_idx;     // repeat last knot as many times as needed
-//                             done = true;
-//                         }
-//                     } while (!done);
-//                 }
-//             }                                                               // for all dims.
-//         }
-
         // check which is the correct previous or next neighbor tensor containing the target in the current dimension
         // if more than one tensor sharing the target, pick highest level
         // updates cur_tensor and cur_level and neigh_hi_levels
@@ -1345,16 +1205,6 @@ namespace mfa
             }
         }
 
-        // DEPRECATE
-//         // given an anchor point in index space, compute local knot vector in all dimensions in index space
-//         // in Bazilevs 2010, knot indices start at 1, but mine start counting at 0
-//         void local_knot_vector(const vector<KnotIdx>&       anchor,                 // knot indices of anchor
-//                                vector<vector<KnotIdx>>&     loc_knot_idxs) const    // (output) local knot vector in index space
-//         {
-//             vector<NeighborTensor> unused;
-//             knot_intersections(anchor, p_, loc_knot_idxs, unused);
-//         }
-// 
         // given a point in parameter space to decode, compute p + 1 anchor points in all dims in knot index space
         // anchors are the centers of basis functions and locations of corresponding control points, in knot index space
         // in Bazilevs 2010, knot indices start at 1, but mine start at 0
@@ -1421,8 +1271,8 @@ namespace mfa
             }
 
             // debug
-            vector<vector<KnotIdx>> old_anchors = anchors;
-            bool changed_anchors = false;
+//             vector<vector<KnotIdx>> old_anchors = anchors;
+//             bool changed_anchors = false;
 
             // expand anchors by one level higher
             if (expand)
@@ -1445,7 +1295,7 @@ namespace mfa
                             anchors[i][j]--;
                             skip++;
                             // debug
-                            changed_anchors = true;
+//                             changed_anchors = true;
                         }
                     }
                     // from after the target to the right
@@ -1459,7 +1309,7 @@ namespace mfa
                             anchors[i][j]++;
                             skip++;
                             // debug
-                            changed_anchors = true;
+//                             changed_anchors = true;
                         }
                     }
                 }
