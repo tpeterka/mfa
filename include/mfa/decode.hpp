@@ -422,17 +422,16 @@ namespace mfa
 
 #ifdef TMESH
 
-        // decode a point in the t-mesh using all the control points
-        // TODO: unoptimized
-        // TODO: computes product of all basis functions and anchors, even those that are 0
-        // TODO: for coverage of local knot vectors to the decoded point and only use those anchors
+        // decode a point in the t-mesh
+        // TODO: serial implementation, no threading
+        // TODO: checks local support of individual control points, but could also check bounds of tensors and skip entire tensors
         // TODO: no derivatives as yet
         // TODO: weighs all dims, whereas other versions of VolPt have a choice of all dims or only last dim
         void VolPt_tmesh(const VectorX<T>&      param,      // parameters of point to decode
                          VectorX<T>&            out_pt)     // (output) point, allocated by caller
         {
             // debug
-            cerr << "VolPt_tmesh(): decoding point with param: " << param.transpose() << endl;
+//             cerr << "VolPt_tmesh(): decoding point with param: " << param.transpose() << endl;
 
             // init
             out_pt = VectorX<T>::Zero(out_pt.size());
@@ -441,11 +440,31 @@ namespace mfa
 
             // compute range of anchors covering decoded point
             vector<vector<KnotIdx>> anchors(mfa_data.dom_dim);
-            mfa_data.tmesh.anchors(param, anchors);
+
+            mfa_data.tmesh.anchors(param, true, anchors);
+
+            // debug
+//             if (param(0) > 0.7 && param(0) < 0.8 && param(1) > 0.6 && param(1) < 0.7)
+//             {
+//                 for (auto i = 0; i < mfa_data.dom_dim; i++)
+//                 {
+//                     fprintf(stderr, "anchors[%d]: [ ", i);
+//                     for (auto j = 0; j < anchors[i].size(); j++)
+//                         fprintf(stderr, "%lu ", anchors[i][j]);
+//                     fprintf(stderr, "] ");
+//                 }
+//                 fprintf(stderr, "\n");
+//             }
 
             for (auto k = 0; k < mfa_data.tmesh.tensor_prods.size(); k++)           // for all tensor products
             {
                 const TensorProduct<T>& t = mfa_data.tmesh.tensor_prods[k];
+
+                // TODO: skip entire tensor if knot mins, maxs are too far away from decoded point
+                // don't need to check individual control points in this case
+
+                // debug
+//                 cerr << "tensor " << k << endl;
 
                 VolIterator         vol_iterator(t.nctrl_pts);                      // iterator over control points in the current tensor
                 vector<KnotIdx>     anchor(mfa_data.dom_dim);                       // one anchor in (global, ie, over all tensors) index space
@@ -467,11 +486,17 @@ namespace mfa
                         continue;
                     }
 
+                    // debug
+//                     bool skip = false;
+
                     // skip control points too far away from the decoded point
                     if (!mfa_data.tmesh.in_anchors(anchor, anchors))
                     {
                         // debug
-                        cerr << "skipping ctrl pt (too far away) " << t.ctrl_pts.row(vol_iterator.cur_iter()) << endl;
+//                         cerr << "skipping ctrl pt (too far away) [" << ijk.transpose() << "] " << t.ctrl_pts.row(vol_iterator.cur_iter()) << endl;
+
+                        // debug
+//                         skip = true;
 
                         vol_iterator.incr_iter();
                         continue;
@@ -485,7 +510,7 @@ namespace mfa
                         // local knot vector
                         local_knot_idxs[i].resize(mfa_data.p(i) + 2);               // local knot vector for current dim in index space
                         vector<T> local_knots(mfa_data.p(i) + 2);                   // local knot vector for current dim in parameter space
-                        mfa_data.tmesh.local_knot_vector(anchor, local_knot_idxs);
+                        mfa_data.tmesh.knot_intersections(anchor, k, local_knot_idxs);
                         for (auto n = 0; n < local_knot_idxs[i].size(); n++)
                             local_knots[n] = mfa_data.tmesh.all_knots[i][local_knot_idxs[i][n]];
 
@@ -502,6 +527,13 @@ namespace mfa
                     }
                     // compute the point
                     out_pt += B * t.ctrl_pts.row(vol_iterator.cur_iter()) * t.weights(vol_iterator.cur_iter());
+
+                    // debug
+//                     if (skip && B != 0.0)
+//                     {
+//                         cerr << "\nVolPt_tmesh(): Error: incorrect skip. decoding point with param: " << param.transpose() << endl;
+//                         cerr << "tensor " << k << " skipping ctrl pt [" << ijk.transpose() << "] " << endl;
+//                     }
 
                     B_sum += B * t.weights(vol_iterator.cur_iter());
                     // debug
