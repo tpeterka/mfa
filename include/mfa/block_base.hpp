@@ -519,9 +519,9 @@ struct BlockBase
         cerr << "tot # output ctrl pts = " << tot_nctrl_pts << endl;
 
         //  debug: print control points and weights
-        //         print_ctrl_weights(geometry.mfa_data->tmesh);
+//         print_ctrl_weights(geometry.mfa_data->tmesh);
         // debug: print knots
-        //         print_knots(geometry.mfa_data->tmesh);
+//         print_knots(geometry.mfa_data->tmesh);
 
         fprintf(stderr, "# output knots        = [ ");
         for (auto j = 0 ; j < geometry.mfa_data->tmesh.all_knots.size(); j++)
@@ -551,9 +551,9 @@ struct BlockBase
             cerr << "tot # output ctrl pts = " << tot_nctrl_pts << endl;
 
             //  debug: print control points and weights
-            //             print_ctrl_weights(vars[i].mfa_data->tmesh);
+//             print_ctrl_weights(vars[i].mfa_data->tmesh);
             // debug: print knots
-            //             print_knots(vars[i].mfa_data->tmesh);
+//             print_knots(vars[i].mfa_data->tmesh);
 
 
             fprintf(stderr, "# output knots        = [ ");
@@ -565,10 +565,10 @@ struct BlockBase
 
             cerr << "-----------------------------" << endl;
 
-            T rms_err = sqrt(sum_sq_errs[i] / (domain.rows()));
-            fprintf(stderr, "range extent          = %e\n",  range_extent);
             if (error)
             {
+                T rms_err = sqrt(sum_sq_errs[i] / (domain.rows()));
+                fprintf(stderr, "range extent          = %e\n",  range_extent);
                 fprintf(stderr, "max_err               = %e\n",  max_errs[i]);
                 fprintf(stderr, "normalized max_err    = %e\n",  max_errs[i] / range_extent);
                 fprintf(stderr, "sum of squared errors = %e\n",  sum_sq_errs[i]);

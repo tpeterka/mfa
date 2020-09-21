@@ -4,14 +4,6 @@ import diy
 import mfa
 import math
 
-# class PyBlock(mfa.Block):
-#     # debug
-#     def test(self, cp, caps=False):
-#         if caps:
-#             print("HELLO")
-#         else:
-#             print("hello")
-
 # default program arguments
 fun             = "sinc"
 error           = True
@@ -47,8 +39,6 @@ d_args.s                = [10.0, 1.0]
 # MPI, DIY world and master
 w = diy.mpi.MPIComm()           # world
 m = diy.Master(w)               # master
-# TODO: this doesn't work
-# m = diy.Master(w, 1, -1, mfa.Block.create, mfa.Block.destroy, 0, mfa.Block.save, mfa.Block.load)               # master
 
 def add_block(gid, core, bounds, domain, link):
 #     b = PyBlock()
@@ -67,7 +57,6 @@ a = diy.ContiguousAssigner(w.size, nblocks)
 d.decompose(w.rank, a, add_block)
 
 # initialize input data
-# TODO: this seg faults, and it used to work
 m.foreach(lambda b, cp: b.generate_analytical_data(cp, fun, d_args))
 
 # compute the MFA
@@ -81,6 +70,13 @@ if error:
 m.foreach(lambda b, cp: b.print_block(cp, True))
 
 # save the results
-# TODO: giving a specific save function doesn't work
-# diy.write_blocks("approx.out", m, save=mfa.Block.save)
+print("\n\nSaving blocks\n")
+diy.write_blocks("approx.out", m, save = mfa.save_block)
+
+# debug: load the results and print them out
+print("\n\nLoading blocks back in and printing them out\n")
+m1 = diy.Master(w)
+a1 = diy.ContiguousAssigner(w.size, -1)
+diy.read_blocks("approx.out", a1, m1, load = mfa.load_block)
+m1.foreach(lambda b,cp: b.print_block(cp, False))
 

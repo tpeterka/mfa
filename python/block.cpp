@@ -89,66 +89,19 @@ void init_block(py::module& m, std::string name)
         .def("destroy",             &Block<T>::destroy)
         .def("save",                &Block<T>::save)
         .def("load",                &Block<T>::load)
-        .def(py::pickle(
-            [](const Block<T>& b)      // __getstate__
-            {
-                return py::make_tuple(b.domain,             // TODO: debugging only; don't save input pts in practice
-                                      b.dom_dim,
-                                      b.pt_dim,
-                                      b.mfa->ndom_pts(),
-                                      b.bounds_mins,
-                                      b.bounds_maxs,
-                                      b.core_mins,
-                                      b.core_maxs,
-                                      b.geometry.mfa_data->p,
-                                      b.geometry.mfa_data->tmesh.tensor_prods.size());
-                // TODO: how to add a variable number of items to the tuple?
-                // TODO: get the rest of the state
-            },
-            [](py::tuple t)                 // __setstate__
-            {
-                Block<T> b;
+        ;
 
-                // TODO: don't load domain in practice, for debugging only
-                b.domain                = t[0].cast<MatrixX<T>>();
+        m.def("save_block", [](const py::object* b, diy::BinaryBuffer* bb)
+                {
+                    mfa::save<Block<T>, T>(b->cast<Block<T>*>(), *bb);
+                });
 
-                // top-level MFA data
-                b.dom_dim               = t[1].cast<int>();
-                b.pt_dim                = t[2].cast<int>();
-                VectorXi ndom_pts       = t[3].cast<VectorXi>();
-                b.mfa                   = new mfa::MFA<T>(b.dom_dim, ndom_pts, b.domain);
-
-                // extents
-                b.bounds_mins           = t[4].cast<VectorX<T>>();
-                b.bounds_maxs           = t[5].cast<VectorX<T>>();
-                b.core_mins             = t[6].cast<VectorX<T>>();
-                b.core_maxs             = t[7].cast<VectorX<T>>();
-
-                // geometry
-                VectorXi p              = t[8].cast<VectorXi>();
-                size_t ntensor_prods    = t[9].cast<size_t>();
-                b.geometry.mfa_data     = new mfa::MFA_Data<T>(p, ntensor_prods);
-
-                // TODO: set the rest of the state
-
-                return b;
-            }))
-    ;
-
-    // TODO: crashes at runtime
-//     m.def("add", [](int             gid,
-//                     const Bounds&   core,
-//                     const Bounds&   bounds,
-//                     const Bounds&   domain,
-//                     const RCLink&   link,
-//                     Master&         master,
-//                     int             dom_dim,
-//                     int             pt_dim,
-//                     T          ghost_factor)
-//             {
-//                 mfa::add<Block<T>, T>(gid, core, bounds, domain, link, master, dom_dim, pt_dim, ghost_factor);
-//             });
-
+        m.def("load_block", [](diy::BinaryBuffer* bb) -> py::object
+                {
+                    Block<T> b;
+                    mfa::load<Block<T>, T>(&b, *bb);
+                    return py::cast(b);
+                });
 }
 
 void init_block(py::module& m)
