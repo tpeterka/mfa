@@ -67,6 +67,7 @@ a = diy.ContiguousAssigner(w.size, nblocks)
 d.decompose(w.rank, a, add_block)
 
 # initialize input data
+# TODO: this seg faults, and it used to work
 m.foreach(lambda b, cp: b.generate_analytical_data(cp, fun, d_args))
 
 # compute the MFA
@@ -81,5 +82,5 @@ m.foreach(lambda b, cp: b.print_block(cp, True))
 
 # save the results
 # TODO: giving a specific save function doesn't work
-diy.write_blocks("approx.out", m, save=mfa.Block.save)
+# diy.write_blocks("approx.out", m, save=mfa.Block.save)
 

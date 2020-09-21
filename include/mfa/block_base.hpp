@@ -144,6 +144,8 @@ struct BlockBase
         bounds_maxs.resize(pt_dim);
         core_mins.resize(dom_dim);
         core_maxs.resize(dom_dim);
+        // blending
+        overlaps.resize(dom_dim);
 
         // manually set ghosted block bounds as a factor increase of original core bounds
         for (int i = 0; i < dom_dim; i++)
