@@ -32,29 +32,28 @@ d_args.min              = [-4.0 * math.pi]
 d_args.max              = [4.0 * math.pi]
 d_args.s                = [10.0, 1.0]
 
-# debug
-# print(d_args)
-# print(d_args.dom_dim, d_args.pt_dim, d_args.min, d_args.max, d_args.s)
-
 # MPI, DIY world and master
 w = diy.mpi.MPIComm()           # world
 m = diy.Master(w)               # master
 
 def add_block(gid, core, bounds, domain, link):
-#     b = PyBlock()
     b = mfa.Block()
     b.init(core, domain, dom_dim, pt_dim, float(0.0))
     m.add(gid, b, link)
 
 nblocks = w.size
-# TODO: this doesn't work
-# domain = diy.DoubleContinuousBounds(d_args.min, d_args.max)
+
+# decompose domain using single precision bounds
 domain = diy.ContinuousBounds(d_args.min, d_args.max)
-# TODO: this doesn't work
-# d = diy.DoubleContinuousDecomposer(dom_dim, domain, nblocks)
 d = diy.ContinuousDecomposer(dom_dim, domain, nblocks)
 a = diy.ContiguousAssigner(w.size, nblocks)
 d.decompose(w.rank, a, add_block)
+
+# decompose domain using double precision bounds (TODO: doesn't work)
+# domain = diy.DoubleContinuousBounds(d_args.min, d_args.max)
+# d = diy.DoubleContinuousDecomposer(dom_dim, domain, nblocks) # TODO: this fails
+# a = diy.ContiguousAssigner(w.size, nblocks)
+# d.decompose(w.rank, a, add_block)
 
 # initialize input data
 m.foreach(lambda b, cp: b.generate_analytical_data(cp, fun, d_args))
@@ -74,9 +73,9 @@ print("\n\nSaving blocks\n")
 diy.write_blocks("approx.out", m, save = mfa.save_block)
 
 # debug: load the results and print them out
-print("\n\nLoading blocks back in and printing them out\n")
-m1 = diy.Master(w)
-a1 = diy.ContiguousAssigner(w.size, -1)
-diy.read_blocks("approx.out", a1, m1, load = mfa.load_block)
-m1.foreach(lambda b,cp: b.print_block(cp, False))
+# print("\n\nLoading blocks back in and printing them out\n")
+# m1 = diy.Master(w)
+# a1 = diy.ContiguousAssigner(w.size, -1)
+# diy.read_blocks("approx.out", a1, m1, load = mfa.load_block)
+# m1.foreach(lambda b,cp: b.print_block(cp, False))
 

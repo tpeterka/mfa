@@ -73,7 +73,7 @@ struct Block : public BlockBase<T>
         void* create()              { return mfa::create<Block>(); }
 
     static
-        void destroy(void* b)       { mfa::destroy<Block>(b); }
+        void destroy(void* b)       { cerr << "Block::destroy" << endl; mfa::destroy<Block>(b); }
 
     static
         void add(                                   // add the block to the decomposition
@@ -87,6 +87,7 @@ struct Block : public BlockBase<T>
             int                 pt_dim,             // point dimensionality
             T                   ghost_factor = 0.0) // amount of ghost zone overlap as a factor of block size (0.0 - 1.0)
     {
+        cerr << "Block::add" << endl;
         mfa::add<Block, T>(gid, core, bounds, domain, link, master, dom_dim, pt_dim, ghost_factor);
     }
 

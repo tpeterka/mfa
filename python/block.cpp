@@ -31,11 +31,6 @@ void init_block(py::module& m, std::string name)
 
     py::class_<BlockBase<T>> (m, "BlockBase")
         .def(py::init<>())
-        // TODO: not sure if these will be needed
-//         .def_readwrite("bounds_mins",   &BlockBase<T>::bounds_mins)
-//         .def_readwrite("bounds_maxs",   &BlockBase<T>::bounds_maxs)
-//         .def_readwrite("core_mins",     &BlockBase<T>::core_mins)
-//         .def_readwrite("core_maxs",     &BlockBase<T>::core_maxs)
     ;
 
     py::class_<DomainArgs, ModelInfo>(m, "DomainArgs")

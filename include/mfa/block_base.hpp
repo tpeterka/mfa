@@ -123,6 +123,7 @@ struct BlockBase
 
     ~BlockBase()
     {
+        cerr << "~BlockBase" << endl;
         if (mfa)
             delete mfa;
     }
@@ -1423,11 +1424,7 @@ namespace mfa
     template<typename B>                        // B = block object
     void destroy(void* b)
     {
-        //         DEPRECATE, moved to ~BlockBase()
-//         B* block = static_cast<B*>(b);
-//         if (block->mfa)
-//             delete block->mfa;
-//         delete block;
+        cerr << "mfa::destroy" << endl;
         delete static_cast<B*>(b);
     }
 
@@ -1443,6 +1440,7 @@ namespace mfa
                 int                 pt_dim,             // point dimensionality
                 T                   ghost_factor = 0.0) // amount of ghost zone overlap as a factor of block size (0.0 - 1.0)
         {
+            cerr << "mfa::add" << endl;
             B*              b   = new B;
             RCLink<T>*      l   = new RCLink<T>(link);
             diy::Master&    m   = const_cast<diy::Master&>(master);
