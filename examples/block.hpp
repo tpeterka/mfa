@@ -61,7 +61,7 @@ struct DomainArgs : public ModelInfo
     vector<real_t>      f;                          // frequency multiplier for each variable or any other usage
     real_t              t;                          // waviness of domain edges or any other usage
     real_t              n;                          // noise factor [0.0 - 1.0]
-    char                infile[256];                // input filename
+    string              infile;                     // input filename
     bool                multiblock;                 // multiblock domain, get bounds from block
 };
 
@@ -449,7 +449,7 @@ struct Block : public BlockBase<T>
         // rest is hard-coded for 1d
 
         // open file and seek to a slice in the center
-        FILE *fd = fopen(a->infile, "r");
+        FILE *fd = fopen(a->infile.c_str(), "r");
         assert(fd);
         fseek(fd, (a->ndom_pts[0] * a->ndom_pts[1] * a->ndom_pts[2] / 2 + a->ndom_pts[0] * a->ndom_pts[1] / 2) * 12, SEEK_SET);
 
@@ -532,7 +532,7 @@ struct Block : public BlockBase<T>
         // rest is hard-coded for 2d
 
         // open file and seek to a slice in the center
-        FILE *fd = fopen(a->infile, "r");
+        FILE *fd = fopen(a->infile.c_str(), "r");
         assert(fd);
         // middle plane in z, offset = full x,y range * 1/2 z range
         fseek(fd, (a->ndom_pts[0] * a->ndom_pts[1] * a->ndom_pts[2] / 2) * 12, SEEK_SET);
@@ -617,7 +617,7 @@ struct Block : public BlockBase<T>
         this->domain.resize(tot_ndom_pts, this->pt_dim);
         vector<float> vel(a->full_dom_pts[0] * a->full_dom_pts[1] * 3);
 
-        FILE *fd = fopen(a->infile, "r");
+        FILE *fd = fopen(a->infile.c_str(), "r");
         assert(fd);
 
         // rest is hard-coded for 2d
@@ -729,7 +729,7 @@ struct Block : public BlockBase<T>
 
         vector<float> vel(3 * tot_ndom_pts);
 
-        FILE *fd = fopen(a->infile, "r");
+        FILE *fd = fopen(a->infile.c_str(), "r");
         assert(fd);
 
         // read all three components of velocity and compute magnitude
@@ -819,7 +819,7 @@ struct Block : public BlockBase<T>
         this->domain.resize(tot_ndom_pts, this->pt_dim);
         vector<float> vel(a->full_dom_pts[0] * a->full_dom_pts[1] * a->full_dom_pts[2] * 3);
 
-        FILE *fd = fopen(a->infile, "r");
+        FILE *fd = fopen(a->infile.c_str(), "r");
         assert(fd);
 
         // rest is hard-coded for 3d
@@ -934,7 +934,7 @@ struct Block : public BlockBase<T>
 
         vector<float> val(tot_ndom_pts);
 
-        FILE *fd = fopen(a->infile, "r");
+        FILE *fd = fopen(a->infile.c_str(), "r");
         assert(fd);
 
         // read data values
@@ -1014,7 +1014,7 @@ struct Block : public BlockBase<T>
 
         vector<float> val(tot_ndom_pts);
 
-        FILE *fd = fopen(a->infile, "r");
+        FILE *fd = fopen(a->infile.c_str(), "r");
         assert(fd);
 
         // read data values

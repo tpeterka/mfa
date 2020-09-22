@@ -366,8 +366,8 @@ int main(int argc, char** argv)
         d_args.ndom_pts[0]  = 704;
         d_args.ndom_pts[1]  = 540;
         d_args.ndom_pts[2]  = 550;
-        strncpy(d_args.infile, infile.c_str(), sizeof(d_args.infile));
-//         strncpy(d_args.infile, "/Users/tpeterka/datasets/flame/6_small.xyz", sizeof(d_args.infile));
+        d_args.infile       = infile;
+//         d_args.infile       = "/Users/tpeterka/datasets/flame/6_small.xyz";
         if (dom_dim == 1)
             master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
                     { b->read_1d_slice_3d_vector_data(cp, d_args); });
@@ -390,8 +390,8 @@ int main(int argc, char** argv)
         d_args.ndom_pts[0]  = 200;
         d_args.ndom_pts[1]  = 200;
         d_args.ndom_pts[2]  = 200;
-        strncpy(d_args.infile, infile.c_str(), sizeof(d_args.infile));
-//         strncpy(d_args.infile, "/Users/tpeterka/datasets/nek5000/200x200x200/0.xyz", sizeof(d_args.infile));
+        d_args.infile       = infile;
+//         d_args.infile       = "/Users/tpeterka/datasets/nek5000/200x200x200/0.xyz";
         if (dom_dim == 2)
             master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
                     { b->read_2d_slice_3d_vector_data(cp, d_args); });
@@ -411,8 +411,8 @@ int main(int argc, char** argv)
         d_args.ndom_pts[0]  = 288;
         d_args.ndom_pts[1]  = 512;
         d_args.ndom_pts[2]  = 512;
-        strncpy(d_args.infile, infile.c_str(), sizeof(d_args.infile));
-//         strncpy(d_args.infile, "/Users/tpeterka/datasets/rti/dd07g_xxsmall_le.xyz", sizeof(d_args.infile));
+        d_args.infile       = infile;
+//         d_args.infile       = "/Users/tpeterka/datasets/rti/dd07g_xxsmall_le.xyz";
         if (dom_dim == 2)
             master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
                     { b->read_2d_slice_3d_vector_data(cp, d_args); });
@@ -431,8 +431,8 @@ int main(int argc, char** argv)
     {
         d_args.ndom_pts[0]  = 1800;
         d_args.ndom_pts[1]  = 3600;
-        strncpy(d_args.infile, infile.c_str(), sizeof(d_args.infile));
-//         strncpy(d_args.infile, "/Users/tpeterka/datasets/CESM-ATM-tylor/1800x3600/FLDSC_1_1800_3600.dat", sizeof(d_args.infile));
+        d_args.infile       = infile;
+        d_args.infile       = "/Users/tpeterka/datasets/CESM-ATM-tylor/1800x3600/FLDSC_1_1800_3600.dat";
         if (dom_dim == 2)
             master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
                     { b->read_2d_scalar_data(cp, d_args); });
