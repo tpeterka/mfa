@@ -50,7 +50,7 @@ void init_block(py::module& m, std::string name)
         .def_readwrite("t",             &DomainArgs::t)
         .def_readwrite("n",             &DomainArgs::n)
         //  TODO: how to bind infile, does not compile
-//         .def_readwrite("infile",        &DomainArgs::infile)
+        .def_readwrite("infile",        &DomainArgs::infile)
         .def_readwrite("multiblock",    &DomainArgs::multiblock)
     ;
 
