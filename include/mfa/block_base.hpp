@@ -123,7 +123,6 @@ struct BlockBase
 
     ~BlockBase()
     {
-        cerr << "~BlockBase" << endl;
         if (mfa)
             delete mfa;
     }
@@ -304,7 +303,10 @@ struct BlockBase
     void decode_point(
             const   diy::Master::ProxyWithLink& cp,
             const VectorX<T>&                   param,          // parameters of point to decode
-            VectorX<T>&                         cpt)            // (output) decoded point
+            // TODO: DEPRECATE C++ reference for cpt argument in favor of Eigen::Ref
+//             VectorX<T>&                         cpt)            // (output) decoded point
+            Eigen::Ref<VectorX<T>>              cpt)            // (output) decoded point
+                                                                // using Eigen::Ref instead of C++ reference so that pybind11 can pass by reference
     {
         // geometry
         VectorX<T> geom_cpt(dom_dim);
@@ -1422,11 +1424,7 @@ namespace mfa
         void* create()          { return new B; }
 
     template<typename B>                        // B = block object
-    void destroy(void* b)
-    {
-        cerr << "mfa::destroy" << endl;
-        delete static_cast<B*>(b);
-    }
+    void destroy(void* b)       { delete static_cast<B*>(b); }
 
     template<typename B, typename T>                // B = block object,  T = float or double
         void add(                                       // add the block to the decomposition
@@ -1440,7 +1438,6 @@ namespace mfa
                 int                 pt_dim,             // point dimensionality
                 T                   ghost_factor = 0.0) // amount of ghost zone overlap as a factor of block size (0.0 - 1.0)
         {
-            cerr << "mfa::add" << endl;
             B*              b   = new B;
             RCLink<T>*      l   = new RCLink<T>(link);
             diy::Master&    m   = const_cast<diy::Master&>(master);
