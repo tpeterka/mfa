@@ -313,8 +313,8 @@ namespace mfa
                     if (nonempty_intersection(new_tensor, tensor_prods[j], split_side))
                     {
                         // debug
-//                         fprintf(stderr, "intersection found between new tensor and existing tensor idx=%lu split_side=[%d %d]\n",
-//                                 j, split_side[0], split_side[1]);
+                        fprintf(stderr, "intersection found between new tensor and existing tensor idx=%d split_side=[%d %d]\n",
+                                j, split_side[0], split_side[1]);
 //                         fprintf(stderr, "\ntensors before intersection\n\n");
 //                         print();
 
@@ -324,8 +324,8 @@ namespace mfa
                                 tensor_inserted = true;
 
                             // debug
-//                             fprintf(stderr, "\ntensors after intersection\n\n");
-//                             print();
+                            fprintf(stderr, "\ntensors after intersection\n\n");
+                            print();
 
                             break;  // adding a tensor invalidates iterator, start iteration over
                         }
@@ -429,7 +429,7 @@ namespace mfa
             return retval;
         }
 
-        // intersect in one dimension a new tensor product with an existing tensor product, if the intersection exists
+        // intersect a new tensor product with an existing tensor product, if the intersection exists
         // returns true if intersection found (and the vector of tensor products grew as a result of the intersection, ie, an existing tensor was split into two)
         // sets knots_match to true if during the course of intersecting, one of the tensors in tensor_prods was added or modified to match the new tensor
         // ie, the caller should not add the tensor later if knots_match
@@ -479,7 +479,7 @@ namespace mfa
                       TensorIdx             exist_tensor_idx,       // index in tensor_prods of existing tensor
                       int                   cur_dim,                // current dimension to intersect
                       KnotIdx               knot_idx,               // knot index in current dim of split point
-                      int                   split_side,             // whether min (-1) or max or both sides (1) of new tensor split the existing tensor
+                      int                   split_side,             // whether min (-1) or max (1) or both sides (2) of new tensor split the existing tensor
                       bool&                 knots_match)            // (output) interection resulted in a tensor whose knot mins, max match new tensor's
         {
             // convert global knot_idx to local_knot_idx in exist_tensor
@@ -520,9 +520,9 @@ namespace mfa
 //                         exist_tensor_idx, knot_idx, local_knot_idx);
 
                 if (split_side == -1 || split_side == 2)
-                    split_ctrl_pts(exist_tensor_idx, side_tensor, cur_dim, local_knot_idx, false, true);
+                    split_ctrl_pts(exist_tensor_idx, side_tensor, cur_dim, local_knot_idx, split_side, false, true);
                 else
-                    split_ctrl_pts(exist_tensor_idx, side_tensor, cur_dim, local_knot_idx, false, false);
+                    split_ctrl_pts(exist_tensor_idx, side_tensor, cur_dim, local_knot_idx, split_side, false, false);
 
                 // add the new max side tensor
                 tensor_prods.push_back(side_tensor);
@@ -546,9 +546,9 @@ namespace mfa
 //                         exist_tensor_idx, knot_idx, local_knot_idx);
 
                 if (split_side == -1 || split_side == 2)
-                    split_ctrl_pts(exist_tensor_idx, new_tensor, cur_dim, local_knot_idx, true, true);
+                    split_ctrl_pts(exist_tensor_idx, new_tensor, cur_dim, local_knot_idx, split_side, true, true);
                 else
-                    split_ctrl_pts(exist_tensor_idx, new_tensor, cur_dim, local_knot_idx, true, false);
+                    split_ctrl_pts(exist_tensor_idx, new_tensor, cur_dim, local_knot_idx, split_side, true, false);
 
                 // delete next and prev pointers of existing tensor that are no longer valid as a result of adding new max side
                 delete_old_pointers(exist_tensor_idx);
@@ -659,6 +659,7 @@ namespace mfa
                             TensorProduct<T>&    new_side_tensor,        // new max side tensor
                             int                  cur_dim,                // current dimension to intersect
                             KnotIdx              split_knot_idx,         // local (not global!) knot index in current dim of split point in existing tensor
+                            int                  split_side,             // whether min (-1) or max (1) or both sides (2) of new tensor split the existing tensor
                             bool                 skip_new_side,          // don't add control points to new_side tensor, only adjust exsiting tensor control points
                             bool                 max_side)               // new side is in the max. direction (false = min. direction)
         {
@@ -753,9 +754,9 @@ namespace mfa
                     new_exist_ctrl_pts.row(cur_exist_idx) = existing_tensor.ctrl_pts.row(vol_iter.cur_iter());
                     new_exist_weights(cur_exist_idx) = existing_tensor.weights(vol_iter.cur_iter());
 
-                    // when degree is odd, set the ctrl point to nan, real value is in the added tensor
+                    // when degree is odd, set the ctrl point to nan, real value is in the new side tensor
                     // TODO: check for being outside the new tensor bounds in the other dims
-                    if (p_(cur_dim) % 2 &&
+                    if (split_side != 2 && p_(cur_dim) % 2 &&
                             ((max_side && vol_iter.idx_dim(cur_dim) == max_ctrl_idx) ||
                              (!max_side && vol_iter.idx_dim(cur_dim) == min_ctrl_idx)))
                         new_exist_weights(cur_exist_idx, 0) = MFA_NAW;
@@ -769,14 +770,16 @@ namespace mfa
                     if (!skip_new_side)
                     {
                         // debug
-//                         fprintf(stderr, "moving to new_side_tensor.ctrl_pts[%lu]\n", cur_new_side_idx);
+//                         if (cur_dim == 0 && split_knot_idx == 5)
+//                             fprintf(stderr, "moving to new_side_tensor.ctrl_pts[%lu]\n", cur_new_side_idx);
 
                         new_side_tensor.ctrl_pts.row(cur_new_side_idx) = existing_tensor.ctrl_pts.row(vol_iter.cur_iter());
                         new_side_tensor.weights(cur_new_side_idx) = existing_tensor.weights(vol_iter.cur_iter());
 
-                        // when degree is odd, set the ctrl point to nan, real value is in the added tensor
+                        // when degree is odd and new tensor is inside the existing tensor,
+                        // set the ctrl point to nan, real value is in the added tensor
                         // TODO: check for being outside the new tensor bounds in the other dims
-                        if (p_(cur_dim) % 2 &&
+                        if (split_side == 2 && p_(cur_dim) % 2 &&
                                 ((max_side && vol_iter.idx_dim(cur_dim) == min_ctrl_idx) ||
                                  (!max_side && vol_iter.idx_dim(cur_dim) == max_ctrl_idx)))
                             new_side_tensor.weights(cur_new_side_idx, 0) = MFA_NAW;
@@ -1400,30 +1403,28 @@ namespace mfa
 //                 cerr << "ctrl_pt(" << vol_iter.cur_iter() << "): " << ctrl_pts.row(vol_iter.cur_iter()) << endl;
 //                 fprintf(stderr, "found ctrl pt in tensor_idx = %d\n", tensor_idx);
 
-                // skip control point if it is an extension of a refined tensor at a deeper level of refinement
-                // ie, if in any dimension the (global) anchor of this control point corresponds to a knot whose level
-                // is level is > the level of the target tensor, skip this control point
-                bool skip = false;
+                // find minimum level of all the dimensions of the anchor of the control point
+                int anchor_max_level;
                 for (auto j = 0; j < dom_dim_; j++)
                 {
-                    if (all_knot_levels[j][anchor[j]] > tensor_prods[tensor_idx].level)
-                    {
-                        // debug
-//                         fprintf(stderr, "scatter_ctrl_pts: skipping ctrl pt idx %lu\n", vol_iter.cur_iter());
-
-                        skip = true;
-                        break;
-                    }
+                    if (j == 0 || all_knot_levels[j][anchor[j]] > anchor_max_level)
+                        anchor_max_level = all_knot_levels[j][anchor[j]];
                 }
 
                 // set the destination tensor for the point
-                if (!skip)
+                if (anchor_max_level <= tensor_prods[tensor_idx].level)
                 {
                     tensor_tot_nctrl_pts[tensor_idx]++;
                     tensor_idxs[vol_iter.cur_iter()].push_back(tensor_idx);
 
                     // debug
-//                     fprintf(stderr, "tensor_tot_nctrl_pts[%d] = %lu\n", tensor_idx, tensor_tot_nctrl_pts[tensor_idx]);
+//                     if (tensor_idx == 2)
+//                     {
+//                         VectorXi ijk(dom_dim_);
+//                         vol_iter.idx_ijk(vol_iter.cur_iter(), ijk);
+//                         cerr << "ijk: " << ijk.transpose() << endl;
+//                         fprintf(stderr, "1: tensor_tot_nctrl_pts[%d] = %lu\n", tensor_idx, tensor_tot_nctrl_pts[tensor_idx]);
+//                     }
                 }
 
                 // if degree is odd, check borders of neighboring tensors
@@ -1437,11 +1438,25 @@ namespace mfa
                         in_neighbors(anchor, j, tensor_idx, neighbor_idxs);
                         for (auto k = 0; k < neighbor_idxs.size(); k++)
                         {
-                            tensor_tot_nctrl_pts[neighbor_idxs[k]]++;
-                            tensor_idxs[vol_iter.cur_iter()].push_back(neighbor_idxs[k]);
-                        }
-                    }
-                }
+                            TensorIdx           neigh_idx       = neighbor_idxs[k];
+                            TensorProduct<T>&   neigh_tensor    = tensor_prods[neigh_idx];
+                            if (anchor_max_level <= neigh_tensor.level && in(anchor, neigh_tensor))
+                            {
+                                tensor_tot_nctrl_pts[neigh_idx]++;
+                                tensor_idxs[vol_iter.cur_iter()].push_back(neigh_idx);
+
+                                // debug
+//                                 if (neigh_idx == 2)
+//                                 {
+//                                     VectorXi ijk(dom_dim_);
+//                                     vol_iter.idx_ijk(vol_iter.cur_iter(), ijk);
+//                                     cerr << "ijk: " << ijk.transpose() << endl;
+//                                     fprintf(stderr, "2: tensor_tot_nctrl_pts[%lu] = %lu\n", neigh_idx, tensor_tot_nctrl_pts[neigh_idx]);
+//                                 }
+                            }
+                        }   // neighbors
+                    }   // odd degree
+                }   // j < dom_dim_
 
                 anchor[0]++;
                 vol_iter.incr_iter();                       // increment vol_iter
@@ -1474,6 +1489,7 @@ namespace mfa
             // allocated space and product of nctrl_pts in the tensor
             for (int i = 0; i < tensor_prods.size(); i++)
             {
+                // debug
                 assert(tensor_tot_nctrl_pts[i] == tensor_prods[i].ctrl_pts.rows());
                 assert(tensor_tot_nctrl_pts[i] == tensor_prods[i].weights.size());
                 assert(tensor_tot_nctrl_pts[i] == tensor_prods[i].nctrl_pts.prod());

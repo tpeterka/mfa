@@ -603,11 +603,11 @@ namespace mfa
             }   // for all input points
 
             // debug: hard code span
-//             if (Max_err >= 0.0)
-//             {
-//                 for (auto k = 0; k < mfa.dom_dim; k++)
-//                     Max_span[k] = 5;
-//             }
+            if (Max_err >= 0.0)
+            {
+                for (auto k = 0; k < mfa.dom_dim; k++)
+                    Max_span[k] = 5;
+            }
 
             if (Max_err >= 0.0)
             {
@@ -741,11 +741,11 @@ namespace mfa
             }   // for all input points
 
             // debug: hard code span
-//             if (Max_err >= 0.0)
-//             {
-//                 for (auto k = 0; k < mfa.dom_dim; k++)
-//                     Max_span[k] = 5;
-//             }
+            if (Max_err >= 0.0)
+            {
+                for (auto k = 0; k < mfa.dom_dim; k++)
+                    Max_span[k] = 5;
+            }
 
             if (Max_err >= 0.0)
             {
@@ -754,24 +754,29 @@ namespace mfa
                 int parent_tensor_idx = mfa_data.tmesh.search_tensors(Max_span, unused);
 
                 // check if there are sufficient constraints for the local solve, or we need to revert to global solve
+                // commented out if not using constraints in local solve
+                // DEPRECATE commented out code eventually when we're sure we don't need it
                 for (auto k = 0; k < mfa.dom_dim; k++)
                 {
-                    vector<KnotIdx>& knot_mins = mfa_data.tmesh.tensor_prods[parent_tensor_idx].knot_mins;
-                    vector<KnotIdx>& knot_maxs = mfa_data.tmesh.tensor_prods[parent_tensor_idx].knot_maxs;
-                    if (mfa_data.p(k) % 2 == 0)                         // even degree
-                    {
-                        if (Max_span[k] <= mfa_data.p(k) || Max_span[k] >= mfa_data.tmesh.all_knots[k].size() - mfa_data.p(k) - 2 ||
-                                Max_span[k] - knot_mins[k] < mfa_data.p(k) || knot_maxs[k] - Max_span[k] < mfa_data.p(k))
-                            local = false;
-                    }
-                    if (mfa_data.p(k) % 2 == 1)                         // odd degree, skip border points
-                    {
-                        if (Max_span[k] <= mfa_data.p(k) + 1 || Max_span[k] >= mfa_data.tmesh.all_knots[k].size() - mfa_data.p(k) - 3 ||
-                                Max_span[k] - knot_mins[k] < mfa_data.p(k) + 1 || knot_maxs[k] - Max_span[k] < mfa_data.p(k) + 1)
-                            local = false;
-                    }
+                    // commented out if not using constraints in local solve
+                    // DEPRECATE eventually when we're sure this is the case
+//                     vector<KnotIdx>& knot_mins = mfa_data.tmesh.tensor_prods[parent_tensor_idx].knot_mins;
+//                     vector<KnotIdx>& knot_maxs = mfa_data.tmesh.tensor_prods[parent_tensor_idx].knot_maxs;
+//                     if (mfa_data.p(k) % 2 == 0)                         // even degree
+//                     {
+//                         if (Max_span[k] <= mfa_data.p(k) || Max_span[k] >= mfa_data.tmesh.all_knots[k].size() - mfa_data.p(k) - 2 ||
+//                                 Max_span[k] - knot_mins[k] < mfa_data.p(k) || knot_maxs[k] - Max_span[k] < mfa_data.p(k))
+//                             local = false;
+//                     }
+//                     if (mfa_data.p(k) % 2 == 1)                         // odd degree, skip border points
+//                     {
+//                         if (Max_span[k] <= mfa_data.p(k) + 1 || Max_span[k] >= mfa_data.tmesh.all_knots[k].size() - mfa_data.p(k) - 3 ||
+//                                 Max_span[k] - knot_mins[k] < mfa_data.p(k) + 1 || knot_maxs[k] - Max_span[k] < mfa_data.p(k) + 1)
+//                             local = false;
+//                     }
 
                     // debug
+                    // DEPRECATE this printf once the above code is removed
                     if (!local)
                         fprintf(stderr, "MaxErrorSpan: span = %lu does not allow enough constraints for local solve, switching to global solve\n", Max_span[k]);
 
