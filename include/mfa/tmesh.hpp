@@ -1400,8 +1400,9 @@ namespace mfa
                     anchor[j] = ijk(j) + (p_(j) + 1) / 2;                  // first control point has anchor floor((p + 1) / 2)
 
                 // debug
-//                 cerr << "ctrl_pt(" << vol_iter.cur_iter() << "): " << ctrl_pts.row(vol_iter.cur_iter()) << endl;
-//                 fprintf(stderr, "found ctrl pt in tensor_idx = %d\n", tensor_idx);
+                cerr << "ctrl_pt(" << vol_iter.cur_iter() << ") ijk [ " << ijk.transpose() << " ] : " << ctrl_pts.row(vol_iter.cur_iter()) << endl;
+                cerr << "anchor [ " << anchor[0] << " " << anchor[1] << " ]" << endl;
+                fprintf(stderr, "found ctrl pt in tensor_idx = %d\n", tensor_idx);
 
                 // find minimum level of all the dimensions of the anchor of the control point
                 int anchor_max_level;
@@ -1468,6 +1469,10 @@ namespace mfa
                     {
                         anchor[0] = (p_(0) + 1) / 2;
                         anchor[k + 1]++;
+
+                        // debug
+//                         cerr << "2: anchor [ " << anchor[0] << " " << anchor[1] << " ]" << endl;
+
                         if (ijk(k + 1) < nctrl_pts(k + 1))
                         {
                             // check for the anchor in the current tensor and in next pointers in next higher dim, starting back at last tensor of current dim
@@ -1481,7 +1486,17 @@ namespace mfa
                         }
                     }
                     if (!vol_iter.done(k))
+                    {
+                        // debug
+//                         if (anchor[0] == 4 && anchor[1] == 1)
+//                             cerr << "0: anchor [ " << anchor[0] << " " << anchor[1] << " ] " << "tensor_idx = " << tensor_idx << endl;
+
                         tensor_idx = in_and_next(anchor, tensor_idx, 0);
+
+                        // debug
+//                         if (anchor[0] == 4 && anchor[1] == 1)
+//                             cerr << "1: anchor [ " << anchor[0] << " " << anchor[1] << " ] " << "tensor_idx = " << tensor_idx << endl;
+                    }
                 }
             }       // vol_iter not done
 
