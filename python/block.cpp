@@ -31,6 +31,7 @@ void init_block(py::module& m, std::string name)
 
     py::class_<BlockBase<T>> (m, "BlockBase")
         .def(py::init<>())
+        .def("add",                     &Block<T>::add)
     ;
 
     py::class_<DomainArgs, ModelInfo>(m, "DomainArgs")
