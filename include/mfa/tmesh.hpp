@@ -527,12 +527,15 @@ namespace mfa
                 // add the new max side tensor
                 tensor_prods.push_back(side_tensor);
 
+                // reset the reference, which could be invalid after the push_back
+                TensorProduct<T>& et  = tensor_prods[exist_tensor_idx];
+
                 // delete next and prev pointers of existing tensor that are no longer valid as a result of adding new max side
                 delete_old_pointers(exist_tensor_idx);
 
                 // check if the knot mins, maxs of the existing or added tensor match the original new tensor
                 if ( (side_tensor.knot_mins == new_tensor.knot_mins && side_tensor.knot_maxs == new_tensor.knot_maxs) ||
-                     (exist_tensor.knot_mins == new_tensor.knot_mins && exist_tensor.knot_maxs == new_tensor.knot_maxs) )
+                     (et.knot_mins == new_tensor.knot_mins && et.knot_maxs == new_tensor.knot_maxs) )
                     knots_match = true;
 
                 return true;
