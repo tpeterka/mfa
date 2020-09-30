@@ -1403,9 +1403,8 @@ namespace mfa
                     anchor[j] = ijk(j) + (p_(j) + 1) / 2;                  // first control point has anchor floor((p + 1) / 2)
 
                 // debug
-                cerr << "ctrl_pt(" << vol_iter.cur_iter() << ") ijk [ " << ijk.transpose() << " ] : " << ctrl_pts.row(vol_iter.cur_iter()) << endl;
-                cerr << "anchor [ " << anchor[0] << " " << anchor[1] << " ]" << endl;
-                fprintf(stderr, "found ctrl pt in tensor_idx = %d\n", tensor_idx);
+//                 cerr << "ctrl_pt(" << vol_iter.cur_iter() << ") ijk [ " << ijk.transpose() << " ] anchor [ " << anchor[0] << " " << anchor[1] <<
+//                     " ] value " << ctrl_pts.row(vol_iter.cur_iter()) << " found in tensor_idx " << tensor_idx << endl;
 
                 // find minimum level of all the dimensions of the anchor of the control point
                 int anchor_max_level;
@@ -1422,13 +1421,8 @@ namespace mfa
                     tensor_idxs[vol_iter.cur_iter()].push_back(tensor_idx);
 
                     // debug
-//                     if (tensor_idx == 2)
-//                     {
-//                         VectorXi ijk(dom_dim_);
-//                         vol_iter.idx_ijk(vol_iter.cur_iter(), ijk);
-//                         cerr << "ijk: " << ijk.transpose() << endl;
-//                         fprintf(stderr, "1: tensor_tot_nctrl_pts[%d] = %lu\n", tensor_idx, tensor_tot_nctrl_pts[tensor_idx]);
-//                     }
+//                     cerr << "ctrl_pt(" << vol_iter.cur_iter() << ") ijk [ " << ijk.transpose() << " ] value " <<
+//                         ctrl_pts.row(vol_iter.cur_iter()) << " destination tensor " << tensor_idx << endl;
                 }
 
                 // if degree is odd, check borders of neighboring tensors
@@ -1450,13 +1444,8 @@ namespace mfa
                                 tensor_idxs[vol_iter.cur_iter()].push_back(neigh_idx);
 
                                 // debug
-//                                 if (neigh_idx == 2)
-//                                 {
-//                                     VectorXi ijk(dom_dim_);
-//                                     vol_iter.idx_ijk(vol_iter.cur_iter(), ijk);
-//                                     cerr << "ijk: " << ijk.transpose() << endl;
-//                                     fprintf(stderr, "2: tensor_tot_nctrl_pts[%lu] = %lu\n", neigh_idx, tensor_tot_nctrl_pts[neigh_idx]);
-//                                 }
+//                                 cerr << "ctrl_pt(" << vol_iter.cur_iter() << ") ijk [ " << ijk.transpose() << " ] value " <<
+//                                     ctrl_pts.row(vol_iter.cur_iter()) << " destination tensor " << neigh_idx << endl;
                             }
                         }   // neighbors
                     }   // odd degree
