@@ -1658,7 +1658,8 @@ namespace mfa
                 // TODO: this is not the right place to pad, see comment above
                 // but it's ok for now
                 if (pad)
-                    start_knot_idxs[k] = start_knot_idxs[k] - p_(k) < 0 ? 0 : start_knot_idxs[k] - p_(k);
+                    // casting to long allows checking for a negative value of an expression using an unsigned size_t
+                    start_knot_idxs[k] = (long)start_knot_idxs[k] - p_(k) < 0 ? 0 : start_knot_idxs[k] - p_(k);
             }
 
             local_knot_idxs.clear();
