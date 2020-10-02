@@ -1,6 +1,7 @@
 #include    <pybind11/pybind11.h>
 #include    <pybind11/stl.h>
 #include    <pybind11/eigen.h>
+#include    <pybind11/functional.h>
 namespace py = pybind11;
 
 #include    <../examples/block.hpp>
@@ -31,7 +32,6 @@ void init_block(py::module& m, std::string name)
 
     py::class_<BlockBase<T>> (m, "BlockBase")
         .def(py::init<>())
-        .def("add",                     &Block<T>::add)
     ;
 
     py::class_<DomainArgs, ModelInfo>(m, "DomainArgs")
@@ -49,13 +49,29 @@ void init_block(py::module& m, std::string name)
         .def_readwrite("multiblock",    &DomainArgs::multiblock)
     ;
 
+    using namespace py::literals;
+
     py::class_<Block<T>, BlockBase<T>>(m, "Block")
         .def(py::init<>())
         .def("generate_analytical_data",&Block<T>::generate_analytical_data)
         .def("print_block",             &Block<T>::print_block)
-        // TODO: init only exists because I can't get add to work in the decomposer
-        .def("init",                    &Block<T>::init)
-        .def("add",                     &Block<T>::add)
+        .def("add",                     [](
+                                        int                 gid,
+                                        const Bounds&       core,
+                                        const Bounds&       bounds,
+                                        const Bounds&       domain,
+                                        const RCLink&       link,
+                                        Master&             master,
+                                        int                 dom_dim,
+                                        int                 pt_dim,
+                                        T                   ghost_factor)
+            {
+                Block<T>*       b   = new Block<T>;
+                RCLink*         l   = new RCLink(link);
+                master.add(gid, new py::object(py::cast(b)), l);
+                b->init_block(core, domain, dom_dim, pt_dim);
+            }, "core"_a, "bounds"_a, "domain"_a, "link"_a, "master"_a, "dom_dim"_a, "pt_dim"_a,
+            "ghost_factor"_a = 0.0)
         .def("fixed_encode_block",      &Block<T>::fixed_encode_block)
         .def("adaptive_encode_block",   &Block<T>::adaptive_encode_block)
         .def("decode_point",            &Block<T>::decode_point)
@@ -69,11 +85,11 @@ void init_block(py::module& m, std::string name)
             mfa::save<Block<T>, T>(b->cast<Block<T>*>(), *bb);
         });
 
-    m.def("load_block", [](diy::BinaryBuffer* bb) -> py::object
+    m.def("load_block", [](diy::BinaryBuffer* bb)
         {
-            Block<T> b;
-            mfa::load<Block<T>, T>(&b, *bb);
-            return py::cast(b);
+            std::unique_ptr<Block<T>> b { new Block<T> };
+            mfa::load<Block<T>, T>(b.get(), *bb);
+            return b;
         });
 }
 

@@ -35,27 +35,13 @@ d_args.s                = [10.0, 1.0, 1.0]
 # MPI, DIY world and master
 w = diy.mpi.MPIComm()           # world
 m = diy.Master(w)               # master
-
-# TODO: using python definition of add_block because b.add does not work
-# add_block could be removed if b.add would work
-def add_block(gid, core, bounds, domain, link):
-    b = mfa.Block()
-#     print(m)
-#     mfa.Block.add(gid, core, bounds, domain, link, m, dom_dim, pt_dim, float(0.0))
-#     print(gid, core, bounds, domain, link, m, dom_dim, pt_dim)
-    b.init(core, domain, dom_dim, pt_dim, float(0.0))
-    m.add(gid, b, link)
-
-nblocks = w.size
+nblocks = w.size                # hard-code 1 block per MPI rank
 
 # decompose domain using double precision bounds
 domain = diy.DoubleContinuousBounds(d_args.min, d_args.max)
 d = diy.DoubleContinuousDecomposer(dom_dim, domain, nblocks)
 a = diy.ContiguousAssigner(w.size, nblocks)
-# TODO: using python definition of add_block because b.add does not work
-d.decompose(w.rank, a, add_block)
-# TODO: following does not work
-# d.decompose(w.rank, a, lambda gid, core, bounds, domain_, link: mfa.Block.add(gid, core, bounds, domain_, link, m, dom_dim, pt_dim, float(0.0)))
+d.decompose(w.rank, a, lambda gid, core, bounds, domain_, link: mfa.Block.add(gid, core, bounds, domain_, link, m, dom_dim, pt_dim))
 
 # initialize input data
 m.foreach(lambda b, cp: b.generate_analytical_data(cp, fun, d_args))
@@ -73,10 +59,3 @@ m.foreach(lambda b, cp: b.print_block(cp, True))
 # save the results
 print("\n\nSaving blocks\n")
 diy.write_blocks("approx.out", m, save = mfa.save_block)
-
-# debug: load the results and print them out
-# print("\n\nLoading blocks back in and printing them out\n")
-# m1 = diy.Master(w)
-# a1 = diy.ContiguousAssigner(w.size, -1)
-# diy.read_blocks("approx.out", a1, m1, load = mfa.load_block)
-# m1.foreach(lambda b,cp: b.print_block(cp, False))

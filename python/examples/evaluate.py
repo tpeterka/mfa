@@ -17,6 +17,6 @@ m.foreach(lambda b,cp: b.print_block(cp, False))
 
 # evaluate a point
 param   = np.array([0.5, 0.5])          # input parameters where to decode the point
-pt      = np.array([0.0, 0.0, 0.0])     # assigning some fake values to define shape and type
+pt      = np.array([0.0, 0.0, 0.0])     # assigning fake values defines shape and type
 m.foreach(lambda b, cp: b.decode_point(cp, param, pt))
-print(pt)
+print("\nThe point at [u =", param[0], ", v =", param[1], "] =", pt)

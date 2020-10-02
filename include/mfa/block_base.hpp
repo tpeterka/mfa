@@ -127,9 +127,8 @@ struct BlockBase
             delete mfa;
     }
 
-    // initialize an empty block previously added (instead of using mfa.add())
-    // not sure if we will keep this, needed for PyMFA for now
-    void init(
+    // initialize an empty block that was previously added
+    void init_block(
             const Bounds<T>&    core,               // block bounds without any ghost added
             const Bounds<T>&    domain,             // global data bounds
             int                 dom_dim_,           // domain dimensionality
@@ -1443,35 +1442,7 @@ namespace mfa
             diy::Master&    m   = const_cast<diy::Master&>(master);
             m.add(gid, b, l);
 
-            b->dom_dim = dom_dim;
-            b->pt_dim  = pt_dim;
-
-            // NB: using bounds to hold full point dimensionality, but using core to hold only domain dimensionality
-            b->bounds_mins.resize(pt_dim);
-            b->bounds_maxs.resize(pt_dim);
-            b->core_mins.resize(dom_dim);
-            b->core_maxs.resize(dom_dim);
-            // blending
-            b->overlaps.resize(dom_dim);
-
-            // manually set ghosted block bounds as a factor increase of original core bounds
-            for (int i = 0; i < dom_dim; i++)
-            {
-                T ghost_amount = ghost_factor * (core.max[i] - core.min[i]);
-                if (core.min[i] > domain.min[i])
-                    b->bounds_mins(i) = core.min[i] - ghost_amount;
-                else
-                    b->bounds_mins(i)= core.min[i];
-
-                if (core.max[i] < domain.max[i])
-                    b->bounds_maxs(i) = core.max[i] + ghost_amount;
-                else
-                    b->bounds_maxs(i) = core.max[i];
-                b->core_mins(i) = core.min[i];
-                b->core_maxs(i) = core.max[i];
-            }
-
-            b->mfa = NULL;
+            b->init_block(core, domain, dom_dim, pt_dim, ghost_factor);
         }
 
     template<typename B, typename T>                // B = block object,  T = float or double
