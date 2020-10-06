@@ -175,19 +175,34 @@ namespace mfa
             decoder.DecodeDomain(approx, min_dim, max_dim, saved_basis, derivs);
         }
 
-        // decode single point at the given parameter location
+        // decode value of single point at the given parameter location
         void DecodePt(
                 const MFA_Data<T>&  mfa_data,               // mfa data model
                 const VectorX<T>&   param,                  // parameters of point to decode
                 VectorX<T>&         cpt) const              // (output) decoded point
         {
+            VectorXi no_derivs;
             int verbose = 0;
             Decoder<T> decoder(*this, mfa_data, verbose);
             // TODO: hard-coded for one tensor product
-            decoder.VolPt(param, cpt, mfa_data.tmesh.tensor_prods[0]);
+            decoder.VolPt(param, cpt, mfa_data.tmesh.tensor_prods[0], no_derivs);
         }
 
-        // method to decode at grid, in parameter space
+        // decode derivative of single point at the given parameter location
+        void DecodePt(
+                const MFA_Data<T>&  mfa_data,               // mfa data model
+                const VectorX<T>&   param,                  // parameters of point to decode
+                const VectorXi&     derivs,                 // derivative to take in each domain dim. (0 = value, 1 = 1st deriv, 2 = 2nd deriv, ...)
+                                                            // pass size-0 vector if unused
+                VectorX<T>&         cpt) const              // (output) decoded point
+        {
+            int verbose = 0;
+            Decoder<T> decoder(*this, mfa_data, verbose);
+            // TODO: hard-coded for one tensor product
+            decoder.VolPt(param, cpt, mfa_data.tmesh.tensor_prods[0], derivs);
+        }
+
+        // decode points on grid in parameter space
         void DecodeAtGrid(  const MFA_Data<T>&      mfa_data,               // mfa_data
                             int                     min_dim,                // min index to decode
                             int                     max_dim,                // max index to decode

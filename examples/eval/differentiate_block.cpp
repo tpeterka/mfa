@@ -1,5 +1,5 @@
 //--------------------------------------------------------------
-// example of computing derivatives of an MFA
+// example of computing derivatives of an MFA for an entire block of input points
 //
 // Tom Peterka
 // Argonne National Laboratory
@@ -41,7 +41,7 @@ int main(int argc, char** argv)
     // get command line arguments
     opts::Options ops;
     ops >> opts::Option('d', "deriv",   deriv,   " which derivative to take (1 = 1st, 2 = 2nd, ...)");
-    ops >> opts::Option('i', "infile",  infile,  " diy input file name");
+    ops >> opts::Option('f', "infile",  infile,  " diy input file name");
     ops >> opts::Option('a', "partial", partial, " dimension of 1 partial derivative only");
     ops >> opts::Option('h', "help",    help,    " show help");
 

@@ -302,8 +302,6 @@ struct BlockBase
     void decode_point(
             const   diy::Master::ProxyWithLink& cp,
             const VectorX<T>&                   param,          // parameters of point to decode
-            // TODO: DEPRECATE C++ reference for cpt argument in favor of Eigen::Ref
-//             VectorX<T>&                         cpt)            // (output) decoded point
             Eigen::Ref<VectorX<T>>              cpt)            // (output) decoded point
                                                                 // using Eigen::Ref instead of C++ reference so that pybind11 can pass by reference
     {
@@ -318,6 +316,47 @@ struct BlockBase
         for (auto i = 0; i < vars.size(); i++)
         {
             mfa->DecodePt(*(vars[i].mfa_data), param, var_cpt);
+            cpt(dom_dim + i) = var_cpt(0);
+        }
+    }
+
+    // differentiate one point
+    void differentiate_point(
+            const diy::Master::ProxyWithLink&   cp,
+            const VectorX<T>&                   param,      // parameters of point to decode
+            int                                 deriv,      // which derivative to take (1 = 1st, 2 = 2nd, ...) in each domain dim.
+            int                                 partial,    // limit to partial derivative in just this dimension (-1 = no limit)
+            int                                 var,        // differentiate only this one science variable (0 to nvars -1, -1 = all vars)
+            Eigen::Ref<VectorX<T>>              cpt)        // (output) decoded point
+                                                            // using Eigen::Ref instead of C++ reference so that pybind11 can pass by reference
+    {
+        VectorXi derivs(dom_dim);                           // degree of derivative in each domain dimension
+
+        // degree of derivative is same for all dimensions
+        for (auto i = 0; i < derivs.size(); i++)
+            derivs(i) = deriv;
+
+        // optional limit to one partial derivative
+        if (deriv && dom_dim > 1 && partial >= 0)
+        {
+            for (auto i = 0; i < dom_dim; i++)
+            {
+                if (i != partial)
+                    derivs(i) = 0;
+            }
+        }
+
+        // geometry
+        VectorX<T> geom_cpt(dom_dim);
+        mfa->DecodePt(*geometry.mfa_data, param, derivs, geom_cpt);
+        for (auto i = 0; i < dom_dim; i++)
+            cpt(i) = geom_cpt(i);
+
+        // science variables
+        VectorX<T> var_cpt(1);                                  // each variable is a scalar
+        for (auto i = 0; i < vars.size(); i++)
+        {
+            mfa->DecodePt(*(vars[i].mfa_data), param, derivs, var_cpt);
             cpt(dom_dim + i) = var_cpt(0);
         }
     }
@@ -1457,6 +1496,7 @@ namespace mfa
 
             // top-level mfa data
             diy::save(bb, b->dom_dim);
+            diy::save(bb, b->pt_dim);
             diy::save(bb, b->mfa->ndom_pts());
 
             diy::save(bb, b->bounds_mins);
@@ -1524,6 +1564,7 @@ namespace mfa
 
             // top-level mfa data
             diy::load(bb, b->dom_dim);
+            diy::load(bb, b->pt_dim);
             VectorXi ndom_pts(b->dom_dim);
             diy::load(bb, ndom_pts);
             b->mfa = new mfa::MFA<T>(b->dom_dim, ndom_pts, b->domain);
