@@ -258,7 +258,7 @@ void PrepRenderingData(
                     if (ndom_dims < 3)
                         p.z = tc.ctrl_pts(vol_iter.cur_iter(), 0);
                     else
-                        p.z = ctrl_pts_coords[2][ofst(3) + ijk(3)];
+                        p.z = ctrl_pts_coords[2][ofst(2) + ijk(2)];
                 }
                 vars_ctrl_pts[i].push_back(p);
 
