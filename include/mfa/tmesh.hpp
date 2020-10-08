@@ -835,6 +835,7 @@ namespace mfa
                         // remove the next pointer of the existing tensor
                         existing_tensor.next[j][i] = existing_tensor.next[j][valid_size - 1];
                         valid_size--;
+                        i--;                                        // keep loop counter the same for next iteration
                     }
                 }
                 existing_tensor.next[j].resize(valid_size);         // drop the invalid entries at back
@@ -862,6 +863,7 @@ namespace mfa
                         // remove the prev pointer of the existing tensor
                         existing_tensor.prev[j][i] = existing_tensor.prev[j][valid_size - 1];
                         valid_size--;
+                        i--;                                        // keep loop counter the same for next iteration
                     }
                 }
                 existing_tensor.prev[j].resize(valid_size);         // drop the invalid entries at back
