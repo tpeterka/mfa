@@ -510,7 +510,7 @@ namespace mfa
                         // local knot vector
                         local_knot_idxs[i].resize(mfa_data.p(i) + 2);               // local knot vector for current dim in index space
                         vector<T> local_knots(mfa_data.p(i) + 2);                   // local knot vector for current dim in parameter space
-                        mfa_data.tmesh.knot_intersections(anchor, k, local_knot_idxs);
+                        mfa_data.tmesh.knot_intersections(anchor, k, true, local_knot_idxs);
                         for (auto n = 0; n < local_knot_idxs[i].size(); n++)
                             local_knots[n] = mfa_data.tmesh.all_knots[i][local_knot_idxs[i][n]];
 
