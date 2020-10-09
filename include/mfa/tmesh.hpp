@@ -514,9 +514,6 @@ namespace mfa
             // new side tensor will be added
             if (!subset(side_tensor.knot_mins, side_tensor.knot_maxs, new_tensor.knot_mins, new_tensor.knot_maxs))
             {
-                //                 DEPRECATE
-//                 adjust_prev_next(exist_tensor, side_tensor, new_tensor, exist_tensor_idx, side_tensor_idx, cur_dim);
-
                 // adjust prev and nex pointers
                 adjust_prev_next(exist_tensor_idx, side_tensor, side_tensor_idx, new_tensor, split_side, cur_dim);
 
@@ -566,81 +563,6 @@ namespace mfa
                 return false;
             }
         }
-
-        // DEPRECATED, remove
-        // adjust prev and next pointers for splitting a tensor into two
-//         void adjust_prev_next(TensorProduct<T>& min_side_tensor,        // new minimum side tensor after split
-//                               TensorProduct<T>& max_side_tensor,        // new maximum side tensor after split
-//                               TensorProduct<T>& new_tensor,             // new tensor product that caused the split
-//                               TensorIdx         min_side_tensor_idx,    // idx of min side tensor after split
-//                               TensorIdx         max_side_tensor_idx,    // idx of max side tensor after split
-//                               int               cur_dim)                // current dimension to intersect
-//         {
-//             // adjust next and prev pointers for min_side_tensor and max_side_tensor in the current dimension
-//             for (int i = 0; i < min_side_tensor.next[cur_dim].size(); i++)
-//             {
-//                 if (adjacent(max_side_tensor, tensor_prods[min_side_tensor.next[cur_dim][i]], cur_dim))
-//                 {
-//                     max_side_tensor.next[cur_dim].push_back(min_side_tensor.next[cur_dim][i]);
-//                     vector<TensorIdx>& prev = tensor_prods[min_side_tensor.next[cur_dim][i]].prev[cur_dim];
-//                     auto it                 = find(prev.begin(), prev.end(), min_side_tensor_idx);
-//                     assert(it != prev.end());
-//                     size_t k                = distance(prev.begin(), it);
-//                     prev[k]                 = max_side_tensor_idx;
-//                 }
-//             }
-// 
-//             // connect next and prev pointers of existing and new max side tensors only if
-//             // the new tensor will not completely separate the two
-//             if (!occluded(new_tensor, min_side_tensor, cur_dim))
-//             {
-//                 min_side_tensor.next[cur_dim].push_back(max_side_tensor_idx);
-//                 max_side_tensor.prev[cur_dim].push_back(min_side_tensor_idx);
-//             }
-// 
-//             // adjust next and prev pointers for min_side_tensor and max_side_tensor in other dimensions
-//             for (int j = 0; j < dom_dim_; j++)
-//             {
-//                 if (j == cur_dim)
-//                     continue;
-// 
-//                 // next pointer
-//                 for (int i = 0; i < min_side_tensor.next[j].size(); i++)
-//                 {
-//                     // debug
-//                     int retval = adjacent(max_side_tensor, tensor_prods[min_side_tensor.next[j][i]], j);
-// 
-//                     // add new next pointers
-//                     if (adjacent(max_side_tensor, tensor_prods[min_side_tensor.next[j][i]], j))
-//                     {
-//                         max_side_tensor.next[j].push_back(min_side_tensor.next[j][i]);
-//                         tensor_prods[min_side_tensor.next[j][i]].prev[j].push_back(max_side_tensor_idx);
-// 
-//                         // debug
-//                         assert(retval == 1);
-//                     }
-// 
-//                 }
-// 
-//                 // prev pointer
-//                 for (int i = 0; i < min_side_tensor.prev[j].size(); i++)
-//                 {
-//                     // debug
-//                     int retval = adjacent(max_side_tensor, tensor_prods[min_side_tensor.prev[j][i]], j);
-// 
-//                     // add new prev pointers
-//                     if (adjacent(max_side_tensor, tensor_prods[min_side_tensor.prev[j][i]], j))
-//                     {
-//                         max_side_tensor.prev[j].push_back(min_side_tensor.prev[j][i]);
-//                         tensor_prods[min_side_tensor.prev[j][i]].next[j].push_back(max_side_tensor_idx);
-// 
-//                         // debug
-//                         assert(retval == -1);
-//                     }
-// 
-//                 }
-//             }
-//         }
 
         // adjust prev and next pointers for splitting a tensor into two
         void adjust_prev_next(
