@@ -1582,7 +1582,7 @@ namespace mfa
                 mfa_data.tmesh.append_tensor(knot_mins, knot_maxs);
 
             // debug
-            mfa_data.tmesh.print();
+//             mfa_data.tmesh.print();
 
             // local solve newly appended tensor
             // TODO: experimenting with the difference between iterative and linear least squares

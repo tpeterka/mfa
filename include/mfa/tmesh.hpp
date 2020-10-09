@@ -313,8 +313,8 @@ namespace mfa
                     if (nonempty_intersection(new_tensor, tensor_prods[j], split_side))
                     {
                         // debug
-                        fprintf(stderr, "intersection found between new tensor and existing tensor idx=%d split_side=[%d %d]\n",
-                                j, split_side[0], split_side[1]);
+//                         fprintf(stderr, "intersection found between new tensor and existing tensor idx=%d split_side=[%d %d]\n",
+//                                 j, split_side[0], split_side[1]);
 //                         fprintf(stderr, "\ntensors before intersection\n\n");
 //                         print();
 
@@ -324,8 +324,8 @@ namespace mfa
                                 tensor_inserted = true;
 
                             // debug
-                            fprintf(stderr, "\ntensors after intersection\n\n");
-                            print();
+//                             fprintf(stderr, "\ntensors after intersection\n\n");
+//                             print();
 
                             break;  // adding a tensor invalidates iterator, start iteration over
                         }
@@ -463,13 +463,8 @@ namespace mfa
                 // a new max_side_tensor is appended to be the max. side of existing_tensor
                 if (!subset(temp_mins, temp_maxs, new_tensor.knot_mins, new_tensor.knot_maxs))
                 {
-                    retval |= new_side(new_tensor, existing_tensor_idx, k, split_knot_idx, split_side[k], knots_match);
-
-                    // debug
-//                     fprintf(stderr, "***-------------Tmesh after new_side-------------***\n\n");
-//                     print();
-
                     // if there is a new tensor, return and start checking again for intersections
+                    retval |= new_side(new_tensor, existing_tensor_idx, k, split_knot_idx, split_side[k], knots_match);
                     if (retval)
                         return true;
                 }
@@ -687,7 +682,7 @@ namespace mfa
 
         // split control points between existing and new side tensors
         void split_ctrl_pts(TensorIdx            existing_tensor_idx,    // index in tensor_prods of existing tensor
-                            TensorProduct<T>&    new_side_tensor,        // new max side tensor
+                            TensorProduct<T>&    new_side_tensor,        // new side tensor
                             int                  cur_dim,                // current dimension to intersect
                             KnotIdx              split_knot_idx,         // local (not global!) knot index in current dim of split point in existing tensor
                             int                  split_side,             // whether min (-1) or max (1) or both sides (2) of new tensor split the existing tensor
@@ -696,7 +691,7 @@ namespace mfa
         {
             TensorProduct<T>& existing_tensor = tensor_prods[existing_tensor_idx];
 
-            // index of min (max_side = true: in new side)in existing tensor) and max (in new side) control points in current dim
+            // index of min and max in new side or existing tensor (depending on max_side true/false) control points in current dim
             // allowed to be negative in order for the logic below to partition correctly (long long instead of size_t)
             long long min_ctrl_idx; // index of min (max_side = true: in new side; max_side = false: in existing tensor) control points in current dim
             long long max_ctrl_idx; // index of max (max_side = true: in existing tensor; max_side = false: in new side) control points in current dim
@@ -718,10 +713,13 @@ namespace mfa
             }
 
             // if max_ctrl_idx is past last existing control point, then split is too close to global edge and must be clamped to last control point
+            // NB there is no equivalent for !max_side because new_side_tensor does not have any numbers of control points assigned yet
             if (max_side && max_ctrl_idx >= existing_tensor.nctrl_pts[cur_dim])
                 max_ctrl_idx = existing_tensor.nctrl_pts[cur_dim] - 1;
-            if (!max_side && min_ctrl_idx >= new_side_tensor.nctrl_pts[cur_dim])
-                min_ctrl_idx = new_side_tensor.nctrl_pts[cur_dim] - 1;
+
+            // DEPRECATE: there is no equivalent for !max_side because new_side_tensor does not have any numbers of control points assigned yet
+//             if (!max_side && min_ctrl_idx >= new_side_tensor.nctrl_pts[cur_dim])
+//                 min_ctrl_idx = new_side_tensor.nctrl_pts[cur_dim] - 1;
 
             // debug
 //             fprintf(stderr, "splitting ctrl points in dim %d max_side %d split_knot_idx=%lu max_ctrl_idx=%lld min_ctrl_idx=%lld\n",
@@ -801,8 +799,7 @@ namespace mfa
                     if (!skip_new_side)
                     {
                         // debug
-//                         if (cur_dim == 0 && split_knot_idx == 5)
-//                             fprintf(stderr, "moving to new_side_tensor.ctrl_pts[%lu]\n", cur_new_side_idx);
+//                         fprintf(stderr, "moving to new_side_tensor.ctrl_pts[%lu]\n", cur_new_side_idx);
 
                         new_side_tensor.ctrl_pts.row(cur_new_side_idx) = existing_tensor.ctrl_pts.row(vol_iter.cur_iter());
                         new_side_tensor.weights(cur_new_side_idx) = existing_tensor.weights(vol_iter.cur_iter());
@@ -1552,6 +1549,10 @@ namespace mfa
             // allocated space and product of nctrl_pts in the tensor
             for (int i = 0; i < tensor_prods.size(); i++)
             {
+                // debug
+                if (tensor_tot_nctrl_pts[i] != tensor_prods[i].ctrl_pts.rows())
+                    fprintf(stderr, "1:\n");
+
                 // debug
                 assert(tensor_tot_nctrl_pts[i] == tensor_prods[i].ctrl_pts.rows());
                 assert(tensor_tot_nctrl_pts[i] == tensor_prods[i].weights.size());
