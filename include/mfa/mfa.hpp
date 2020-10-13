@@ -29,13 +29,15 @@
 // comment out the following line for original single tensor product version
 #define MFA_TMESH
 
+
 // comment out the following line for separable dimension solve
-// #define MFA_UNIFIED_DIMS
+#define MFA_UNIFIED_DIMS
 
 // linear least squares local solve
 #define MFA_LINEAR_LOCAL
 
 #include    <Eigen/Dense>
+#include    <Eigen/Sparse>
 #include    <vector>
 #include    <list>
 #include    <iostream>
@@ -64,6 +66,11 @@ template <typename T>
 using ArrayXX  = Eigen::Array<T, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>;
 template <typename T>
 using ArrayX   = Eigen::Array<T, Eigen::Dynamic, 1>;
+
+template <typename T>
+using SparseMatrixX = Eigen::SparseMatrix<T, Eigen::RowMajor>;
+template <typename T>
+using SpMatTriplet = Eigen::Triplet<T>;
 
 #include    <mfa/util.hpp>
 #include    <mfa/param.hpp>

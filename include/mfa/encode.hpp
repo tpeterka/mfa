@@ -382,6 +382,7 @@ namespace mfa
             fprintf(stderr, "EncodeTensor\n");
 
             TensorProduct<T>& t = mfa_data.tmesh.tensor_prods[t_idx];
+            bool sparse = false;
 
             // get input domain points covered by the tensor
             vector<size_t> start_idxs(mfa_data.dom_dim);
@@ -405,8 +406,20 @@ namespace mfa
             // |     ...        ...      ...            |
             // |  N_0(u[m-1])   ...     N_n-1(u[m-1])   |
             //  -                                      -
+            std::vector<SpMatTriplet<T>> triplet_list;
+            SparseMatrixX<T> NS(ndom_pts.prod(), t.nctrl_pts.prod());
+
             MatrixX<T>& N = mfa_data.N[0];
-            N = MatrixX<T>::Constant(ndom_pts.prod(), t.nctrl_pts.prod(), -1);              // basis functions, -1 means unassigned so far
+
+            int bf_per_pt = (mfa_data.p + VectorXi::Ones(mfa_data.dom_dim)).prod();       // nonzero basis functions per input point
+            // if (sparse)
+            // {
+                triplet_list.reserve(ndom_pts.prod() * bf_per_pt); 
+            // }
+            // else 
+            // {
+                N = MatrixX<T>::Constant(ndom_pts.prod(), t.nctrl_pts.prod(), -1);              // basis functions, -1 means unassigned so far
+            // }
             VectorXi dom_starts(mfa_data.dom_dim);
             for (auto k = 0; k < mfa_data.dom_dim; k++)
                 dom_starts(k) = start_idxs[k];
@@ -470,6 +483,12 @@ namespace mfa
                                     // debug
 //                                     cerr << "ctrl_cur_iter = " << ctrl_vol_iter.cur_iter() << " k = " << k << " ijk(k) = col = " << col << endl;
 
+                                // if(sparse)
+                                // {
+                                    triplet_list.emplace_back(dom_vol_iter.cur_iter(), ctrl_vol_iter.cur_iter(), B[k](0, col));
+                                // }
+                                // else
+                                // {
                                     if (N(dom_vol_iter.cur_iter(), ctrl_vol_iter.cur_iter()) == -1.0)   // unassigned so far
                                         N(dom_vol_iter.cur_iter(), ctrl_vol_iter.cur_iter()) = B[k](0, col);
                                     else
@@ -487,14 +506,27 @@ namespace mfa
                 dom_vol_iter.incr_iter();
             }
 
-            // set any unassigned values in N to 0
-            for (auto i = 0; i < N.rows(); i++)
-                for (auto j = 0; j < N.cols(); j++)
-                    if (N(i, j) == -1.0)
-                        N(i, j) = 0.0;
+            // if (sparse)
+            // {
+                // Construct sparse matrix
+                // When duplicate entries are specified, multiply entries together
+                cout << "TripletList size: " << triplet_list.size() << endl;
+                cout << "Size estimate: " << ndom_pts.prod()*bf_per_pt << endl;
+                NS.setFromTriplets(triplet_list.begin(), triplet_list.end(), [] (const T& first, const T& second) { return first*second;});
+            // }
+            // else
+            // {
+                // set any unassigned values in N to 0
+                for (auto i = 0; i < N.rows(); i++)
+                    for (auto j = 0; j < N.cols(); j++)
+                        if (N(i, j) == -1.0)
+                            N(i, j) = 0.0;
+            // }
 
             // debug
-//             cerr << "N:\n" << mfa_data.N[0] << endl;
+            // cerr << "N:\n" << mfa_data.N[0] << endl;
+            // cerr << MatrixX<T>(NS) << endl;
+            cerr << N-MatrixX<T>(NS) << endl;
 
             // normal form
             MatrixX<T> NtN = N.transpose() * N;
@@ -502,13 +534,34 @@ namespace mfa
             // debug
 //             cerr << "NtN:\n" << NtN << endl;
 
-            // R is the right hand side needed for solving NtN * P = R
-            MatrixX<T> R(NtN.cols(), pt_dim);
-            RHSTensor(N, start_idxs, end_idxs, t, R);
+            MatrixX<T> P(NS.cols(), pt_dim);
 
-            // P is the solution vector
-            MatrixX<T> P(NtN.cols(), pt_dim);
-            P = NtN.ldlt().solve(R);
+            if (sparse)
+            {
+                MatrixX<T> Rk(NS.rows(), pt_dim);
+                RHSTensorLSQ(NS, start_idxs, end_idxs, t, Rk);
+
+                cerr << Rk << endl;
+
+                Eigen::LeastSquaresConjugateGradient<SparseMatrixX<T>> solver(NS);
+                if (solver.info() != Eigen::Success) 
+                    cerr << "Matrix decomposition failed in EncodeTensor" << endl;
+
+                P = solver.solve(Rk);
+                if (solver.info() != Eigen::Success)
+                    cerr << "Least-squares solve failed in EncodeTensor" << endl;
+            }
+            else
+            {
+                // R is the right hand side needed for solving NtN * P = R
+                MatrixX<T> R(NtN.cols(), pt_dim);
+                RHSTensor(N, start_idxs, end_idxs, t, cons, R);
+
+                // P is the solution vector
+                P = NtN.ldlt().solve(R);
+            }
+            
+
             t.ctrl_pts = P.block(0, 0, t.ctrl_pts.rows(), pt_dim);
 
             // debug
@@ -1132,6 +1185,32 @@ namespace mfa
 
             // debug
             //     cerr << "R:\n" << R << endl;
+        }
+
+        void RHSTensorLSQ(
+                const SparseMatrixX<T>& N,
+                const vector<size_t>&   start_idxs,
+                const vector<size_t>&   end_idxs,
+                const TensorProduct<T>& t,
+                MatrixX<T>&             Rk)
+        {
+            VectorXi ndom_pts(mfa_data.dom_dim);
+            VectorXi dom_starts(mfa_data.dom_dim);
+            for (auto k = 0; k < mfa_data.dom_dim; k++)
+            {
+                ndom_pts(k)     = end_idxs[k] - start_idxs[k] + 1;
+                dom_starts(k)   = start_idxs[k];
+            }
+
+            // fill Rk, the matrix of input points
+            VolIterator vol_iter(ndom_pts, dom_starts, mfa.ndom_pts());                 // iterator over input points
+            VectorXi ijk(mfa_data.dom_dim);
+            while (!vol_iter.done())
+            {
+                vol_iter.idx_ijk(vol_iter.cur_iter(), ijk);
+                Rk.row(vol_iter.cur_iter()) = domain.block(vol_iter.ijk_idx(ijk), mfa_data.min_dim, 1, mfa_data.max_dim - mfa_data.min_dim + 1);
+                vol_iter.incr_iter();
+            }
         }
 
         // computes right hand side vector for encoding one tensor product of control points
