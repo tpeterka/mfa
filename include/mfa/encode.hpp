@@ -414,7 +414,7 @@ namespace mfa
             int bf_per_pt = (mfa_data.p + VectorXi::Ones(mfa_data.dom_dim)).prod();       // nonzero basis functions per input point
             // if (sparse)
             // {
-                triplet_list.reserve(ndom_pts.prod() * bf_per_pt); 
+                triplet_list.reserve(ndom_pts.prod() * bf_per_pt * mfa_data.dom_dim); 
             // }
             // else 
             // {
@@ -426,6 +426,8 @@ namespace mfa
 
             vector<int>         spans(mfa_data.dom_dim);
             vector<MatrixX<T>>  B(mfa_data.dom_dim);
+            VectorXi            ctrl_starts(mfa_data.dom_dim);
+
             for (auto k = 0; k < mfa_data.dom_dim; k++)
                 B[k].resize(1, t.nctrl_pts(k));
             VolIterator dom_vol_iter(ndom_pts, dom_starts, mfa.ndom_pts());                 // iterator over input points
@@ -435,6 +437,7 @@ namespace mfa
                 {
                     int p   = mfa_data.p(k);
                     spans[k] = mfa_data.FindSpan(k, mfa.params()[k][dom_vol_iter.idx_dim(k)]);
+                    ctrl_starts(k) = spans[k] - p - t.knot_mins[k];
 
                     // basis functions
                     vector<T> loc_knots(p + 2);
@@ -454,48 +457,23 @@ namespace mfa
 //                     cerr << "B[" << k <<"]: " << B[k] << endl;
                 }
 
-                VolIterator ctrl_vol_iter(t.nctrl_pts);                                     // iterator over control points
+                // VolIterator ctrl_vol_iter(t.nctrl_pts);                                     // iterator over control points
+                VectorXi nctrl_pts_span = mfa_data.p + VectorXi::Ones(mfa_data.dom_dim);       // number of "active" ctrl points per input point in each dimension
+                VolIterator ctrl_vol_iter(nctrl_pts_span, ctrl_starts, t.nctrl_pts);
                 while (!ctrl_vol_iter.done())
                 {
-                    VectorXi ijk(mfa_data.dom_dim);                                         // ijk of current control point
-                    ctrl_vol_iter.idx_ijk(ctrl_vol_iter.cur_iter(), ijk);
-
-                    // check if current control point is covered by the basis funcs. in all dims
-                    bool local_support = true;
+                    size_t ctrl_flat_idx = ctrl_vol_iter.cur_iter_full();
                     for (auto k = 0; k < mfa_data.dom_dim; k++)
                     {
-                        if (ijk(k) < spans[k] - mfa_data.p(k) - t.knot_mins[k] || ijk(k) > spans[k] - t.knot_mins[k])
-                        {
-                            local_support = false;
-                            break;
-                        }
-                    }
+                        int p   = mfa_data.p(k);
+                        int idx = ctrl_vol_iter.idx_dim(k);                                 // index in current dim of this control point
 
-                    if (local_support)
-                    {
-                        for (auto k = 0; k < mfa_data.dom_dim; k++)
-                        {
-                            for (auto j = 0; j < mfa_data.p(k) + 1; j++)                    // nonzero basis function values at this parameter, in this dim.
-                            {
-                                int col = spans[k] - mfa_data.p(k) + j - t.knot_mins[k];
-                                if (ijk(k) == col)
-                                {
-                                    // debug
-//                                     cerr << "ctrl_cur_iter = " << ctrl_vol_iter.cur_iter() << " k = " << k << " ijk(k) = col = " << col << endl;
+                        triplet_list.emplace_back(dom_vol_iter.cur_iter(), ctrl_flat_idx, B[k](0, idx));
 
-                                // if(sparse)
-                                // {
-                                    triplet_list.emplace_back(dom_vol_iter.cur_iter(), ctrl_vol_iter.cur_iter(), B[k](0, col));
-                                // }
-                                // else
-                                // {
-                                    if (N(dom_vol_iter.cur_iter(), ctrl_vol_iter.cur_iter()) == -1.0)   // unassigned so far
-                                        N(dom_vol_iter.cur_iter(), ctrl_vol_iter.cur_iter()) = B[k](0, col);
-                                    else
-                                        N(dom_vol_iter.cur_iter(), ctrl_vol_iter.cur_iter()) *= B[k](0, col);
-                                }
-                            }
-                        }
+                        if (N(dom_vol_iter.cur_iter(), ctrl_flat_idx) == -1.0)   // unassigned so far
+                            N(dom_vol_iter.cur_iter(), ctrl_flat_idx) = B[k](0, idx);
+                        else
+                            N(dom_vol_iter.cur_iter(), ctrl_flat_idx) *= B[k](0, idx);
                     }
 
                     // debug
@@ -526,7 +504,7 @@ namespace mfa
             // debug
             // cerr << "N:\n" << mfa_data.N[0] << endl;
             // cerr << MatrixX<T>(NS) << endl;
-            cerr << N-MatrixX<T>(NS) << endl;
+            cerr << (N-MatrixX<T>(NS)).norm() << endl;
 
             // normal form
             MatrixX<T> NtN = N.transpose() * N;
@@ -541,7 +519,7 @@ namespace mfa
                 MatrixX<T> Rk(NS.rows(), pt_dim);
                 RHSTensorLSQ(NS, start_idxs, end_idxs, t, Rk);
 
-                cerr << Rk << endl;
+                // cerr << Rk << endl;
 
                 Eigen::LeastSquaresConjugateGradient<SparseMatrixX<T>> solver(NS);
                 if (solver.info() != Eigen::Success) 

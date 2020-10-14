@@ -147,6 +147,12 @@ namespace mfa
             return ijk_idx(ijk);
         }
 
+        // return current iteration count within full volum
+        size_t cur_iter_full() const 
+        {
+            return sub_full_idx(cur_iter_);
+        }
+
         // increment iteration; user must call incr_iter() near the bottom of the flattened loop
         void incr_iter()
         {
