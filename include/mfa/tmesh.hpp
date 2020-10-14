@@ -1113,11 +1113,11 @@ namespace mfa
                     {
                         // find previous knot in the current tensor, skipping higher level knots
                         int incr = -1;
-                        while (cur_knot_idx + incr >= tensor_prods[cur_tensor].knot_mins[i] &&
+                        while ((long)cur_knot_idx + incr >= tensor_prods[cur_tensor].knot_mins[i] &&
                                 all_knot_levels[i][cur_knot_idx + incr] > cur_level)
                             incr--;
 
-                        if (cur_knot_idx + incr > 0)                               // more knots in the tmesh
+                        if ((long)cur_knot_idx + incr > 0)                               // more knots in the tmesh
                         {
                             cur[i] = cur_knot_idx + incr;
 
@@ -1125,6 +1125,9 @@ namespace mfa
                             // if more than one tensor sharing the target, pick highest level
                             if (!in_dim(cur_knot_idx + incr, tensor_prods[cur_tensor], true, i))
                             {
+                                // debug
+                                if (tensor_prods[cur_tensor].prev[i].size() == 0)
+                                    fprintf(stderr, "1:\n");
                                 assert(tensor_prods[cur_tensor].prev[i].size() > 0);            // sanity
                                 neighbor_tensors(tensor_prods[cur_tensor].prev[i], i, cur, ctrl_pt_anchor, cur_tensor, cur_level, unused);
                             }

@@ -443,15 +443,14 @@ namespace mfa
             // get input domain points covered by the tensor
             vector<size_t> start_idxs(mfa_data.dom_dim);
             vector<size_t> end_idxs(mfa_data.dom_dim);
-            // TODO: following crashes, hard-code start and end idxs for the time being
-//             mfa_data.tmesh.domain_pts(t_idx, pad, start_idxs, end_idxs);
+            mfa_data.tmesh.domain_pts(t_idx, pad, start_idxs, end_idxs);
 
             // debug: hard-code start and end idxs
-            for (auto i = 0; i < mfa_data.dom_dim; i++)
-            {
-                start_idxs[i]   = 0;
-                end_idxs[i]     = mfa.ndom_pts()(i) - 1;
-            }
+//             for (auto i = 0; i < mfa_data.dom_dim; i++)
+//             {
+//                 start_idxs[i]   = 0;
+//                 end_idxs[i]     = mfa.ndom_pts()(i) - 1;
+//             }
 
             VectorXi ndom_pts(mfa_data.dom_dim);
             for (auto k = 0; k < mfa_data.dom_dim; k++)
