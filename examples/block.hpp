@@ -37,6 +37,8 @@ struct vec3d
 {
     float x, y, z;
     float mag() { return sqrt(x*x + y*y + z*z); }
+    vec3d(float x_, float y_, float z_) : x(x_), y(y_), z(z_) {}
+    vec3d() {}
 };
 
 // arguments to block foreach functions

@@ -22,6 +22,126 @@
 #include    "writer.hpp"
 #include    "block.hpp"
 
+// make combinations of min, max corner vertices in index and real space
+void CellVertices(
+        int             ndom_dims,                      // number of domain dimensions
+        vec3d&          min,                            // min corner
+        vec3d&          max,                            // max corner
+        vector<vec3d>&  tensor_pts)                     // (output) vertices
+{
+    vec3d p;
+
+    p.x = min.x;
+    p.y = min.y;
+    p.z = min.z;
+    tensor_pts.push_back(p);
+
+    p.x = max.x;
+    tensor_pts.push_back(p);
+
+    if (ndom_dims > 1)
+    {
+        p.y = max.y;
+        tensor_pts.push_back(p);
+
+        p.x = min.x;
+        tensor_pts.push_back(p);
+
+        if (ndom_dims > 2)
+        {
+            p.x = min.x;
+            p.y = min.y;
+            p.z = max.z;
+            tensor_pts.push_back(p);
+
+            p.x = max.x;
+            tensor_pts.push_back(p);
+
+            p.y = max.y;
+            tensor_pts.push_back(p);
+
+            p.x = min.x;
+            tensor_pts.push_back(p);
+        }
+    }
+}
+
+// prep tmesh tensor extents
+void PrepTmeshTensorExtents(
+        int             nvars,                              // number of variables
+        int             ndom_dims,                          // number of domain dimensions
+        vector<vec3d>&  tensor_pts_real,                    // (output) points in real space
+        vector<vec3d>&  tensor_pts_index,                   // (output) points in index space
+        Block<real_t>*  block)                              // curent block
+{
+    for (auto j = 0; j < nvars; j++)
+    {
+        vec3d min_real, max_real, min_index, max_index;         // extents in real and index space
+
+        mfa::Tmesh<real_t>& tmesh = block->vars[j].mfa_data->tmesh;
+
+        // form extents in index and real space
+        for (auto k = 0; k < tmesh.tensor_prods.size(); k++)
+        {
+            min_index.x = tmesh.tensor_prods[k].knot_mins[0];
+            min_real.x  = block->core_mins[0] + tmesh.all_knots[0][tmesh.tensor_prods[k].knot_mins[0]] *
+                (block->core_maxs[0] - block->core_mins[0]);
+            if (ndom_dims > 1)
+            {
+                min_index.y = tmesh.tensor_prods[k].knot_mins[1];
+                min_real.y  = block->core_mins[1] + tmesh.all_knots[1][tmesh.tensor_prods[k].knot_mins[1]] *
+                    (block->core_maxs[1] - block->core_mins[1]);
+            }
+            else
+            {
+                min_index.y = 0.0;
+                min_real.y  = 0.0;
+            }
+            if (ndom_dims > 2)
+            {
+                min_index.z = tmesh.tensor_prods[k].knot_mins[2];
+                min_real.z  = block->core_mins[2] + tmesh.all_knots[2][tmesh.tensor_prods[k].knot_mins[2]] *
+                    (block->core_maxs[2] - block->core_mins[2]);
+            }
+            else
+            {
+                min_index.z = 0.0;
+                min_real.z  = 0.0;
+            }
+
+            max_index.x = tmesh.tensor_prods[k].knot_maxs[0];
+            max_real.x  = block->core_mins[0] + tmesh.all_knots[0][tmesh.tensor_prods[k].knot_maxs[0]] *
+                (block->core_maxs[0] - block->core_mins[0]);
+            if (ndom_dims > 1)
+            {
+                max_index.y = tmesh.tensor_prods[k].knot_maxs[1];
+                max_real.y  = block->core_mins[1] + tmesh.all_knots[1][tmesh.tensor_prods[k].knot_maxs[1]] *
+                    (block->core_maxs[1] - block->core_mins[1]);
+            }
+            else
+            {
+                max_index.y = 0.0;
+                max_real.y  = 0.0;
+            }
+            if (ndom_dims > 2)
+            {
+                max_index.z = tmesh.tensor_prods[k].knot_maxs[2];
+                max_real.z  = block->core_mins[2] + tmesh.all_knots[2][tmesh.tensor_prods[k].knot_maxs[2]] *
+                    (block->core_maxs[2] - block->core_mins[2]);
+            }
+            else
+            {
+                max_index.z = 0.0;
+                max_real.z  = 0.0;
+            }
+
+            // make vertex points for cells
+            CellVertices(ndom_dims, min_index, max_index, tensor_pts_index);
+            CellVertices(ndom_dims, min_real, max_real, tensor_pts_real);
+        }   // tensor products
+    }   // nvars
+}
+
 // package rendering data
 void PrepRenderingData(
         vector<int>&                nraw_pts,
@@ -37,6 +157,9 @@ void PrepRenderingData(
         vector<int> &               nblend_pts,
         vector<vec3d>&              blend_pts,
         float**&                    blend_data,
+        vector<vec3d>&              tensor_pts_real,
+        vector<vec3d>&              tensor_pts_index,
+        vector<int>&                ntensor_pts,
         Block<real_t>*              block,
         int&                        pt_dim)                 // (output) dimensionality of point
 {
@@ -320,6 +443,12 @@ void PrepRenderingData(
         if (block->errs.cols() == 2 && p.y > max_err)
             max_err = p.y;
     }
+
+    // tmesh tensor extents
+    ntensor_pts.resize(3);
+    for (auto i = 0; i < 3; i++)
+        ntensor_pts[i] = (i >= ndom_dims ? 1 : 2);
+    PrepTmeshTensorExtents(nvars, ndom_dims, tensor_pts_real, tensor_pts_index, block);
 }
 
 // write vtk files for initial, approximated, control points
@@ -341,6 +470,9 @@ void write_vtk_files(
     vector<vec3d>               err_pts;            // abs value error field
     vector<int>                 nblend_pts;         // number of out points in each dim.
     vector<vec3d>               blend_pts;          // blended data points (<= 3d)
+    vector<vec3d>               tensor_pts_real;    // tmesh tensor product extents in real space
+    vector<vec3d>               tensor_pts_index;   // tmesh tensor product extents in index space
+    vector<int>                 ntensor_pts;        // number of tensor extent points in each dim.
     float**                     blend_data;
 
     // package rendering data
@@ -357,6 +489,9 @@ void write_vtk_files(
                       nblend_pts,
                       blend_pts,
                       blend_data,
+                      tensor_pts_real,
+                      tensor_pts_index,
+                      ntensor_pts,
                       b,
                       pt_dim);
 
@@ -502,6 +637,58 @@ void write_vtk_files(
             /* int *vardim */                               &vardim,
             /* int *centering */                            &centering,
             /* const char * const *varnames */              &name_err,
+            /* float **vars */                              &vars);
+
+    // write tensor product extents
+    int pts_per_cell = pow(2, dom_dim);
+    int ncells = tensor_pts_real.size() / pts_per_cell;
+    vector<int> cell_types(ncells);
+    for (auto i = 0; i < cell_types.size(); i++)
+    {
+        if (dom_dim == 1)
+            cell_types[i] = VISIT_LINE;
+        else if (dom_dim == 2)
+            cell_types[i] = VISIT_QUAD;
+        else
+            cell_types[i] = VISIT_HEXAHEDRON;
+    }
+    vector<float> tensor_data(tensor_pts_real.size(), 1.0); // tensor data set to fake value
+    vector<int> conn(tensor_pts_real.size());               // connectivity
+    for (auto i = 0; i < conn.size(); i++)
+        conn[i] = i;
+    vars = &tensor_data[0];
+    sprintf(filename, "tensor_real_gid_%d.vtk", cp.gid());
+    const char* name_tensor ="tensor0";
+
+    // in real space
+    write_unstructured_mesh(
+            /* const char *filename */                      filename,
+            /* int useBinary */                             0,
+            /* int npts */                                  tensor_pts_real.size(),
+            /* float *pts */                                &(tensor_pts_real[0].x),
+            /* int ncells */                                ncells,
+            /* int *celltypes */                            &cell_types[0],
+            /* int *conn */                                 &conn[0],
+            /* int nvars */                                 1,
+            /* int *vardim */                               &vardim,
+            /* int *centering */                            &centering,
+            /* const char * const *varnames */              &name_tensor,
+            /* float **vars */                              &vars);
+
+    // in index space
+    sprintf(filename, "tensor_index_gid_%d.vtk", cp.gid());
+    write_unstructured_mesh(
+            /* const char *filename */                      filename,
+            /* int useBinary */                             0,
+            /* int npts */                                  tensor_pts_index.size(),
+            /* float *pts */                                &(tensor_pts_index[0].x),
+            /* int ncells */                                ncells,
+            /* int *celltypes */                            &cell_types[0],
+            /* int *conn */                                 &conn[0],
+            /* int nvars */                                 1,
+            /* int *vardim */                               &vardim,
+            /* int *centering */                            &centering,
+            /* const char * const *varnames */              &name_tensor,
             /* float **vars */                              &vars);
 
     delete[] vardims;
