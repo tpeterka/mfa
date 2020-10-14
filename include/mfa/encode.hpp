@@ -431,6 +431,7 @@ namespace mfa
         // solves all dimensions together (not separably)
         // does not encode weights for now
         void EncodeTensor(TensorIdx                 t_idx,                  // index of tensor product being encoded
+                          bool                      pad,                    // pad input points by degree p in each dimension
                           bool                      constrained,            // whether to impose p control point constraints on each side
                           bool                      weighted = true)        // solve for and use weights
         {
@@ -442,12 +443,15 @@ namespace mfa
             // get input domain points covered by the tensor
             vector<size_t> start_idxs(mfa_data.dom_dim);
             vector<size_t> end_idxs(mfa_data.dom_dim);
-            mfa_data.tmesh.domain_pts(t_idx, start_idxs, end_idxs);
+            // TODO: following crashes, hard-code start and end idxs for the time being
+//             mfa_data.tmesh.domain_pts(t_idx, pad, start_idxs, end_idxs);
 
-            // TODO: start_idxs and end_idxs can be a lot tighter, although nothing changes if they are loose
             // debug: hard-code start and end idxs
-//             start_idxs[0] = 7;
-//             end_idxs[0] = 15;
+            for (auto i = 0; i < mfa_data.dom_dim; i++)
+            {
+                start_idxs[i]   = 0;
+                end_idxs[i]     = mfa.ndom_pts()(i) - 1;
+            }
 
             VectorXi ndom_pts(mfa_data.dom_dim);
             for (auto k = 0; k < mfa_data.dom_dim; k++)
@@ -465,7 +469,7 @@ namespace mfa
             {
                 MatrixX<T> ctrlpts_tosolve;
                 // TODO: make a version of LocalSolverCtrlPts that only finds the constraints
-                LocalSolveCtrlPts(t_idx, ctrlpts_tosolve);
+                LocalSolveCtrlPts(t, ctrlpts_tosolve);
                 cons = ctrlpts_tosolve.block(t.nctrl_pts.prod(), 0, ctrlpts_tosolve.rows() - t.ctrl_pts.rows(), ctrlpts_tosolve.cols());
             }
 

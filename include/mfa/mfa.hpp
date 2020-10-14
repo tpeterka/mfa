@@ -115,7 +115,7 @@ namespace mfa
 
             // experiment with separable, unified dimension encoding
 #ifdef MFA_UNIFIED_DIMS
-            encoder.EncodeTensor(t, false, weighted);
+            encoder.EncodeTensor(0, false, false, weighted);   // assumes only one tensor product
 #else
             encoder.Encode(t.nctrl_pts, t.ctrl_pts, t.weights, weighted);
 #endif
