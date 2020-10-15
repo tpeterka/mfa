@@ -27,7 +27,7 @@
 // #define WEIGH_ALL_DIMS
 
 // comment out the following line for original single tensor product version
-// #define TMESH
+#define TMESH
 
 // comment out the following line for separable dimension solve
 // #define MFA_UNIFIED_DIMS

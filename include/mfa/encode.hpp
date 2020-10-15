@@ -715,7 +715,9 @@ namespace mfa
 
                 // using NewKnots_full high-d span splitting with tmesh (for now)
                 bool temp_local = local;                        // ability to do local solve temporarily for this round depends on whether new knots permits local solve
-                int retval = NewKnots_full(err_limit, extents, iter, temp_local, nctrl_pts, ctrl_pts, weights);
+                //                 DEPRECATE
+//                 int retval = NewKnots_full(err_limit, extents, iter, temp_local, nctrl_pts, ctrl_pts, weights);
+                int retval = NewKnots_full(err_limit, extents, iter, temp_local);
 
                 // if not doing local solve,
                 // resize temporary control points and weights and global encode and scatter of control points to tensors
@@ -1486,7 +1488,7 @@ namespace mfa
 
 #ifdef TMESH
 
-        // this is the version used currently for tmesh and optional local solve
+        // this is the version used currently for tmesh global or local solve
         // encodes at full dimensionality and decodes at full dimensionality
         // decodes full-d points in each knot span and adds new knot spans where error > err_limit
         // returns 1 if knots were added, 0 if no knots were added, -1 if number of control points >= input points
@@ -1494,10 +1496,11 @@ namespace mfa
                 T                   err_limit,                  // max allowable error
                 const VectorX<T>&   extents,                    // extents in each dimension, for normalizing error (size 0 means do not normalize)
                 int                 iter,                       // iteration number of caller (for debugging)
-                bool&               local,                      // (input, output) solve locally (with constraints)
-                const VectorXi&     nctrl_pts,                  // number of control points in each dimension
-                const MatrixX<T>&   ctrl_pts,                   // control points
-                const VectorX<T>&   weights)                    // weights
+                bool&               local)                      // (input, output) solve locally (with constraints)
+            //                 DEPRECATE
+//                 const VectorXi&     nctrl_pts,                  // number of control points in each dimension
+//                 const MatrixX<T>&   ctrl_pts,                   // control points
+//                 const VectorX<T>&   weights)                    // weights
         {
             // debug
             if (local)
@@ -1527,9 +1530,10 @@ namespace mfa
                                           myextents,
                                           err_limit,
                                           iter,
-                                          nctrl_pts,
-                                          ctrl_pts,
-                                          weights,
+                                          //                                           DEPRECATE
+//                                           nctrl_pts,
+//                                           ctrl_pts,
+//                                           weights,
                                           inserted_knot_idxs,
                                           new_nctrl_pts,
                                           new_ctrl_pts,
@@ -1541,9 +1545,10 @@ namespace mfa
                                           myextents,
                                           err_limit,
                                           iter,
-                                          nctrl_pts,
-                                          ctrl_pts,
-                                          weights,
+                                          //                                           DEPRECATE
+//                                           nctrl_pts,
+//                                           ctrl_pts,
+//                                           weights,
                                           inserted_knot_idxs);
 
             if (local)
@@ -1597,7 +1602,7 @@ namespace mfa
 #endif
 
             for (auto k = 0; k < mfa_data.dom_dim; k++)
-                if (mfa.ndom_pts()(k) <= nctrl_pts(k))
+                if (mfa.ndom_pts()(k) <= mfa_data.tmesh.all_knots[k].size() - (mfa_data.p(k) + 1))
                     return -1;
 
             return 1;
