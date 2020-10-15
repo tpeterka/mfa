@@ -238,10 +238,6 @@ namespace mfa
                 VectorX<T>                  extents,                // extents in each dimension, for normalizing error (size 0 means do not normalize)
                 T                           err_limit,              // max. allowed error
                 int                         iter,                   // iteration number
-                //                 DEPRECATE
-//                 const VectorXi&             nctrl_pts,              // number of control points
-//                 const MatrixX<T>&           ctrl_pts,               // control points
-//                 const VectorX<T>&           weights,                // control point weights
                 vector<vector<KnotIdx>>&    inserted_knot_idxs)     // (output) indices in each dim. of inserted knots in full knot vector after insertion
         {
             // debug
@@ -264,9 +260,6 @@ namespace mfa
                 mfa_data.idx2ijk(mfa.ds(), i, ijk);
                 for (auto k = 0; k < mfa.dom_dim; k++)
                     param(k) = mfa.params()[k][ijk(k)];
-                //                 DEPRECATE
-//                 VectorX<T> cpt(domain.cols());                      // approximated point
-//                 decoder.VolPt(param, cpt, nctrl_pts, ctrl_pts, weights);
                 VectorX<T> cpt(mfa_data.tmesh.tensor_prods[0].ctrl_pts.cols());
                 decoder.VolPt_tmesh(param, cpt);
 
@@ -289,8 +282,6 @@ namespace mfa
                     bool empty_span = false;
                     for (auto k = 0; k < mfa.dom_dim; k++)
                     {
-                        //                         DEPRECATE
-//                         span[k] = mfa_data.FindSpan(k, param(k), nctrl_pts(k));
                         span[k] = mfa_data.FindSpan(k, param(k));
 
                         // debug: hard code span
@@ -358,10 +349,6 @@ namespace mfa
                 VectorX<T>                  extents,                // extents in each dimension, for normalizing error (size 0 means do not normalize)
                 T                           err_limit,              // max. allowed error
                 int                         iter,                   // iteration number
-                //                 DEPRECATE
-//                 const VectorXi&             nctrl_pts,              // number of control points
-//                 const MatrixX<T>&           ctrl_pts,               // control points
-//                 const VectorX<T>&           weights,                // control point weights
                 vector<vector<KnotIdx>>&    inserted_knot_idxs,     // (output) indices in each dim. of inserted knots in full knot vector after insertion
                 vector<VectorXi>&           new_nctrl_pts,          // (output) new number of control points in each dim. from P&T knot insertion, one std:vector element per knot inserted
                 vector<MatrixX<T>>&         new_ctrl_pts,           // (output) new control points from P&T knot insertion, one std::vector element per knot inserted
@@ -387,9 +374,6 @@ namespace mfa
                 mfa_data.idx2ijk(mfa.ds(), i, ijk);
                 for (auto k = 0; k < mfa.dom_dim; k++)
                     param(k) = mfa.params()[k][ijk(k)];
-                //                 DEPRECATE
-//                 VectorX<T> cpt(domain.cols());                      // approximated point
-//                 decoder.VolPt(param, cpt, nctrl_pts, ctrl_pts, weights);
                 VectorX<T> cpt(mfa_data.tmesh.tensor_prods[0].ctrl_pts.cols());
                 decoder.VolPt_tmesh(param, cpt);
 
@@ -410,8 +394,6 @@ namespace mfa
                 {
                     vector<KnotIdx> span(mfa.dom_dim);              // index space coordinates of span where knot will be inserted
                     for (auto k = 0; k < mfa.dom_dim; k++)
-                        //                         DEPRECATE
-//                         span[k] = mfa_data.FindSpan(k, param(k), nctrl_pts(k));
                         span[k] = mfa_data.FindSpan(k, param(k));
 
                     // check that new spans will contain at least one input point
@@ -525,10 +507,6 @@ namespace mfa
                 VectorX<T>                  extents,                // extents in each dimension, for normalizing error (size 0 means do not normalize)
                 T                           err_limit,              // max. allowed error
                 int                         iter,                   // iteration number
-                //                 DEPRECATE
-//                 const VectorXi&             nctrl_pts,              // number of control points
-//                 const MatrixX<T>&           ctrl_pts,               // control points
-//                 const VectorX<T>&           weights,                // control point weights
                 vector<vector<KnotIdx>>&    inserted_knot_idxs)     // (output) indices in each dim. of inserted knots in full knot vector after insertion
         {
             // debug
@@ -554,9 +532,6 @@ namespace mfa
                 mfa_data.idx2ijk(mfa.ds(), i, ijk);
                 for (auto k = 0; k < mfa.dom_dim; k++)
                     param(k) = mfa.params()[k][ijk(k)];
-                //                 DEPRECATE
-//                 VectorX<T> cpt(domain.cols());                      // approximated point
-//                 decoder.VolPt(param, cpt, nctrl_pts, ctrl_pts, weights);
                 VectorX<T> cpt(mfa_data.tmesh.tensor_prods[0].ctrl_pts.cols());
                 decoder.VolPt_tmesh(param, cpt);
 
@@ -579,8 +554,6 @@ namespace mfa
                     bool empty_span = false;
                     for (auto k = 0; k < mfa.dom_dim; k++)
                     {
-                        //                         DEPRECATE
-//                         span[k] = mfa_data.FindSpan(k, param(k), nctrl_pts(k));
                         span[k] = mfa_data.FindSpan(k, param(k));
 
                         // span should never be the last knot because of the repeated knots at end
@@ -659,10 +632,6 @@ namespace mfa
                 VectorX<T>                  extents,                // extents in each dimension, for normalizing error (size 0 means do not normalize)
                 T                           err_limit,              // max. allowed error
                 int                         iter,                   // iteration number
-                //                 DEPRECATE
-//                 const VectorXi&             nctrl_pts,              // number of control points
-//                 const MatrixX<T>&           ctrl_pts,               // control points
-//                 const VectorX<T>&           weights,                // control point weights
                 vector<vector<KnotIdx>>&    inserted_knot_idxs,     // (output) indices in each dim. of inserted knots in full knot vector after insertion
                 vector<VectorXi>&           new_nctrl_pts,          // (output) new number of control points in each dim. from P&T knot insertion, one std:vector element per knot inserted
                 vector<MatrixX<T>>&         new_ctrl_pts,           // (output) new control points from P&T knot insertion, one std::vector element per knot inserted
@@ -691,9 +660,6 @@ namespace mfa
                 mfa_data.idx2ijk(mfa.ds(), i, ijk);
                 for (auto k = 0; k < mfa.dom_dim; k++)
                     param(k) = mfa.params()[k][ijk(k)];
-                //                 DEPRECATE
-//                 VectorX<T> cpt(domain.cols());                      // approximated point
-//                 decoder.VolPt(param, cpt, nctrl_pts, ctrl_pts, weights);
                 VectorX<T> cpt(mfa_data.tmesh.tensor_prods[0].ctrl_pts.cols());
                 decoder.VolPt_tmesh(param, cpt);
 
@@ -714,11 +680,7 @@ namespace mfa
                 {
                     vector<KnotIdx> span(mfa.dom_dim);              // index space coordinates of span where knot will be inserted
                     for (auto k = 0; k < mfa.dom_dim; k++)
-                    {
-                        //                         DEPRECATE
-//                         span[k] = mfa_data.FindSpan(k, param(k), nctrl_pts(k));
                         span[k] = mfa_data.FindSpan(k, param(k));
-                    }
 
                     // check that new spans will contain at least one input point
                     bool empty_span = false;

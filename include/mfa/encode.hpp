@@ -715,8 +715,6 @@ namespace mfa
 
                 // using NewKnots_full high-d span splitting with tmesh (for now)
                 bool temp_local = local;                        // ability to do local solve temporarily for this round depends on whether new knots permits local solve
-                //                 DEPRECATE
-//                 int retval = NewKnots_full(err_limit, extents, iter, temp_local, nctrl_pts, ctrl_pts, weights);
                 int retval = NewKnots_full(err_limit, extents, iter, temp_local);
 
                 // if not doing local solve,
@@ -1497,10 +1495,6 @@ namespace mfa
                 const VectorX<T>&   extents,                    // extents in each dimension, for normalizing error (size 0 means do not normalize)
                 int                 iter,                       // iteration number of caller (for debugging)
                 bool&               local)                      // (input, output) solve locally (with constraints)
-            //                 DEPRECATE
-//                 const VectorXi&     nctrl_pts,                  // number of control points in each dimension
-//                 const MatrixX<T>&   ctrl_pts,                   // control points
-//                 const VectorX<T>&   weights)                    // weights
         {
             // debug
             if (local)
@@ -1530,10 +1524,6 @@ namespace mfa
                                           myextents,
                                           err_limit,
                                           iter,
-                                          //                                           DEPRECATE
-//                                           nctrl_pts,
-//                                           ctrl_pts,
-//                                           weights,
                                           inserted_knot_idxs,
                                           new_nctrl_pts,
                                           new_ctrl_pts,
@@ -1545,10 +1535,6 @@ namespace mfa
                                           myextents,
                                           err_limit,
                                           iter,
-                                          //                                           DEPRECATE
-//                                           nctrl_pts,
-//                                           ctrl_pts,
-//                                           weights,
                                           inserted_knot_idxs);
 
             if (local)
