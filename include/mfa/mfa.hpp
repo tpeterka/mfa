@@ -32,8 +32,8 @@
 // comment out the following line for separable dimension solve
 // #define MFA_UNIFIED_DIMS
 
-// comment out the following line for linear least squares local solve
-#define MFA_ITERATIVE_SOLVE
+// linear least squares local solve
+// #define MFA_LINEAR_LOCAL
 
 #include    <Eigen/Dense>
 #include    <vector>

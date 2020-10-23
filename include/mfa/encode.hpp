@@ -1778,11 +1778,15 @@ namespace mfa
             // local solve newly appended tensor
             // TODO: experimenting with the difference between iterative and linear least squares
             if (local)
-#ifdef MFA_ITERATIVE_SOLVE
-                LocalSolve();
-#else
+#ifdef MFA_LINEAR_LOCAL
+
 //                 EncodeTensor(mfa_data.tmesh.tensor_prods.size() - 1, true, true);
                 NewEncodeTensor(mfa_data.tmesh.tensor_prods.size() - 1);
+
+#else
+
+                LocalSolve();
+
 #endif
 
             for (auto k = 0; k < mfa_data.dom_dim; k++)
