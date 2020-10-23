@@ -303,10 +303,9 @@ namespace mfa
                         T new_knot_val = (mfa_data.tmesh.all_knots[k][span[k]] + mfa_data.tmesh.all_knots[k][span[k] + 1]) / 2.0;
 
                         // if the current span were to be split, check whether the resulting spans will have an input point
-                        auto param_it       = lower_bound(mfa.params()[k].begin() + low_idx, mfa.params()[k].begin() + high_idx, new_knot_val);
-                        ParamIdx param_idx  = param_it - mfa.params()[k].begin();
-                        if (param_idx == mfa.params()[k].size() - 1 || new_knot_val < mfa.params()[k][param_idx])
-                            param_idx--;
+                        ParamIdx param_idx  = low_idx;
+                        while (mfa.params()[k][param_idx] < new_knot_val)
+                            param_idx++;
                         if (param_idx - low_idx == 0 || high_idx - param_idx == 0)
                         {
                             empty_span =  true;
@@ -417,16 +416,11 @@ namespace mfa
                         T new_knot_val = (mfa_data.tmesh.all_knots[k][span[k]] + mfa_data.tmesh.all_knots[k][span[k] + 1]) / 2.0;
 
                         // if the current span were to be split, check whether the resulting spans will have an input point
-                        auto param_it       = lower_bound(mfa.params()[k].begin() + low_idx, mfa.params()[k].begin() + high_idx, new_knot_val);
-                        ParamIdx param_idx  = param_it - mfa.params()[k].begin();
-                        if (param_idx == mfa.params()[k].size() - 1 || new_knot_val < mfa.params()[k][param_idx])
-                            param_idx--;
+                        ParamIdx param_idx  = low_idx;
+                        while (mfa.params()[k][param_idx] < new_knot_val)
+                            param_idx++;
                         if (param_idx - low_idx == 0 || high_idx - param_idx == 0)
                         {
-                            // debug
-//                             fprintf(stderr, "Insufficient input points when attempting to split span %lu: low_idx = %lu param_idx = %lu high_idx = %lu\n",
-//                                     span[k], low_idx, param_idx, high_idx);
-
                             empty_span =  true;
                             break;
                         }
@@ -572,10 +566,9 @@ namespace mfa
                         T new_knot_val = (mfa_data.tmesh.all_knots[k][span[k]] + mfa_data.tmesh.all_knots[k][span[k] + 1]) / 2.0;
 
                         // if the current span were to be split, check whether the resulting spans will have an input point
-                        auto param_it       = lower_bound(mfa.params()[k].begin() + low_idx, mfa.params()[k].begin() + high_idx, new_knot_val);
-                        ParamIdx param_idx  = param_it - mfa.params()[k].begin();
-                        if (param_idx == mfa.params()[k].size() - 1 || new_knot_val < mfa.params()[k][param_idx])
-                            param_idx--;
+                        ParamIdx param_idx  = low_idx;
+                        while (mfa.params()[k][param_idx] < new_knot_val)
+                            param_idx++;
                         if (param_idx - low_idx == 0 || high_idx - param_idx == 0)
                         {
                             empty_span =  true;
@@ -597,7 +590,7 @@ namespace mfa
 //             if (Max_err >= 0.0)
 //             {
 //                 for (auto k = 0; k < mfa.dom_dim; k++)
-//                     Max_span[k] = 5;
+//                     Max_span[k] = 4;
 //             }
 
             if (Max_err >= 0.0)
@@ -703,16 +696,11 @@ namespace mfa
                         T new_knot_val = (mfa_data.tmesh.all_knots[k][span[k]] + mfa_data.tmesh.all_knots[k][span[k] + 1]) / 2.0;
 
                         // if the current span were to be split, check whether the resulting spans will have an input point
-                        auto param_it       = lower_bound(mfa.params()[k].begin() + low_idx, mfa.params()[k].begin() + high_idx, new_knot_val);
-                        ParamIdx param_idx  = param_it - mfa.params()[k].begin();
-                        if (param_idx == mfa.params()[k].size() - 1 || new_knot_val < mfa.params()[k][param_idx])
-                            param_idx--;
+                        ParamIdx param_idx  = low_idx;
+                        while (mfa.params()[k][param_idx] < new_knot_val)
+                            param_idx++;
                         if (param_idx - low_idx == 0 || high_idx - param_idx == 0)
                         {
-                            // debug
-//                             fprintf(stderr, "Insufficient input points when attempting to split span %lu: low_idx = %lu param_idx = %lu high_idx = %lu\n",
-//                                     span[k], low_idx, param_idx, high_idx);
-
                             empty_span =  true;
                             break;
                         }
@@ -732,7 +720,7 @@ namespace mfa
 //             if (Max_err >= 0.0)
 //             {
 //                 for (auto k = 0; k < mfa.dom_dim; k++)
-//                     Max_span[k] = 5;
+//                     Max_span[k] = 4;
 //             }
 
             if (Max_err >= 0.0)

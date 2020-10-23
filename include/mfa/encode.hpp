@@ -443,7 +443,7 @@ namespace mfa
             // get input domain points covered by the tensor
             vector<size_t> start_idxs(mfa_data.dom_dim);
             vector<size_t> end_idxs(mfa_data.dom_dim);
-            mfa_data.tmesh.domain_pts(t_idx, pad, start_idxs, end_idxs);
+            mfa_data.tmesh.domain_pts(t_idx, pad, mfa.params(), start_idxs, end_idxs);
 
             // debug: hard-code start and end idxs
 //             for (auto i = 0; i < mfa_data.dom_dim; i++)
@@ -616,6 +616,203 @@ namespace mfa
 //             cerr << "\nEncodeTensor() ctrl_pts:\n" << t.ctrl_pts << endl;
 //             cerr << "\nEncodeTensor() weights:\n" << t.weights << endl;
         }
+
+#ifdef TMESH
+
+        // encodes the control points for one tensor product of a tmesh
+        // takes a subset of input points from the global domain, covered by basis functions of this tensor product
+        // solves all dimensions together (not separably)
+        // does not encode weights for now
+        // latest linear constrained formulation as proposed by David Lenz (see wiki/notes/linear-constrained-fit.pdf)
+        // currently only tried for 1-d
+        void NewEncodeTensor(
+                TensorIdx                 t_idx,                  // index of tensor product being encoded
+                bool                      weighted = true)        // solve for and use weights
+        {
+            // debug
+            fprintf(stderr, "NewEncodeTensor\n");
+
+            TensorProduct<T>& t = mfa_data.tmesh.tensor_prods[t_idx];
+
+            // get input domain points covered by the tensor
+            vector<size_t> start_idxs(mfa_data.dom_dim);
+            vector<size_t> end_idxs(mfa_data.dom_dim);
+            mfa_data.tmesh.domain_pts(t_idx, false, mfa.params(), start_idxs, end_idxs);
+
+            // debug: hard-code start and end idxs
+            // for ./adaptive -d 2 -m 1 -q 2 -u 1 -v 10 -n 15 -e 1e-2 -l 1 -u 1 should be [6, 10]
+//             for (auto i = 0; i < mfa_data.dom_dim; i++)
+//             {
+//                 start_idxs[i]   = 6;
+//                 end_idxs[i]     = 10;
+// 
+//                 // debug
+//                 fprintf(stderr, "hard-coding start and end input points\n");
+//                 for (auto k = 0; k < mfa_data.dom_dim; k++)
+//                     fprintf(stderr, "start_input_pt_idx[%d] = %lu end_input_pt_idx[%d] = %lu\n", k, start_idxs[k], k, end_idxs[k]);
+//             }
+
+            VectorXi ndom_pts(mfa_data.dom_dim);
+            for (auto k = 0; k < mfa_data.dom_dim; k++)
+                ndom_pts(k) = end_idxs[k] - start_idxs[k] + 1;
+
+            // resize matrices in case number of control points changed
+            int pt_dim = mfa_data.max_dim - mfa_data.min_dim + 1;                           // control point dimensionality
+            t.ctrl_pts.resize(t.nctrl_pts.prod(), pt_dim);
+            t.weights.resize(t.ctrl_pts.rows());
+
+
+            // find control points to solve, including both free and constrained ones
+            MatrixX<T> ctrlpts_tosolve;
+            LocalSolveCtrlPts(t, ctrlpts_tosolve);
+
+            // debug
+//             cerr << "ctrlpts_tosolve:\n" << ctrlpts_tosolve << endl;
+
+            // TODO: get correct number of min and max side constraint control points (rewrite LocalSolveCtrlPts)
+            // also need number of all control points in each dimension, hard-coded for 1d right now
+            int min_cons_nctrl_pts = mfa_data.p(0);         // number of minimum side constraint control points
+            int max_cons_nctrl_pts = mfa_data.p(0);         // number of maximum side constraint control points
+            VectorXi nctrl_pts(mfa.dom_dim);                // number of all control points (constrained + free) in each dim.
+            nctrl_pts(0) = ctrlpts_tosolve.rows();
+
+            // matrix of basis functions
+            // using 0th dimension for full-d
+            // N is a matrix of m x n scalars that are the basis function coefficients
+            //  _                                      _
+            // |  N_0(u[0])     ...     N_n-1(u[0])     |
+            // |     ...        ...      ...            |
+            // |  N_0(u[m-1])   ...     N_n-1(u[m-1])   |
+            //  -                                      -
+            MatrixX<T> N = MatrixX<T>::Constant(ndom_pts.prod(), ctrlpts_tosolve.rows(), -1);   // basis functions, -1 means unassigned so far
+
+            MatrixX<T> Q(ndom_pts.prod(), pt_dim);                                              // relevant input points
+
+            // local knot vector
+            vector<vector<KnotIdx>> local_knot_idxs(mfa_data.dom_dim);                          // local knot indices
+            vector<vector<T>> local_knots(mfa_data.dom_dim);                                    // local knot vector for current dim in parameter space
+            for (auto k = 0; k < mfa_data.dom_dim; k++)
+            {
+                local_knot_idxs[k].resize(mfa_data.p(k) + 2);
+                local_knots[k].resize(mfa_data.p(k) + 2);
+            }
+
+            vector<KnotIdx>     anchor(mfa_data.dom_dim);                                       // control point anchor
+
+            // iterator over input points
+            VectorXi dom_starts(mfa_data.dom_dim);
+            for (auto k = 0; k < mfa_data.dom_dim; k++)
+                dom_starts(k) = start_idxs[k];
+            VolIterator dom_vol_iter(ndom_pts, dom_starts, mfa.ndom_pts());
+            while (!dom_vol_iter.done())
+            {
+                // debug
+//                 cerr << "\ndomain points full idx = " << dom_vol_iter.sub_full_idx(dom_vol_iter.cur_iter()) << endl;
+
+                Q.block(dom_vol_iter.cur_iter(), 0, 1, pt_dim) =
+                    domain.block(dom_vol_iter.sub_full_idx(dom_vol_iter.cur_iter()), mfa_data.min_dim, 1, pt_dim);
+
+                // iterator over control points
+                VolIterator ctrl_vol_iter(nctrl_pts);
+                while (!ctrl_vol_iter.done())
+                {
+                    VectorXi ijk(mfa_data.dom_dim);                                             // ijk of current control point
+                    ctrl_vol_iter.idx_ijk(ctrl_vol_iter.cur_iter(), ijk);
+
+                    // anchor of control point
+                    // TODO: save and do not recompute for next domain point
+                    for (auto k = 0; k < mfa_data.dom_dim; k++)
+                        anchor[k] = ctrl_vol_iter.idx_dim(k) + mfa_data.tmesh.tensor_prods[t_idx].knot_mins[k] - mfa_data.p(k);
+
+                    // tensor containing anchor
+                    // TODO: save and do not recompute for next domain point
+                    TensorIdx t_idx_anchor;
+                    for (auto k = 0; k < mfa_data.dom_dim; k++)
+                    {
+                        t_idx_anchor = mfa_data.tmesh.in_prev_next(anchor, t_idx, k, true);
+                        if (t_idx_anchor >= 0)
+                            break;
+                    }
+                    assert(t_idx_anchor >= 0);
+
+                    // local knot vector
+                    // TODO: save and do not recompute for next domain point
+                    mfa_data.tmesh.knot_intersections(anchor, t_idx_anchor, true, local_knot_idxs);
+                    for (auto k = 0; k < mfa_data.dom_dim; k++)
+                        for (auto n = 0; n < local_knot_idxs[k].size(); n++)
+                            local_knots[k][n] = mfa_data.tmesh.all_knots[k][local_knot_idxs[k][n]];
+
+                    for (auto k = 0; k < mfa_data.dom_dim; k++)                                 // for all dims
+                    {
+                        int p = mfa_data.p(k);                                                  // degree of current dim.
+                        T u = mfa.params()[k][dom_vol_iter.idx_dim(k)];                         // parameter of current input point
+
+                        // debug
+//                         cerr << "u = " << u << " anchor = " << anchor[k] << " local_knots: [ ";
+
+                        T B = mfa_data.OneBasisFun(k, u, local_knots[k]);                       // basis function
+                        if (N(dom_vol_iter.cur_iter(), ctrl_vol_iter.cur_iter()) == -1.0)       // unassigned so far
+                            N(dom_vol_iter.cur_iter(), ctrl_vol_iter.cur_iter()) = B;
+                        else
+                            N(dom_vol_iter.cur_iter(), ctrl_vol_iter.cur_iter()) *= B;
+
+                        // debug
+//                         cerr << "B: " << B << endl;
+                    }   // for all dims
+
+                    // debug
+//                     cerr << "N.row(" << dom_vol_iter.cur_iter() << "): " << N.row(dom_vol_iter.cur_iter()) << endl;
+
+                    ctrl_vol_iter.incr_iter();
+                }   // control point iterator
+                dom_vol_iter.incr_iter();
+            }   // input domain point iterator
+
+            // set any unassigned values in N to 0
+            for (auto i = 0; i < N.rows(); i++)
+            {
+                for (auto j = 0; j < N.cols(); j++)
+                    if (N(i, j) == -1.0)
+                        N(i, j) = 0.0;
+
+                // debug
+//                 cerr << "N.row(" << i << "): " << N.row(i) << endl;
+
+                // check for summing to 1; TODO: do I need to normalize because local knot vector comes from tmesh?
+                double eps = 1.0e-10;
+                assert(fabs(N.row(i).sum() - 1.0) < eps);
+            }
+
+            //  split N into Nmin, Nmax, Nfree, the basis functions for the min and max constraints and the free control points
+            MatrixX<T> Nmin     = N.block(0, 0, N.rows(), min_cons_nctrl_pts);
+            MatrixX<T> Nfree    = N.block(0, min_cons_nctrl_pts, N.rows(), t.ctrl_pts.rows());
+            MatrixX<T> Nmax     = N.block(0, min_cons_nctrl_pts + t.ctrl_pts.rows(), N.rows(), max_cons_nctrl_pts);
+
+            // R is the right hand side needed for solving N * P = R
+            MatrixX<T>  Pmin = ctrlpts_tosolve.block(t.ctrl_pts.rows(), 0, min_cons_nctrl_pts, pt_dim);
+            MatrixX<T>  Pmax = ctrlpts_tosolve.block(t.ctrl_pts.rows() + min_cons_nctrl_pts, 0, max_cons_nctrl_pts, pt_dim);
+            MatrixX<T>  R = Q - Nmin * Pmin - Nmax * Pmax;
+
+            // debug
+//             cerr << "input:\n"  << domain   << endl;
+//             cerr << "N:\n"      << N        << endl;
+//             cerr << "Nmin:\n"   << Nmin     << endl;
+//             cerr << "Nfree:\n"  << Nfree    << endl;
+//             cerr << "Nmax:\n"   << Nmax     << endl;
+//             cerr << "Pmin:\n"   << Pmin     << endl;
+//             cerr << "Pmax:\n"   << Pmax     << endl;
+//             cerr << "Q:\n"      << Q        << endl;
+//             cerr << "R:\n"      << R        << endl;
+
+            // solve
+            t.ctrl_pts = Nfree.colPivHouseholderQr().solve(R);
+
+            // debug
+//             cerr << "\nNewEncodeTensor() ctrl_pts:\n" << t.ctrl_pts << endl;
+//             cerr << "\nNewEncodeTensor() weights:\n" << t.weights << endl;
+        }
+
+#endif
 
         // original adaptive encoding for first tensor product only
         void OrigAdaptiveEncode(
@@ -1584,7 +1781,8 @@ namespace mfa
 #ifdef MFA_ITERATIVE_SOLVE
                 LocalSolve();
 #else
-                EncodeTensor(mfa_data.tmesh.tensor_prods.size() - 1, true);
+//                 EncodeTensor(mfa_data.tmesh.tensor_prods.size() - 1, true, true);
+                NewEncodeTensor(mfa_data.tmesh.tensor_prods.size() - 1);
 #endif
 
             for (auto k = 0; k < mfa_data.dom_dim; k++)
@@ -1622,7 +1820,7 @@ namespace mfa
             // get the subset of the domain points needed for the local solve
             vector<size_t> start_idxs(mfa_data.dom_dim);
             vector<size_t> end_idxs(mfa_data.dom_dim);
-            tmesh.domain_pts(tmesh.tensor_prods.size() - 1, true, start_idxs, end_idxs);        // true = pad by degree on each side
+            tmesh.domain_pts(tmesh.tensor_prods.size() - 1, true, mfa.params(), start_idxs, end_idxs);        // true = pad by degree on each side
 
             // debug: decode all domain points
 //             fprintf(stderr, "Debug: overriding domain points to include all: ");

@@ -41,8 +41,8 @@ namespace mfa
     {
         vector<vector<T>>           all_knots;          // all_knots[dimension][index]
         vector<vector<int>>         all_knot_levels;    // refinement levels of all_knots[dimension][index]
-        vector<vector<ParamIdx>>    all_knot_param_idxs;// span in input point parameters containing knot value in all_knots[dimension][idx] (same layout as all_knots)
-                                                        // params[dim][idx] <= knot_value < params[dim][idx + 1]
+        vector<vector<ParamIdx>>    all_knot_param_idxs;// index of first input point whose parameter is >= knot value in all_knots[dimension][idx] (same layout as all_knots)
+                                                        // knot value <= params[dim][idx] < next knot value
         vector<TensorProduct<T>>    tensor_prods;       // all tensor products
         int                         dom_dim_;           // domain dimensionality
         VectorXi                    p_;                 // degree in each dimension
@@ -100,9 +100,8 @@ namespace mfa
                 ParamIdx high   = all_knot_param_idxs[dim][pos];
                 param_it        = lower_bound(params[dim].begin() + low, params[dim].begin() + high, all_knots[dim][pos]);
             }
+
             ParamIdx param_idx = param_it - params[dim].begin();
-            if (param_idx == params[dim].size() - 1 || knot < params[dim][param_idx])
-                param_idx--;
             all_knot_param_idxs[dim].insert(all_knot_param_idxs[dim].begin() + pos, param_idx);
 
             // adjust tensor product knot_mins and knot_maxs
@@ -1646,6 +1645,38 @@ namespace mfa
             return -1;
         }
 
+        // check tensor and prev and next pointers of tensor looking for a tensor containing the point
+        // only checks the direct preve and next neighbors, not multiple hops
+        // returns index of tensor containing the point, or -1 if not found
+        int in_prev_next(
+                const vector<KnotIdx>&  pt,                     // target point in index space
+                int                     tensor_idx,             // index of starting tensor for the walk
+                int                     cur_dim,                // dimension in which to walk
+                bool                    ctrl_pt_anchor) const   // whether pt refers to control point anchor (shifted 1/2 space for even degree)
+        {
+            const TensorProduct<T>& tensor = tensor_prods[tensor_idx];
+
+            // check current tensor
+            if (in(pt, tensor, ctrl_pt_anchor))
+                return tensor_idx;
+
+            // check nearest neighbor prev tensors
+            for (auto i = 0; i < tensor.prev[cur_dim].size(); ++i)
+            {
+                if (in(pt, tensor_prods[tensor.prev[cur_dim][i]], ctrl_pt_anchor))
+                    return tensor.prev[cur_dim][i];
+            }
+
+            // check nearest neighbor next tensors
+            for (auto i = 0; i < tensor.next[cur_dim].size(); ++i)
+            {
+                if (in(pt, tensor_prods[tensor.next[cur_dim][i]], ctrl_pt_anchor))
+                    return tensor.next[cur_dim][i];
+            }
+
+            return -1;
+        }
+
         // search for tensor containing point in index space
         // returns index of tensor containing the point, or -1 if not found
         int search_tensors(const vector<KnotIdx>&   pt,                     // target point in index space
@@ -1691,6 +1722,7 @@ namespace mfa
         // coverage extends to edge of basis functions corresponding to control points in the tensor product
         void domain_pts(TensorIdx               t_idx,              // index of current tensor product
                         bool                    pad,                // pad by degree p in each dimension
+                        vector<vector<T>>&      params,             // params of input points
                         vector<size_t>&         start_idxs,         // (output) starting idxs of input points
                         vector<size_t>&         end_idxs) const     // (output) ending idxs of input points
         {
@@ -1755,8 +1787,13 @@ namespace mfa
             // input points corresponding to start and end knot values
             for (auto k = 0; k < dom_dim_; k++)
             {
+                // start points start at all_knot_param_idxs[start_knot_idxs]
                 start_idxs[k]   = all_knot_param_idxs[k][start_knot_idxs[k]];
+
+                // end points go up to all_knot_param_ixs[end_knot_idxs]
                 end_idxs[k]     = all_knot_param_idxs[k][end_knot_idxs[k]];
+                while(params[k][end_idxs[k]] > all_knots[k][end_knot_idxs[k]])
+                    end_idxs[k]--;
             }
 
             // debug
