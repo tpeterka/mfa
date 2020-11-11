@@ -268,11 +268,12 @@ namespace mfa
         // This version takes a (possibly larger) set of control points and weights to copy into the appended tensor
         // If the input control points and weights are a superset of the tensor, the correct subset of them will be used
         // The number of control points is the number of the input superset
-        void append_tensor(const vector<KnotIdx>&   knot_mins,      // indices in all_knots of min. corner of tensor to be inserted
-                           const vector<KnotIdx>&   knot_maxs,      // indices in all_knots of max. corner
-                           const VectorXi&          new_nctrl_pts,  // number of control points in each dim. for this tensor (possibly superset)
-                           const MatrixX<T>&        new_ctrl_pts,   // local control points for this tensor (possibly superset)
-                           const VectorX<T>&        new_weights)    // local weights for this tensor (possibly superset)
+        void append_tensor(const vector<KnotIdx>&   knot_mins,          // indices in all_knots of min. corner of tensor to be inserted
+                           const vector<KnotIdx>&   knot_maxs,          // indices in all_knots of max. corner
+                           const VectorXi&          new_nctrl_pts,      // number of control points in each dim. for this tensor (possibly superset)
+                           const MatrixX<T>&        new_ctrl_pts,       // local control points for this tensor (possibly superset)
+                           const VectorX<T>&        new_weights,        // local weights for this tensor (possibly superset)
+                           int                      parent_tensor_idx)  // idx of parent tensor from which the superset of control points derives
         {
             // debug
             fprintf(stderr, "*** append_tensor with provided control points ***\n");
@@ -381,8 +382,7 @@ namespace mfa
             // TODO: deal with the case that the tensor was already inserted, check if it's possible to not be at the end
             // following assumes the appended tensor is last
             int tensor_idx = tensor_prods.size() - 1;
-            subset_ctrl_pts(new_nctrl_pts, new_ctrl_pts, new_weights, tensor_idx);
-
+            subset_ctrl_pts(new_nctrl_pts, new_ctrl_pts, new_weights, tensor_idx, parent_tensor_idx);
         }
 
         // check if nonempty intersection exists in all dimensions between knot_mins, knot_maxs of two tensors
@@ -1580,30 +1580,38 @@ namespace mfa
 
         // copy subset of control points into a given tensor product in the tmesh
         // assumes that the destination tensor is the most refined, ie, no knots or control points in its interior should be skipped
-        // also assumes that source control points are global for the entire domain
-        // both of these assumptions are reasonable when being called by append_tensor
-        void subset_ctrl_pts(const VectorXi&           nctrl_pts,          // number of control points in each dim.
-                             const MatrixX<T>&         ctrl_pts,           // control points
-                             const VectorX<T>&         weights,            // weights
-                             int                       tensor_idx)         // index of destination tensor
+        void subset_ctrl_pts(const VectorXi&        nctrl_pts,          // number of control points in each dim.
+                             const MatrixX<T>&      ctrl_pts,           // control points
+                             const VectorX<T>&      weights,            // weights
+                             int                    tensor_idx,         // index of destination tensor
+                             int                    parent_tensor_idx)  // index of parent tensor where new control points originated
         {
-            TensorProduct<T>& t = tensor_prods[tensor_idx];
+            TensorProduct<T>& t     = tensor_prods[tensor_idx];         // destination (child) tensor
+            TensorProduct<T>& pt    = tensor_prods[parent_tensor_idx];  // parent tensor
 
             // get starting offsets and numbers of control points in the subset
             VectorXi sub_starts(dom_dim_);
             t.nctrl_pts.resize(dom_dim_);
             for (auto i = 0; i < dom_dim_; i++)
             {
-                if (p_(i) % 2 == 0)
+                if (t.knot_mins[i] == pt.knot_maxs[i])          // child tensor is to the max side of parent
                 {
-                    sub_starts(i)   = t.knot_mins[i] - 1;
-                    t.nctrl_pts(i)  = t.knot_maxs[i] - t.knot_mins[i];
+                    if (p_(i) % 2 == 0)
+                        sub_starts(i)   = t.knot_mins[i] - 1;
+                    else
+                        sub_starts(i)   = t.knot_mins[i] - 2;
                 }
+                else if (t.knot_maxs[i] == pt.knot_mins[i])     // child tensor is to the min size of parent
+                    sub_starts(i)   = 0;
                 else
                 {
-                    sub_starts(i)   = t.knot_mins[i] - 2;
-                    t.nctrl_pts(i)  = t.knot_maxs[i] - t.knot_mins[i] + 1;
+                    fprintf(stderr, "subset_ctrl_pts(): child tensor not adjacent to parent. This should not happen.\n");
+                    abort();
                 }
+                if (p_(i) % 2 == 0)
+                    t.nctrl_pts(i)  = t.knot_maxs[i] - t.knot_mins[i];
+                else
+                    t.nctrl_pts(i)  = t.knot_maxs[i] - t.knot_mins[i] + 1;
             }
 
             // allocate control points

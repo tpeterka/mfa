@@ -183,7 +183,8 @@ namespace mfa
 
         // inserts a set of knots (in all dimensions) into the original knot set
         // this version is for local solve
-        void InsertKnots(
+        // returns idx of parent tensor containing new knot to be inserted (assuming single knot insertion)
+        int InsertKnots(
                 vector<vector<T>>&          new_knots,              // new knots
                 vector<vector<int>>&        new_levels,             // new knot levels
                 vector<vector<KnotIdx>>&    inserted_knot_idxs,     // (output) indices in each dim. of inserted knots in full knot vector after insertion
@@ -201,6 +202,22 @@ namespace mfa
             new_weights.resize(nnew_knots);
             vector<KnotIdx> inserted_idx(mfa.dom_dim);
 
+#ifdef MFA_LINEAR_LOCAL
+
+            TensorProduct<T>& t = mfa_data.tmesh.tensor_prods[parent_tensor_idx];
+            for (auto i = 0; i < nnew_knots; i++)
+            {
+                new_nctrl_pts[i].resize(mfa_data.dom_dim);
+                for (auto k = 0; k < mfa_data.dom_dim; k++)
+                    (new_nctrl_pts[i])(k) = t.nctrl_pts(k) + 1;
+                new_ctrl_pts[i].resize(new_nctrl_pts[i].prod(), t.ctrl_pts.cols());
+                new_weights[i].resize(new_ctrl_pts[i].rows());
+                // linear local solve does not solve for weights; set to 1
+                new_weights[i] = VectorX<T>::Ones(new_weights[i].size());
+            }
+
+#else
+
             // call P&T knot insertion
             for (auto i = 0; i < nnew_knots; i++)
             {
@@ -216,6 +233,10 @@ namespace mfa
                                             new_ctrl_pts[i],
                                             new_weights[i]);
             }
+
+#endif
+
+            return parent_tensor_idx;
         }
 
 #ifdef TMESH
@@ -238,6 +259,7 @@ namespace mfa
                 VectorX<T>                  extents,                // extents in each dimension, for normalizing error (size 0 means do not normalize)
                 T                           err_limit,              // max. allowed error
                 int                         iter,                   // iteration number
+                int&                        parent_tensor_idx,      // (output) idx of parent tensor of error span
                 vector<vector<KnotIdx>>&    inserted_knot_idxs)     // (output) indices in each dim. of inserted knots in full knot vector after insertion
         {
             // debug
@@ -324,7 +346,7 @@ namespace mfa
                         new_levels[k].push_back(iter + 1);  // adapt at the next level, for now every iteration is a new level
                     }
 
-                    InsertKnots(new_knots, new_levels, inserted_knot_idxs);
+                    parent_tensor_idx = InsertKnots(new_knots, new_levels, inserted_knot_idxs);
                     return false;
                 }   // max_err > err_limit
             }   // for all input points
@@ -348,6 +370,7 @@ namespace mfa
                 VectorX<T>                  extents,                // extents in each dimension, for normalizing error (size 0 means do not normalize)
                 T                           err_limit,              // max. allowed error
                 int                         iter,                   // iteration number
+                int&                        parent_tensor_idx,      // (output) idx of parent tensor of error span
                 vector<vector<KnotIdx>>&    inserted_knot_idxs,     // (output) indices in each dim. of inserted knots in full knot vector after insertion
                 vector<VectorXi>&           new_nctrl_pts,          // (output) new number of control points in each dim. from P&T knot insertion, one std:vector element per knot inserted
                 vector<MatrixX<T>>&         new_ctrl_pts,           // (output) new control points from P&T knot insertion, one std::vector element per knot inserted
@@ -429,39 +452,12 @@ namespace mfa
                     if (empty_span)
                         continue;               // next input point
 
-                    // find tensor containing the span
-                    VectorXi unused;
-                    int parent_tensor_idx = mfa_data.tmesh.search_tensors(span, unused);
-
-                    // debug
-//                     fprintf(stderr, "FirstErrorSpan: span[0] = %lu found parent_tensor_idx = %d\n", span[0], parent_tensor_idx);
-
                     // debug: hard code span
 //                     for (auto k = 0; k < mfa.dom_dim; k++)
 //                         span[k] = 5;
 
-                    // check if there are sufficient constraints for the local solve, or we need to revert to global solve
                     for (auto k = 0; k < mfa.dom_dim; k++)
                     {
-                        vector<KnotIdx>& knot_mins = mfa_data.tmesh.tensor_prods[parent_tensor_idx].knot_mins;
-                        vector<KnotIdx>& knot_maxs = mfa_data.tmesh.tensor_prods[parent_tensor_idx].knot_maxs;
-                        if (mfa_data.p(k) % 2 == 0)                         // even degree
-                        {
-                            if (span[k] <= mfa_data.p(k) || span[k] >= mfa_data.tmesh.all_knots[k].size() - mfa_data.p(k) - 2 ||
-                                span[k] - knot_mins[k] < mfa_data.p(k) || knot_maxs[k] - span[k] < mfa_data.p(k))
-                                local = false;
-                        }
-                        if (mfa_data.p(k) % 2 == 1)                         // odd degree, skip border points
-                        {
-                            if (span[k] <= mfa_data.p(k) + 1 || span[k] >= mfa_data.tmesh.all_knots[k].size() - mfa_data.p(k) - 3 ||
-                                span[k] - knot_mins[k] < mfa_data.p(k) + 1 || knot_maxs[k] - span[k] < mfa_data.p(k) + 1)
-                                local = false;
-                        }
-
-                        // debug
-                        if (!local)
-                            fprintf(stderr, "FirstErrorSpan: span = %lu does not allow enough constraints for local solve, switching to global solve\n", span[k]);
-
                         // span should never be the last knot because of the repeated knots at end
                         assert(span[k] < mfa_data.tmesh.all_knots[k].size() - 1);
 
@@ -472,9 +468,16 @@ namespace mfa
                     }
 
                     if (local)
-                        InsertKnots(new_knots, new_levels, inserted_knot_idxs, new_nctrl_pts, new_ctrl_pts, new_weights);
+                        parent_tensor_idx = InsertKnots(new_knots,
+                                                        new_levels,
+                                                        inserted_knot_idxs,
+                                                        new_nctrl_pts,
+                                                        new_ctrl_pts,
+                                                        new_weights);
                     else
-                        InsertKnots(new_knots, new_levels, inserted_knot_idxs);
+                        parent_tensor_idx = InsertKnots(new_knots,
+                                                        new_levels,
+                                                        inserted_knot_idxs);
 
                     return false;
                 }   // max_err > err_limit
@@ -501,6 +504,7 @@ namespace mfa
                 VectorX<T>                  extents,                // extents in each dimension, for normalizing error (size 0 means do not normalize)
                 T                           err_limit,              // max. allowed error
                 int                         iter,                   // iteration number
+                int&                        parent_tensor_idx,      // (output) idx of parent tensor of error span
                 vector<vector<KnotIdx>>&    inserted_knot_idxs)     // (output) indices in each dim. of inserted knots in full knot vector after insertion
         {
             // debug
@@ -603,7 +607,7 @@ namespace mfa
                     new_levels[k].push_back(iter + 1);  // adapt at the next level, for now every iteration is a new level
                 }
 
-                InsertKnots(new_knots, new_levels, inserted_knot_idxs);
+                parent_tensor_idx = InsertKnots(new_knots, new_levels, inserted_knot_idxs);
                 return false;
             }
             return true;
@@ -625,6 +629,7 @@ namespace mfa
                 VectorX<T>                  extents,                // extents in each dimension, for normalizing error (size 0 means do not normalize)
                 T                           err_limit,              // max. allowed error
                 int                         iter,                   // iteration number
+                int&                        parent_tensor_idx,      // (output) idx of parent tensor of error span
                 vector<vector<KnotIdx>>&    inserted_knot_idxs,     // (output) indices in each dim. of inserted knots in full knot vector after insertion
                 vector<VectorXi>&           new_nctrl_pts,          // (output) new number of control points in each dim. from P&T knot insertion, one std:vector element per knot inserted
                 vector<MatrixX<T>>&         new_ctrl_pts,           // (output) new control points from P&T knot insertion, one std::vector element per knot inserted
@@ -725,37 +730,8 @@ namespace mfa
 
             if (Max_err >= 0.0)
             {
-                // find tensor containing the span
-                VectorXi unused;
-                int parent_tensor_idx = mfa_data.tmesh.search_tensors(Max_span, unused);
-
-                // check if there are sufficient constraints for the local solve, or we need to revert to global solve
-                // commented out if not using constraints in local solve
-                // DEPRECATE commented out code eventually when we're sure we don't need it
                 for (auto k = 0; k < mfa.dom_dim; k++)
                 {
-                    // commented out if not using constraints in local solve
-                    // DEPRECATE eventually when we're sure this is the case
-//                     vector<KnotIdx>& knot_mins = mfa_data.tmesh.tensor_prods[parent_tensor_idx].knot_mins;
-//                     vector<KnotIdx>& knot_maxs = mfa_data.tmesh.tensor_prods[parent_tensor_idx].knot_maxs;
-//                     if (mfa_data.p(k) % 2 == 0)                         // even degree
-//                     {
-//                         if (Max_span[k] <= mfa_data.p(k) || Max_span[k] >= mfa_data.tmesh.all_knots[k].size() - mfa_data.p(k) - 2 ||
-//                                 Max_span[k] - knot_mins[k] < mfa_data.p(k) || knot_maxs[k] - Max_span[k] < mfa_data.p(k))
-//                             local = false;
-//                     }
-//                     if (mfa_data.p(k) % 2 == 1)                         // odd degree, skip border points
-//                     {
-//                         if (Max_span[k] <= mfa_data.p(k) + 1 || Max_span[k] >= mfa_data.tmesh.all_knots[k].size() - mfa_data.p(k) - 3 ||
-//                                 Max_span[k] - knot_mins[k] < mfa_data.p(k) + 1 || knot_maxs[k] - Max_span[k] < mfa_data.p(k) + 1)
-//                             local = false;
-//                     }
-
-                    // debug
-                    // DEPRECATE this printf once the above code is removed
-                    if (!local)
-                        fprintf(stderr, "MaxErrorSpan: span = %lu does not allow enough constraints for local solve, switching to global solve\n", Max_span[k]);
-
                     // span should never be the last knot because of the repeated knots at end
                     assert(Max_span[k] < mfa_data.tmesh.all_knots[k].size() - 1);
 
@@ -766,9 +742,16 @@ namespace mfa
                 }
 
                 if (local)
-                    InsertKnots(new_knots, new_levels, inserted_knot_idxs, new_nctrl_pts, new_ctrl_pts, new_weights);
+                    parent_tensor_idx = InsertKnots(new_knots,
+                                                    new_levels,
+                                                    inserted_knot_idxs,
+                                                    new_nctrl_pts,
+                                                    new_ctrl_pts,
+                                                    new_weights);
                 else
-                    InsertKnots(new_knots, new_levels, inserted_knot_idxs);
+                    parent_tensor_idx = InsertKnots(new_knots,
+                                                    new_levels,
+                                                    inserted_knot_idxs);
 
                 return false;
             }   // Max_err >= 0.0
@@ -837,7 +820,7 @@ namespace mfa
                        new_knots[k].push_back(new_knot_val);
                        new_levels[k].push_back(iter + 1);  // adapt at the next level, for now every iteration is a new level
                    }
-                   InsertKnots(new_knots, new_levels, inserted_knot_idxs, parent_tensor_idx);
+                   parent_tensor_idx = InsertKnots(new_knots, new_levels, inserted_knot_idxs, parent_tensor_idx);
                    return false;
                }
            }

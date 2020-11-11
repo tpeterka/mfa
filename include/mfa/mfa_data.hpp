@@ -787,6 +787,10 @@ namespace mfa
         // assumes all control points needed are contained within one tensor
         // this version is for a knot already added to the tmesh
         // TODO: expensive deep copies
+        //
+        // TODO: only handles first round or insertion into a tensor that has starts at knot index 0
+        // and has ample (p) control points before insertion point
+        //
         void ExistKnotInsertion(const VectorX<T>&    param,              // new knot value to be inserted
                                 TensorProduct<T>&    tensor)             // (output) tensor product for insertion
         {
@@ -997,6 +1001,10 @@ namespace mfa
         // this version assumes the new knot already exists in the tmesh knot, only updates control points
         // not for inserting a duplicate knot (does not handle knot multiplicity > 1)
         // original algorithm from P&T did handle multiplicity, but I simplified
+        //
+        // TODO: only handles first round or insertion into a tensor that has starts at knot index 0
+        // and has ample (p) control points before insertion point
+        //
         void ExistCurveKnotIns(int                   cur_dim,            // current dimension
                                KnotIdx               inserted_knot_idx,  // index of inserted knot in new all_knots
                                const MatrixX<T>&     old_ctrl_pts,       // old control points of curve
@@ -1224,6 +1232,10 @@ namespace mfa
         // not for inserting a duplicate knot (does not handle knot multiplicity > 1)
         // original algorithm from P&T did handle multiplicity, but I simplified
         // this version assumes the new knot already exists in the tmesh, updates only control points
+        //
+        // TODO: only handles first round or insertion into a tensor that has starts at knot index 0
+        // and has ample (p) control points before insertion point
+        //
         void ExistVolKnotIns(const vector<KnotIdx>       inserted_idx,           // index of inserted knot in new all_knots
                              const MatrixX<T>&           old_ctrl_pts,           // old control points
                              const VectorX<T>&           old_weights,            // old control point weights

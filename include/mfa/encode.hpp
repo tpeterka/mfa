@@ -661,6 +661,8 @@ namespace mfa
             t.ctrl_pts.resize(t.nctrl_pts.prod(), pt_dim);
             t.weights.resize(t.ctrl_pts.rows());
 
+            // linear solve does not solve for weights; set to 1
+            t.weights = VectorX<T>::Ones(t.weights.size());
 
             // find control points to solve, including both free and constrained ones
             MatrixX<T> ctrlpts_tosolve;
@@ -1706,6 +1708,8 @@ namespace mfa
 
             VectorX<T> myextents = extents.size() ? extents : VectorX<T>::Ones(mfa_data.tmesh.tensor_prods[0].ctrl_pts.cols());
 
+            int parent_tensor_idx;                              // idx of parent tensor of new knot (assuming only one new knot)
+
             // find new knots
             mfa::NewKnots<T> nk(mfa, mfa_data);
 
@@ -1721,6 +1725,7 @@ namespace mfa
                                           myextents,
                                           err_limit,
                                           iter,
+                                          parent_tensor_idx,
                                           inserted_knot_idxs,
                                           new_nctrl_pts,
                                           new_ctrl_pts,
@@ -1732,6 +1737,7 @@ namespace mfa
                                           myextents,
                                           err_limit,
                                           iter,
+                                          parent_tensor_idx,
                                           inserted_knot_idxs);
 
             if (local)
@@ -1749,6 +1755,14 @@ namespace mfa
                 // following makes p control points in the added tensor
                 knot_mins[j] = inserted_knot_idxs[j][0] - mfa_data.p(j) / 2;
                 knot_maxs[j] = inserted_knot_idxs[j][0] + mfa_data.p(j) / 2;
+
+                // check that we don't leave the parent tensor with less than p control points anywhere
+                TensorProduct<T>& t = mfa_data.tmesh.tensor_prods[parent_tensor_idx];
+                int odd_degree = mfa_data.p(j) % 2 == 0 ? 0 : 1;
+                if (t.knot_maxs[j] - knot_maxs[j] < mfa_data.p(j) - odd_degree)
+                    knot_maxs[j] = t.knot_maxs[j];
+                if (knot_mins[j] - t.knot_mins[j] < mfa_data.p(j) - odd_degree)
+                    knot_mins[j] = t.knot_mins[j];
 
                 // debug: try making a bigger tensor with p + 1 control points
 //                 knot_maxs[j]++;             // correct for both even and odd degree
@@ -1768,9 +1782,15 @@ namespace mfa
             // append the tensor
             // only doing one new knot insertion, hence the [0] index on new_nctrl_pts, new_ctrl_pts, new_weights
             if (local)
-                mfa_data.tmesh.append_tensor(knot_mins, knot_maxs, new_nctrl_pts[0], new_ctrl_pts[0], new_weights[0]);
+                mfa_data.tmesh.append_tensor(knot_mins,
+                                             knot_maxs,
+                                             new_nctrl_pts[0],
+                                             new_ctrl_pts[0],
+                                             new_weights[0],
+                                             parent_tensor_idx);
             else
-                mfa_data.tmesh.append_tensor(knot_mins, knot_maxs);
+                mfa_data.tmesh.append_tensor(knot_mins,
+                                             knot_maxs);
 
             // debug
 //             mfa_data.tmesh.print();
@@ -1913,6 +1933,7 @@ namespace mfa
             for (auto k = 0; k < mfa_data.dom_dim; k++)
             {
                 // previous tensors
+                // assumes that all previous tensors have at least the required number of control points (p)
                 for (auto j = 0; j < tc.prev[k].size(); j++)
                 {
                     const TensorProduct<T>& tp = tmesh.tensor_prods[tc.prev[k][j]];
@@ -1942,6 +1963,7 @@ namespace mfa
                 }
 
                 // next tensors
+                // assumes that all next tensors have at least the required number of control points (p)
                 for (auto j = 0; j < tc.next[k].size(); j++)
                 {
                     const TensorProduct<T>& tn = tmesh.tensor_prods[tc.next[k][j]];
