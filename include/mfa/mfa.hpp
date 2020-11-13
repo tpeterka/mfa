@@ -33,7 +33,7 @@
 // #define MFA_UNIFIED_DIMS
 
 // linear least squares local solve
-#define MFA_LINEAR_LOCAL
+// #define MFA_LINEAR_LOCAL
 
 #include    <Eigen/Dense>
 #include    <vector>

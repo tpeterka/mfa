@@ -1594,24 +1594,19 @@ namespace mfa
             t.nctrl_pts.resize(dom_dim_);
             for (auto i = 0; i < dom_dim_; i++)
             {
-                if (t.knot_mins[i] == pt.knot_maxs[i])          // child tensor is to the max side of parent
+                if (t.knot_maxs[i] == pt.knot_mins[i])      // child tensor is to the min size of parent
+                    sub_starts(i) = 0;
+                else
                 {
                     if (p_(i) % 2 == 0)
-                        sub_starts(i)   = t.knot_mins[i] - 1;
+                        sub_starts(i) = t.knot_mins[i] - pt.knot_mins[i] - 1;
                     else
-                        sub_starts(i)   = t.knot_mins[i] - 2;
-                }
-                else if (t.knot_maxs[i] == pt.knot_mins[i])     // child tensor is to the min size of parent
-                    sub_starts(i)   = 0;
-                else
-                {
-                    fprintf(stderr, "subset_ctrl_pts(): child tensor not adjacent to parent. This should not happen.\n");
-                    abort();
+                        sub_starts(i) = t.knot_mins[i] - pt.knot_mins[i] - 2;
                 }
                 if (p_(i) % 2 == 0)
-                    t.nctrl_pts(i)  = t.knot_maxs[i] - t.knot_mins[i];
+                    t.nctrl_pts(i) = t.knot_maxs[i] - t.knot_mins[i];
                 else
-                    t.nctrl_pts(i)  = t.knot_maxs[i] - t.knot_mins[i] + 1;
+                    t.nctrl_pts(i) = t.knot_maxs[i] - t.knot_mins[i] + 1;
             }
 
             // allocate control points
