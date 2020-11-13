@@ -625,14 +625,15 @@ namespace mfa
         // does not encode weights for now
         // latest linear constrained formulation as proposed by David Lenz (see wiki/notes/linear-constrained-fit.pdf)
         // currently only tried for 1-d
-        void NewEncodeTensor(
+        void EncodeTensorLocalLinear(
                 TensorIdx                 t_idx,                  // index of tensor product being encoded
                 bool                      weighted = true)        // solve for and use weights
         {
             // debug
-            fprintf(stderr, "NewEncodeTensor\n");
+            fprintf(stderr, "EncodeTensorLocalLinear\n");
 
-            TensorProduct<T>& t = mfa_data.tmesh.tensor_prods[t_idx];
+            TensorProduct<T>& t = mfa_data.tmesh.tensor_prods[t_idx];                           // current tensor product
+            int pt_dim = mfa_data.max_dim - mfa_data.min_dim + 1;                               // control point dimensionality
 
             // get input domain points covered by the tensor
             vector<size_t> start_idxs(mfa_data.dom_dim);
@@ -652,43 +653,27 @@ namespace mfa
 //                     fprintf(stderr, "start_input_pt_idx[%d] = %lu end_input_pt_idx[%d] = %lu\n", k, start_idxs[k], k, end_idxs[k]);
 //             }
 
+            // Q matrix of relevant input domain points
             VectorXi ndom_pts(mfa_data.dom_dim);
+            VectorXi dom_starts(mfa_data.dom_dim);
             for (auto k = 0; k < mfa_data.dom_dim; k++)
-                ndom_pts(k) = end_idxs[k] - start_idxs[k] + 1;
+            {
+                ndom_pts(k)     = end_idxs[k] - start_idxs[k] + 1;
+                dom_starts(k)   = start_idxs[k];                                                // need Eigen vector from STL vector
+            }
+            MatrixX<T> Q(ndom_pts.prod(), pt_dim);
+            VolIterator dom_iter(ndom_pts, dom_starts, mfa.ndom_pts());
+            while (!dom_iter.done())
+            {
+                Q.block(dom_iter.cur_iter(), 0, 1, pt_dim) =
+                    domain.block(dom_iter.sub_full_idx(dom_iter.cur_iter()), mfa_data.min_dim, 1, pt_dim);
+                dom_iter.incr_iter();
+            }
 
-            // resize matrices in case number of control points changed
-            int pt_dim = mfa_data.max_dim - mfa_data.min_dim + 1;                           // control point dimensionality
+            // resize control poiunts and weights in case number of control points changed
             t.ctrl_pts.resize(t.nctrl_pts.prod(), pt_dim);
             t.weights.resize(t.ctrl_pts.rows());
-
-            // linear solve does not solve for weights; set to 1
-            t.weights = VectorX<T>::Ones(t.weights.size());
-
-            // find control points to solve, including both free and constrained ones
-            MatrixX<T> ctrlpts_tosolve;
-            LocalSolveCtrlPts(t, ctrlpts_tosolve);
-
-            // debug
-//             cerr << "ctrlpts_tosolve:\n" << ctrlpts_tosolve << endl;
-
-            // TODO: get correct number of min and max side constraint control points (rewrite LocalSolveCtrlPts)
-            // also need number of all control points in each dimension, hard-coded for 1d right now
-            int min_cons_nctrl_pts = mfa_data.p(0);         // number of minimum side constraint control points
-            int max_cons_nctrl_pts = mfa_data.p(0);         // number of maximum side constraint control points
-            VectorXi nctrl_pts(mfa.dom_dim);                // number of all control points (constrained + free) in each dim.
-            nctrl_pts(0) = ctrlpts_tosolve.rows();
-
-            // matrix of basis functions
-            // using 0th dimension for full-d
-            // N is a matrix of m x n scalars that are the basis function coefficients
-            //  _                                      _
-            // |  N_0(u[0])     ...     N_n-1(u[0])     |
-            // |     ...        ...      ...            |
-            // |  N_0(u[m-1])   ...     N_n-1(u[m-1])   |
-            //  -                                      -
-            MatrixX<T> N = MatrixX<T>::Constant(ndom_pts.prod(), ctrlpts_tosolve.rows(), -1);   // basis functions, -1 means unassigned so far
-
-            MatrixX<T> Q(ndom_pts.prod(), pt_dim);                                              // relevant input points
+            t.weights = VectorX<T>::Ones(t.weights.size());                                     // linear solve does not solve for weights; set to 1
 
             // local knot vector
             vector<vector<KnotIdx>> local_knot_idxs(mfa_data.dom_dim);                          // local knot indices
@@ -701,117 +686,129 @@ namespace mfa
 
             vector<KnotIdx>     anchor(mfa_data.dom_dim);                                       // control point anchor
 
-            // iterator over input points
-            VectorXi dom_starts(mfa_data.dom_dim);
-            for (auto k = 0; k < mfa_data.dom_dim; k++)
-                dom_starts(k) = start_idxs[k];
-            VolIterator dom_vol_iter(ndom_pts, dom_starts, mfa.ndom_pts());
-            while (!dom_vol_iter.done())
+            // iterator over free control points
+            MatrixX<T> Nfree = MatrixX<T>::Constant(ndom_pts.prod(), t.ctrl_pts.rows(), -1);    // basis functions, -1 means unassigned so far
+            VolIterator free_iter(t.nctrl_pts);
+            while (!free_iter.done())
             {
-                // debug
-//                 cerr << "\ndomain points full idx = " << dom_vol_iter.sub_full_idx(dom_vol_iter.cur_iter()) << endl;
+                VectorXi ijk(mfa_data.dom_dim);                                                 // ijk of current control point
+                free_iter.idx_ijk(free_iter.cur_iter(), ijk);
 
-                Q.block(dom_vol_iter.cur_iter(), 0, 1, pt_dim) =
-                    domain.block(dom_vol_iter.sub_full_idx(dom_vol_iter.cur_iter()), mfa_data.min_dim, 1, pt_dim);
+                // anchor of control point
+                for (auto k = 0; k < mfa_data.dom_dim; k++)
+                    anchor[k] = free_iter.idx_dim(k) + mfa_data.tmesh.tensor_prods[t_idx].knot_mins[k];
 
-                // iterator over control points
-                VolIterator ctrl_vol_iter(nctrl_pts);
-                while (!ctrl_vol_iter.done())
+                // tensor containing anchor
+                TensorIdx t_idx_anchor;
+                for (auto k = 0; k < mfa_data.dom_dim; k++)
                 {
-                    VectorXi ijk(mfa_data.dom_dim);                                             // ijk of current control point
-                    ctrl_vol_iter.idx_ijk(ctrl_vol_iter.cur_iter(), ijk);
+                    t_idx_anchor = mfa_data.tmesh.in_prev_next(anchor, t_idx, k, true);
+                    if (t_idx_anchor >= 0)
+                        break;
+                }
+                assert(t_idx_anchor >= 0);
 
-                    // anchor of control point
-                    // TODO: save and do not recompute for next domain point
-                    for (auto k = 0; k < mfa_data.dom_dim; k++)
-                        anchor[k] = ctrl_vol_iter.idx_dim(k) + mfa_data.tmesh.tensor_prods[t_idx].knot_mins[k] - mfa_data.p(k);
+                // local knot vector
+                mfa_data.tmesh.knot_intersections(anchor, t_idx_anchor, true, local_knot_idxs);
+                for (auto k = 0; k < mfa_data.dom_dim; k++)
+                    for (auto n = 0; n < local_knot_idxs[k].size(); n++)
+                        local_knots[k][n] = mfa_data.tmesh.all_knots[k][local_knot_idxs[k][n]];
 
-                    // tensor containing anchor
-                    // TODO: save and do not recompute for next domain point
-                    TensorIdx t_idx_anchor;
-                    for (auto k = 0; k < mfa_data.dom_dim; k++)
-                    {
-                        t_idx_anchor = mfa_data.tmesh.in_prev_next(anchor, t_idx, k, true);
-                        if (t_idx_anchor >= 0)
-                            break;
-                    }
-                    assert(t_idx_anchor >= 0);
-
-                    // local knot vector
-                    // TODO: save and do not recompute for next domain point
-                    mfa_data.tmesh.knot_intersections(anchor, t_idx_anchor, true, local_knot_idxs);
-                    for (auto k = 0; k < mfa_data.dom_dim; k++)
-                        for (auto n = 0; n < local_knot_idxs[k].size(); n++)
-                            local_knots[k][n] = mfa_data.tmesh.all_knots[k][local_knot_idxs[k][n]];
-
+                // iterator over input points
+                VolIterator dom_iter(ndom_pts, dom_starts, mfa.ndom_pts());
+                while (!dom_iter.done())
+                {
                     for (auto k = 0; k < mfa_data.dom_dim; k++)                                 // for all dims
                     {
                         int p = mfa_data.p(k);                                                  // degree of current dim.
-                        T u = mfa.params()[k][dom_vol_iter.idx_dim(k)];                         // parameter of current input point
-
-                        // debug
-//                         cerr << "u = " << u << " anchor = " << anchor[k] << " local_knots: [ ";
-
+                        T u = mfa.params()[k][dom_iter.idx_dim(k)];                             // parameter of current input point
                         T B = mfa_data.OneBasisFun(k, u, local_knots[k]);                       // basis function
-                        if (N(dom_vol_iter.cur_iter(), ctrl_vol_iter.cur_iter()) == -1.0)       // unassigned so far
-                            N(dom_vol_iter.cur_iter(), ctrl_vol_iter.cur_iter()) = B;
+                        if (Nfree(dom_iter.cur_iter(), free_iter.cur_iter()) == -1.0)           // unassigned so far
+                            Nfree(dom_iter.cur_iter(), free_iter.cur_iter()) = B;
                         else
-                            N(dom_vol_iter.cur_iter(), ctrl_vol_iter.cur_iter()) *= B;
+                            Nfree(dom_iter.cur_iter(), free_iter.cur_iter()) *= B;
+                    }           // for all dims
+                    dom_iter.incr_iter();
+                }           // domain point iterator
+                free_iter.incr_iter();
+            }           // free control point iterator
 
-                        // debug
-//                         cerr << "B: " << B << endl;
-                    }   // for all dims
-
-                    // debug
-//                     cerr << "N.row(" << dom_vol_iter.cur_iter() << "): " << N.row(dom_vol_iter.cur_iter()) << endl;
-
-                    ctrl_vol_iter.incr_iter();
-                }   // control point iterator
-                dom_vol_iter.incr_iter();
-            }   // input domain point iterator
-
-            // set any unassigned values in N to 0
-            for (auto i = 0; i < N.rows(); i++)
+            // set any unassigned values in Nfree to 0
+            for (auto i = 0; i < Nfree.rows(); i++)
             {
-                for (auto j = 0; j < N.cols(); j++)
-                    if (N(i, j) == -1.0)
-                        N(i, j) = 0.0;
-
-                // debug
-//                 cerr << "N.row(" << i << "): " << N.row(i) << endl;
-
-                // check for summing to 1; TODO: do I need to normalize because local knot vector comes from tmesh?
-                double eps = 1.0e-10;
-                assert(fabs(N.row(i).sum() - 1.0) < eps);
+                for (auto j = 0; j < Nfree.cols(); j++)
+                    if (Nfree(i, j) == -1.0)
+                        Nfree(i, j) = 0.0;
             }
 
-            //  split N into Nmin, Nmax, Nfree, the basis functions for the min and max constraints and the free control points
-            MatrixX<T> Nmin     = N.block(0, 0, N.rows(), min_cons_nctrl_pts);
-            MatrixX<T> Nfree    = N.block(0, min_cons_nctrl_pts, N.rows(), t.ctrl_pts.rows());
-            MatrixX<T> Nmax     = N.block(0, min_cons_nctrl_pts + t.ctrl_pts.rows(), N.rows(), max_cons_nctrl_pts);
+            // find constraint control points and their anchors
+            MatrixX<T>              Pcons;                                                      // constraint control points
+            vector<vector<KnotIdx>> anchors;                                                    // corresponding anchors
+            LocalSolveConstraints(t, Pcons, anchors);
+
+            // iterator over constraint control points
+            MatrixX<T> Ncons = MatrixX<T>::Constant(ndom_pts.prod(), Pcons.rows(), -1);         // basis functions, -1 means unassigned so far
+            for (auto i = 0; i < Pcons.rows(); i++)                                             // for all constraint control points
+            {
+                // tensor containing anchor
+                TensorIdx t_idx_anchor;
+                for (auto k = 0; k < mfa_data.dom_dim; k++)
+                {
+                    t_idx_anchor = mfa_data.tmesh.in_prev_next(anchors[i], t_idx, k, true);
+                    if (t_idx_anchor >= 0)
+                        break;
+                }
+                assert(t_idx_anchor >= 0);
+
+                // local knot vector
+                mfa_data.tmesh.knot_intersections(anchors[i], t_idx_anchor, true, local_knot_idxs);
+                for (auto k = 0; k < mfa_data.dom_dim; k++)
+                    for (auto n = 0; n < local_knot_idxs[k].size(); n++)
+                        local_knots[k][n] = mfa_data.tmesh.all_knots[k][local_knot_idxs[k][n]];
+
+                // iterator over input points
+                VolIterator dom_iter(ndom_pts, dom_starts, mfa.ndom_pts());
+                while (!dom_iter.done())
+                {
+                    for (auto k = 0; k < mfa_data.dom_dim; k++)                                 // for all dims
+                    {
+                        int p = mfa_data.p(k);                                                  // degree of current dim.
+                        T u = mfa.params()[k][dom_iter.idx_dim(k)];                             // parameter of current input point
+                        T B = mfa_data.OneBasisFun(k, u, local_knots[k]);                       // basis function
+                        if (Ncons(dom_iter.cur_iter(), i) == -1.0)                              // unassigned so far
+                            Ncons(dom_iter.cur_iter(), i) = B;
+                        else
+                            Ncons(dom_iter.cur_iter(), i) *= B;
+                    }           // for all dims
+                    dom_iter.incr_iter();
+                }           // domain points iterator
+            }           // for all constraint control points
+
+            // set any unassigned values in Ncons to 0
+            for (auto i = 0; i < Ncons.rows(); i++)
+            {
+                for (auto j = 0; j < Ncons.cols(); j++)
+                    if (Ncons(i, j) == -1.0)
+                        Ncons(i, j) = 0.0;
+            }
 
             // R is the right hand side needed for solving N * P = R
-            MatrixX<T>  Pmin = ctrlpts_tosolve.block(t.ctrl_pts.rows(), 0, min_cons_nctrl_pts, pt_dim);
-            MatrixX<T>  Pmax = ctrlpts_tosolve.block(t.ctrl_pts.rows() + min_cons_nctrl_pts, 0, max_cons_nctrl_pts, pt_dim);
-            MatrixX<T>  R = Q - Nmin * Pmin - Nmax * Pmax;
+            MatrixX<T>  R = Q - Ncons* Pcons;
 
             // debug
-//             cerr << "input:\n"  << domain   << endl;
-//             cerr << "N:\n"      << N        << endl;
-//             cerr << "Nmin:\n"   << Nmin     << endl;
-//             cerr << "Nfree:\n"  << Nfree    << endl;
-//             cerr << "Nmax:\n"   << Nmax     << endl;
-//             cerr << "Pmin:\n"   << Pmin     << endl;
-//             cerr << "Pmax:\n"   << Pmax     << endl;
-//             cerr << "Q:\n"      << Q        << endl;
-//             cerr << "R:\n"      << R        << endl;
+            cerr << "input:\n"  << domain   << endl;
+            cerr << "Nfree:\n"  << Nfree    << endl;
+            cerr << "Ncons:\n"  << Ncons    << endl;
+            cerr << "Pcons:\n"  << Pcons    << endl;
+            cerr << "Q:\n"      << Q        << endl;
+            cerr << "R:\n"      << R        << endl;
 
             // solve
             t.ctrl_pts = Nfree.colPivHouseholderQr().solve(R);
 
             // debug
-//             cerr << "\nNewEncodeTensor() ctrl_pts:\n" << t.ctrl_pts << endl;
-//             cerr << "\nNewEncodeTensor() weights:\n" << t.weights << endl;
+//             cerr << "\EncodeTensorLocalLinear() ctrl_pts:\n" << t.ctrl_pts << endl;
+//             cerr << "\nEncodeTensorLocalLinear() weights:\n" << t.weights << endl;
         }
 
 #endif
@@ -1801,7 +1798,7 @@ namespace mfa
 #ifdef MFA_LINEAR_LOCAL
 
 //                 EncodeTensor(mfa_data.tmesh.tensor_prods.size() - 1, true, true);
-                NewEncodeTensor(mfa_data.tmesh.tensor_prods.size() - 1);
+                EncodeTensorLocalLinear(mfa_data.tmesh.tensor_prods.size() - 1);
 
 #else
 
@@ -1875,8 +1872,147 @@ namespace mfa
             fprintf(stderr, "\nSolver converged in %lu iterations.\n", llsq.iters());
         }
 
+        // constraint control points and corresponding anchors for local solve
+        void LocalSolveConstraints(
+                const TensorProduct<T>&     tc,                 // current tensor product being solved
+                MatrixX<T>&                 ctrl_pts,           // (output) constraing control points
+                vector<vector<KnotIdx>>&    anchors)            // (output) corresponding anchors
+        {
+            const Tmesh<T>&         tmesh   = mfa_data.tmesh;
+            int                     cols    = tc.ctrl_pts.cols();
+
+            // get required sizes
+
+            // TODO: does not check if prev/next extends beyond the current tensor
+            int rows = 0;                                       // number of rows required in ctrl_pts
+            VectorXi npts(mfa_data.dom_dim);
+            for (auto k = 0; k < mfa_data.dom_dim; k++)
+            {
+                for (auto j = 0; j < tc.prev[k].size(); j++)
+                {
+                    const TensorProduct<T>& tp = tmesh.tensor_prods[tc.prev[k][j]];
+                    for (auto i = 0; i < mfa_data.dom_dim; i++)
+                    {
+                        if (i == k)                             // direction of prev
+                            npts(i) = mfa_data.p(i);
+                        else                                    // direction orthogonal to prev
+                            npts(i) = tp.nctrl_pts(i);
+                    }
+                    rows += npts.prod();
+                }
+                for (auto j = 0; j < tc.next[k].size(); j++)
+                {
+                    const TensorProduct<T>& tn = tmesh.tensor_prods[tc.next[k][j]];
+                    for (auto i = 0; i < mfa_data.dom_dim; i++)
+                    {
+                        if (i == k)                             // direction of next
+                            npts(i) = mfa_data.p(i);
+                        else                                    // direction orthogonal to next
+                            npts(i) = tn.nctrl_pts(i);
+                    }
+                    rows += npts.prod();
+                }
+            }
+            ctrl_pts.resize(rows, cols);
+            anchors.resize(rows);
+
+            // copy constraints into ctrl_pts
+
+            // TODO: does not check if prev/next extends beyond the current tensor
+            int cur_row = 0;
+            VectorXi sub_starts(mfa_data.dom_dim);
+            VectorXi sub_npts(mfa_data.dom_dim);
+            VectorXi all_npts(mfa_data.dom_dim);
+            for (auto k = 0; k < mfa_data.dom_dim; k++)
+            {
+                // previous tensors
+                // assumes that all previous tensors have at least the required number of control points (p)
+                for (auto j = 0; j < tc.prev[k].size(); j++)
+                {
+                    const TensorProduct<T>& tp = tmesh.tensor_prods[tc.prev[k][j]];
+                    for (auto i = 0; i < mfa_data.dom_dim; i++)
+                    {
+                        if (i == k)                             // direction of prev
+                        {
+                            sub_starts(i)   = tp.nctrl_pts(i) - mfa_data.p(i);
+                            if (mfa_data.p(i) % 2)              // odd degree, skip border point
+                                sub_starts(i)--;
+                            sub_npts(i)     = mfa_data.p(i);
+                        }
+                        else                                    // direction orthogonal to prev
+                        {
+                            sub_starts(i)   = 0;
+                            sub_npts(i)     = tp.nctrl_pts(i);
+                        }
+                        all_npts(i)         = tp.nctrl_pts(i);
+                    }
+                    VolIterator voliter_prev(sub_npts, sub_starts, all_npts);
+                    VectorXi ijk(mfa_data.dom_dim);
+                    while (!voliter_prev.done())
+                    {
+                        // control point
+                        ctrl_pts.row(cur_row) = tp.ctrl_pts.row(voliter_prev.sub_full_idx(voliter_prev.cur_iter()));
+
+                        // anchor
+                        anchors[cur_row].resize(mfa_data.dom_dim);
+                        voliter_prev.idx_ijk(voliter_prev.cur_iter(), ijk);
+                        // counting from the max end of prev tensor avoids dealing with the global min. empty knots
+                        for (auto i = 0; i < mfa_data.dom_dim; i++)
+                        {
+                            anchors[cur_row][i] = tp.knot_maxs[i] - (all_npts(i) - ijk(i));
+                            if (mfa_data.p(i) % 2)              // odd degree
+                                anchors[cur_row][i]++;
+                        }
+
+                        cur_row++;
+                        voliter_prev.incr_iter();
+                    }
+                }
+
+                // next tensors
+                // assumes that all next tensors have at least the required number of control points (p)
+                for (auto j = 0; j < tc.next[k].size(); j++)
+                {
+                    const TensorProduct<T>& tn = tmesh.tensor_prods[tc.next[k][j]];
+                    for (auto i = 0; i < mfa_data.dom_dim; i++)
+                    {
+                        if (i == k)                             // direction of next
+                        {
+                            if (mfa_data.p(i) % 2)              // odd degree, skip border point
+                                sub_starts(i) = 1;
+                            else
+                                sub_starts(i) = 0;
+                            sub_npts(i)     = mfa_data.p(i);
+                        }
+                        else                                    // direction orthogonal to next
+                        {
+                            sub_starts(i)   = 0;
+                            sub_npts(i)     = tn.nctrl_pts(i);
+                        }
+                        all_npts(i)         = tn.nctrl_pts(i);
+                    }
+                    VolIterator voliter_next(sub_npts, sub_starts, all_npts);
+                    VectorXi ijk(mfa_data.dom_dim);
+                    while (!voliter_next.done())
+                    {
+                        // control point
+                        ctrl_pts.row(cur_row) = tn.ctrl_pts.row(voliter_next.sub_full_idx(voliter_next.cur_iter()));
+
+                        // anchor
+                        anchors[cur_row].resize(mfa_data.dom_dim);
+                        voliter_next.idx_ijk(voliter_next.cur_iter(), ijk);
+                        // counting from the min end of next tensor avoids dealing with the global max. empty knots
+                        for (auto i = 0; i < mfa_data.dom_dim; i++)
+                            anchors[cur_row][i] = ijk(i) + tn.knot_mins[i];
+
+                        cur_row++;
+                        voliter_next.incr_iter();
+                    }
+                }
+            }
+        }
+
         // set up control points to solve for local solver
-        // n-d version
         void LocalSolveCtrlPts(const TensorProduct<T>&  tc,                 // current tensor product being solved
                                MatrixX<T>&              ctrlpts_tosolve)    // (output) control points to solv
         {
