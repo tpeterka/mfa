@@ -1438,7 +1438,7 @@ namespace mfa
             // 2. Copy the control points to the tensors using the recorded destination tensor for each control point
 
             vector<KnotIdx>     anchor(dom_dim_);                           // anchor in each dim. of control point in global tensor
-            int                 tensor_idx = 0;                             // index of current tensor
+            TensorIdx           tensor_idx = 0;                             // index of current tensor
             vector<int>         start_tensor_idx(dom_dim_, 0);              // index of starting tensor when dimension changes
             vector<size_t>      tensor_tot_nctrl_pts(tensor_prods.size());  // number of control points needed to allocate in each tensor
             vector<size_t>      tensor_cur_nctrl_pts(tensor_prods.size());  // current number of control points in each tensor so far
@@ -1449,7 +1449,7 @@ namespace mfa
 
             while (!vol_iter.done())
             {
-                assert(tensor_idx >= 0);                                    // sanity: anchor was found in some tensor
+                assert(tensor_idx < tensor_prods.size());                   // sanity: anchor was found in some tensor
 
                 vol_iter.idx_ijk(vol_iter.cur_iter(), ijk);
 
@@ -1524,7 +1524,7 @@ namespace mfa
                         {
                             // check for the anchor in the current tensor and in next pointers in next higher dim, starting back at last tensor of current dim
                             tensor_idx = in_and_next(anchor, start_tensor_idx[k + 1], k + 1, true);
-                            if (tensor_idx >= 0)
+                            if (tensor_idx < tensor_prods.size())
                             {
                                 // TODO: following is untested, need higher dimension example with multiple tensors
                                 start_tensor_idx[k + 1] = tensor_idx;           // adjust start tensor of next dim
@@ -1627,8 +1627,9 @@ namespace mfa
 
         // check tensor and next pointers of tensor looking for a tensor containing the point
         // only checks the direct next neighbors, not multiple hops
-        // returns index of tensor containing the point, or -1 if not found
-        int in_and_next(const vector<KnotIdx>&  pt,                     // target point in index space
+        // returns index of tensor containing the point, or size of tensors (end) if not found
+        TensorIdx in_and_next(
+                        const vector<KnotIdx>&  pt,                     // target point in index space
                         int                     tensor_idx,             // index of starting tensor for the walk
                         int                     cur_dim,                // dimension in which to walk
                         bool                    ctrl_pt_anchor) const   // whether pt refers to control point anchor (shifted 1/2 space for even degree)
@@ -1645,13 +1646,13 @@ namespace mfa
                 if (in(pt, tensor_prods[tensor.next[cur_dim][i]], ctrl_pt_anchor))
                     return tensor.next[cur_dim][i];
             }
-            return -1;
+            return tensor_prods.size();
         }
 
         // check tensor and prev and next pointers of tensor looking for a tensor containing the point
-        // only checks the direct preve and next neighbors, not multiple hops
-        // returns index of tensor containing the point, or -1 if not found
-        int in_prev_next(
+        // only checks the direct prev and next neighbors, not multiple hops
+        // returns index of tensor containing the point, or size of tensors (end) if not found
+        TensorIdx in_prev_next(
                 const vector<KnotIdx>&  pt,                     // target point in index space
                 int                     tensor_idx,             // index of starting tensor for the walk
                 int                     cur_dim,                // dimension in which to walk
@@ -1677,13 +1678,14 @@ namespace mfa
                     return tensor.next[cur_dim][i];
             }
 
-            return -1;
+            return tensor_prods.size();
         }
 
         // search for tensor containing point in index space
-        // returns index of tensor containing the point, or -1 if not found
-        int search_tensors(const vector<KnotIdx>&   pt,                     // target point in index space
-                           const VectorXi&          pad)                    // padding in each dim. between target and extents of tensor, zero size -> unused
+        // returns index of tensor containing the point, or size of tensors (end) if not found
+        TensorIdx search_tensors(
+                const vector<KnotIdx>&   pt,                                // target point in index space
+                const VectorXi&          pad)                               // padding in each dim. between target and extents of tensor, zero size -> unused
         {
             for (auto i = 0; i < tensor_prods.size(); i++)                  // for all existing tensors
             {
@@ -1702,7 +1704,7 @@ namespace mfa
                     return i;
             }   // for all existing tensors
 
-            return -1;
+            return tensor_prods.size();
         }
 
         // convert (i,j,k,...) multidimensional index into linear index into domain
@@ -1817,7 +1819,7 @@ namespace mfa
             {
                 anchor[j] = ijk(j) + t.knot_mins[j];                // add knot_mins to get from local (in this tensor) to global (in the t-mesh) anchor
                 if (t.knot_mins[j] == 0)
-                    anchor[j] += (p_(j) + 1) / 2;           // first control point has anchor floor((p + 1) / 2)
+                    anchor[j] += (p_(j) + 1) / 2;                   // first control point has anchor floor((p + 1) / 2)
                 // check for any knots at a higher level of refinement that would add to the anchor index (anchor is global over all knots)
                 for (auto i = t.knot_mins[j]; i <= t.knot_maxs[j]; i++)
                 {

@@ -624,7 +624,6 @@ namespace mfa
         // solves all dimensions together (not separably)
         // does not encode weights for now
         // latest linear constrained formulation as proposed by David Lenz (see wiki/notes/linear-constrained-fit.pdf)
-        // currently only tried for 1-d
         void EncodeTensorLocalLinear(
                 TensorIdx                 t_idx,                  // index of tensor product being encoded
                 bool                      weighted = true)        // solve for and use weights
@@ -639,19 +638,6 @@ namespace mfa
             vector<size_t> start_idxs(mfa_data.dom_dim);
             vector<size_t> end_idxs(mfa_data.dom_dim);
             mfa_data.tmesh.domain_pts(t_idx, false, mfa.params(), start_idxs, end_idxs);
-
-            // debug: hard-code start and end idxs
-            // for ./adaptive -d 2 -m 1 -q 2 -u 1 -v 10 -n 15 -e 1e-2 -l 1 -u 1 should be [6, 10]
-//             for (auto i = 0; i < mfa_data.dom_dim; i++)
-//             {
-//                 start_idxs[i]   = 6;
-//                 end_idxs[i]     = 10;
-// 
-//                 // debug
-//                 fprintf(stderr, "hard-coding start and end input points\n");
-//                 for (auto k = 0; k < mfa_data.dom_dim; k++)
-//                     fprintf(stderr, "start_input_pt_idx[%d] = %lu end_input_pt_idx[%d] = %lu\n", k, start_idxs[k], k, end_idxs[k]);
-//             }
 
             // Q matrix of relevant input domain points
             VectorXi ndom_pts(mfa_data.dom_dim);
@@ -703,10 +689,10 @@ namespace mfa
                 for (auto k = 0; k < mfa_data.dom_dim; k++)
                 {
                     t_idx_anchor = mfa_data.tmesh.in_prev_next(anchor, t_idx, k, true);
-                    if (t_idx_anchor >= 0)
+                    if (t_idx_anchor < mfa_data.tmesh.tensor_prods.size())
                         break;
                 }
-                assert(t_idx_anchor >= 0);
+                assert(t_idx_anchor < mfa_data.tmesh.tensor_prods.size());
 
                 // local knot vector
                 mfa_data.tmesh.knot_intersections(anchor, t_idx_anchor, true, local_knot_idxs);
@@ -755,10 +741,10 @@ namespace mfa
                 for (auto k = 0; k < mfa_data.dom_dim; k++)
                 {
                     t_idx_anchor = mfa_data.tmesh.in_prev_next(anchors[i], t_idx, k, true);
-                    if (t_idx_anchor >= 0)
+                    if (t_idx_anchor < mfa_data.tmesh.tensor_prods.size())
                         break;
                 }
-                assert(t_idx_anchor >= 0);
+                assert(t_idx_anchor < mfa_data.tmesh.tensor_prods.size());
 
                 // local knot vector
                 mfa_data.tmesh.knot_intersections(anchors[i], t_idx_anchor, true, local_knot_idxs);
@@ -796,12 +782,21 @@ namespace mfa
             MatrixX<T>  R = Q - Ncons* Pcons;
 
             // debug
-            cerr << "input:\n"  << domain   << endl;
-            cerr << "Nfree:\n"  << Nfree    << endl;
-            cerr << "Ncons:\n"  << Ncons    << endl;
-            cerr << "Pcons:\n"  << Pcons    << endl;
-            cerr << "Q:\n"      << Q        << endl;
-            cerr << "R:\n"      << R        << endl;
+//             cerr << "input:\n"  << domain   << endl;
+//             cerr << "Nfree:\n"  << Nfree    << endl;
+//             cerr << "Ncons:\n"  << Ncons    << endl;
+//             cerr << "Pcons:\n"  << Pcons    << endl;
+//             cerr << "Q:\n"      << Q        << endl;
+//             cerr << "R:\n"      << R        << endl;
+
+            // sanity check that the row sums of Nfree + Ncons should be ~ 1
+            for (auto i = 0; i < Nfree.rows(); i++)
+            {
+                double eps = 1.0e-1;                // not sure how close is close enough
+                assert(fabs(Nfree.row(i).sum() + Ncons.row(i).sum() - 1.0) < eps);
+                // debug
+//                 fprintf(stderr, "Nfree + Ncons row(%d) sum = %.4lf\n", i, Nfree.row(i).sum() + Ncons.row(i).sum());
+            }
 
             // solve
             t.ctrl_pts = Nfree.colPivHouseholderQr().solve(R);
@@ -1880,10 +1875,10 @@ namespace mfa
         {
             const Tmesh<T>&         tmesh   = mfa_data.tmesh;
             int                     cols    = tc.ctrl_pts.cols();
+            KnotIdx                 min, max;                   // temporaries
 
             // get required sizes
 
-            // TODO: does not check if prev/next extends beyond the current tensor
             int rows = 0;                                       // number of rows required in ctrl_pts
             VectorXi npts(mfa_data.dom_dim);
             for (auto k = 0; k < mfa_data.dom_dim; k++)
@@ -1893,10 +1888,21 @@ namespace mfa
                     const TensorProduct<T>& tp = tmesh.tensor_prods[tc.prev[k][j]];
                     for (auto i = 0; i < mfa_data.dom_dim; i++)
                     {
+                        int p = mfa_data.p(i);
                         if (i == k)                             // direction of prev
-                            npts(i) = mfa_data.p(i);
+                            npts(i) = p;
                         else                                    // direction orthogonal to prev
-                            npts(i) = tp.nctrl_pts(i);
+                        {
+                            if (tp.knot_mins[i] <= tc.knot_mins[i] - p)
+                                min = tc.knot_mins[i] - p;
+                            else
+                                min = tp.knot_mins[i];
+                            if (tp.knot_maxs[i] >= tc.knot_maxs[i] + p)
+                                max = tc.knot_maxs[i] + p;
+                            else
+                                max = tp.knot_maxs[i];
+                            npts(i) = p % 2 ? max - min : max - min - 1;
+                        }
                     }
                     rows += npts.prod();
                 }
@@ -1905,10 +1911,21 @@ namespace mfa
                     const TensorProduct<T>& tn = tmesh.tensor_prods[tc.next[k][j]];
                     for (auto i = 0; i < mfa_data.dom_dim; i++)
                     {
+                        int p = mfa_data.p(i);
                         if (i == k)                             // direction of next
-                            npts(i) = mfa_data.p(i);
+                            npts(i) = p;
                         else                                    // direction orthogonal to next
-                            npts(i) = tn.nctrl_pts(i);
+                        {
+                            if (tn.knot_mins[i] <= tc.knot_mins[i] - p)
+                                min = tc.knot_mins[i] - p;
+                            else
+                                min = tn.knot_mins[i];
+                            if (tn.knot_maxs[i] >= tc.knot_maxs[i] + p)
+                                max = tc.knot_maxs[i] + p;
+                            else
+                                max = tn.knot_maxs[i];
+                            npts(i) = p % 2 ? max - min : max - min - 1;
+                        }
                     }
                     rows += npts.prod();
                 }
@@ -1916,33 +1933,45 @@ namespace mfa
             ctrl_pts.resize(rows, cols);
             anchors.resize(rows);
 
-            // copy constraints into ctrl_pts
+            // get control points and anchors
 
-            // TODO: does not check if prev/next extends beyond the current tensor
             int cur_row = 0;
             VectorXi sub_starts(mfa_data.dom_dim);
             VectorXi sub_npts(mfa_data.dom_dim);
             VectorXi all_npts(mfa_data.dom_dim);
+            vector<KnotIdx> anchor(mfa_data.dom_dim);           // one anchor
             for (auto k = 0; k < mfa_data.dom_dim; k++)
             {
                 // previous tensors
-                // assumes that all previous tensors have at least the required number of control points (p)
+                // assumes that all previous tensors have at least the required number of control points (p) in the prev direction
                 for (auto j = 0; j < tc.prev[k].size(); j++)
                 {
                     const TensorProduct<T>& tp = tmesh.tensor_prods[tc.prev[k][j]];
                     for (auto i = 0; i < mfa_data.dom_dim; i++)
                     {
+                        int p = mfa_data.p(i);
                         if (i == k)                             // direction of prev
                         {
-                            sub_starts(i)   = tp.nctrl_pts(i) - mfa_data.p(i);
-                            if (mfa_data.p(i) % 2)              // odd degree, skip border point
+                            sub_starts(i)   = tp.nctrl_pts(i) - p;
+                            if (p % 2)                          // odd degree, skip border point
                                 sub_starts(i)--;
-                            sub_npts(i)     = mfa_data.p(i);
+                            sub_npts(i)     = p;
                         }
                         else                                    // direction orthogonal to prev
                         {
-                            sub_starts(i)   = 0;
-                            sub_npts(i)     = tp.nctrl_pts(i);
+                            if (tp.knot_mins[i] <= tc.knot_mins[i] - p)
+                                min = tc.knot_mins[i] - p;
+                            else
+                                min = tp.knot_mins[i];
+                            if (tp.knot_maxs[i] >= tc.knot_maxs[i] + p)
+                                max = tc.knot_maxs[i] + p;
+                            else
+                                max = tp.knot_maxs[i];
+                            if (tp.knot_mins[i] == 0)
+                                sub_starts(i)   = min - (p + 1) / 2;
+                            else
+                                sub_starts(i)   = min - tp.knot_mins[i];
+                            sub_npts(i)     = p % 2 ? max - min : max - min - 1;
                         }
                         all_npts(i)         = tp.nctrl_pts(i);
                     }
@@ -1956,38 +1985,45 @@ namespace mfa
                         // anchor
                         anchors[cur_row].resize(mfa_data.dom_dim);
                         voliter_prev.idx_ijk(voliter_prev.cur_iter(), ijk);
-                        // counting from the max end of prev tensor avoids dealing with the global min. empty knots
+                        mfa_data.tmesh.ctrl_pt_anchor(tp, ijk, anchor);
                         for (auto i = 0; i < mfa_data.dom_dim; i++)
-                        {
-                            anchors[cur_row][i] = tp.knot_maxs[i] - (all_npts(i) - ijk(i));
-                            if (mfa_data.p(i) % 2)              // odd degree
-                                anchors[cur_row][i]++;
-                        }
-
+                            anchors[cur_row][i] = anchor[i];
                         cur_row++;
                         voliter_prev.incr_iter();
                     }
-                }
+                }   // previous tensors
 
                 // next tensors
-                // assumes that all next tensors have at least the required number of control points (p)
+                // assumes that all next tensors have at least the required number of control points (p) in the next direction
                 for (auto j = 0; j < tc.next[k].size(); j++)
                 {
                     const TensorProduct<T>& tn = tmesh.tensor_prods[tc.next[k][j]];
                     for (auto i = 0; i < mfa_data.dom_dim; i++)
                     {
+                        int p = mfa_data.p(i);
                         if (i == k)                             // direction of next
                         {
-                            if (mfa_data.p(i) % 2)              // odd degree, skip border point
-                                sub_starts(i) = 1;
+                            if (p % 2)                          // odd degree, skip border point
+                                sub_starts(i)   = 1;
                             else
-                                sub_starts(i) = 0;
-                            sub_npts(i)     = mfa_data.p(i);
+                                sub_starts(i)   = 0;
+                            sub_npts(i)         = p;
                         }
                         else                                    // direction orthogonal to next
                         {
-                            sub_starts(i)   = 0;
-                            sub_npts(i)     = tn.nctrl_pts(i);
+                            if (tn.knot_mins[i] <= tc.knot_mins[i] - p)
+                                min = tc.knot_mins[i] - p;
+                            else
+                                min = tn.knot_mins[i];
+                            if (tn.knot_maxs[i] >= tc.knot_maxs[i] + p)
+                                max = tc.knot_maxs[i] + p;
+                            else
+                                max = tn.knot_maxs[i];
+                            if (tn.knot_mins[i] == 0)
+                                sub_starts(i)   = min - (p + 1) / 2;
+                            else
+                                sub_starts(i)   = min - tn.knot_mins[i];
+                            sub_npts(i)     = p % 2 ? max - min : max - min - 1;
                         }
                         all_npts(i)         = tn.nctrl_pts(i);
                     }
@@ -2001,15 +2037,14 @@ namespace mfa
                         // anchor
                         anchors[cur_row].resize(mfa_data.dom_dim);
                         voliter_next.idx_ijk(voliter_next.cur_iter(), ijk);
-                        // counting from the min end of next tensor avoids dealing with the global max. empty knots
+                        mfa_data.tmesh.ctrl_pt_anchor(tn, ijk, anchor);
                         for (auto i = 0; i < mfa_data.dom_dim; i++)
-                            anchors[cur_row][i] = ijk(i) + tn.knot_mins[i];
-
+                            anchors[cur_row][i] = anchor[i];
                         cur_row++;
                         voliter_next.incr_iter();
                     }
-                }
-            }
+                }   // next tensors
+            }   // for all dimensions
         }
 
         // set up control points to solve for local solver
@@ -2018,10 +2053,10 @@ namespace mfa
         {
             const Tmesh<T>&         tmesh   = mfa_data.tmesh;
             int                     cols    = tc.ctrl_pts.cols();
+            KnotIdx                 min, max;                   // temporaries
 
             // get required sizes
 
-            // TODO: does not check if prev/next extends beyond the current tensor
             int rows = tc.ctrl_pts.rows();                      // number of rows required in ctrlpts_tosolve
             VectorXi npts(mfa_data.dom_dim);
             for (auto k = 0; k < mfa_data.dom_dim; k++)
@@ -2031,10 +2066,21 @@ namespace mfa
                     const TensorProduct<T>& tp = tmesh.tensor_prods[tc.prev[k][j]];
                     for (auto i = 0; i < mfa_data.dom_dim; i++)
                     {
+                        int p = mfa_data.p(i);
                         if (i == k)                             // direction of prev
-                            npts(i) = mfa_data.p(i);
+                            npts(i) = p;
                         else                                    // direction orthogonal to prev
-                            npts(i) = tp.nctrl_pts(i);
+                        {
+                            if (tp.knot_mins[i] <= tc.knot_mins[i] - p)
+                                min = tc.knot_mins[i] - p;
+                            else
+                                min = tp.knot_mins[i];
+                            if (tp.knot_maxs[i] >= tc.knot_maxs[i] + p)
+                                max = tc.knot_maxs[i] + p;
+                            else
+                                max = tp.knot_maxs[i];
+                            npts(i) = p % 2 ? max - min : max - min - 1;
+                        }
                     }
                     rows += npts.prod();
                 }
@@ -2043,10 +2089,21 @@ namespace mfa
                     const TensorProduct<T>& tn = tmesh.tensor_prods[tc.next[k][j]];
                     for (auto i = 0; i < mfa_data.dom_dim; i++)
                     {
+                        int p = mfa_data.p(i);
                         if (i == k)                             // direction of next
-                            npts(i) = mfa_data.p(i);
+                            npts(i) = p;
                         else                                    // direction orthogonal to next
-                            npts(i) = tn.nctrl_pts(i);
+                        {
+                            if (tn.knot_mins[i] <= tc.knot_mins[i] - p)
+                                min = tc.knot_mins[i] - p;
+                            else
+                                min = tn.knot_mins[i];
+                            if (tn.knot_maxs[i] >= tc.knot_maxs[i] + p)
+                                max = tc.knot_maxs[i] + p;
+                            else
+                                max = tn.knot_maxs[i];
+                            npts(i) = p % 2 ? max - min : max - min - 1;
+                        }
                     }
                     rows += npts.prod();
                 }
@@ -2061,7 +2118,6 @@ namespace mfa
 
             // copy constraints into ctrlpts_tosolve after the original control points
 
-            // TODO: does not check if prev/next extends beyond the current tensor
             int cur_row = tc.ctrl_pts.rows();
             VectorXi sub_starts(mfa_data.dom_dim);
             VectorXi sub_npts(mfa_data.dom_dim);
@@ -2075,17 +2131,29 @@ namespace mfa
                     const TensorProduct<T>& tp = tmesh.tensor_prods[tc.prev[k][j]];
                     for (auto i = 0; i < mfa_data.dom_dim; i++)
                     {
+                        int p = mfa_data.p(i);
                         if (i == k)                             // direction of prev
                         {
-                            sub_starts(i)   = tp.nctrl_pts(i) - mfa_data.p(i);
-                            if (mfa_data.p(i) % 2)              // odd degree, skip border point
+                            sub_starts(i)   = tp.nctrl_pts(i) - p;
+                            if (p % 2)                          // odd degree, skip border point
                                 sub_starts(i)--;
-                            sub_npts(i)     = mfa_data.p(i);
+                            sub_npts(i)     = p;
                         }
                         else                                    // direction orthogonal to prev
                         {
-                            sub_starts(i)   = 0;
-                            sub_npts(i)     = tp.nctrl_pts(i);
+                            if (tp.knot_mins[i] <= tc.knot_mins[i] - p)
+                                min = tc.knot_mins[i] - p;
+                            else
+                                min = tp.knot_mins[i];
+                            if (tp.knot_maxs[i] >= tc.knot_maxs[i] + p)
+                                max = tc.knot_maxs[i] + p;
+                            else
+                                max = tp.knot_maxs[i];
+                            if (tp.knot_mins[i] == 0)
+                                sub_starts(i)   = min - (p + 1) / 2;
+                            else
+                                sub_starts(i)   = min - tp.knot_mins[i];
+                            sub_npts(i)     = p % 2 ? max - min : max - min - 1;
                         }
                         all_npts(i)         = tp.nctrl_pts(i);
                     }
@@ -2105,18 +2173,30 @@ namespace mfa
                     const TensorProduct<T>& tn = tmesh.tensor_prods[tc.next[k][j]];
                     for (auto i = 0; i < mfa_data.dom_dim; i++)
                     {
+                        int p = mfa_data.p(i);
                         if (i == k)                             // direction of next
                         {
-                            if (mfa_data.p(i) % 2)              // odd degree, skip border point
-                                sub_starts(i) = 1;
+                            if (p % 2)                          // odd degree, skip border point
+                                sub_starts(i)   = 1;
                             else
-                                sub_starts(i) = 0;
-                            sub_npts(i)     = mfa_data.p(i);
+                                sub_starts(i)   = 0;
+                            sub_npts(i)         = p;
                         }
                         else                                    // direction orthogonal to next
                         {
-                            sub_starts(i)   = 0;
-                            sub_npts(i)     = tn.nctrl_pts(i);
+                            if (tn.knot_mins[i] <= tc.knot_mins[i] - p)
+                                min = tc.knot_mins[i] - p;
+                            else
+                                min = tn.knot_mins[i];
+                            if (tn.knot_maxs[i] >= tc.knot_maxs[i] + p)
+                                max = tc.knot_maxs[i] + p;
+                            else
+                                max = tn.knot_maxs[i];
+                            if (tn.knot_mins[i] == 0)
+                                sub_starts(i)   = min - (p + 1) / 2;
+                            else
+                                sub_starts(i)   = min - tn.knot_mins[i];
+                            sub_npts(i)     = p % 2 ? max - min : max - min - 1;
                         }
                         all_npts(i)         = tn.nctrl_pts(i);
                     }
