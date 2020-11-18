@@ -204,12 +204,12 @@ void PrepRenderingData(
         mfa::VolIterator vol_iter(tc.nctrl_pts);
         for (auto k = 0; k < ndom_dims; k++)                                                            // domain dimensions
         {
+            int skip = 0;
             // starting knot in sequence for computing control point coordinate
             KnotIdx knot_min = tc.knot_mins[k];
             if (knot_min)
             {
                 // skip knots at a deeper level than the tensor
-                int skip = 0;
                 for (auto l = 0; l < block->geometry.mfa_data->p(k); l++)
                 {
                     while (block->geometry.mfa_data->tmesh.all_knot_levels[k][knot_min - l - skip] > tc.level)
@@ -218,23 +218,17 @@ void PrepRenderingData(
                 knot_min -= (block->geometry.mfa_data->p(k) - 1 + skip);
             }
 
-            for (auto j = 0; j < tc.nctrl_pts(k); j++)     // control points
+            for (auto j = 0; j < tc.nctrl_pts(k); j++)                      // control points
             {
                 float tsum  = 0.0;
-                int skip    = 0;                                    // number of knots at a deeper level that should be skipped
+                int skip1   = skip;                                         // number of knots at a deeper level that should be skipped
                 // skip knots at a deeper level than the tensor
-                for (auto l = 0; l < knot_min + j + 1; l++)                    // knots prior to start of current control point
-                {
-                    // skip knots at a deeper level than the tensor
-                    while (block->geometry.mfa_data->tmesh.all_knot_levels[k][l + skip] > tc.level)
-                        skip++;
-                }
                 for (int l = 1; l < block->geometry.mfa_data->p(k) + 1; l++)
                 {
                     // skip knots at a deeper level than the tensor
-                    while (block->geometry.mfa_data->tmesh.all_knot_levels[k][knot_min + j + l + skip] > tc.level)
-                        skip++;
-                    tsum += block->geometry.mfa_data->tmesh.all_knots[k][knot_min + j + l];
+                    while (block->geometry.mfa_data->tmesh.all_knot_levels[k][knot_min + j + l + skip1] > tc.level)
+                        skip1++;
+                    tsum += block->geometry.mfa_data->tmesh.all_knots[k][knot_min + j + l + skip1];
                 }
                 tsum /= float(block->geometry.mfa_data->p(k));
                 ctrl_pts_coords[k].push_back(block->core_mins(k) + tsum * (block->core_maxs(k) - block->core_mins(k)));
@@ -306,12 +300,12 @@ void PrepRenderingData(
             mfa::VolIterator vol_iter(tc.nctrl_pts);
             for (auto k = 0; k < ndom_dims; k++)                                                        // domain dimensions
             {
+                int skip = 0;
                 // starting knot in sequence for computing control point coordinate
                 KnotIdx knot_min = tc.knot_mins[k];
                 if (knot_min)
                 {
                     // skip knots at a deeper level than the tensor
-                    int skip = 0;
                     for (auto l = 0; l < block->vars[i].mfa_data->p(k); l++)
                     {
                         while (block->vars[i].mfa_data->tmesh.all_knot_levels[k][knot_min - l - skip] > tc.level)
@@ -320,26 +314,16 @@ void PrepRenderingData(
                     knot_min -= (block->vars[i].mfa_data->p(k) - 1 + skip);
                 }
 
-                for (auto j = 0; j < tc.nctrl_pts(k); j++)          // control points
+                for (auto j = 0; j < tc.nctrl_pts(k); j++)              // control points
                 {
                     float tsum  = 0.0;
-                    int skip    = 0;                                    // number of knots at a deeper level that should be skipped
-                    for (auto l = 0; l < knot_min + j + 1; l++)         // knots prior to start of current control point
-                    {
-                        // skip knots at a deeper level than the tensor
-                        while (block->vars[i].mfa_data->tmesh.all_knot_levels[k][l + skip] > tc.level)
-                            skip++;
-                    }
+                    int skip1   = skip;                                 // number of knots at a deeper level that should be skipped
                     for (auto l = 1; l < block->vars[i].mfa_data->p(k) + 1; l++)
                     {
                         // skip knots at a deeper level than the tensor
-                        while (block->vars[i].mfa_data->tmesh.all_knot_levels[k][knot_min + j + l + skip] > tc.level)
-                            skip++;
-                        tsum += block->vars[i].mfa_data->tmesh.all_knots[k][knot_min + j + l + skip];
-
-                        // debug
-//                         fprintf(stderr, "t=%d k=%d knot_min=%lu j=%d l=%d skip=%d knot = %.4lf\n",
-//                                 t, k, knot_min, j, l, skip, block->vars[i].mfa_data->tmesh.all_knots[k][knot_min + j + l + skip]);
+                        while (block->vars[i].mfa_data->tmesh.all_knot_levels[k][knot_min + j + l + skip1] > tc.level)
+                            skip1++;
+                        tsum += block->vars[i].mfa_data->tmesh.all_knots[k][knot_min + j + l + skip1];
                     }
                     tsum /= float(block->vars[i].mfa_data->p(k));
                     ctrl_pts_coords[k].push_back(block->core_mins(k) + tsum * (block->core_maxs(k) - block->core_mins(k)));
