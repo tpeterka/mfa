@@ -239,7 +239,7 @@ namespace mfa
             return parent_tensor_idx;
         }
 
-#ifdef TMESH
+#ifdef MFA_TMESH
 
         // computes error in knot spans and finds first new knot (in all dimensions at once) that should be inserted
         // returns true if all done, ie, no new knots inserted
@@ -758,7 +758,7 @@ namespace mfa
             return true;
         }
 
-#endif      // TMESH
+#endif      // MFA_TMESH
 
         // computes error in knot spans and returns first new knot (in all dimensions at once) that should be inserted
         // returns true if all done, ie, no new knots inserted

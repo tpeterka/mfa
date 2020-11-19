@@ -200,7 +200,7 @@ namespace mfa
                 // compute approximated point for this parameter vector
                 VectorX<T> cpt(last + 1);               // evaluated point
 
-#ifndef TMESH   // original version for one tensor product
+#ifndef MFA_TMESH   // original version for one tensor product
 
                 if (saved_basis)
                 {
@@ -249,7 +249,7 @@ namespace mfa
 
                 // compute approximated point for this parameter vector
 
-#ifndef TMESH   // original version for one tensor product
+#ifndef MFA_TMESH   // original version for one tensor product
 
                 if (saved_basis)
                 {
@@ -341,7 +341,7 @@ namespace mfa
                 for (int i = 0; i < NN[k].rows(); i++)
                 {
                     int span = mfa_data.FindSpan(k, params[k][i], nctrl_pts(k));
-#ifndef TMESH       // original version for one tensor product
+#ifndef MFA_TMESH   // original version for one tensor product
 
                     mfa_data.OrigBasisFuns(k, params[k][i], span, NN[k], i);
 
@@ -372,7 +372,7 @@ namespace mfa
                     param(i) = params[i][ijk[i]];
                 }
 
-#ifndef TMESH       // original version for one tensor product
+#ifndef MFA_TMESH   // original version for one tensor product
 
                 VolPt_saved_basis_grid(ijk, param, cpt, decode_info, mfa_data.tmesh.tensor_prods[0], NN);
 
@@ -403,7 +403,7 @@ namespace mfa
                 for (auto i = 0; i < mfa_data.dom_dim; i++)
                     thread_param.local()(i)    = params[i][thread_ijk.local()[i]];
 
-#ifndef TMESH   // original version for one tensor product
+#ifndef MFA_TMESH   // original version for one tensor product
 
                 VolPt_saved_basis_grid(thread_ijk.local(), thread_param.local(), thread_cpt.local(), thread_decode_info.local(), mfa_data.tmesh.tensor_prods[0], NN);
 
@@ -420,7 +420,7 @@ namespace mfa
 
         }
 
-#ifdef TMESH
+#ifdef MFA_TMESH
 
         // decode a point in the t-mesh
         // TODO: serial implementation, no threading
@@ -555,7 +555,7 @@ namespace mfa
 //             cerr << "out_pt: " << out_pt.transpose() << "\n" << endl;
         }
 
-#endif      // TMESH
+#endif      // MFA_TMESH
 
         // compute a point from a NURBS n-d volume at a given parameter value
         // slower version for single points
@@ -624,7 +624,7 @@ namespace mfa
                 N[i]       = MatrixX<T>::Zero(1, tensor.nctrl_pts(i));
                 if (derivs.size() && derivs(i))
                 {
-#ifndef TMESH       // original version for one tensor product
+#ifndef MFA_TMESH   // original version for one tensor product
                     MatrixX<T> Ders = MatrixX<T>::Zero(derivs(i) + 1, tensor.nctrl_pts(i));
                     mfa_data.DerBasisFuns(i, param(i), span[i], derivs(i), Ders);
                     N[i].row(0) = Ders.row(derivs(i));
@@ -632,7 +632,7 @@ namespace mfa
                 }
                 else
                 {
-#ifndef TMESH       // original version for one tensor product
+#ifndef MFA_TMESH   // original version for one tensor product
                     mfa_data.OrigBasisFuns(i, param(i), span[i], N[i], 0);
 #else               // tmesh version
                     mfa_data.BasisFuns(i, param(i), span[i], N[i], 0);
@@ -973,14 +973,14 @@ namespace mfa
 
                 if (derivs.size() && derivs(i))
                 {
-#ifndef TMESH       // original version for one tensor product
+#ifndef MFA_TMESH   // original version for one tensor product
                     mfa_data.DerBasisFuns(i, param(i), di.span[i], derivs(i), di.ders[i]);
                     di.N[i].row(0) = di.ders[i].row(derivs(i));
 #endif
                 }
                 else
                 {
-#ifndef TMESH       // original version for one tensor product
+#ifndef MFA_TMESH   // original version for one tensor product
                     mfa_data.OrigBasisFuns(i, param(i), di.span[i], di.N[i], 0);
 #else               // tmesh version
                     mfa_data.BasisFuns(i, param(i), di.span[i], di.N[i], 0);
@@ -1053,17 +1053,22 @@ namespace mfa
                 T                               param,          // parameter value of desired point
                 const MatrixX<T>&               temp_ctrl,      // temporary control points
                 const VectorX<T>&               temp_weights,   // weights associate with temporary control points
-                const TensorProduct<T>&   tensor,         // current tensor product
+                const TensorProduct<T>&         tensor,         // current tensor product
                 VectorX<T>&                     out_pt)         // (output) point
         {
             int span   = mfa_data.FindSpan(cur_dim, param, tensor);
-            MatrixX<T> N = MatrixX<T>::Zero(1, temp_ctrl.rows());      // basis coefficients
-#ifndef TMESH                                           // original version for one tensor product
+            MatrixX<T> N = MatrixX<T>::Zero(1, temp_ctrl.rows());// basis coefficients
+
+#ifndef MFA_TMESH                                               // original version for one tensor product
+
             mfa_data.OrigBasisFuns(cur_dim, param, span, N, 0);
-#else                                                   // tmesh version
+
+#else                                                           // tmesh version
+
             mfa_data.BasisFuns(cur_dim, param, span, N, 0);
+
 #endif
-            out_pt = VectorX<T>::Zero(temp_ctrl.cols());  // initializes and resizes
+            out_pt = VectorX<T>::Zero(temp_ctrl.cols());        // initializes and resizes
 
             for (int j = 0; j <= mfa_data.p(cur_dim); j++)
                 out_pt += N(0, j + span - mfa_data.p(cur_dim)) *

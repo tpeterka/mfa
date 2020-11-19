@@ -27,13 +27,13 @@
 // #define WEIGH_ALL_DIMS
 
 // comment out the following line for original single tensor product version
-#define TMESH
+#define MFA_TMESH
 
 // comment out the following line for separable dimension solve
 // #define MFA_UNIFIED_DIMS
 
 // linear least squares local solve
-// #define MFA_LINEAR_LOCAL
+#define MFA_LINEAR_LOCAL
 
 #include    <Eigen/Dense>
 #include    <vector>
@@ -115,9 +115,13 @@ namespace mfa
 
             // experiment with separable, unified dimension encoding
 #ifdef MFA_UNIFIED_DIMS
+
             encoder.EncodeTensor(0, false, false, weighted);   // assumes only one tensor product
+
 #else
+
             encoder.Encode(t.nctrl_pts, t.ctrl_pts, t.weights, weighted);
+
 #endif
 
             // debug: try inserting a knot
@@ -140,7 +144,7 @@ namespace mfa
         {
             Encoder<T> encoder(*this, mfa_data, domain, verbose);
 
-#ifndef TMESH               // original adaptive encode for one tensor product
+#ifndef MFA_TMESH           // original adaptive encode for one tensor product
             encoder.OrigAdaptiveEncode(err_limit, weighted, extents, max_rounds);
 #else                       // adaptive encode for tmesh
             encoder.AdaptiveEncode(err_limit, weighted, local, extents, max_rounds);
