@@ -1864,7 +1864,8 @@ namespace mfa
             {
                 while (idx < end && all_knot_levels[cur_dim][idx] > t.level)
                     idx++;
-                dist++;
+                if (idx < end)
+                    dist++;
             }
             return dist;
         }

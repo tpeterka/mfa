@@ -314,10 +314,10 @@ void PrepRenderingData(
                     knot_min -= (block->vars[i].mfa_data->p(k) - 1 + skip);
                 }
 
+                int skip1   = skip;                                 // number of knots at a deeper level that should be skipped
                 for (auto j = 0; j < tc.nctrl_pts(k); j++)              // control points
                 {
                     float tsum  = 0.0;
-                    int skip1   = skip;                                 // number of knots at a deeper level that should be skipped
                     for (auto l = 1; l < block->vars[i].mfa_data->p(k) + 1; l++)
                     {
                         // skip knots at a deeper level than the tensor

@@ -295,7 +295,7 @@ namespace mfa
                 {
                     int span = mfa_data.FindSpan(k, mfa.params()[k][i], nctrl_pts(k));
 
-#ifndef MFA_TMESH       // original version for one tensor product
+#ifndef MFA_TMESH   // original version for one tensor product
 
                     mfa_data.OrigBasisFuns(k, mfa.params()[k][i], span, mfa_data.N[k], i);
 
