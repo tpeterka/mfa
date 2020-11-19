@@ -275,10 +275,6 @@ namespace mfa
                            const VectorX<T>&        new_weights,        // local weights for this tensor (possibly superset)
                            int                      parent_tensor_idx)  // idx of parent tensor from which the superset of control points derives
         {
-            // debug
-            fprintf(stderr, "*** append_tensor with provided control points ***\n");
-            cerr << "new_nctrl_pts: " << new_nctrl_pts.transpose() << endl;
-
             bool vec_grew;                          // vector of tensor_prods grew
             bool tensor_inserted = false;           // the desired tensor was already inserted
 
@@ -1827,6 +1823,50 @@ namespace mfa
                         anchor[j]++;
                 }
             }
+        }
+
+        // offsets a knot index by some amount within a tensor, skipping over any knots at a deeper level
+        // returns whether the full offset was achieved (true) or whether ran out of tensor bounds (false)
+        // if the tensor ran out of bounds, computes as much offset as possible, ie, ofst_idx = the min or max bound
+        bool knot_idx_ofst(
+                const TensorProduct<T>& t,                          // tensor product
+                KnotIdx                 orig_idx,                   // starting knot idx
+                int                     ofst,                       // affset amount, can be positive or negative
+                int                     cur_dim,                    // current dimension
+                KnotIdx&                ofst_idx)                   // (output) offset knot idx
+        {
+            ofst_idx    = orig_idx;
+            int sgn     = (0 < ofst) - (ofst < 0);                  // sgn = 1 for positive ofst, -1 for negative, 0 for zero
+            for (auto i = 0; i < abs(ofst); i++)
+            {
+                while (ofst_idx + sgn >= t.knot_mins[cur_dim]   &&
+                        ofst_idx + sgn <= t.knot_maxs[cur_dim]  &&
+                        all_knot_levels[cur_dim][ofst_idx + sgn] > t.level)
+                    ofst_idx += sgn;
+                if (ofst_idx + sgn < t.knot_mins[cur_dim] || ofst_idx + sgn > t.knot_maxs[cur_dim])
+                    return false;
+                ofst_idx += sgn;
+            }
+            return true;
+        }
+
+        // counts number of knot indices between min and max index skipping knots at a deeper level than current tensor
+        KnotIdx knot_idx_dist(
+                const TensorProduct<T>& t,                          // tensor product
+                KnotIdx                 min,                        // min knot idx
+                KnotIdx                 max,                        // max knot idx
+                int                     cur_dim,                    // current dimension
+                bool                    inclusive)                  // whether to include max
+        {
+            KnotIdx dist    = 0;
+            KnotIdx end     = inclusive ? max + 1 : max;
+            for (auto idx = min; idx < end; idx++)
+            {
+                while (idx < end && all_knot_levels[cur_dim][idx] > t.level)
+                    idx++;
+                dist++;
+            }
+            return dist;
         }
 
         void print() const
