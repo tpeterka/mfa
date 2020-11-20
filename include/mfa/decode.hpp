@@ -443,28 +443,12 @@ namespace mfa
 
             mfa_data.tmesh.anchors(param, true, anchors);
 
-            // debug
-//             if (param(0) > 0.7 && param(0) < 0.8 && param(1) > 0.6 && param(1) < 0.7)
-//             {
-//                 for (auto i = 0; i < mfa_data.dom_dim; i++)
-//                 {
-//                     fprintf(stderr, "anchors[%d]: [ ", i);
-//                     for (auto j = 0; j < anchors[i].size(); j++)
-//                         fprintf(stderr, "%lu ", anchors[i][j]);
-//                     fprintf(stderr, "] ");
-//                 }
-//                 fprintf(stderr, "\n");
-//             }
-
             for (auto k = 0; k < mfa_data.tmesh.tensor_prods.size(); k++)           // for all tensor products
             {
                 const TensorProduct<T>& t = mfa_data.tmesh.tensor_prods[k];
 
                 // TODO: skip entire tensor if knot mins, maxs are too far away from decoded point
                 // don't need to check individual control points in this case
-
-                // debug
-//                 cerr << "tensor " << k << endl;
 
                 VolIterator         vol_iterator(t.nctrl_pts);                      // iterator over control points in the current tensor
                 vector<KnotIdx>     anchor(mfa_data.dom_dim);                       // one anchor in (global, ie, over all tensors) index space
@@ -502,30 +486,21 @@ namespace mfa
                         continue;
                     }
 
+                    // intersect tmesh lines to get local knot indices in all directions
+                    vector<vector<KnotIdx>> local_knot_idxs(mfa_data.dom_dim);          // local knot vectors in index space
+                    mfa_data.tmesh.knot_intersections(anchor, k, true, local_knot_idxs);
+
                     // compute product of basis functions in each dimension
-                    T                       B = 1.0;                                // product of basis function values in each dimension
-                    vector<vector<KnotIdx>> local_knot_idxs(mfa_data.dom_dim);      // local knot indices
+                    T B = 1.0;                                                          // product of basis function values in each dimension
                     for (auto i = 0; i < mfa_data.dom_dim; i++)
                     {
-                        // local knot vector
-                        local_knot_idxs[i].resize(mfa_data.p(i) + 2);               // local knot vector for current dim in index space
-                        vector<T> local_knots(mfa_data.p(i) + 2);                   // local knot vector for current dim in parameter space
-                        // TODO: why are knot_intersections being computed for each dimension?
-                        mfa_data.tmesh.knot_intersections(anchor, k, true, local_knot_idxs);
+                        vector<T> local_knots(mfa_data.p(i) + 2);                       // local knot vector for current dim in parameter space
                         for (auto n = 0; n < local_knot_idxs[i].size(); n++)
                             local_knots[n] = mfa_data.tmesh.all_knots[i][local_knot_idxs[i][n]];
 
-                        // debug: print local knot idxs
-//                         fprintf(stderr, "tensor = %d iter = %ld anchor[%d] = %ld local knot idxs = [", k, vol_iterator.cur_iter(), i, anchor[i]);
-//                         for (auto j = 0; j < local_knot_idxs[i].size(); j++)
-//                             fprintf(stderr, "%ld ", local_knot_idxs[i][j]);
-//                         fprintf(stderr, "]\n");
-
-                        // debug
-//                         cerr << "OneBasisFun[dim " << i << " ]: " << mfa_data.OneBasisFun(i, param(i), local_knots) << endl;
-
                         B *= mfa_data.OneBasisFun(i, param(i), local_knots);
                     }
+
                     // compute the point
                     out_pt += B * t.ctrl_pts.row(vol_iterator.cur_iter()) * t.weights(vol_iterator.cur_iter());
 
@@ -537,11 +512,8 @@ namespace mfa
 //                     }
 
                     B_sum += B * t.weights(vol_iterator.cur_iter());
-                    // debug
-//                     cerr << "Tensor: " << k << " CtrlPt: " << vol_iterator.cur_iter() << " B[all dims]: " << B << " B_sum: " << B_sum << endl;
 
-
-                    vol_iterator.incr_iter();                                       // must increment volume iterator at the bottom of the loop
+                    vol_iterator.incr_iter();                                           // must increment volume iterator at the bottom of the loop
                 }       // volume iterator
             }       // tensors
 
