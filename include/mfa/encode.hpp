@@ -19,6 +19,13 @@
 #include    <set>
 #include    <iostream>
 
+// temporary utilities for testing
+#include    <ctime>
+#include    <chrono>
+#include    <iomanip>
+#include    <fstream>
+#include    <sstream>
+
 #ifndef      MFA_NO_WEIGHTS
 
 #include    "coin/ClpSimplex.hpp"
@@ -374,15 +381,14 @@ namespace mfa
         // solves all dimensions together (not separably)
         // does not encode weights for now
         void EncodeTensor(TensorIdx                 t_idx,                  // index of tensor product being encoded
-                          bool                      pad,                    // pad input points by degree p in each dimension
-                          bool                      constrained,            // whether to impose p control point constraints on each side
-                          bool                      weighted = true)        // solve for and use weights
+                        bool                      pad,                    // pad input points by degree p in each dimension
+                        bool                      constrained,            // whether to impose p control point constraints on each side
+                        bool                      weighted = true)        // solve for and use weights
         {
             // debug
             fprintf(stderr, "EncodeTensor\n");
 
             TensorProduct<T>& t = mfa_data.tmesh.tensor_prods[t_idx];
-            bool sparse = false;
 
             // get input domain points covered by the tensor
             vector<size_t> start_idxs(mfa_data.dom_dim);
@@ -406,31 +412,163 @@ namespace mfa
             // |     ...        ...      ...            |
             // |  N_0(u[m-1])   ...     N_n-1(u[m-1])   |
             //  -                                      -
-            std::vector<SpMatTriplet<T>> triplet_list;
-            SparseMatrixX<T> NS(ndom_pts.prod(), t.nctrl_pts.prod());
-
             MatrixX<T>& N = mfa_data.N[0];
-
-            int bf_per_pt = (mfa_data.p + VectorXi::Ones(mfa_data.dom_dim)).prod();       // nonzero basis functions per input point
-            // if (sparse)
-            // {
-                triplet_list.reserve(ndom_pts.prod() * bf_per_pt * mfa_data.dom_dim); 
-            // }
-            // else 
-            // {
-                N = MatrixX<T>::Constant(ndom_pts.prod(), t.nctrl_pts.prod(), -1);              // basis functions, -1 means unassigned so far
-            // }
+            N = MatrixX<T>::Constant(ndom_pts.prod(), t.nctrl_pts.prod(), -1);              // basis functions, -1 means unassigned so far
             VectorXi dom_starts(mfa_data.dom_dim);
             for (auto k = 0; k < mfa_data.dom_dim; k++)
                 dom_starts(k) = start_idxs[k];
 
             vector<int>         spans(mfa_data.dom_dim);
             vector<MatrixX<T>>  B(mfa_data.dom_dim);
-            VectorXi            ctrl_starts(mfa_data.dom_dim);
-
             for (auto k = 0; k < mfa_data.dom_dim; k++)
                 B[k].resize(1, t.nctrl_pts(k));
             VolIterator dom_vol_iter(ndom_pts, dom_starts, mfa.ndom_pts());                 // iterator over input points
+            while (!dom_vol_iter.done())
+            {
+                for (auto k = 0; k < mfa_data.dom_dim; k++)
+                {
+                    int p   = mfa_data.p(k);
+                    spans[k] = mfa_data.FindSpan(k, mfa.params()[k][dom_vol_iter.idx_dim(k)]);
+
+                    // basis functions
+                    vector<T> loc_knots(p + 2);
+                    B[k].row(0).setZero();
+                    T u = mfa.params()[k][dom_vol_iter.idx_dim(k)];                         // parameter of current input point
+
+                    for (auto j = 0; j < p + 1; j++)
+                    {
+                        for (auto i = 0; i < p + 2; i++)
+                            loc_knots[i] = mfa_data.tmesh.all_knots[k][spans[k] - p + j + i];
+                        int col = spans[k] - p + j - t.knot_mins[k];
+                        if (col >= 0 && col < B[k].cols())
+                            B[k](0, col) = mfa_data.OneBasisFun(k, u, loc_knots);
+                    }
+
+                    // debug
+//                     cerr << "B[" << k <<"]: " << B[k] << endl;
+                }
+
+                VolIterator ctrl_vol_iter(t.nctrl_pts);                                     // iterator over control points
+                while (!ctrl_vol_iter.done())
+                {
+                    VectorXi ijk(mfa_data.dom_dim);                                         // ijk of current control point
+                    ctrl_vol_iter.idx_ijk(ctrl_vol_iter.cur_iter(), ijk);
+
+                    // check if current control point is covered by the basis funcs. in all dims
+                    bool local_support = true;
+                    for (auto k = 0; k < mfa_data.dom_dim; k++)
+                    {
+                        if (ijk(k) < spans[k] - mfa_data.p(k) - t.knot_mins[k] || ijk(k) > spans[k] - t.knot_mins[k])
+                        {
+                            local_support = false;
+                            break;
+                        }
+                    }
+
+                    if (local_support)
+                    {
+                        for (auto k = 0; k < mfa_data.dom_dim; k++)
+                        {
+                            for (auto j = 0; j < mfa_data.p(k) + 1; j++)                    // nonzero basis function values at this parameter, in this dim.
+                            {
+                                int col = spans[k] - mfa_data.p(k) + j - t.knot_mins[k];
+                                if (ijk(k) == col)
+                                {
+                                    // debug
+//                                     cerr << "ctrl_cur_iter = " << ctrl_vol_iter.cur_iter() << " k = " << k << " ijk(k) = col = " << col << endl;
+
+                                    if (N(dom_vol_iter.cur_iter(), ctrl_vol_iter.cur_iter()) == -1.0)   // unassigned so far
+                                        N(dom_vol_iter.cur_iter(), ctrl_vol_iter.cur_iter()) = B[k](0, col);
+                                    else
+                                        N(dom_vol_iter.cur_iter(), ctrl_vol_iter.cur_iter()) *= B[k](0, col);
+                                }
+                            }
+                        }
+                    }
+
+                    // debug
+//                     cerr << "N.row(" << dom_vol_iter.cur_iter() << "): " << N.row(dom_vol_iter.cur_iter()) << endl;
+
+                    ctrl_vol_iter.incr_iter();
+                }
+                dom_vol_iter.incr_iter();
+            }
+
+            // set any unassigned values in N to 0
+            for (auto i = 0; i < N.rows(); i++)
+                for (auto j = 0; j < N.cols(); j++)
+                    if (N(i, j) == -1.0)
+                        N(i, j) = 0.0;
+
+            // debug
+//             cerr << "N:\n" << mfa_data.N[0] << endl;
+
+            // normal form
+            MatrixX<T> NtN = N.transpose() * N;
+
+            // debug
+//             cerr << "NtN:\n" << NtN << endl;
+
+            // R is the right hand side needed for solving NtN * P = R
+            MatrixX<T> R(NtN.cols(), pt_dim);
+            RHSTensor(N, start_idxs, end_idxs, t, cons, R);
+
+            // P is the solution vector
+            MatrixX<T> P(NtN.cols(), pt_dim);
+            P = NtN.ldlt().solve(R);
+            t.ctrl_pts = P.block(0, 0, t.ctrl_pts.rows(), pt_dim);
+
+            // debug
+//             cerr << "\nEncodeTensor() P:\n" << P << endl;
+//             cerr << "\nEncodeTensor() ctrl_pts:\n" << t.ctrl_pts << endl;
+//             cerr << "\nEncodeTensor() weights:\n" << t.weights << endl;
+        }
+
+        // Assemble B-spline collocation matrix for a full tensor, using sparse matrices
+        // Here we are filling Nt (transpose of N)
+        // Nt is a matrix of n x m scalars that are the basis function coefficients
+        //  _                                      _
+        // |  N_0(u[0])     ...     N_0(u[m-1])     |
+        // |     ...        ...      ...            |
+        // |  N_n-1(u[0])   ...     N_n-1(u[m-1])   |
+        //  -                                      -
+        void FillTensorCollSparse(  TensorIdx           t_idx,    // index of tensor product containing input points and control points
+                                    vector<size_t>&     start_idxs,
+                                    vector<size_t>&     end_idxs,
+                                    SparseMatrixX<T>&   Nt)     // (output) transpose of collocation matrix
+        {
+            cerr << "begin matrix construction" << endl;
+            clock_t fill_time = clock();
+
+            TensorProduct<T>& t = mfa_data.tmesh.tensor_prods[t_idx];
+
+            VectorXi ndom_pts(mfa_data.dom_dim);                                    // domain points per dimension
+            VectorXi dom_starts(mfa_data.dom_dim);                                  // subvolume start indices in each dimension
+            VectorXi ctrl_starts(mfa_data.dom_dim);                                 // subvolume ctrl pt indices in each dimension
+            VectorXi spans(mfa_data.dom_dim);                                       // current knot span in each dimension
+            VectorXi nctrl_patch = mfa_data.p + VectorXi::Ones(mfa_data.dom_dim);   // number of nonzero basis functions at a given parameter, in each dimension
+            vector<MatrixX<T>>  B(mfa_data.dom_dim);                                // list of 1D basis functions valued at a given parameter (one per dimension)
+            for (auto k = 0; k < mfa_data.dom_dim; k++)
+            {
+                ndom_pts(k) = end_idxs[k] - start_idxs[k] + 1;
+                dom_starts(k) = start_idxs[k];
+                B[k].resize(1, t.nctrl_pts(k));
+            }
+
+
+            // resize matrices in case number of control points changed
+            const int pt_dim = mfa_data.max_dim - mfa_data.min_dim + 1;                           // control point dimensonality
+            t.ctrl_pts.resize(t.nctrl_pts.prod(), pt_dim);
+            t.weights.resize(t.ctrl_pts.rows());
+            assert(Nt.rows() == t.nctrl_pts.prod());
+            assert(Nt.cols() == ndom_pts.prod());
+
+            // Reserve space in sparse matrix; don't forget to call makeCompressed() at end!
+            int bf_per_pt = (mfa_data.p + VectorXi::Ones(mfa_data.dom_dim)).prod();       // nonzero basis functions per input point
+            Nt.reserve(VectorXi::Constant(Nt.cols(), bf_per_pt));
+
+            // Iterate thru every point in subvolume given by tensor
+            VolIterator dom_vol_iter(ndom_pts, dom_starts, mfa.ndom_pts());
             while (!dom_vol_iter.done())
             {
                 for (auto k = 0; k < mfa_data.dom_dim; k++)
@@ -452,100 +590,189 @@ namespace mfa
                         if (col >= 0 && col < B[k].cols())
                             B[k](0, col) = mfa_data.OneBasisFun(k, u, loc_knots);
                     }
-
-                    // debug
-//                     cerr << "B[" << k <<"]: " << B[k] << endl;
                 }
 
-                // VolIterator ctrl_vol_iter(t.nctrl_pts);                                     // iterator over control points
-                VectorXi nctrl_pts_span = mfa_data.p + VectorXi::Ones(mfa_data.dom_dim);       // number of "active" ctrl points per input point in each dimension
-                VolIterator ctrl_vol_iter(nctrl_pts_span, ctrl_starts, t.nctrl_pts);
+                // Iterate over all basis functions (ctrl points) which are nonzero at the given input point
+                VolIterator ctrl_vol_iter(nctrl_patch, ctrl_starts, t.nctrl_pts);
                 while (!ctrl_vol_iter.done())
                 {
-                    size_t ctrl_flat_idx = ctrl_vol_iter.cur_iter_full();
+                    int ctrl_idx_full = ctrl_vol_iter.cur_iter_full();
+                    T coeff_prod = 1;
                     for (auto k = 0; k < mfa_data.dom_dim; k++)
                     {
-                        int p   = mfa_data.p(k);
                         int idx = ctrl_vol_iter.idx_dim(k);                                 // index in current dim of this control point
-
-                        triplet_list.emplace_back(dom_vol_iter.cur_iter(), ctrl_flat_idx, B[k](0, idx));
-
-                        if (N(dom_vol_iter.cur_iter(), ctrl_flat_idx) == -1.0)   // unassigned so far
-                            N(dom_vol_iter.cur_iter(), ctrl_flat_idx) = B[k](0, idx);
-                        else
-                            N(dom_vol_iter.cur_iter(), ctrl_flat_idx) *= B[k](0, idx);
+                        coeff_prod *= B[k](0,idx);
                     }
 
-                    // debug
-//                     cerr << "N.row(" << dom_vol_iter.cur_iter() << "): " << N.row(dom_vol_iter.cur_iter()) << endl;
-
+                    Nt.insertBackUncompressed(ctrl_idx_full, dom_vol_iter.cur_iter()) = coeff_prod;  
+                    // FRAGILE command; reserve() must be called prior, **with vector signature**
+                    // entries must be inserted only once, and entries within a column must be inserted
+                    // in order of increasing row index.
+                    // This is an internal SparseMatrix command and no consistency checks are done.
+                    // 
+                    // Empirical testing indicates that insertBackUncompressed is faster than insert, which
+                    // is faster than setFromTriplets(); however, space must be reserved/allocated properly ahead of time.
+                    // setFromTriplets also requires a bit more memory, but is the most robust/user-friendly.
+                
                     ctrl_vol_iter.incr_iter();
                 }
                 dom_vol_iter.incr_iter();
             }
 
-            // if (sparse)
-            // {
-                // Construct sparse matrix
-                // When duplicate entries are specified, multiply entries together
-                cout << "TripletList size: " << triplet_list.size() << endl;
-                cout << "Size estimate: " << ndom_pts.prod()*bf_per_pt << endl;
-                NS.setFromTriplets(triplet_list.begin(), triplet_list.end(), [] (const T& first, const T& second) { return first*second;});
-            // }
-            // else
-            // {
-                // set any unassigned values in N to 0
-                for (auto i = 0; i < N.rows(); i++)
-                    for (auto j = 0; j < N.cols(); j++)
-                        if (N(i, j) == -1.0)
-                            N(i, j) = 0.0;
-            // }
+            // Nt.makeCompressed();  // not necessary if using prune(), as prune always returns compressed form
+            Nt.prune(1,1e-5);  // remove entries less than a given value (and compress matrix)
+            
+            fill_time = clock() - fill_time;
+            cerr << "Matrix Construction Time: " << setprecision(3) << ((double)fill_time)/CLOCKS_PER_SEC << "s." << endl;
+        }
 
-            // debug
-            // cerr << "N:\n" << mfa_data.N[0] << endl;
-            // cerr << MatrixX<T>(NS) << endl;
-            cerr << (N-MatrixX<T>(NS)).norm() << endl;
+        // Computes the product of two Eigen sparse matrices using TBB.  All matrices must be in column major format.
+        void MatProdThreaded(   Eigen::SparseMatrix<T, Eigen::ColMajor>& lhs,
+                                Eigen::SparseMatrix<T, Eigen::ColMajor>& rhs,
+                                Eigen::SparseMatrix<T, Eigen::ColMajor>& res,
+                                int reserveSizes )
+        {
+            using LhsInIt = typename Eigen::SparseMatrix<T, Eigen::ColMajor>::InnerIterator;
+            using RhsInIt = typename Eigen::SparseMatrix<T, Eigen::ColMajor>::InnerIterator;
 
-            // normal form
-            MatrixX<T> NtN = N.transpose() * N;
+            int rows = lhs.innerSize();
+            int cols = rhs.outerSize();
 
-            // debug
-//             cerr << "NtN:\n" << NtN << endl;
+            res.setZero();
+            res.reserve(VectorXi::Constant(rows, reserveSizes));
 
-            MatrixX<T> P(NS.cols(), pt_dim);
+            // Internal SparseMatrix buffers
+            int* outer_index = res.outerIndexPtr();
+            int* inner_nnz = res.innerNonZeroPtr();
+            auto& res_data = res.data();
 
-            if (sparse)
+            tbb::affinity_partitioner ap;
+            parallel_for(blocked_range<size_t>(0, cols), [&](blocked_range<size_t>& r)
             {
-                MatrixX<T> Rk(NS.rows(), pt_dim);
-                RHSTensorLSQ(NS, start_idxs, end_idxs, t, Rk);
+                int j_begin = r.begin();
+                int j_end = r.end();
 
-                // cerr << Rk << endl;
+                std::vector<char> mask(rows, 0);
+                std::vector<T> values(rows, 0);
+            
+                // we compute each column of the result, one after the other
+                for (int j=j_begin; j<j_end; ++j)
+                {
+                    for (RhsInIt rhsIt(rhs, j); rhsIt; ++rhsIt)
+                    {
+                        T y = rhsIt.value();
+                        int k = rhsIt.index();
+                        for (LhsInIt lhsIt(lhs, k); lhsIt; ++lhsIt)
+                        {
+                            int i = lhsIt.index();
+                            T x = lhsIt.value();
+                            if(mask[i] == 0)
+                            {
+                                mask[i] = 1;
+                                values[i] = x * y;
+                            }
+                            else
+                                values[i] += x * y;
+                        }
+                    }
 
-                Eigen::LeastSquaresConjugateGradient<SparseMatrixX<T>> solver(NS);
-                if (solver.info() != Eigen::Success) 
-                    cerr << "Matrix decomposition failed in EncodeTensor" << endl;
+                    // TODO: can loop over nonzeros only, but this involves sorted insertion, which may be slower
+                    for(int i=0; i<rows; ++i)
+                    {
+                        if(mask[i] == 1)
+                        {
+                            mask[i] = 0;
 
-                P = solver.solve(Rk);
-                if (solver.info() != Eigen::Success)
-                    cerr << "Least-squares solve failed in EncodeTensor" << endl;
-            }
-            else
-            {
-                // R is the right hand side needed for solving NtN * P = R
-                MatrixX<T> R(NtN.cols(), pt_dim);
-                RHSTensor(N, start_idxs, end_idxs, t, cons, R);
+                            // We never want this (slow) reallocation to happen. Always OVER-estimate reserveSizes (input variable)
+                            if( inner_nnz[j] >= outer_index[j+1] - outer_index[j] )
+                            {
+                                cerr << "Warning: Reallocating memory in threaded matrix product. Did you reserve space properly?" << endl;
+                                VectorXi extra_size = VectorXi::Zero(cols);
+                                extra_size[j] = std::max<int>(2, inner_nnz[j]);
+                                res.reserve(extra_size);  // NB: reserve() always adds to existing buffer
+                            }
+                            
+                            // Insert entry 
+                            int p = outer_index[j] + inner_nnz[j];
+                            res_data.index(p) = i;
+                            res_data.value(p) = values[i];
+                            inner_nnz[j]++;
+                        }
+                    }
+                }
 
-                // P is the solution vector
-                P = NtN.ldlt().solve(R);
-            }
+            }, ap );
+
+            res.makeCompressed();
+        }
+
+       // Sparse matrix version of EncodeTensor. Not a 
+       // one-for-one copy of the logic in EncodeTensor
+        void EncodeTensorSparse(TensorIdx   t_idx,                      // tensor product being encoded
+                          bool              pad,            // whether to impose p control point constraints on each side
+                          bool              weighted = true)        // solve for and use weights
+        {
+            // debug
+            cerr << "EncodeTensor (Sparse)" << endl;
+
+            const int pt_dim = mfa_data.max_dim - mfa_data.min_dim + 1;                           // control point dimensonality
+            TensorProduct<T>& t = mfa_data.tmesh.tensor_prods[t_idx];
+
+            // Compute total number of points in tensor product
+            int tot_dom_pts = 1;
+            vector<size_t> start_idxs(mfa_data.dom_dim);
+            vector<size_t> end_idxs(mfa_data.dom_dim);
+            mfa_data.tmesh.domain_pts(t_idx, pad, start_idxs, end_idxs);
+            for (int k=0; k < mfa_data.dom_dim; k++)
+                tot_dom_pts *= end_idxs[k] - start_idxs[k] + 1;
+
+            // Assemble collocation matrix
+            SparseMatrixX<T> Nt(t.nctrl_pts.prod() , tot_dom_pts);
+            FillTensorCollSparse(t_idx, start_idxs, end_idxs, Nt);
             
 
-            t.ctrl_pts = P.block(0, 0, t.ctrl_pts.rows(), pt_dim);
+            // Set up linear system
+            SparseMatrixX<T> Mat(Nt.rows(), Nt.rows()); // Mat will be the matrix on the LHS
+            Mat.setZero();
 
-            // debug
-//             cerr << "\nEncodeTensor() P:\n" << P << endl;
-//             cerr << "\nEncodeTensor() ctrl_pts:\n" << t.ctrl_pts << endl;
-//             cerr << "\nEncodeTensor() weights:\n" << t.weights << endl;
+#ifdef MFA_TBB  // TBB version
+                // TODO next two lines make unnecessary deep copies, maybe make N and Nt in col-major form simultaneously?
+                // Eigen::SparseMatrix<T, Eigen::RowMajor> NtRow(Nt); 
+                Eigen::SparseMatrix<T, Eigen::ColMajor> NCol = Nt.transpose();
+
+                int ntn_sparsity = (2*mfa_data.p + VectorXi::Ones(mfa_data.dom_dim)).prod();       // nonzero basis functions per input point
+                MatProdThreaded(Nt, NCol, Mat, ntn_sparsity);
+#else 
+                Mat = Nt * Nt.transpose();
+#endif           
+
+            MatrixX<T>  R(Nt.cols(), pt_dim);           // R is the right hand side 
+            RHSUnified(start_idxs, end_idxs, Nt, R);
+
+
+            // Solve Linear System
+            // Eigen::ConjugateGradient<SparseMatrixX<T>, Eigen::Lower|Eigen::Upper, Eigen::IncompleteLUT<T>>  solver;
+            Eigen::ConjugateGradient<SparseMatrixX<T>, Eigen::Lower|Eigen::Upper>  solver;  // Default preconditioner is Jacobi
+                
+            // // Optional parameters for solver    
+            // solver.setTolerance(1e-5);
+            // solver.preconditioner().setDroptol(0.001);
+            // solver.preconditioner().setFillfactor(1);
+            
+            solver.compute(Mat);
+            if (solver.info() != Eigen::Success) 
+                cerr << "Matrix decomposition failed in EncodeTensor" << endl;
+            else
+                cerr << "Sparse matrix factorization successful" << endl;
+
+            t.ctrl_pts = solver.solve(R); 
+            if (solver.info() != Eigen::Success)
+                cerr << "Least-squares solve failed in EncodeTensor" << endl;
+            else
+            {
+                cerr << "Sparse matrix solve successful" << endl;
+                cerr << "  # iterations: " << solver.iterations() << endl;
+            }
         }
 
 #ifdef MFA_TMESH
@@ -1165,12 +1392,12 @@ namespace mfa
             //     cerr << "R:\n" << R << endl;
         }
 
-        void RHSTensorLSQ(
-                const SparseMatrixX<T>& N,
-                const vector<size_t>&   start_idxs,
-                const vector<size_t>&   end_idxs,
-                const TensorProduct<T>& t,
-                MatrixX<T>&             Rk)
+        // computes right hand side vector for encoding a tensor product in unified-dimensional form
+        void RHSUnified(
+            const vector<size_t>&   start_idxs,
+            const vector<size_t>&   end_idxs,
+            SparseMatrixX<T>&       Nt,
+            MatrixX<T>&             R)
         {
             VectorXi ndom_pts(mfa_data.dom_dim);
             VectorXi dom_starts(mfa_data.dom_dim);
@@ -1180,15 +1407,19 @@ namespace mfa
                 dom_starts(k)   = start_idxs[k];
             }
 
-            // fill Rk, the matrix of input points
+            if (R.cols() != mfa_data.max_dim - mfa_data.min_dim + 1)
+                cerr << "Incorrect matrix dimensions in RHSTensorQ (cols)" << endl;
+            if (R.rows() != ndom_pts.prod())
+                cerr << "Incorrect matrix dimensions in RHSTensorQ (rows)" << endl;
+
             VolIterator vol_iter(ndom_pts, dom_starts, mfa.ndom_pts());                 // iterator over input points
-            VectorXi ijk(mfa_data.dom_dim);
             while (!vol_iter.done())
             {
-                vol_iter.idx_ijk(vol_iter.cur_iter(), ijk);
-                Rk.row(vol_iter.cur_iter()) = domain.block(vol_iter.ijk_idx(ijk), mfa_data.min_dim, 1, mfa_data.max_dim - mfa_data.min_dim + 1);
+                R.row(vol_iter.cur_iter()) = domain.block(vol_iter.cur_iter_full(), mfa_data.min_dim, 1, mfa_data.max_dim - mfa_data.min_dim + 1);
                 vol_iter.incr_iter();
             }
+
+            R = Nt * R;
         }
 
         // computes right hand side vector for encoding one tensor product of control points

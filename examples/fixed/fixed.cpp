@@ -54,6 +54,7 @@ int main(int argc, char** argv)
     int    error        = 1;                    // decode all input points and check error (bool 1 or 0)
     string infile;                              // input file name
     bool   help;                                // show help
+    int    sparse       = false;                // (TEMPORARY) use sparse matrix in encodeTensor
 
     // get command line arguments
     opts::Options ops;
@@ -73,6 +74,7 @@ int main(int argc, char** argv)
     ops >> opts::Option('c', "error",       error,      " decode entire error field (default=true)");
     ops >> opts::Option('f', "infile",      infile,     " input file name");
     ops >> opts::Option('h', "help",        help,       " show help");
+    ops >> opts::Option('r', "sparse",      sparse,     " (TEMPORARY) use sparse matrix in EncodeTensor");
 
     if (!ops.parse(argc, argv) || help)
     {
@@ -94,7 +96,8 @@ int main(int argc, char** argv)
         "\ngeom_degree = "  << geom_degree  << " vars_degree = "    << vars_degree  <<
         "\ninput pts = "    << ndomp        << " geom_ctrl pts = "  << geom_nctrl   <<
         "\nvars_ctrl_pts = "<< vars_nctrl   << " test_points = "    << ntest        <<
-        "\ninput = "        << input        << " noise = "          << noise        << endl;
+        "\ninput = "        << input        << " noise = "          << noise        << 
+        "\nsparse = "       << sparse << endl;
 
 #ifdef CURVE_PARAMS
     cerr << "parameterization method = curve" << endl;
@@ -153,6 +156,7 @@ int main(int argc, char** argv)
     d_args.n            = noise;
     d_args.multiblock   = false;
     d_args.verbose      = 1;
+    d_args.sparse       = sparse;
     for (int i = 0; i < pt_dim - dom_dim; i++)
         d_args.f[i] = 1.0;
     for (int i = 0; i < dom_dim; i++)

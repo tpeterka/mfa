@@ -139,6 +139,18 @@ namespace mfa
             return idx;
         }
 
+        size_t ijk_idx(const vector<int>& ijk) const
+        {
+            size_t idx          = 0;
+            size_t stride       = 1;
+            for (int i = 0; i < dom_dim_; i++)
+            {
+                idx     += ijk[i] * stride;
+                stride  *= all_npts_dim_(i);
+            }
+            return idx;   
+        }
+
         // convert subvolume index into full volume index
         size_t sub_full_idx(size_t sub_idx) const
         {
@@ -147,10 +159,10 @@ namespace mfa
             return ijk_idx(ijk);
         }
 
-        // return current iteration count within full volum
+        // return current iteration count within full volume
         size_t cur_iter_full() const 
         {
-            return sub_full_idx(cur_iter_);
+            return ijk_idx(idx_dim_);
         }
 
         // increment iteration; user must call incr_iter() near the bottom of the flattened loop

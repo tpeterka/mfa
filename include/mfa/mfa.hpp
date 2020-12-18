@@ -59,16 +59,15 @@ using ArrayXXf = Eigen::ArrayXXf;
 using ArrayXXd = Eigen::ArrayXXd;
 // NB, storing matrices and arrays in row-major order
 template <typename T>
-using MatrixX = Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>;
+using MatrixX = Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic, Eigen::ColMajor>;
 template <typename T>
 using VectorX  = Eigen::Matrix<T, Eigen::Dynamic, 1>;
 template <typename T>
-using ArrayXX  = Eigen::Array<T, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>;
+using ArrayXX  = Eigen::Array<T, Eigen::Dynamic, Eigen::Dynamic, Eigen::ColMajor>;
 template <typename T>
 using ArrayX   = Eigen::Array<T, Eigen::Dynamic, 1>;
-
 template <typename T>
-using SparseMatrixX = Eigen::SparseMatrix<T, Eigen::RowMajor>;
+using SparseMatrixX = Eigen::SparseMatrix<T, Eigen::ColMajor>;  // Many sparse solvers require column-major format (otherwise, deep copies are made)
 template <typename T>
 using SpMatTriplet = Eigen::Triplet<T>;
 
@@ -112,7 +111,8 @@ namespace mfa
                 const MatrixX<T>&   domain,                 // input points
                 const VectorXi      nctrl_pts,              // number of control points in each dim
                 int                 verbose,                // debug level
-                bool                weighted) const         // solve for and use weights (default = true)
+                bool                weighted,               // solve for and use weights (default = true)
+                bool                sparse=false) const     // (TEMP) use sparse matrix in EncodeTensor
         {
             // fixed encode assumes the tmesh has only one tensor product
             TensorProduct<T>&t = mfa_data.tmesh.tensor_prods[0];
@@ -122,9 +122,10 @@ namespace mfa
 
             // experiment with separable, unified dimension encoding
 #ifdef MFA_UNIFIED_DIMS
-
-            encoder.EncodeTensor(0, false, false, weighted);   // assumes only one tensor product
-
+            if (!sparse)
+                encoder.EncodeTensor(0, false, false, weighted);
+            else
+                encoder.EncodeTensorSparse(0, false, weighted);  // Assumes only one tensor product
 #else
 
             encoder.Encode(t.nctrl_pts, t.ctrl_pts, t.weights, weighted);

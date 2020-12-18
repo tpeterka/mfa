@@ -63,6 +63,7 @@ struct ModelInfo
     bool                weighted;               // solve for and use weights (default = true)
     bool                local;                  // solve locally (with constraints) each round (default = false)
     int                 verbose;                // debug level
+    bool                sparse;                 // (TEMPORARY) use sparse matrix in EncodeTensor
 };
 
 // a solved and stored MFA model (geometry or science variable or both)
@@ -198,7 +199,7 @@ struct BlockBase
                 0,
                 dom_dim - 1);
         // TODO: consider not weighting the geometry (only science variables), depends on geometry complexity
-        mfa->FixedEncode(*geometry.mfa_data, domain, nctrl_pts, a->verbose, a->weighted);
+        mfa->FixedEncode(*geometry.mfa_data, domain, nctrl_pts, a->verbose, a->weighted, a->sparse);
 
         // encode science variables
         for (auto i = 0; i< vars.size(); i++)
@@ -219,7 +220,7 @@ struct BlockBase
                     nctrl_pts,
                     dom_dim + i,        // assumes each variable is scalar
                     dom_dim + i);
-            mfa->FixedEncode(*(vars[i].mfa_data), domain, nctrl_pts, a->verbose, a->weighted);
+            mfa->FixedEncode(*(vars[i].mfa_data), domain, nctrl_pts, a->verbose, a->weighted, a->sparse);
         }
     }
 
