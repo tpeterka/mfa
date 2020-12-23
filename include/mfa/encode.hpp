@@ -376,153 +376,6 @@ namespace mfa
 //             cerr << "Encode() weights:\n" << weights << endl;
         }
 
-        // encodes the control points for one tensor product of a tmesh
-        // takes a subset of input points from the global domain, covered by basis functions of this tensor product
-        // solves all dimensions together (not separably)
-        // does not encode weights for now
-        void EncodeTensor(TensorIdx                 t_idx,                  // index of tensor product being encoded
-                        bool                      pad,                    // pad input points by degree p in each dimension
-                        bool                      constrained,            // whether to impose p control point constraints on each side
-                        bool                      weighted = true)        // solve for and use weights
-        {
-            // debug
-            fprintf(stderr, "EncodeTensor\n");
-
-            TensorProduct<T>& t = mfa_data.tmesh.tensor_prods[t_idx];
-
-            // get input domain points covered by the tensor
-            vector<size_t> start_idxs(mfa_data.dom_dim);
-            vector<size_t> end_idxs(mfa_data.dom_dim);
-            mfa_data.tmesh.domain_pts(t_idx, pad, mfa.params(), start_idxs, end_idxs);
-
-            VectorXi ndom_pts(mfa_data.dom_dim);
-            for (auto k = 0; k < mfa_data.dom_dim; k++)
-                ndom_pts(k) = end_idxs[k] - start_idxs[k] + 1;
-
-            // resize matrices in case number of control points changed
-            int pt_dim = mfa_data.max_dim - mfa_data.min_dim + 1;                           // control point dimensonality
-            t.ctrl_pts.resize(t.nctrl_pts.prod(), pt_dim);
-            t.weights.resize(t.ctrl_pts.rows());
-
-            // matrix of basis functions
-            // using 0th dimension for full-d
-            // N is a matrix of m x n scalars that are the basis function coefficients
-            //  _                                      _
-            // |  N_0(u[0])     ...     N_n-1(u[0])     |
-            // |     ...        ...      ...            |
-            // |  N_0(u[m-1])   ...     N_n-1(u[m-1])   |
-            //  -                                      -
-            MatrixX<T>& N = mfa_data.N[0];
-            N = MatrixX<T>::Constant(ndom_pts.prod(), t.nctrl_pts.prod(), -1);              // basis functions, -1 means unassigned so far
-            VectorXi dom_starts(mfa_data.dom_dim);
-            for (auto k = 0; k < mfa_data.dom_dim; k++)
-                dom_starts(k) = start_idxs[k];
-
-            vector<int>         spans(mfa_data.dom_dim);
-            vector<MatrixX<T>>  B(mfa_data.dom_dim);
-            for (auto k = 0; k < mfa_data.dom_dim; k++)
-                B[k].resize(1, t.nctrl_pts(k));
-            VolIterator dom_vol_iter(ndom_pts, dom_starts, mfa.ndom_pts());                 // iterator over input points
-            while (!dom_vol_iter.done())
-            {
-                for (auto k = 0; k < mfa_data.dom_dim; k++)
-                {
-                    int p   = mfa_data.p(k);
-                    spans[k] = mfa_data.FindSpan(k, mfa.params()[k][dom_vol_iter.idx_dim(k)]);
-
-                    // basis functions
-                    vector<T> loc_knots(p + 2);
-                    B[k].row(0).setZero();
-                    T u = mfa.params()[k][dom_vol_iter.idx_dim(k)];                         // parameter of current input point
-
-                    for (auto j = 0; j < p + 1; j++)
-                    {
-                        for (auto i = 0; i < p + 2; i++)
-                            loc_knots[i] = mfa_data.tmesh.all_knots[k][spans[k] - p + j + i];
-                        int col = spans[k] - p + j - t.knot_mins[k];
-                        if (col >= 0 && col < B[k].cols())
-                            B[k](0, col) = mfa_data.OneBasisFun(k, u, loc_knots);
-                    }
-
-                    // debug
-//                     cerr << "B[" << k <<"]: " << B[k] << endl;
-                }
-
-                VolIterator ctrl_vol_iter(t.nctrl_pts);                                     // iterator over control points
-                while (!ctrl_vol_iter.done())
-                {
-                    VectorXi ijk(mfa_data.dom_dim);                                         // ijk of current control point
-                    ctrl_vol_iter.idx_ijk(ctrl_vol_iter.cur_iter(), ijk);
-
-                    // check if current control point is covered by the basis funcs. in all dims
-                    bool local_support = true;
-                    for (auto k = 0; k < mfa_data.dom_dim; k++)
-                    {
-                        if (ijk(k) < spans[k] - mfa_data.p(k) - t.knot_mins[k] || ijk(k) > spans[k] - t.knot_mins[k])
-                        {
-                            local_support = false;
-                            break;
-                        }
-                    }
-
-                    if (local_support)
-                    {
-                        for (auto k = 0; k < mfa_data.dom_dim; k++)
-                        {
-                            for (auto j = 0; j < mfa_data.p(k) + 1; j++)                    // nonzero basis function values at this parameter, in this dim.
-                            {
-                                int col = spans[k] - mfa_data.p(k) + j - t.knot_mins[k];
-                                if (ijk(k) == col)
-                                {
-                                    // debug
-//                                     cerr << "ctrl_cur_iter = " << ctrl_vol_iter.cur_iter() << " k = " << k << " ijk(k) = col = " << col << endl;
-
-                                    if (N(dom_vol_iter.cur_iter(), ctrl_vol_iter.cur_iter()) == -1.0)   // unassigned so far
-                                        N(dom_vol_iter.cur_iter(), ctrl_vol_iter.cur_iter()) = B[k](0, col);
-                                    else
-                                        N(dom_vol_iter.cur_iter(), ctrl_vol_iter.cur_iter()) *= B[k](0, col);
-                                }
-                            }
-                        }
-                    }
-
-                    // debug
-//                     cerr << "N.row(" << dom_vol_iter.cur_iter() << "): " << N.row(dom_vol_iter.cur_iter()) << endl;
-
-                    ctrl_vol_iter.incr_iter();
-                }
-                dom_vol_iter.incr_iter();
-            }
-
-            // set any unassigned values in N to 0
-            for (auto i = 0; i < N.rows(); i++)
-                for (auto j = 0; j < N.cols(); j++)
-                    if (N(i, j) == -1.0)
-                        N(i, j) = 0.0;
-
-            // debug
-//             cerr << "N:\n" << mfa_data.N[0] << endl;
-
-            // normal form
-            MatrixX<T> NtN = N.transpose() * N;
-
-            // debug
-//             cerr << "NtN:\n" << NtN << endl;
-
-            // R is the right hand side needed for solving NtN * P = R
-            MatrixX<T> R(NtN.cols(), pt_dim);
-            RHSTensor(N, start_idxs, end_idxs, t, cons, R);
-
-            // P is the solution vector
-            MatrixX<T> P(NtN.cols(), pt_dim);
-            P = NtN.ldlt().solve(R);
-            t.ctrl_pts = P.block(0, 0, t.ctrl_pts.rows(), pt_dim);
-
-            // debug
-//             cerr << "\nEncodeTensor() P:\n" << P << endl;
-//             cerr << "\nEncodeTensor() ctrl_pts:\n" << t.ctrl_pts << endl;
-//             cerr << "\nEncodeTensor() weights:\n" << t.weights << endl;
-        }
 
         // Assemble B-spline collocation matrix for a full tensor, using sparse matrices
         // Here we are filling Nt (transpose of N)
@@ -619,8 +472,8 @@ namespace mfa
                 dom_vol_iter.incr_iter();
             }
 
-            // Nt.makeCompressed();  // not necessary if using prune(), as prune always returns compressed form
-            Nt.prune(1,1e-5);  // remove entries less than a given value (and compress matrix)
+            Nt.makeCompressed();  // not necessary if using prune(), as prune always returns compressed form
+            // Nt.prune(1,1e-5);  // remove entries less than a given value (and compress matrix)
             
             fill_time = clock() - fill_time;
             cerr << "Matrix Construction Time: " << setprecision(3) << ((double)fill_time)/CLOCKS_PER_SEC << "s." << endl;
@@ -722,7 +575,7 @@ namespace mfa
             int tot_dom_pts = 1;
             vector<size_t> start_idxs(mfa_data.dom_dim);
             vector<size_t> end_idxs(mfa_data.dom_dim);
-            mfa_data.tmesh.domain_pts(t_idx, pad, start_idxs, end_idxs);
+            mfa_data.tmesh.domain_pts(t_idx, pad, mfa.params(), start_idxs, end_idxs);
             for (int k=0; k < mfa_data.dom_dim; k++)
                 tot_dom_pts *= end_idxs[k] - start_idxs[k] + 1;
 

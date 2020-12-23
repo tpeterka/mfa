@@ -122,14 +122,9 @@ namespace mfa
 
             // experiment with separable, unified dimension encoding
 #ifdef MFA_UNIFIED_DIMS
-            if (!sparse)
-                encoder.EncodeTensor(0, false, false, weighted);
-            else
-                encoder.EncodeTensorSparse(0, false, weighted);  // Assumes only one tensor product
+            encoder.EncodeTensorSparse(0, false, weighted);  // Assumes only one tensor product
 #else
-
             encoder.Encode(t.nctrl_pts, t.ctrl_pts, t.weights, weighted);
-
 #endif
 
             // debug: try inserting a knot
