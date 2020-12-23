@@ -29,10 +29,6 @@
 // comment out the following line for original single tensor product version
 #define MFA_TMESH
 
-
-// comment out the following line for separable dimension solve
-#define MFA_UNIFIED_DIMS
-
 // linear least squares local solve
 #define MFA_LINEAR_LOCAL
 
@@ -112,7 +108,7 @@ namespace mfa
                 const VectorXi      nctrl_pts,              // number of control points in each dim
                 int                 verbose,                // debug level
                 bool                weighted,               // solve for and use weights (default = true)
-                bool                sparse=false) const     // (TEMP) use sparse matrix in EncodeTensor
+                bool                separable=true) const     // encode each dimension separately
         {
             // fixed encode assumes the tmesh has only one tensor product
             TensorProduct<T>&t = mfa_data.tmesh.tensor_prods[0];
@@ -120,12 +116,11 @@ namespace mfa
             t.weights = VectorX<T>::Ones(t.nctrl_pts.prod());
             Encoder<T> encoder(*this, mfa_data, domain, verbose);
 
-            // experiment with separable, unified dimension encoding
-#ifdef MFA_UNIFIED_DIMS
-            encoder.EncodeTensorSparse(0, false, weighted);  // Assumes only one tensor product
-#else
-            encoder.Encode(t.nctrl_pts, t.ctrl_pts, t.weights, weighted);
-#endif
+            if (separable)
+                encoder.Encode(t.nctrl_pts, t.ctrl_pts, t.weights, weighted);
+            else
+                encoder.EncodeUnified(0, weighted);  // Assumes only one tensor product
+            
 
             // debug: try inserting a knot
             //             VectorX<T> new_knot(mfa->dom_dim);
@@ -165,15 +160,7 @@ namespace mfa
         {
             VectorXi no_derivs;                             // size-0 means no derivatives
 
-#ifdef MFA_UNIFIED_DIMS
-
-            DecodeDomain(mfa_data, verbose, approx, min_dim, max_dim, false, no_derivs);
-
-#else
-
             DecodeDomain(mfa_data, verbose, approx, min_dim, max_dim, saved_basis, no_derivs);
-
-#endif
         }
 
         // decode derivatives at all input points

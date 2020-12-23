@@ -385,10 +385,10 @@ namespace mfa
         // |     ...        ...      ...            |
         // |  N_n-1(u[0])   ...     N_n-1(u[m-1])   |
         //  -                                      -
-        void FillTensorCollSparse(  TensorIdx           t_idx,    // index of tensor product containing input points and control points
-                                    vector<size_t>&     start_idxs,
-                                    vector<size_t>&     end_idxs,
-                                    SparseMatrixX<T>&   Nt)     // (output) transpose of collocation matrix
+        void CollMatrixUnified( TensorIdx           t_idx,    // index of tensor product containing input points and control points
+                                vector<size_t>&     start_idxs,
+                                vector<size_t>&     end_idxs,
+                                SparseMatrixX<T>&   Nt)     // (output) transpose of collocation matrix
         {
             cerr << "begin matrix construction" << endl;
             clock_t fill_time = clock();
@@ -561,12 +561,15 @@ namespace mfa
 
        // Sparse matrix version of EncodeTensor. Not a 
        // one-for-one copy of the logic in EncodeTensor
-        void EncodeTensorSparse(TensorIdx   t_idx,                      // tensor product being encoded
-                          bool              pad,            // whether to impose p control point constraints on each side
-                          bool              weighted = true)        // solve for and use weights
+        void EncodeUnified( TensorIdx   t_idx,                      // tensor product being encoded
+                            bool        weighted=true)                   // solve for and use weights 
         {
             // debug
-            cerr << "EncodeTensor (Sparse)" << endl;
+            cerr << "EncodeTensor (Unified Dimensions)" << endl;
+            if (weighted)  // We want weighted encoding to be default behavior eventually. However, not currently implemented.
+            {
+                cerr << "Warning: NURBS (nonuniform weights) are not implemented for unified-dimensional encoding!" << endl;
+            }
 
             const int pt_dim = mfa_data.max_dim - mfa_data.min_dim + 1;                           // control point dimensonality
             TensorProduct<T>& t = mfa_data.tmesh.tensor_prods[t_idx];
@@ -575,22 +578,21 @@ namespace mfa
             int tot_dom_pts = 1;
             vector<size_t> start_idxs(mfa_data.dom_dim);
             vector<size_t> end_idxs(mfa_data.dom_dim);
-            mfa_data.tmesh.domain_pts(t_idx, pad, mfa.params(), start_idxs, end_idxs);
+            mfa_data.tmesh.domain_pts(t_idx, false, mfa.params(), start_idxs, end_idxs);
             for (int k=0; k < mfa_data.dom_dim; k++)
                 tot_dom_pts *= end_idxs[k] - start_idxs[k] + 1;
 
             // Assemble collocation matrix
             SparseMatrixX<T> Nt(t.nctrl_pts.prod() , tot_dom_pts);
-            FillTensorCollSparse(t_idx, start_idxs, end_idxs, Nt);
+            CollMatrixUnified(t_idx, start_idxs, end_idxs, Nt);
             
 
             // Set up linear system
             SparseMatrixX<T> Mat(Nt.rows(), Nt.rows()); // Mat will be the matrix on the LHS
-            Mat.setZero();
 
 #ifdef MFA_TBB  // TBB version
-                // TODO next two lines make unnecessary deep copies, maybe make N and Nt in col-major form simultaneously?
-                // Eigen::SparseMatrix<T, Eigen::RowMajor> NtRow(Nt); 
+                // TODO potentially unnecessary deep copies, maybe make N and Nt in col-major form simultaneously?
+                // Creating a separate matrix for N makes threading the sparse matrix product easier
                 Eigen::SparseMatrix<T, Eigen::ColMajor> NCol = Nt.transpose();
 
                 int ntn_sparsity = (2*mfa_data.p + VectorXi::Ones(mfa_data.dom_dim)).prod();       // nonzero basis functions per input point
@@ -1261,9 +1263,9 @@ namespace mfa
             }
 
             if (R.cols() != mfa_data.max_dim - mfa_data.min_dim + 1)
-                cerr << "Incorrect matrix dimensions in RHSTensorQ (cols)" << endl;
+                cerr << "Error: Incorrect matrix dimensions in RHSUnified (cols)" << endl;
             if (R.rows() != ndom_pts.prod())
-                cerr << "Incorrect matrix dimensions in RHSTensorQ (rows)" << endl;
+                cerr << "Error: Incorrect matrix dimensions in RHSUnified (rows)" << endl;
 
             VolIterator vol_iter(ndom_pts, dom_starts, mfa.ndom_pts());                 // iterator over input points
             while (!vol_iter.done())
