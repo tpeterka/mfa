@@ -544,6 +544,10 @@ struct BlockBase
         fprintf(stderr, "gid = %d\n", cp.gid());
 //         cerr << "domain\n" << domain << endl;
 
+        // max errors over all science variables
+        T all_max_err, all_max_norm_err, all_max_sum_sq_err, all_max_rms_err, all_max_norm_rms_err;
+        int all_max_var, all_max_norm_var, all_max_sum_sq_var, all_max_rms_var, all_max_norm_rms_var;   // variables where the max error occurs
+
         VectorXi tot_nctrl_pts_dim = VectorXi::Zero(geometry.mfa_data->dom_dim);        // total num. ctrl. pts. per dim.
         size_t tot_nctrl_pts = 0;                                                       // total number of control points
 
@@ -615,10 +619,49 @@ struct BlockBase
                 fprintf(stderr, "sum of squared errors = %e\n",  sum_sq_errs[i]);
                 fprintf(stderr, "RMS error             = %e\n",  rms_err);
                 fprintf(stderr, "normalized RMS error  = %e\n",  rms_err / range_extent);
+
+                // find max over all science variables
+                if (i == 0 || max_errs[i] > all_max_err)
+                {
+                    all_max_err = max_errs[i];
+                    all_max_var = i;
+                }
+                if (i == 0 || max_errs[i] / range_extent > all_max_norm_err)
+                {
+                    all_max_norm_err = max_errs[i] / range_extent;
+                    all_max_norm_var = i;
+                }
+                if (i == 0 || sum_sq_errs[i] > all_max_sum_sq_err)
+                {
+                    all_max_sum_sq_err = sum_sq_errs[i];
+                    all_max_sum_sq_var = i;
+                }
+                if (i == 0 || rms_err > all_max_rms_err)
+                {
+                    all_max_rms_err = rms_err;
+                    all_max_rms_var = i;
+                }
+                if (i == 0 || rms_err / range_extent > all_max_norm_rms_err)
+                {
+                    all_max_norm_rms_err = rms_err / range_extent;
+                    all_max_norm_rms_var = i;
+                }
             }
             cerr << "-----------------------------" << endl;
         }
-        cerr << "\n-----------------------------------" << endl;
+
+        if (error)
+        {
+            fprintf(stderr, "\n");
+            fprintf(stderr, "Maximum errors over all science variables:\n");
+            fprintf(stderr, "max_err                (var %d)    = %e\n",  all_max_var,          all_max_err);
+            fprintf(stderr, "normalized max_err     (var %d)    = %e\n",  all_max_norm_var,     all_max_norm_err);
+            fprintf(stderr, "sum of squared errors  (var %d)    = %e\n",  all_max_sum_sq_var,   all_max_sum_sq_err);
+            fprintf(stderr, "RMS error              (var %d)    = %e\n",  all_max_rms_var,      all_max_rms_err);
+            fprintf(stderr, "normalized RMS error   (var %d)    = %e\n",  all_max_norm_rms_var, all_max_norm_rms_err);
+        }
+
+       cerr << "\n-----------------------------------" << endl;
 
         //  debug: print approximated points
 //         cerr << approx.rows() << " approximated points\n" << approx << endl;
