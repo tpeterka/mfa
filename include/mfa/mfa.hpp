@@ -69,6 +69,7 @@ using SpMatTriplet = Eigen::Triplet<T>;
 
 #include    <mfa/util.hpp>
 #include    <mfa/param.hpp>
+#include    <mfa/input.hpp>
 #include    <mfa/tmesh.hpp>
 #include    <mfa/mfa_data.hpp>
 #include    <mfa/decode.hpp>
@@ -80,41 +81,48 @@ namespace mfa
     struct MFA
     {
         int                     dom_dim;            // domain dimensionality
-        Param<T>*               mfa_param;          // pointer to parameterization object
+        // Param<T>*               mfa_param;          // pointer to parameterization object
 
-        MFA(
-            int                 dom_dim_,           // domain dimensionality (excluding science variables)
-            const VectorXi&     ndom_pts_,          // number of input data points in each dim
-            const MatrixX<T>&   domain_) :          // input data points (1st dim changes fastest)
+        // MFA(
+        //     int                 dom_dim_,           // domain dimensionality (excluding science variables)
+        //     const VectorXi&     ndom_pts_,          // number of input data points in each dim
+        //     const MatrixX<T>&   domain_) :          // input data points (1st dim changes fastest)
+        //     dom_dim(dom_dim_)
+        // {
+        //     // mfa_param = new Param<T>(dom_dim_, ndom_pts_, domain_);
+        // }
+
+        MFA(size_t dom_dim_) :
             dom_dim(dom_dim_)
         {
-            mfa_param = new Param<T>(dom_dim_, ndom_pts_, domain_);
+            // mfa_param = new Param<T>(info);
         }
 
         ~MFA()
         {
-            delete mfa_param;
+            // delete mfa_param;
         }
 
-        VectorXi&               ndom_pts() const    { return mfa_param->ndom_pts; }
-        vector<vector<T>>&      params() const      { return mfa_param->params; }
-        vector<size_t>&         ds() const          { return mfa_param->ds; }
-        vector<vector<size_t>>& co() const          { return mfa_param->co; }
+        // VectorXi&               ndom_pts() const    { return mfa_param->ndom_pts; }
+        // vector<vector<T>>&      params() const      { return mfa_param->params; }
+        // vector<size_t>&         ds() const          { return mfa_param->ds; }
+        // vector<vector<size_t>>& co() const          { return mfa_param->co; }
 
         // fixed number of control points encode
         void FixedEncode(
                 MFA_Data<T>&        mfa_data,               // mfa data model
-                const MatrixX<T>&   domain,                 // input points
+                const InputInfo<T>& input,                 // input points
                 const VectorXi      nctrl_pts,              // number of control points in each dim
                 int                 verbose,                // debug level
                 bool                weighted,               // solve for and use weights (default = true)
                 bool                separable=true) const     // encode each dimension separately
         {
+cerr << "Begining fixed encode" << endl;
             // fixed encode assumes the tmesh has only one tensor product
             TensorProduct<T>&t = mfa_data.tmesh.tensor_prods[0];
 
             t.weights = VectorX<T>::Ones(t.nctrl_pts.prod());
-            Encoder<T> encoder(*this, mfa_data, domain, verbose);
+            Encoder<T> encoder(*this, mfa_data, input, verbose);
 
             if (separable)
                 encoder.Encode(t.nctrl_pts, t.ctrl_pts, t.weights, weighted);
@@ -132,7 +140,7 @@ namespace mfa
         // adaptive encode
         void AdaptiveEncode(
                 MFA_Data<T>&        mfa_data,               // mfa data model
-                const MatrixX<T>&   domain,                 // input points
+                const InputInfo<T>& input,                  // input points
                 T                   err_limit,              // maximum allowable normalized error
                 int                 verbose,                // debug level
                 bool                weighted,               // solve for and use weights (default = true)
@@ -140,7 +148,7 @@ namespace mfa
                 const VectorX<T>&   extents,                // extents in each dimension, for normalizing error (size 0 means do not normalize)
                 int                 max_rounds) const       // optional maximum number of rounds
         {
-            Encoder<T> encoder(*this, mfa_data, domain, verbose);
+            Encoder<T> encoder(*this, mfa_data, input, verbose);
 
 #ifndef MFA_TMESH           // original adaptive encode for one tensor product
             encoder.OrigAdaptiveEncode(err_limit, weighted, extents, max_rounds);
@@ -153,6 +161,7 @@ namespace mfa
         void DecodeDomain(
                 const MFA_Data<T>&  mfa_data,               // mfa data model
                 int                 verbose,                // debug level
+                const InputInfo<T>& input,                  // domain info
                 MatrixX<T>&         approx,                 // decoded points
                 int                 min_dim,                // first dimension to decode
                 int                 max_dim,                // last dimension to decode
@@ -160,13 +169,14 @@ namespace mfa
         {
             VectorXi no_derivs;                             // size-0 means no derivatives
 
-            DecodeDomain(mfa_data, verbose, approx, min_dim, max_dim, saved_basis, no_derivs);
+            DecodeDomain(mfa_data, verbose, input, approx, min_dim, max_dim, saved_basis, no_derivs);
         }
 
         // decode derivatives at all input points
         void DecodeDomain(
                 const MFA_Data<T>&  mfa_data,               // mfa data model
                 int                 verbose,                // debug level
+                const InputInfo<T>& input,                  // domain info
                 MatrixX<T>&         approx,                 // decoded values
                 int                 min_dim,                // first dimension to decode
                 int                 max_dim,                // last dimension to decode
@@ -175,7 +185,7 @@ namespace mfa
                                                             // pass size-0 vector if unused
         {
             mfa::Decoder<T> decoder(*this, mfa_data, verbose);
-            decoder.DecodeDomain(approx, min_dim, max_dim, saved_basis, derivs);
+            decoder.DecodeDomain(input, approx, min_dim, max_dim, saved_basis, derivs);
         }
 
         // decode value of single point at the given parameter location
@@ -223,19 +233,22 @@ namespace mfa
         // error is not normalized by the data range (absolute, not relative error)
         void AbsCoordError(
                 const MFA_Data<T>&  mfa_data,               // mfa data model
-                const MatrixX<T>&   domain,                 // input points
+                // const MatrixX<T>&   domain,                 // input points
+                const InputInfo<T>&          input,
                 size_t              idx,                    // index of domain point
                 VectorX<T>&         error,                  // (output) absolute value of error at each coordinate
                 int                 verbose) const          // debug level
         {
-            // convert linear idx to multidim. i,j,k... indices in each domain dimension
-            VectorXi ijk(dom_dim);
-            mfa_data.idx2ijk(ds(), idx, ijk);
+            // // convert linear idx to multidim. i,j,k... indices in each domain dimension
+            // VectorXi ijk(dom_dim);
+            // mfa_data.idx2ijk(ds(), idx, ijk);
 
-            // compute parameters for the vertices of the cell
+            // // compute parameters for the vertices of the cell
+            // VectorX<T> param(dom_dim);
+            // for (int i = 0; i < dom_dim; i++)
+            //     param(i) = mfa_param->params[i][ijk(i)];
             VectorX<T> param(dom_dim);
-            for (int i = 0; i < dom_dim; i++)
-                param(i) = mfa_param->params[i][ijk(i)];
+            input.pt_params(idx, param);
 
             // NB, assumes at least one tensor product exists and that all have the same ctrl pt dimensionality
             int pt_dim = mfa_data.tmesh.tensor_prods[0].ctrl_pts.cols();
@@ -246,7 +259,7 @@ namespace mfa
             decoder.VolPt(param, cpt, mfa_data.tmesh.tensor_prods[0]);      // TODO: hard-coded for first tensor product
 
             for (auto i = 0; i < pt_dim; i++)
-                error(i) = fabs(cpt(i) - domain(idx, mfa_data.min_dim + i));
+                error(i) = fabs(cpt(i) - input.domain(idx, mfa_data.min_dim + i));
         }
     };
 }                                           // namespace
