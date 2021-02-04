@@ -1278,8 +1278,9 @@ cerr << "ncurves loop (tbb)" << endl;
             for (auto input_it = input.begin(); input_it != input.end(); ++input_it)
             {
                 // R.row(vol_iter.cur_iter()) = domain.block(vol_iter.cur_iter_full(), mfa_data.min_dim, 1, mfa_data.max_dim - mfa_data.min_dim + 1);
-                input_it.coords(pt_coords);
+                input_it.coords(pt_coords, mfa_data.min_dim, mfa_data.max_dim);
                 R.row(input_it.idx()) = pt_coords;
+
                 // vol_iter.incr_iter();
             }
 

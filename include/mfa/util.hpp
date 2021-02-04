@@ -151,6 +151,10 @@ namespace mfa
         // in case of a subvolume (slice), index is w.r.t. entire volume
         int idx_dim(int dim) const      { return idx_dim_[dim]; }
 
+        // return vector of indices in each dimension
+        // in case of a subvolume (slice), index is w.r.t entire volume
+        VectorXi idx_dim() const        { return idx_dim_; }
+
         // return previous index, what it was before incrementing, in a dimension
         // in case of a subvolume (slice), index is w.r.t. entire volume
         int prev_idx_dim(int dim) const   { return prev_idx_dim_[dim]; }

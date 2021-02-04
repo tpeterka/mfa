@@ -169,6 +169,11 @@ namespace mfa
                     coord_vec = info.domain.row(lin_idx);
             }
 
+            void coords(VectorX<T>& coord_vec, size_t min_dim, size_t max_dim)
+            {
+                coord_vec = info.domain.block(idx(), min_dim, 1, max_dim - min_dim + 1).transpose();
+            }
+
             void params(VectorX<T>& param_vec)
             {
                 if(structured)
@@ -185,7 +190,7 @@ namespace mfa
                     exit(1);
                 }
 
-                ijk_vec = vol_it.idx_dim_;
+                ijk_vec = vol_it.idx_dim();
             }
 
             int idx()
