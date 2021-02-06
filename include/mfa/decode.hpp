@@ -189,12 +189,10 @@ namespace mfa
             
             // parallel_for (size_t(0), (size_t)approx.rows(), [&] (size_t i)
             // {
-            parallel_for (blocked_range<size_t>(0, approx.rows(),300000), [&](blocked_range<size_t>& r)
+            parallel_for (blocked_range<size_t>(0, approx.rows()), [&](blocked_range<size_t>& r)
             {
-// cerr << "start loop " << r.begin() << " " << r.end() << endl;
                 auto pt_it  = input.iterator(r.begin());
                 auto pt_end = input.iterator(r.end());
-cerr << "constructed iterators" << endl;
                 for (; pt_it != pt_end; ++pt_it)
                 {
                     // // convert linear idx to multidim. i,j,k... indices in each domain dimension
