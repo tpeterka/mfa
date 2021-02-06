@@ -55,6 +55,7 @@ struct DomainArgs : public ModelInfo
         s.resize(pt_dim);
         f.resize(pt_dim);
     }
+    size_t              tot_ndom_pts;
     vector<int>         starts;                     // starting offsets of ndom_pts (optional, usually assumed 0)
     vector<int>         ndom_pts;                   // number of points in domain (possibly a subset of full domain)
     vector<int>         full_dom_pts;               // number of points in full domain in case a subset is taken
@@ -67,12 +68,22 @@ struct DomainArgs : public ModelInfo
     real_t              n;                          // noise factor [0.0 - 1.0]
     string              infile;                     // input filename
     bool                multiblock;                 // multiblock domain, get bounds from block
+    bool                structured;                 // input data lies on unstructured grid
 };
 
 // block
 template <typename T>
 struct Block : public BlockBase<T>
 {
+    using Base = BlockBase<T>;
+    using Base::dom_dim;
+    using Base::pt_dim;
+    using Base::core_mins;
+    using Base::core_maxs;
+    using Base::bounds_mins;
+    using Base::bounds_maxs;
+    using Base::overlaps;
+
     static
         void* create()              { return mfa::create<Block>(); }
 
@@ -235,8 +246,161 @@ struct Block : public BlockBase<T>
         return retval;
     }
 
-    // synthetic analytical data
     void generate_analytical_data(
+            const diy::Master::ProxyWithLink&   cp,
+            string&                             fun,
+            DomainArgs&                         args)
+    {
+        if (args.structured)
+        {
+            cout << "Generating data on structured grid for function: " << fun << endl;
+            generate_analytical_data_structured(cp, fun, args);
+        }
+        else
+        {
+            cout << "Generating data on random point cloud for function: " << fun << endl;
+            args.model_dims.resize(2);
+            args.model_dims[0] = dom_dim;
+            args.model_dims[1] = 1;
+
+            args.tot_ndom_pts = 1;
+            for (size_t k = 0; k < dom_dim; k++)
+            {
+                args.tot_ndom_pts *= args.ndom_pts[k];
+            }
+
+            if (!args.structured && args.separable)
+            {
+                cerr << "Warning: Cannot apply separable encoding scheme to unstructured input data." << endl;
+                cerr << "         Continuing with unified encoding." << endl;
+
+                args.separable = 0;
+            }
+
+            generate_analytical_data_unstructured(cp, fun, args);
+        }
+    }
+    
+
+    // synthetic analytic (scalar) data, sampled on unstructured point cloud
+    void generate_analytical_data_unstructured(
+            const diy::Master::ProxyWithLink&   cp,
+            string&                             fun,
+            DomainArgs&                         args)
+    {
+        DomainArgs* a = &args;
+
+        // Prepare containers
+        size_t nvars = a->model_dims.size()-1;
+        size_t geom_dim = a->model_dims[0];
+        this->vars.resize(nvars);
+        this->max_errs.resize(nvars);
+        this->sum_sq_errs.resize(nvars);
+
+        // Assign min/max dimensions for each model
+        this->geometry.min_dim = 0;
+        this->geometry.max_dim = geom_dim - 1;
+        this->vars[0].min_dim = a->model_dims[0];
+        this->vars[0].max_dim = this->vars[0].min_dim + a->model_dims[0];
+        for (size_t n = 1; n < nvars; n++)
+        {
+            this->vars[n].min_dim = this->vars[n-1].max_dim + 1;
+            this->vars[n].max_dim = this->vars[n].min_dim + a->model_dims[n];
+        }
+
+        // Set block bounds (if not already done by DIY)
+        if (!a->multiblock)
+        {
+            bounds_mins.resize(pt_dim);
+            bounds_maxs.resize(pt_dim);
+            core_mins.resize(geom_dim);
+            core_maxs.resize(geom_dim);
+            for (int i = 0; i < geom_dim; i++)
+            {
+                bounds_mins(i)  = a->min[i];
+                bounds_maxs(i)  = a->max[i];
+                core_mins(i)    = a->min[i];
+                core_maxs(i)    = a->max[i];
+            }
+        }
+
+        // decide overlap in each direction; they should be symmetric for neighbors
+        // so if block a overlaps block b, block b overlaps a the same area
+        for (size_t k = 0; k < geom_dim; k++)
+        {
+            overlaps(k) = fabs(core_mins(k) - bounds_mins(k));
+            T m2 = fabs(bounds_maxs(k) - core_maxs(k));
+            if (m2 > overlaps(k))
+                overlaps(k) = m2;
+        }
+
+
+        // Create input data set and add to block
+        VectorXi unused;
+        mfa::InputInfo<T>* input = new mfa::InputInfo<T>(dom_dim, pt_dim, core_mins, core_maxs, false, unused);
+        input->domain.resize(a->tot_ndom_pts, pt_dim);
+
+        unsigned seed = chrono::system_clock::now().time_since_epoch().count();
+        std::default_random_engine df_gen(seed);
+        std::uniform_real_distribution<double> u_dist(0.0, 1.0);
+
+        // Fill domain with randomly distributed points
+        for (size_t j = 0; j < input->domain.rows(); j++)
+        {
+            for (size_t k = 0; k < geom_dim; k++)
+            {
+                input->domain(j, k) = input->dom_mins(k) + u_dist(df_gen) * (input->dom_maxs(k) - input->dom_mins(k));
+            }
+
+            VectorX<T> dom_pt = input->domain.block(j, 0, 1, geom_dim).transpose();
+            T retval;
+            for (size_t n = 0; n < nvars; n++)        // for all science variables
+            {
+                if (fun == "sine")
+                    retval = sine(dom_pt, args, n);
+                if (fun == "sinc")
+                    retval = sinc(dom_pt, args, n);
+                if (fun == "psinc1")
+                    retval = polysinc1(dom_pt, args);
+                if (fun == "psinc2")
+                    retval = polysinc2(dom_pt, args);
+                if (fun == "ml")
+                {
+                    if (this->dom_dim != 3)
+                    {
+                        fprintf(stderr, "Error: Marschner-Lobb function is only defined for a 3d domain.\n");
+                        exit(0);
+                    }
+                    retval = ml(dom_pt, args);
+                }
+                if (fun == "f16")
+                    retval = f16(dom_pt);
+                if (fun == "f17")
+                    retval = f17(dom_pt);
+                if (fun == "f18")
+                    retval = f18(dom_pt);
+                input->domain(j, geom_dim + n) = retval;
+
+                if (j == 0 || input->domain(j, geom_dim + n) > bounds_maxs(geom_dim + n))
+                    bounds_maxs(geom_dim + n) = input->domain(j, geom_dim + n);
+                if (j == 0 || input->domain(j, geom_dim + n) < bounds_mins(geom_dim + n))
+                    bounds_mins(geom_dim + n) = input->domain(j, geom_dim + n);
+            }      
+        }
+
+        this->set_input_block(cp, input);
+        this->mfa = new mfa::MFA<T>(this->dom_dim);
+
+        // extents
+        fprintf(stderr, "gid = %d\n", cp.gid());
+        cerr << "core_mins:\n" << this->core_mins << endl;
+        cerr << "core_maxs:\n" << this->core_maxs << endl;
+        cerr << "bounds_mins:\n" << this->bounds_mins << endl;
+        cerr << "bounds_maxs:\n" << this->bounds_maxs << endl;
+    }
+
+    // synthetic analytical data
+    void generate_analytical_data_structured(
             const diy::Master::ProxyWithLink&   cp,
             string&                             fun,        // function to evaluate
             DomainArgs&                         args)
@@ -305,8 +469,9 @@ struct Block : public BlockBase<T>
                 this->overlaps(i) = m2;
         }
 
-        bool structured = true;
-        mfa::InputInfo<T>* input = new mfa::InputInfo<T>(this->dom_dim, this->pt_dim, structured, ndom_pts);
+        VectorX<T> unused;  // Let MFA determine domain mins/maxs automatically
+                            // NB Don't want to use bounds_min/max here because ghost points might not sit exactly at these values
+        mfa::InputInfo<T>* input = new mfa::InputInfo<T>(this->dom_dim, this->pt_dim, unused, unused, true, ndom_pts);
 
         input->domain.resize(ndom_pts.prod(), this->pt_dim);
 

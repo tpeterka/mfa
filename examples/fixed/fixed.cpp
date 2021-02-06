@@ -54,7 +54,8 @@ int main(int argc, char** argv)
     int    error        = 1;                    // decode all input points and check error (bool 1 or 0)
     string infile;                              // input file name
     bool   help;                                // show help
-    int    separable    = 1;                 // encode data in each dimension separately
+    int    separable    = 1;                    // encode data in each dimension separately
+    int    structured   = 1;                    // parse input data from a structured (possibly curvilinear) grid
 
     // get command line arguments
     opts::Options ops;
@@ -75,6 +76,7 @@ int main(int argc, char** argv)
     ops >> opts::Option('f', "infile",      infile,     " input file name");
     ops >> opts::Option('h', "help",        help,       " show help");
     ops >> opts::Option('r', "separable",   separable,  " encode data in each dimension separately");
+    ops >> opts::Option('x', "structured",  structured, " parse input data from a structured (possibly curvilinear) grid");
 
 
     if (!ops.parse(argc, argv) || help)
@@ -98,7 +100,7 @@ int main(int argc, char** argv)
         "\ninput pts = "    << ndomp        << " geom_ctrl pts = "  << geom_nctrl   <<
         "\nvars_ctrl_pts = "<< vars_nctrl   << " test_points = "    << ntest        <<
         "\ninput = "        << input        << " noise = "          << noise        << 
-        "\nseparable = "    << separable << endl;
+        "\nseparable = "    << separable    << " structured = "     << structured   << endl;
 
 #ifdef CURVE_PARAMS
     cerr << "parameterization method = curve" << endl;
@@ -159,6 +161,7 @@ int main(int argc, char** argv)
     d_args.multiblock   = false;
     d_args.verbose      = 1;
     d_args.separable    = separable;
+    d_args.structured   = structured;
     for (int i = 0; i < pt_dim - dom_dim; i++)
         d_args.f[i] = 1.0;
     for (int i = 0; i < dom_dim; i++)
