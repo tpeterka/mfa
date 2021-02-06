@@ -93,8 +93,7 @@ struct BlockBase
     VectorX<T>          core_maxs;              // local domain maximum corner w/o ghost
 
     // input data
-    mfa::InputInfo<T>*       input;        
-    // MatrixX<T>          domain;                 // input data (1st dim changes fastest)
+    mfa::InputInfo<T>   *input;                 // input data
 
     // MFA object
     mfa::MFA<T>         *mfa;
@@ -471,10 +470,8 @@ struct BlockBase
         errs.resize(input->domain.rows(), input->domain.cols());
         errs            = input->domain;
 
-cerr << "before decode_block" << endl;
         if (decode_block_)
             decode_block(cp, verbose, saved_basis);
-cerr << "after decode_block" << endl;
 #ifdef MFA_TBB      // TBB version
 
         // distance computation
@@ -1345,15 +1342,16 @@ namespace mfa
             diy::save(bb, b->pt_dim);
             // diy::save(bb, b->mfa->ndom_pts());
 
-            // TODO: don't save input in practice
-            diy::save(bb, b->input->structured);
-            diy::save(bb, b->input->ndom_pts);
-            diy::save(bb, b->input->domain);
-
+            // block bounds
             diy::save(bb, b->bounds_mins);
             diy::save(bb, b->bounds_maxs);
             diy::save(bb, b->core_mins);
             diy::save(bb, b->core_maxs);
+
+            // TODO: don't save input in practice
+            diy::save(bb, b->input->structured);
+            diy::save(bb, b->input->ndom_pts);
+            diy::save(bb, b->input->domain);
 
             // geometry
             diy::save(bb, b->geometry.mfa_data->p);
@@ -1418,19 +1416,30 @@ namespace mfa
             diy::load(bb, b->pt_dim);
             b->mfa = new mfa::MFA<T>(b->dom_dim);
 
+            // block bounds
+            diy::load(bb, b->bounds_mins);
+            diy::load(bb, b->bounds_maxs);
+            diy::load(bb, b->core_mins);
+            diy::load(bb, b->core_maxs);
+
             // InputInfo.  TODO: don't load in practice
             bool structured = false;
             VectorXi ndom_pts(b->dom_dim);
             diy::load(bb, structured);
             diy::load(bb, ndom_pts);
-            b->input = new InputInfo<T>(b->dom_dim, b->pt_dim, structured, ndom_pts);
+
+            // N.B. core_mins is currently defined to be of size geom_dim, which typically 
+            //      matches dom_dim. However, in future use cases we may have dom_dim < geom_dim,
+            //      e.g. when domain is a 2D surface in 3D space. To account for this, we slice
+            //      core_mins to the first dom_dim entries. But in most cases, this is entire vector.
+            b->input = new InputInfo<T>(b->dom_dim, 
+                                        b->pt_dim,
+                                        b->bounds_mins.head(b->dom_dim).eval(),  // Set params bounding box to match block bounds
+                                        b->bounds_maxs.head(b->dom_dim).eval(),
+                                        structured, 
+                                        ndom_pts);
             diy::load(bb, b->input->domain);
             b->input->init();
-
-            diy::load(bb, b->bounds_mins);
-            diy::load(bb, b->bounds_maxs);
-            diy::load(bb, b->core_mins);
-            diy::load(bb, b->core_maxs);
 
             VectorXi    p;                  // degree of the mfa
             size_t      ntensor_prods;      // number of tensor products in the tmesh

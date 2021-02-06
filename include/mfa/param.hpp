@@ -55,6 +55,8 @@ namespace mfa
 
         // Constructor for structured input
         Param(  int                 dom_dim_,           // domain dimensionality (excluding science variables)
+                const VectorX<T>&   dom_mins_,          // minimal extents of bounding box in each dimension (optional, important when data does not cover domain)
+                const VectorX<T>&   dom_maxs_,          // maximal extents of bounding box in each dimension (see above)
                 const VectorXi&     ndom_pts_,          // number of input data points in each dim
                 const MatrixX<T>&   domain_,
                 bool                structured_) :          // input data points (1st dim changes fastest)
@@ -83,9 +85,9 @@ namespace mfa
             }
 #else
             if (structured)
-                setDomainParamsStructured(domain_, param_grid);          // params spaced according to domain spacing
+                setDomainParamsStructured(domain_, dom_mins_, dom_maxs_, param_grid);          // params spaced according to domain spacing
             else
-                setDomainParamsUnstructured(domain_);
+                setDomainParamsUnstructured(domain_, dom_mins_, dom_maxs_);
 #endif
 
             // debug
@@ -262,38 +264,106 @@ namespace mfa
         // assumes params were allocated by caller
         void setDomainParamsStructured(
                 const MatrixX<T>&     domain,                   // input data points (1st dim changes fastest)
+                const VectorX<T>&     dom_mins,
+                const VectorX<T>&     dom_maxs,
                 vector<vector<T>>&    params)                   // (output) parameters for input points[dimension][index]
         {
+            VectorX<T> mins;
+            VectorX<T> maxs;
+
+            // dom mins/maxs should either be empty or of size dom_dim
+            if (dom_mins.size() > 0 && dom_mins.size() != dom_dim)
+                cerr << "Warning: Invalid size of dom_mins in Param construction" << endl;
+            if (dom_maxs.size() > 0 && dom_maxs.size() != dom_dim)
+                cerr << "Warning: Invalid size of dom_maxs in Param construction" << endl;
+
+            // Set min/max extents in each domain dimension
+            if (dom_mins.size() != dom_dim || dom_maxs.size() != dom_dim)
+            {
+                mins = domain.leftCols(dom_dim).colwise().minCoeff();
+                maxs = domain.leftCols(dom_dim).colwise().maxCoeff();
+            }
+            else
+            {
+                mins = dom_mins;
+                maxs = dom_maxs;
+            }
+
+            VectorX<T> diff = maxs - mins;
+
             size_t cs = 1;                                      // stride for domain points in current dim.
             for (size_t k = 0; k < dom_dim; k++)                // for all domain dimensions
             {
                 param_grid[k].resize(ndom_pts(k));
-                for (size_t i = 1; i < ndom_pts(k) - 1; i++)
-                    param_grid[k][i]= fabs( (domain(cs * i, k) - domain(0, k)) /
-                            (domain(cs * (ndom_pts(k) - 1), k) - domain(0, k)) );
+                for (size_t i = 0; i < ndom_pts(k); i++)
+                    param_grid[k][i]= (domain(cs * i, k) - mins(k)) / diff(k);
 
-                param_grid[k][ndom_pts(k) - 1] = 1.0;
                 cs *= ndom_pts(k);
             }                                                    // domain dimensions
 
+            // Check for parameter values outside of [0,1]
+            // This could happen if dom_mins, dom_maxs are set incorrectly, e.g.
+            // Also catches any unanticipated floating point arithmetic issues
+            for (size_t k = 0; k < dom_dim; k++)
+            {
+                for (size_t j = 0; j < ndom_pts(k); j++)
+                {
+                    if (param_grid[k][j] < 0.0 || param_grid[k][j] > 1.0)
+                    {
+                        cerr << "ERROR: Domain parametrization contains values outside of [0,1]. Exiting program." << endl;
+                        cerr << "         parameter for dim " << k << ", pt #" << j << " = " << param_grid[k][j] << endl;
+                        exit(1);
+                    }
+                }
+            }
             // debug
             //     cerr << "params:\n" << params << endl;
         }
 
         void setDomainParamsUnstructured(
-            const MatrixX<T>&   domain)
+            const MatrixX<T>&   domain,
+            const VectorX<T>&   dom_mins,
+            const VectorX<T>&   dom_maxs)
         {
+            VectorX<T> mins;
+            VectorX<T> maxs;
+
+            // dom mins/maxs should either be empty or of size dom_dim
+            if (dom_mins.size() > 0 && dom_mins.size() != dom_dim)
+                cerr << "Warning: Invalid size of dom_mins in Param construction" << endl;
+            if (dom_maxs.size() > 0 && dom_maxs.size() != dom_dim)
+                cerr << "Warning: Invalid size of dom_maxs in Param construction" << endl;
+
+            // Set min/max extents in each domain dimension
+            if (dom_mins.size() != dom_dim || dom_maxs.size() != dom_dim)
+            {
+                mins = domain.leftCols(dom_dim).colwise().minCoeff();
+                maxs = domain.leftCols(dom_dim).colwise().maxCoeff();
+            }
+            else    // Use domain bounds provided by block (input data need not extend to bounds)
+            {
+                mins = dom_mins;
+                maxs = dom_maxs;
+            }
+            
             int npts = domain.rows();
             param_list.resize(npts, dom_dim);
 
-            VectorX<T> maxs = domain.colwise().maxCoeff();
-            VectorX<T> mins = domain.rowwise().minCoeff();
             VectorX<T> diff = maxs - mins;
 
             // Rescale domain values to the interval [0,1], column-by-column
             for (size_t k = 0; k < dom_dim; k++)
             {
                 param_list.col(k) = (domain.col(k).array() - mins(k)) * (1/diff(k));
+            }
+        
+            // Check for parameter values outside of [0,1]
+            // This could happen if dom_mins, dom_maxs are set incorrectly, e.g.
+            // Also catches any unanticipated floating point arithmetic issues
+            if ((param_list.array() < 0.0).any() || (param_list.array() > 1.0).any())
+            {
+                cerr << "ERROR: Domain parametrization contains values outside of [0,1]. Exiting program." << endl;
+                exit(1);
             }
         }
     };

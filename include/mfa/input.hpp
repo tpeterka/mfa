@@ -17,26 +17,30 @@ namespace mfa
     template <typename T>
     struct InputInfo
     {
-        InputInfo(
-                int     dom_dim_,
-                int     pt_dim_,
-                bool    structured_) :
-            dom_dim(dom_dim_),
-            pt_dim(pt_dim_),
-            structured(structured_)
-        { 
-            // Assume unstructured data when ndom_pts_ is not passed to constructor
-            if (structured)
-                cerr << "ERROR: Conflicting constructor arguments for InputInfo" << endl;    
-        }
+        // InputInfo(
+        //         int     dom_dim_,
+        //         int     pt_dim_,
+        //         bool    structured_) :
+        //     dom_dim(dom_dim_),
+        //     pt_dim(pt_dim_),
+        //     structured(structured_)
+        // { 
+        //     // Assume unstructured data when ndom_pts_ is not passed to constructor
+        //     if (structured)
+        //         cerr << "ERROR: Conflicting constructor arguments for InputInfo" << endl;    
+        // }
 
         InputInfo(
-                size_t      dom_dim_,
-                size_t      pt_dim_,
-                bool        structured_,
-                VectorXi&   ndom_pts_) :
+                        size_t      dom_dim_,
+                        size_t      pt_dim_,
+                const   VectorX<T>& mins_,
+                const   VectorX<T>& maxs_,
+                        bool        structured_,
+                const   VectorXi&   ndom_pts_) :
             dom_dim(dom_dim_),
             pt_dim(pt_dim_),
+            dom_mins(mins_),
+            dom_maxs(maxs_),
             structured(structured_),
             ndom_pts(ndom_pts_)
         {
@@ -70,7 +74,7 @@ namespace mfa
                 tot_ndom_pts = domain.rows();
                 
                 // set parameters
-                Param<T> temp_param(dom_dim, ndom_pts, domain, structured);
+                Param<T> temp_param(dom_dim, dom_mins, dom_maxs, ndom_pts, domain, structured);
                 swap(params, temp_param);
                 
                 // set grid data structure if needed
@@ -100,6 +104,8 @@ namespace mfa
         //     swap(first.pt_dim, second.pt_dim);
         //     swap(first.structured, second.structured);
         //     first.ndom_pts.swap(second.ndom_pts);
+        //     first.dom_mins.swap(second.dom_mins);
+        //     first.dom_maxs.swap(second.dom_maxs);
         //     swap(first.g, second.g);
         //     first.domain.swap(second.domain);
         //     swap(first.params, second.params);
@@ -109,7 +115,9 @@ namespace mfa
         int         dom_dim;
         int         pt_dim;
         bool        structured;
-        VectorXi    ndom_pts;
+        VectorXi    ndom_pts;           
+        VectorX<T>  dom_mins;           // Minimal extents of bounding box (optional: for parametrization)
+        VectorX<T>  dom_maxs;           // Maximal extents of bounding box (optional: for parametrization)
         // VectorXi    model_dims;
 
         // Defined by user
@@ -241,6 +249,7 @@ namespace mfa
                             &&  (pt_dim == domain.cols())
                             &&  (structured ? ndom_pts.size() == dom_dim : true)
                             &&  (structured ? ndom_pts.prod() == domain.rows() : true)
+                            &&  (dom_mins.size() == dom_maxs.size())
                             ;
 
             if (is_valid) return is_valid;
@@ -254,6 +263,14 @@ namespace mfa
                     cerr << ndom_pts(k) << " ";
                 cerr << endl;
                 cerr << "  domain matrix dims: " << domain.rows() << " x " << domain.cols() << endl;
+                cerr << "  dom_mins: ";
+                for (size_t k=0; k < dom_mins.size(); k++)
+                    cerr << dom_mins(k) << " ";
+                cerr << endl;
+                cerr << "  dom_maxs: ";
+                for (size_t k=0; k < dom_maxs.size(); k++)
+                    cerr << dom_maxs(k) << " ";
+                cerr << endl;
 
                 return is_valid;
             }
