@@ -669,7 +669,7 @@ namespace mfa
                 dom_iter.incr_iter();
             }
 
-            // resize control poiunts and weights in case number of control points changed
+            // resize control points and weights in case number of control points changed
             t.ctrl_pts.resize(t.nctrl_pts.prod(), pt_dim);
             t.weights.resize(t.ctrl_pts.rows());
             t.weights = VectorX<T>::Ones(t.weights.size());                                     // linear solve does not solve for weights; set to 1
@@ -792,7 +792,7 @@ namespace mfa
             }
 
             // R is the right hand side needed for solving N * P = R
-            MatrixX<T>  R = Q - Ncons* Pcons;
+            MatrixX<T>  R = Q - Ncons * Pcons;
 
             // debug
 //             cerr << "input:\n"  << domain   << endl;
