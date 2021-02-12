@@ -193,7 +193,12 @@ namespace mfa
             }                                                    // domain dimensions
 
             // debug
-            //     cerr << "params:\n" << params << endl;
+//             for (auto k = 0; k < dom_dim; k++)
+//             {
+//                 cerr << "params[" << k << "]:\n" << endl;
+//                 for (auto i = 0; i < params[k].size(); i++)
+//                     cerr << params[k][i] << endl;
+//             }
         }
     };
 

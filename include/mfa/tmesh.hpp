@@ -424,6 +424,21 @@ namespace mfa
             return retval;
         }
 
+        // checks if two tensors intersect to within a padding distance
+        // adjacency (to within pad distance) counts as an intersection, as does subset
+        bool intersect(TensorProduct<T>&    t1,
+                       TensorProduct<T>&    t2,
+                       KnotIdx              pad = 0)
+        {
+            for (auto k = 0; k < dom_dim_; k++)
+            {
+                if (t1.knot_maxs[k] < t2.knot_mins[k] - pad ||
+                    t1.knot_mins[k] > t2.knot_maxs[k] + pad)
+                    return false;
+            }
+            return true;
+        }
+
         // intersect a new tensor product with an existing tensor product, if the intersection exists
         // returns true if intersection found (and the vector of tensor products grew as a result of the intersection, ie, an existing tensor was split into two)
         // sets knots_match to true if during the course of intersecting, one of the tensors in tensor_prods was added or modified to match the new tensor
@@ -1837,14 +1852,35 @@ namespace mfa
         {
             ofst_idx    = orig_idx;
             int sgn     = (0 < ofst) - (ofst < 0);                  // sgn = 1 for positive ofst, -1 for negative, 0 for zero
+            int p       = p_(cur_dim);                              // degree in current dimension
             for (auto i = 0; i < abs(ofst); i++)
             {
                 while (ofst_idx + sgn >= t.knot_mins[cur_dim]   &&
                         ofst_idx + sgn <= t.knot_maxs[cur_dim]  &&
                         all_knot_levels[cur_dim][ofst_idx + sgn] > t.level)
                     ofst_idx += sgn;
-                if (ofst_idx + sgn < t.knot_mins[cur_dim] || ofst_idx + sgn > t.knot_maxs[cur_dim])
+                if (t.knot_mins[cur_dim] == 0 &&
+                        ofst_idx + sgn < p - 1)                             // missing control points at global min edge
+                {
+                    ofst_idx = p - 1;
                     return false;
+                }
+                if (t.knot_maxs[cur_dim] == all_knots[cur_dim].size() - 1 &&
+                        ofst_idx + sgn > all_knots[cur_dim].size() - p)     // missing control points at global max edge
+                {
+                    ofst_idx  = all_knots[cur_dim].size() - p;
+                    return false;
+                }
+                if (ofst_idx + sgn < t.knot_mins[cur_dim])
+                {
+                    ofst_idx = t.knot_mins[cur_dim];
+                    return false;
+                }
+                if (ofst_idx + sgn > t.knot_maxs[cur_dim])
+                {
+                    ofst_idx = t.knot_maxs[cur_dim];
+                    return false;
+                }
                 ofst_idx += sgn;
             }
             return true;

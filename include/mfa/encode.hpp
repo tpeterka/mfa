@@ -741,26 +741,17 @@ namespace mfa
             }
 
             // find constraint control points and their anchors
-            MatrixX<T>              Pcons;                                                      // constraint control points
-            vector<vector<KnotIdx>> anchors;                                                    // corresponding anchors
-            LocalSolveConstraints(t, Pcons, anchors);
+            MatrixX<T>                  Pcons;                                                      // constraint control points
+            vector<vector<KnotIdx>>     anchors;                                                    // corresponding anchors
+            vector<TensorIdx>           t_idx_anchors;                                              // tensors containing corresponding anchors
+            LocalSolveAllConstraints(t, Pcons, anchors, t_idx_anchors);
 
             // iterator over constraint control points
             MatrixX<T> Ncons = MatrixX<T>::Constant(ndom_pts.prod(), Pcons.rows(), -1);         // basis functions, -1 means unassigned so far
             for (auto i = 0; i < Pcons.rows(); i++)                                             // for all constraint control points
             {
-                // tensor containing anchor
-                TensorIdx t_idx_anchor;
-                for (auto k = 0; k < mfa_data.dom_dim; k++)
-                {
-                    t_idx_anchor = mfa_data.tmesh.in_prev_next(anchors[i], t_idx, k, true);
-                    if (t_idx_anchor < mfa_data.tmesh.tensor_prods.size())
-                        break;
-                }
-                assert(t_idx_anchor < mfa_data.tmesh.tensor_prods.size());
-
                 // local knot vector
-                mfa_data.tmesh.knot_intersections(anchors[i], t_idx_anchor, true, local_knot_idxs);
+                mfa_data.tmesh.knot_intersections(anchors[i], t_idx_anchors[i], true, local_knot_idxs);
                 for (auto k = 0; k < mfa_data.dom_dim; k++)
                     for (auto n = 0; n < local_knot_idxs[k].size(); n++)
                         local_knots[k][n] = mfa_data.tmesh.all_knots[k][local_knot_idxs[k][n]];
@@ -1891,10 +1882,13 @@ namespace mfa
         }
 
         // constraint control points and corresponding anchors for local solve
-        void LocalSolveConstraints(
+        // this version looks at prev and next tensors, but currently misses diagonal neighbors
+        // TODO: either fix to find all constraints or deprecate in favor LocalSolveAllConstraints
+        void LocalSolvePrevNextConstraints(
                 const TensorProduct<T>&     tc,                 // current tensor product being solved
                 MatrixX<T>&                 ctrl_pts,           // (output) constraing control points
-                vector<vector<KnotIdx>>&    anchors)            // (output) corresponding anchors
+                vector<vector<KnotIdx>>&    anchors,            // (output) corresponding anchors
+                vector<TensorIdx>&          t_idx_anchors)      // (output) tensors containing corresponding anchors
         {
             const Tmesh<T>&         tmesh   = mfa_data.tmesh;
             int                     cols    = tc.ctrl_pts.cols();
@@ -1949,6 +1943,7 @@ namespace mfa
             }   // next tensors
             ctrl_pts.resize(rows, cols);
             anchors.resize(rows);
+            t_idx_anchors.resize(rows);
 
             // get control points and anchors
 
@@ -2006,6 +2001,7 @@ namespace mfa
                         mfa_data.tmesh.ctrl_pt_anchor(tp, ijk, anchor);
                         for (auto i = 0; i < mfa_data.dom_dim; i++)
                             anchors[cur_row][i] = anchor[i];
+                        t_idx_anchors[cur_row] = tc.prev[k][j];
                         cur_row++;
                         voliter_prev.incr_iter();
                     }
@@ -2059,11 +2055,115 @@ namespace mfa
                         mfa_data.tmesh.ctrl_pt_anchor(tn, ijk, anchor);
                         for (auto i = 0; i < mfa_data.dom_dim; i++)
                             anchors[cur_row][i] = anchor[i];
+                        t_idx_anchors[cur_row] = tc.next[k][j];
                         cur_row++;
                         voliter_next.incr_iter();
                     }
                 }   // next tensors
             }   // for all dimensions
+        }
+
+        // constraint control points and corresponding anchors for local solve
+        // this version checks all tensors, slower than looking at prev/next, but reliably finds all constraints
+        void LocalSolveAllConstraints(
+                const TensorProduct<T>&     tc,                 // current tensor product being solved
+                MatrixX<T>&                 ctrl_pts,           // (output) constraing control points
+                vector<vector<KnotIdx>>&    anchors,            // (output) corresponding anchors
+                vector<TensorIdx>&          t_idx_anchors)      // (output) tensors containing corresponding anchors
+        {
+            const Tmesh<T>&         tmesh   = mfa_data.tmesh;
+            int                     cols    = tc.ctrl_pts.cols();
+            KnotIdx                 min, max;                   // temporaries
+
+            // get required sizes
+
+            int rows = 0;                                       // number of rows required in ctrl_pts
+            VectorXi npts(mfa_data.dom_dim);
+
+            // debug
+            for (auto k = 0; k < tmesh.tensor_prods.size(); k++)
+            {
+                const TensorProduct<T>& t = tmesh.tensor_prods[k];
+                if (&t == &tc)
+                    continue;
+                for (auto i = 0; i < mfa_data.dom_dim; i++)
+                {
+                    int p = mfa_data.p(i);
+                    mfa_data.tmesh.knot_idx_ofst(t, tc.knot_mins[i], -p, i, min);
+                    mfa_data.tmesh.knot_idx_ofst(t, tc.knot_maxs[i], p, i, max);
+                    if (p % 2)                          // odd degree
+                        npts(i) = mfa_data.tmesh.knot_idx_dist(t, min, max, i, true);
+                    else                                // even degree
+                        npts(i) = mfa_data.tmesh.knot_idx_dist(t, min, max, i, false);
+                    // debug
+                    fprintf(stderr, "tensor %d dim %d t.min %lu t.max %lu min %lu max %lu\n",
+                            k, i, t.knot_mins[i], t.knot_maxs[i], min, max);
+                }
+                rows += npts.prod();
+            }       // for all tensor products
+            ctrl_pts.resize(rows, cols);
+            anchors.resize(rows);
+            t_idx_anchors.resize(rows);
+
+            // get control points and anchors
+
+            int cur_row = 0;
+            VectorXi sub_starts(mfa_data.dom_dim);
+            VectorXi sub_npts(mfa_data.dom_dim);
+            VectorXi all_npts(mfa_data.dom_dim);
+            vector<KnotIdx> anchor(mfa_data.dom_dim);           // one anchor
+            for (auto k = 0; k < tmesh.tensor_prods.size(); k++)
+            {
+                const TensorProduct<T>& t = tmesh.tensor_prods[k];
+                if (&t == &tc)
+                    continue;
+                for (auto i = 0; i < mfa_data.dom_dim; i++)
+                {
+                    int p = mfa_data.p(i);
+                    mfa_data.tmesh.knot_idx_ofst(t, tc.knot_mins[i], -p, i, min);
+                    mfa_data.tmesh.knot_idx_ofst(t, tc.knot_maxs[i], p, i, max);
+
+                    sub_starts(i) = mfa_data.tmesh.knot_idx_dist(t, t.knot_mins[i], min, i, false);
+                    if (t.knot_mins[i] == 0)
+                        sub_starts(i) -= (p + 1) / 2;
+                    if (p % 2)                          // odd degree
+                        sub_npts(i) = mfa_data.tmesh.knot_idx_dist(t, min, max, i, true);
+                    else                                // even degree
+                        sub_npts(i) = mfa_data.tmesh.knot_idx_dist(t, min, max, i, false);
+                    all_npts(i)         = t.nctrl_pts(i);
+
+                    // debug
+                    //                         fprintf(stderr, "tensor: dim = %d sub_npts = %d sub_starts = %d all_npts = %d\n",
+                    //                                 i, sub_npts(i), sub_starts(i), all_npts(i));
+                }
+                VolIterator voliter(sub_npts, sub_starts, all_npts);
+                VectorXi ijk(mfa_data.dom_dim);
+                while (!voliter.done())
+                {
+                    // skip MFA_NAW control points (used in odd degree cases)
+                    if (t.weights(voliter.sub_full_idx(voliter.cur_iter())) != MFA_NAW)
+                    {
+                        // control point
+                        ctrl_pts.row(cur_row) = t.ctrl_pts.row(voliter.sub_full_idx(voliter.cur_iter()));
+
+                        // anchor
+                        anchors[cur_row].resize(mfa_data.dom_dim);
+                        voliter.idx_ijk(voliter.cur_iter(), ijk);
+                        mfa_data.tmesh.ctrl_pt_anchor(t, ijk, anchor);
+                        for (auto i = 0; i < mfa_data.dom_dim; i++)
+                            anchors[cur_row][i] = anchor[i];
+                        t_idx_anchors[cur_row] = k;
+                        cur_row++;
+                    }
+                    voliter.incr_iter();
+                }
+            }       // for all tensor products
+            if (cur_row < ctrl_pts.rows())          // not all control points were used because of skipping MFA_NAW
+            {
+                ctrl_pts.conservativeResize(cur_row, cols);
+                anchors.resize(cur_row);
+                t_idx_anchors.resize(cur_row);
+            }
         }
 
 #endif      // MFA_TMESH
