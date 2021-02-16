@@ -1012,6 +1012,33 @@ namespace mfa
             return true;
         }
 
+        // forms union of mins and maxs of a and b and stores result in res
+        void merge(const vector<KnotIdx>& a_mins,
+                   const vector<KnotIdx>& a_maxs,
+                   const vector<KnotIdx>& b_mins,
+                   const vector<KnotIdx>& b_maxs,
+                   vector<KnotIdx>&       res_mins,
+                   vector<KnotIdx>&       res_maxs)
+        {
+            // check that sizes are identical
+            size_t a_size = a_mins.size();
+            if (a_size != a_maxs.size() || a_size != b_mins.size() || a_size != b_maxs.size())
+            {
+                fprintf(stderr, "Error, size mismatch in subset()\n");
+                abort();
+            }
+
+            res_mins.resize(a_size);
+            res_maxs.resize(a_size);
+
+            // form union
+            for (auto i = 0; i < a_size; i++)
+            {
+                res_mins[i] = a_mins[i] < b_mins[i] ? a_mins[i] : b_mins[i];
+                res_maxs[i] = a_maxs[i] > b_mins[i] ? a_maxs[i] : b_maxs[i];
+            }
+        }
+
         // checks if a point in index space is in a tensor product
         // in all dimensions except skip_dim (-1 = default, don't skip any dimensions)
         // if ctrl_pt_anchor == true, for dimension i, if degree[i] is even, pt[i] + 0.5 is checked because pt coords are truncated to integers
