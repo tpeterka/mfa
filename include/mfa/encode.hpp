@@ -466,7 +466,7 @@ namespace mfa
                     // Empirical testing indicates that insertBackUncompressed is faster than insert, which
                     // is faster than setFromTriplets(); however, space must be reserved/allocated properly ahead of time.
                     // setFromTriplets also requires a bit more memory, but is the most robust/user-friendly.
-                
+
                     ctrl_vol_iter.incr_iter();
                 }
                 dom_vol_iter.incr_iter();
@@ -474,7 +474,7 @@ namespace mfa
 
             Nt.makeCompressed();  // not necessary if using prune(), as prune always returns compressed form
             // Nt.prune(1,1e-5);  // remove entries less than a given value (and compress matrix)
-            
+
             fill_time = clock() - fill_time;
             cerr << "Matrix Construction Time: " << setprecision(3) << ((double)fill_time)/CLOCKS_PER_SEC << "s." << endl;
         }
@@ -507,7 +507,7 @@ namespace mfa
 
                 std::vector<char> mask(rows, 0);
                 std::vector<T> values(rows, 0);
-            
+
                 // we compute each column of the result, one after the other
                 for (int j=j_begin; j<j_end; ++j)
                 {
@@ -544,7 +544,7 @@ namespace mfa
                                 extra_size[j] = std::max<int>(2, inner_nnz[j]);
                                 res.reserve(extra_size);  // NB: reserve() always adds to existing buffer
                             }
-                            
+
                             // Insert entry 
                             int p = outer_index[j] + inner_nnz[j];
                             res_data.index(p) = i;
@@ -585,7 +585,7 @@ namespace mfa
             // Assemble collocation matrix
             SparseMatrixX<T> Nt(t.nctrl_pts.prod() , tot_dom_pts);
             CollMatrixUnified(t_idx, start_idxs, end_idxs, Nt);
-            
+
 
             // Set up linear system
             SparseMatrixX<T> Mat(Nt.rows(), Nt.rows()); // Mat will be the matrix on the LHS
@@ -597,9 +597,9 @@ namespace mfa
 
                 int ntn_sparsity = (2*mfa_data.p + VectorXi::Ones(mfa_data.dom_dim)).prod();       // nonzero basis functions per input point
                 MatProdThreaded(Nt, NCol, Mat, ntn_sparsity);
-#else 
+#else
                 Mat = Nt * Nt.transpose();
-#endif           
+#endif
 
             MatrixX<T>  R(Nt.cols(), pt_dim);           // R is the right hand side 
             RHSUnified(start_idxs, end_idxs, Nt, R);
@@ -608,12 +608,12 @@ namespace mfa
             // Solve Linear System
             // Eigen::ConjugateGradient<SparseMatrixX<T>, Eigen::Lower|Eigen::Upper, Eigen::IncompleteLUT<T>>  solver;
             Eigen::ConjugateGradient<SparseMatrixX<T>, Eigen::Lower|Eigen::Upper>  solver;  // Default preconditioner is Jacobi
-                
+
             // // Optional parameters for solver    
             // solver.setTolerance(1e-5);
             // solver.preconditioner().setDroptol(0.001);
             // solver.preconditioner().setFillfactor(1);
-            
+
             solver.compute(Mat);
             if (solver.info() != Eigen::Success) 
                 cerr << "Matrix decomposition failed in EncodeTensor" << endl;
