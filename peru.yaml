@@ -1,6 +1,11 @@
 imports:
     pybind11: ./include/pybind11
+    cppoptlib: ./include/cppoptlib
 
 git module pybind11:
     url: https://github.com/pybind/pybind11
     rev: 417067eeb8d93e8ed49f3ff580712ae2b9a85259
+
+git module cppoptlib:
+    url: https://github.com/PatWie/CppNumericalSolvers
+    rev: 7d862a2afa99d4ea19a0831074e616564da2b511

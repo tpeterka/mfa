@@ -101,6 +101,7 @@ endif                       ()
 # Include dirs
 set                         (CMAKE_INCLUDE_SYSTEM_FLAG_CXX "-isystem")
 include_directories         (${CMAKE_CURRENT_SOURCE_DIR}/include
+                            ${CMAKE_CURRENT_SOURCE_DIR}/include/cppoptlib/include
                             ${DIY_INCLUDE_DIRS}
                             ${EIGEN_INCLUDE_DIRS}
                             SYSTEM
@@ -136,7 +137,6 @@ if                          (python)
     add_subdirectory        (include/pybind11)
     add_subdirectory        (python)
 endif                       ()
-
 
 # Install the headers
 file                        (GLOB DEPLOY_FILES_AND_DIRS "${PROJECT_SOURCE_DIR}/include/*")
