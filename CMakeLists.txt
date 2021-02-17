@@ -15,31 +15,6 @@ if                          (NOT CMAKE_BUILD_TYPE)
     set_property            (CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS "Debug" "Release" "MinSizeRel" "RelWithDebInfo")
 endif                       (NOT CMAKE_BUILD_TYPE)
 
-# OSX flags
-if                          (${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
-  add_definitions           (-DMAC_OSX)
-  set                       (CMAKE_MACOSX_RPATH on)
-
-    # --- following RPATH settings are for Sierra w/ Clang, hopefully they don't hurt other versions
-    # ref: https://cmake.org/Wiki/CMake_RPATH_handling
-    # use, i.e. don't skip, the full RPATH for the build tree
-    set                     (CMAKE_SKIP_BUILD_RPATH            false)
-    # when building, don't use the install RPATH already (but later on when installing)
-    set                     (CMAKE_BUILD_WITH_INSTALL_RPATH    false)
-    # set RPATH to install path
-    set                     (CMAKE_INSTALL_RPATH               "${CMAKE_INSTALL_PREFIX}/lib")
-    # add the automatically determined parts of the RPATH
-    # which point to directories outside the build tree to the install RPATH
-    set                     (CMAKE_INSTALL_RPATH_USE_LINK_PATH true)
-    # the RPATH to be used when installing, but only if it's not a system directory
-    list                    (FIND CMAKE_PLATFORM_IMPLICIT_LINK_DIRECTORIES
-                                                               "${CMAKE_INSTALL_PREFIX}/lib"
-                                                               isSystemDir)
-    if                      ("${isSystemDir}" STREQUAL         "-1")
-      set                   (CMAKE_INSTALL_RPATH               "${CMAKE_INSTALL_PREFIX}/lib")
-    endif                   ()
-endif                       (${CMAKE_SYSTEM_NAME} MATCHES      "Darwin")
-
 # MPI
  if                         (NOT wrapped_mpi)
      find_package           (MPI REQUIRED)
@@ -82,9 +57,6 @@ endif                       ()
 # Threads
 find_package                (Threads)
 
-# DIY
-find_path                   (DIY_INCLUDE_DIRS diy/types.h)
-
 # Coin-OR CLP
 find_path                   (CLP_INCLUDE_DIRS   ClpSimplex.hpp)
 find_library                (CLP_LIB NAMES      Clp)
@@ -102,8 +74,8 @@ endif                       ()
 set                         (CMAKE_INCLUDE_SYSTEM_FLAG_CXX "-isystem")
 include_directories         (${CMAKE_CURRENT_SOURCE_DIR}/include
                             ${CMAKE_CURRENT_SOURCE_DIR}/include/cppoptlib/include
-                            ${DIY_INCLUDE_DIRS}
-                            ${EIGEN_INCLUDE_DIRS}
+                            ${CMAKE_CURRENT_SOURCE_DIR}/include/diy/include
+                            ${CMAKE_CURRENT_SOURCE_DIR}/include/eigen3
                             SYSTEM
                             ${MPI_INCLUDE_PATH}
                             )
@@ -125,14 +97,8 @@ set                         (libraries
 # NB testing must be enabled before adding tests subdirectory, otherwise no tests will be found
 enable_testing              ()
 include                     (CTest)
-
-# Subdirectories
-if                          (DIY_INCLUDE_DIRS AND EIGEN_INCLUDE_DIRS)
-    add_subdirectory        (examples)
-    add_subdirectory        (tests)
-else                        ()
-    message                 (ERROR "Need diy2 and eigen in order to build mfa")
-endif                       ()
+add_subdirectory            (examples)
+add_subdirectory            (tests)
 if                          (python)
     add_subdirectory        (include/pybind11)
     add_subdirectory        (python)

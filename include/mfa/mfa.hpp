@@ -27,10 +27,10 @@
 // #define WEIGH_ALL_DIMS
 
 // comment out the following line for original single tensor product version
-#define MFA_TMESH
+// #define MFA_TMESH
 
 // linear least squares local solve
-#define MFA_LINEAR_LOCAL
+// #define MFA_LINEAR_LOCAL
 
 #include    <Eigen/Dense>
 #include    <Eigen/Sparse>
