@@ -189,7 +189,6 @@ namespace mfa
                     VectorX<T>&     weights,                // (output) weights
                     bool            weighted = true)        // solve for and use weights
         {
-cerr << "Separable encode" << endl;
             // check quantities
             if (mfa_data.p.size() != input.ndom_pts.size())
             {
@@ -214,14 +213,12 @@ cerr << "Separable encode" << endl;
             int      ndims  = input.ndom_pts.size();          // number of domain dimensions
             size_t   cs     = 1;                            // stride for input points in curve in cur. dim
             int      pt_dim = mfa_data.max_dim - mfa_data.min_dim + 1;// control point dimensonality
-cerr << "pt_dim=" << pt_dim << endl;
             // resize matrices in case number of control points changed
             ctrl_pts.resize(nctrl_pts.prod(), pt_dim);
             weights.resize(ctrl_pts.rows());
             for (auto k = 0; k < ndims; k++)
                 mfa_data.N[k] = MatrixX<T>::Zero(input.ndom_pts(k), nctrl_pts(k));  // basis functions need to be resized and initialized to 0
 
-cerr << "N matrices zeroed out" << endl;
             // 2 buffers of temporary control points
             // double buffer needed to write output curves of current dim without changing its input pts
             // temporary control points need to begin with size as many as the input domain points
@@ -236,7 +233,6 @@ cerr << "N matrices zeroed out" << endl;
 
             VectorXi ntemp_ctrl = input.ndom_pts;     // current num of temp control pts in each dim
 
-cerr << "begin main loop" << endl;
             for (size_t k = 0; k < ndims; k++)      // for all domain dimensions
             {
                 // number of curves in this dimension
@@ -294,7 +290,6 @@ cerr << "begin main loop" << endl;
                 // TODO: N is going to be very sparse when it is large: switch to sparse representation
                 // N has semibandwidth < p  nonzero entries across diagonal
 
-cerr << "begin constructing basis functions" << endl;
                 for (int i = 0; i < mfa_data.N[k].rows(); i++)
                 {
                     int span = mfa_data.FindSpan(k, input.params.param_grid[k][i], nctrl_pts(k));
@@ -319,7 +314,6 @@ cerr << "begin constructing basis functions" << endl;
 //                 cerr << "NtN:\n" << NtN << endl;
 
 #ifdef MFA_TBB  // TBB version
-cerr << "ncurves loop (tbb)" << endl;
                 parallel_for (size_t(0), ncurves, [&] (size_t j)      // for all the curves in this dimension
                         {
                         // debug

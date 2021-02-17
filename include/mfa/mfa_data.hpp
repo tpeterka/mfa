@@ -1570,7 +1570,6 @@ namespace mfa
 
                 int nknots = nctrl_pts + p(k) + 1;              // number of knots in current dim
 
-cerr << "A" << endl;
                 // set p + 1 external knots at each end
                 for (int i = 0; i < p(k) + 1; i++)
                 {
@@ -1579,7 +1578,6 @@ cerr << "A" << endl;
                     tmesh.all_knot_param_idxs[k][nknots - 1 - i] = params[k].size() - 1;
                 }
 
-cerr << "B" << endl;
                 // compute remaining n - p internal knots
                 T step = 1.0 / (nctrl_pts - p(k));              // size of internal knot span
                 size_t param_idx = 0;                           // index into params
@@ -1592,7 +1590,6 @@ cerr << "B" << endl;
                         param_idx++;
                     tmesh.all_knot_param_idxs[k][p(k) + j] = param_idx;
                 }
-cerr << "C" << endl;
             }
         }
 

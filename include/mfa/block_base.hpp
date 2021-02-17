@@ -773,7 +773,7 @@ struct BlockBase
     void DecodeRequestGrid(int verbose,
                            MatrixX<T> &localBlock) // local block is in a grid, in lexicographic order
     {
-        VectorXi &ndpts = input->ndom_pts();
+        VectorXi &ndpts = input->ndom_pts;
 
         VectorX<T> min_bd(this->dom_dim);
         VectorX<T> max_bd(this->dom_dim);

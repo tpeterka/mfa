@@ -117,7 +117,6 @@ namespace mfa
                 bool                weighted,               // solve for and use weights (default = true)
                 bool                separable=true) const     // encode each dimension separately
         {
-cerr << "Begining fixed encode" << endl;
             // fixed encode assumes the tmesh has only one tensor product
             TensorProduct<T>&t = mfa_data.tmesh.tensor_prods[0];
 
