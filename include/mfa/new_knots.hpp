@@ -496,7 +496,7 @@ namespace mfa
         // TODO: lots of optimizations possible; this is completely naive so far
         // optimizations:
         // each time called, resume search at next domain point
-        // step through domain points fineer each time the end is reached
+        // step through domain points finer each time the end is reached
         // increment ijk in the loop over domain points instead of calling idx2ijk
         // TBB? (currently serial)
         bool MaxErrorSpan(
@@ -756,6 +756,48 @@ namespace mfa
                 return false;
             }   // Max_err >= 0.0
             return true;
+        }
+
+        // computes error in knot spans and finds all new knots (in all dimensions at once) that should be inserted in a given level
+        // returns true if all done, ie, no new knots inserted
+        //
+        // This version is for tmesh with local solve
+        //
+        // TODO: lots of optimizations possible; this is completely naive so far
+        // optimizations:
+        // each time called, resume search at next domain point
+        // step through domain points finer each time the end is reached
+        // increment ijk in the loop over domain points instead of calling idx2ijk
+        // TBB? (currently serial)
+        bool AllErrorSpansLevel(
+                const MatrixX<T>&           domain,                 // input points
+                VectorX<T>                  extents,                // extents in each dimension, for normalizing error (size 0 means do not normalize)
+                T                           err_limit,              // max. allowed error
+                int                         level,                  // current level of tensor products to search
+                vector<TensorIdx>&          parent_tensor_idxs,     // (output) idx of parent tensor of each error span
+                vector<vector<KnotIdx>>&    inserted_knot_idxs)     // (output) indices in each dim. of inserted knots in full knot vector after insertion
+        {
+            // debug
+            fprintf(stderr, "*** Using local solve in AllErrorSpansLevel ***\n");
+
+            Decoder<T>          decoder(mfa, mfa_data, 1);
+            VectorXi            ijk(mfa.dom_dim);                   // i,j,k of domain point
+            VectorX<T>          param(mfa.dom_dim);                 // parameters of domain point
+            VectorXi            derivs;                             // size 0 means unused
+            DecodeInfo<T>       decode_info(mfa_data, derivs);      // reusable decode point info for calling VolPt repeatedly
+            vector<vector<T>>   new_knots(mfa.dom_dim);             // new knots
+            vector<vector<int>> new_levels(mfa.dom_dim);            // new knot levels
+
+            if (!extents.size())
+                extents = VectorX<T>::Ones(domain.cols());
+
+            for (auto i = 0; i < mfa_data.tmesh.TensorProducts.size(); i++)
+            {
+                TensorProduct<T>& t = mfa_data.tmesh.TensorProducts[i];
+                if (t.level != level)
+                    continue;
+
+            }
         }
 
 #endif      // MFA_TMESH
