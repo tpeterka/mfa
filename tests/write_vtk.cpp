@@ -44,26 +44,26 @@ void PrepRenderingData(
     // number of geometry dimensions and science variables
     int ndom_dims   = block->geometry.mfa_data->tmesh.tensor_prods[0].ctrl_pts.cols();          // number of geometry dims
     nvars           = block->vars.size();                       // number of science variables
-    pt_dim          = block->domain.cols();                     // dimensionality of point
+    pt_dim          = block->input->domain.cols();                     // dimensionality of point
 
     // number of raw points
-    for (size_t j = 0; j < (size_t)(block->mfa->ndom_pts().size()); j++)
-        nraw_pts.push_back(block->mfa->ndom_pts()(j));
+    for (size_t j = 0; j < (size_t)(block->input->ndom_pts.size()); j++)
+        nraw_pts.push_back(block->input->ndom_pts(j));
 
     // raw geometry and science variables
     raw_data = new float*[nvars];
     for (size_t j = 0; j < nvars; j++)
-        raw_data[j] = new float[block->domain.rows()];
+        raw_data[j] = new float[block->input->domain.rows()];
 
-    for (size_t j = 0; j < (size_t)(block->domain.rows()); j++)
+    for (size_t j = 0; j < (size_t)(block->input->domain.rows()); j++)
     {
-        p.x = block->domain(j, 0);                      // first 3 dims stored as mesh geometry
-        p.y = block->domain(j, 1);
-        p.z = block->domain.cols() > 2 ? block->domain(j, 2) : 0.0;
+        p.x = block->input->domain(j, 0);                      // first 3 dims stored as mesh geometry
+        p.y = block->input->domain(j, 1);
+        p.z = block->input->domain.cols() > 2 ? block->input->domain(j, 2) : 0.0;
         raw_pts.push_back(p);
 
         for (int k = 0; k < nvars; k++)                         // science variables
-            raw_data[k][j] = block->domain(j, ndom_dims + k);
+            raw_data[k][j] = block->input->domain(j, ndom_dims + k);
     }
 
     // number of geometry control points
@@ -192,7 +192,7 @@ void PrepRenderingData(
     // approximated points
     approx_data = new float*[nvars];
     for (size_t j = 0; j < nvars; j++)
-        approx_data[j] = new float[block->domain.rows()];
+        approx_data[j] = new float[block->approx.rows()];
 
     for (size_t j = 0; j < (size_t)(block->approx.rows()); j++)
     {
@@ -432,7 +432,7 @@ void test_and_write(Block<real_t>*                      b,
 
     nvars = b->vars.size();
     if (!b->dom_dim)
-        b->dom_dim =  b->mfa->ndom_pts().size();
+        b->dom_dim =  b->input->ndom_pts.size();
 
     // default args for evaluating analytical functions
     for (auto i = 0; i < nvars; i++)
