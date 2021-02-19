@@ -179,7 +179,6 @@ namespace mfa
                 const   VectorXi&       derivs)             // derivative to take in each domain dim. (0 = value, 1 = 1st deriv, 2 = 2nd deriv, ...)
                                                         // pass size-0 vector if unused
         {
-            VectorXi iter = VectorXi::Zero(mfa_data.dom_dim);                    // parameter index (iteration count, ie, ijk) in current dim.
             int last = mfa_data.tmesh.tensor_prods[0].ctrl_pts.cols() - 1;       // last coordinate of control point
 
 #ifdef MFA_TBB                                          // TBB version, faster (~3X) than serial
@@ -204,11 +203,11 @@ namespace mfa
                     // for (int j = 0; j < mfa_data.dom_dim; j++)
                     //     param(j) = mfa.params()[j][ijk(j)];
 
+                    VectorX<T>  cpt(last + 1);               // evaluated point
                     VectorX<T>  param(mfa_data.dom_dim);    // vector of param values
                     VectorXi    ijk(mfa_data.dom_dim);      // vector of param indices (structured grid only)
                     pt_it.params(param);  
                     // compute approximated point for this parameter vector
-                    VectorX<T> cpt(last + 1);               // evaluated point
 
 #ifndef MFA_TMESH   // original version for one tensor product
 
@@ -254,6 +253,7 @@ namespace mfa
 
             VectorX<T> cpt(last + 1);                       // evaluated point
             VectorX<T> param(mfa_data.dom_dim);            // parameters for one point
+            VectorXi   ijk(mfa_data.dom_dim);      // vector of param indices (structured grid only)
 
             // for (size_t i = 0; i < approx.rows(); i++)
             auto pt_it  = input.begin();
@@ -262,7 +262,6 @@ namespace mfa
             {
                 // Get parameter values and indices at current point
                 pt_it.params(param);
-                pt_it.ijk(iter);
 
                 // // extract parameter vector for one input point of all params
                 // for (size_t j = 0; j < mfa_data.dom_dim; j++)
@@ -274,7 +273,8 @@ namespace mfa
 
                 if (saved_basis && input.structured)
                 {
-                    VolPt_saved_basis(iter, param, cpt, decode_info, mfa_data.tmesh.tensor_prods[0]);
+                    pt_it.ijk(ijk);
+                    VolPt_saved_basis(ijk, param, cpt, decode_info, mfa_data.tmesh.tensor_prods[0]);
 
                     // debug
                     if (pt_it.idx() == 0)
