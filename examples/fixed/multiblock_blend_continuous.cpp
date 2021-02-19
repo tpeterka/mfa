@@ -170,6 +170,8 @@ int main(int argc, char **argv) {
     d_args.verbose = 0;
     d_args.r = 0.0;
     d_args.t = 0.0;
+    d_args.separable    = true;
+    d_args.structured   = true; // multiblock not tested for unstructured data yet
     for (int i = 0; i < dom_dim; i++) {
         d_args.geom_p[i] = geom_degree;
         d_args.vars_p[0][i] = vars_degree;

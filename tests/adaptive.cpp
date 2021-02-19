@@ -206,6 +206,8 @@ int main(int argc, char** argv)
     d_args.verbose      = 1;
     d_args.r            = 0.0;
     d_args.t            = 0.0;
+    d_args.separable    = true;
+    d_args.structured   = true; // adaptive encoding does not yet support unstructured input
     for (int i = 0; i < pt_dim - dom_dim; i++)
         d_args.f[i] = 1.0;
     for (int i = 0; i < dom_dim; i++)
@@ -481,8 +483,8 @@ int main(int argc, char** argv)
 
     // check the results of the last (only) science variable
     Block<real_t>* b        = static_cast<Block<real_t>*>(master.block(0));
-    int     ndom_dims       = b->mfa->ndom_pts().size();        // domain dimensionality
-    real_t  range_extent    = b->domain.col(ndom_dims).maxCoeff() - b->domain.col(ndom_dims).minCoeff();
+    int     ndom_dims       = b->dom_dim;        // domain dimensionality
+    real_t  range_extent    = b->input->domain.col(ndom_dims).maxCoeff() - b->input->domain.col(ndom_dims).minCoeff();
     real_t  err_factor      = 1.0e-3;
     real_t  our_err         = b->max_errs[0] / range_extent;    // actual normalized max_err
     real_t  expect_err;                                         // expected (normalized max) error
