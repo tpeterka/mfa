@@ -289,17 +289,17 @@ int main(int argc, char** argv)
         d_args.vars_nctrl_pts[0][1] = 108;
         d_args.vars_nctrl_pts[0][2] = 110;
         d_args.infile               = infile;
-//         d_args.infile               = "/Users/tpeterka/datasets/flame/6_small.xyz";
-        // if (dom_dim == 1)
-        //     master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-        //             { b->read_1d_slice_3d_vector_data(cp, d_args); });
-        // else if (dom_dim == 2)
-        //     master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-        //             { b->read_2d_slice_3d_vector_data(cp, d_args); });
-        // else if (dom_dim == 3)
-        //     master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-        //             { b->read_3d_vector_data(cp, d_args); });
-        // else
+        // d_args.infile               = "/Users/tpeterka/datasets/flame/6_small.xyz";
+        if (dom_dim == 1)
+            master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
+                    { b->read_1d_slice_3d_vector_data(cp, d_args); });
+        else if (dom_dim == 2)
+            master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
+                    { b->read_2d_slice_3d_vector_data(cp, d_args); });
+        else if (dom_dim == 3)
+            master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
+                    { b->read_3d_vector_data(cp, d_args); });
+        else
         {
             fprintf(stderr, "S3D data only available in 2 or 3d domain\n");
             exit(0);
@@ -331,13 +331,13 @@ int main(int argc, char** argv)
             d_args.vars_nctrl_pts[0][i] = 100;
         d_args.infile = infile;
 //         d_args.infile = "/Users/tpeterka/datasets/nek5000/200x200x200/0.xyz";
-        // if (dom_dim == 2)
-        //     master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-        //             { b->read_2d_slice_3d_vector_data(cp, d_args); });
-        // else if (dom_dim == 3)
-        //     master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-        //             { b->read_3d_vector_data(cp, d_args); });
-        // else
+        if (dom_dim == 2)
+            master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
+                    { b->read_2d_slice_3d_vector_data(cp, d_args); });
+        else if (dom_dim == 3)
+            master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
+                    { b->read_3d_vector_data(cp, d_args); });
+        else
         {
             fprintf(stderr, "nek5000 data only available in 2 or 3d domain\n");
             exit(0);
@@ -355,13 +355,13 @@ int main(int argc, char** argv)
         d_args.vars_nctrl_pts[0][2] = 128;
         d_args.infile = infile;
 //         d_args.infile = "/Users/tpeterka/datasets/rti/dd07g_xxsmall_le.xyz";
-        // if (dom_dim == 2)
-        //     master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-        //             { b->read_2d_slice_3d_vector_data(cp, d_args); });
-        // else if (dom_dim == 3)
-        //     master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-        //             { b->read_3d_vector_data(cp, d_args); });
-        // else
+        if (dom_dim == 2)
+            master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
+                    { b->read_2d_slice_3d_vector_data(cp, d_args); });
+        else if (dom_dim == 3)
+            master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
+                    { b->read_3d_vector_data(cp, d_args); });
+        else
         {
             fprintf(stderr, "rti data only available in 2 or 3d domain\n");
             exit(0);
@@ -389,11 +389,11 @@ int main(int argc, char** argv)
         d_args.vars_nctrl_pts[0][0] = 180;
         d_args.vars_nctrl_pts[0][1] = 360;
         d_args.infile = infile;
-        d_args.infile = "/Users/tpeterka/datasets/CESM-ATM-tylor/1800x3600/FLDSC_1_1800_3600.dat";
-        // if (dom_dim == 2)
-        //     master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-        //             { b->read_2d_scalar_data(cp, d_args); });
-        // else
+//      d_args.infile = "/Users/tpeterka/datasets/CESM-ATM-tylor/1800x3600/FLDSC_1_1800_3600.dat";
+        if (dom_dim == 2)
+            master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
+                    { b->read_2d_scalar_data(cp, d_args); });
+        else
         {
             fprintf(stderr, "cesm data only available in 2d domain\n");
             exit(0);

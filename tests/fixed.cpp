@@ -52,6 +52,7 @@ int main(int argc, char** argv)
     real_t twist        = 0.0;                  // twist (waviness) of domain (0.0-1.0)
     int    error        = 1;                    // decode all input points and check error (bool 0 or 1)
     string infile;                              // input file name
+    int    structured   = 1;                    // input format (structured grid if nonzero)
     bool   help         = false;                // show help
     int    resolutionGrid = 0;
 
@@ -71,6 +72,7 @@ int main(int argc, char** argv)
     ops >> opts::Option('f', "infile",      infile,     " input file name");
     ops >> opts::Option('h', "help",        help,       " show help");
     ops >> opts::Option('u', "resolution",  resolutionGrid,    " resolution for grid test ");
+    ops >> opts::Option('x', "structured",  structured, " parse input data from a structured (possibly curvilinear) grid");
 
     if (!ops.parse(argc, argv) || help)
     {
@@ -89,7 +91,8 @@ int main(int argc, char** argv)
         "pt_dim = "         << pt_dim       << " dom_dim = "        << dom_dim      <<
         "\ngeom_degree = "  << geom_degree  << " vars_degree = "    << vars_degree  <<
         "\ninput pts = "    << ndomp        << " geom_ctrl pts = "  << geom_nctrl   <<
-        "\nvars_ctrl_pts = "<< vars_nctrl   << " input = "          << input        << endl;
+        "\nvars_ctrl_pts = "<< vars_nctrl   << " input = "          << input        << 
+        "\nstructured = "   << structured   << endl;
 #ifdef CURVE_PARAMS
     cerr << "parameterization method = curve" << endl;
 #else
@@ -139,6 +142,7 @@ int main(int argc, char** argv)
     d_args.weighted     = weighted;
     d_args.multiblock   = false;
     d_args.verbose      = 1;
+    d_args.structured   = structured;
     for (int i = 0; i < pt_dim - dom_dim; i++)
         d_args.f[i] = 1.0;
     for (int i = 0; i < dom_dim; i++)
@@ -254,6 +258,7 @@ int main(int argc, char** argv)
     master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
             { b->error(cp, 1, true); });
 #else                   // range coordinate difference
+    bool saved_basis = structured; // TODO: basis functions are currently only saved during encoding of structured data
     master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
             { b->range_error(cp, 1, true, true); });
 #endif
@@ -273,7 +278,7 @@ int main(int argc, char** argv)
 
     // check the results of the last (only) science variable
     Block<real_t>* b    = static_cast<Block<real_t>*>(master.block(0));
-    real_t range_extent = b->domain.col(dom_dim).maxCoeff() - b->domain.col(dom_dim).minCoeff();
+    real_t range_extent = b->input->domain.col(dom_dim).maxCoeff() - b->input->domain.col(dom_dim).minCoeff();
     real_t err_factor   = 1.0e-3;
     real_t expect_err;
     // for ./fixed-test -i sinc -d 3 -m 2 -p 1 -q 5 -v 20 -w 0
