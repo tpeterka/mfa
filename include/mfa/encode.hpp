@@ -477,6 +477,7 @@ namespace mfa
             cerr << "Matrix Construction Time: " << setprecision(3) << ((double)fill_time)/CLOCKS_PER_SEC << "s." << endl;
         }
 
+#ifdef MFA_TBB
         // Computes the product of two Eigen sparse matrices using TBB.  All matrices must be in column major format.
         void MatProdThreaded(   Eigen::SparseMatrix<T, Eigen::ColMajor>& lhs,
                                 Eigen::SparseMatrix<T, Eigen::ColMajor>& rhs,
@@ -556,6 +557,7 @@ namespace mfa
 
             res.makeCompressed();
         }
+#endif // MFA_TBB
 
        // Sparse matrix version of EncodeTensor. Not a 
        // one-for-one copy of the logic in EncodeTensor
