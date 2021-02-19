@@ -127,6 +127,9 @@ struct BlockBase
     vector<int>         map_dir;                // will map current directions with global directions
     vector<T>           max_errs_reduce;        // max_errs used in the reduce operations, plus location (2 T vals per entry)
 
+    // zero-initialize pointers during default construction
+    BlockBase() : mfa(NULL), input(NULL) { }
+
     ~BlockBase()
     {
         if (mfa)
@@ -177,14 +180,9 @@ struct BlockBase
 //         cerr << "core_maxs: " << core_maxs.transpose() << endl;
 //         cerr << "bounds_mins: " << bounds_mins.transpose() << endl;
 //         cerr << "bounds_maxs: " << bounds_maxs.transpose() << endl;
-
-        mfa = NULL;
-        input = NULL;
     }
 
-    void set_input_block(
-            const diy::Master::ProxyWithLink&   cp,
-            mfa::InputInfo<T>*                  input_)
+    void set_input_block(mfa::InputInfo<T>* input_)
     {
         if (input)
         {
@@ -429,13 +427,14 @@ struct BlockBase
         for (auto i = 0; i < vars.size(); i++)
             if (var < 0 || var == i)
             {
+                // TODO: remove duplication of MFA_Data? Also, this leaks memory as-is
                 // TODO: hard-coded for one tensor product
                 vars[i].mfa_data = new mfa::MFA_Data<T>(vars[i].mfa_data->p,
-                        mfa->ndom_pts(),
+                        // mfa->ndom_pts(),
                         vars[i].mfa_data->tmesh,
                         dom_dim + i,        // assumes each variable is scalar
                         dom_dim + i);
-                mfa->DecodeDomain(*(vars[i].mfa_data), verbose, approx, dom_dim + i, dom_dim + i, false, derivs);  // assumes each variable is scalar
+                mfa->DecodeDomain(*(vars[i].mfa_data), verbose, *input, approx, dom_dim + i, dom_dim + i, false, derivs);  // assumes each variable is scalar
             }
 
         // the derivative is a vector of same dimensionality as domain

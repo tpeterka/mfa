@@ -54,6 +54,7 @@ struct DomainArgs : public ModelInfo
         max.resize(dom_dim);
         s.resize(pt_dim);
         f.resize(pt_dim);
+        structured = true;   // Assume structured input by default
     }
     size_t              tot_ndom_pts;
     vector<int>         starts;                     // starting offsets of ndom_pts (optional, usually assumed 0)
@@ -388,15 +389,15 @@ struct Block : public BlockBase<T>
             }      
         }
 
-        this->set_input_block(cp, input);
-        this->mfa = new mfa::MFA<T>(this->dom_dim);
+        this->set_input_block(input);
+        this->mfa = new mfa::MFA<T>(dom_dim);
 
         // extents
         fprintf(stderr, "gid = %d\n", cp.gid());
-        cerr << "core_mins:\n" << this->core_mins << endl;
-        cerr << "core_maxs:\n" << this->core_maxs << endl;
-        cerr << "bounds_mins:\n" << this->bounds_mins << endl;
-        cerr << "bounds_maxs:\n" << this->bounds_maxs << endl;
+        cerr << "core_mins:\n" << core_mins << endl;
+        cerr << "core_maxs:\n" << core_maxs << endl;
+        cerr << "bounds_mins:\n" << bounds_mins << endl;
+        cerr << "bounds_maxs:\n" << bounds_maxs << endl;
     }
 
     // synthetic analytical data
@@ -583,7 +584,7 @@ struct Block : public BlockBase<T>
         for (int k = 0; k < this->dom_dim; k++)
             this->map_dir.push_back(k);
 
-        this->set_input_block(cp, input);
+        this->set_input_block(input);
         this->mfa = new mfa::MFA<T>(this->dom_dim);
 
         // extents
@@ -680,7 +681,7 @@ struct Block : public BlockBase<T>
             core_maxs(i) = bounds_maxs(i);
         }
 
-        this->set_input_block(cp, input);
+        this->set_input_block(input);
         this->mfa = new mfa::MFA<T>(dom_dim);
 
         // debug
@@ -775,7 +776,7 @@ struct Block : public BlockBase<T>
             core_maxs(i) = bounds_maxs(i);
         }
 
-        this->set_input_block(cp, input);
+        this->set_input_block(input);
         this->mfa = new mfa::MFA<T>(dom_dim);
 
         // debug
@@ -893,7 +894,7 @@ struct Block : public BlockBase<T>
             core_maxs(i) = bounds_maxs(i);
         }
 
-        this->set_input_block(cp, input);
+        this->set_input_block(input);
         this->mfa = new mfa::MFA<T>(dom_dim);
 
         // debug
@@ -991,7 +992,7 @@ struct Block : public BlockBase<T>
             core_maxs(i) = bounds_maxs(i);
         }
 
-        this->set_input_block(cp, input);
+        this->set_input_block(input);
         this->mfa = new mfa::MFA<T>(dom_dim);
 
         // debug
@@ -1113,7 +1114,7 @@ struct Block : public BlockBase<T>
             core_maxs(i) = bounds_maxs(i);
         }
 
-        this->set_input_block(cp, input);
+        this->set_input_block(input);
         this->mfa = new mfa::MFA<T>(dom_dim);
 
         // debug
@@ -1200,7 +1201,7 @@ struct Block : public BlockBase<T>
             core_maxs(i) = bounds_maxs(i);
         }
 
-        this->set_input_block(cp, input);
+        this->set_input_block(input);
         this->mfa = new mfa::MFA<T>(dom_dim);
 
         // debug
@@ -1291,7 +1292,7 @@ struct Block : public BlockBase<T>
             core_maxs(i) = bounds_maxs(i);
         }
 
-        this->set_input_block(cp, input);
+        this->set_input_block(input);
         this->mfa = new mfa::MFA<T>(dom_dim);
 
         // debug
@@ -1489,7 +1490,7 @@ struct Block : public BlockBase<T>
         VectorX<T> unused;  // Let MFA determine domain mins/maxs automatically
                             // NB Don't want to use bounds_min/max here because ghost points might not sit exactly at these values
         mfa::InputInfo<T>* input = new mfa::InputInfo<T>(b->dom_dim, b->pt_dim, unused, unused, true, ndom_pts);
-        input->domain.resize(tot_ndom_pts, pt_dim);
+        input->domain.resize(tot_ndom_pts, b->pt_dim);
 
         if (0 == gid)
             cerr << " total local size : " << tot_ndom_pts << endl;
