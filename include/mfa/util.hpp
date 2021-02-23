@@ -148,7 +148,7 @@ namespace mfa
                 idx     += ijk[i] * stride;
                 stride  *= all_npts_dim_(i);
             }
-            return idx;   
+            return idx;
         }
 
         // convert subvolume index into full volume index

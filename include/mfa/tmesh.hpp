@@ -114,12 +114,43 @@ namespace mfa
             }
         }
 
-        // append a tensor product to the back of tensor_prods
-        void append_tensor(const vector<KnotIdx>&   knot_mins,      // indices in all_knots of min. corner of tensor to be inserted
-                           const vector<KnotIdx>&   knot_maxs)      // indices in all_knots of max. corner
+        // append a tensor product to the vector of tensor_prods
+        // if a tensor matching the knot mins and maxs exists, resizes its control points to the current number of knots
+        // returns index of new or existing tensor in the vector of tensor products
+        int append_tensor(const vector<KnotIdx>&   knot_mins,       // indices in all_knots of min. corner of tensor to be inserted
+                          const vector<KnotIdx>&   knot_maxs,       // indices in all_knots of max. corner
+                          int                      level = -1)      // optional level to assign to new tensor, -1 = choose next level automatically
         {
             bool vec_grew;                          // vector of tensor_prods grew
             bool tensor_inserted = false;           // the desired tensor was already inserted
+
+            // check if the tensor to be added matches any existing ones
+            for (auto k = 0; k < tensor_prods.size(); k++)
+            {
+                auto& t = tensor_prods[k];
+
+                if (knot_mins == t.knot_mins && knot_maxs == t.knot_maxs)
+                {
+                    // adjust level
+                    if (level >= 0)
+                        t.level = level;
+
+                    // resize control points and weights
+                    for (auto j = 0; j < dom_dim_; j++)
+                    {
+                        bool odd_degree = p_(j) % 2;
+                        t.nctrl_pts(j) = knot_idx_dist(t, knot_mins[j], knot_maxs[j], j, odd_degree);
+                        if (knot_mins[j] == 0)
+                            t.nctrl_pts(j) -= (p_(j) + 1) / 2;
+                        if (knot_maxs[j] == all_knots[j].size() - 1)
+                            t.nctrl_pts(j) -= (p_(j) + 1) / 2;
+                    }
+                    t.ctrl_pts.resize(t.nctrl_pts.prod(), t.ctrl_pts.cols());
+                    t.weights = VectorX<T>::Ones(t.ctrl_pts.rows());
+
+                    return k;
+                }
+            }
 
             // create a new tensor product
             TensorProduct<T> new_tensor;
@@ -139,7 +170,7 @@ namespace mfa
                 // level 0 has only one box of control points
                 for (auto j = 0; j < dom_dim_; j++)
                 {
-                    new_tensor.nctrl_pts[j] = all_knots[j].size() - p_[j] - 1;
+                    new_tensor.nctrl_pts[j] = all_knots[j].size() - p_(j) - 1;
                     tot_nctrl_pts *= new_tensor.nctrl_pts[j];
                 }
                 new_tensor.ctrl_pts.resize(tot_nctrl_pts, max_dim_ - min_dim_ + 1);
@@ -147,7 +178,7 @@ namespace mfa
             }
             else
             {
-                new_tensor.level = tensor_prods.back().level + 1;
+                new_tensor.level = (level == -1 ? tensor_prods.back().level + 1 : level);
 
                 // resize control points
                 for (auto j = 0; j < dom_dim_; j++)
@@ -159,14 +190,14 @@ namespace mfa
                     size_t nanchors = 0;
                     for (auto i = knot_mins[j]; i <= knot_maxs[j]; i++)
                         nknots++;
-                    if (p_[j] % 2 == 0)         // even degree: anchors are between knot lines
+                    if (p_(j) % 2 == 0)         // even degree: anchors are between knot lines
                         nanchors = nknots - 1;
                     else                            // odd degree: anchors are on knot lines
                         nanchors = nknots;
-                    if (knot_mins[j] < p_[j] - 1)                       // skip up to p-1 anchors at start of global knots
-                        nanchors -= (p_[j] - 1 - knot_mins[j]);
-                    if (knot_maxs[j] > all_knots[j].size() - p_[j])     // skip up to p-1 anchors at end of global knots
-                        nanchors -= (knot_maxs[j] + p_[j] - all_knots[j].size());
+                    if (knot_mins[j] < p_(j) - 1)                       // skip up to p-1 anchors at start of global knots
+                        nanchors -= (p_(j) - 1 - knot_mins[j]);
+                    if (knot_maxs[j] > all_knots[j].size() - p_(j))     // skip up to p-1 anchors at end of global knots
+                        nanchors -= (knot_maxs[j] + p_(j) - all_knots[j].size());
                     new_tensor.nctrl_pts[j] = nanchors;
                     tot_nctrl_pts *= nanchors;
 
@@ -262,6 +293,8 @@ namespace mfa
             // add the tensor
             if (!tensor_inserted)
                 tensor_prods.push_back(new_tensor);
+
+            return new_tensor_idx;
         }
 
         // Append a tensor product to the back of tensor_prods and copy control points and weights into it
@@ -432,8 +465,7 @@ namespace mfa
         {
             for (auto k = 0; k < dom_dim_; k++)
             {
-                if (t1.knot_maxs[k] < t2.knot_mins[k] - pad ||
-                    t1.knot_mins[k] > t2.knot_maxs[k] + pad)
+                if (t1.knot_maxs[k] + pad < t2.knot_mins[k] || t2.knot_maxs[k] + pad < t1.knot_mins[k])
                     return false;
             }
             return true;
@@ -711,15 +743,15 @@ namespace mfa
             max_ctrl_idx = split_knot_idx;
 
             // TODO: unclear why the following is needed, but things break if we don't do this
-            if (p_[cur_dim] % 2 == 0)                           // even degree
+            if (p_(cur_dim) % 2 == 0)                           // even degree
                 max_ctrl_idx--;
 
             // if tensor starts at global minimum, skip the first (p + 1) / 2 knots
             if ((max_side  && existing_tensor.knot_mins[cur_dim] == 0) ||
                 (!max_side && new_side_tensor.knot_mins[cur_dim] == 0))
             {
-                min_ctrl_idx -= (p_[cur_dim] + 1) / 2;
-                max_ctrl_idx -= (p_[cur_dim] + 1) / 2;
+                min_ctrl_idx -= (p_(cur_dim) + 1) / 2;
+                max_ctrl_idx -= (p_(cur_dim) + 1) / 2;
             }
 
             // if max_ctrl_idx is past last existing control point, then split is too close to global edge and must be clamped to last control point
@@ -1035,7 +1067,7 @@ namespace mfa
             for (auto i = 0; i < a_size; i++)
             {
                 res_mins[i] = a_mins[i] < b_mins[i] ? a_mins[i] : b_mins[i];
-                res_maxs[i] = a_maxs[i] > b_mins[i] ? a_maxs[i] : b_maxs[i];
+                res_maxs[i] = a_maxs[i] > b_maxs[i] ? a_maxs[i] : b_maxs[i];
             }
         }
 
@@ -1054,7 +1086,7 @@ namespace mfa
 
                 // move pt[i] to center of t-mesh cell if degree is even and pt refers to control point anchor
                 float fp;               // floating point version of pt[i]
-                if (ctrl_pt_anchor && p_[i] % 2 == 0)
+                if (ctrl_pt_anchor && p_(i) % 2 == 0)
                     fp = pt[i] + 0.5;
                 else
                     fp = pt[i];
@@ -1076,7 +1108,7 @@ namespace mfa
         {
             // move pt to center of t-mesh cell if degree is even and pt refers to control point anchor
             float fp;               // floating point version of pt
-            if (ctrl_pt_anchor && p_[cur_dim] % 2 == 0)
+            if (ctrl_pt_anchor && p_(cur_dim) % 2 == 0)
                 fp = pt + 0.5;
             else
                 fp = pt;
@@ -1840,11 +1872,11 @@ namespace mfa
             }
 
             // debug
-            for (auto k = 0; k < dom_dim_; k++)
-            {
-                fprintf(stderr, "start_knot_idx[%d] = %lu end_knot_idx[%d] = %lu\n", k, start_knot_idxs[k], k, end_knot_idxs[k]);
-                fprintf(stderr, "start_input_pt_idx[%d] = %lu end_input_pt_idx[%d] = %lu\n", k, start_idxs[k], k, end_idxs[k]);
-            }
+//             for (auto k = 0; k < dom_dim_; k++)
+//             {
+//                 fprintf(stderr, "start_knot_idx[%d] = %lu end_knot_idx[%d] = %lu\n", k, start_knot_idxs[k], k, end_knot_idxs[k]);
+//                 fprintf(stderr, "start_input_pt_idx[%d] = %lu end_input_pt_idx[%d] = %lu\n", k, start_idxs[k], k, end_idxs[k]);
+//             }
         }
 
         // for a given tensor, get anchor of control point, given control point multidim index
@@ -1933,7 +1965,7 @@ namespace mfa
             return dist;
         }
 
-        void print() const
+        void print_knots() const
         {
             // all_knots
             for (int i = 0; i < dom_dim_; i++)
@@ -1944,11 +1976,10 @@ namespace mfa
                             all_knots[i][j], all_knot_levels[i][j], all_knot_param_idxs[i][j]);
                 fprintf(stderr, "\n");
             }
-            fprintf(stderr, "\n");
+        }
 
-            fprintf(stderr, "T-mesh has %lu tensor products\n\n", tensor_prods.size());
-
-            // tensor products
+        void print_tensors() const
+        {
             for (auto j = 0; j < tensor_prods.size(); j++)
             {
                 const TensorProduct<T>& t = tensor_prods[j];
@@ -1997,6 +2028,14 @@ namespace mfa
 
                 fprintf(stderr, "\n");
             }
+        }
+
+        void print() const
+        {
+            print_knots();
+            fprintf(stderr, "\n");
+            fprintf(stderr, "T-mesh has %lu tensor products\n\n", tensor_prods.size());
+            print_tensors();
             fprintf(stderr, "\n");
         }
 

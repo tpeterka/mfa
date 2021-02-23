@@ -63,8 +63,6 @@ TBB is the only threading model currently implemented, but other threading model
 Build dependencies
 
 - C++11 compiler
-- [diy](https://github.com/diatomic/diy)
-- [eigen](http://eigen.tuxfamily.org)
 - [MPI](http://www.mpich.org)
 - [TBB (optional)](https://www.threadingbuildingblocks.org)
 - [COIN-OR CLP (optional)](https://projects.coin-or.org/Clp)
@@ -79,8 +77,6 @@ cd build
 
 cmake .. \
 -DCMAKE_INSTALL_PREFIX=/path/to/mfa/install \
--DDIY_INCLUDE_DIRS=/path/to/diy/include \
--DEIGEN_INCLUDE_DIRS=/path/to/eigen3 \
 -DCMAKE_CXX_COMPILER=mpicxx \                                   # optional, set to CC on Cray, default or g++ also works if MPI is correctly found
 -Dmfa_thread=tbb \                                              # optional TBB threading, serial (no threading) is the default
 -DTBB_INCLUDE_DIR=/path/to/tbb/include \                        # optional, will try to find TBB automatically if mfa_thread=tbb
