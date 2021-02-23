@@ -346,11 +346,58 @@ struct Block : public BlockBase<T>
         std::uniform_real_distribution<double> u_dist(0.0, 1.0);
 
         // Fill domain with randomly distributed points
-        for (size_t j = 0; j < input->domain.rows(); j++)
+        size_t nvoids = 3;
+        double keep_frac = 1.0/5.0;
+        double radii_frac = 1.0/10.0;   // fraction of domain width to set as void radius
+        VectorX<T> radii(nvoids);
+        MatrixX<T> centers(geom_dim, nvoids);
+        for (size_t nv = 0; nv < nvoids; nv++) // Randomly generate the centers of each void
         {
             for (size_t k = 0; k < geom_dim; k++)
             {
-                input->domain(j, k) = input->dom_mins(k) + u_dist(df_gen) * (input->dom_maxs(k) - input->dom_mins(k));
+                centers(k,nv) = input->dom_mins(k) + u_dist(df_gen) * (input->dom_maxs(k) - input->dom_mins(k));
+            }
+
+            radii(nv) = radii_frac * (input->dom_maxs - input->dom_mins).minCoeff();
+        }
+
+        for (size_t j = 0; j < input->domain.rows(); j++)
+        {
+
+            VectorX<T> candidate_pt(geom_dim);
+
+            bool keep = true;
+            do
+            {
+                // Generate a random point
+                for (size_t k = 0; k < geom_dim; k++)
+                {
+                    // input->domain(j, k) = input->dom_mins(k) + u_dist(df_gen) * (input->dom_maxs(k) - input->dom_mins(k));
+                    candidate_pt(k) = input->dom_mins(k) + u_dist(df_gen) * (input->dom_maxs(k) - input->dom_mins(k));
+                }
+
+                // Consider discarding point if within a certain radius of a void
+                for (size_t nv = 0; nv < nvoids; nv++)
+                {
+                    if ((candidate_pt - centers.col(nv)).norm() < radii(nv))
+                    {
+                        keep = false;
+                        break;
+                    }
+                }
+
+                // Keep this point anyway a certain fraction of the time
+                if (keep == false)
+                {
+                    if (u_dist(df_gen) <= keep_frac)
+                        keep = true;
+                }
+            } while (!keep);    
+
+            // Add point to Input
+            for (size_t k = 0; k < geom_dim; k++)
+            {
+                input->domain(j,k) = candidate_pt(k);
             }
 
             VectorX<T> dom_pt = input->domain.block(j, 0, 1, geom_dim).transpose();
