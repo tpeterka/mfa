@@ -93,7 +93,7 @@ struct BlockBase
     VectorX<T>          core_maxs;              // local domain maximum corner w/o ghost
 
     // input data
-    mfa::InputInfo<T>   *input;                 // input data
+    mfa::PointSet<T>   *input;                 // input data
 
     // MFA object
     mfa::MFA<T>         *mfa;
@@ -182,11 +182,11 @@ struct BlockBase
 //         cerr << "bounds_maxs: " << bounds_maxs.transpose() << endl;
     }
 
-    void set_input_block(mfa::InputInfo<T>* input_)
+    void set_input_block(mfa::PointSet<T>* input_)
     {
         if (input)
         {
-            cerr << "ERROR: Attempted to set block InputInfo multiple times" << endl;
+            cerr << "ERROR: Attempted to set block input multiple times" << endl;
             exit(1);
         }
         
@@ -1421,7 +1421,7 @@ namespace mfa
             diy::load(bb, b->core_mins);
             diy::load(bb, b->core_maxs);
 
-            // InputInfo.  TODO: don't load in practice
+            // Input info.  TODO: don't load in practice
             bool structured = false;
             VectorXi ndom_pts(b->dom_dim);
             diy::load(bb, structured);
@@ -1431,7 +1431,7 @@ namespace mfa
             //      matches dom_dim. However, in future use cases we may have dom_dim < geom_dim,
             //      e.g. when domain is a 2D surface in 3D space. To account for this, we slice
             //      core_mins to the first dom_dim entries. But in most cases, this is entire vector.
-            b->input = new InputInfo<T>(b->dom_dim, 
+            b->input = new PointSet<T>(b->dom_dim, 
                                         b->pt_dim,
                                         b->bounds_mins.head(b->dom_dim).eval(),  // Set params bounding box to match block bounds
                                         b->bounds_maxs.head(b->dom_dim).eval(),

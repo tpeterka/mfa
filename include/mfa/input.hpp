@@ -15,22 +15,9 @@
 namespace mfa
 {
     template <typename T>
-    struct InputInfo
+    struct PointSet
     {
-        // InputInfo(
-        //         int     dom_dim_,
-        //         int     pt_dim_,
-        //         bool    structured_) :
-        //     dom_dim(dom_dim_),
-        //     pt_dim(pt_dim_),
-        //     structured(structured_)
-        // { 
-        //     // Assume unstructured data when ndom_pts_ is not passed to constructor
-        //     if (structured)
-        //         cerr << "ERROR: Conflicting constructor arguments for InputInfo" << endl;    
-        // }
-
-        InputInfo(
+        PointSet(
                         size_t      dom_dim_,
                         size_t      pt_dim_,
                 const   VectorX<T>& mins_,
@@ -48,7 +35,7 @@ namespace mfa
             if ( (!structured && ndom_pts.size() != 0) ||
                 (structured && ndom_pts.size() == 0)     ) 
             {
-                cerr << "ERROR: Conflicting constructor arguments for InputInfo" << endl;    
+                cerr << "ERROR: Conflicting constructor arguments for PointSet" << endl;    
                 cerr << "  structured: " << boolalpha << structured << endl;
                 cerr << "  ndom_pts: ";
                 for (size_t k = 0; k < ndom_pts.size(); k++) cerr << ndom_pts(k) << " ";
@@ -60,12 +47,12 @@ namespace mfa
         {
             if (is_initialized)
             {
-                cerr << "Warning: Attempting to initialize a previously initialized InputInfo" << endl;
+                cerr << "Warning: Attempting to initialize a previously initialized PointSet" << endl;
                 return;
             }
             if (!validate())
             {
-                cerr << "ERROR: Improper setup of InputInfo" << endl;
+                cerr << "ERROR: Improper setup of PointSet" << endl;
                 exit(1);
             }
             else
@@ -87,18 +74,18 @@ namespace mfa
             is_initialized = true;
         }
 
-        InputInfo(const InputInfo&) = delete;
-        InputInfo(InputInfo&&) = delete;
-        InputInfo& operator=(const InputInfo&) = delete;
-        InputInfo& operator=(InputInfo&&) = delete;
+        PointSet(const PointSet&) = delete;
+        PointSet(PointSet&&) = delete;
+        PointSet& operator=(const PointSet&) = delete;
+        PointSet& operator=(PointSet&&) = delete;
 
-        // InputInfo& operator=(InputInfo&& other)
+        // PointSet& operator=(PointSet&& other)
         // {
         //     swap(*this, other);
         //     return *this;
         // }
 
-        // friend void swap(InputInfo& first, InputInfo& second)
+        // friend void swap(PointSet& first, PointSet& second)
         // {
         //     swap(first.dom_dim, second.dom_dim);
         //     swap(first.pt_dim, second.pt_dim);
@@ -136,14 +123,14 @@ namespace mfa
             const bool  structured;
             size_t      lin_idx;
             mfa::VolIterator vol_it;
-            const InputInfo&  info;
+            const PointSet&  pset;
 
         public:
-            PtIterator(const InputInfo& info_, size_t idx_) :
-                structured(info_.structured),
+            PtIterator(const PointSet& pset_, size_t idx_) :
+                structured(pset_.structured),
                 lin_idx(structured ? 0 : idx_),
-                vol_it(structured ? VolIterator(info_.ndom_pts, idx_) : VolIterator()),
-                info(info_)
+                vol_it(structured ? VolIterator(pset_.ndom_pts, idx_) : VolIterator()),
+                pset(pset_)
             { }
 
             // prefix increment
@@ -172,22 +159,22 @@ namespace mfa
             void coords(VectorX<T>& coord_vec)
             {
                 if(structured)
-                    coord_vec = info.domain.row(vol_it.cur_iter());
+                    coord_vec = pset.domain.row(vol_it.cur_iter());
                 else
-                    coord_vec = info.domain.row(lin_idx);
+                    coord_vec = pset.domain.row(lin_idx);
             }
 
             void coords(VectorX<T>& coord_vec, size_t min_dim, size_t max_dim)
             {
-                coord_vec = info.domain.block(idx(), min_dim, 1, max_dim - min_dim + 1).transpose();
+                coord_vec = pset.domain.block(idx(), min_dim, 1, max_dim - min_dim + 1).transpose();
             }
 
             void params(VectorX<T>& param_vec)
             {
                 if(structured)
-                    param_vec = info.params.pt_params(vol_it);
+                    param_vec = pset.params.pt_params(vol_it);
                 else
-                    param_vec = info.params.pt_params(lin_idx);
+                    param_vec = pset.params.pt_params(lin_idx);
             }
 
             void ijk(VectorXi& ijk_vec)
@@ -255,7 +242,7 @@ namespace mfa
             if (is_valid) return is_valid;
             else 
             {
-                cerr << "InputInfo initialized with incompatible data" << endl;
+                cerr << "PointSet initialized with incompatible data" << endl;
                 cerr << "  structured: " << boolalpha << structured << endl;
                 cerr << "  dom_dim: " << dom_dim << ",  pt_dim: " << endl;
                 cerr << "  ndom_pts: ";

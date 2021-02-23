@@ -157,7 +157,7 @@ namespace mfa
         // P&T eq. 9.77, p. 424
         // assumes all vectors have been correctly resized by the caller
         void DecodeDomain(
-                const   InputInfo<T>&   input,                   // information for domain to be decoded
+                const   PointSet<T>&    input,                   // information for domain to be decoded
                         MatrixX<T>&     approx,                 // decoded output points (1st dim changes fastest)
                         int             min_dim,                // first dimension to decode
                         int             max_dim,                // last dimension to decode
@@ -171,7 +171,7 @@ namespace mfa
         // P&T eq. 9.77, p. 424
         // assumes all vectors have been correctly resized by the caller
         void DecodeDomain(
-                const   InputInfo<T>&   input,              // information for domain to be decoded
+                const   PointSet<T>&    input,              // information for domain to be decoded
                         MatrixX<T>&     approx,             // decoded output points (1st dim changes fastest)
                         int             min_dim,            // first dimension to decode
                         int             max_dim,            // last dimension to decode

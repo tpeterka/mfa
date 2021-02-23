@@ -338,7 +338,7 @@ struct Block : public BlockBase<T>
 
         // Create input data set and add to block
         VectorXi unused;
-        mfa::InputInfo<T>* input = new mfa::InputInfo<T>(dom_dim, pt_dim, core_mins, core_maxs, false, unused);
+        mfa::PointSet<T>* input = new mfa::PointSet<T>(dom_dim, pt_dim, core_mins, core_maxs, false, unused);
         input->domain.resize(a->tot_ndom_pts, pt_dim);
 
         unsigned seed = chrono::system_clock::now().time_since_epoch().count();
@@ -519,7 +519,7 @@ struct Block : public BlockBase<T>
 
         VectorX<T> unused;  // Let MFA determine domain mins/maxs automatically
                             // NB Don't want to use bounds_min/max here because ghost points might not sit exactly at these values
-        mfa::InputInfo<T>* input = new mfa::InputInfo<T>(this->dom_dim, this->pt_dim, unused, unused, true, ndom_pts);
+        mfa::PointSet<T>* input = new mfa::PointSet<T>(this->dom_dim, this->pt_dim, unused, unused, true, ndom_pts);
 
         input->domain.resize(ndom_pts.prod(), this->pt_dim);
 
@@ -675,7 +675,7 @@ struct Block : public BlockBase<T>
 
         VectorX<T> unused;  // Let MFA determine domain mins/maxs automatically
                             // NB Don't want to use bounds_min/max here because ghost points might not sit exactly at these values
-        mfa::InputInfo<T>* input = new mfa::InputInfo<T>(dom_dim, pt_dim, unused, unused, true, ndom_pts);
+        mfa::PointSet<T>* input = new mfa::PointSet<T>(dom_dim, pt_dim, unused, unused, true, ndom_pts);
 
         input->domain.resize(tot_ndom_pts, pt_dim);
         // rest is hard-coded for 1d
@@ -765,7 +765,7 @@ struct Block : public BlockBase<T>
 
         VectorX<T> unused;  // Let MFA determine domain mins/maxs automatically
                             // NB Don't want to use bounds_min/max here because ghost points might not sit exactly at these values
-        mfa::InputInfo<T>* input = new mfa::InputInfo<T>(dom_dim, pt_dim, unused, unused, true, ndom_pts);
+        mfa::PointSet<T>* input = new mfa::PointSet<T>(dom_dim, pt_dim, unused, unused, true, ndom_pts);
         input->domain.resize(tot_ndom_pts, pt_dim);
 
         // rest is hard-coded for 2d
@@ -860,7 +860,7 @@ struct Block : public BlockBase<T>
 
         VectorX<T> unused;  // Let MFA determine domain mins/maxs automatically
                             // NB Don't want to use bounds_min/max here because ghost points might not sit exactly at these values
-        mfa::InputInfo<T>* input = new mfa::InputInfo<T>(dom_dim, pt_dim, unused, unused, true, ndom_pts);
+        mfa::PointSet<T>* input = new mfa::PointSet<T>(dom_dim, pt_dim, unused, unused, true, ndom_pts);
         this->domain.resize(tot_ndom_pts, pt_dim);
 
         FILE *fd = fopen(a->infile.c_str(), "r");
@@ -977,7 +977,7 @@ struct Block : public BlockBase<T>
 
         VectorX<T> unused;  // Let MFA determine domain mins/maxs automatically
                             // NB Don't want to use bounds_min/max here because ghost points might not sit exactly at these values
-        mfa::InputInfo<T>* input = new mfa::InputInfo<T>(dom_dim, pt_dim, unused, unused, true, ndom_pts);
+        mfa::PointSet<T>* input = new mfa::PointSet<T>(dom_dim, pt_dim, unused, unused, true, ndom_pts);
         input->domain.resize(tot_ndom_pts, pt_dim);
 
         vector<float> vel(3 * tot_ndom_pts);
@@ -1075,7 +1075,7 @@ struct Block : public BlockBase<T>
 
         VectorX<T> unused;  // Let MFA determine domain mins/maxs automatically
                             // NB Don't want to use bounds_min/max here because ghost points might not sit exactly at these values
-        mfa::InputInfo<T>* input = new mfa::InputInfo<T>(dom_dim, pt_dim, unused, unused, true, ndom_pts);
+        mfa::PointSet<T>* input = new mfa::PointSet<T>(dom_dim, pt_dim, unused, unused, true, ndom_pts);
         input->domain.resize(tot_ndom_pts, pt_dim);
 
         vector<float> vel(a->full_dom_pts[0] * a->full_dom_pts[1] * a->full_dom_pts[2] * 3);
@@ -1197,7 +1197,7 @@ struct Block : public BlockBase<T>
 
         VectorX<T> unused;  // Let MFA determine domain mins/maxs automatically
                             // NB Don't want to use bounds_min/max here because ghost points might not sit exactly at these values
-        mfa::InputInfo<T>* input = new mfa::InputInfo<T>(dom_dim, pt_dim, unused, unused, true, ndom_pts);
+        mfa::PointSet<T>* input = new mfa::PointSet<T>(dom_dim, pt_dim, unused, unused, true, ndom_pts);
         input->domain.resize(tot_ndom_pts, pt_dim);
 
         vector<float> val(tot_ndom_pts);
@@ -1284,7 +1284,7 @@ struct Block : public BlockBase<T>
 
         VectorX<T> unused;  // Let MFA determine domain mins/maxs automatically
                             // NB Don't want to use bounds_min/max here because ghost points might not sit exactly at these values
-        mfa::InputInfo<T>* input = new mfa::InputInfo<T>(dom_dim, pt_dim, unused, unused, true, ndom_pts);
+        mfa::PointSet<T>* input = new mfa::PointSet<T>(dom_dim, pt_dim, unused, unused, true, ndom_pts);
         input->domain.resize(tot_ndom_pts, pt_dim);
 
         vector<float> val(tot_ndom_pts);
@@ -1536,7 +1536,7 @@ struct Block : public BlockBase<T>
 
         VectorX<T> unused;  // Let MFA determine domain mins/maxs automatically
                             // NB Don't want to use bounds_min/max here because ghost points might not sit exactly at these values
-        mfa::InputInfo<T>* input = new mfa::InputInfo<T>(b->dom_dim, b->pt_dim, unused, unused, true, ndom_pts);
+        mfa::PointSet<T>* input = new mfa::PointSet<T>(b->dom_dim, b->pt_dim, unused, unused, true, ndom_pts);
         input->domain.resize(tot_ndom_pts, b->pt_dim);
 
         if (0 == gid)

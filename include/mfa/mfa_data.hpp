@@ -122,7 +122,7 @@ namespace mfa
 
         ~MFA_Data() {}
 
-        void set_knots(InputInfo<T>& input)
+        void set_knots(PointSet<T>& input)
         {
             // TODO move this elsewhere (to encode method?), wrapped in "structured==true" block
             // allocate basis functions
@@ -1472,7 +1472,7 @@ namespace mfa
         // total number of knots is the sum of number of knots over the dimensions, much less than the product
         // assumes knots were allocated by caller
         void Knots(
-                const InputInfo<T>&         input,                  // input domain
+                const PointSet<T>&         input,                  // input domain
                 // const VectorXi&             ndom_pts,               // number of input points in each dim.
                 // const vector<vector<T>>&    params,                 // parameters for input points[dimension][index]
                 Tmesh<T>&                   tmesh) const            // (output) tmesh
@@ -1540,7 +1540,7 @@ namespace mfa
         // resulting knots are same for all curves and stored once for each dimension (1st dim knots, 2nd dim, ...)
         // total number of knots is the sum of number of knots over the dimensions, much less than the product
         // assumes knots were allocated by caller
-        void UniformKnots( const    InputInfo<T>&   input,
+        void UniformKnots( const    PointSet<T>&   input,
                                     Tmesh<T>&       tmesh)
         {
             if (input.structured)

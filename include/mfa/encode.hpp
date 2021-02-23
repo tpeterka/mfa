@@ -67,7 +67,7 @@ namespace mfa
     private:
         const MFA<T>&       mfa;            // the mfa object
         MFA_Data<T>&        mfa_data;       // the mfa data object
-        const InputInfo<T>& input;          // input points
+        const PointSet<T>& input;          // input points
         vector<size_t>      start_idxs;     // start and end of the local subdomain
         vector<size_t>      end_idxs;       // in input point space
         int                 verbose;        // more output
@@ -79,7 +79,7 @@ namespace mfa
     public:
         LocalLSQ(const MFA<T>&          mfa_,
                  MFA_Data<T>&           mfa_data_,
-                 const InputInfo<T>&    input_,
+                 const PointSet<T>&    input_,
                  vector<size_t>         starts_,
                  vector<size_t>         ends_,
                  int                    verb_): mfa(mfa_),
@@ -161,7 +161,7 @@ namespace mfa
         const MFA<T>&       mfa;                            // the mfa top-level object
         MFA_Data<T>&        mfa_data;                       // the mfa data model
         int                 verbose;                        // output level
-        const InputInfo<T>& input;                         // input points
+        const PointSet<T>& input;                         // input points
         size_t              max_num_curves;                 // max num. curves per dimension to check in curve version
 
     public:
@@ -169,7 +169,7 @@ namespace mfa
         Encoder(
                 const MFA<T>&       mfa_,                   // MFA top-level object
                 MFA_Data<T>&        mfa_data_,              // MFA data model
-                const InputInfo<T>& input_,                // input points
+                const PointSet<T>& input_,                // input points
                 int                 verbose_) :             // debug level
             mfa(mfa_),
             mfa_data(mfa_data_),

@@ -111,7 +111,7 @@ namespace mfa
         // fixed number of control points encode
         void FixedEncode(
                 MFA_Data<T>&        mfa_data,               // mfa data model
-                const InputInfo<T>& input,                 // input points
+                const PointSet<T>& input,                 // input points
                 const VectorXi      nctrl_pts,              // number of control points in each dim
                 int                 verbose,                // debug level
                 bool                weighted,               // solve for and use weights (default = true)
@@ -139,7 +139,7 @@ namespace mfa
         // adaptive encode
         void AdaptiveEncode(
                 MFA_Data<T>&        mfa_data,               // mfa data model
-                const InputInfo<T>& input,                  // input points
+                const PointSet<T>& input,                  // input points
                 T                   err_limit,              // maximum allowable normalized error
                 int                 verbose,                // debug level
                 bool                weighted,               // solve for and use weights (default = true)
@@ -160,7 +160,7 @@ namespace mfa
         void DecodeDomain(
                 const MFA_Data<T>&  mfa_data,               // mfa data model
                 int                 verbose,                // debug level
-                const InputInfo<T>& input,                  // domain info
+                const PointSet<T>& input,                  // domain info
                 MatrixX<T>&         approx,                 // decoded points
                 int                 min_dim,                // first dimension to decode
                 int                 max_dim,                // last dimension to decode
@@ -175,7 +175,7 @@ namespace mfa
         void DecodeDomain(
                 const MFA_Data<T>&  mfa_data,               // mfa data model
                 int                 verbose,                // debug level
-                const InputInfo<T>& input,                  // domain info
+                const PointSet<T>& input,                  // domain info
                 MatrixX<T>&         approx,                 // decoded values
                 int                 min_dim,                // first dimension to decode
                 int                 max_dim,                // last dimension to decode
@@ -233,7 +233,7 @@ namespace mfa
         void AbsCoordError(
                 const MFA_Data<T>&  mfa_data,               // mfa data model
                 // const MatrixX<T>&   domain,                 // input points
-                const InputInfo<T>&          input,
+                const PointSet<T>&          input,
                 size_t              idx,                    // index of domain point
                 VectorX<T>&         error,                  // (output) absolute value of error at each coordinate
                 int                 verbose) const          // debug level
