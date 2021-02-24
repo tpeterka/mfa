@@ -1534,6 +1534,22 @@ struct Block : public BlockBase<T>
                 cerr << "  dimension " << j << " " << size_in_dir << endl;
         }
 
+        if (!transpose && b->dom_dim > 1)
+        {
+            if (b->dom_dim == 2)
+            {
+                int tmp = ndom_pts(0);
+                ndom_pts(0) = ndom_pts(1);
+                ndom_pts(1) = tmp;
+            }
+            else if (b->dom_dim == 3)
+            {
+                int tmp = ndom_pts(2);
+                ndom_pts(2) = ndom_pts(0);
+                ndom_pts(0) = tmp; // reverse counting
+            }
+        }
+
         VectorX<T> unused;  // Let MFA determine domain mins/maxs automatically
                             // NB Don't want to use bounds_min/max here because ghost points might not sit exactly at these values
         mfa::PointSet<T>* input = new mfa::PointSet<T>(b->dom_dim, b->pt_dim, unused, unused, true, ndom_pts);
@@ -1585,9 +1601,6 @@ struct Block : public BlockBase<T>
                 int idx = 0;
                 int dir0 = mapDimension[1]; // so x would vary to 704 in 2d 1 block similar case
                 int dir1 = mapDimension[0];
-                int tmp = ndom_pts(0);
-                ndom_pts(0) = ndom_pts(1);
-                ndom_pts(1) = tmp;
                 b->map_dir.push_back(dir0);
                 b->map_dir.push_back(dir1);
                 for (int j = 0; j < ndom_pts(1); j++) {
@@ -1638,9 +1651,6 @@ struct Block : public BlockBase<T>
                 b->map_dir.push_back(mapDimension[2]); // reverse
                 b->map_dir.push_back(mapDimension[1]);
                 b->map_dir.push_back(mapDimension[0]);
-                int tmp = ndom_pts(2);
-                ndom_pts(2) = ndom_pts(0);
-                ndom_pts(0) = tmp; // reverse counting
                 // last dimension would correspond to x, as in the 2d example
                 for (int k = 0; k < ndom_pts(2); k++)
                     for (int j = 0; j < ndom_pts(1); j++)
