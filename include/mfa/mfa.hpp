@@ -183,7 +183,7 @@ namespace mfa
                 const VectorXi&     derivs) const           // derivative to take in each domain dim. (0 = value, 1 = 1st deriv, 2 = 2nd deriv, ...)
                                                             // pass size-0 vector if unused
         {
-            mfa::Decoder<T> decoder(*this, mfa_data, verbose);
+            mfa::Decoder<T> decoder(mfa_data, verbose);
             decoder.DecodeDomain(input, approx, min_dim, max_dim, saved_basis, derivs);
         }
 
@@ -195,7 +195,7 @@ namespace mfa
         {
             VectorXi no_derivs;
             int verbose = 0;
-            Decoder<T> decoder(*this, mfa_data, verbose);
+            Decoder<T> decoder(mfa_data, verbose);
             // TODO: hard-coded for one tensor product
             decoder.VolPt(param, cpt, mfa_data.tmesh.tensor_prods[0], no_derivs);
         }
@@ -209,7 +209,7 @@ namespace mfa
                 VectorX<T>&         cpt) const              // (output) decoded point
         {
             int verbose = 0;
-            Decoder<T> decoder(*this, mfa_data, verbose);
+            Decoder<T> decoder(mfa_data, verbose);
             // TODO: hard-coded for one tensor product
             decoder.VolPt(param, cpt, mfa_data.tmesh.tensor_prods[0], derivs);
         }
@@ -224,7 +224,7 @@ namespace mfa
                             MatrixX<T>&             result)                 // decoded result
         {
             int verbose = 0;
-            Decoder<T> decoder(*this, mfa_data, verbose);
+            Decoder<T> decoder(mfa_data, verbose);
             decoder.DecodeGrid(result, min_dim, max_dim, par_min, par_max, ndom_pts);
         }
 
@@ -254,7 +254,7 @@ namespace mfa
 
             // approximated value
             VectorX<T> cpt(pt_dim);          // approximated point
-            Decoder<T> decoder(*this, mfa_data, verbose);
+            Decoder<T> decoder(mfa_data, verbose);
             decoder.VolPt(param, cpt, mfa_data.tmesh.tensor_prods[0]);      // TODO: hard-coded for first tensor product
 
             for (auto i = 0; i < pt_dim; i++)

@@ -79,7 +79,7 @@ namespace mfa
     public:
         LocalLSQ(const MFA<T>&          mfa_,
                  MFA_Data<T>&           mfa_data_,
-                 const PointSet<T>&    input_,
+                 const PointSet<T>&     input_,
                  vector<size_t>         starts_,
                  vector<size_t>         ends_,
                  int                    verb_): mfa(mfa_),
@@ -161,7 +161,7 @@ namespace mfa
         const MFA<T>&       mfa;                            // the mfa top-level object
         MFA_Data<T>&        mfa_data;                       // the mfa data model
         int                 verbose;                        // output level
-        const PointSet<T>& input;                         // input points
+        const PointSet<T>&  input;                         // input points
         size_t              max_num_curves;                 // max num. curves per dimension to check in curve version
 
     public:
@@ -169,7 +169,7 @@ namespace mfa
         Encoder(
                 const MFA<T>&       mfa_,                   // MFA top-level object
                 MFA_Data<T>&        mfa_data_,              // MFA data model
-                const PointSet<T>& input_,                // input points
+                const PointSet<T>&  input_,                // input points
                 int                 verbose_) :             // debug level
             mfa(mfa_),
             mfa_data(mfa_data_),
@@ -1665,7 +1665,7 @@ namespace mfa
                 set<int>&               err_spans,  // (output) spans with error greater than err_limit
                 T                       err_limit)  // max allowable error
         {
-            mfa::Decoder<T> decoder(mfa, mfa_data, verbose);
+            mfa::Decoder<T> decoder(mfa_data, verbose);
             int pt_dim = tensor.ctrl_pts.cols();            // control point dimensonality
             VectorX<T> cpt(pt_dim);                         // decoded curve point
             int nerr = 0;                                   // number of points with error greater than err_limit
@@ -1753,7 +1753,7 @@ namespace mfa
             int parent_tensor_idx;                              // idx of parent tensor of new knot (assuming only one new knot)
 
             // find new knots
-            mfa::NewKnots<T> nk(mfa, mfa_data);
+            mfa::NewKnots<T> nk(mfa_data, input);
 
             // vectors of new_nctrl_pts, new_ctrl_pts, new_weights, one instance for each knot to be inserted
             // we're only inserting one knot at a time, but the NewKnots object supports multiple knot insertions, hence std::vector
@@ -1763,8 +1763,7 @@ namespace mfa
 
             if (local)
 //                 done &= nk.FirstErrorSpan(domain,
-                done &=   nk.MaxErrorSpan(input.domain,
-                                          myextents,
+                done &=   nk.MaxErrorSpan(myextents,
                                           err_limit,
                                           iter,
                                           parent_tensor_idx,
@@ -1775,8 +1774,7 @@ namespace mfa
                                           local);
             else
 //                 done &= nk.FirstErrorSpan(domain,
-                done &=   nk.MaxErrorSpan(input.domain,
-                                          myextents,
+                done &=   nk.MaxErrorSpan(myextents,
                                           err_limit,
                                           iter,
                                           parent_tensor_idx,
@@ -2236,7 +2234,7 @@ namespace mfa
                 }                                                           // domain dimensions
 
                 // insert the new knots
-                mfa::NewKnots<T> nk(mfa, mfa_data);
+                mfa::NewKnots<T> nk(mfa_data, input);
                 vector<vector<KnotIdx>> unused(mfa_data.dom_dim);
                 nk.OrigInsertKnots(new_knots, new_levels, unused);
 

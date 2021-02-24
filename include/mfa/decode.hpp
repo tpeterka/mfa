@@ -99,16 +99,13 @@ namespace mfa
                                                         // control points
         vector<size_t>      cs;                         // control point stride (only in decoder, not mfa)
         int                 verbose;                    // output level
-        const MFA<T>&       mfa;                        // the mfa top-level object
         const MFA_Data<T>&  mfa_data;                   // the mfa data model
 
     public:
 
         Decoder(
-                const MFA<T>&       mfa_,               // MFA top-level object
                 const MFA_Data<T>&  mfa_data_,          // MFA data model
                 int                 verbose_) :         // debug level
-            mfa(mfa_),
             mfa_data(mfa_data_),
             verbose(verbose_)
         {
