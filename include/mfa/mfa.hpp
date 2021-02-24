@@ -69,7 +69,7 @@ using SpMatTriplet = Eigen::Triplet<T>;
 
 #include    <mfa/util.hpp>
 #include    <mfa/param.hpp>
-#include    <mfa/input.hpp>
+#include    <mfa/pointset.hpp>
 #include    <mfa/tmesh.hpp>
 #include    <mfa/mfa_data.hpp>
 #include    <mfa/decode.hpp>
