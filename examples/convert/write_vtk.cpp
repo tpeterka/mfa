@@ -183,9 +183,9 @@ void PrepRenderingData(
     // raw geometry and science variables
     raw_data = new float*[nvars];
     for (size_t j = 0; j < nvars; j++)
-        raw_data[j] = new float[block->input->tot_ndom_pts];
+        raw_data[j] = new float[block->input->npts];
 
-    for (size_t j = 0; j < (size_t)(block->input->tot_ndom_pts); j++)
+    for (size_t j = 0; j < (size_t)(block->input->npts); j++)
     {
         p.x = block->input->domain(j, 0);                      // first 3 dims stored as mesh geometry
         p.y = block->input->domain(j, 1);
@@ -388,7 +388,7 @@ void PrepRenderingData(
     blend_data  = new float*[nvars];
     for (size_t j = 0; j < nvars; j++)
     {
-        approx_data[j]  = new float[block->input->tot_ndom_pts];
+        approx_data[j]  = new float[block->input->npts];
         blend_data[j]   = new float[block->blend.rows()];
     }
 

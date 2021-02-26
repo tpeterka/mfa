@@ -106,7 +106,7 @@ namespace mfa
                 for (auto i = 0; i < inserted_knot_idxs[k].size(); i++)
                 {
                     auto idx = inserted_knot_idxs[k][i];
-                    mfa_data.tmesh.insert_knot(k, idx, temp_levels[k][idx], temp_knots[k][idx], input.params.param_grid);
+                    mfa_data.tmesh.insert_knot(k, idx, temp_levels[k][idx], temp_knots[k][idx], input.params->param_grid);
                 }
             }   // for all domain dimensions
         }
@@ -172,7 +172,7 @@ namespace mfa
                 for (auto i = 0; i < inserted_knot_idxs[k].size(); i++)
                 {
                     auto idx = inserted_knot_idxs[k][i];
-                    mfa_data.tmesh.insert_knot(k, idx, temp_levels[k][idx], temp_knots[k][idx], input.params.param_grid);
+                    mfa_data.tmesh.insert_knot(k, idx, temp_levels[k][idx], temp_knots[k][idx], input.params->param_grid);
                 }
             }   // for all domain dimensions
 
@@ -325,7 +325,7 @@ namespace mfa
 
                         // if the current span were to be split, check whether the resulting spans will have an input point
                         ParamIdx param_idx  = low_idx;
-                        while (input.params.param_grid[k][param_idx] < new_knot_val)
+                        while (input.params->param_grid[k][param_idx] < new_knot_val)
                             param_idx++;
                         if (param_idx - low_idx == 0 || high_idx - param_idx == 0)
                         {
@@ -436,7 +436,7 @@ namespace mfa
 
                         // if the current span were to be split, check whether the resulting spans will have an input point
                         ParamIdx param_idx  = low_idx;
-                        while (input.params.param_grid[k][param_idx] < new_knot_val)
+                        while (input.params->param_grid[k][param_idx] < new_knot_val)
                             param_idx++;
                         if (param_idx - low_idx == 0 || high_idx - param_idx == 0)
                         {
@@ -564,7 +564,7 @@ namespace mfa
 
                         // if the current span were to be split, check whether the resulting spans will have an input point
                         ParamIdx param_idx  = low_idx;
-                        while (input.params.param_grid[k][param_idx] < new_knot_val)
+                        while (input.params->param_grid[k][param_idx] < new_knot_val)
                             param_idx++;
                         if (param_idx - low_idx == 0 || high_idx - param_idx == 0)
                         {
@@ -692,7 +692,7 @@ namespace mfa
 
                         // if the current span were to be split, check whether the resulting spans will have an input point
                         ParamIdx param_idx  = low_idx;
-                        while (input.params.param_grid[k][param_idx] < new_knot_val)
+                        while (input.params->param_grid[k][param_idx] < new_knot_val)
                             param_idx++;
                         if (param_idx - low_idx == 0 || high_idx - param_idx == 0)
                         {

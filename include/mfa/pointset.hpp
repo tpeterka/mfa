@@ -1,5 +1,5 @@
 //--------------------------------------------------------------
-// mfa input data structure
+// mfa point set data structure
 //
 // Tom Peterka
 // Argonne National Laboratory
@@ -9,69 +9,196 @@
 // Argonne National Laboratory
 // dlenz@anl.gov
 //--------------------------------------------------------------
-#ifndef _INPUT_HPP
-#define _INPUT_HPP
+#ifndef _POINTSET_HPP
+#define _POINTSET_HPP
+
+#include <memory>
 
 namespace mfa
 {
     template <typename T>
     struct PointSet
     {
+        // Defined during construction
+        int         dom_dim;
+        int         pt_dim;
+        int         npts;
+
+        // List of points
+        MatrixX<T>  domain;
+
+        // Param<T>   params;
+        shared_ptr<Param<T>>    params;
+        VectorX<T>              dom_mins;
+        VectorX<T>              dom_maxs;
+
+        // Optional grid data
+        bool        structured;
+        VectorXi    ndom_pts;   // TODO: remove since this is contained in GridInfo?  
+        GridInfo    g;
+
+        // Generic constructor with only dimensionality and total points
         PointSet(
-                        size_t      dom_dim_,
-                        size_t      pt_dim_,
-                const   VectorX<T>& mins_,
-                const   VectorX<T>& maxs_,
-                        bool        structured_,
-                const   VectorXi&   ndom_pts_) :
+                size_t  dom_dim_,
+                size_t  pt_dim_,
+                size_t  npts_) :
             dom_dim(dom_dim_),
             pt_dim(pt_dim_),
-            dom_mins(mins_),
-            dom_maxs(maxs_),
-            structured(structured_),
-            ndom_pts(ndom_pts_)
+            npts(npts_),
+            structured(false)
         {
-            // Check that ndom_pts matches structured flag
-            if ( (!structured && ndom_pts.size() != 0) ||
-                (structured && ndom_pts.size() == 0)     ) 
-            {
-                cerr << "ERROR: Conflicting constructor arguments for PointSet" << endl;    
-                cerr << "  structured: " << boolalpha << structured << endl;
-                cerr << "  ndom_pts: ";
-                for (size_t k = 0; k < ndom_pts.size(); k++) cerr << ndom_pts(k) << " ";
-                cerr << endl;
-            }
+            domain.resize(npts, pt_dim);
+        }   
+
+        // Constructor for (possibly) grid-aligned data
+        // If ndom_pts_ is empty, PointSet is unstructured
+        PointSet(
+                size_t              dom_dim_,
+                size_t              pt_dim_,
+                size_t              npts_,
+                const VectorXi&     ndom_pts_) :
+            PointSet(dom_dim_, pt_dim_, npts_)
+        {
+            add_grid(ndom_pts_);
         }
 
-        void init()
+        // Constructor for a PointSet mapped from existing parameters
+        //   N.B. this is useful when decoding at the same params as encoding,
+        //        or when Params are constructed ahead of time
+        PointSet(
+                shared_ptr<Param<T>>    params_,
+                size_t                  pt_dim_) :
+            dom_dim(params_->dom_dim),
+            pt_dim(pt_dim_),
+            npts(params_->npts()),
+            params(params_)
         {
-            if (is_initialized)
+            domain.resize(npts, pt_dim);
+
+            if (params_->structured)
+                add_grid(params_->ndom_pts);
+        }
+
+        void set_bounds(const VectorX<T>& mins_, const VectorX<T>& maxs_)
+        {
+            if ( (mins_.size() > 0 && mins_.size() != dom_dim) ||
+                 (mins_.size() != maxs_.size()) )
             {
-                cerr << "Warning: Attempting to initialize a previously initialized PointSet" << endl;
-                return;
-            }
-            if (!validate())
-            {
-                cerr << "ERROR: Improper setup of PointSet" << endl;
+                cerr << "ERROR: Invalid bounds passed to PointSet" << endl;
+                cerr << "  dom_mins: " << mins_ << endl;
+                cerr << "  dom_maxs: " << maxs_ << endl;
                 exit(1);
+            }
+
+            if (params != nullptr)
+            {
+                cerr << "Warning: Setting PointSet bounds after parameter initialization, this likely will have no effect" << endl;
+            }
+
+            dom_mins = mins_;
+            dom_maxs = maxs_;
+        }
+
+        // Initialize parameter values from domain points and bounding box (dom_mins/maxs)
+        //   N.B. If dom_mins/maxs are empty, they are set to be the min/max values of the
+        //        domain points during Param construction.
+        void init_params()
+        {
+            params = make_shared<Param<T>>(dom_dim, dom_mins, dom_maxs, ndom_pts, domain, structured);
+        }
+
+        // Specify bounding box and initialize parameters simultaneously
+        void init_params(const VectorX<T>& dom_mins_, const VectorX<T>& dom_maxs_)
+        {
+            set_bounds(dom_mins_, dom_maxs_);
+            init_params();
+        }
+
+        void set_params(shared_ptr<Param<T>> params_)
+        {
+            if (params != nullptr)
+            {
+                cerr << "Warning: Overwriting existing parameters in PointSet" << endl;
+            }
+
+            if (!check_param_domain_agreement(*params_))
+            {
+                cerr << "ERROR: Attempted to add mismatched Params to PointSet" << endl;
+                exit(1);
+            }
+ 
+            params = params_;
+
+            // If Param is structured and *this does not yet have a grid structure, inherit the 
+            // grid structure from Param
+            if (params_->structured && !structured)
+                add_grid(params_->ndom_pts);
+        }
+
+
+        // Checks that the Param object does not contradict existing members of PointSet
+        //   N.B. If *this is structured, then Param object must be too.
+        //        However, if *this is not structured, Param is allowed to be structured;
+        //        this allows a new grid structure to be imposed from the Param grid structure.
+        bool check_param_domain_agreement(const Param<T>& params_)
+        {
+            bool agreement =    (dom_dim == params_.dom_dim)
+                            &&  (npts == params_.npts())
+                            &&  (structured ? params_.structured == true : true)
+                            &&  (structured ? ndom_pts == params_.ndom_pts : true)
+                            ;
+
+            return agreement;
+        }
+
+        // Add a grid structure to point set
+        // Does nothing if ndom_pts_ is empty
+        void add_grid(VectorXi ndom_pts_)
+        {
+            if (ndom_pts_.size() == 0)
+            {
+                return;
             }
             else
             {
-                // set total number of points
-                tot_ndom_pts = domain.rows();
-                
-                // set parameters
-                Param<T> temp_param(dom_dim, dom_mins, dom_maxs, ndom_pts, domain, structured);
-                swap(params, temp_param);
-                
-                // set grid data structure if needed
-                if (structured)
+                if (npts != ndom_pts_.prod())
                 {
-                    g.init(dom_dim, ndom_pts);
+                    cerr << "ERROR: Invalid grid added to PointSet. Total points do not match." << endl;
+                    exit(1);
                 }
-            }
 
-            is_initialized = true;
+                structured = true;
+                ndom_pts = ndom_pts_;
+                g.init(dom_dim, ndom_pts);
+
+                validate(); // Prints warning and continues if invalid
+            }
+        }
+
+        // Test that user-provided data meets basic sanity checks
+        bool validate() const
+        { 
+            bool is_valid =     (dom_dim > 0)
+                            &&  (pt_dim > dom_dim)
+                            &&  (pt_dim == domain.cols())
+                            &&  (structured ? ndom_pts.size() == dom_dim : true)
+                            &&  (structured ? ndom_pts.prod() == domain.rows() : true)
+                            ;
+
+            if (is_valid) return is_valid;
+            else 
+            {
+                cerr << "PointSet initialized with incompatible data" << endl;
+                cerr << "  structured: " << boolalpha << structured << endl;
+                cerr << "  dom_dim: " << dom_dim << ",  pt_dim: " << endl;
+                cerr << "  ndom_pts: ";
+                for (size_t k=0; k < ndom_pts.size(); k++) 
+                    cerr << ndom_pts(k) << " ";
+                cerr << endl;
+                cerr << "  domain matrix dims: " << domain.rows() << " x " << domain.cols() << endl;
+                
+                return is_valid;
+            }
         }
 
         PointSet(const PointSet&) = delete;
@@ -97,26 +224,6 @@ namespace mfa
         //     first.domain.swap(second.domain);
         //     swap(first.params, second.params);
         // }
-
-        // Defined during construction
-        int         dom_dim;
-        int         pt_dim;
-        bool        structured;
-        VectorXi    ndom_pts;           
-        VectorX<T>  dom_mins;           // Minimal extents of bounding box (optional: for parametrization)
-        VectorX<T>  dom_maxs;           // Maximal extents of bounding box (optional: for parametrization)
-        // VectorXi    model_dims;
-
-        // Defined by user
-        MatrixX<T>  domain;
-
-        // Defined automatically during init()
-        int             tot_ndom_pts{0};
-        mfa::GridInfo   g;
-        mfa::Param<T>   params;
-        bool            is_initialized{false};
-
-        
 
         class PtIterator
         {
@@ -172,9 +279,9 @@ namespace mfa
             void params(VectorX<T>& param_vec)
             {
                 if(structured)
-                    param_vec = pset.params.pt_params(vol_it);
+                    param_vec = pset.params->pt_params(vol_it);
                 else
-                    param_vec = pset.params.pt_params(lin_idx);
+                    param_vec = pset.params->pt_params(lin_idx);
             }
 
             void ijk(VectorXi& ijk_vec)
@@ -192,7 +299,7 @@ namespace mfa
             {
                 return structured ? vol_it.cur_iter() : lin_idx;
             }
-        };
+        };  // PtIterator
 
         PtIterator iterator(size_t idx) const
         {
@@ -206,7 +313,7 @@ namespace mfa
 
         PtIterator end() const
         {
-            return PtIterator(*this, tot_ndom_pts);
+            return PtIterator(*this, npts);
         }
 
         void pt_coords(size_t idx, VectorX<T>& coord_vec) const
@@ -220,49 +327,14 @@ namespace mfa
             {
                 VectorXi ijk(dom_dim);
                 g.idx2ijk(idx, ijk);
-                param_vec = params.pt_params(ijk);
+                param_vec = params->pt_params(ijk);
             }
             else
             {
-                param_vec = params.pt_params(idx);   
-            }
-        }
-
-        // Test that user-provided data meets basic sanity checks
-        bool validate() const
-        { 
-            bool is_valid =     (dom_dim > 0)
-                            &&  (pt_dim > dom_dim)
-                            &&  (pt_dim == domain.cols())
-                            &&  (structured ? ndom_pts.size() == dom_dim : true)
-                            &&  (structured ? ndom_pts.prod() == domain.rows() : true)
-                            &&  (dom_mins.size() == dom_maxs.size())
-                            ;
-
-            if (is_valid) return is_valid;
-            else 
-            {
-                cerr << "PointSet initialized with incompatible data" << endl;
-                cerr << "  structured: " << boolalpha << structured << endl;
-                cerr << "  dom_dim: " << dom_dim << ",  pt_dim: " << endl;
-                cerr << "  ndom_pts: ";
-                for (size_t k=0; k < ndom_pts.size(); k++) 
-                    cerr << ndom_pts(k) << " ";
-                cerr << endl;
-                cerr << "  domain matrix dims: " << domain.rows() << " x " << domain.cols() << endl;
-                cerr << "  dom_mins: ";
-                for (size_t k=0; k < dom_mins.size(); k++)
-                    cerr << dom_mins(k) << " ";
-                cerr << endl;
-                cerr << "  dom_maxs: ";
-                for (size_t k=0; k < dom_maxs.size(); k++)
-                    cerr << dom_maxs(k) << " ";
-                cerr << endl;
-
-                return is_valid;
+                param_vec = params->pt_params(idx);   
             }
         }
     };
 }   // namespace mfa
 
-#endif // _INPUT_HPP
+#endif // _POINTSET_HPP

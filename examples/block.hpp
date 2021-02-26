@@ -84,6 +84,7 @@ struct Block : public BlockBase<T>
     using Base::bounds_mins;
     using Base::bounds_maxs;
     using Base::overlaps;
+    using Base::input;
 
     static
         void* create()              { return mfa::create<Block>(); }
@@ -337,9 +338,7 @@ struct Block : public BlockBase<T>
 
 
         // Create input data set and add to block
-        VectorXi unused;
-        mfa::PointSet<T>* input = new mfa::PointSet<T>(dom_dim, pt_dim, core_mins, core_maxs, false, unused);
-        input->domain.resize(a->tot_ndom_pts, pt_dim);
+        input = new mfa::PointSet<T>(dom_dim, pt_dim, a->tot_ndom_pts);
 
         unsigned seed = chrono::system_clock::now().time_since_epoch().count();
         std::default_random_engine df_gen(seed);
@@ -436,7 +435,7 @@ struct Block : public BlockBase<T>
             }      
         }
 
-        this->set_input_block(input);
+        input->init_params(core_mins, core_maxs);     // Set explicit bounding box for parameter space
         this->mfa = new mfa::MFA<T>(dom_dim);
 
         // extents
@@ -517,11 +516,7 @@ struct Block : public BlockBase<T>
                 this->overlaps(i) = m2;
         }
 
-        VectorX<T> unused;  // Let MFA determine domain mins/maxs automatically
-                            // NB Don't want to use bounds_min/max here because ghost points might not sit exactly at these values
-        mfa::PointSet<T>* input = new mfa::PointSet<T>(this->dom_dim, this->pt_dim, unused, unused, true, ndom_pts);
-
-        input->domain.resize(ndom_pts.prod(), this->pt_dim);
+        input = new mfa::PointSet<T>(dom_dim, pt_dim, ndom_pts.prod(), ndom_pts);
 
         // assign values to the domain (geometry)
         mfa::VolIterator vol_it(ndom_pts);
@@ -631,7 +626,7 @@ struct Block : public BlockBase<T>
         for (int k = 0; k < this->dom_dim; k++)
             this->map_dir.push_back(k);
 
-        this->set_input_block(input);
+        input->init_params();
         this->mfa = new mfa::MFA<T>(this->dom_dim);
 
         // extents
@@ -673,11 +668,9 @@ struct Block : public BlockBase<T>
         }
         vector<float> vel(3 * tot_ndom_pts);
 
-        VectorX<T> unused;  // Let MFA determine domain mins/maxs automatically
-                            // NB Don't want to use bounds_min/max here because ghost points might not sit exactly at these values
-        mfa::PointSet<T>* input = new mfa::PointSet<T>(dom_dim, pt_dim, unused, unused, true, ndom_pts);
+        // Construct point set to contain input
+        input = new mfa::PointSet<T>(dom_dim, pt_dim, tot_ndom_pts, ndom_pts);
 
-        input->domain.resize(tot_ndom_pts, pt_dim);
         // rest is hard-coded for 1d
 
         // open file and seek to a slice in the center
@@ -728,7 +721,7 @@ struct Block : public BlockBase<T>
             core_maxs(i) = bounds_maxs(i);
         }
 
-        this->set_input_block(input);
+        input->init_params();
         this->mfa = new mfa::MFA<T>(dom_dim);
 
         // debug
@@ -763,10 +756,8 @@ struct Block : public BlockBase<T>
         }
         vector<float> vel(3 * tot_ndom_pts);
 
-        VectorX<T> unused;  // Let MFA determine domain mins/maxs automatically
-                            // NB Don't want to use bounds_min/max here because ghost points might not sit exactly at these values
-        mfa::PointSet<T>* input = new mfa::PointSet<T>(dom_dim, pt_dim, unused, unused, true, ndom_pts);
-        input->domain.resize(tot_ndom_pts, pt_dim);
+        // Construct point set to contain input
+        input = new mfa::PointSet<T>(dom_dim, pt_dim, tot_ndom_pts, ndom_pts);
 
         // rest is hard-coded for 2d
 
@@ -823,7 +814,7 @@ struct Block : public BlockBase<T>
             core_maxs(i) = bounds_maxs(i);
         }
 
-        this->set_input_block(input);
+        input->init_params();
         this->mfa = new mfa::MFA<T>(dom_dim);
 
         // debug
@@ -858,10 +849,8 @@ struct Block : public BlockBase<T>
         }
         vector<float> vel(a->full_dom_pts[0] * a->full_dom_pts[1] * 3);
 
-        VectorX<T> unused;  // Let MFA determine domain mins/maxs automatically
-                            // NB Don't want to use bounds_min/max here because ghost points might not sit exactly at these values
-        mfa::PointSet<T>* input = new mfa::PointSet<T>(dom_dim, pt_dim, unused, unused, true, ndom_pts);
-        this->domain.resize(tot_ndom_pts, pt_dim);
+        // Construct point set to contain input
+        input = new mfa::PointSet<T>(dom_dim, pt_dim, tot_ndom_pts, ndom_pts);
 
         FILE *fd = fopen(a->infile.c_str(), "r");
         assert(fd);
@@ -941,7 +930,7 @@ struct Block : public BlockBase<T>
             core_maxs(i) = bounds_maxs(i);
         }
 
-        this->set_input_block(input);
+        input->init_params();
         this->mfa = new mfa::MFA<T>(dom_dim);
 
         // debug
@@ -975,10 +964,8 @@ struct Block : public BlockBase<T>
             tot_ndom_pts                    *= ndom_pts(i);
         }
 
-        VectorX<T> unused;  // Let MFA determine domain mins/maxs automatically
-                            // NB Don't want to use bounds_min/max here because ghost points might not sit exactly at these values
-        mfa::PointSet<T>* input = new mfa::PointSet<T>(dom_dim, pt_dim, unused, unused, true, ndom_pts);
-        input->domain.resize(tot_ndom_pts, pt_dim);
+        // Construct point set to contain input
+        input = new mfa::PointSet<T>(dom_dim, pt_dim, tot_ndom_pts, ndom_pts);
 
         vector<float> vel(3 * tot_ndom_pts);
 
@@ -1039,7 +1026,7 @@ struct Block : public BlockBase<T>
             core_maxs(i) = bounds_maxs(i);
         }
 
-        this->set_input_block(input);
+        input->init_params();
         this->mfa = new mfa::MFA<T>(dom_dim);
 
         // debug
@@ -1073,10 +1060,8 @@ struct Block : public BlockBase<T>
             tot_ndom_pts    *= ndom_pts(i);
         }
 
-        VectorX<T> unused;  // Let MFA determine domain mins/maxs automatically
-                            // NB Don't want to use bounds_min/max here because ghost points might not sit exactly at these values
-        mfa::PointSet<T>* input = new mfa::PointSet<T>(dom_dim, pt_dim, unused, unused, true, ndom_pts);
-        input->domain.resize(tot_ndom_pts, pt_dim);
+        // Construct point set to contain input
+        input = new mfa::PointSet<T>(dom_dim, pt_dim, tot_ndom_pts, ndom_pts);
 
         vector<float> vel(a->full_dom_pts[0] * a->full_dom_pts[1] * a->full_dom_pts[2] * 3);
 
@@ -1161,7 +1146,7 @@ struct Block : public BlockBase<T>
             core_maxs(i) = bounds_maxs(i);
         }
 
-        this->set_input_block(input);
+        input->init_params();
         this->mfa = new mfa::MFA<T>(dom_dim);
 
         // debug
@@ -1195,10 +1180,8 @@ struct Block : public BlockBase<T>
             tot_ndom_pts    *= ndom_pts(i);
         }
 
-        VectorX<T> unused;  // Let MFA determine domain mins/maxs automatically
-                            // NB Don't want to use bounds_min/max here because ghost points might not sit exactly at these values
-        mfa::PointSet<T>* input = new mfa::PointSet<T>(dom_dim, pt_dim, unused, unused, true, ndom_pts);
-        input->domain.resize(tot_ndom_pts, pt_dim);
+        // Construct point set to contain input
+        input = new mfa::PointSet<T>(dom_dim, pt_dim, tot_ndom_pts, ndom_pts);
 
         vector<float> val(tot_ndom_pts);
 
@@ -1248,7 +1231,7 @@ struct Block : public BlockBase<T>
             core_maxs(i) = bounds_maxs(i);
         }
 
-        this->set_input_block(input);
+        input->init_params();
         this->mfa = new mfa::MFA<T>(dom_dim);
 
         // debug
@@ -1282,10 +1265,8 @@ struct Block : public BlockBase<T>
             tot_ndom_pts    *= ndom_pts(i);
         }
 
-        VectorX<T> unused;  // Let MFA determine domain mins/maxs automatically
-                            // NB Don't want to use bounds_min/max here because ghost points might not sit exactly at these values
-        mfa::PointSet<T>* input = new mfa::PointSet<T>(dom_dim, pt_dim, unused, unused, true, ndom_pts);
-        input->domain.resize(tot_ndom_pts, pt_dim);
+        // Construct point set to contain input
+        input = new mfa::PointSet<T>(dom_dim, pt_dim, tot_ndom_pts, ndom_pts);
 
         vector<float> val(tot_ndom_pts);
 
@@ -1339,7 +1320,7 @@ struct Block : public BlockBase<T>
             core_maxs(i) = bounds_maxs(i);
         }
 
-        this->set_input_block(input);
+        input->init_params();
         this->mfa = new mfa::MFA<T>(dom_dim);
 
         // debug
@@ -1550,10 +1531,8 @@ struct Block : public BlockBase<T>
             }
         }
 
-        VectorX<T> unused;  // Let MFA determine domain mins/maxs automatically
-                            // NB Don't want to use bounds_min/max here because ghost points might not sit exactly at these values
-        mfa::PointSet<T>* input = new mfa::PointSet<T>(b->dom_dim, b->pt_dim, unused, unused, true, ndom_pts);
-        input->domain.resize(tot_ndom_pts, b->pt_dim);
+        // Construct point set to contain input
+        b->input = new mfa::PointSet<T>(b->dom_dim, b->pt_dim, tot_ndom_pts, ndom_pts);
 
         if (0 == gid)
             cerr << " total local size : " << tot_ndom_pts << endl;
@@ -1562,13 +1541,13 @@ struct Block : public BlockBase<T>
             int dir0 = mapDimension[0];
             b->map_dir.push_back(dir0); // only one dimension, rest are not varying
             for (int i = 0; i < tot_ndom_pts; i++) {
-                input->domain(i, 0) = bounds.min[dir0] + i;
+                b->input->domain(i, 0) = bounds.min[dir0] + i;
                 int idx = 3 * i;
                 float val = 0;
                 for (int k = 0; k < chunk; k++)
                     val += data[idx + k] * data[idx + k];
                 val = sqrt(val);
-                input->domain(i, 1) = val;
+                b->input->domain(i, 1) = val;
             }
             args.vars_nctrl_pts[0][0] = args.vars_nctrl_pts[0][dir0]; // only one direction that matters
         } else if (b->dom_dim == 2) // 2d problem, second direction would be x, first would be y
@@ -1584,13 +1563,13 @@ struct Block : public BlockBase<T>
                 for (int i = 0; i < ndom_pts(0); i++) {
                     for (int j = 0; j < ndom_pts(1); j++) {
                         n = j * ndom_pts(0) + i;
-                        input->domain(n, 0) = bounds.min[dir0] + i; //
-                        input->domain(n, 1) = bounds.min[dir1] + j;
+                        b->input->domain(n, 0) = bounds.min[dir0] + i; //
+                        b->input->domain(n, 1) = bounds.min[dir1] + j;
                         float val = 0;
                         for (int k = 0; k < chunk; k++)
                             val += data[idx + k] * data[idx + k];
                         val = sqrt(val);
-                        input->domain(n, 2) = val;
+                        b->input->domain(n, 2) = val;
                         idx += 3;
                     }
                 }
@@ -1605,12 +1584,12 @@ struct Block : public BlockBase<T>
                 b->map_dir.push_back(dir1);
                 for (int j = 0; j < ndom_pts(1); j++) {
                     for (int i = 0; i < ndom_pts(0); i++) {
-                        input->domain(n, 1) = bounds.min[dir1] + j;
-                        input->domain(n, 0) = bounds.min[dir0] + i;
+                        b->input->domain(n, 1) = bounds.min[dir1] + j;
+                        b->input->domain(n, 0) = bounds.min[dir0] + i;
                         float val = 0;
                         for (int k = 0; k < chunk; k++)
                             val += data[idx + k] * data[idx + k];
-                        input->domain(n, 2) = sqrt(val);
+                        b->input->domain(n, 2) = sqrt(val);
                         n++;
                         idx += 3;
                     }
@@ -1634,14 +1613,14 @@ struct Block : public BlockBase<T>
                             //             -ndom_pts(0) + ndom_pts(0)-1 =   ndom_pts(0)*ndom_pts(1)*ndom_pts(2) - 1;
                             n = k * ndom_pts(0) * ndom_pts(1) + j * ndom_pts(0)
                                 + i;
-                            input->domain(n, 0) = bounds.min[0] + i;
-                            input->domain(n, 1) = bounds.min[1] + j;
-                            input->domain(n, 2) = bounds.min[2] + k;
+                            b->input->domain(n, 0) = bounds.min[0] + i;
+                            b->input->domain(n, 1) = bounds.min[1] + j;
+                            b->input->domain(n, 2) = bounds.min[2] + k;
                             float val = 0;
                             for (int k = 0; k < chunk; k++)
                                 val += data[idx + k] * data[idx + k];
                             val = sqrt(val);
-                            input->domain(n, 3) = val;
+                            b->input->domain(n, 3) = val;
                             idx += 3;
                         }
             } else // visualization order
@@ -1655,13 +1634,13 @@ struct Block : public BlockBase<T>
                 for (int k = 0; k < ndom_pts(2); k++)
                     for (int j = 0; j < ndom_pts(1); j++)
                         for (int i = 0; i < ndom_pts(0); i++) {
-                            input->domain(n, 2) = bounds.min[0] + k;
-                            input->domain(n, 1) = bounds.min[1] + j;
-                            input->domain(n, 0) = bounds.min[2] + i; // this now corresponds to x
+                            b->input->domain(n, 2) = bounds.min[0] + k;
+                            b->input->domain(n, 1) = bounds.min[1] + j;
+                            b->input->domain(n, 0) = bounds.min[2] + i; // this now corresponds to x
                             float val = 0;
                             for (int k = 0; k < chunk; k++)
                                 val += data[idx + k] * data[idx + k];
-                            input->domain(n, 3) = sqrt(val);
+                            b->input->domain(n, 3) = sqrt(val);
                             n++;
                             idx += 3;
                         }
@@ -1688,10 +1667,10 @@ struct Block : public BlockBase<T>
         }
 
         // set bounds_min/max for science variable (last coordinate)
-        b->bounds_mins(b->dom_dim) = input->domain.col(b->dom_dim).minCoeff();
-        b->bounds_maxs(b->dom_dim) = input->domain.col(b->dom_dim).maxCoeff();
+        b->bounds_mins(b->dom_dim) = b->input->domain.col(b->dom_dim).minCoeff();
+        b->bounds_maxs(b->dom_dim) = b->input->domain.col(b->dom_dim).maxCoeff();
 
-        b->set_input_block(input);
+        b->input->init_params();
         b->mfa = new mfa::MFA<T>(b->dom_dim);
     }
 

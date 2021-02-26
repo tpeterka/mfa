@@ -1548,7 +1548,7 @@ namespace mfa
                 // debug
                 cerr << "Using uniform knots (structured input)" << endl;
                 
-                uniform_knots_impl_structured(input.params.param_grid, tmesh);
+                uniform_knots_impl_structured(input.params->param_grid, tmesh);
             }
             else
             {

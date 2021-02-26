@@ -135,6 +135,11 @@ namespace mfa
             // }
         }
 
+        size_t npts()
+        {
+            return structured ? ndom_pts.prod() : param_list.rows();
+        }
+
         friend void swap(Param& first, Param& second)
         {
             first.ndom_pts.swap(second.ndom_pts);

@@ -132,7 +132,7 @@ namespace mfa
             while(!vol_iter.done())
             {
                 for (auto k = 0; k < mfa_data.dom_dim; k++)
-                    param(k) = input.params.param_grid[k][vol_iter.idx_dim(k)];
+                    param(k) = input.params->param_grid[k][vol_iter.idx_dim(k)];
 
                 decoder.VolPt_tmesh(param, cpt);
                 vol_iter.idx_ijk(vol_iter.cur_iter(), ijk);                     // multi-dim index into domain points
@@ -292,15 +292,15 @@ namespace mfa
 
                 for (int i = 0; i < mfa_data.N[k].rows(); i++)
                 {
-                    int span = mfa_data.FindSpan(k, input.params.param_grid[k][i], nctrl_pts(k));
+                    int span = mfa_data.FindSpan(k, input.params->param_grid[k][i], nctrl_pts(k));
 
 #ifndef MFA_TMESH       // original version for one tensor product
 
-                    mfa_data.OrigBasisFuns(k, input.params.param_grid[k][i], span, mfa_data.N[k], i);
+                    mfa_data.OrigBasisFuns(k, input.params->param_grid[k][i], span, mfa_data.N[k], i);
 
 #else               // tmesh version
 
-                    mfa_data.BasisFuns(k, input.params.param_grid[k][i], span, mfa_data.N[k], i);
+                    mfa_data.BasisFuns(k, input.params->param_grid[k][i], span, mfa_data.N[k], i);
 
 #endif
                 }
@@ -584,7 +584,7 @@ namespace mfa
             //     tot_dom_pts *= end_idxs[k] - start_idxs[k] + 1;
 
             // Assemble collocation matrix
-            SparseMatrixX<T> Nt(t.nctrl_pts.prod() , input.tot_ndom_pts);
+            SparseMatrixX<T> Nt(t.nctrl_pts.prod() , input.npts);
             CollMatrixUnified(t_idx, /*start_idxs, end_idxs,*/ Nt);
             
 
@@ -651,7 +651,7 @@ namespace mfa
             // get input domain points covered by the tensor
             vector<size_t> start_idxs(mfa_data.dom_dim);
             vector<size_t> end_idxs(mfa_data.dom_dim);
-            mfa_data.tmesh.domain_pts(t_idx, false, input.params.param_grid, start_idxs, end_idxs);
+            mfa_data.tmesh.domain_pts(t_idx, false, input.params->param_grid, start_idxs, end_idxs);
 
             // Q matrix of relevant input domain points
             VectorXi ndom_pts(mfa_data.dom_dim);
@@ -721,7 +721,7 @@ namespace mfa
                     for (auto k = 0; k < mfa_data.dom_dim; k++)                                 // for all dims
                     {
                         int p = mfa_data.p(k);                                                  // degree of current dim.
-                        T u = input.params.param_grid[k][dom_iter.idx_dim(k)];                             // parameter of current input point
+                        T u = input.params->param_grid[k][dom_iter.idx_dim(k)];                             // parameter of current input point
                         T B = mfa_data.OneBasisFun(k, u, local_knots[k]);                       // basis function
                         if (Nfree(dom_iter.cur_iter(), free_iter.cur_iter()) == -1.0)           // unassigned so far
                             Nfree(dom_iter.cur_iter(), free_iter.cur_iter()) = B;
@@ -773,7 +773,7 @@ namespace mfa
                     for (auto k = 0; k < mfa_data.dom_dim; k++)                                 // for all dims
                     {
                         int p = mfa_data.p(k);                                                  // degree of current dim.
-                        T u = input.params.param_grid[k][dom_iter.idx_dim(k)];                             // parameter of current input point
+                        T u = input.params->param_grid[k][dom_iter.idx_dim(k)];                             // parameter of current input point
                         T B = mfa_data.OneBasisFun(k, u, local_knots[k]);                       // basis function
                         if (Ncons(dom_iter.cur_iter(), i) == -1.0)                              // unassigned so far
                             Ncons(dom_iter.cur_iter(), i) = B;
@@ -1265,7 +1265,7 @@ namespace mfa
 
             if (R.cols() != mfa_data.max_dim - mfa_data.min_dim + 1)
                 cerr << "Error: Incorrect matrix dimensions in RHSUnified (cols)" << endl;
-            if (R.rows() != input.tot_ndom_pts)
+            if (R.rows() != input.npts)
                 cerr << "Error: Incorrect matrix dimensions in RHSUnified (rows)" << endl;
 
             VectorX<T> pt_coords(input.dom_dim);
@@ -1675,10 +1675,10 @@ namespace mfa
 
             for (auto i = 0; i < input.ndom_pts[k]; i++)      // all domain points in the curve
             {
-                while (mfa_data.tmesh.all_knots[k][span + 1] < 1.0 && mfa_data.tmesh.all_knots[k][span + 1] <= input.params.param_grid[k][i])
+                while (mfa_data.tmesh.all_knots[k][span + 1] < 1.0 && mfa_data.tmesh.all_knots[k][span + 1] <= input.params->param_grid[k][i])
                     span++;
 
-                decoder.CurvePt(k, input.params.param_grid[k][i], ctrl_pts, weights, tensor, cpt);
+                decoder.CurvePt(k, input.params->param_grid[k][i], ctrl_pts, weights, tensor, cpt);
 
 
                 // error
@@ -1697,15 +1697,15 @@ namespace mfa
                     {
                         // ensure there would be a domain point in both halves of the span if it were split
                         bool split_left = false;
-                        for (auto j = i; input.params.param_grid[k][j] >= mfa_data.tmesh.all_knots[k][span]; j--)
-                            if (input.params.param_grid[k][j] < (mfa_data.tmesh.all_knots[k][span] + mfa_data.tmesh.all_knots[k][span + 1]) / 2.0)
+                        for (auto j = i; input.params->param_grid[k][j] >= mfa_data.tmesh.all_knots[k][span]; j--)
+                            if (input.params->param_grid[k][j] < (mfa_data.tmesh.all_knots[k][span] + mfa_data.tmesh.all_knots[k][span + 1]) / 2.0)
                             {
                                 split_left = true;
                                 break;
                             }
                         bool split_right = false;
-                        for (auto j = i; input.params.param_grid[k][j] < mfa_data.tmesh.all_knots[k][span + 1]; j++)
-                            if (input.params.param_grid[k][j] >= (mfa_data.tmesh.all_knots[k][span] + mfa_data.tmesh.all_knots[k][span + 1]) / 2.0)
+                        for (auto j = i; input.params->param_grid[k][j] < mfa_data.tmesh.all_knots[k][span + 1]; j++)
+                            if (input.params->param_grid[k][j] >= (mfa_data.tmesh.all_knots[k][span] + mfa_data.tmesh.all_knots[k][span + 1]) / 2.0)
                             {
                                 split_right = true;
                                 break;
@@ -1874,7 +1874,7 @@ namespace mfa
             // get the subset of the domain points needed for the local solve
             vector<size_t> start_idxs(mfa_data.dom_dim);
             vector<size_t> end_idxs(mfa_data.dom_dim);
-            tmesh.domain_pts(tmesh.tensor_prods.size() - 1, true, input.params.param_grid, start_idxs, end_idxs);        // true = pad by degree on each side
+            tmesh.domain_pts(tmesh.tensor_prods.size() - 1, true, input.params->param_grid, start_idxs, end_idxs);        // true = pad by degree on each side
 
             // set up the optimization
             LocalLSQ<T> llsq(mfa, mfa_data, input, start_idxs, end_idxs, verbose);
@@ -2130,11 +2130,11 @@ namespace mfa
                     for (int i = 0; i < N.rows(); i++)                      // the rows of N
                     {
                         // TODO: hard-coded for single tensor
-                        int span = mfa_data.FindSpan(k, input.params.param_grid[k][i], mfa_data.tmesh.tensor_prods[0]);
+                        int span = mfa_data.FindSpan(k, input.params->param_grid[k][i], mfa_data.tmesh.tensor_prods[0]);
 #ifndef MFA_TMESH       // original version for one tensor product
-                        mfa_data.OrigBasisFuns(k, input.params.param_grid[k][i], span, N, i);
+                        mfa_data.OrigBasisFuns(k, input.params->param_grid[k][i], span, N, i);
 #else                   // tmesh version
-                        mfa_data.BasisFuns(k, input.params.param_grid[k][i], span, N, i);
+                        mfa_data.BasisFuns(k, input.params->param_grid[k][i], span, N, i);
 #endif
                     }
 
