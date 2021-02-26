@@ -48,8 +48,6 @@
 
 #endif
 
-#include    <diy/thirdparty/fmt/format.h>
-
 typedef Eigen::MatrixXf MatrixXf;
 typedef Eigen::MatrixXi MatrixXi;
 typedef Eigen::VectorXf VectorXf;
@@ -708,6 +706,8 @@ namespace mfa
                 mfa_data.tmesh.ctrl_pt_anchor(mfa_data.tmesh.tensor_prods[t_idx], ijk, anchor);
 
                 // tensor containing anchor
+                // TODO: isn't this always the parent tensor t_idx?
+                // if so, remove this code and set t_idx_anchor = t_idx
                 TensorIdx t_idx_anchor;
                 for (auto k = 0; k < mfa_data.dom_dim; k++)
                 {
@@ -716,6 +716,15 @@ namespace mfa
                         break;
                 }
                 assert(t_idx_anchor < mfa_data.tmesh.tensor_prods.size());
+
+                // debug
+                // part of the TODO above, remove this with the above code and just set t_idx_anchor = t_idx
+                if (t_idx_anchor != t_idx)
+                {
+                    fmt::print(stderr, "EncodeTensorLocalLinear(): t_idx = {} but t_idx_anchor = {}. These should be equal\n",
+                            t_idx, t_idx_anchor);
+                    abort();
+                }
 
                 // local knot vector
                 mfa_data.tmesh.knot_intersections(anchor, t_idx_anchor, true, local_knot_idxs);
@@ -756,9 +765,9 @@ namespace mfa
             vector<TensorIdx>           t_idx_anchors;                                              // tensors containing corresponding anchors
             LocalSolveAllConstraints(t, Pcons, anchors, t_idx_anchors);
 
-            // iterator over constraint control points
+            // loop over constraint control points
             MatrixX<T> Ncons = MatrixX<T>::Constant(ndom_pts.prod(), Pcons.rows(), -1);         // basis functions, -1 means unassigned so far
-            for (auto i = 0; i < Pcons.rows(); i++)                                             // for all constraint control points
+            for (auto i = 0; i < Ncons.cols(); i++)                                             // for all constraint control points
             {
                 // local knot vector
                 mfa_data.tmesh.knot_intersections(anchors[i], t_idx_anchors[i], true, local_knot_idxs);
@@ -792,40 +801,35 @@ namespace mfa
                         Ncons(i, j) = 0.0;
             }
 
-            // R is the right hand side needed for solving N * P = R
-            MatrixX<T>  R = Q - Ncons * Pcons;
-
-            // debug
-//             cerr << "input:\n"  << domain   << endl;
-//             cerr << "Nfree:\n"  << Nfree    << endl;
-//             cerr << "Ncons:\n"  << Ncons    << endl;
-//             cerr << "Pcons:\n"  << Pcons    << endl;
-//             cerr << "Q:\n"      << Q        << endl;
-//             cerr << "R:\n"      << R        << endl;
-
-            // sanity check that the row sums of Nfree + Ncons should be ~ 1
+            // normalize Nfree and Ncons such that the row sum of Nfree + Ncons = 1.0
             for (auto i = 0; i < Nfree.rows(); i++)
             {
-                double eps = 1.0e-6;                // not sure how close is close enough
-
-                // debug
-                if (fabs(Nfree.row(i).sum() + Ncons.row(i).sum() - 1.0) > eps)
+                T sum = Nfree.row(i).sum() + Ncons.row(i).sum();
+                if (sum > 0.0)
                 {
-                    fprintf(stderr, "\nWarning: Row(%d) Nfree sum = %.4lf Ncons sum = %.4lf Nfree + Ncons sum = %.4lf which should be ~ 1.0\n",
-                            i, Nfree.row(i).sum(), Ncons.row(i).sum(), Nfree.row(i).sum() + Ncons.row(i).sum());
-                    cerr << "Nfree row(" << i << "):\n" << Nfree.row(i) << endl;
-                    cerr << "Ncons row(" << i << "):\n" << Ncons.row(i) << endl;
+                    Nfree.row(i) /= sum;
+                    Ncons.row(i) /= sum;
                 }
-
-//                 assert(fabs(Nfree.row(i).sum() + Ncons.row(i).sum() - 1.0) < eps);
+                else
+                    fmt::print(stderr, "Warning: EncodeTensorLocalLinear(): Nfree.row({}).sum() = {}. This should not happen.\n",
+                            i, Nfree.row(i).sum());
             }
+
+            // R is the right hand side needed for solving N * P = R
+            MatrixX<T>  R = Q - Ncons * Pcons;
 
             // solve
             t.ctrl_pts = Nfree.colPivHouseholderQr().solve(R);
 
             // debug
-//             cerr << "\EncodeTensorLocalLinear() ctrl_pts:\n" << t.ctrl_pts << endl;
-//             cerr << "\nEncodeTensorLocalLinear() weights:\n" << t.weights << endl;
+//             cerr << "input:\n"                               << domain       << endl;
+//             cerr << "Nfree:\n"                               << Nfree        << endl;
+//             cerr << "Ncons:\n"                               << Ncons        << endl;
+//             cerr << "Pcons:\n"                               << Pcons        << endl;
+//             cerr << "Q:\n"                                   << Q            << endl;
+//             cerr << "R:\n"                                   << R            << endl;
+//             cerr << "\EncodeTensorLocalLinear() ctrl_pts:\n" << t.ctrl_pts   << endl;
+//             cerr << "\nEncodeTensorLocalLinear() weights:\n" << t.weights    << endl;
         }
 
 #endif
@@ -1748,10 +1752,10 @@ namespace mfa
         // this is the version used currently for local solve
         // returns 1 if knots were added, 0 if no knots were added, -1 if number of control points >= input points
         int Refine(
-                T                   err_limit,                  // max allowable error
-                const VectorX<T>&   extents,                    // extents in each dimension, for normalizing error (size 0 means do not normalize)
-                int                 iter,                       // iteration number of caller (for debugging)
-                bool                local)                      // do the local solve
+                T                   err_limit,                                  // max allowable error
+                const VectorX<T>&   extents,                                    // extents in each dimension, for normalizing error (size 0 means do not normalize)
+                int                 iter,                                       // iteration number of caller (for debugging)
+                bool                local)                                      // do the local solve
         {
             vector<vector<KnotIdx>>     inserted_knot_idxs(mfa_data.dom_dim);   // indices in each dim. of inserted knots in full knot vector after insertion
             vector<vector<T>>           inserted_knots(mfa_data.dom_dim);       // knots to be inserted in each dim.
@@ -1787,36 +1791,55 @@ namespace mfa
                 assert(inserted_knot_idxs[j].size() == n_insertions &&
                         inserted_knots[j].size() == n_insertions);
 
-            map<int, int> n_parent_insertions;                                  // (parent_idx, n_insertions in parent)
+            vector<bool> inserted(mfa_data.dom_dim);                            // whether the current insertion succeed (in each dim)
 
             for (auto i = 0; i < n_insertions; i++)                             // for all knots to be inserted
             {
-                // update number of insertions so far in the parent tensor
-                if (n_parent_insertions.find(parent_tensor_idxs[i]) == n_parent_insertions.end())
-                    n_parent_insertions.insert({parent_tensor_idxs[i], 1});
-                else
-                    n_parent_insertions[parent_tensor_idxs[i]]++;
-
                 // debug
-                fprintf(stderr, "Refine() inserting knot idx [ ");
+//                 fmt::print(stderr, "\nTrying to insert knot idx [ ");
+//                 for (auto j = 0; j < mfa_data.dom_dim; j++)
+//                     fmt::print(stderr, "{} ", inserted_knot_idxs[j][i]);
+//                 fmt::print(stderr, "] with value [ ");
+//                 for (auto j = 0; j < mfa_data.dom_dim; j++)
+//                     fmt::print(stderr, "{} ", inserted_knots[j][i]);
+//                 fmt::print(stderr, "]\n");
+
+                // insert the new knots into tmesh all_knots
                 for (auto j = 0; j < mfa_data.dom_dim; j++)
-                    fprintf(stderr, "%lu ", inserted_knot_idxs[j][i]);
-                fprintf(stderr, "]\n");
+                {
+                    inserted[j] = false;
+                    if (mfa_data.tmesh.insert_knot(j,
+                                inserted_knot_idxs[j][i],
+                                iter + 1,
+                                inserted_knots[j][i], mfa.params()))
+                    {
+                        inserted[j] = true;
+                        // increment subsequent insertions
+                        for (auto k = 0; k < n_insertions; k++)
+                        {
+                            if (inserted_knot_idxs[j][k] > inserted_knot_idxs[j][i])
+                                inserted_knot_idxs[j][k]++;
+                        }
+                    }
+                }
+
+                // debug: print knots after insertion
+//                 fprintf(stderr, "\nRefine(): Tmesh knots after insertion:\n");
+//                 mfa_data.tmesh.print_knots();
+
+                if (find(inserted.begin(), inserted.end(), true) == inserted.end())
+                {
+                    // debug
+//                     fmt::print(stderr, "all dimensions of this knot are inserted already; skipping\n");
+
+                    continue;
+                }
 
                 for (auto j = 0; j < mfa_data.dom_dim; j++)
                 {
                     // make p + 1 control points in the added tensor
                     knot_mins[j] = inserted_knot_idxs[j][i] - mfa_data.p(j) / 2;
                     knot_maxs[j] = inserted_knot_idxs[j][i] + mfa_data.p(j) / 2 + 1;
-
-                    // adjust knot mins, maxs by previous insertions
-                    for (auto k = 0; k < i; k++)                                // for number of knots inserted so far
-                    {
-                        if (inserted_knot_idxs[j][k] <= knot_mins[j])
-                            knot_mins[j]++;
-                        if (inserted_knot_idxs[j][k] <= knot_maxs[j])
-                            knot_maxs[j]++;
-                    }
                 }
 
                 // candidate tensor
@@ -1825,8 +1848,8 @@ namespace mfa
                 c.knot_maxs = knot_maxs;
 
                 // debug
-                fmt::print(stderr, "Refine() candidate tensor with knot mins [{}] knot_maxs[{}]\n",
-                        fmt::join(c.knot_mins, ","), fmt::join(c.knot_maxs, ","));
+//                 fmt::print(stderr, "Refine() candidate tensor with knot mins [{}] knot_maxs[{}]\n",
+//                         fmt::join(c.knot_mins, ","), fmt::join(c.knot_maxs, ","));
 
                 // intersection proximity (assumes same for all dims)
                 int pad = mfa_data.p(0) % 2 == 0 ? mfa_data.p(0) : mfa_data.p(0) - 1;
@@ -1840,9 +1863,9 @@ namespace mfa
                     // adjust previously scheduled tensor knot mins, maxs for new knot insertion
                     for (auto j = 0; j < mfa_data.dom_dim; j++)
                     {
-                        if (inserted_knot_idxs[j][i] <= t.knot_mins[j])
+                        if (inserted[j] && inserted_knot_idxs[j][i] <= t.knot_mins[j])
                             t.knot_mins[j]++;
-                        if (inserted_knot_idxs[j][i] <= t.knot_maxs[j])
+                        if (inserted[j] && inserted_knot_idxs[j][i] <= t.knot_maxs[j])
                             t.knot_maxs[j]++;
                     }
 
@@ -1850,8 +1873,8 @@ namespace mfa
                     if (mfa_data.tmesh.subset(c.knot_mins, c.knot_maxs, t.knot_mins, t.knot_maxs))
                     {
                         // debug
-                        fmt::print(stderr, "Refine() candidate tensor with knot_mins [{}] knot_maxs [{}] is a subset of tensor with knot_mins[{}] knot_maxs[{}]\n",
-                                fmt::join(c.knot_mins, ","), fmt::join(c.knot_maxs, ","), fmt::join(t.knot_mins, ","), fmt::join(t.knot_maxs, ","));
+//                         fmt::print(stderr, "Refine() candidate tensor with knot_mins [{}] knot_maxs [{}] is a subset of tensor with knot_mins[{}] knot_maxs[{}]\n",
+//                                 fmt::join(c.knot_mins, ","), fmt::join(c.knot_maxs, ","), fmt::join(t.knot_mins, ","), fmt::join(t.knot_maxs, ","));
 
                         add = false;
                     }
@@ -1859,8 +1882,8 @@ namespace mfa
                     else if (mfa_data.tmesh.subset(t.knot_mins, t.knot_maxs, c.knot_mins, c.knot_maxs))
                     {
                         // debug
-                        fmt::print(stderr, "Refine() candidate tensor with knot_mins [{}] knot_maxs [{}] is a superset of tensor with knot_mins[{}] knot_maxs[{}]\n",
-                                fmt::join(c.knot_mins, ","), fmt::join(c.knot_maxs, ","), fmt::join(t.knot_mins, ","), fmt::join(t.knot_maxs, ","));
+//                         fmt::print(stderr, "Refine() candidate tensor with knot_mins [{}] knot_maxs [{}] is a superset of tensor with knot_mins[{}] knot_maxs[{}]\n",
+//                                 fmt::join(c.knot_mins, ","), fmt::join(c.knot_maxs, ","), fmt::join(t.knot_mins, ","), fmt::join(t.knot_maxs, ","));
 
                         t.knot_mins = c.knot_mins;
                         t.knot_maxs = c.knot_maxs;
@@ -1872,18 +1895,14 @@ namespace mfa
                     else if (mfa_data.tmesh.intersect(c, t, pad))
                     {
                         // debug
-                        fmt::print(stderr, "Refine() candidate tensor with knot_mins [{}] knot_maxs [{}] intersects tensor with knot_mins[{}] knot_maxs[{}]\n",
-                                fmt::join(c.knot_mins, ","), fmt::join(c.knot_maxs, ","), fmt::join(t.knot_mins, ","), fmt::join(t.knot_maxs, ","));
+//                         fmt::print(stderr, "Refine() candidate tensor with knot_mins [{}] knot_maxs [{}] intersects tensor with knot_mins[{}] knot_maxs[{}]\n",
+//                                 fmt::join(c.knot_mins, ","), fmt::join(c.knot_maxs, ","), fmt::join(t.knot_mins, ","), fmt::join(t.knot_maxs, ","));
 
                         vector<KnotIdx> merge_mins(mfa_data.dom_dim);
                         vector<KnotIdx> merge_maxs(mfa_data.dom_dim);
                         mfa_data.tmesh.merge(t.knot_mins, t.knot_maxs, c.knot_mins, c.knot_maxs, merge_mins, merge_maxs);
                         t.knot_mins = merge_mins;
                         t.knot_maxs = merge_maxs;
-
-                        // debug
-                        fmt::print(stderr, "Refine() scheduled tensor merged with new knot_mins [{}] knot_maxs [{}]\n",
-                                fmt::join(t.knot_mins, ","), fmt::join(t.knot_maxs, ","));
 
                         changed = true;
                         add = false;
@@ -1896,19 +1915,17 @@ namespace mfa
                         {
                             TensorProduct<T>& tp = mfa_data.tmesh.tensor_prods[parent_tensor_idxs[i]];
                             int odd_degree = mfa_data.p(j) % 2 == 0 ? 0 : 1;
-                            KnotIdx p_min = tp.knot_mins[j];                                                // min knot index of parent
-                            KnotIdx p_max = tp.knot_maxs[j] + n_parent_insertions[parent_tensor_idxs[i]];   // max knot index of parent adjusted for num. insertions
-                            KnotIdx g_max = mfa_data.tmesh.all_knots[j].size() + n_insertions - 1;          // max knot index of entire tmesh adjusted for num. insertions
-
-                            if (p_max - t.knot_maxs[j] < mfa_data.p(j) - odd_degree || t.knot_maxs[j] >= g_max - mfa_data.p(j))
-                                t.knot_maxs[j] = p_max;
-                            if (t.knot_mins[j] - p_min < mfa_data.p(j) - odd_degree || t.knot_mins[j] <= mfa_data.p(j))
-                                t.knot_mins[j] = p_min;
+                            if (tp.knot_maxs[j] - t.knot_maxs[j] < mfa_data.p(j) - odd_degree ||
+                                    t.knot_maxs[j] >= mfa_data.tmesh.all_knots[j].size() - 1 - mfa_data.p(j))
+                                t.knot_maxs[j] = tp.knot_maxs[j];
+                            if (t.knot_mins[j] - tp.knot_mins[j] < mfa_data.p(j) - odd_degree ||
+                                    t.knot_mins[j] <= mfa_data.p(j))
+                                t.knot_mins[j] = tp.knot_mins[j];
                         }
 
                         // debug
-                        fmt::print(stderr, "Refine() after adjustment scheduled tensor with new knot_mins [{}] knot_maxs [{}]\n",
-                                fmt::join(t.knot_mins, ","), fmt::join(t.knot_maxs, ","));
+//                         fmt::print(stderr, "Refine() modifying previously scheduled tensor with new knot_mins [{}] knot_maxs [{}]\n",
+//                                 fmt::join(t.knot_mins, ","), fmt::join(t.knot_maxs, ","));
                     }
                 }       // for all tensors scheduled to be added so far
 
@@ -1916,55 +1933,29 @@ namespace mfa
                 if (add)
                 {
                     // debug
-                    fmt::print(stderr, "Refine() before adjustment scheduling tensor with knot_mins [{}] knot_maxs [{}] to be added\n",
-                                fmt::join(c.knot_mins, ","), fmt::join(c.knot_maxs, ","));
+//                     fmt::print(stderr, "Refine() before adjustment scheduling tensor with knot_mins [{}] knot_maxs [{}] to be added\n",
+//                                 fmt::join(c.knot_mins, ","), fmt::join(c.knot_maxs, ","));
 
                     // check that we don't leave the parent tensor with less than p control points anywhere
                     for (auto j = 0; j < mfa_data.dom_dim; j++)
                     {
                         TensorProduct<T>& tp = mfa_data.tmesh.tensor_prods[parent_tensor_idxs[i]];
                         int odd_degree = mfa_data.p(j) % 2 == 0 ? 0 : 1;
-                        KnotIdx p_min = tp.knot_mins[j];                                                // min knot index of parent
-                        KnotIdx p_max = tp.knot_maxs[j] + n_parent_insertions[parent_tensor_idxs[i]];   // max knot index of parent adjusted for num. insertions
-                        KnotIdx g_max = mfa_data.tmesh.all_knots[j].size() + n_insertions - 1;          // max knot index of entire tmesh adjusted for num. insertions
-
-                        if (p_max - c.knot_maxs[j] < mfa_data.p(j) - odd_degree || c.knot_maxs[j] >= g_max - mfa_data.p(j))
-                            c.knot_maxs[j] = p_max;
-                        if (c.knot_mins[j] - p_min < mfa_data.p(j) - odd_degree || c.knot_mins[j] <= mfa_data.p(j))
-                            c.knot_mins[j] = p_min;
+                        if (tp.knot_maxs[j] - c.knot_maxs[j] < mfa_data.p(j) - odd_degree ||
+                                c.knot_maxs[j] >= mfa_data.tmesh.all_knots[j].size() - 1 - mfa_data.p(j))
+                            c.knot_maxs[j] = tp.knot_maxs[j];
+                        if (c.knot_mins[j] - tp.knot_mins[j] < mfa_data.p(j) - odd_degree ||
+                                c.knot_mins[j] <= mfa_data.p(j))
+                            c.knot_mins[j] = tp.knot_mins[j];
                     }
 
                     // debug
-                    fmt::print(stderr, "Refine() after adjustment scheduling tensor with knot_mins [{}] knot_maxs [{}] to be added\n",
-                                fmt::join(c.knot_mins, ","), fmt::join(c.knot_maxs, ","));
+//                     fmt::print(stderr, "Refine() scheduling tensor to be added with knot_mins [{}] knot_maxs [{}] to be added\n",
+//                                 fmt::join(c.knot_mins, ","), fmt::join(c.knot_maxs, ","));
 
                     new_tensors.push_back(c);
                 }
             }   // for all knots to be inserted
-
-            // debug: print knots before insertion
-//             fprintf(stderr, "\nRefine(): Tmesh knots before insertion:\n");
-//             mfa_data.tmesh.print_knots();
-
-            // debug: print knots to be inserted
-//             for (auto i = 0; i < mfa_data.dom_dim; i++)
-//             {
-//                 fprintf(stderr, "inserted_knots[dim %d]\n", i);
-//                 for (auto j = 0; j < inserted_knots[i].size(); j++)
-//                     fprintf(stderr, " [pos %lu val %.3lf] ",inserted_knot_idxs[i][j], inserted_knots[i][j]);
-//                 fprintf(stderr, "\n");
-//             }
-
-            // insert the new knots into tmesh all_knots
-            for (auto i = 0; i < n_insertions; i++)                             // for all knots to be inserted
-            {
-                for (auto j = 0; j < mfa_data.dom_dim; j++)
-                    mfa_data.tmesh.insert_knot(j, inserted_knot_idxs[j][i] + i, iter + 1, inserted_knots[j][i], mfa.params());
-            }
-
-            // debug: print knots after insertion
-//             fprintf(stderr, "\nRefine(): Tmesh knots after insertion:\n");
-//             mfa_data.tmesh.print_knots();
 
             // append the tensors
 

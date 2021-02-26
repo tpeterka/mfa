@@ -790,9 +790,6 @@ namespace mfa
             if (!extents.size())
                 extents = VectorX<T>::Ones(domain.cols());
 
-            // set of inserted knot idxs, to prevent inserting duplicates
-            vector<set<KnotIdx>> new_knot_idxs_set(dom_dim);
-
             // parameters for vol iterator over knot spans in a tensor product and parameters in a knot span
             VectorXi sub_npts(dom_dim);
             VectorXi sub_starts(dom_dim);
@@ -802,7 +799,7 @@ namespace mfa
 
             VolIterator dom_iter(mfa.ndom_pts());                           // iterator over input domain points
 
-            for (auto tidx = 0; tidx < tmesh.tensor_prods.size(); tidx++)
+            for (auto tidx = 0; tidx < tmesh.tensor_prods.size(); tidx++)   // for all tensors
             {
                 // debug
 //                 cerr << "\ntensor " << tidx << endl;
@@ -911,41 +908,27 @@ namespace mfa
                             if (!empty_split_span(span_ijk))            // splitting span will have input points
                             {
                                 // record new knot to be inserted
-                                pair<set<KnotIdx>::iterator, bool> inserted;
                                 for (auto j = 0; j < dom_dim; j++)
                                 {
-                                    inserted = new_knot_idxs_set[j].insert(span_ijk(j) + 1);
-                                    if (inserted.second)
-                                    {
-                                        T new_knot = (all_knots[j][span_ijk(j)] + all_knots[j][span_ijk(j) + 1]) / 2.0;
-                                        new_knots[j].push_back(new_knot);
-                                    }
+                                    new_knot_idxs[j].push_back(span_ijk(j) + 1);
+                                    T new_knot = (all_knots[j][span_ijk(j)] + all_knots[j][span_ijk(j) + 1]) / 2.0;
+                                    new_knots[j].push_back(new_knot);
                                 }
-                                if (inserted.second)
-                                {
-                                    parent_tensor_idxs.push_back(tidx);
-                                    retval = false;
-                                }
+                                parent_tensor_idxs.push_back(tidx);
+                                retval = false;
 
                                 // debug
-//                                 cerr << "inserting knot in span_ijk: " << span_ijk.transpose() << endl;
+                                //                                 cerr << "inserting knot in span_ijk: " << span_ijk.transpose() << endl;
                             }
                             break;
                         }
 
                         param_iter.incr_iter();
-                    }
+                    }   // iterator over domain points in a knot span
 
                     span_iter.incr_iter();
-                }
-            }
-
-            // copy from set to vector
-            for (auto j = 0; j < dom_dim; j++)
-            {
-                for (auto it = new_knot_idxs_set[j].begin(); it != new_knot_idxs_set[j].end(); it++)
-                    new_knot_idxs[j].push_back(*it);
-            }
+                }   // iterator over knot spans
+            }   // for all tensors
 
             return retval;
         }

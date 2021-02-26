@@ -70,6 +70,8 @@ using SparseMatrixX = Eigen::SparseMatrix<T, Eigen::ColMajor>;  // Many sparse s
 template <typename T>
 using SpMatTriplet = Eigen::Triplet<T>;
 
+#include    <diy/thirdparty/fmt/format.h>
+
 #include    <mfa/util.hpp>
 #include    <mfa/param.hpp>
 #include    <mfa/tmesh.hpp>
