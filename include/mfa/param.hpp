@@ -53,6 +53,32 @@ namespace mfa
 // #endif
 //         }
 
+        // Constructor for equispaced grid over all of parameter space
+        Param(const VectorXi& ndom_pts_) :
+            ndom_pts(ndom_pts_),
+            range_extent(0),
+            dom_dim(ndom_pts.size()),
+            structured(true)
+        { 
+            VectorX<T>  param_mins = VectorX<T>::Zero(dom_dim);
+            VectorX<T>  param_maxs = VectorX<T>::Ones(dom_dim);
+
+            set_grid_params(ndom_pts, param_mins, param_maxs);
+        }
+
+        // Constructor for equispaced grid over subset of parameter space
+        // N.B. If ndom_pts_(k) = 1 in any dimension, then we expect param_mins_(k) == param_maxs_(k)
+        Param(  const VectorXi&     ndom_pts_,
+                const VectorX<T>&   param_mins_, 
+                const VectorX<T>&   param_maxs_) :
+            ndom_pts(ndom_pts_),
+            range_extent(0),
+            dom_dim(ndom_pts.size()),
+            structured(true)
+        {
+            set_grid_params(ndom_pts_, param_mins_, param_maxs_);
+        }
+
         // Constructor for structured input
         Param(  int                 dom_dim_,           // domain dimensionality (excluding science variables)
                 const VectorX<T>&   dom_mins_,          // minimal extents of bounding box in each dimension (optional, important when data does not cover domain)
@@ -185,6 +211,40 @@ namespace mfa
             return param_list.row(i);
         }
 
+        // Set parameters to be a rectangular, equispaced grid bounded by [param_mins, param_maxs]
+        void set_grid_params(   const VectorXi&     ndom_pts,     // Number of points in each dimension
+                                const VectorX<T>&   param_mins,   // Minimum param in each dimension
+                                const VectorX<T>&   param_maxs)   // Maximum param in each dimension
+        {
+            if (!structured)
+            {
+                cerr << "\nWarning: Setting grid params to unstructured Param object\n" << endl;
+            }
+
+            T step = 0;
+            param_grid.resize(dom_dim);
+
+            for (int k = 0; k < dom_dim; k++)
+            {
+                param_grid[k].resize(ndom_pts(k));
+
+                param_grid[k][0] = param_mins(k);
+
+                if (ndom_pts(k) > 1)
+                {
+                    param_grid[k][ndom_pts(k)-1] = param_maxs(k);
+
+                    step = (param_maxs(k) - param_mins(k)) / (ndom_pts(k)-1);
+                    for (int j = 1; j < ndom_pts(k)-1; j++)
+                    {
+                        param_grid[k][j] = j * step;
+                    }
+                }
+            }
+
+            check_param_bounds();
+        }
+
         // precompute curve parameters for input data points using the chord-length method
         // n-d version of algorithm 9.3, P&T, p. 377
         // params are computed along curves and averaged over all curves at same data point index i,j,k,...
@@ -260,6 +320,7 @@ namespace mfa
             }                                                    // domain dimensions
             // debug
             //     cerr << "params:\n" << params << endl;
+            check_param_bounds();
         }
 
         // precompute parameters for input data points using domain spacing only (not length along curve)
@@ -306,21 +367,7 @@ namespace mfa
                 cs *= ndom_pts(k);
             }                                                    // domain dimensions
 
-            // Check for parameter values outside of [0,1]
-            // This could happen if dom_mins, dom_maxs are set incorrectly, e.g.
-            // Also catches any unanticipated floating point arithmetic issues
-            for (size_t k = 0; k < dom_dim; k++)
-            {
-                for (size_t j = 0; j < ndom_pts(k); j++)
-                {
-                    if (param_grid[k][j] < 0.0 || param_grid[k][j] > 1.0)
-                    {
-                        cerr << "ERROR: Domain parametrization contains values outside of [0,1]. Exiting program." << endl;
-                        cerr << "         parameter for dim " << k << ", pt #" << j << " = " << param_grid[k][j] << endl;
-                        exit(1);
-                    }
-                }
-            }
+            check_param_bounds();
             // debug
             //     cerr << "params:\n" << params << endl;
         }
@@ -362,17 +409,62 @@ namespace mfa
                 param_list.col(k) = (domain.col(k).array() - mins(k)) * (1/diff(k));
             }
         
-            // Check for parameter values outside of [0,1]
-            // This could happen if dom_mins, dom_maxs are set incorrectly, e.g.
-            // Also catches any unanticipated floating point arithmetic issues
-            if ((param_list.array() < 0.0).any() || (param_list.array() > 1.0).any())
+            check_param_bounds();
+        }
+
+        // Checks for any parameter values outside the range [0,1].
+        // If found, prints an error message and quits the program.
+        bool check_param_bounds()
+        {
+            bool valid = true;
+            T minp = 0, maxp = 0;
+
+            if (structured)
             {
-                cerr << "ERROR: Domain parametrization contains values outside of [0,1]. Exiting program." << endl;
+                for (int k = 0; k < dom_dim; k++)
+                {
+                    for (int j = 0; j < ndom_pts(k); j++)
+                    {
+                        if (param_grid[k][j] < 0.0 || param_grid[k][j] > 1.0)
+                        {
+                            valid = false;
+                            break;
+                        }
+                    }
+                    
+                    if (valid == false)  // break of dimension loop if out-of-bounds entry found
+                        break;
+                }
+            }
+            else
+            {
+                for (int k = 0; k < dom_dim; k++)
+                {
+                    minp = param_list.col(k).minCoeff();
+                    if (minp < 0.0)
+                    {
+                        valid = false;
+                        break;
+                    }
+
+                    maxp = param_list.col(k).maxCoeff();
+                    if (maxp > 1.0)
+                    {
+                        valid = false;
+                        break;
+                    }
+                }
+            }
+            
+            if (valid == false)
+            {
+                cerr << "ERROR: Construction of Param object contains out-of-bounds entries" << endl;
                 exit(1);
             }
+
+            return valid;
         }
-    };
+    };  // struct Param
+}  // namespace mfa
 
-}                                               // namespace
-
-#endif
+#endif  // _PARAMS_HPP

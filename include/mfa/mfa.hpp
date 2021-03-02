@@ -157,34 +157,32 @@ namespace mfa
         }
 
         // decode values at all input points
-        void DecodeDomain(
+        void DecodePointSet(
                 const MFA_Data<T>&  mfa_data,               // mfa data model
+                PointSet<T>&        output,                 // (output) decoded point set
                 int                 verbose,                // debug level
-                const PointSet<T>& input,                  // domain info
-                MatrixX<T>&         approx,                 // decoded points
                 int                 min_dim,                // first dimension to decode
                 int                 max_dim,                // last dimension to decode
                 bool                saved_basis) const      // whether basis functions were saved and can be reused
         {
             VectorXi no_derivs;                             // size-0 means no derivatives
 
-            DecodeDomain(mfa_data, verbose, input, approx, min_dim, max_dim, saved_basis, no_derivs);
+            DecodePointSet(mfa_data, output, verbose, min_dim, max_dim, saved_basis, no_derivs);
         }
 
         // decode derivatives at all input points
-        void DecodeDomain(
+        void DecodePointSet(
                 const MFA_Data<T>&  mfa_data,               // mfa data model
+                PointSet<T>&        output,                 // (output) decoded point set
                 int                 verbose,                // debug level
-                const PointSet<T>& input,                  // domain info
-                MatrixX<T>&         approx,                 // decoded values
                 int                 min_dim,                // first dimension to decode
                 int                 max_dim,                // last dimension to decode
                 bool                saved_basis,            // whether basis functions were saved and can be reused
                 const VectorXi&     derivs) const           // derivative to take in each domain dim. (0 = value, 1 = 1st deriv, 2 = 2nd deriv, ...)
                                                             // pass size-0 vector if unused
         {
-            mfa::Decoder<T> decoder(mfa_data, verbose);
-            decoder.DecodeDomain(input, approx, min_dim, max_dim, saved_basis, derivs);
+            mfa::Decoder<T> decoder(mfa_data, verbose, saved_basis);
+            decoder.DecodePointSet(output, min_dim, max_dim, derivs);
         }
 
         // decode value of single point at the given parameter location
@@ -232,20 +230,11 @@ namespace mfa
         // error is not normalized by the data range (absolute, not relative error)
         void AbsCoordError(
                 const MFA_Data<T>&  mfa_data,               // mfa data model
-                // const MatrixX<T>&   domain,                 // input points
-                const PointSet<T>&          input,
+                const PointSet<T>&  input,
                 size_t              idx,                    // index of domain point
                 VectorX<T>&         error,                  // (output) absolute value of error at each coordinate
                 int                 verbose) const          // debug level
         {
-            // // convert linear idx to multidim. i,j,k... indices in each domain dimension
-            // VectorXi ijk(dom_dim);
-            // mfa_data.idx2ijk(ds(), idx, ijk);
-
-            // // compute parameters for the vertices of the cell
-            // VectorX<T> param(dom_dim);
-            // for (int i = 0; i < dom_dim; i++)
-            //     param(i) = mfa_param->params[i][ijk(i)];
             VectorX<T> param(dom_dim);
             input.pt_params(idx, param);
 

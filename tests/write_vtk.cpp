@@ -192,17 +192,17 @@ void PrepRenderingData(
     // approximated points
     approx_data = new float*[nvars];
     for (size_t j = 0; j < nvars; j++)
-        approx_data[j] = new float[block->approx.rows()];
+        approx_data[j] = new float[block->approx->npts];
 
-    for (size_t j = 0; j < (size_t)(block->approx.rows()); j++)
+    for (size_t j = 0; j < (size_t)(block->approx->npts); j++)
     {
-        p.x = block->approx(j, 0);                      // first 3 dims stored as mesh geometry
-        p.y = block->approx(j, 1);
-        p.z = block->approx.cols() > 2 ? block->approx(j, 2) : 0.0;
+        p.x = block->approx->domain(j, 0);                      // first 3 dims stored as mesh geometry
+        p.y = block->approx->domain(j, 1);
+        p.z = block->approx->pt_dim > 2 ? block->approx->domain(j, 2) : 0.0;
         approx_pts.push_back(p);
 
         for (int k = 0; k < nvars; k++)                         // science variables
-            approx_data[k][j] = block->approx(j, ndom_dims + k);
+            approx_data[k][j] = block->approx->domain(j, ndom_dims + k);
     }
 
     // error points

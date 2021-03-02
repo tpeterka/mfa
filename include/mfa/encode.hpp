@@ -116,7 +116,7 @@ namespace mfa
 
             // loop from substart to subend, decode.VolPt_tmesh(param(idx), cpt) - domain(idx)
             lsq_error = 0.0;
-            mfa::Decoder<T> decoder(mfa, mfa_data, verbose);
+            mfa::Decoder<T> decoder(mfa_data, verbose);
             VectorX<T> cpt(cols);                                               // decoded curve point
             VectorX<T> param(mfa_data.dom_dim);                                 // parameters for one point
             VectorXi npts(mfa_data.dom_dim);                                    // number of points to decode

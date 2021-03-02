@@ -164,6 +164,8 @@ namespace mfa
                 if (npts != ndom_pts_.prod())
                 {
                     cerr << "ERROR: Invalid grid added to PointSet. Total points do not match." << endl;
+                    cerr << "  npts = " << npts << endl;
+                    cerr << "  ndom_pts = " << ndom_pts_ << endl;
                     exit(1);
                 }
 

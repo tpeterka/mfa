@@ -388,19 +388,19 @@ void PrepRenderingData(
     blend_data  = new float*[nvars];
     for (size_t j = 0; j < nvars; j++)
     {
-        approx_data[j]  = new float[block->input->npts];
+        approx_data[j]  = new float[block->approx->npts];
         blend_data[j]   = new float[block->blend.rows()];
     }
 
-    for (size_t j = 0; j < (size_t)(block->approx.rows()); j++)
+    for (size_t j = 0; j < (size_t)(block->approx->npts); j++)
     {
-        p.x = block->approx(j, 0);                      // first 3 dims stored as mesh geometry
-        p.y = block->approx(j, 1);
-        p.z = block->approx.cols() > 2 ? block->approx(j, 2) : 0.0;
+        p.x = block->approx->domain(j, 0);                      // first 3 dims stored as mesh geometry
+        p.y = block->approx->domain(j, 1);
+        p.z = block->approx->pt_dim > 2 ? block->approx->domain(j, 2) : 0.0;
         approx_pts.push_back(p);
 
         for (int k = 0; k < nvars; k++)                         // science variables
-            approx_data[k][j] = block->approx(j, ndom_dims + k);
+            approx_data[k][j] = block->approx->domain(j, ndom_dims + k);
     }
 
     for (size_t j = 0; j < (size_t)(block->blend.rows()); j++)
@@ -483,8 +483,6 @@ void write_vtk_files(
                       b,
                       pt_dim);
 
-    bool structured = b->input->structured;
-
     // pad dimensions up to 3
     dom_dim = b->dom_dim;
     for (auto i = 0; i < 3 - dom_dim; i++)
@@ -547,7 +545,7 @@ void write_vtk_files(
     sprintf(filename, "initial_points_gid_%d.vtk", cp.gid());
     if (raw_pts.size())
     {
-        if (structured)
+        if (b->input->structured)
         {
             write_curvilinear_mesh(
                 /* const char *filename */                  filename,
@@ -578,7 +576,7 @@ void write_vtk_files(
     sprintf(filename, "approx_points_gid_%d.vtk", cp.gid());
     if (approx_pts.size())
     {
-        if (structured)
+        if (b->approx->structured)
         {
             write_curvilinear_mesh(
                 /* const char *filename */                  filename,
@@ -638,7 +636,7 @@ void write_vtk_files(
     sprintf(filename, "error_gid_%d.vtk", cp.gid());
     if (err_pts.size())
     {
-        if (structured)
+        if (b->approx->structured)
         {
             write_curvilinear_mesh(
             /* const char *filename */                      filename,
