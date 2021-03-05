@@ -494,6 +494,11 @@ namespace mfa
                                 Eigen::SparseMatrix<T, Eigen::ColMajor>& res,
                                 int reserveSizes )
         {
+
+        // TODO: David needs to add serial version in case TBB is not being used
+
+#ifdef MFA_TBB
+
             using LhsInIt = typename Eigen::SparseMatrix<T, Eigen::ColMajor>::InnerIterator;
             using RhsInIt = typename Eigen::SparseMatrix<T, Eigen::ColMajor>::InnerIterator;
 
@@ -566,6 +571,9 @@ namespace mfa
             }, ap );
 
             res.makeCompressed();
+
+#endif
+
         }
 
        // Sparse matrix version of EncodeTensor. Not a 
@@ -769,6 +777,14 @@ namespace mfa
             MatrixX<T> Ncons = MatrixX<T>::Constant(ndom_pts.prod(), Pcons.rows(), -1);         // basis functions, -1 means unassigned so far
             for (auto i = 0; i < Ncons.cols(); i++)                                             // for all constraint control points
             {
+                // debug
+                if (anchors[i][0] == 56 & anchors[i][1] == 46 && t_idx_anchors[i] == 8)
+                {
+//                     for (auto j = 0; j < anchors.size(); j++)
+//                         fmt::print(stderr, "anchors[{}]: [{}] t_tidx_anchor: {}\n", j, fmt::join(anchors[j], ","), t_idx_anchors[j]);
+                        fmt::print(stderr, "EncodeTensorLocalLinear: anchors[{}]: [{}] t_tidx_anchor: {}\n", i, fmt::join(anchors[i], ","), t_idx_anchors[i]);
+                }
+
                 // local knot vector
                 mfa_data.tmesh.knot_intersections(anchors[i], t_idx_anchors[i], true, local_knot_idxs);
                 for (auto k = 0; k < mfa_data.dom_dim; k++)
@@ -1835,6 +1851,15 @@ namespace mfa
                     continue;
                 }
 
+                // debug
+//                 fmt::print(stderr, "\nRefine(): inserting knot idx [ ");
+//                 for (auto j = 0; j < mfa_data.dom_dim; j++)
+//                     fmt::print(stderr, "{} ", inserted_knot_idxs[j][i]);
+//                 fmt::print(stderr, "] with value [ ");
+//                 for (auto j = 0; j < mfa_data.dom_dim; j++)
+//                     fmt::print(stderr, "{} ", inserted_knots[j][i]);
+//                 fmt::print(stderr, "]\n");
+
                 for (auto j = 0; j < mfa_data.dom_dim; j++)
                 {
                     // make p + 1 control points in the added tensor
@@ -1932,10 +1957,6 @@ namespace mfa
                 // schedule the tensor to be added
                 if (add)
                 {
-                    // debug
-//                     fmt::print(stderr, "Refine() before adjustment scheduling tensor with knot_mins [{}] knot_maxs [{}] to be added\n",
-//                                 fmt::join(c.knot_mins, ","), fmt::join(c.knot_maxs, ","));
-
                     // check that we don't leave the parent tensor with less than p control points anywhere
                     for (auto j = 0; j < mfa_data.dom_dim; j++)
                     {
@@ -1962,13 +1983,14 @@ namespace mfa
             for (auto& t: new_tensors)
             {
                 // debug
-                fmt::print(stderr, "Refine() appending tensor with knot_mins [{}] knot_maxs [{}]\n",
+                fmt::print(stderr, "\nRefine() appending tensor with knot_mins [{}] knot_maxs [{}]\n",
                         fmt::join(t.knot_mins, ","), fmt::join(t.knot_maxs, ","));
 
                 int tensor_idx = mfa_data.tmesh.append_tensor(t.knot_mins, t.knot_maxs, iter + 1);
 
                 // debug
-//                 mfa_data.tmesh.print();
+                if (iter == 3)
+                    mfa_data.tmesh.print();
 
                 // solve for new control points
                 if (local)
@@ -2360,8 +2382,8 @@ namespace mfa
                 for (auto i = 0; i < mfa_data.dom_dim; i++)
                 {
                     int p = mfa_data.p(i);
-                    mfa_data.tmesh.knot_idx_ofst(t, tc.knot_mins[i], -p, i, min);
-                    mfa_data.tmesh.knot_idx_ofst(t, tc.knot_maxs[i], p, i, max);
+                    mfa_data.tmesh.knot_idx_ofst(t, tc.knot_mins[i], -p, i, true, min);
+                    mfa_data.tmesh.knot_idx_ofst(t, tc.knot_maxs[i], p, i, true, max);
                     if (p % 2)                          // odd degree
                         npts(i) = mfa_data.tmesh.knot_idx_dist(t, min, max, i, true);
                     else                                // even degree
@@ -2391,8 +2413,8 @@ namespace mfa
                 for (auto i = 0; i < mfa_data.dom_dim; i++)
                 {
                     int p = mfa_data.p(i);
-                    mfa_data.tmesh.knot_idx_ofst(t, tc.knot_mins[i], -p, i, min);
-                    mfa_data.tmesh.knot_idx_ofst(t, tc.knot_maxs[i], p, i, max);
+                    mfa_data.tmesh.knot_idx_ofst(t, tc.knot_mins[i], -p, i, true, min);
+                    mfa_data.tmesh.knot_idx_ofst(t, tc.knot_maxs[i], p, i, true, max);
 
                     sub_starts(i) = mfa_data.tmesh.knot_idx_dist(t, t.knot_mins[i], min, i, false);
                     if (t.knot_mins[i] == 0)

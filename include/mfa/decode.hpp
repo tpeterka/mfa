@@ -434,9 +434,10 @@ namespace mfa
 //             cerr << "VolPt_tmesh(): decoding point with param: " << param.transpose() << endl;
 
             // debug
-//             bool debug = false;
-//             if (fabs(param(0) - 0.131313) < 1e-6 && fabs(param(1) - 0.030303) < 1e-6)
-//                 debug = true;
+            bool debug = false;
+//             if (fabs(param(0) - 0.33333) < 1e-3 && fabs(param(1) - 0.0000) < 1e-3)
+            if (fabs(param(0) - 0.0) < 1e-3 && fabs(param(1) - 0.0) < 1e-3)
+                debug = true;
 
             // init
             out_pt = VectorX<T>::Zero(out_pt.size());
@@ -467,7 +468,8 @@ namespace mfa
                     if (t.knot_maxs[j] < anchors[j].front() || t.knot_mins[j] > anchors[j].back())
                     {
                         // debug
-//                         cerr << "Skipping tensor " << k << " when decoding point param " << param.transpose() << endl;
+//                         if (debug)
+//                             cerr << "Skipping tensor " << k << " when decoding point param " << param.transpose() << endl;
 
                         skip = true;
                         break;
@@ -491,7 +493,8 @@ namespace mfa
                     if (t.weights(vol_iterator.cur_iter()) == MFA_NAW)
                     {
                         // debug
-//                         cerr << "skipping ctrl pt (MFA_NAW) " << t.ctrl_pts.row(vol_iterator.cur_iter()) << endl;
+//                         if (debug)
+//                             cerr << "skipping ctrl pt (MFA_NAW) " << t.ctrl_pts.row(vol_iterator.cur_iter()) << endl;
 
                         vol_iterator.incr_iter();
                         continue;
@@ -521,6 +524,10 @@ namespace mfa
                         continue;
                     }
 
+                    // debug
+//                     if (debug)
+//                         fmt::print(stderr, "VolPt_tmesh() calling knot_intersections w/ anchor [{}]\n", fmt::join(anchor, ","));
+
                     // intersect tmesh lines to get local knot indices in all directions
                     vector<vector<KnotIdx>> local_knot_idxs(mfa_data.dom_dim);          // local knot vectors in index space
                     mfa_data.tmesh.knot_intersections(anchor, k, true, local_knot_idxs);
@@ -528,8 +535,10 @@ namespace mfa
                     // debug
 //                     if (debug)
 //                     {
+//                         fmt::print(stderr, "VolPt_tmesh(): anchor [{}] ", fmt::join(anchor, ","));
 //                         for (auto j = 0; j < mfa_data.dom_dim; j++)
-//                             fmt::print(stderr, "local_knot_idxs[{}] = [{}]\n", j, fmt::join(local_knot_idxs[j], ","));
+//                             fmt::print(stderr, "local_knot_idxs[{}] [{}] ", j, fmt::join(local_knot_idxs[j], ","));
+//                         fmt::print(stderr, "\n");
 //                     }
 
                     // compute product of basis functions in each dimension
