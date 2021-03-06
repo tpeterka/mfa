@@ -713,28 +713,6 @@ namespace mfa
                 // anchor of control point
                 mfa_data.tmesh.ctrl_pt_anchor(mfa_data.tmesh.tensor_prods[t_idx], ijk, anchor);
 
-                //                 DEPRECATE
-//                 // tensor containing anchor
-//                 // TODO: isn't this always the parent tensor t_idx?
-//                 // if so, remove this code and set t_idx_anchor = t_idx
-//                 TensorIdx t_idx_anchor;
-//                 for (auto k = 0; k < mfa_data.dom_dim; k++)
-//                 {
-//                     t_idx_anchor = mfa_data.tmesh.in_prev_next(anchor, t_idx, k, true);
-//                     if (t_idx_anchor < mfa_data.tmesh.tensor_prods.size())
-//                         break;
-//                 }
-//                 assert(t_idx_anchor < mfa_data.tmesh.tensor_prods.size());
-// 
-//                 // debug
-//                 // part of the TODO above, remove this with the above code and just set t_idx_anchor = t_idx
-//                 if (t_idx_anchor != t_idx)
-//                 {
-//                     fmt::print(stderr, "EncodeTensorLocalLinear(): t_idx = {} but t_idx_anchor = {}. These should be equal\n",
-//                             t_idx, t_idx_anchor);
-//                     abort();
-//                 }
-
                 TensorIdx t_idx_anchor = t_idx;                                                 // tensor containing anchor
 
                 // local knot vector

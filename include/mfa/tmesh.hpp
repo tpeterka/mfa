@@ -1214,17 +1214,13 @@ namespace mfa
                 // from the anchor in the min. direction
                 for (int j = 0; j < min; j++)                               // add 'min' more knots in minimum direction from the anchor
                 {
-#if 1
-
                     // debug
 //                     if (anchor[0] == 56 && anchor[1] == 46 && i == 1 && t_idx == 8)
 //                         debug = true;
 
-                    // --- new version ---
-
-                    if (debug)
-                        fmt::print(stderr, "knot_intersections() dim {} min. dir. before neighbor_tensor_ofst: cur [{}] cur_tensor {} cur_level {}\n",
-                                i, fmt::join(cur, ","), cur_tensor, cur_level);
+//                     if (debug)
+//                         fmt::print(stderr, "knot_intersections() dim {} min. dir. before neighbor_tensor_ofst: cur [{}] cur_tensor {} cur_level {}\n",
+//                                 i, fmt::join(cur, ","), cur_tensor, cur_level);
 
                     // find the next knot and the tensor containing it
                     int count       = 0;
@@ -1238,9 +1234,9 @@ namespace mfa
                         abort();
                     }
 
-                    if (debug)
-                        fmt::print(stderr, "knot_intersections() dim {} min. dir. after neighbor_tensor_ofst: cur [{}] cur_tensor {} cur_level {}\n",
-                                i, fmt::join(cur, ","), cur_tensor, cur_level);
+//                     if (debug)
+//                         fmt::print(stderr, "knot_intersections() dim {} min. dir. after neighbor_tensor_ofst: cur [{}] cur_tensor {} cur_level {}\n",
+//                                 i, fmt::join(cur, ","), cur_tensor, cur_level);
 
                     if (cur[i] > 0)                                         // more knots in the tmesh
                     {
@@ -1253,57 +1249,6 @@ namespace mfa
                     else                                                    // no more knots in the tmesh
                         loc_knots[i][start - j - 1] = 0;                    // repeat first index as many times as needed
 
-#else
-                    // --- old version --- DEPRECATE
-
-                    bool done = false;
-                    do
-                    {
-                        // find previous knot in the current tensor, skipping higher level knots
-                        int incr = -1;
-                        while ((long)cur_knot_idx + incr >= tensor_prods[cur_tensor].knot_mins[i] &&
-                                all_knot_levels[i][cur_knot_idx + incr] > cur_level)
-                            incr--;
-
-                        if ((long)cur_knot_idx + incr > 0)                               // more knots in the tmesh
-                        {
-                            cur[i] = cur_knot_idx + incr;
-
-                            // check which is the correct previous tensor
-                            // if more than one tensor sharing the target, pick highest level
-                            if (!in_dim(cur_knot_idx + incr, tensor_prods[cur_tensor], true, i))
-                            {
-                                // debug
-                                if (anchor[0] == 56 && anchor[1] == 46 && t_idx == 8)
-                                    fmt::print(stderr, "knot_intersections(): cur [{}] cur_tensor {} cur_tensor.prev/next [{}] anchor [{}] t_idx {}\n",
-                                            fmt::join(cur, ","), cur_tensor, fmt::join(tensor_prods[cur_tensor].prev[i], ","), fmt::join(anchor, ","), t_idx);
-
-                                assert(tensor_prods[cur_tensor].prev[i].size() > 0);            // sanity
-                                neighbor_tensors(tensor_prods[cur_tensor].prev[i], i, cur, ctrl_pt_anchor, cur_tensor, cur_level, unused);
-                            }
-
-                            // check if next knot borders a higher level; if so, switch to higher level tensor
-                            border_higher_level(cur, ctrl_pt_anchor, cur_tensor, cur_level);
-
-                            // move to next knot
-                            if (cur_knot_idx + incr > 0                                         &&
-                                cur_knot_idx + incr >= tensor_prods[cur_tensor].knot_mins[i]    &&
-                                all_knot_levels[i][cur_knot_idx + incr] <= cur_level)
-                            {
-                                cur_knot_idx += incr;
-                                loc_knots[i][start - j - 1] = cur_knot_idx;
-                                done = true;
-                            }
-                        }
-                        else                                                // no more knots in the tmesh
-                        {
-                            loc_knots[i][start - j - 1] = 0;                // repeat first index as many times as needed
-                            done = true;
-                        }
-                    } while (!done);
-
-#endif
-
                 }       // for j knots
 
                 // reset back to anchor
@@ -1315,11 +1260,6 @@ namespace mfa
                 // from the anchor in the max. direction
                 for (int j = 0; j < max; j++)                               // add 'max' more knots in maximum direction from the anchor
                 {
-
-#if 1
-
-                    // --- new version ---
-
 //                     if (debug)
 //                         fmt::print(stderr, "knot_intersections() dim {} max. dir. before neighbor_tensor_ofst: cur [{}] cur_tensor {} cur_level {}\n",
 //                                 i, fmt::join(cur, ","), cur_tensor, cur_level);
@@ -1337,9 +1277,9 @@ namespace mfa
                         abort();
                     }
 
-                    if (debug)
-                        fmt::print(stderr, "knot_intersections() dim {} max. dir. after neighbor_tensor_ofst: cur [{}] cur_tensor {} cur_level {}\n",
-                                i, fmt::join(cur, ","), cur_tensor, cur_level);
+//                     if (debug)
+//                         fmt::print(stderr, "knot_intersections() dim {} max. dir. after neighbor_tensor_ofst: cur [{}] cur_tensor {} cur_level {}\n",
+//                                 i, fmt::join(cur, ","), cur_tensor, cur_level);
 
                     if (cur[i] < all_knots[i].size() - 1)
                     {
@@ -1351,110 +1291,9 @@ namespace mfa
                     }
                     else                                                        // no more knots in the tmesh
                         loc_knots[i][start + j + 1] = all_knots[i].size() - 1;  // repeat last index as many times as needed
-
-#else
-                    // --- old version --- DEPRECATE
-
-                    bool done = false;
-                    do
-                    {
-
-                        // find next knot in the current tensor, skipping higher level knots
-                        int incr = 1;
-                        while (cur_knot_idx + incr <= tensor_prods[cur_tensor].knot_maxs[i] &&
-                                all_knot_levels[i][cur_knot_idx + incr] > cur_level)
-                            incr++;
-
-                        if (cur_knot_idx + incr < all_knots[i].size() - 1)      // more knots in the tmesh
-                        {
-                            cur[i] = cur_knot_idx + incr;
-
-                            // check which is the correct next tensor
-                            // if more than one tensor sharing the target, pick highest level
-                            if (!in_dim(cur_knot_idx + incr, tensor_prods[cur_tensor], true, i))
-                            {
-                                assert(tensor_prods[cur_tensor].next[i].size() > 0);        // sanity
-                                neighbor_tensors(tensor_prods[cur_tensor].next[i], i, cur, ctrl_pt_anchor, cur_tensor, cur_level, unused);
-                            }
-
-                            // check if next knot borders a higher level; if so, switch to higher level tensor
-                            border_higher_level(cur, ctrl_pt_anchor, cur_tensor, cur_level);
-
-                            // move to next knot
-                            if (cur_knot_idx + incr < all_knots[i].size()                      &&
-                                cur_knot_idx + incr <= tensor_prods[cur_tensor].knot_maxs[i]   &&
-                                all_knot_levels[i][cur_knot_idx + incr] <= cur_level)
-                            {
-                                cur_knot_idx += incr;
-                                loc_knots[i][start + j + 1] = cur_knot_idx;
-                                done = true;
-                            }
-                        }
-                        else                                                // no more knots in the tmesh
-                        {
-                            loc_knots[i][start + j + 1] = all_knots[i].size() - 1;  // repeat last index as many times as needed
-                            done = true;
-                        }
-
-                    } while (!done);
-
-#endif
-
                 }       // for j knots
             }       // for all dims
         }
-
-        // DEPRECATE
-//         // check which is the correct previous or next neighbor tensor containing the target in the current dimension
-//         // if more than one tensor sharing the target, pick highest level
-//         // updates cur_tensor and cur_level and neigh_hi_levels
-//         void neighbor_tensors(const vector<TensorIdx>&  prev_next,              // previous or next neighbor tensors
-//                               int                       cur_dim,                // current dimension
-//                               const vector<KnotIdx>&    target,                 // target knot indices
-//                               bool                      ctrl_pt_anchor,         // whether pt refers to control point anchor (shifted 1/2 space for even degree)
-//                               TensorIdx&                cur_tensor,             // (input / output) highest level neighbor tensor containing the target
-//                               int&                      cur_level,              // (input / output) level of current tensor
-//                               vector<NeighborTensor>&   neigh_hi_levels) const  // (input / output) neighbors with higher levels than current tensor
-//         {
-//             // check if the target happens to be in the current tensor
-//             if (in(target, tensor_prods[cur_tensor], ctrl_pt_anchor))
-//                 return;
-// 
-//             int         temp_max_level;
-//             TensorIdx   temp_max_k;
-//             bool        first_time = true;
-//             for (auto k = 0; k < prev_next.size(); k++)
-//             {
-//                 if (in(target, tensor_prods[prev_next[k]], ctrl_pt_anchor))
-//                 {
-//                     if (first_time)
-//                     {
-//                         temp_max_k      = k;
-//                         temp_max_level  = tensor_prods[prev_next[k]].level;
-//                         first_time      = false;
-//                     }
-//                     else if (tensor_prods[prev_next[k]].level > temp_max_level)
-//                     {
-//                         temp_max_level  = tensor_prods[prev_next[k]].level;
-//                         temp_max_k      = k;
-//                     }
-//                 }
-//             }
-//             if (first_time)
-//             {
-//                 fmt::print(stderr, "Error: neighbor_tensors(): no valid previous or next tensor for knot vector\n");
-//                 fmt::print(stderr, "prev_next [{}], cur_dim {}, target [{}], cur_tensor {}, cur_level {}\n",
-//                         fmt::join(prev_next, ","), cur_dim, fmt::join(target, ","), cur_tensor, cur_level);
-//                 abort();
-//             }
-//             cur_tensor = prev_next[temp_max_k];
-//             if (tensor_prods[cur_tensor].level > cur_level)
-//             {
-//                 NeighborTensor neighbor = {cur_dim, tensor_prods[cur_tensor].level, prev_next[temp_max_k]};
-//                 neigh_hi_levels.push_back(neighbor);
-//             }
-//             cur_level = tensor_prods[cur_tensor].level;
-//         }
 
         // iterates to the next intersection of knot index
         // first checks current tensor before checking its neighbors
@@ -1484,20 +1323,9 @@ namespace mfa
                 abort();
             }
 
-            bool debug = false;
-//             if (target[0] == 56 && target[1] <= 46 && target [1] >= 40 && (cur_tensor == 8 || cur_tensor == 11) && cur_dim == 1)
-//             {
-//                 fmt::print(stderr, "neigbhor_tensors_ofst(): target [{}] ofst {} cur_dim {} prev_next [{}] cur_tensor {} cur_level {}\n",
-//                         fmt::join(target, ","), ofst, cur_dim, fmt::join(prev_next, ","), cur_tensor, cur_level);
-//                 debug = true;
-//             }
-
             // check if the target plus offset is in the current tensor
             if (knot_idx_ofst(tensor_prods[cur_tensor], target[cur_dim], ofst, cur_dim, false, temp_target))
             {
-                if (debug)
-                    fmt::print(stderr, "0: temp_target {} in cur_tensor {}\n", temp_target, cur_tensor);
-
                 target[cur_dim] = temp_target;
                 return true;
             }
@@ -1511,20 +1339,11 @@ namespace mfa
             // check if the target plus offset is in the neighbors
             for (auto k = 0; k < prev_next.size(); k++)
             {
-                if (debug)
-                    fmt::print(stderr, "1: prev_next[{}] = {}\n", k, prev_next[k]);
-
                 if (knot_idx_ofst(tensor_prods[prev_next[k]], target[cur_dim], ofst, cur_dim, false, temp_target))
                 {
-                    if (debug)
-                        fmt::print(stderr, "2: temp_target = {}\n", temp_target);
-
                     ofst_target[cur_dim] = temp_target;
                     if (in(ofst_target, tensor_prods[prev_next[k]], false))
                     {
-                        if (debug)
-                            fmt::print(stderr, "3: temp_target {} in tensor {}\n", temp_target, prev_next[k]);
-
                         if (first_time || tensor_prods[prev_next[k]].level > new_level)
                         {
                             new_k           = k;
@@ -1534,13 +1353,6 @@ namespace mfa
                         }
                         success = true;
                     }
-                    // debug
-                    else
-                    {
-                        if (debug)
-                            fmt::print(stderr, "3: temp_target {} not in tensor {}\n", temp_target, prev_next[k]);
-                    }
-
                 }
             }
 

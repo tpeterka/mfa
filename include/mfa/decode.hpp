@@ -532,13 +532,13 @@ namespace mfa
                     mfa_data.tmesh.knot_intersections(anchor, k, true, local_knot_idxs);
 
                     // debug
-                    if (debug)
-                    {
-                        fmt::print(stderr, "VolPt_tmesh(): anchor [{}] ", fmt::join(anchor, ","));
-                        for (auto j = 0; j < mfa_data.dom_dim; j++)
-                            fmt::print(stderr, "local_knot_idxs[{}] [{}] ", j, fmt::join(local_knot_idxs[j], ","));
-                        fmt::print(stderr, "\n");
-                    }
+//                     if (debug)
+//                     {
+//                         fmt::print(stderr, "VolPt_tmesh(): anchor [{}] ", fmt::join(anchor, ","));
+//                         for (auto j = 0; j < mfa_data.dom_dim; j++)
+//                             fmt::print(stderr, "local_knot_idxs[{}] [{}] ", j, fmt::join(local_knot_idxs[j], ","));
+//                         fmt::print(stderr, "\n");
+//                     }
 
                     // compute product of basis functions in each dimension
                     T B = 1.0;                                                          // product of basis function values in each dimension
