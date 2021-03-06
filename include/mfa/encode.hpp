@@ -713,26 +713,29 @@ namespace mfa
                 // anchor of control point
                 mfa_data.tmesh.ctrl_pt_anchor(mfa_data.tmesh.tensor_prods[t_idx], ijk, anchor);
 
-                // tensor containing anchor
-                // TODO: isn't this always the parent tensor t_idx?
-                // if so, remove this code and set t_idx_anchor = t_idx
-                TensorIdx t_idx_anchor;
-                for (auto k = 0; k < mfa_data.dom_dim; k++)
-                {
-                    t_idx_anchor = mfa_data.tmesh.in_prev_next(anchor, t_idx, k, true);
-                    if (t_idx_anchor < mfa_data.tmesh.tensor_prods.size())
-                        break;
-                }
-                assert(t_idx_anchor < mfa_data.tmesh.tensor_prods.size());
+                //                 DEPRECATE
+//                 // tensor containing anchor
+//                 // TODO: isn't this always the parent tensor t_idx?
+//                 // if so, remove this code and set t_idx_anchor = t_idx
+//                 TensorIdx t_idx_anchor;
+//                 for (auto k = 0; k < mfa_data.dom_dim; k++)
+//                 {
+//                     t_idx_anchor = mfa_data.tmesh.in_prev_next(anchor, t_idx, k, true);
+//                     if (t_idx_anchor < mfa_data.tmesh.tensor_prods.size())
+//                         break;
+//                 }
+//                 assert(t_idx_anchor < mfa_data.tmesh.tensor_prods.size());
+// 
+//                 // debug
+//                 // part of the TODO above, remove this with the above code and just set t_idx_anchor = t_idx
+//                 if (t_idx_anchor != t_idx)
+//                 {
+//                     fmt::print(stderr, "EncodeTensorLocalLinear(): t_idx = {} but t_idx_anchor = {}. These should be equal\n",
+//                             t_idx, t_idx_anchor);
+//                     abort();
+//                 }
 
-                // debug
-                // part of the TODO above, remove this with the above code and just set t_idx_anchor = t_idx
-                if (t_idx_anchor != t_idx)
-                {
-                    fmt::print(stderr, "EncodeTensorLocalLinear(): t_idx = {} but t_idx_anchor = {}. These should be equal\n",
-                            t_idx, t_idx_anchor);
-                    abort();
-                }
+                TensorIdx t_idx_anchor = t_idx;                                                 // tensor containing anchor
 
                 // local knot vector
                 mfa_data.tmesh.knot_intersections(anchor, t_idx_anchor, true, local_knot_idxs);
@@ -777,14 +780,6 @@ namespace mfa
             MatrixX<T> Ncons = MatrixX<T>::Constant(ndom_pts.prod(), Pcons.rows(), -1);         // basis functions, -1 means unassigned so far
             for (auto i = 0; i < Ncons.cols(); i++)                                             // for all constraint control points
             {
-                // debug
-                if (anchors[i][0] == 56 & anchors[i][1] == 46 && t_idx_anchors[i] == 8)
-                {
-//                     for (auto j = 0; j < anchors.size(); j++)
-//                         fmt::print(stderr, "anchors[{}]: [{}] t_tidx_anchor: {}\n", j, fmt::join(anchors[j], ","), t_idx_anchors[j]);
-                        fmt::print(stderr, "EncodeTensorLocalLinear: anchors[{}]: [{}] t_tidx_anchor: {}\n", i, fmt::join(anchors[i], ","), t_idx_anchors[i]);
-                }
-
                 // local knot vector
                 mfa_data.tmesh.knot_intersections(anchors[i], t_idx_anchors[i], true, local_knot_idxs);
                 for (auto k = 0; k < mfa_data.dom_dim; k++)
@@ -1987,10 +1982,6 @@ namespace mfa
                         fmt::join(t.knot_mins, ","), fmt::join(t.knot_maxs, ","));
 
                 int tensor_idx = mfa_data.tmesh.append_tensor(t.knot_mins, t.knot_maxs, iter + 1);
-
-                // debug
-                if (iter == 3)
-                    mfa_data.tmesh.print();
 
                 // solve for new control points
                 if (local)

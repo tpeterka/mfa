@@ -424,7 +424,6 @@ namespace mfa
 
         // decode a point in the t-mesh
         // TODO: serial implementation, no threading
-        // TODO: checks local support of individual control points, but could also check bounds of tensors and skip entire tensors
         // TODO: no derivatives as yet
         // TODO: weighs all dims, whereas other versions of VolPt have a choice of all dims or only last dim
         void VolPt_tmesh(const VectorX<T>&      param,      // parameters of point to decode
@@ -436,8 +435,8 @@ namespace mfa
             // debug
             bool debug = false;
 //             if (fabs(param(0) - 0.33333) < 1e-3 && fabs(param(1) - 0.0000) < 1e-3)
-            if (fabs(param(0) - 0.0) < 1e-3 && fabs(param(1) - 0.0) < 1e-3)
-                debug = true;
+//             if (fabs(param(0) - 0.0) < 1e-3 && fabs(param(1) - 0.0) < 1e-3)
+//                 debug = true;
 
             // init
             out_pt = VectorX<T>::Zero(out_pt.size());
@@ -533,13 +532,13 @@ namespace mfa
                     mfa_data.tmesh.knot_intersections(anchor, k, true, local_knot_idxs);
 
                     // debug
-//                     if (debug)
-//                     {
-//                         fmt::print(stderr, "VolPt_tmesh(): anchor [{}] ", fmt::join(anchor, ","));
-//                         for (auto j = 0; j < mfa_data.dom_dim; j++)
-//                             fmt::print(stderr, "local_knot_idxs[{}] [{}] ", j, fmt::join(local_knot_idxs[j], ","));
-//                         fmt::print(stderr, "\n");
-//                     }
+                    if (debug)
+                    {
+                        fmt::print(stderr, "VolPt_tmesh(): anchor [{}] ", fmt::join(anchor, ","));
+                        for (auto j = 0; j < mfa_data.dom_dim; j++)
+                            fmt::print(stderr, "local_knot_idxs[{}] [{}] ", j, fmt::join(local_knot_idxs[j], ","));
+                        fmt::print(stderr, "\n");
+                    }
 
                     // compute product of basis functions in each dimension
                     T B = 1.0;                                                          // product of basis function values in each dimension
