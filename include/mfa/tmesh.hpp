@@ -29,8 +29,8 @@ struct TensorProduct
     VectorXi                    nctrl_pts;              // number of control points in each domain dimension
     MatrixX<T>                  ctrl_pts;               // control points in row major order
     VectorX<T>                  weights;                // weights associated with control points
-    vector<vector<TensorIdx>>   next;                   // next[dim][index of next tensor product]
-    vector<vector<TensorIdx>>   prev;                   // prev[dim][index of previous tensor product]
+    vector<vector<TensorIdx>>   next;                   // next[dim][index of next tensor product] (unsorted)
+    vector<vector<TensorIdx>>   prev;                   // prev[dim][index of previous tensor product] (unsorted)
     int                         level;                  // refinement level
 };
 
@@ -39,7 +39,7 @@ namespace mfa
     template <typename T>
     struct Tmesh
     {
-        vector<vector<T>>           all_knots;          // all_knots[dimension][index]
+        vector<vector<T>>           all_knots;          // all_knots[dimension][index] (sorted)
         vector<vector<int>>         all_knot_levels;    // refinement levels of all_knots[dimension][index]
         vector<vector<ParamIdx>>    all_knot_param_idxs;// index of first input point whose parameter is >= knot value in all_knots[dimension][idx] (same layout as all_knots)
                                                         // knot value <= params[dim][idx] < next knot value
@@ -144,6 +144,11 @@ namespace mfa
             bool vec_grew;                          // vector of tensor_prods grew
             bool tensor_inserted = false;           // the desired tensor was already inserted
 
+            // debug
+//             bool debug;
+//             if (knot_mins[0] == 6 && knot_mins[1] == 5 && knot_maxs[0] ==79 && knot_maxs[1] == 91)
+//                 debug = true;
+
             // check if the tensor to be added matches any existing ones
             for (auto k = 0; k < tensor_prods.size(); k++)
             {
@@ -228,6 +233,10 @@ namespace mfa
                 new_tensor.weights.resize(tot_nctrl_pts);               // will get initialized to 1 later
             }
 
+            // debug
+//             if (debug)
+//                 fmt::print("append_tensor(): 1: knot_mins [{}] knot_maxs[{}]\n", fmt::join(knot_mins, ","), fmt::join(knot_maxs, ","));
+
             vector<int> split_side(dom_dim_);       // whether min (-1), max (1), or both (2) sides of
                                                     // new tensor split the existing tensor (one value for each dim.)
 
@@ -240,15 +249,60 @@ namespace mfa
                 for (auto j = 0; j < tensor_prods.size(); j++)
                 {
                     // debug
-//                     fprintf(stderr, "checking for intersection between new tensor and existing tensor idx=%lu\n", j);
+//                     if (debug)
+//                         fmt::print(stderr, "checking for intersection between new tensor and existing tensor idx={}\n", j);
+
+                    // check if new tensor completely covers existing tensor, if so, delete existing
+                    if (subset(tensor_prods[j].knot_mins, tensor_prods[j].knot_maxs, new_tensor.knot_mins, new_tensor.knot_maxs))
+                    {
+//                         if (debug)
+//                             fmt::print("append_tensor(): new tensor covers existing tensor {} which will be deleted\n", j);
+
+                        // delete neighbors' prev/next pointers to this tensor
+                        for (auto i = 0; i < dom_dim_; i++)
+                        {
+                            auto& prev = tensor_prods[j].prev[i];
+                            for (auto k = 0; k < prev.size(); k++)
+                                delete_pointer(prev[k], j);
+                            auto& next = tensor_prods[j].next[i];
+                            for (auto k = 0; k < next.size(); k++)
+                                delete_pointer(next[k], j);
+                        }
+
+                        // delete the tensor by swapping the last tensor in its place
+                        // TODO: deep copy can be avoided by marking tensor as dirty and reclaiming on next append
+                        tensor_prods[j] = tensor_prods.back();
+                        tensor_prods.resize(tensor_prods.size() - 1);
+
+                        // renumber the pointers of the moved tensor's neighbors
+                        for (auto i = 0; i < dom_dim_; i++)
+                        {
+                            auto& prev = tensor_prods[j].prev[i];
+                            for (auto k = 0; k < prev.size(); k++)
+                                change_pointer(prev[k], tensor_prods.size(), j);
+                            auto& next = tensor_prods[j].next[i];
+                            for (auto k = 0; k < next.size(); k++)
+                                change_pointer(next[k], tensor_prods.size(), j);
+                        }
+
+                        // debug
+//                         if (debug)
+//                         {
+//                             fmt::print("\nappend_tensor(): tensors after deletion\n\n");
+//                             print_tensors();
+//                         }
+                    }
 
                     if (nonempty_intersection(new_tensor, tensor_prods[j], split_side))
                     {
                         // debug
-//                         fprintf(stderr, "intersection found between new tensor and existing tensor idx=%lu split_side=[%d %d]\n",
-//                                 j, split_side[0], split_side[1]);
-//                         fprintf(stderr, "\ntensors before intersection\n\n");
-//                         print();
+//                         if (debug)
+//                         {
+//                             fmt::print("append_tensor(): intersection found between new tensor and existing tensor idx={} split_side=[{}]\n",
+//                                     j, fmt::join(split_side, ","));
+//                             fmt::print("\nappend_tensor(): tensors before intersection\n\n");
+//                             print();
+//                         }
 
                         if ((vec_grew = intersect(new_tensor, j, split_side, knots_match)) && vec_grew)
                         {
@@ -256,8 +310,11 @@ namespace mfa
                                 tensor_inserted = true;
 
                             // debug
-//                             fprintf(stderr, "\ntensors after intersection\n\n");
-//                             print();
+//                             if (debug)
+//                             {
+//                                 fmt::print("\nappend_tensor(): tensors after intersection\n\n");
+//                                 print();
+//                             }
 
                             break;  // adding a tensor invalidates iterator, start iteration over
                         }
@@ -435,10 +492,10 @@ namespace mfa
         }
 
         // check if nonempty intersection exists in all dimensions between knot_mins, knot_maxs of two tensors
-        // assumes new tensor cannot be larger than existing tensor in any dimension (continually refining smaller or equal)
         bool nonempty_intersection(TensorProduct<T>&    new_tensor,         // new tensor product to be added
                                    TensorProduct<T>&    existing_tensor,    // existing tensor product
-                                   vector<int>&         split_side)         // (output) whether min (-1), max (1), or both sides of new_tensor split
+                                   vector<int>&         split_side)         // (output) whether none (0), min (-1), max (1), or
+                                                                            // both (2) sides of new_tensor split
                                                                             // existing tensor (one value for each dim.)
         {
             split_side.clear();
@@ -568,6 +625,10 @@ namespace mfa
             side_tensor.level           = exist_tensor.level;
             TensorIdx side_tensor_idx   = tensor_prods.size();                  // index of new tensor to be added
 
+            // debug
+//             fmt::print("new_side(): 0: checking subset side_tensor mins [{}] side_tensor maxs [{}] new_tensor mins [{}] new_tensor maxs [{}]\n",
+//                     fmt::join(side_tensor.knot_mins, ","), fmt::join(side_tensor.knot_maxs, ","), fmt::join(new_tensor.knot_mins, ","), fmt::join(new_tensor.knot_maxs, ","));
+
             // new side tensor will be added
             if (!subset(side_tensor.knot_mins, side_tensor.knot_maxs, new_tensor.knot_mins, new_tensor.knot_maxs))
             {
@@ -577,7 +638,7 @@ namespace mfa
                 //  split control points between existing and max side tensors
 
                 // debug
-//                 fprintf(stderr, "1: calling split_ctrl_pts exist_tensor_idx=%lu cur_dim=%d split_side=%d global knot_idx = %lu local_knot_idx=%lu\n",
+//                 fprintf(stderr, "new_side(): 1: calling split_ctrl_pts exist_tensor_idx=%lu cur_dim=%d split_side=%d global knot_idx = %lu local_knot_idx=%lu\n",
 //                         exist_tensor_idx, cur_dim, split_side, knot_idx, local_knot_idx);
 
                 if (split_side == -1 || split_side == 2)
@@ -606,7 +667,7 @@ namespace mfa
             else
             {
                 // debug
-//                 fprintf(stderr, "2: calling split_ctrl_pts exist_tensor_idx=%lu cur_dim=%d split_side=%d global knot_idx = %lu local_knot_idx=%lu\n",
+//                 fprintf(stderr, "new_side(): 2: calling split_ctrl_pts exist_tensor_idx=%lu cur_dim=%d split_side=%d global knot_idx = %lu local_knot_idx=%lu\n",
 //                         exist_tensor_idx, cur_dim, split_side, knot_idx, local_knot_idx);
 
                 if (split_side == -1 || split_side == 2)
@@ -890,6 +951,65 @@ namespace mfa
 //             fprintf(stderr, "new existing tensor tot_nctrl_pts=%lu = [%d %d]\n", existing_tensor.ctrl_pts.rows(), existing_tensor.nctrl_pts[0], existing_tensor.nctrl_pts[1]);
 //             if (!skip_new_side)
 //                 fprintf(stderr, "max side tensor tot_nctrl_pts=%lu = [%d %d]\n\n", new_side_tensor.ctrl_pts.rows(), new_side_tensor.nctrl_pts[0], new_side_tensor.nctrl_pts[1]);
+        }
+
+        // delete pointer from prev and/or next vectors of a tensor
+        void delete_pointer(TensorIdx t_idx,                            // existing tensor
+                            TensorIdx p_idx)                            // pointer to be deleted from prev and next
+        {
+            for (auto i = 0; i < dom_dim_; i++)
+            {
+                // delete from prev
+                // does not check for duplicates, only deletes first instance found
+                auto& prev = tensor_prods[t_idx].prev[i];
+                for (auto j = 0; j < prev.size(); j++)
+                {
+                    if (prev[j] == p_idx)
+                    {
+                        prev[j] = prev.back();
+                        prev.resize(prev.size() - 1);
+                        break;
+                    }
+                }
+
+                // delete from next
+                // does not check for duplicates, only deletes first instance found
+                auto& next = tensor_prods[t_idx].next[i];
+                for (auto j = 0; j < next.size(); j++)
+                {
+                    if (next[j] == p_idx)
+                    {
+                        next[j] = next.back();
+                        next.resize(next.size() - 1);
+                        break;
+                    }
+                }
+            }
+        }
+
+        // change pointer from prev and/or next vectors of a tensor
+        void change_pointer(TensorIdx t_idx,                            // existing tensor
+                            TensorIdx old_idx,                          // pointer to be changed from prev and next of existing tensor
+                            TensorIdx new_idx)                          // new value of pointer
+        {
+            for (auto i = 0; i < dom_dim_; i++)
+            {
+                // check prev
+                auto& prev = tensor_prods[t_idx].prev[i];
+                for (auto j = 0; j < prev.size(); j++)
+                {
+                    if (prev[j] == old_idx)
+                        prev[j] = new_idx;
+                }
+
+                // check next
+                auto& next = tensor_prods[t_idx].next[i];
+                for (auto j = 0; j < next.size(); j++)
+                {
+                    if (next[j] == old_idx)
+                        next[j] = new_idx;
+                }
+            }
         }
 
         // delete pointers that are no longer valid as a result of adding a new max side tensor
@@ -1215,12 +1335,12 @@ namespace mfa
                 for (int j = 0; j < min; j++)                               // add 'min' more knots in minimum direction from the anchor
                 {
                     // debug
-//                     if (anchor[0] == 56 && anchor[1] == 46 && i == 1 && t_idx == 8)
+//                     if (anchor[0] == 6 && anchor[1] == 9 && i == 1 && t_idx == 5)
 //                         debug = true;
 
 //                     if (debug)
-//                         fmt::print(stderr, "knot_intersections() dim {} min. dir. before neighbor_tensor_ofst: cur [{}] cur_tensor {} cur_level {}\n",
-//                                 i, fmt::join(cur, ","), cur_tensor, cur_level);
+//                         fmt::print(stderr, "knot_intersections() min. dir. dim {} j {} min {} before neighbor_tensor_ofst: cur [{}] cur_tensor {} cur_level {}\n",
+//                                 i, j, min, fmt::join(cur, ","), cur_tensor, cur_level);
 
                     // find the next knot and the tensor containing it
                     int count       = 0;
@@ -1235,8 +1355,8 @@ namespace mfa
                     }
 
 //                     if (debug)
-//                         fmt::print(stderr, "knot_intersections() dim {} min. dir. after neighbor_tensor_ofst: cur [{}] cur_tensor {} cur_level {}\n",
-//                                 i, fmt::join(cur, ","), cur_tensor, cur_level);
+//                         fmt::print(stderr, "knot_intersections() min. dir. dim {} j {} min {} after neighbor_tensor_ofst: cur [{}] cur_tensor {} cur_level {}\n",
+//                                 i, j, min, fmt::join(cur, ","), cur_tensor, cur_level);
 
                     if (cur[i] > 0)                                         // more knots in the tmesh
                     {

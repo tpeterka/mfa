@@ -1961,6 +1961,9 @@ namespace mfa
 
                 int tensor_idx = mfa_data.tmesh.append_tensor(t.knot_mins, t.knot_maxs, iter + 1);
 
+                // debug
+//                 mfa_data.tmesh.print();
+
                 // solve for new control points
                 if (local)
                     EncodeTensorLocalLinear(tensor_idx);
@@ -2060,7 +2063,7 @@ namespace mfa
             }
 
             // debug
-            fmt::print(stderr, "Refine() appending tensor with knot_mins [{}] knot_maxs [{}]\n",
+            fmt::print(stderr, "NewKnots_full() appending tensor with knot_mins [{}] knot_maxs [{}]\n",
                     fmt::join(knot_mins, ","), fmt::join(knot_maxs, ","));
 
             // append the tensor
