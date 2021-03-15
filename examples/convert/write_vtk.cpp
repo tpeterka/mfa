@@ -161,6 +161,7 @@ void PrepRenderingData(
         vector<vec3d>&              tensor_pts_index,
         vector<int>&                ntensor_pts,
         Block<real_t>*              block,
+        int                         sci_var,                // science variable to render geometrically for 1d and 2d domains
         int&                        pt_dim)                 // (output) dimensionality of point
 {
     vec3d p;
@@ -185,9 +186,12 @@ void PrepRenderingData(
 
     for (size_t j = 0; j < (size_t)(block->domain.rows()); j++)
     {
-        p.x = block->domain(j, 0);                      // first 3 dims stored as mesh geometry
-        p.y = block->domain(j, 1);
-        p.z = block->domain.cols() > 2 ? block->domain(j, 2) : 0.0;
+        p.x = block->domain(j, 0);                              // if domain < 3d, mesh geometry includes a science variable
+        p.y = ndom_dims > 1 ? block->domain(j, 1) : block->domain(j, ndom_dims + sci_var);
+        if (ndom_dims < 2)
+            p.z = 0.0;
+        else
+            p.z = ndom_dims > 2 ? block->domain(j, 2) : block->domain(j, ndom_dims + sci_var);
         raw_pts.push_back(p);
 
         for (int k = 0; k < nvars; k++)                         // science variables
@@ -392,20 +396,27 @@ void PrepRenderingData(
 
     for (size_t j = 0; j < (size_t)(block->approx.rows()); j++)
     {
-        p.x = block->approx(j, 0);                      // first 3 dims stored as mesh geometry
-        p.y = block->approx(j, 1);
-        p.z = block->approx.cols() > 2 ? block->approx(j, 2) : 0.0;
+        p.x = block->approx(j, 0);                              // if domain < 3d, mesh geometry includes a science variable
+        p.y = ndom_dims > 1 ? block->approx(j, 1) : block->approx(j, ndom_dims + sci_var);
+        if (ndom_dims < 2)
+            p.z = 0.0;
+        else
+            p.z = ndom_dims > 2 ? block->approx(j, 2) : block->approx(j, ndom_dims + sci_var);
         approx_pts.push_back(p);
 
         for (int k = 0; k < nvars; k++)                         // science variables
             approx_data[k][j] = block->approx(j, ndom_dims + k);
     }
 
+    // blended points
     for (size_t j = 0; j < (size_t)(block->blend.rows()); j++)
     {
-        p.x = block->blend(j, 0);                      // first 3 dims stored as mesh geometry
-        p.y = block->blend(j, 1);
-        p.z = block->blend.cols() > 2 ? block->blend(j, 2) : 0.0;
+        p.x = block->blend(j, 0);                               // if domain < 3d, mesh geometry includes a science variable
+        p.y = ndom_dims > 1 ? block->blend(j, 1) : block->blend(j, ndom_dims + sci_var);
+        if (ndom_dims < 2)
+            p.z = 0.0;
+        else
+            p.z = ndom_dims > 2 ? block->blend(j, 2) : block->blend(j, ndom_dims + sci_var);
         blend_pts.push_back(p);
 
         for (int k = 0; k < nvars; k++)                         // science variables
@@ -439,6 +450,7 @@ void PrepRenderingData(
 void write_vtk_files(
         Block<real_t>* b,
         const          diy::Master::ProxyWithLink& cp,
+        int            sci_var,                     // science variable to render geometrically for 1d and 2d domains
         int&           dom_dim,                     // (output) domain dimensionality
         int&           pt_dim)                      // (output) point dimensionality
 {
@@ -477,6 +489,7 @@ void write_vtk_files(
                       tensor_pts_index,
                       ntensor_pts,
                       b,
+                      sci_var,
                       pt_dim);
 
     // pad dimensions up to 3
@@ -830,12 +843,14 @@ int main(int argc, char ** argv)
     string                      infile = "approx.out";  // diy input file
     bool                        help;                   // show help
     int                         dom_dim, pt_dim;        // domain and point dimensionality, respectively
+    int                         sci_var = 0;            // science variable to render geometrically for 1d and 2d domains
 
     // get command line arguments
     opts::Options ops;
     ops >> opts::Option('f', "infile",      infile,     " diy input file name");
     ops >> opts::Option('a', "ntest",       ntest,      " number of test points in each dimension of domain (for analytical error calculation)");
     ops >> opts::Option('i', "input",       input,      " input dataset");
+    ops >> opts::Option('v', "var",         sci_var,    " science variable to render geometrically for 1d and 2d domains");
     ops >> opts::Option('h', "help",        help,       " show help");
 
     if (!ops.parse(argc, argv) || help)
@@ -878,7 +893,7 @@ int main(int argc, char ** argv)
 
     // write vtk files for initial and approximated points
     master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-            { write_vtk_files(b, cp, dom_dim, pt_dim); });
+            { write_vtk_files(b, cp, sci_var, dom_dim, pt_dim); });
 
     // rest of the code tests analytical functions and writes those files
 
