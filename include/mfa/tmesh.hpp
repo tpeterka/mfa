@@ -48,6 +48,7 @@ namespace mfa
         VectorXi                    p_;                 // degree in each dimension
         int                         min_dim_;           // starting coordinate of this model in full-dimensional data
         int                         max_dim_;           // ending coordinate of this model in full-dimensional data
+        int                         cur_split_dim;      // current split dimension
 
         Tmesh(int               dom_dim,                // number of domain dimension
               const VectorXi&   p,                      // degree in each dimension
@@ -65,6 +66,8 @@ namespace mfa
 
             if (ntensor_prods)
                 tensor_prods.resize(ntensor_prods);
+
+            cur_split_dim = 0;
         }
 
         // initialize knots
@@ -562,8 +565,13 @@ namespace mfa
             bool    retval          = false;
             KnotIdx split_knot_idx;
 
-            for (int k = 0; k < dom_dim_; k++)      // for all domain dimensions
+            for (int i = 0; i < dom_dim_; i++)      // for all domain dimensions
             {
+                int k = next_split_dim();           // alternate splitting dimension
+
+                // debug
+//                 fmt::print("intersect(): i = {} k = {}\n", i, k);
+
                 if (!split_side[k])
                     continue;
 
@@ -588,6 +596,14 @@ namespace mfa
                         return true;
                 }
             }
+            return retval;
+        }
+
+        // return the next dimension to split a tensor
+        int next_split_dim()
+        {
+            int retval      = cur_split_dim;
+            cur_split_dim   = (cur_split_dim + 1) % dom_dim_;
             return retval;
         }
 
@@ -1288,7 +1304,7 @@ namespace mfa
         {
             // debug
             bool debug = false;
-//             if (anchor[0] == 2 && anchor[1] == 1)
+//             if (anchor[0] == 78 && anchor[1] == 41 && t_idx == 5)
 //                 debug = true;
 
             // sanity check that anchor is in the current tensor
@@ -1380,6 +1396,9 @@ namespace mfa
                 // from the anchor in the max. direction
                 for (int j = 0; j < max; j++)                               // add 'max' more knots in maximum direction from the anchor
                 {
+//                     if (anchor[0] == 78 && anchor[1] == 41 && i == 1 && t_idx == 5)
+//                         debug = true;
+
 //                     if (debug)
 //                         fmt::print(stderr, "knot_intersections() dim {} max. dir. before neighbor_tensor_ofst: cur [{}] cur_tensor {} cur_level {}\n",
 //                                 i, fmt::join(cur, ","), cur_tensor, cur_level);
@@ -1435,6 +1454,10 @@ namespace mfa
             bool            first_time  = true;
             int             ofst;
 
+//             bool debug = false;
+//             if (target[0] == 78 && target[1] == 43 && dir == 1)
+//                 debug = true;
+
             if (dir == 1 || dir == -1)
                 ofst = dir;
             else
@@ -1459,20 +1482,18 @@ namespace mfa
             // check if the target plus offset is in the neighbors
             for (auto k = 0; k < prev_next.size(); k++)
             {
-                if (knot_idx_ofst(tensor_prods[prev_next[k]], target[cur_dim], ofst, cur_dim, false, temp_target))
+                knot_idx_ofst(tensor_prods[prev_next[k]], target[cur_dim], ofst, cur_dim, false, temp_target);
+                ofst_target[cur_dim] = temp_target;
+                if (in(ofst_target, tensor_prods[prev_next[k]], false))
                 {
-                    ofst_target[cur_dim] = temp_target;
-                    if (in(ofst_target, tensor_prods[prev_next[k]], false))
+                    if (first_time || tensor_prods[prev_next[k]].level > new_level)
                     {
-                        if (first_time || tensor_prods[prev_next[k]].level > new_level)
-                        {
-                            new_k           = k;
-                            new_level       = tensor_prods[prev_next[k]].level;
-                            new_target      = temp_target;
-                            first_time      = false;
-                        }
-                        success = true;
+                        new_k           = k;
+                        new_level       = tensor_prods[prev_next[k]].level;
+                        new_target      = temp_target;
+                        first_time      = false;
                     }
+                    success = true;
                 }
             }
 

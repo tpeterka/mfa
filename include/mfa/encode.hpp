@@ -1959,9 +1959,14 @@ namespace mfa
                 fmt::print(stderr, "\nRefine() appending tensor with knot_mins [{}] knot_maxs [{}]\n",
                         fmt::join(t.knot_mins, ","), fmt::join(t.knot_maxs, ","));
 
+                // debug
+//                 fmt::print("\nT-mesh before append\n\n");
+//                 mfa_data.tmesh.print();
+
                 int tensor_idx = mfa_data.tmesh.append_tensor(t.knot_mins, t.knot_maxs, iter + 1);
 
                 // debug
+//                 fmt::print("\nT-mesh after append and before local solve\n\n");
 //                 mfa_data.tmesh.print();
 
                 // solve for new control points
