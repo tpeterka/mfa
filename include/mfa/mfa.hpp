@@ -37,6 +37,7 @@
 
 #include    <Eigen/Dense>
 #include    <Eigen/Sparse>
+#include    <Eigen/OrderingMethods>
 #include    <vector>
 #include    <list>
 #include    <iostream>

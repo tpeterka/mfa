@@ -14,7 +14,6 @@
 #include    <mfa/decode.hpp>
 #include    <mfa/new_knots.hpp>
 
-#include    <Eigen/Dense>
 #include    <vector>
 #include    <set>
 #include    <iostream>
@@ -25,6 +24,7 @@
 #include    <iomanip>
 #include    <fstream>
 #include    <sstream>
+#include    <mpi.h>     // for MPI_Wtime() only
 
 #ifndef      MFA_NO_WEIGHTS
 
@@ -649,47 +649,18 @@ namespace mfa
 
 #ifdef MFA_TMESH
 
-        // encodes the control points for one tensor product of a tmesh
-        // takes a subset of input points from the global domain, covered by basis functions of this tensor product
-        // solves all dimensions together (not separably)
-        // does not encode weights for now
-        // latest linear constrained formulation as proposed by David Lenz (see wiki/notes/linear-constrained-fit.pdf)
-        void EncodeTensorLocalLinear(
-                TensorIdx                 t_idx,                  // index of tensor product being encoded
-                bool                      weighted = true)        // solve for and use weights
+        // free control points matrix of basis functions
+        // helper function for EncodeTensorLocalLinear
+        // returns max number of nonzeros in any column
+        int  FreeCtrlPtMat(TensorIdx            t_idx,              // index of tensor of control points
+                           VectorXi&            ndom_pts,           // number of relevant input points in each dim
+                           VectorXi&            dom_starts,         // starting offsets of relevant input points in each dim
+                           MatrixX<T>&          Nfree)              // (output) matrix of free control points basis functions
         {
-            // debug
-            fprintf(stderr, "EncodeTensorLocalLinear\n");
-
-            TensorProduct<T>& t = mfa_data.tmesh.tensor_prods[t_idx];                           // current tensor product
-            int pt_dim = mfa_data.max_dim - mfa_data.min_dim + 1;                               // control point dimensionality
-
-            // get input domain points covered by the tensor
-            vector<size_t> start_idxs(mfa_data.dom_dim);
-            vector<size_t> end_idxs(mfa_data.dom_dim);
-            mfa_data.tmesh.domain_pts(t_idx, false, mfa.params(), start_idxs, end_idxs);
-
-            // Q matrix of relevant input domain points
-            VectorXi ndom_pts(mfa_data.dom_dim);
-            VectorXi dom_starts(mfa_data.dom_dim);
-            for (auto k = 0; k < mfa_data.dom_dim; k++)
-            {
-                ndom_pts(k)     = end_idxs[k] - start_idxs[k] + 1;
-                dom_starts(k)   = start_idxs[k];                                                // need Eigen vector from STL vector
-            }
-            MatrixX<T> Q(ndom_pts.prod(), pt_dim);
-            VolIterator dom_iter(ndom_pts, dom_starts, mfa.ndom_pts());
-            while (!dom_iter.done())
-            {
-                Q.block(dom_iter.cur_iter(), 0, 1, pt_dim) =
-                    domain.block(dom_iter.sub_full_idx(dom_iter.cur_iter()), mfa_data.min_dim, 1, pt_dim);
-                dom_iter.incr_iter();
-            }
-
-            // resize control points and weights in case number of control points changed
-            t.ctrl_pts.resize(t.nctrl_pts.prod(), pt_dim);
-            t.weights.resize(t.ctrl_pts.rows());
-            t.weights = VectorX<T>::Ones(t.weights.size());                                     // linear solve does not solve for weights; set to 1
+            TensorProduct<T>&   t = mfa_data.tmesh.tensor_prods[t_idx];
+            vector<KnotIdx>     anchor(mfa_data.dom_dim);                                       // control point anchor
+            Nfree = MatrixX<T>::Zero(ndom_pts.prod(), t.ctrl_pts.rows());
+            int max_nnz_col = 0;                                                                // max num nonzeros in any column
 
             // local knot vector
             vector<vector<KnotIdx>> local_knot_idxs(mfa_data.dom_dim);                          // local knot indices
@@ -700,10 +671,7 @@ namespace mfa
                 local_knots[k].resize(mfa_data.p(k) + 2);
             }
 
-            vector<KnotIdx>     anchor(mfa_data.dom_dim);                                       // control point anchor
-
             // iterator over free control points
-            MatrixX<T> Nfree = MatrixX<T>::Constant(ndom_pts.prod(), t.ctrl_pts.rows(), -1);    // basis functions, -1 means unassigned so far
             VolIterator free_iter(t.nctrl_pts);
             while (!free_iter.done())
             {
@@ -711,15 +679,15 @@ namespace mfa
                 free_iter.idx_ijk(free_iter.cur_iter(), ijk);
 
                 // anchor of control point
-                mfa_data.tmesh.ctrl_pt_anchor(mfa_data.tmesh.tensor_prods[t_idx], ijk, anchor);
-
-                TensorIdx t_idx_anchor = t_idx;                                                 // tensor containing anchor
+                mfa_data.tmesh.ctrl_pt_anchor(t, ijk, anchor);
 
                 // local knot vector
-                mfa_data.tmesh.knot_intersections(anchor, t_idx_anchor, true, local_knot_idxs);
+                mfa_data.tmesh.knot_intersections(anchor, t_idx, true, local_knot_idxs);
                 for (auto k = 0; k < mfa_data.dom_dim; k++)
                     for (auto n = 0; n < local_knot_idxs[k].size(); n++)
                         local_knots[k][n] = mfa_data.tmesh.all_knots[k][local_knot_idxs[k][n]];
+
+                int nnz_col = 0;                                                                // num nonzeros in current column
 
                 // iterator over input points
                 VolIterator dom_iter(ndom_pts, dom_starts, mfa.ndom_pts());
@@ -730,32 +698,103 @@ namespace mfa
                         int p = mfa_data.p(k);                                                  // degree of current dim.
                         T u = mfa.params()[k][dom_iter.idx_dim(k)];                             // parameter of current input point
                         T B = mfa_data.OneBasisFun(k, u, local_knots[k]);                       // basis function
-                        if (Nfree(dom_iter.cur_iter(), free_iter.cur_iter()) == -1.0)           // unassigned so far
-                            Nfree(dom_iter.cur_iter(), free_iter.cur_iter()) = B;
-                        else
-                            Nfree(dom_iter.cur_iter(), free_iter.cur_iter()) *= B;
+                        Nfree(dom_iter.cur_iter(), free_iter.cur_iter()) =
+                            (k == 0 ? B : Nfree(dom_iter.cur_iter(), free_iter.cur_iter()) * B);
                     }       // for all dims
+                    if (Nfree(dom_iter.cur_iter(), free_iter.cur_iter()) != 0.0)
+                        nnz_col++;
                     dom_iter.incr_iter();
                 }       // domain point iterator
+
+                if (nnz_col > max_nnz_col)
+                    max_nnz_col = nnz_col;
+                free_iter.incr_iter();
+            }       // free control point iterator
+            return max_nnz_col;
+        }
+
+        // free control points matrix of basis functions
+        // helper function for EncodeTensorLocalLinear
+        // sparse matrix version; not used for now, but might be in the future
+        void FreeCtrlPtMatSparse(TensorIdx          t_idx,              // index of tensor of control points
+                                 VectorXi&          ndom_pts,           // number of relevant input points in each dim
+                                 VectorXi&          dom_starts,         // starting offsets of relevant input points in each dim
+                                 SparseMatrixX<T>&  Nfree_sparse)       // (output) matrix of free control points basis functions
+        {
+            typedef Eigen::Triplet<T> Triplet;                                                  // (row, column, value)
+            vector<Triplet> coeffs;                                                             // nonzero coefficients
+
+            TensorProduct<T>&   t = mfa_data.tmesh.tensor_prods[t_idx];
+            vector<KnotIdx>     anchor(mfa_data.dom_dim);                                       // control point anchor
+
+            // local knot vector
+            vector<vector<KnotIdx>> local_knot_idxs(mfa_data.dom_dim);                          // local knot indices
+            vector<vector<T>> local_knots(mfa_data.dom_dim);                                    // local knot vector for current dim in parameter space
+            for (auto k = 0; k < mfa_data.dom_dim; k++)
+            {
+                local_knot_idxs[k].resize(mfa_data.p(k) + 2);
+                local_knots[k].resize(mfa_data.p(k) + 2);
+            }
+
+            // iterator over free control points
+            VolIterator free_iter(t.nctrl_pts);
+            while (!free_iter.done())
+            {
+                VectorXi ijk(mfa_data.dom_dim);                                                 // ijk of current control point
+                free_iter.idx_ijk(free_iter.cur_iter(), ijk);
+
+                // anchor of control point
+                mfa_data.tmesh.ctrl_pt_anchor(t, ijk, anchor);
+
+                // local knot vector
+                mfa_data.tmesh.knot_intersections(anchor, t_idx, true, local_knot_idxs);
+                for (auto k = 0; k < mfa_data.dom_dim; k++)
+                    for (auto n = 0; n < local_knot_idxs[k].size(); n++)
+                        local_knots[k][n] = mfa_data.tmesh.all_knots[k][local_knot_idxs[k][n]];
+
+                // iterator over input points
+                VolIterator dom_iter(ndom_pts, dom_starts, mfa.ndom_pts());
+                while (!dom_iter.done())
+                {
+                    T v;                                                                        // basis function value
+                    for (auto k = 0; k < mfa_data.dom_dim; k++)                                 // for all dims
+                    {
+                        int p = mfa_data.p(k);                                                  // degree of current dim.
+                        T u = mfa.params()[k][dom_iter.idx_dim(k)];                             // parameter of current input point
+                        T B = mfa_data.OneBasisFun(k, u, local_knots[k]);                       // basis function
+                        v = (k == 0 ? B : v * B);
+                    }       // for all dims
+
+                    coeffs.push_back(Triplet(dom_iter.cur_iter(), free_iter.cur_iter(), v));
+                    dom_iter.incr_iter();
+                }       // domain point iterator
+
                 free_iter.incr_iter();
             }       // free control point iterator
 
-            // set any unassigned values in Nfree to 0
-            for (auto i = 0; i < Nfree.rows(); i++)
+            Nfree_sparse.setFromTriplets(coeffs.begin(), coeffs.end());
+        }
+
+        // constraint control points matrix of basis functions
+        // helper function for EncodeTensorLocalLinear
+        // Ncons needs to be sized correctly by caller
+        void ConsCtrlPtMat(VectorXi&                ndom_pts,           // number of relevant input points in each dim
+                           VectorXi&                dom_starts,         // starting offsets of relevant input points in each dim
+                           vector<vector<KnotIdx>>& anchors,            // anchors of constraint control points                                                    // corresponding anchors
+                           vector<TensorIdx>&       t_idx_anchors,      // tensors containing corresponding anchors
+                           MatrixX<T>&              Ncons)              // (output) matrix of constraint control points basis functions
+        {
+            Ncons = MatrixX<T>::Constant(ndom_pts.prod(), Ncons.cols(), -1);         // basis functions, -1 means unassigned so far
+
+            // local knot vector
+            vector<vector<KnotIdx>> local_knot_idxs(mfa_data.dom_dim);                          // local knot indices
+            vector<vector<T>> local_knots(mfa_data.dom_dim);                                    // local knot vector for current dim in parameter space
+            for (auto k = 0; k < mfa_data.dom_dim; k++)
             {
-                for (auto j = 0; j < Nfree.cols(); j++)
-                    if (Nfree(i, j) == -1.0)
-                        Nfree(i, j) = 0.0;
+                local_knot_idxs[k].resize(mfa_data.p(k) + 2);
+                local_knots[k].resize(mfa_data.p(k) + 2);
             }
 
-            // find constraint control points and their anchors
-            MatrixX<T>                  Pcons;                                                      // constraint control points
-            vector<vector<KnotIdx>>     anchors;                                                    // corresponding anchors
-            vector<TensorIdx>           t_idx_anchors;                                              // tensors containing corresponding anchors
-            LocalSolveAllConstraints(t, Pcons, anchors, t_idx_anchors);
-
-            // loop over constraint control points
-            MatrixX<T> Ncons = MatrixX<T>::Constant(ndom_pts.prod(), Pcons.rows(), -1);         // basis functions, -1 means unassigned so far
             for (auto i = 0; i < Ncons.cols(); i++)                                             // for all constraint control points
             {
                 // local knot vector
@@ -789,6 +828,85 @@ namespace mfa
                     if (Ncons(i, j) == -1.0)
                         Ncons(i, j) = 0.0;
             }
+        }
+
+        // encodes the control points for one tensor product of a tmesh
+        // takes a subset of input points from the global domain, covered by basis functions of this tensor product
+        // solves all dimensions together (not separably)
+        // does not encode weights for now
+        // latest linear constrained formulation as proposed by David Lenz (see wiki/notes/linear-constrained-fit.pdf)
+        void EncodeTensorLocalLinear(
+                TensorIdx                 t_idx,                  // index of tensor product being encoded
+                bool                      weighted = true)        // solve for and use weights
+        {
+            // debug
+            fprintf(stderr, "EncodeTensorLocalLinear\n");
+
+            // timing
+            double setup_time   = MPI_Wtime();
+            double q_time       = MPI_Wtime();
+            fmt::print(stderr, "Setting up...\n");
+
+            TensorProduct<T>& t = mfa_data.tmesh.tensor_prods[t_idx];                               // current tensor product
+            int pt_dim = mfa_data.max_dim - mfa_data.min_dim + 1;                                   // control point dimensionality
+
+            // get input domain points covered by the tensor
+            vector<size_t> start_idxs(mfa_data.dom_dim);
+            vector<size_t> end_idxs(mfa_data.dom_dim);
+            mfa_data.tmesh.domain_pts(t_idx, false, mfa.params(), start_idxs, end_idxs);
+
+            // Q matrix of relevant input domain points
+            VectorXi ndom_pts(mfa_data.dom_dim);
+            VectorXi dom_starts(mfa_data.dom_dim);
+            for (auto k = 0; k < mfa_data.dom_dim; k++)
+            {
+                ndom_pts(k)     = end_idxs[k] - start_idxs[k] + 1;
+                dom_starts(k)   = start_idxs[k];                                                    // need Eigen vector from STL vector
+            }
+            MatrixX<T> Q(ndom_pts.prod(), pt_dim);
+            VolIterator dom_iter(ndom_pts, dom_starts, mfa.ndom_pts());
+            while (!dom_iter.done())
+            {
+                Q.block(dom_iter.cur_iter(), 0, 1, pt_dim) =
+                    domain.block(dom_iter.sub_full_idx(dom_iter.cur_iter()), mfa_data.min_dim, 1, pt_dim);
+                dom_iter.incr_iter();
+            }
+
+            // resize control points and weights in case number of control points changed
+            t.ctrl_pts.resize(t.nctrl_pts.prod(), pt_dim);
+            t.weights.resize(t.ctrl_pts.rows());
+            t.weights = VectorX<T>::Ones(t.weights.size());                                         // linear solve does not solve for weights; set to 1
+
+            // timing
+            q_time                  = MPI_Wtime() - q_time;
+            double free_time        = MPI_Wtime();
+
+            // matrix of free control point basis functions
+
+            // a dense matrix copied to a sparse matrix just prior to solving
+            // To fill sparse matrix directly, skipping dense matrix, we would need to use row-major order
+            // to do row-sum normalization efficiently later. However, row-major is 2X slower to fill
+            // and 3-4X slower to solve than column-major. Hence, for now, we fill a dense matrix,
+            // do the row normalization, then copy dense matrix to column-major sparse matrix just before solving.
+
+            MatrixX<T> Nfree;
+            int max_nnz_col = FreeCtrlPtMat(t_idx, ndom_pts, dom_starts, Nfree);                    // returns max num nonzeros in any column
+
+            // timing
+            free_time           = MPI_Wtime() - free_time;
+            double cons_time    = MPI_Wtime();
+
+            // find constraint control points and their anchors
+            MatrixX<T>                  Pcons;                                                      // constraint control points
+            vector<vector<KnotIdx>>     anchors;                                                    // corresponding anchors
+            vector<TensorIdx>           t_idx_anchors;                                              // tensors containing corresponding anchors
+            LocalSolveAllConstraints(t, Pcons, anchors, t_idx_anchors);
+
+            MatrixX<T> Ncons = MatrixX<T>::Constant(ndom_pts.prod(), Pcons.rows(), -1);             // basis functions, -1 means unassigned so far
+            ConsCtrlPtMat(ndom_pts, dom_starts, anchors, t_idx_anchors, Ncons);
+
+            // timing
+            cons_time           = MPI_Wtime() - cons_time;
 
             // normalize Nfree and Ncons such that the row sum of Nfree + Ncons = 1.0
             for (auto i = 0; i < Nfree.rows(); i++)
@@ -804,11 +922,81 @@ namespace mfa
                             i, Nfree.row(i).sum());
             }
 
+            // copy from dense to sparse
+            SparseMatrixX<T> Nfree_sparse(Nfree.rows(), Nfree.cols());
+            Nfree_sparse.reserve(VectorXi::Constant(Nfree.cols(), max_nnz_col));
+            for (auto i = 0; i < Nfree.rows(); i++)
+            {
+                for (auto j = 0; j < Nfree.cols(); j++)
+                {
+                    if (Nfree(i, j) != 0.0)
+                        Nfree_sparse.insert(i, j) = Nfree(i,j);
+                }
+            }
+            Nfree_sparse.makeCompressed();
+
+            // timing
+            double r_time       = MPI_Wtime();
+
             // R is the right hand side needed for solving N * P = R
             MatrixX<T>  R = Q - Ncons * Pcons;
 
-            // solve
-            t.ctrl_pts = Nfree.colPivHouseholderQr().solve(R);
+            // timing
+            r_time                  = MPI_Wtime() - r_time;
+            setup_time              = MPI_Wtime() - setup_time;
+
+            // debug: collect some metrics about N
+//             size_t nonzeros = (Nfree.array() > 0).count();
+//             fmt::print(stderr, "EncodeTensorLocalLinear Nfree matrix: {} rows x {} cols = {} entries of which {} are nonzero ({})\n",
+//                     Nfree.rows(), Nfree.cols(), Nfree.rows() * Nfree.cols(), nonzeros, float(nonzeros) / (float)(Nfree.rows() * Nfree.cols()));
+
+            fmt::print(stderr, "Solving...\n");
+
+//             // timing
+//             double dense_solve_time = MPI_Wtime();
+
+            // dense solve
+            // DEPRECATE, replaced by sparse solve
+//             t.ctrl_pts = Nfree.colPivHouseholderQr().solve(R);
+
+            // timing
+//             dense_solve_time            = MPI_Wtime() - dense_solve_time;
+            double sparse_solve_time    = MPI_Wtime();
+
+            // sparse solve
+
+            Eigen::SparseQR<SparseMatrixX<T>, Eigen::COLAMDOrdering<int>>  solver;
+
+            // TODO: iterative least squares conjugate gradient is faster but sometimes fails
+            // NtN not necessarily symmetric positive definite?
+            // TODO: is NtN faster to solve than N?
+//             Eigen::LeastSquaresConjugateGradient<SparseMatrixX<T>>  solver;
+
+            solver.compute(Nfree_sparse);
+            if (solver.info() != Eigen::Success)
+            {
+                cerr << "EncodeTensorLocalLinear(): Error: Matrix decomposition failed" << endl;
+                abort();
+            }
+
+            t.ctrl_pts = solver.solve(R);
+            if (solver.info() != Eigen::Success)
+            {
+                cerr << "EncodeTensorLocalLinear(): Error: Least-squares solve failed" << endl;
+                abort();
+            }
+
+            // timing
+            sparse_solve_time = MPI_Wtime() - sparse_solve_time;
+            fmt::print(stderr, "EncodeTensorLocalLinear() timing:\n");
+            fmt::print(stderr, "setup time: {} s.\n", setup_time);
+//             fmt::print(stderr, "    = q time {} + free time {} + cons time {} + r time {} s.\n",
+//                     q_time, free_time, cons_time, r_time);
+//             fmt::print(stderr, "free_time {} = free_iter_time {} + dom_iter_time {} s.\n",
+//                     free_time, free_iter_time, dom_iter_time);
+//             fmt::print(stderr, "r time {} s.\n", r_time);
+//             fmt::print(stderr, "dense_solve time: {} s.\n", dense_solve_time);
+            fmt::print(stderr, "sparse_solve time: {} s.\n", sparse_solve_time);
 
             // debug
 //             cerr << "input:\n"                               << domain       << endl;
@@ -906,9 +1094,9 @@ namespace mfa
             mfa_data.tmesh.scatter_ctrl_pts(nctrl_pts, ctrl_pts, weights);
 
             // debug: print tmesh
-            fprintf(stderr, "\n----- initial T-mesh -----\n\n");
-            mfa_data.tmesh.print();
-            fprintf(stderr, "--------------------------\n\n");
+//             fprintf(stderr, "\n----- initial T-mesh -----\n\n");
+//             mfa_data.tmesh.print();
+//             fprintf(stderr, "--------------------------\n\n");
 
             // loop until no change in knots or number of control points >= input points
             for (int iter = 0; ; iter++)
@@ -917,7 +1105,7 @@ namespace mfa
                     break;
 
                 if (verbose)
-                    fprintf(stderr, "Iteration %d...\n", iter);
+                    fprintf(stderr, "\n--- Iteration %d ---\n", iter);
 
                 int retval;
 
@@ -957,9 +1145,9 @@ namespace mfa
 #endif
 
                 // debug: print tmesh
-                fprintf(stderr, "\n----- T-mesh at the end of iteration %d-----\n\n", iter);
-                mfa_data.tmesh.print();
-                fprintf(stderr, "--------------------------\n\n");
+//                 fprintf(stderr, "\n----- T-mesh at the end of iteration %d-----\n\n", iter);
+//                 mfa_data.tmesh.print();
+//                 fprintf(stderr, "--------------------------\n\n");
 
                 // no new knots to be added
                 if (retval == 0)
@@ -977,6 +1165,11 @@ namespace mfa
                     break;
                 }
             }
+
+            // debug: print tmesh
+            fprintf(stderr, "\n----- final T-mesh -----\n\n");
+            mfa_data.tmesh.print();
+            fprintf(stderr, "--------------------------\n\n");
         }
 
     private:
@@ -1743,7 +1936,7 @@ namespace mfa
         int Refine(
                 T                   err_limit,                                  // max allowable error
                 const VectorX<T>&   extents,                                    // extents in each dimension, for normalizing error (size 0 means do not normalize)
-                int                 iter,                                       // iteration number of caller (for debugging)
+                int                 iter,                                       // current iteration number
                 bool                local)                                      // do the local solve
         {
             vector<vector<KnotIdx>>     inserted_knot_idxs(mfa_data.dom_dim);   // indices in each dim. of inserted knots in full knot vector after insertion
@@ -1759,6 +1952,9 @@ namespace mfa
             vector<VectorXi>    new_nctrl_pts;
             vector<MatrixX<T>>  new_ctrl_pts;
             vector<VectorX<T>>  new_weights;
+
+            // timing
+            double error_spans_time = MPI_Wtime();
 
             bool done = nk.AllErrorSpansLevel(domain,
                     myextents,
@@ -1781,6 +1977,10 @@ namespace mfa
                         inserted_knots[j].size() == n_insertions);
 
             vector<bool> inserted(mfa_data.dom_dim);                            // whether the current insertion succeed (in each dim)
+
+            // timing
+            error_spans_time    = MPI_Wtime() - error_spans_time;
+            double insert_time  = MPI_Wtime();
 
             for (auto i = 0; i < n_insertions; i++)                             // for all knots to be inserted
             {
@@ -1951,6 +2151,11 @@ namespace mfa
                 }
             }   // for all knots to be inserted
 
+            // timing
+            insert_time         = MPI_Wtime() - insert_time;
+            double append_time  = 0.0;
+            double encode_time  = 0.0;
+
             // append the tensors
 
             for (auto& t: new_tensors)
@@ -1963,7 +2168,14 @@ namespace mfa
 //                 fmt::print("\nT-mesh before append\n\n");
 //                 mfa_data.tmesh.print();
 
+                // timing
+                double t0 = MPI_Wtime();
+
                 int tensor_idx = mfa_data.tmesh.append_tensor(t.knot_mins, t.knot_maxs, iter + 1);
+
+                // timing
+                append_time += (MPI_Wtime() - t0);
+                t0 = MPI_Wtime();
 
                 // debug
 //                 fmt::print("\nT-mesh after append and before local solve\n\n");
@@ -1972,7 +2184,17 @@ namespace mfa
                 // solve for new control points
                 if (local)
                     EncodeTensorLocalLinear(tensor_idx);
+
+                // timing
+                encode_time += (MPI_Wtime() - t0);
             }
+
+            // timing
+            fmt::print(stderr, "\nRefine() timing:\n");
+            fmt::print(stderr, "error span time:    {} s.\n", error_spans_time);
+            fmt::print(stderr, "insert time:        {} s.\n", insert_time);
+            fmt::print(stderr, "append time:        {} s.\n", append_time);
+            fmt::print(stderr, "encode time:        {} s.\n", encode_time);
 
             // check for max number of control points in any dimension
             for (auto k = 0; k < mfa_data.dom_dim; k++)
@@ -2157,7 +2379,7 @@ namespace mfa
         // TODO: either fix to find all constraints or deprecate in favor LocalSolveAllConstraints
         void LocalSolvePrevNextConstraints(
                 const TensorProduct<T>&     tc,                 // current tensor product being solved
-                MatrixX<T>&                 ctrl_pts,           // (output) constraing control points
+                MatrixX<T>&                 ctrl_pts,           // (output) constraint control points
                 vector<vector<KnotIdx>>&    anchors,            // (output) corresponding anchors
                 vector<TensorIdx>&          t_idx_anchors)      // (output) tensors containing corresponding anchors
         {
