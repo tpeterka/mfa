@@ -271,14 +271,6 @@ struct Block : public BlockBase<T>
                 args.tot_ndom_pts *= args.ndom_pts[k];
             }
 
-            if (!args.structured && args.separable)
-            {
-                cerr << "Warning: Cannot apply separable encoding scheme to unstructured input data." << endl;
-                cerr << "         Continuing with unified encoding." << endl;
-
-                args.separable = 0;
-            }
-
             generate_analytical_data_unstructured(cp, fun, args);
         }
     }

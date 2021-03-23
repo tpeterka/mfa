@@ -42,8 +42,7 @@ struct ModelInfo
 {
     ModelInfo(int dom_dim_, int pt_dim_) :
         dom_dim(dom_dim_),
-        pt_dim(pt_dim_),
-        separable(true)
+        pt_dim(pt_dim_)
     {
         geom_p.resize(dom_dim);
         vars_p.resize(pt_dim - dom_dim);
@@ -68,7 +67,6 @@ struct ModelInfo
     bool                weighted;               // solve for and use weights (default = true)
     bool                local;                  // solve locally (with constraints) each round (default = false)
     int                 verbose;                // debug level
-    bool                separable;              // encode data in each dimension separately (default = true)
 };
 
 // a solved and stored MFA model (geometry or science variable or both)
@@ -213,7 +211,7 @@ struct BlockBase
 
         geometry.mfa_data->set_knots(*input);
         // TODO: consider not weighting the geometry (only science variables), depends on geometry complexity
-        mfa->FixedEncode(*geometry.mfa_data, *input, nctrl_pts, a->verbose, a->weighted, a->separable);
+        mfa->FixedEncode(*geometry.mfa_data, *input, nctrl_pts, a->verbose, a->weighted);
 
         // encode science variables
         for (auto i = 0; i< vars.size(); i++)
@@ -236,7 +234,7 @@ struct BlockBase
                     dom_dim + i);
 
             vars[i].mfa_data->set_knots(*input);
-            mfa->FixedEncode(*(vars[i].mfa_data), *input, nctrl_pts, a->verbose, a->weighted, a->separable);
+            mfa->FixedEncode(*(vars[i].mfa_data), *input, nctrl_pts, a->verbose, a->weighted);
         }
     }
 

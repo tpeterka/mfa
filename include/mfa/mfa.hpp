@@ -111,11 +111,10 @@ namespace mfa
         // fixed number of control points encode
         void FixedEncode(
                 MFA_Data<T>&        mfa_data,               // mfa data model
-                const PointSet<T>& input,                 // input points
+                const PointSet<T>&  input,                  // input points
                 const VectorXi      nctrl_pts,              // number of control points in each dim
                 int                 verbose,                // debug level
-                bool                weighted,               // solve for and use weights (default = true)
-                bool                separable=true) const     // encode each dimension separately
+                bool                weighted) const         // solve for and use weights (default = true)
         {
             // fixed encode assumes the tmesh has only one tensor product
             TensorProduct<T>&t = mfa_data.tmesh.tensor_prods[0];
@@ -123,7 +122,7 @@ namespace mfa
             t.weights = VectorX<T>::Ones(t.nctrl_pts.prod());
             Encoder<T> encoder(*this, mfa_data, input, verbose);
 
-            if (separable)
+            if (input.structured)
                 encoder.Encode(t.nctrl_pts, t.ctrl_pts, t.weights, weighted);
             else
                 encoder.EncodeUnified(0, weighted);  // Assumes only one tensor product

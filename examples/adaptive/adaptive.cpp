@@ -163,7 +163,6 @@ int main(int argc, char** argv)
     d_args.verbose      = 1;
     d_args.r            = 0.0;
     d_args.t            = 0.0;
-    d_args.separable    = true;
     d_args.structured   = true; // adaptive fitting does not yet support unstructured input
     for (int i = 0; i < pt_dim - dom_dim; i++)
         d_args.f[i] = 1.0;
