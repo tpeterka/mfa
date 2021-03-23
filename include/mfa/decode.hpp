@@ -290,6 +290,39 @@ namespace mfa
 #endif
         }
 
+        void IntegratePointSet( PointSet<T>&    ps,
+                                int             min_dim,
+                                int             max_dim)
+        {
+            int pt_dim_l = mfa_data.tmesh.tensor_prods[0].ctrl_pts.cols();  // dimension of "local" control point
+
+            VectorX<T> cpt(last + 1);                       // evaluated point
+            VectorX<T> param(mfa_data.dom_dim);            // parameters for one point
+            VectorXi   ijk(mfa_data.dom_dim);      // vector of param indices (structured grid only)
+
+            for (auto pt_it = ps.begin(), pt_end = ps.end(); pt_it != pt_end; ++pt_it)
+            {
+                pt_it.params(param);
+
+                for (auto i = 0; i < ps.dom_dim; i++)
+                {
+                    span[i]    = mfa_data.FindSpan(i, param(i), tensor);
+                    N[i]       = MatrixX<T>::Zero(1, tensor.nctrl_pts(i));
+
+                    mfa_data.BasisFuns(i, param(i), span[i], N[i], 0);
+                }
+                
+
+
+                ps.domain.block(pt_it.idx(), min_dim, 1, max_dim - min_dim + 1) = cpt.transpose();
+
+                // print progress
+                if (verbose)
+                    if (pt_it.idx() > 0 && ps.npts >= 100 && pt_it.idx() % (ps.npts / 100) == 0)
+                        fprintf(stderr, "\r%.0f %% decoded (integral)", (T)pt_it.idx() / (T)(ps.npts) * 100);
+            }
+        }
+
         // decode at a regular grid using saved basis that is computed once by this function
         // and then used to decode all the points in the grid
         void DecodeGrid(MatrixX<T>&         result,         // output

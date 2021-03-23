@@ -397,6 +397,17 @@ struct BlockBase
         }
     }
 
+    void integrate_block(
+            const diy::Master::ProxyWithLink& cp)
+    {
+        approx = new mfa::PointSet<T>(input->params, input->pt_dim);
+
+        for (auto k = 0; k < vars.size(); k++)
+        {
+            mfa->IntegratePointSet(*(vars[k].mfa_data), *approx, dom_dim + k, dom_dim + k);
+        }
+    }
+
     // differentiate entire block
     void differentiate_block(
             const diy::Master::ProxyWithLink& cp,

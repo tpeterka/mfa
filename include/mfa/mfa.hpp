@@ -27,10 +27,10 @@
 // #define WEIGH_ALL_DIMS
 
 // comment out the following line for original single tensor product version
-#define MFA_TMESH
+// #define MFA_TMESH
 
 // linear least squares local solve
-#define MFA_LINEAR_LOCAL
+// #define MFA_LINEAR_LOCAL
 
 // refine as many knot spans in one iteration as possible
 #define MFA_ALL_SPANS
@@ -179,6 +179,16 @@ namespace mfa
         {
             mfa::Decoder<T> decoder(mfa_data, verbose, saved_basis);
             decoder.DecodePointSet(output, min_dim, max_dim, derivs);
+        }
+
+        void IntegratePointSet(
+                const MFA_Data<T>&  mfa_data,
+                PointSet<T>&        output,
+                int                 min_dim,
+                int                 max_dim)
+        {
+            mfa::Decoder<T> deocder(mfa_data, 0, false);
+            decoder.IntegratePointSet(output, min_dim, max_dim);
         }
 
         // decode value of single point at the given parameter location
