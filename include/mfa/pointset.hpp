@@ -71,7 +71,8 @@ namespace mfa
             dom_dim(params_->dom_dim),
             pt_dim(pt_dim_),
             npts(params_->npts()),
-            params(params_)
+            params(params_), 
+            structured(params->structured)
         {
             domain.resize(npts, pt_dim);
 
