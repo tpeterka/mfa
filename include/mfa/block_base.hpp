@@ -325,6 +325,35 @@ struct BlockBase
         }
     }
 
+    // decode entire block over a regular grid
+    void decode_block_grid(
+        const   diy::Master::ProxyWithLink& cp,
+        int                                 verbose,
+        vector<int>&                        grid_size)
+    {
+        VectorXi grid_npts(dom_dim);
+        for (int k = 0; k < dom_dim; k++)
+        {
+            grid_npts(k) = grid_size[k];
+        }
+
+        shared_ptr<mfa::Param<T>> grid_params = make_shared<mfa::Param<T>>(grid_npts, VectorX<T>::Zero(dom_dim), VectorX<T>::Ones(dom_dim));
+        approx = new mfa::PointSet<T>(grid_params, input->pt_dim);
+
+        // geometry
+        fprintf(stderr, "\n--- Decoding geometry ---\n\n");
+        mfa->DecodePointSet(*geometry.mfa_data, *approx, verbose, 0, dom_dim - 1, false);
+
+        // science variables
+        for (auto i = 0; i < vars.size(); i++)
+        {
+            fprintf(stderr, "\n--- Decoding science variable %d ---\n\n", i);
+
+            // assumes each variable is scalar
+            mfa->DecodePointSet(*(vars[i].mfa_data), *approx, verbose, dom_dim + i, dom_dim + i, false);
+        }
+    }
+
     // decode one point
     void decode_point(
             const   diy::Master::ProxyWithLink& cp,
@@ -1628,8 +1657,6 @@ namespace diy
                         diy::load(bb, pt_dim);
                         diy::load(bb, npts);
                         diy::load(bb, ndom_pts);
-                        cout << dom_dim << " " << pt_dim << " " << npts << endl;
-                        cout << ndom_pts << endl;
                         ps = new mfa::PointSet<T>(dom_dim, pt_dim, npts, ndom_pts);
 
                         // Param info. We need to handle cases where Params may or may not be initialized
@@ -1638,7 +1665,6 @@ namespace diy
                         if (load_param)
                         {
                             ps->params = make_shared<mfa::Param<T>>();
-                            // ps->params.reset(new mfa::Param<T>());
                             diy::load(bb, *(ps->params));
                         }
                         diy::load(bb, dom_mins);

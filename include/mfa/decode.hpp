@@ -241,7 +241,6 @@ namespace mfa
             VectorX<T> param(mfa_data.dom_dim);            // parameters for one point
             VectorXi   ijk(mfa_data.dom_dim);      // vector of param indices (structured grid only)
 
-            // for (size_t i = 0; i < approx.rows(); i++)
             auto pt_it  = ps.begin();
             auto pt_end = ps.end();
             for (; pt_it != pt_end; ++pt_it)
@@ -264,13 +263,13 @@ namespace mfa
                 }
                 else
                 {
-                    VolPt(param, cpt, decode_info, mfa_data.tmesh.tensor_prods[0], derivs);
-
                     // debug
                     if (pt_it.idx() == 0)
                         fprintf(stderr, "Using VolPt\n");
                     if (saved_basis && !ps.structured)
                         cerr << "Warning: Saved basis decoding not implemented with unstructured input. Proceeding with standard decoding" << endl;
+
+                    VolPt(param, cpt, decode_info, mfa_data.tmesh.tensor_prods[0], derivs);
                 }
 
 #else           // tmesh version
