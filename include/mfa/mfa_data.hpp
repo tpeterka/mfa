@@ -328,6 +328,35 @@ namespace mfa
 //             cerr << N << endl;
         }
 
+        void BasisFunsK(
+                int         degree,
+                int         cur_dim,
+                T           u,
+                int         span,
+                MatrixX<T>& N,
+                int         row) const
+        {
+            // debug
+            if (degree > span)
+            {
+                cerr << "Bad span index in BasisFunsK" << endl;
+                exit(1);
+            }
+
+            vector<T> loc_knots(p(cur_dim) + 2);
+
+            // initialize row to 0
+            N.row(row).setZero();
+
+            for (auto j = 0; j < degree + 1; j++)
+            {
+                for (auto i = 0; i < degree + 2; i++)
+                    loc_knots[i] = tmesh.all_knots[cur_dim][span - degree + j + i];
+
+                N(row, span - degree + j) = OneBasisFun(cur_dim, u, loc_knots);
+            }
+        }
+
         // tmesh version of basis functions that computes one basis function at a time for each local knot vector
         // computes one row of basis function values for a given parameter value
         // writes results in a row of N

@@ -290,9 +290,10 @@ namespace mfa
 #endif
         }
 
-        void IntegratePointSet( PointSet<T>&    ps,
-                                int             min_dim,
-                                int             max_dim)
+        void IntegratePointSet( PointSet<T>&        ps,
+                                TensorProduct<T>&   tensor,
+                                int                 min_dim,
+                                int                 max_dim)
         {
             int pt_dim_l = mfa_data.tmesh.tensor_prods[0].ctrl_pts.cols();  // dimension of "local" control point
 
@@ -309,7 +310,17 @@ namespace mfa
                     span[i]    = mfa_data.FindSpan(i, param(i), tensor);
                     N[i]       = MatrixX<T>::Zero(1, tensor.nctrl_pts(i));
 
-                    mfa_data.BasisFuns(i, param(i), span[i], N[i], 0);
+                    // dim param-dim span-dim coeff-dim, 0
+                    mfa_data.BasisFunsK(mfa_data.p(i)+1, i, param(i), span[i], N[i], 0);
+                }
+
+                VectorX<T> temp(mfa_data.dom_dim);
+                for (int i = 0; i < ps.dom_dim; i++)
+                {
+                    for (int j = 0; j < mfa_data.p(i) + 1; j++)
+                    {
+                        temp(i) += ctlp(j) * N[i](0, span[i])
+                    }
                 }
                 
 
