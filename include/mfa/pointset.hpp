@@ -27,7 +27,7 @@ namespace mfa
         // List of points
         MatrixX<T>  domain;
 
-        // Param<T>   params;
+        // Parameter values corresponding to domain
         shared_ptr<Param<T>>    params;
         VectorX<T>              dom_mins;
         VectorX<T>              dom_maxs;
@@ -132,7 +132,7 @@ namespace mfa
 
             // If Param is structured and *this does not yet have a grid structure, inherit the 
             // grid structure from Param
-            if (params_->structured && !structured)
+            if (params_->structured && !this->structured)
                 add_grid(params_->ndom_pts);
         }
 

@@ -31,8 +31,6 @@ namespace mfa
         vector<vector<T>>       param_grid;         // parameters for input points[dimension][index] (for structured case)
         MatrixX<T>              param_list;         // list of parameters for each input pt (for unstructured case)
         T                       range_extent;       // extent of range value of input data points  // TODO: what does this have to do with parameters?
-        // vector<vector<size_t>>  co;                 // starting offset for curves in each dim
-        // vector<size_t>          ds;                 // stride for domain points in each dim
         int                     dom_dim;            // dimensionality of domain
         bool                    structured;         // true if points lie on structured grid
 
@@ -79,17 +77,18 @@ namespace mfa
             set_grid_params(ndom_pts_, param_mins_, param_maxs_);
         }
 
-        // Constructor for structured input
+        // General constructor for creating params from set of existing points
         Param(  int                 dom_dim_,           // domain dimensionality (excluding science variables)
                 const VectorX<T>&   dom_mins_,          // minimal extents of bounding box in each dimension (optional, important when data does not cover domain)
                 const VectorX<T>&   dom_maxs_,          // maximal extents of bounding box in each dimension (see above)
                 const VectorXi&     ndom_pts_,          // number of input data points in each dim
-                const MatrixX<T>&   domain_,
+                const MatrixX<T>&   domain_,            // physical coordinates of points
                 bool                structured_) :          // input data points (1st dim changes fastest)
             dom_dim(dom_dim_),
             ndom_pts(ndom_pts_),
             structured(structured_)
         {
+            // TODO: replace with warnings?
             if (structured == true)
                 assert(ndom_pts.size() > 0);
             if (structured == false)
@@ -129,36 +128,6 @@ namespace mfa
             // max extent of input data points
             int last     = domain_.cols() - 1;
             range_extent = domain_.col(last).maxCoeff() - domain_.col(last).minCoeff();
-
-            // NB: Moved to GridInfo struct within InputInfo
-
-            // // stride for domain points in different dimensions
-            // ds.resize(dom_dim, 1);
-            // for (size_t i = 1; i < dom_dim; i++)
-            //     ds[i] = ds[i - 1] * ndom_pts_[i - 1];
-
-            // // offsets for curve starting (domain) points in each dimension
-            // co.resize(dom_dim);
-            // for (auto k = 0; k < dom_dim; k++)
-            // {
-            //     size_t ncurves  = domain_.rows() / ndom_pts_(k);    // number of curves in this dimension
-            //     size_t coo      = 0;                                // co at start of contiguous sequence
-            //     co[k].resize(ncurves);
-
-            //     co[k][0] = 0;
-
-            //     for (auto j = 1; j < ncurves; j++)
-            //     {
-            //         // adjust offsets for the next curve
-            //         if (j % ds[k])
-            //             co[k][j] = co[k][j - 1] + 1;
-            //         else
-            //         {
-            //             co[k][j] = coo + ds[k] * ndom_pts_(k);
-            //             coo = co[k][j];
-            //         }
-            //     }
-            // }
         }
 
         size_t npts()

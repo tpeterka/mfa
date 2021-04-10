@@ -276,7 +276,6 @@ namespace mfa
             first.ndom_pts.swap(second.ndom_pts);
             first.ds.swap(second.ds);
             swap(first.co, second.co);
-            // swap(first.initialized, second.initialized);
         }
 
         void init(size_t dom_dim_, VectorXi& ndom_pts_ ) 
@@ -286,7 +285,7 @@ namespace mfa
 
             size_t npts = ndom_pts.prod();
 
-                // stride for domain points in different dimensions
+            // stride for domain points in different dimensions
             ds = VectorXi::Ones(dom_dim);
             for (size_t k = 1; k < dom_dim; k++)
                 ds(k) = ds(k - 1) * ndom_pts(k - 1);

@@ -48,7 +48,6 @@ struct ModelInfo
         vars_p.resize(pt_dim - dom_dim);
         for (auto i = 0; i < vars_p.size(); i++)
             vars_p[i].resize(dom_dim);
-        // ndom_pts.resize(dom_dim);
         geom_nctrl_pts.resize(dom_dim);
         vars_nctrl_pts.resize(pt_dim - dom_dim);
         for (auto i = 0; i < vars_nctrl_pts.size(); i++)
@@ -58,10 +57,9 @@ struct ModelInfo
 
     int                 dom_dim;                // domain dimensionality
     int                 pt_dim;                 // point dimensionality (> dom_dim)
-    VectorXi            model_dims;
+    VectorXi            model_dims;             // (currently unused) pt dim for each mfa_data
     vector<int>         geom_p;                 // degree in each dimension of geometry
     vector<vector<int>> vars_p;                 // degree in each dimension of each science variable vars_p[var][dim]
-    // vector<int>         ndom_pts;               // number of input points in each dimension of domain
     vector<int>         geom_nctrl_pts;         // number of input points in each dimension of geometry
     vector<vector<int>> vars_nctrl_pts;         // number of input pts in each dim of each science variable vars_nctrl_pts[var][dim]
     bool                weighted;               // solve for and use weights (default = true)
@@ -90,7 +88,7 @@ struct BlockBase
     VectorX<T>          core_mins;              // local domain minimum corner w/o ghost
     VectorX<T>          core_maxs;              // local domain maximum corner w/o ghost
 
-    // input data
+    // data sets
     mfa::PointSet<T>    *input;                 // input data
     mfa::PointSet<T>    *approx;                // output data
 
@@ -202,9 +200,6 @@ struct BlockBase
         if (a->verbose && cp.master()->communicator().rank() == 0)
             fprintf(stderr, "\nEncoding geometry\n\n");
         geometry.mfa_data = new mfa::MFA_Data<T>(p,
-                // mfa->ndom_pts(),
-                // domain,
-                // mfa->params(),
                 nctrl_pts,
                 0,
                 dom_dim - 1);
@@ -226,9 +221,6 @@ struct BlockBase
             }
 
             vars[i].mfa_data = new mfa::MFA_Data<T>(p,
-                    // mfa->ndom_pts(),
-                    // domain,
-                    // mfa->params(),
                     nctrl_pts,
                     dom_dim + i,        // assumes each variable is scalar
                     dom_dim + i);
@@ -269,9 +261,6 @@ struct BlockBase
         if (a->verbose && cp.master()->communicator().rank() == 0)
             fprintf(stderr, "\nEncoding geometry\n\n");
         geometry.mfa_data = new mfa::MFA_Data<T>(p,
-                // mfa->ndom_pts(),
-                // domain,
-                // mfa->params(),
                 nctrl_pts,
                 0,
                 dom_dim - 1);
@@ -292,9 +281,6 @@ struct BlockBase
             }
 
             vars[i].mfa_data = new mfa::MFA_Data<T>(p,
-                    // mfa->ndom_pts(),
-                    // domain,
-                    // mfa->params(),
                     nctrl_pts,
                     dom_dim + i,        // assumes each variable is scalar
                     dom_dim + i);
@@ -444,7 +430,6 @@ struct BlockBase
                 // TODO: remove duplication of MFA_Data? Also, this leaks memory as-is
                 // TODO: hard-coded for one tensor product
                 vars[i].mfa_data = new mfa::MFA_Data<T>(vars[i].mfa_data->p,
-                        // mfa->ndom_pts(),
                         vars[i].mfa_data->tmesh,
                         dom_dim + i,        // assumes each variable is scalar
                         dom_dim + i);
@@ -1350,7 +1335,6 @@ namespace mfa
             // top-level mfa data
             diy::save(bb, b->dom_dim);
             diy::save(bb, b->pt_dim);
-            // diy::save(bb, b->mfa->ndom_pts());
 
             // block bounds
             diy::save(bb, b->bounds_mins);
@@ -1415,9 +1399,6 @@ namespace mfa
                 diy::BinaryBuffer& bb)
         {
             B* b = (B*)b_;
-
-            // // TODO: don't load domain in practice
-            // diy::load(bb, b->domain);
 
             // top-level mfa data
             diy::load(bb, b->dom_dim);

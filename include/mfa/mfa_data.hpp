@@ -156,44 +156,6 @@ namespace mfa
 #endif
         }
 
-        // convert linear domain point index into (i,j,k,...) multidimensional index
-        // number of dimensions is the domain dimensionality
-        void idx2ijk(
-                const vector<size_t>&   ds,             // stride for points in each dim.
-                size_t                  idx,            // linear cell indx
-                VectorXi&               ijk) const      // (output) i,j,k,... indices in all dimensions
-        {
-            if (dom_dim == 1)
-            {
-                ijk(0) = idx;
-                return;
-            }
-
-            for (int i = 0; i < dom_dim; i++)
-            {
-                if (i < dom_dim - 1)
-                    ijk(i) = (idx % ds[i + 1]) / ds[i];
-                else
-                    ijk(i) = idx / ds[i];
-            }
-        }
-
-        // convert (i,j,k,...) multidimensional index into linear index into domain
-        // number of dimension is the domain dimensionality
-        void ijk2idx(
-                const VectorXi& ndom_pts,               // number of input points in each dimension
-                const VectorXi& ijk,                    // i,j,k,... indices to all dimensions
-                size_t&         idx) const              // (output) linear index
-        {
-            idx           = 0;
-            size_t stride = 1;
-            for (int i = 0; i < dom_dim; i++)
-            {
-                idx += ijk(i) * stride;
-                stride *= ndom_pts(i);
-            }
-        }
-
         // binary search to find the span in the knots vector containing a given parameter value
         // returns span index i s.t. u is in [ knots[i], knots[i + 1] )
         // NB closed interval at left and open interval at right

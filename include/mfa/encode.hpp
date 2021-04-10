@@ -413,10 +413,7 @@ namespace mfa
 
             // Iterate thru every point in subvolume given by tensor
             VectorX<T> param(input.dom_dim);
-            // VolIterator dom_vol_iter(ndom_pts, dom_starts, mfa.ndom_pts());
-            auto input_it = input.begin();
-            auto input_end = input.end();
-            for (; input_it != input_end; ++input_it)
+            for (auto input_it = input.begin(), input_end = input.end(); input_it != input_end; ++input_it)
             {
                 input_it.params(param);
 
@@ -425,7 +422,6 @@ namespace mfa
                     int p   = mfa_data.p(k);
                     T   u   = param(k);
 
-                    // spans[k] = mfa_data.FindSpan(k, mfa.params()[k][dom_vol_iter.idx_dim(k)]);
                     spans[k] = mfa_data.FindSpan(k, u);
                     
                     ctrl_starts(k) = spans[k] - p - t.knot_mins[k];
@@ -559,8 +555,9 @@ namespace mfa
         }
 #endif // MFA_TBB
 
-       // Sparse matrix version of EncodeTensor. Not a 
-       // one-for-one copy of the logic in EncodeTensor
+       // Encodes ctrl points in each dimensions simultaneously
+       // Necessary for encoding unstructured input data, where parameter values
+       // corresponding to input do not lie on structured grid
         void EncodeUnified( TensorIdx   t_idx,                      // tensor product being encoded
                             bool        weighted=true)                   // solve for and use weights 
         {
@@ -575,6 +572,7 @@ namespace mfa
             const int pt_dim = mfa_data.max_dim - mfa_data.min_dim + 1;                           // control point dimensonality
             TensorProduct<T>& t = mfa_data.tmesh.tensor_prods[t_idx];
 
+            // REQUIRED for Tmesh
             // Compute total number of points in tensor product
             // int tot_dom_pts = 1;
             // vector<size_t> start_idxs(mfa_data.dom_dim);
@@ -603,7 +601,7 @@ namespace mfa
 #endif      
 
     
-// EXPERIMENTAL >>
+// EXPERIMENTAL search for potential infinite ctrl points >>
             Mat.prune(1e-5);
             // Check for unconstrained control points (we set to zero later)
             // this can happen if there is no input data within the support of a 
@@ -644,7 +642,7 @@ namespace mfa
             }
 
 
-// EXPERIMENTAL >>
+// EXPERIMENTAL search for potential infinite ctrl points >>
             for (auto& idx : undef_ctrl_pts)
             {
                 cerr << "idx=" << idx << ", value(s)=" << t.ctrl_pts(idx,0) << endl;
@@ -1301,6 +1299,7 @@ namespace mfa
             SparseMatrixX<T>&       Nt,
             MatrixX<T>&             R)
         {
+            // REQUIRED for TMesh
             // VectorXi ndom_pts(mfa_data.dom_dim);
             // VectorXi dom_starts(mfa_data.dom_dim);
             // for (auto k = 0; k < mfa_data.dom_dim; k++)
@@ -1315,15 +1314,11 @@ namespace mfa
                 cerr << "Error: Incorrect matrix dimensions in RHSUnified (rows)" << endl;
 
             VectorX<T> pt_coords(input.dom_dim);
-            // VolIterator vol_iter(ndom_pts, dom_starts, mfa.ndom_pts());                 // iterator over input points
-            // while (!vol_iter.done())
             for (auto input_it = input.begin(); input_it != input.end(); ++input_it)
             {
-                // R.row(vol_iter.cur_iter()) = domain.block(vol_iter.cur_iter_full(), mfa_data.min_dim, 1, mfa_data.max_dim - mfa_data.min_dim + 1);
+                // extract coordinates in dimension min_dim<-->max_dim and place in pt_coords
                 input_it.coords(pt_coords, mfa_data.min_dim, mfa_data.max_dim);
                 R.row(input_it.idx()) = pt_coords;
-
-                // vol_iter.incr_iter();
             }
 
             R = Nt * R;

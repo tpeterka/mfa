@@ -27,10 +27,10 @@
 // #define WEIGH_ALL_DIMS
 
 // comment out the following line for original single tensor product version
-#define MFA_TMESH
+// #define MFA_TMESH
 
 // linear least squares local solve
-#define MFA_LINEAR_LOCAL
+// #define MFA_LINEAR_LOCAL
 
 #include    <Eigen/Dense>
 #include    <Eigen/Sparse>
@@ -81,32 +81,13 @@ namespace mfa
     struct MFA
     {
         int                     dom_dim;            // domain dimensionality
-        // Param<T>*               mfa_param;          // pointer to parameterization object
-
-        // MFA(
-        //     int                 dom_dim_,           // domain dimensionality (excluding science variables)
-        //     const VectorXi&     ndom_pts_,          // number of input data points in each dim
-        //     const MatrixX<T>&   domain_) :          // input data points (1st dim changes fastest)
-        //     dom_dim(dom_dim_)
-        // {
-        //     // mfa_param = new Param<T>(dom_dim_, ndom_pts_, domain_);
-        // }
 
         MFA(size_t dom_dim_) :
             dom_dim(dom_dim_)
-        {
-            // mfa_param = new Param<T>(info);
-        }
+        { }
 
         ~MFA()
-        {
-            // delete mfa_param;
-        }
-
-        // VectorXi&               ndom_pts() const    { return mfa_param->ndom_pts; }
-        // vector<vector<T>>&      params() const      { return mfa_param->params; }
-        // vector<size_t>&         ds() const          { return mfa_param->ds; }
-        // vector<vector<size_t>>& co() const          { return mfa_param->co; }
+        { }
 
         // fixed number of control points encode
         void FixedEncode(
