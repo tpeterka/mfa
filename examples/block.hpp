@@ -331,6 +331,7 @@ struct Block : public BlockBase<T>
 
         // Create input data set and add to block
         input = new mfa::PointSet<T>(dom_dim, pt_dim, a->tot_ndom_pts);
+        input->set_bounds(core_mins, core_maxs);
 
         unsigned seed = chrono::system_clock::now().time_since_epoch().count();
         std::default_random_engine df_gen(seed);
@@ -1317,6 +1318,84 @@ struct Block : public BlockBase<T>
 
         // debug
         cerr << "domain extent:\n min\n" << bounds_mins << "\nmax\n" << bounds_maxs << endl;
+    }
+    
+    void analytical_error_field(
+        const diy::Master::ProxyWithLink&   cp,
+        string&                             fun,                // function to evaluate
+        T&                                  L1,                 // (output) L-1 norm
+        T&                                  L2,                 // (output) L-2 norm
+        T&                                  Linf,               // (output) L-infinity norm
+        DomainArgs&                         args,               // input args
+        bool                                keep_approx)        // keep the regular grid approximation we create
+    {
+        DomainArgs* a   = &args;
+        
+        // Size of grid on which to test error
+        VectorXi test_pts(dom_dim);
+        for (int i = 0; i < dom_dim; i++)
+        {
+            test_pts(i) = a->ndom_pts[i];
+        }
+
+        // Create parameters to decode at
+        shared_ptr<mfa::Param<T>> grid_params = make_shared<mfa::Param<T>>(test_pts);
+        
+        // Create pointsets to hold decoded points and errors
+        mfa::PointSet<T>* grid_approx = new mfa::PointSet<T>(grid_params, pt_dim);
+        this->errs = new mfa::PointSet<T>(grid_params, pt_dim);
+
+        // Decode on above-specified grid
+        this->mfa->DecodePointSet(*(this->geometry).mfa_data, *grid_approx, 0, 0, dom_dim - 1, false);
+        for (auto i = 0; i < this->vars.size(); i++)
+            this->mfa->DecodePointSet(*(this->vars[i].mfa_data), *grid_approx, 0, dom_dim + i, dom_dim + i, false);
+
+        // Copy geometric point coordinates into errs PointSet
+        this->errs->domain.leftCols(dom_dim) = grid_approx->domain.leftCols(dom_dim);
+
+        // Compute the analytical error at each point
+        T sum_errs      = 0.0;                                  // sum of absolute values of errors (L-1 norm)
+        T sum_sq_errs   = 0.0;                                  // sum of squares of errors (square of L-2 norm)
+        T max_err       = -1.0;                                 // maximum absolute value of error (L-infinity norm)
+        T true_val = 0;
+        T test_val = 0;
+        VectorX<T> dom_pt(dom_dim);
+        for (auto pt_it = this->errs->begin(), pt_end = this->errs->end(); pt_it != pt_end; ++pt_it)
+        {
+            pt_it.coords(dom_pt, 0, dom_dim-1); // extract the first dom_dim coords (i.e. geometric coords)
+            
+            // evaluate function at dom_pt_real
+            if (fun == "sinc")
+                true_val = sinc(dom_pt, args, 0);      // hard-coded for one science variable
+            if (fun == "sine")
+                true_val = sine(dom_pt, args, 0);      // hard-codded for one science variable
+            if (fun == "f16")
+                true_val = f16(dom_pt);
+            if (fun == "f17")
+                true_val = f17(dom_pt);
+            if (fun == "f18")
+                true_val = f18(dom_pt);
+
+            test_val = grid_approx->domain(pt_it.idx(), dom_dim);    // hard-coded for first science variable only
+
+            // compute and accrue error
+            T err = fabs(true_val - test_val);
+            sum_errs += err;                                // L1
+            sum_sq_errs += err * err;                       // L2
+            if (err > max_err)                              // Linf
+                max_err = err;
+
+            this->errs->domain(pt_it.idx(), dom_dim) = err;
+        }
+
+        L1    = sum_errs;
+        L2    = sqrt(sum_sq_errs);
+        Linf  = max_err;
+
+        if (keep_approx)
+            this->approx = grid_approx;
+        else
+            delete grid_approx;
     }
 
     // compute error to synthethic, non-noisy function (for HEP applications)
