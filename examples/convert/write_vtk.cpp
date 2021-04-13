@@ -22,6 +22,106 @@
 #include    "writer.hpp"
 #include    "block.hpp"
 
+template<typename T>
+void write_pointset_vtk(mfa::PointSet<T>* ps, char* filename)
+{
+    if (ps == nullptr)
+    {
+        cout << "Did not write " << filename << " due to uninitialized pointset" << endl;
+        return;
+    }
+    if (ps->npts == 0)
+    {
+        cout << "Did not write " << filename << " due to empty pointset" << endl;
+        return;
+    }
+
+    int dom_dim = ps->dom_dim;
+    int pt_dim  = ps->pt_dim;
+    int nvars = pt_dim - dom_dim;   // TODO: this assumes all vars are scalar
+
+    vector<int> npts_dim;  // only used if data is structured
+    if (ps->structured)
+    {
+        for (size_t k = 0; k < 3; k++)
+        {
+            if (k < dom_dim) 
+                npts_dim.push_back(ps->ndom_pts(k));
+            else
+                npts_dim.push_back(1);
+        }
+    }
+    
+    float** pt_data = new float*[nvars];
+    for (size_t j = 0; j < nvars; j++)
+    {
+        pt_data[j]  = new float[ps->npts];
+    }
+
+    vec3d           pt;
+    vector<vec3d>   pt_coords;
+    for (size_t j = 0; j < (size_t)(ps->npts); j++)
+    {
+        pt.x = ps->domain(j, 0);                      // first 3 dims stored as mesh geometry
+        pt.y = ps->domain(j, 1);
+        pt.z = pt_dim > 2 ? ps->domain(j, 2) : 0.0;
+        pt_coords.push_back(pt);
+
+        for (int k = 0; k < nvars; k++)                         // science variables
+            pt_data[k][j] = ps->domain(j, dom_dim + k);
+    }
+
+    // science variable settings
+    int* vardims        = new int[nvars];
+    char** varnames     = new char*[nvars];
+    int* centerings     = new int[nvars];
+    for (int i = 0; i < nvars; i++)
+    {
+        vardims[i]      = 1;                                // TODO; treating each variable as a scalar (for now)
+        varnames[i]     = new char[256];
+        centerings[i]   = 1;
+        sprintf(varnames[i], "var%d", i);
+    }
+
+    // write raw original points
+    if (ps->structured)
+    {
+        write_curvilinear_mesh(
+            /* const char *filename */                  filename,
+            /* int useBinary */                         0,
+            /* int *dims */                             &npts_dim[0],
+            /* float *pts */                            &(pt_coords[0].x),
+            /* int nvars */                             nvars,
+            /* int *vardim */                           vardims,
+            /* int *centering */                        centerings,
+            /* const char * const *varnames */          varnames,
+            /* float **vars */                          pt_data);
+    }
+    else
+    {
+        write_point_mesh(
+        /* const char *filename */                      filename,
+        /* int useBinary */                             0,
+        /* int npts */                                  pt_coords.size(),
+        /* float *pts */                                &(pt_coords[0].x),
+        /* int nvars */                                 nvars,
+        /* int *vardim */                               vardims,
+        /* const char * const *varnames */              varnames,
+        /* float **vars */                              pt_data);
+    }  
+
+    delete[] vardims;
+    for (int i = 0; i < nvars; i++)
+        delete[] varnames[i];
+    delete[] varnames;
+    delete[] centerings;
+    for (int j = 0; j < nvars; j++)
+    {
+        delete[] pt_data[j];
+    }
+    delete[] pt_data;
+}
+
 // make combinations of min, max corner vertices in index and real space
 void CellVertices(
         int             ndom_dims,                      // number of domain dimensions
@@ -144,17 +244,10 @@ void PrepTmeshTensorExtents(
 
 // package rendering data
 void PrepRenderingData(
-        vector<int>&                nraw_pts,
-        vector<vec3d>&              raw_pts,
-        float**&                    raw_data,
         int&                        nvars,
         vector<vec3d>&              geom_ctrl_pts,
         vector< vector <vec3d> >&   vars_ctrl_pts,
         float**&                    vars_ctrl_data,
-        vector<vec3d>&              approx_pts,
-        float**&                    approx_data,
-        vector<vec3d>&              err_pts,
-        float**&                    err_data,
         vector<int> &               nblend_pts,
         vector<vec3d>&              blend_pts,
         float**&                    blend_data,
@@ -171,30 +264,9 @@ void PrepRenderingData(
     nvars           = block->vars.size();                       // number of science variables
     pt_dim          = block->input->pt_dim;                     // dimensionality of point
 
-    // number of raw points
-    for (size_t j = 0; j < (size_t)(block->input->ndom_pts.size()); j++)
-        nraw_pts.push_back(block->input->ndom_pts(j));
-
-
     // number of output points for blend
     for (size_t j = 0; j < (size_t)(block->ndom_outpts.size()); j++)
         nblend_pts.push_back(block->ndom_outpts(j));
-
-    // raw geometry and science variables
-    raw_data = new float*[nvars];
-    for (size_t j = 0; j < nvars; j++)
-        raw_data[j] = new float[block->input->npts];
-
-    for (size_t j = 0; j < (size_t)(block->input->npts); j++)
-    {
-        p.x = block->input->domain(j, 0);                      // first 3 dims stored as mesh geometry
-        p.y = block->input->domain(j, 1);
-        p.z = block->input->domain.cols() > 2 ? block->input->domain(j, 2) : 0.0;
-        raw_pts.push_back(p);
-
-        for (int k = 0; k < nvars; k++)                         // science variables
-            raw_data[k][j] = block->input->domain(j, ndom_dims + k);
-    }
 
     // --- geometry control points ---
 
@@ -384,23 +456,10 @@ void PrepRenderingData(
     }   // science variables
 
     // approximated points
-    approx_data = new float*[nvars];
     blend_data  = new float*[nvars];
     for (size_t j = 0; j < nvars; j++)
     {
-        approx_data[j]  = new float[block->approx->npts];
         blend_data[j]   = new float[block->blend.rows()];
-    }
-
-    for (size_t j = 0; j < (size_t)(block->approx->npts); j++)
-    {
-        p.x = block->approx->domain(j, 0);                      // first 3 dims stored as mesh geometry
-        p.y = block->approx->domain(j, 1);
-        p.z = block->approx->pt_dim > 2 ? block->approx->domain(j, 2) : 0.0;
-        approx_pts.push_back(p);
-
-        for (int k = 0; k < nvars; k++)                         // science variables
-            approx_data[k][j] = block->approx->domain(j, ndom_dims + k);
     }
 
     for (size_t j = 0; j < (size_t)(block->blend.rows()); j++)
@@ -412,22 +471,6 @@ void PrepRenderingData(
 
         for (int k = 0; k < nvars; k++)                         // science variables
             blend_data[k][j] = block->blend(j, ndom_dims + k);
-    }
-
-    // error points
-    // error values are not normalized by data range
-    err_data = new float*[nvars];
-    for (size_t j = 0; j < nvars; j++)
-        err_data[j]  = new float[block->input->domain.rows()];
-    for (size_t j = 0; j < (size_t)(block->errs.rows()); j++)
-    {
-        p.x = block->errs(j, 0);
-        p.y = block->errs(j, 1);
-        p.z = block->errs.cols() > 2 ? block->errs(j, 2) : 0.0;
-        err_pts.push_back(p);
-        
-        for (int k = 0; k < nvars; k++)                         // science variables
-            err_data[k][j] = block->errs(j, ndom_dims + k);
     }
 
     // tmesh tensor extents
@@ -445,16 +488,9 @@ void write_vtk_files(
         int&           pt_dim)                      // (output) point dimensionality
 {
     int                         nvars;              // number of science variables (excluding geometry)
-    vector<int>                 nraw_pts;           // number of input points in each dim.
-    vector<vec3d>               raw_pts;            // input raw data points (<= 3d)
-    float**                     raw_data;           // input raw data values (4d)
     vector<vec3d>               geom_ctrl_pts;      // control points (<= 3d) in geometry
     vector < vector <vec3d> >   vars_ctrl_pts;      // control points (<= 3d) in science variables
     float**                     vars_ctrl_data;     // control point data values (4d)
-    vector<vec3d>               approx_pts;         // approximated data points (<= 3d)
-    float**                     approx_data;        // approximated data values (4d)
-    vector<vec3d>               err_pts;            // abs value error field
-    float**                     err_data;           // abs value error values (for each science variable)
     vector<int>                 nblend_pts;         // number of out points in each dim.
     vector<vec3d>               blend_pts;          // blended data points (<= 3d)
     vector<vec3d>               tensor_pts_real;    // tmesh tensor product extents in real space
@@ -463,17 +499,10 @@ void write_vtk_files(
     float**                     blend_data;
 
     // package rendering data
-    PrepRenderingData(nraw_pts,
-                      raw_pts,
-                      raw_data,
-                      nvars,
+    PrepRenderingData(nvars,
                       geom_ctrl_pts,
                       vars_ctrl_pts,
                       vars_ctrl_data,
-                      approx_pts,
-                      approx_data,
-                      err_pts,
-                      err_data,
                       nblend_pts,
                       blend_pts,
                       blend_data,
@@ -487,14 +516,8 @@ void write_vtk_files(
     dom_dim = b->dom_dim;
     for (auto i = 0; i < 3 - dom_dim; i++)
     {
-        nraw_pts.push_back(1);
         nblend_pts.push_back(1); // used for blending only in 2d?
     }
-
-    // copy error as a new variable (z dimension, or maybe magnitude?)
-    vector<float> errm(err_pts.size());
-    for (size_t i=0; i<err_pts.size(); i++)
-        errm[i] = err_pts[i].z;
 
     // science variable settings
     int vardim          = 1;
@@ -541,81 +564,15 @@ void write_vtk_files(
             /* float **vars */                              vars_ctrl_data);
     }
 
-    // write raw original points
-    sprintf(filename, "initial_points_gid_%d.vtk", cp.gid());
-    if (raw_pts.size())
-    {
-        if (b->input->structured)
-        {
-            write_curvilinear_mesh(
-                /* const char *filename */                  filename,
-                /* int useBinary */                         0,
-                /* int *dims */                             &nraw_pts[0],
-                /* float *pts */                            &(raw_pts[0].x),
-                /* int nvars */                             nvars,
-                /* int *vardim */                           vardims,
-                /* int *centering */                        centerings,
-                /* const char * const *varnames */          varnames,
-                /* float **vars */                          raw_data);
-        }
-        else
-        {
-            write_point_mesh(
-            /* const char *filename */                      filename,
-            /* int useBinary */                             0,
-            /* int npts */                                  raw_pts.size(),
-            /* float *pts */                                &(raw_pts[0].x),
-            /* int nvars */                                 nvars,
-            /* int *vardim */                               vardims,
-            /* const char * const *varnames */              varnames,
-            /* float **vars */                              raw_data);
-        }  
-    }
-
-    // write approx points
-    sprintf(filename, "approx_points_gid_%d.vtk", cp.gid());
-    if (approx_pts.size())
-    {
-        if (b->approx->structured)
-        {
-            write_curvilinear_mesh(
-                /* const char *filename */                  filename,
-                /* int useBinary */                         0,
-                /* int *dims */                             &nraw_pts[0],
-                /* float *pts */                            &(approx_pts[0].x),
-                /* int nvars */                             nvars,
-                /* int *vardim */                           vardims,
-                /* int *centering */                        centerings,
-                /* const char * const *varnames */          varnames,
-                /* float **vars */                          approx_data);
-        }
-        else
-        {
-            write_point_mesh(
-            /* const char *filename */                      filename,
-            /* int useBinary */                             0,
-            /* int npts */                                  approx_pts.size(),
-            /* float *pts */                                &(approx_pts[0].x),
-            /* int nvars */                                 nvars,
-            /* int *vardim */                               vardims,
-            /* const char * const *varnames */              varnames,
-            /* float **vars */                              approx_data);
-        }   
-    }
-    else
-    {
-        write_curvilinear_mesh(
-                /* const char *filename */                  filename,
-                /* int useBinary */                         0,
-                /* int *dims */                             &nraw_pts[0],
-                /* float *pts */                            &(approx_pts[0].x),
-                /* int nvars */                             0,
-                /* int *vardim */                           NULL,
-                /* int *centering */                        NULL,
-                /* const char * const *varnames */          NULL,
-                /* float **vars */                          NULL);
-    }
-        
+    char input_filename[256];
+    char approx_filename[256];
+    char errs_filename[256];
+    sprintf(input_filename, "initial_points_gid_%d.vtk", cp.gid());
+    sprintf(approx_filename, "approx_points_gid_%d.vtk", cp.gid());
+    sprintf(errs_filename, "error_gid_%d.vtk", cp.gid());
+    write_pointset_vtk(b->input, input_filename);
+    write_pointset_vtk(b->approx, approx_filename);
+    write_pointset_vtk(b->errs, errs_filename);
 
     if (blend_pts.size())
     {
@@ -631,38 +588,6 @@ void write_vtk_files(
                 /* const char * const *varnames */          varnames,
                 /* float **vars */                          blend_data);
     }
-
-    // write error
-    sprintf(filename, "error_gid_%d.vtk", cp.gid());
-    if (err_pts.size())
-    {
-        if (b->approx->structured)
-        {
-            write_curvilinear_mesh(
-            /* const char *filename */                      filename,
-            /* int useBinary */                             0,
-            /* int *dims */                                 &nraw_pts[0],
-            /* float *pts */                                &(err_pts[0].x),
-            /* int nvars */                                 nvars,
-            /* int *vardim */                               vardims,
-            /* int *centering */                            centerings,
-            /* const char * const *varnames */              varnames,
-            /* float **vars */                              err_data);
-        }
-        else
-        {
-            write_point_mesh(
-            /* const char *filename */                      filename,
-            /* int useBinary */                             0,
-            /* int npts */                                  err_pts.size(),
-            /* float *pts */                                &(err_pts[0].x),
-            /* int nvars */                                 nvars,
-            /* int *vardim */                               vardims,
-            /* const char * const *varnames */              varnames,
-            /* float **vars */                              err_data);
-        }  
-    }
-        
 
     // write tensor product extents
     int pts_per_cell = pow(2, dom_dim);
@@ -723,17 +648,11 @@ void write_vtk_files(
     delete[] centerings;
     for (int j = 0; j < nvars; j++)
     {
-        delete[] raw_data[j];
         delete[] vars_ctrl_data[j];
-        delete[] approx_data[j];
         delete[] blend_data[j];
-        delete[] err_data[j];
     }
-    delete[] raw_data;
     delete[] vars_ctrl_data;
-    delete[] approx_data;
     delete[] blend_data;
-    delete[] err_data;
 }
 
 // generate analytical test data and write to vtk

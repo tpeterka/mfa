@@ -204,6 +204,38 @@ namespace mfa
             }
         }
 
+        bool is_same_layout(const PointSet<T>& ps, int verbose = 1) const
+        {
+            bool is_same =      (dom_dim    == ps.dom_dim)
+                            &&  (pt_dim     == ps.pt_dim)
+                            &&  (npts       == ps.npts)
+                            &&  (structured == ps.structured);
+            
+            if (structured)
+            {
+                is_same = is_same && (ndom_pts == ps.ndom_pts);
+            }
+
+            if (is_same) return is_same;
+            else
+            {
+                if (verbose)
+                {
+                    cerr << "Pair of PointSets do not have matching layout" << endl;
+                    cerr << "  dom_dim    = " << dom_dim << ",\t" << ps.dom_dim << endl;
+                    cerr << "  pt_dim     = " << pt_dim << ",\t" << ps.pt_dim << endl;
+                    cerr << "  npts       = " << npts << ",\t" << ps.npts << endl;
+                    cerr << "  structured = " << boolalpha << structured << ",\t" << ps.structured << endl;
+                    if (structured || ps.structured)
+                    {
+                        cerr << "  ndom_pts: " << ndom_pts << ps.ndom_pts << endl;
+                    }
+                }
+
+                return is_same;
+            }
+        }
+
         PointSet(const PointSet&) = delete;
         PointSet(PointSet&&) = delete;
         PointSet& operator=(const PointSet&) = delete;

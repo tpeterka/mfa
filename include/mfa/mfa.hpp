@@ -75,6 +75,17 @@ using SpMatTriplet = Eigen::Triplet<T>;
 #include    <mfa/decode.hpp>
 #include    <mfa/encode.hpp>
 
+// TODO: Move Model's from BlockBase to MFA
+//       Want MFA object to manage construction-destruction of MFA_Data
+// a solved and stored MFA_data model (geometry or science variable or both)
+template <typename T>
+struct Model
+{
+    int                 min_dim;                // starting coordinate of this model in full-dimensional data
+    int                 max_dim;                // ending coordinate of this model in full-dimensional data
+    mfa::MFA_Data<T>    *mfa_data;              // MFA model data
+};
+
 namespace mfa
 {
     template <typename T>                           // float or double
@@ -228,6 +239,105 @@ namespace mfa
 
             for (auto i = 0; i < pt_dim; i++)
                 error(i) = fabs(cpt(i) - input.domain(idx, mfa_data.min_dim + i));
+        }
+
+        void AbsPointSetDiff(
+            const   mfa::PointSet<T>& ps1,
+            const   mfa::PointSet<T>& ps2,
+                    mfa::PointSet<T>& diff,
+                    int               verbose)
+        {
+            if (!ps1.is_same_layout(ps2) || !ps1.is_same_layout(diff))
+            {
+                cerr << "ERROR: Incompatible PointSets in AbsPointSetDiff" << endl;
+                exit(1);
+            }
+
+#ifdef MFA_SERIAL
+            diff.domain.leftCols(dom_dim) = ps1.domain.leftCols(dom_dim);
+            diff.domain.rightCols(pt_dim-dom_dim) = (ps1.domain.rightCols(pt_dim-dom_dim) - ps2.rightCols(pt_dim-dom_dim)).abs();
+#endif // MFA_SERIAL
+#ifdef MFA_TBB
+            parallel_for (size_t(0), (size_t)diff.npts, [&] (size_t i)
+                {
+                    for (auto j = 0; j < dom_dim; j++)
+                    {
+                        diff.domain(i,j) = ps1.domain(i,j); // copy the geometric location of each point
+                    }
+                });
+
+            parallel_for (size_t(0), (size_t)diff.npts, [&] (size_t i)
+                {
+                    for (auto j = dom_dim; j < diff.pt_dim; j++)
+                    {
+                        diff.domain(i,j) = fabs(ps1.domain(i,j) - ps2.domain(i,j)); // compute distance between each science value
+                    }
+                });
+#endif // MFA_TBB
+        }
+
+        void AbsPointSetError(
+            const   mfa::PointSet<T>& base,
+                    mfa::PointSet<T>& error,
+                    vector<Model<T>>& vars,
+                    int               verbose)
+        {
+            if (!base.is_same_layout(error))
+            {
+                cerr << "ERROR: Incompatible PointSets in AbsPointSetError" << endl;
+                exit(1);
+            }
+
+#ifdef MFA_SERIAL
+            // copy geometric point coordinates
+            for (size_t i = 0; i < error.npts; i++)
+            {   
+                for (auto j = 0; j < dom_dim; j++)
+                {
+                    error.domain(i,j) = base.domain(i,j); // copy the geometric location of each point
+                } 
+            }
+
+            // compute errors for each point and model
+            for (size_t i = 0; i < error.npts; i++)
+            {
+                VectorX<T> err_vec;                          // errors for all coordinates in current model
+                for (auto k = 0; k < vars.size(); k++)      // for all science models
+                {
+                    err_vec.resize(vars[k].max_dim - vars[k].min_dim);
+                    AbsCoordError(*(vars[k].mfa_data), base, i, err_vec, verbose);
+
+                    for (auto j = 0; j < err_vec.size(); j++)
+                    {
+                        error.domain(i, vars[k].min_dim + j) = err_vec(j);      // error for each science variable
+                    }
+                }
+            }
+#endif // MFA_SERIAL
+#ifdef MFA_TBB
+            parallel_for (size_t(0), (size_t)error.npts, [&] (size_t i)
+                {
+                    for (auto j = 0; j < dom_dim; j++)
+                    {
+                        error.domain(i,j) = base.domain(i,j); // copy the geometric location of each point
+                    }
+                });
+
+            parallel_for (size_t(0), (size_t)error.npts, [&] (size_t i)
+                {
+                VectorX<T> err_vec;                                 // errors for all coordinates in current model
+                for (auto k = 0; k < vars.size() + 1; k++)      // for all models, geometry + science
+                {
+                    err_vec.resize(vars[k - 1].max_dim - vars[k - 1].min_dim);
+                    AbsCoordError(*(vars[k - 1].mfa_data), base, i, err_vec, verbose);
+
+                    for (auto j = 0; j < err_vec.size(); j++)
+                    {
+                        error.domain(i, vars[k - 1].min_dim + j) = err_vec(j); // error for each science variable
+                    }
+                }
+                });
+#endif // MFA_TBB
         }
     };
 }                                           // namespace

@@ -67,14 +67,6 @@ struct ModelInfo
     int                 verbose;                // debug level
 };
 
-// a solved and stored MFA model (geometry or science variable or both)
-template <typename T>
-struct Model
-{
-    int                 min_dim;                // starting coordinate of this model in full-dimensional data
-    int                 max_dim;                // ending coordinate of this model in full-dimensional data
-    mfa::MFA_Data<T>    *mfa_data;              // MFA model data
-};
 
 // block
 template <typename T>
@@ -91,6 +83,7 @@ struct BlockBase
     // data sets
     mfa::PointSet<T>    *input;                 // input data
     mfa::PointSet<T>    *approx;                // output data
+    mfa::PointSet<T>    *errs;                  // error field
 
     // MFA object
     mfa::MFA<T>         *mfa;
@@ -103,9 +96,6 @@ struct BlockBase
     // errors for each science variable
     vector<T>           max_errs;               // maximum (abs value) distance from input points to curve
     vector<T>           sum_sq_errs;            // sum of squared errors
-
-    // error field for last science variable only
-    MatrixX<T>          errs;                   // error field (abs. value, not normalized by data range)
 
     VectorX<T>          overlaps;               // local domain overlaps in each direction
 
@@ -123,7 +113,7 @@ struct BlockBase
     vector<T>           max_errs_reduce;        // max_errs used in the reduce operations, plus location (2 T vals per entry)
 
     // zero-initialize pointers during default construction
-    BlockBase() : mfa(NULL), input(NULL) { }
+    BlockBase() : mfa(NULL), input(NULL), approx(NULL), errs(NULL) { }
 
     ~BlockBase()
     {
@@ -466,100 +456,42 @@ struct BlockBase
             bool    decode_block_,                          // decode entire block first
             bool    saved_basis)                            // whether basis functions were saved and can be reused
     {
-        errs.resize(input->domain.rows(), input->domain.cols());
-        errs            = input->domain;
+        if (input == nullptr)
+        {
+            cerr << "ERROR: Cannot compute range_error; no valid input data" << endl;
+            exit(1);
+        }
+        if (errs != nullptr)
+        {
+            cerr << "Warning: Overwriting existing error field" << endl;
+            delete errs;
+        }
+        errs = new mfa::PointSet<T>(input->params, input->pt_dim);
 
+        // Decode entire block and then compare to input
         if (decode_block_)
+        {
             decode_block(cp, verbose, saved_basis);
-#ifdef MFA_TBB      // TBB version
 
-        // distance computation
-        if (decode_block_)
-        {
-            parallel_for (size_t(0), (size_t)input->domain.rows(), [&] (size_t i)
-                    {
-                    for (auto j = dom_dim; j < input->domain.cols(); j++)
-                    {
-                        // error for each science variable
-                        errs(i, j) = fabs(approx->domain(i,j) - input->domain(i, j)); 
-                    }
-                    });
+            mfa->AbsPointSetDiff(*input, *approx, *errs, verbose);
         }
-        else
+        else // Compute error at each input point on the fly
         {
-            parallel_for (size_t(0), (size_t)input->domain.rows(), [&] (size_t i)
-                {
-                VectorX<T> err;                                 // errors for all coordinates in current model
-                for (auto k = 0; k < vars.size() + 1; k++)      // for all models, geometry + science
-                {
-                    if (k == 0)                                 // geometry
-                    {
-                        err.resize(geometry.max_dim - geometry.min_dim);
-                        mfa->AbsCoordError(*geometry.mfa_data, *input, i, err, verbose);
-                    }
-                    else
-                    {
-                        err.resize(vars[k - 1].max_dim - vars[k - 1].min_dim);
-                        mfa->AbsCoordError(*(vars[k - 1].mfa_data), *input, i, err, verbose);
-                    }
-
-                    for (auto j = 0; j < err.size(); j++)
-                        if (k)                                              // science variables
-                            errs(i, vars[k - 1].min_dim + j) = err(j); // error for each science variable
-                }
-                });
+            mfa->AbsPointSetError(*input, *errs, vars, verbose);
         }
 
-#endif              // end TBB version
+        // Compute error metrics
+        MatrixX<T>& errpts = errs->domain;
 
-#ifdef MFA_SERIAL   // serial version
-
-        for (auto i = 0; i < (size_t)input->domain.rows(); i++)
-        {
-            if (decode_block_)
-            {
-                for (auto j = dom_dim; j < input->domain.cols(); j++)
-                {
-                    // error for each science variable
-                    errs(i, j) = fabs(approx->domain(i,j) - input->domain(i, j)); 
-                }
-            }
-            else
-            {
-                VectorX<T> err;                                 // errors for all coordinates in current model
-                for (auto k = 0; k < vars.size() + 1; k++)      // for all models, geometry + science
-                {
-                    if (k == 0)                                 // geometry
-                    {
-                        err.resize(geometry.max_dim - geometry.min_dim);
-                        mfa->AbsCoordError(*geometry.mfa_data, *input, i, err, verbose);
-                    }
-                    else
-                    {
-                        err.resize(vars[k - 1].max_dim - vars[k - 1].min_dim);
-                        mfa->AbsCoordError(*(vars[k - 1].mfa_data),*input, i, err, verbose);
-                    }
-
-                    for (auto j = 0; j < err.size(); j++)
-                    {
-                        if (k)                                              // science variables
-                            errs(i, vars[k - 1].min_dim + j) = err(j);      // error for each science variable
-                    }
-                }
-            }
-        }
-
-#endif              // end serial version
-
-        for (auto j = dom_dim; j < input->domain.cols(); j++)
+        for (auto j = dom_dim; j < errs->pt_dim; j++)
             sum_sq_errs[j - dom_dim] = 0.0;
-        for (auto i = 0; i < input->domain.rows(); i++)
+        for (auto i = 0; i < errs->npts; i++)
         {
             for (auto j = dom_dim; j < input->domain.cols(); j++)
             {
-                sum_sq_errs[j - dom_dim] += (errs(i, j) * errs(i, j));
-                if ((i == 0 && j == dom_dim) || errs(i, j) > max_errs[j - dom_dim])
-                    max_errs[j - dom_dim] = errs(i, j);
+                sum_sq_errs[j - dom_dim] += (errpts(i, j) * errpts(i, j));
+                if ((i == 0 && j == dom_dim) || errpts(i, j) > max_errs[j - dom_dim])
+                    max_errs[j - dom_dim] = errpts(i, j);
             }
         }
 
@@ -570,7 +502,7 @@ struct BlockBase
             max_errs_reduce[2 * i] = max_errs[i];
             max_errs_reduce[2 * i + 1] = cp.gid(); // use converter from type T to integer
         }
-    }
+     } 
 
     void print_block(const diy::Master::ProxyWithLink& cp,
             bool                              error)       // error was computed
@@ -1342,8 +1274,10 @@ namespace mfa
             diy::save(bb, b->core_mins);
             diy::save(bb, b->core_maxs);
 
-            // TODO: don't save input in practice
+            // TODO: don't save data sets in practice
             diy::save(bb, b->input);
+            diy::save(bb, b->approx);
+            diy::save(bb, b->errs);
 
             // geometry
             diy::save(bb, b->geometry.mfa_data->p);
@@ -1385,9 +1319,6 @@ namespace mfa
                 diy::save(bb, b->vars[i].mfa_data->tmesh.all_knot_levels);
             }
 
-            diy::save(bb, b->approx);
-            diy::save(bb, b->errs);
-
             // output for blending
             diy::save(bb, b->ndom_outpts);
             diy::save(bb, b->blend);
@@ -1411,8 +1342,10 @@ namespace mfa
             diy::load(bb, b->core_mins);
             diy::load(bb, b->core_maxs);
 
-            // Input info.  TODO: don't load in practice
+            // TODO: Don't load data sets in practice
             diy::load(bb, b->input);
+            diy::load(bb, b->approx);
+            diy::load(bb, b->errs);
 
             VectorXi    p;                  // degree of the mfa
             size_t      ntensor_prods;      // number of tensor products in the tmesh
@@ -1460,9 +1393,6 @@ namespace mfa
                 diy::load(bb, b->vars[i].mfa_data->tmesh.all_knots);
                 diy::load(bb, b->vars[i].mfa_data->tmesh.all_knot_levels);
             }
-
-            diy::load(bb, b->approx);
-            diy::load(bb, b->errs);
 
             // output for blending
             diy::load(bb, b->ndom_outpts);
