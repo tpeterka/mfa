@@ -254,8 +254,9 @@ namespace mfa
             }
 
 #ifdef MFA_SERIAL
+            int pt_dim = ps1.pt_dim;
             diff.domain.leftCols(dom_dim) = ps1.domain.leftCols(dom_dim);
-            diff.domain.rightCols(pt_dim-dom_dim) = (ps1.domain.rightCols(pt_dim-dom_dim) - ps2.rightCols(pt_dim-dom_dim)).abs();
+            diff.domain.rightCols(pt_dim-dom_dim) = (ps1.domain.rightCols(pt_dim-dom_dim) - ps2.domain.rightCols(pt_dim-dom_dim)).cwiseAbs();
 #endif // MFA_SERIAL
 #ifdef MFA_TBB
             parallel_for (size_t(0), (size_t)diff.npts, [&] (size_t i)
