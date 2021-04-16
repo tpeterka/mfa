@@ -280,7 +280,7 @@ int main(int argc, char** argv)
     Block<real_t>* b    = static_cast<Block<real_t>*>(master.block(0));
     real_t range_extent = b->input->domain.col(dom_dim).maxCoeff() - b->input->domain.col(dom_dim).minCoeff();
     real_t err_factor   = 1.0e-3;
-    real_t expect_err;
+    real_t expect_err   = -0.0;
     // for ./fixed-test -i sinc -d 3 -m 2 -p 1 -q 5 -v 20 -w 0
     if (input == "sinc" && dom_dim == 2)
         expect_err   = 4.304489e-4;

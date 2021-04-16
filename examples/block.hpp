@@ -47,6 +47,7 @@ struct DomainArgs : public ModelInfo
     DomainArgs(int dom_dim, int pt_dim) :
         ModelInfo(dom_dim, pt_dim)
     {
+        tot_ndom_pts = 0;
         starts.resize(dom_dim);
         ndom_pts.resize(dom_dim);
         full_dom_pts.resize(dom_dim);
@@ -54,6 +55,10 @@ struct DomainArgs : public ModelInfo
         max.resize(dom_dim);
         s.resize(pt_dim);
         f.resize(pt_dim);
+        r = 0;
+        t = 0;
+        n = 0;
+        multiblock = false;
         structured = true;   // Assume structured input by default
     }
     size_t              tot_ndom_pts;
@@ -483,6 +488,8 @@ struct Block : public BlockBase<T>
                 this->core_mins(i)    = a->min[i];
                 this->core_maxs(i)    = a->max[i];
             }
+            this->bounds_mins(dom_dim) = numeric_limits<T>::min();
+            this->bounds_maxs(dom_dim) = numeric_limits<T>::max();
         }
 
         // adjust number of domain points and starting domain point for ghost
