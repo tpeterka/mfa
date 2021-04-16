@@ -1099,19 +1099,21 @@ namespace mfa
 //             fprintf(stderr, "--------------------------\n\n");
 
             // loop until no change in knots or number of control points >= input points
+            int prev_nknots   = -1;                                     // total number of knots in previous iteration
             for (int iter = 0; ; iter++)
             {
-                if (max_rounds > 0 && iter >= max_rounds)       // optional cap on number of rounds
+                if (max_rounds > 0 && iter >= max_rounds)               // optional cap on number of rounds
                     break;
 
                 if (verbose)
                     fprintf(stderr, "\n--- Iteration %d ---\n", iter);
 
-                int retval;
-
 #ifdef MFA_ALL_SPANS
 
-                retval = Refine(err_limit, extents, iter, local);
+                if (verbose)
+                        fmt::print(stderr, "Refining level {}\n", iter);
+
+                Refine(err_limit, extents, iter, local);
                 if (!local)
                 {
                     for (auto k = 0; k < mfa_data.dom_dim; k++)
@@ -1127,7 +1129,7 @@ namespace mfa
 
                 // using NewKnots_full high-d span splitting with tmesh (for now)
                 bool temp_local = local;                        // ability to do local solve temporarily for this round depends on whether new knots permits local solve
-                retval = NewKnots_full(err_limit, extents, iter, temp_local);
+                NewKnots_full(err_limit, extents, iter, temp_local);
 
                 // if not doing local solve,
                 // resize temporary control points and weights and global encode and scatter of control points to tensors
@@ -1149,21 +1151,18 @@ namespace mfa
 //                 mfa_data.tmesh.print();
 //                 fprintf(stderr, "--------------------------\n\n");
 
-                // no new knots to be added
-                if (retval == 0)
+                // check if total number of knots changed
+                int nknots = 1;
+                for (auto i = 0; i < mfa_data.dom_dim; i++)
+                    nknots *= mfa_data.tmesh.all_knots[i].size();
+                if (nknots == prev_nknots)
                 {
                     if (verbose)
                         fprintf(stderr, "\nKnot insertion done after %d iterations; no new knots added.\n\n", iter + 1);
                     break;
                 }
-
-                // new knots would make the number of control points >= number of input points in any dim
-                if (retval == -1)
-                {
-                    if (verbose)
-                        fprintf(stderr, "\nKnot insertion done after %d iterations; control points would outnumber input points.\n", iter + 1);
-                    break;
-                }
+                else
+                    prev_nknots = nknots;
             }
 
             // debug: print tmesh
@@ -1932,8 +1931,8 @@ namespace mfa
 
         // refines a T-mesh one level deeper
         // this is the version used currently for local solve
-        // returns 1 if knots were added, 0 if no knots were added, -1 if number of control points >= input points
-        int Refine(
+        // returns true if all done, ie, no new knots inserted
+        bool Refine(
                 T                   err_limit,                                  // max allowable error
                 const VectorX<T>&   extents,                                    // extents in each dimension, for normalizing error (size 0 means do not normalize)
                 int                 iter,                                       // current iteration number
@@ -1956,16 +1955,17 @@ namespace mfa
             // timing
             double error_spans_time = MPI_Wtime();
 
-            bool done = nk.AllErrorSpansLevel(domain,
+            // check all knots spans at a level for error
+            bool done = nk.AllErrorSpans(
+                    domain,
                     myextents,
                     err_limit,
-                    iter,
                     parent_tensor_idxs,
                     inserted_knot_idxs,
                     inserted_knots);
 
             if (done)                                                           // nothing inserted
-                return 0;
+                return true;
 
             vector<KnotIdx>             knot_mins(mfa_data.dom_dim);            // knot mins and maxs of candidate tensor to be appended
             vector<KnotIdx>             knot_maxs(mfa_data.dom_dim);
@@ -2196,12 +2196,7 @@ namespace mfa
             fmt::print(stderr, "append time:        {} s.\n", append_time);
             fmt::print(stderr, "encode time:        {} s.\n", encode_time);
 
-            // check for max number of control points in any dimension
-            for (auto k = 0; k < mfa_data.dom_dim; k++)
-                if (mfa.ndom_pts()(k) <= mfa_data.tmesh.all_knots[k].size() - (mfa_data.p(k) + 1))
-                    return -1;
-
-            return(new_tensors.size() > 0);
+            return false;
         }
 
         // this is the version used currently for tmesh global or local solve
@@ -2568,6 +2563,11 @@ namespace mfa
             int                     cols    = tc.ctrl_pts.cols();
             KnotIdx                 min, max;                   // temporaries
 
+            // debug
+//             bool debug = false;
+//             if (tc.knot_mins[0] == 51 && tc.knot_mins[1] == 34)
+//                 debug = true;
+
             // get required sizes
 
             int rows = 0;                                       // number of rows required in ctrl_pts
@@ -2624,10 +2624,23 @@ namespace mfa
                         sub_npts(i) = mfa_data.tmesh.knot_idx_dist(t, min, max, i, false);
                     all_npts(i)         = t.nctrl_pts(i);
 
+
                     // debug
                     //                         fprintf(stderr, "tensor: dim = %d sub_npts = %d sub_starts = %d all_npts = %d\n",
                     //                                 i, sub_npts(i), sub_starts(i), all_npts(i));
                 }
+
+                // debug
+//                 if (sub_starts[0] + sub_npts[0] > all_npts[0])
+//                 {
+//                     cerr << "LocalSolveAllConstraints(): Error: sub_starts: " << sub_starts.transpose() <<
+//                         " sub_npts: " << sub_npts.transpose() << " all_npts: " << all_npts.transpose() << endl;
+//                     fmt::print("neighbor tensor:\n");
+//                     mfa_data.tmesh.print_tensor(t);
+//                     fmt::print("all tensors:\n");
+//                     mfa_data.tmesh.print();
+//                 }
+
                 VolIterator voliter(sub_npts, sub_starts, all_npts);
                 VectorXi ijk(mfa_data.dom_dim);
                 while (!voliter.done())

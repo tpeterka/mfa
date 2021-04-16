@@ -32,6 +32,9 @@ struct TensorProduct
     vector<vector<TensorIdx>>   next;                   // next[dim][index of next tensor product] (unsorted)
     vector<vector<TensorIdx>>   prev;                   // prev[dim][index of previous tensor product] (unsorted)
     int                         level;                  // refinement level
+    bool                        done;                   // no more knots need to be added to this tensor
+
+    TensorProduct() : done(false)   {}
 };
 
 namespace mfa
@@ -2221,7 +2224,7 @@ namespace mfa
             for (auto j = 0; j < tensor_prods.size(); j++)
             {
                 const TensorProduct<T>& t = tensor_prods[j];
-                fprintf(stderr, "tensor_prods[%d] level=%d\n", j, t.level);
+                fmt::print(stderr, "tensor_prods[{}] level={} done={}\n", j, t.level, t.done);
                 print_tensor(t, print_ctrl_pts, print_weights);
             }
         }

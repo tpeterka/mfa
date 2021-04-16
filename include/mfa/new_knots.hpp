@@ -758,14 +758,13 @@ namespace mfa
             return true;
         }
 
-        // computes error in knot spans and finds all new knots (in all dimensions at once) that should be inserted in a given level
+        // computes error in knot spans and finds all new knots (in all dimensions at once) that should be inserted
         // returns true if all done, ie, no new knots inserted
         // This version is for tmesh with local solve
-        bool AllErrorSpansLevel(
+        bool AllErrorSpans(
                 const MatrixX<T>&           domain,                 // input points
                 VectorX<T>                  extents,                // extents in each dimension, for normalizing error (size 0 means do not normalize)
                 T                           err_limit,              // max. allowed error
-                int                         level,                  // current level of tensor products to search
                 vector<TensorIdx>&          parent_tensor_idxs,     // (output) idx of parent tensor of each new knot to be inserted
                 vector<vector<KnotIdx>>&    new_knot_idxs,          // (output) indices in each dim. of (unique) new knots in full knot vector after insertion
                 vector<vector<T>>&          new_knots)              // (output) knot values in each dim. of knots to be inserted (unique)
@@ -781,11 +780,15 @@ namespace mfa
             VectorXi&                   p                       = mfa_data.p;
 
             // debug
-            fprintf(stderr, "*** Using local solve in AllErrorSpansLevel ***\n");
+            fprintf(stderr, "*** Using local solve in AllErrorSpans ***\n");
 
             Decoder<T>          decoder(mfa, mfa_data, 1);
             VectorX<T>          param(dom_dim);                             // parameters of domain point
             VectorX<T>          cpt(tmesh.tensor_prods[0].ctrl_pts.cols()); // decoded point
+
+            // new knot when splitting a knot span
+            vector<KnotIdx> new_knot_idx(mfa_data.dom_dim);
+            vector<T>       new_knot_val(mfa_data.dom_dim);
 
             if (!extents.size())
                 extents = VectorX<T>::Ones(domain.cols());
@@ -806,8 +809,10 @@ namespace mfa
 
                 TensorProduct<T>& t = tmesh.tensor_prods[tidx];
 
-                if (t.level != level)
+                if (t.done)
                     continue;
+
+                bool tensor_done    = true;                         // no new knots added in the current tensor
 
                 // setup vol iterator over knot spans
 
@@ -903,23 +908,27 @@ namespace mfa
                         if (max_err > err_limit)
                         {
                             // debug
-//                             cerr << "error above limit in span_ijk: " << span_ijk.transpose() << " param_ijk: " << param_ijk.transpose() << " dom_idx: " << dom_idx << endl;
+//                             cerr << "tensor tidx " << tidx << " has error above limit in span_ijk: " << span_ijk.transpose() << " param_ijk: " << param_ijk.transpose() << " dom_idx: " << dom_idx << endl;
 
-                            if (!empty_split_span(span_ijk))            // splitting span will have input points
+                            if (valid_split_span(span_ijk, t, new_knot_idx, new_knot_val))      // splitting span will have input points
                             {
                                 // record new knot to be inserted
                                 for (auto j = 0; j < dom_dim; j++)
                                 {
-                                    new_knot_idxs[j].push_back(span_ijk(j) + 1);
-                                    T new_knot = (all_knots[j][span_ijk(j)] + all_knots[j][span_ijk(j) + 1]) / 2.0;
-                                    new_knots[j].push_back(new_knot);
+                                    new_knot_idxs[j].push_back(new_knot_idx[j]);
+                                    new_knots[j].push_back(new_knot_val[j]);
                                 }
                                 parent_tensor_idxs.push_back(tidx);
-                                retval = false;
+                                retval      = false;
+                                tensor_done = false;
 
                                 // debug
-                                //                                 cerr << "inserting knot in span_ijk: " << span_ijk.transpose() << endl;
+//                                 cerr << "inserting knot in tensor tidx " << tidx << " span_ijk: " << span_ijk.transpose() << endl;
+//                                 fmt::print(stderr, "new_knot_idx [{}] new_knot_val [{}]\n", fmt::join(new_knot_idx, ","), fmt::join(new_knot_val, ","));
                             }
+//                             else
+//                                 // debug
+//                                 cerr << "tensor tidx " << tidx << " has error above limit in span_ijk: " << span_ijk.transpose() << " but is empty of input points" << endl;
                             break;
                         }
 
@@ -928,7 +937,16 @@ namespace mfa
 
                     span_iter.incr_iter();
                 }   // iterator over knot spans
+
+                if (tensor_done)
+                    t.done = true;
             }   // for all tensors
+
+            // debug
+//             for (auto j = 0; j < dom_dim; j++)
+//                 fmt::print(stderr, "AllErrorSpans(): dim {} new_knot_idxs[{}] = [{}]\nnew_knots[{}] = [{}]\n",
+//                         j, j, fmt::join(new_knot_idxs[j], ","), j, fmt::join(new_knots[j], ","));
+//             fmt::print(stderr, "AllErrorSpans(): parent_tensor_idxs [{}]\n", fmt::join(parent_tensor_idxs,","));
 
             return retval;
         }
@@ -936,27 +954,44 @@ namespace mfa
 #endif      // MFA_TMESH
 
         // checks whether splitting a knot span will be empty of input points
-        bool empty_split_span(VectorXi& span)                               // indices of knot span in all dims
+        // if the return value is false (an empty, invalid split), then new_knot_idx and new_knot_val are invalid
+        // if the return value is true (a valid split), then new_knot_idx and new_knot_val can be used
+        // new_knot_idx and new_knot_val allocated by caller, size not checked here
+        bool valid_split_span(VectorXi&             span,           // indices of knot span in all dims
+                              TensorProduct<T>&     t,              // current tensor
+                              vector<KnotIdx>&      new_knot_idx,   // (output) index of new knot in all dims of all_knots
+                              vector<T>&            new_knot_val)   // (output) value of new knot in all dims
         {
             for (auto k = 0; k < mfa.dom_dim; k++)
             {
+                // skip higher level knots to get right edge of span
+                KnotIdx next_span;
+                mfa_data.tmesh.knot_idx_ofst(t, span(k), 1, k, false, next_span);
+
                 // current span must contain at least two input points
                 size_t low_idx  = mfa_data.tmesh.all_knot_param_idxs[k][span(k)];
-                size_t high_idx = mfa_data.tmesh.all_knot_param_idxs[k][span(k) + 1];
+                size_t high_idx = mfa_data.tmesh.all_knot_param_idxs[k][next_span];
+
                 if (high_idx - low_idx < 2)
-                    return true;
+                    return false;
 
                 // new knot would be the midpoint of the span containing the domain point parameters
-                T new_knot_val = (mfa_data.tmesh.all_knots[k][span(k)] + mfa_data.tmesh.all_knots[k][span(k) + 1]) / 2.0;
+                new_knot_val[k] = (mfa_data.tmesh.all_knots[k][span(k)] + mfa_data.tmesh.all_knots[k][next_span]) / 2.0;
 
                 // if the current span were to be split, check whether the resulting spans will have an input point
                 ParamIdx param_idx  = low_idx;
-                while (mfa.params()[k][param_idx] < new_knot_val)
+                while (mfa.params()[k][param_idx] < new_knot_val[k])
                     param_idx++;
                 if (param_idx - low_idx == 0 || high_idx - param_idx == 0)
-                    return true;
+                    return false;
+
+                // new knot index could be span + 1 or higher depending on higher-level skipped knots
+                // all_knots needs to remain sorted by knot value
+                new_knot_idx[k] = span(k) + 1;
+                for (int i = span(k) + 1; new_knot_val[k] > mfa_data.tmesh.all_knots[k][i]; i++)
+                    new_knot_idx[k] = i;
             }
-            return false;
+            return true;
         }
 
         // computes error in knot spans and returns first new knot (in all dimensions at once) that should be inserted
