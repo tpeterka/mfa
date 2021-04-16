@@ -69,7 +69,7 @@ namespace mfa
                 prev_idx_dim_ = idx_dim_;
 
                 // Set done_dim_ for dims which have been traversed up to this point
-                for (size_t i = 0; ds_(i) <= idx && i < dom_dim_; i++)
+                for (size_t i = 0; i < dom_dim_ && ds_(i) <= idx; i++)
                 {
                     if(idx_dim_(i)==starts_dim_(i))
                         done_dim_[i] = true;
