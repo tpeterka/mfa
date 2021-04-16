@@ -113,18 +113,24 @@ struct BlockBase
     vector<T>           max_errs_reduce;        // max_errs used in the reduce operations, plus location (2 T vals per entry)
 
     // zero-initialize pointers during default construction
-    BlockBase() : mfa(NULL), input(NULL), approx(NULL), errs(NULL) { }
+    BlockBase() : 
+        mfa(NULL), 
+        input(NULL), 
+        approx(NULL), 
+        errs(NULL) { }
 
     ~BlockBase()
     {
-        if (mfa)
-            delete mfa;
+        delete mfa;
+        delete input;
+        delete approx;
+        delete errs;
 
-        if (input)
-            delete input;
-
-        if (approx)
-            delete approx;
+        delete geometry.mfa_data;
+        for (int i = 0; i < vars.size(); i++)
+        {
+            delete vars[i].mfa_data;
+        }
     }
 
     // initialize an empty block that was previously added
