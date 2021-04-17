@@ -291,11 +291,14 @@ namespace mfa
         }
 
         void IntegratePointSet( PointSet<T>&        ps,
-                                TensorProduct<T>&   tensor,
+                       const          TensorProduct<T>&   tensor,
                                 int                 min_dim,
                                 int                 max_dim)
         {
-            int pt_dim_l = mfa_data.tmesh.tensor_prods[0].ctrl_pts.cols();  // dimension of "local" control point
+            int last = mfa_data.tmesh.tensor_prods[0].ctrl_pts.cols();  // dimension of "local" control point
+
+            vector<MatrixX<T>> N(mfa_data.dom_dim);                           // basis functions in each dim.
+            vector<int>         span(mfa_data.p.size());                        // span in each dim.
 
             VectorX<T> cpt(last + 1);                       // evaluated point
             VectorX<T> param(mfa_data.dom_dim);            // parameters for one point
@@ -314,12 +317,32 @@ namespace mfa
                     mfa_data.BasisFunsK(mfa_data.p(i)+1, i, param(i), span[i], N[i], 0);
                 }
 
-                VectorX<T> temp(mfa_data.dom_dim);
-                for (int i = 0; i < ps.dom_dim; i++)
+                // decode integrated point
+                VectorX<T> temp = VectorX<T>::Zero(mfa_data.dom_dim);
+                for (int d = 0; d < ps.dom_dim; d++)
                 {
-                    for (int j = 0; j < mfa_data.p(i) + 1; j++)
+                    int p = mfa_data.p(d);
+
+                    for (int j = 0; j < p + 2; j++)
                     {
-                        temp(i) += ctlp(j) * N[i](0, span[i])
+                        // index of each basis function with support overlapping span[d]
+                        // the first p spans are width 0
+                        int i = span[d] - p + j;  
+
+                        if (i > tensor.ctrl_pts.cols()) continue;
+
+                        // Compute "integrated control point"
+                        T ctl_sum = 0;
+                        for (int l = 0; l <= i; l++)
+                        {
+                            ctl_sum += tensor.ctrl_pts(l, d);  // sum the first span[i] control points in dimension i
+                        }
+                        T span_width = mfa_data.tmesh.all_knots[d][span[d] + j + 1] - mfa_data.tmesh.all_knots[d][span[d] + j];
+                        T ctlp = span_width/p * ctl_sum;
+
+
+                        // add to decoded point partial sum
+                        temp(d) += ctlp * N[d](0, i);
                     }
                 }
                 

@@ -336,12 +336,12 @@ namespace mfa
                 MatrixX<T>& N,
                 int         row) const
         {
-            // debug
-            if (degree > span)
-            {
-                cerr << "Bad span index in BasisFunsK" << endl;
-                exit(1);
-            }
+            // // debug
+            // if (span - p(cur_dim) + degree > )
+            // {
+            //     cerr << "Bad span index in BasisFunsK" << endl;
+            //     exit(1);
+            // }
 
             vector<T> loc_knots(p(cur_dim) + 2);
 
@@ -350,6 +350,15 @@ namespace mfa
 
             for (auto j = 0; j < degree + 1; j++)
             {
+                // when degree > p, not all spans will have precisely
+                // degree+1 active basis funs; this is because only p+1
+                // knots are pinned.
+                if (span - degree + j < 0 || span - degree + j >= tmesh.all_knots[cur_dim].size()) 
+                {
+                    cerr << "ignored basis function, index " << span-degree+j << endl;
+                    continue;
+                }
+
                 for (auto i = 0; i < degree + 2; i++)
                     loc_knots[i] = tmesh.all_knots[cur_dim][span - degree + j + i];
 

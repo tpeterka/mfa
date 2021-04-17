@@ -187,8 +187,10 @@ namespace mfa
                 int                 min_dim,
                 int                 max_dim)
         {
-            mfa::Decoder<T> deocder(mfa_data, 0, false);
-            decoder.IntegratePointSet(output, min_dim, max_dim);
+            const TensorProduct<T>&t = mfa_data.tmesh.tensor_prods[0];
+
+            mfa::Decoder<T> decoder(mfa_data, 0, false);
+            decoder.IntegratePointSet(output, t, min_dim, max_dim);
         }
 
         // decode value of single point at the given parameter location
