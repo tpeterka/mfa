@@ -434,8 +434,7 @@ namespace mfa
 
             // debug
             bool debug = false;
-//             if (fabs(param(0) - 0.33333) < 1e-3 && fabs(param(1) - 0.0000) < 1e-3)
-//             if (fabs(param(0) - 0.0) < 1e-3 && fabs(param(1) - 0.0) < 1e-3)
+//             if (fabs(param(0) - 0.91) < 1e-3 && fabs(param(1) - 0.04) < 1e-3)
 //                 debug = true;
 
             // init
@@ -446,7 +445,9 @@ namespace mfa
             // compute range of anchors covering decoded point
             vector<vector<KnotIdx>> anchors(mfa_data.dom_dim);
 
-            mfa_data.tmesh.anchors(param, true, anchors);
+            //             DEPRECATE using the 'expand' argument in anchors()
+//             mfa_data.tmesh.anchors(param, true, anchors);
+            mfa_data.tmesh.anchors(param, anchors);
 
             for (auto k = 0; k < mfa_data.tmesh.tensor_prods.size(); k++)           // for all tensor products
             {

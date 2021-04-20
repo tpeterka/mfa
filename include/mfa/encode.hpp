@@ -1113,6 +1113,10 @@ namespace mfa
                 if (verbose)
                         fmt::print(stderr, "Refining level {}\n", iter);
 
+                // debug
+//                 fmt::print(stderr, "\nTmesh before refinement\n\n");
+//                 mfa_data.tmesh.print();
+
                 Refine(err_limit, extents, iter, local);
                 if (!local)
                 {

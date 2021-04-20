@@ -805,7 +805,7 @@ namespace mfa
             for (auto tidx = 0; tidx < tmesh.tensor_prods.size(); tidx++)   // for all tensors
             {
                 // debug
-//                 cerr << "\ntensor " << tidx << endl;
+//                 cerr << "tensor " << tidx << endl;
 
                 TensorProduct<T>& t = tmesh.tensor_prods[tidx];
 
