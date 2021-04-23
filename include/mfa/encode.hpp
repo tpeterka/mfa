@@ -840,7 +840,12 @@ namespace mfa
                 bool                      weighted = true)        // solve for and use weights
         {
             // debug
-            fprintf(stderr, "EncodeTensorLocalLinear\n");
+            fmt::print(stderr, "EncodeTensorLocalLinear tidx = {}\n", t_idx);
+
+            // debug
+            bool debug = false;
+//             if (t_idx == 3)
+//                 debug = true;
 
             // timing
             double setup_time   = MPI_Wtime();
@@ -854,6 +859,10 @@ namespace mfa
             vector<size_t> start_idxs(mfa_data.dom_dim);
             vector<size_t> end_idxs(mfa_data.dom_dim);
             mfa_data.tmesh.domain_pts(t_idx, false, mfa.params(), start_idxs, end_idxs);
+
+            // debug
+//             if (debug)
+//                 fmt::print(stderr, "start_idxs [{}] end_idxs [{}]\n", fmt::join(start_idxs, ","), fmt::join(end_idxs, ","));
 
             // Q matrix of relevant input domain points
             VectorXi ndom_pts(mfa_data.dom_dim);
@@ -918,8 +927,19 @@ namespace mfa
                     Ncons.row(i) /= sum;
                 }
                 else
+                {
                     fmt::print(stderr, "Warning: EncodeTensorLocalLinear(): Nfree.row({}).sum() = {}. This should not happen.\n",
                             i, Nfree.row(i).sum());
+
+                    // debug
+//                     VectorXi ijk(mfa_data.dom_dim);
+//                     dom_iter.idx_ijk(i, ijk);
+//                     cerr << "ijk = " << ijk.transpose() << endl;
+//                     fmt::print(stderr, "params = [ ");
+//                     for (auto k = 0; k < mfa_data.dom_dim; k++)
+//                         fmt::print(stderr, "{} ", mfa.params()[k][ijk(k)]);
+//                     fmt::print(stderr, "]\n");
+                }
             }
 
             // copy from dense to sparse

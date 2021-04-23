@@ -2015,11 +2015,17 @@ namespace mfa
         // determine starting and ending indices of domain input points covered by one tensor product
         // coverage extends to edge of basis functions corresponding to control points in the tensor product
         void domain_pts(TensorIdx               t_idx,              // index of current tensor product
+                // DEPRECATE the pad argument once it is no longer used, currently true only for LocalSolve for optimizer
                         bool                    pad,                // pad by degree p in each dimension
                         vector<vector<T>>&      params,             // params of input points
                         vector<size_t>&         start_idxs,         // (output) starting idxs of input points
                         vector<size_t>&         end_idxs) const     // (output) ending idxs of input points
         {
+            // debug
+            bool debug = false;
+//             if (t_idx == 3)
+//                 debug = true;
+
             start_idxs.resize(dom_dim_);
             end_idxs.resize(dom_dim_);
             vector<KnotIdx> min_anchor(dom_dim_);                // anchor for the min. edge basis functions of the new tensor
@@ -2036,12 +2042,15 @@ namespace mfa
                 // but this is hard because we would have to visit neighboring tensors to get the right tensor id
                 // for the shifted anchor, so we cheat and subtract p later from the edge of the local knot vector
                 // without any regard for actual knot lines crossed in the tmesh at that time
+                // DEPRECATE pad once no longer needed, currently only used for LocalSolve for optimizer
             }
             knot_intersections(min_anchor, t_idx, true, local_knot_idxs);
             vector<KnotIdx> start_knot_idxs(dom_dim_);
             for (auto k = 0; k < dom_dim_; k++)
             {
-                start_knot_idxs[k] = local_knot_idxs[k][0];
+                start_knot_idxs[k] = local_knot_idxs[k][1];                             // one knot away from the front
+
+                // DEPRECATE pad once no longer needed, currently only used for LocalSolve for optimizer
                 // TODO: this is not the right place to pad, see comment above
                 // but it's ok for now
                 if (pad)
@@ -2066,12 +2075,15 @@ namespace mfa
                 // but this is hard because we would have to visit neighboring tensors to get the right tensor id
                 // for the shifted anchor, so we cheat and add p later from the edge of the local knot vector
                 // without any regard for actual knot lines crossed in the tmesh at that time
+                // DEPRECATE pad once no longer needed, currently only used for LocalSolve for optimizer
             }
             knot_intersections(max_anchor, t_idx, true, local_knot_idxs);
             vector<KnotIdx> end_knot_idxs(dom_dim_);
             for (auto k = 0; k < dom_dim_; k++)
             {
-                end_knot_idxs[k] = local_knot_idxs[k].back();
+                end_knot_idxs[k] = local_knot_idxs[k][local_knot_idxs[k].size() - 2];   // one knot away from the back
+
+                // DEPRECATE pad once no longer needed, currently only used for LocalSolve for optimizer
                 // TODO: this is not the right place to pad, see comment above
                 // but it's ok for now
                 if (pad)
@@ -2091,11 +2103,9 @@ namespace mfa
             }
 
             // debug
-//             for (auto k = 0; k < dom_dim_; k++)
-//             {
-//                 fprintf(stderr, "start_knot_idx[%d] = %lu end_knot_idx[%d] = %lu\n", k, start_knot_idxs[k], k, end_knot_idxs[k]);
-//                 fprintf(stderr, "start_input_pt_idx[%d] = %lu end_input_pt_idx[%d] = %lu\n", k, start_idxs[k], k, end_idxs[k]);
-//             }
+//             if (debug)
+//                 fmt::print(stderr, "start_knot_idxs [{}] end_knot_idxs [{}] start_pt_idxs [{}] end_pt_idxs [{}]\n",
+//                         fmt::join(start_knot_idxs, ","), fmt::join(end_knot_idxs, ","), fmt::join(start_idxs, ","), fmt::join(end_idxs, ","));
         }
 
         // for a given tensor, get anchor of control point, given control point multidim index

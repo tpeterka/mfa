@@ -126,7 +126,6 @@ namespace mfa
                 encoder.Encode(t.nctrl_pts, t.ctrl_pts, t.weights, weighted);
             else
                 encoder.EncodeUnified(0, weighted);  // Assumes only one tensor product
-            
 
             // debug: try inserting a knot
             //             VectorX<T> new_knot(mfa->dom_dim);
