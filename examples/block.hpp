@@ -256,16 +256,20 @@ struct Block : public BlockBase<T>
     void generate_analytical_data(
             const diy::Master::ProxyWithLink&   cp,
             string&                             fun,
-            DomainArgs&                         args)
+            DomainArgs&                         args,
+            int                                 seed = -1)       // seed for random point generation (-1 = no randomization, 0 = choose random seed)
     {
-        if (args.structured)
-        {
-            cout << "Generating data on structured grid for function: " << fun << endl;
-            generate_analytical_data_structured(cp, fun, args);
-        }
-        else
+        if (seed >= 0)  // random point cloud
         {
             cout << "Generating data on random point cloud for function: " << fun << endl;
+
+            if (args.structured)
+            {
+                cerr << "ERROR: Cannot perform structured encoding of random point cloud" << endl;
+                exit(1);
+            }
+
+            // Prep a few more domain arguments which are used by generate_random_analytical_data
             args.model_dims.resize(2);
             args.model_dims[0] = dom_dim;
             args.model_dims[1] = 1;
@@ -276,17 +280,29 @@ struct Block : public BlockBase<T>
                 args.tot_ndom_pts *= args.ndom_pts[k];
             }
 
-            generate_analytical_data_unstructured(cp, fun, args);
+            // create unsigned conversion of seed
+            // note: seed is always >= 0 in this code block
+            unsigned useed = (unsigned)seed;
+            generate_random_analytical_data(cp, fun, args, useed);
+        }
+        else    // structured grid of points
+        {
+            cout << "Generating data on structured grid for function: " << fun << endl;
+            generate_rectilinear_analytical_data(cp, fun, args);
         }
     }
     
 
     // synthetic analytic (scalar) data, sampled on unstructured point cloud
-    void generate_analytical_data_unstructured(
+    // when seed = 0, we choose a time-dependent seed for the random number generator
+    void generate_random_analytical_data(
             const diy::Master::ProxyWithLink&   cp,
             string&                             fun,
-            DomainArgs&                         args)
+            DomainArgs&                         args,
+            unsigned int                        seed)
     {
+        assert(!args.structured);
+        
         DomainArgs* a = &args;
 
         // Prepare containers
@@ -338,7 +354,10 @@ struct Block : public BlockBase<T>
         input = new mfa::PointSet<T>(dom_dim, pt_dim, a->tot_ndom_pts);
         input->set_bounds(core_mins, core_maxs);
 
-        unsigned seed = chrono::system_clock::now().time_since_epoch().count();
+        // Choose a system-dependent seed if seed==0
+        if (seed == 0)
+            seed = chrono::system_clock::now().time_since_epoch().count();
+
         std::default_random_engine df_gen(seed);
         std::uniform_real_distribution<double> u_dist(0.0, 1.0);
 
@@ -444,8 +463,10 @@ struct Block : public BlockBase<T>
         cerr << "bounds_maxs:\n" << bounds_maxs << endl;
     }
 
-    // synthetic analytical data
-    void generate_analytical_data_structured(
+    // Creates a synthetic dataset on a rectilinear grid of points
+    // This grid can be treated as EITHER a "structured" or "unstructured"
+    // PointSet by setting the args.structured field appropriately
+    void generate_rectilinear_analytical_data(
             const diy::Master::ProxyWithLink&   cp,
             string&                             fun,        // function to evaluate
             DomainArgs&                         args)
@@ -516,7 +537,10 @@ struct Block : public BlockBase<T>
                 this->overlaps(i) = m2;
         }
 
-        input = new mfa::PointSet<T>(dom_dim, pt_dim, ndom_pts.prod(), ndom_pts);
+        if (args.structured)
+            input = new mfa::PointSet<T>(dom_dim, pt_dim, ndom_pts.prod(), ndom_pts);
+        else
+            input = new mfa::PointSet<T>(dom_dim, pt_dim, ndom_pts.prod());
 
         // assign values to the domain (geometry)
         mfa::VolIterator vol_it(ndom_pts);
@@ -645,9 +669,7 @@ struct Block : public BlockBase<T>
     void read_1d_slice_3d_vector_data(
             const       diy::Master::ProxyWithLink& cp,
             DomainArgs& args)
-    {
-        assert(args.structured);
-        
+    {   
         DomainArgs* a = &args;
         int tot_ndom_pts = 1;
         this->geometry.min_dim = 0;
@@ -669,7 +691,10 @@ struct Block : public BlockBase<T>
         vector<float> vel(3 * tot_ndom_pts);
 
         // Construct point set to contain input
-        input = new mfa::PointSet<T>(dom_dim, pt_dim, tot_ndom_pts, ndom_pts);
+        if (args.structured)
+            input = new mfa::PointSet<T>(dom_dim, pt_dim, tot_ndom_pts, ndom_pts);
+        else
+            input = new mfa::PointSet<T>(dom_dim, pt_dim, tot_ndom_pts);
 
         // rest is hard-coded for 1d
 
@@ -734,8 +759,6 @@ struct Block : public BlockBase<T>
             const       diy::Master::ProxyWithLink& cp,
             DomainArgs& args)
     {
-        assert(args.structured);
-
         DomainArgs* a = &args;
         int tot_ndom_pts = 1;
         this->geometry.min_dim = 0;
@@ -757,7 +780,10 @@ struct Block : public BlockBase<T>
         vector<float> vel(3 * tot_ndom_pts);
 
         // Construct point set to contain input
-        input = new mfa::PointSet<T>(dom_dim, pt_dim, tot_ndom_pts, ndom_pts);
+        if (args.structured)
+            input = new mfa::PointSet<T>(dom_dim, pt_dim, tot_ndom_pts, ndom_pts);
+        else
+            input = new mfa::PointSet<T>(dom_dim, pt_dim, tot_ndom_pts);
 
         // rest is hard-coded for 2d
 
@@ -827,8 +853,6 @@ struct Block : public BlockBase<T>
             const       diy::Master::ProxyWithLink& cp,
             DomainArgs& args)
     {
-        assert(args.structured);
-
         DomainArgs* a = &args;
         int tot_ndom_pts = 1;
         this->geometry.min_dim = 0;
@@ -850,7 +874,10 @@ struct Block : public BlockBase<T>
         vector<float> vel(a->full_dom_pts[0] * a->full_dom_pts[1] * 3);
 
         // Construct point set to contain input
-        input = new mfa::PointSet<T>(dom_dim, pt_dim, tot_ndom_pts, ndom_pts);
+        if (args.structured)
+            input = new mfa::PointSet<T>(dom_dim, pt_dim, tot_ndom_pts, ndom_pts);
+        else
+            input = new mfa::PointSet<T>(dom_dim, pt_dim, tot_ndom_pts);
 
         FILE *fd = fopen(a->infile.c_str(), "r");
         assert(fd);
@@ -943,8 +970,6 @@ struct Block : public BlockBase<T>
             const       diy::Master::ProxyWithLink& cp,
             DomainArgs& args)
     {
-        assert(args.structured);
-
         DomainArgs* a = &args;
         int tot_ndom_pts = 1;
         this->geometry.min_dim = 0;
@@ -965,7 +990,10 @@ struct Block : public BlockBase<T>
         }
 
         // Construct point set to contain input
-        input = new mfa::PointSet<T>(dom_dim, pt_dim, tot_ndom_pts, ndom_pts);
+        if (args.structured)
+            input = new mfa::PointSet<T>(dom_dim, pt_dim, tot_ndom_pts, ndom_pts);
+        else
+            input = new mfa::PointSet<T>(dom_dim, pt_dim, tot_ndom_pts);
 
         vector<float> vel(3 * tot_ndom_pts);
 
@@ -1039,8 +1067,6 @@ struct Block : public BlockBase<T>
             const       diy::Master::ProxyWithLink& cp,
             DomainArgs& args)
     {
-        assert(args.structured);
-
         DomainArgs* a = &args;
         int tot_ndom_pts = 1;
         this->geometry.min_dim = 0;
@@ -1061,7 +1087,10 @@ struct Block : public BlockBase<T>
         }
 
         // Construct point set to contain input
-        input = new mfa::PointSet<T>(dom_dim, pt_dim, tot_ndom_pts, ndom_pts);
+        if (args.structured)
+            input = new mfa::PointSet<T>(dom_dim, pt_dim, tot_ndom_pts, ndom_pts);
+        else
+            input = new mfa::PointSet<T>(dom_dim, pt_dim, tot_ndom_pts);
 
         vector<float> vel(a->full_dom_pts[0] * a->full_dom_pts[1] * a->full_dom_pts[2] * 3);
 
@@ -1159,8 +1188,6 @@ struct Block : public BlockBase<T>
             const       diy::Master::ProxyWithLink& cp,
             DomainArgs& args)
     {
-        assert(args.structured);
-
         DomainArgs* a = &args;
         int tot_ndom_pts = 1;
         this->geometry.min_dim = 0;
@@ -1181,7 +1208,10 @@ struct Block : public BlockBase<T>
         }
 
         // Construct point set to contain input
-        input = new mfa::PointSet<T>(dom_dim, pt_dim, tot_ndom_pts, ndom_pts);
+        if (args.structured)
+            input = new mfa::PointSet<T>(dom_dim, pt_dim, tot_ndom_pts, ndom_pts);
+        else
+            input = new mfa::PointSet<T>(dom_dim, pt_dim, tot_ndom_pts);
 
         vector<float> val(tot_ndom_pts);
 
@@ -1244,8 +1274,6 @@ struct Block : public BlockBase<T>
             const       diy::Master::ProxyWithLink& cp,
             DomainArgs& args)
     {
-        assert(args.structured);
-
         DomainArgs* a = &args;
         int tot_ndom_pts = 1;
         this->geometry.min_dim = 0;
@@ -1266,7 +1294,10 @@ struct Block : public BlockBase<T>
         }
 
         // Construct point set to contain input
-        input = new mfa::PointSet<T>(dom_dim, pt_dim, tot_ndom_pts, ndom_pts);
+        if (args.structured)
+            input = new mfa::PointSet<T>(dom_dim, pt_dim, tot_ndom_pts, ndom_pts);
+        else
+            input = new mfa::PointSet<T>(dom_dim, pt_dim, tot_ndom_pts);
 
         vector<float> val(tot_ndom_pts);
 

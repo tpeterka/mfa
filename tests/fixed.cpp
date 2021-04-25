@@ -53,6 +53,7 @@ int main(int argc, char** argv)
     int    error        = 1;                    // decode all input points and check error (bool 0 or 1)
     string infile;                              // input file name
     int    structured   = 1;                    // input format (structured grid if nonzero)
+    int    rand_seed    = -1;                   // seed to use for random data generation (-1 == no randomization)
     bool   help         = false;                // show help
     int    resolutionGrid = 0;
 
@@ -73,6 +74,7 @@ int main(int argc, char** argv)
     ops >> opts::Option('h', "help",        help,       " show help");
     ops >> opts::Option('u', "resolution",  resolutionGrid,    " resolution for grid test ");
     ops >> opts::Option('x', "structured",  structured, " parse input data from a structured (possibly curvilinear) grid");
+    ops >> opts::Option('y', "rand_seed",   rand_seed,  " seed for random point generation (-1 = no randomization, default)");
 
     if (!ops.parse(argc, argv) || help)
     {
@@ -98,10 +100,11 @@ int main(int argc, char** argv)
 #else
     cerr << "parameterization method = domain" << endl;
 #endif
-#ifdef MFA_NO_TBB
-    cerr << "TBB: off" << endl;
-#else
-    cerr << "TBB: on" << endl;
+#ifdef MFA_TBB
+    cerr << "threading: TBB" << endl;
+#endif
+#ifdef MFA_SERIAL
+    cerr << "threading: serial" << endl;
 #endif
 #ifdef MFA_NO_WEIGHTS
     cerr << "weighted = 0" << endl;
@@ -167,7 +170,7 @@ int main(int argc, char** argv)
         for (int i = 0; i < pt_dim - dom_dim; i++)      // for all science variables
             d_args.s[i] = i + 1;                        // scaling factor on range
         master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-                { b->generate_analytical_data(cp, input, d_args); });
+                { b->generate_analytical_data(cp, input, d_args, rand_seed); });
     }
 
     // sinc function f(x) = sin(x)/x, f(x,y) = sinc(x)sinc(y), ...
@@ -185,7 +188,7 @@ int main(int argc, char** argv)
         d_args.r = rot * M_PI / 180.0;   // domain rotation angle in rads
         d_args.t = twist;                // twist (waviness) of domain
         master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-                { b->generate_analytical_data(cp, input, d_args); });
+                { b->generate_analytical_data(cp, input, d_args, rand_seed); });
     }
 
     // S3D dataset
@@ -260,7 +263,7 @@ int main(int argc, char** argv)
 #else                   // range coordinate difference
     bool saved_basis = structured; // TODO: basis functions are currently only saved during encoding of structured data
     master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-            { b->range_error(cp, 1, true, true); });
+            { b->range_error(cp, 1, true, saved_basis); });
 #endif
     decode_time = MPI_Wtime() - decode_time;
 
@@ -282,10 +285,13 @@ int main(int argc, char** argv)
     real_t err_factor   = 1.0e-3;
     real_t expect_err   = -0.0;
     // for ./fixed-test -i sinc -d 3 -m 2 -p 1 -q 5 -v 20 -w 0
-    if (input == "sinc" && dom_dim == 2)
+    if (input == "sinc" && dom_dim == 2 && rand_seed == -1)
         expect_err   = 4.304489e-4;
+    // for ./fixed-test -i sinc -d 3 -m 2 -p 1 -q 5 -v 20 -w 0 -x 0 -y 4444
+    if (input == "s3d" && dom_dim == 1 && rand_seed == 4444)
+        expect_err   = 4.282089e-04;
     // for ./fixed-test -i s3d -d 2 -m 1 -p 1 -q 3 -w 0
-    if (input == "s3d" && dom_dim == 1)
+    if (input == "s3d" && dom_dim == 1 && rand_seed == -1)
         expect_err   = 6.819451e-2;
     // for ./fixed-test -i s3d -d 3 -m 2 -p 1 -q 3 -w 0
     if (input == "s3d" && dom_dim == 2)

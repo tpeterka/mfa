@@ -177,6 +177,9 @@ namespace mfa
                 const   VectorXi&       derivs)     // derivative to take in each domain dim. (0 = value, 1 = 1st deriv, 2 = 2nd deriv, ...)
                                                     // pass size-0 vector if unused
         {
+            if (saved_basis && !ps.structured)
+                cerr << "Warning: Saved basis decoding not implemented with unstructured input. Proceeding with standard decoding" << endl;
+            
             int last = mfa_data.tmesh.tensor_prods[0].ctrl_pts.cols() - 1;       // last coordinate of control point
 
 #ifdef MFA_TBB                                          // TBB version, faster (~3X) than serial
@@ -214,8 +217,6 @@ namespace mfa
                         // debug
                         if (pt_it.idx() == 0)
                             fprintf(stderr, "Using VolPt\n");
-                        if (saved_basis && !ps.structured)
-                            cerr << "Warning: Saved basis decoding not implemented with unstructured input. Proceeding with standard decoding" << endl;
                     }
 
 #else           // tmesh version
@@ -266,8 +267,6 @@ namespace mfa
                     // debug
                     if (pt_it.idx() == 0)
                         fprintf(stderr, "Using VolPt\n");
-                    if (saved_basis && !ps.structured)
-                        cerr << "Warning: Saved basis decoding not implemented with unstructured input. Proceeding with standard decoding" << endl;
 
                     VolPt(param, cpt, decode_info, mfa_data.tmesh.tensor_prods[0], derivs);
                 }
