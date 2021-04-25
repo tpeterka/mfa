@@ -47,14 +47,16 @@ int main(int argc, char** argv)
     int    geom_nctrl   = -1;                   // input number of control points for geometry (same for all dims)
     int    vars_nctrl   = 11;                   // input number of control points for all science variables (same for all dims)
     string input        = "sinc";               // input dataset
-    int    weighted     = 1;                    // solve for and use weights (bool 1 or 0))
+    int    weighted     = 1;                    // solve for and use weights (bool 0/1)
     real_t rot          = 0.0;                  // rotation angle in degrees
     real_t twist        = 0.0;                  // twist (waviness) of domain (0.0-1.0)
     real_t noise        = 0.0;                  // fraction of noise
-    int    error        = 1;                    // decode all input points and check error (bool 1 or 0)
+    int    error        = 1;                    // decode all input points and check error (bool 0/1)
     string infile;                              // input file name
-    bool   help;                                // show help
-    int    structured   = 1;                    // parse input data from a structured (possibly curvilinear) grid
+    int    structured   = 1;                    // input data format (bool 0/1)
+    int    rand_seed    = -1;                   // seed to use for random data generation (-1 == no randomization)
+    bool   help         = false;                // show help
+
 
     // get command line arguments
     opts::Options ops;
@@ -74,8 +76,8 @@ int main(int argc, char** argv)
     ops >> opts::Option('c', "error",       error,      " decode entire error field (default=true)");
     ops >> opts::Option('f', "infile",      infile,     " input file name");
     ops >> opts::Option('h', "help",        help,       " show help");
-    ops >> opts::Option('x', "structured",  structured, " parse input data from a structured (possibly curvilinear) grid");
-
+    ops >> opts::Option('x', "structured",  structured, " input data format (default=structured=true)");
+    ops >> opts::Option('y', "rand_seed",   rand_seed,  " seed for random point generation (-1 = no randomization, default)");
 
     if (!ops.parse(argc, argv) || help)
     {
@@ -151,7 +153,6 @@ int main(int argc, char** argv)
                          [&](int gid, const Bounds<real_t>& core, const Bounds<real_t>& bounds, const Bounds<real_t>& domain, const RCLink<real_t>& link)
                          { Block<real_t>::add(gid, core, bounds, domain, link, master, dom_dim, pt_dim, 0.0); });
 
-
     // set default args for diy foreach callback functions
     DomainArgs d_args(dom_dim, pt_dim);
     d_args.weighted     = weighted;
@@ -159,12 +160,13 @@ int main(int argc, char** argv)
     d_args.multiblock   = false;
     d_args.verbose      = 1;
     d_args.structured   = structured;
+    d_args.rand_seed    = rand_seed;
     for (int i = 0; i < pt_dim - dom_dim; i++)
         d_args.f[i] = 1.0;
     for (int i = 0; i < dom_dim; i++)
     {
         d_args.geom_p[i]            = geom_degree;
-        d_args.vars_p[0][i]         = vars_degree;  // assuming one science variable, vars_p[0]
+        d_args.vars_p[0][i]         = vars_degree;      // assuming one science variable, vars_p[0]
         d_args.ndom_pts[i]          = ndomp;
         d_args.geom_nctrl_pts[i]    = geom_nctrl;
         d_args.vars_nctrl_pts[0][i] = vars_nctrl;       // assuming one science variable, vars_nctrl_pts[0]
@@ -286,7 +288,7 @@ int main(int argc, char** argv)
         d_args.vars_nctrl_pts[0][1] = 108;
         d_args.vars_nctrl_pts[0][2] = 110;
         d_args.infile               = infile;
-        // d_args.infile               = "/Users/tpeterka/datasets/flame/6_small.xyz";
+//         d_args.infile               = "/Users/tpeterka/datasets/flame/6_small.xyz";
         if (dom_dim == 1)
             master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
                     { b->read_1d_slice_3d_vector_data(cp, d_args); });
@@ -322,10 +324,11 @@ int main(int argc, char** argv)
     // nek5000 dataset
     if (input == "nek")
     {
-        for (int i = 0; i < 3; i++)
-            d_args.ndom_pts[i] = 200;
-        for (int i = 0; i < 3; i++)
+        for (int i = 0; i < dom_dim; i++)
+        {
+            d_args.ndom_pts[i]          = 200;
             d_args.vars_nctrl_pts[0][i] = 100;
+        }
         d_args.infile = infile;
 //         d_args.infile = "/Users/tpeterka/datasets/nek5000/200x200x200/0.xyz";
         if (dom_dim == 2)
@@ -415,7 +418,7 @@ int main(int argc, char** argv)
         master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
                 { b->error(cp, 1, true); });
 #else                   // range coordinate difference
-        bool saved_basis = structured; // TODO: basis functions are currently only saved when encoding structured data
+        bool saved_basis = structured; // TODO: basis functions are currently only saved during encoding of structured data
         master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
                 { b->range_error(cp, 1, true, saved_basis); });
 #endif

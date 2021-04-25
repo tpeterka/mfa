@@ -60,6 +60,7 @@ struct DomainArgs : public ModelInfo
         n = 0;
         multiblock = false;
         structured = true;   // Assume structured input by default
+        rand_seed  = -1;
     }
     size_t              tot_ndom_pts;
     vector<int>         starts;                     // starting offsets of ndom_pts (optional, usually assumed 0)
@@ -75,6 +76,7 @@ struct DomainArgs : public ModelInfo
     string              infile;                     // input filename
     bool                multiblock;                 // multiblock domain, get bounds from block
     bool                structured;                 // input data lies on unstructured grid
+    int                 rand_seed;                  // seed for generating random data. -1: no randomization, 0: choose seed at random
 };
 
 // block
@@ -256,10 +258,9 @@ struct Block : public BlockBase<T>
     void generate_analytical_data(
             const diy::Master::ProxyWithLink&   cp,
             string&                             fun,
-            DomainArgs&                         args,
-            int                                 seed = -1)       // seed for random point generation (-1 = no randomization, 0 = choose random seed)
+            DomainArgs&                         args)
     {
-        if (seed >= 0)  // random point cloud
+        if (args.rand_seed >= 0)  // random point cloud
         {
             cout << "Generating data on random point cloud for function: " << fun << endl;
 
@@ -282,7 +283,7 @@ struct Block : public BlockBase<T>
 
             // create unsigned conversion of seed
             // note: seed is always >= 0 in this code block
-            unsigned useed = (unsigned)seed;
+            unsigned useed = (unsigned)args.rand_seed;
             generate_random_analytical_data(cp, fun, args, useed);
         }
         else    // structured grid of points
@@ -302,7 +303,7 @@ struct Block : public BlockBase<T>
             unsigned int                        seed)
     {
         assert(!args.structured);
-        
+
         DomainArgs* a = &args;
 
         // Prepare containers
