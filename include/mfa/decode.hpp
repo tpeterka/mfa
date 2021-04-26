@@ -99,18 +99,18 @@ namespace mfa
                                                         // control points
         vector<size_t>      cs;                         // control point stride (only in decoder, not mfa)
         int                 verbose;                    // output level
-        const MFA<T>&       mfa;                        // the mfa top-level object
         const MFA_Data<T>&  mfa_data;                   // the mfa data model
+        bool                saved_basis;                // flag to use saved basis functions within mfa_data
 
     public:
 
         Decoder(
-                const MFA<T>&       mfa_,               // MFA top-level object
-                const MFA_Data<T>&  mfa_data_,          // MFA data model
-                int                 verbose_) :         // debug level
-            mfa(mfa_),
+                const MFA_Data<T>&  mfa_data_,              // MFA data model
+                int                 verbose_,               // debug level
+                bool                saved_basis_=false) :   // flag to reuse saved basis functions   
             mfa_data(mfa_data_),
-            verbose(verbose_)
+            verbose(verbose_),
+            saved_basis(saved_basis_)
         {
             // ensure that encoding was already done
             if (!mfa_data.p.size()                               ||
@@ -153,81 +153,82 @@ namespace mfa
 
         ~Decoder() {}
 
-        // computes approximated points from a given set of domain points and an n-d NURBS volume
+        // computes approximated points from a given set of parameter values  and an n-d NURBS volume
         // P&T eq. 9.77, p. 424
-        // assumes all vectors have been correctly resized by the caller
-        void DecodeDomain(
-                MatrixX<T>& approx,                 // decoded output points (1st dim changes fastest)
-                int         min_dim,                // first dimension to decode
-                int         max_dim,                // last dimension to decode
-                bool        saved_basis)            // whether basis functions were saved and can be reused
+        // assumes ps contains parameter values to decode at; 
+        // decoded points store in ps
+        void DecodePointSet(
+                        PointSet<T>&    ps,         // PointSet containing parameters to decode at
+                        int             min_dim,    // first dimension to decode
+                        int             max_dim)    // last dimension to decode
         {
             VectorXi no_ders;                       // size 0 means no derivatives
-            Decode(approx, min_dim, max_dim, saved_basis, no_ders);
-        }
-
-        // computes approximated points from a given set of domain points and an n-d NURBS volume
+            DecodePointSet(ps, min_dim, max_dim, no_ders);
+        }    
+    
+        // computes approximated points from a given set of parameter values  and an n-d NURBS volume
         // P&T eq. 9.77, p. 424
-        // assumes all vectors have been correctly resized by the caller
-        void DecodeDomain(
-                MatrixX<T>&     approx,                 // decoded output points (1st dim changes fastest)
-                int             min_dim,                // first dimension to decode
-                int             max_dim,                // last dimension to decode
-                bool            saved_basis,            // whether basis functions were saved and can be reused
-                const VectorXi& derivs)                 // derivative to take in each domain dim. (0 = value, 1 = 1st deriv, 2 = 2nd deriv, ...)
-                                                        // pass size-0 vector if unused
+        // assumes ps contains parameter values to decode at; 
+        // decoded points store in ps
+        void DecodePointSet(
+                        PointSet<T>&    ps,         // PointSet containing parameters to decode at
+                        int             min_dim,    // first dimension to decode
+                        int             max_dim,    // last dimension to decode
+                const   VectorXi&       derivs)     // derivative to take in each domain dim. (0 = value, 1 = 1st deriv, 2 = 2nd deriv, ...)
+                                                    // pass size-0 vector if unused
         {
-            VectorXi iter = VectorXi::Zero(mfa_data.dom_dim);                    // parameter index (iteration count, ie, ijk) in current dim.
+            if (saved_basis && !ps.structured)
+                cerr << "Warning: Saved basis decoding not implemented with unstructured input. Proceeding with standard decoding" << endl;
+            
             int last = mfa_data.tmesh.tensor_prods[0].ctrl_pts.cols() - 1;       // last coordinate of control point
 
 #ifdef MFA_TBB                                          // TBB version, faster (~3X) than serial
-
             // thread-local DecodeInfo
             // ref: https://www.threadingbuildingblocks.org/tutorial-intel-tbb-thread-local-storage
             enumerable_thread_specific<DecodeInfo<T>> thread_decode_info(mfa_data, derivs);
-
-            parallel_for (size_t(0), (size_t)approx.rows(), [&] (size_t i)
+            
+            parallel_for (blocked_range<size_t>(0, ps.npts), [&](blocked_range<size_t>& r)
             {
-                // convert linear idx to multidim. i,j,k... indices in each domain dimension
-                VectorXi ijk(mfa_data.dom_dim);
-                mfa_data.idx2ijk(mfa.ds(), i, ijk);
-
-                // compute parameters for the vertices of the cell
-                VectorX<T> param(mfa_data.dom_dim);
-                for (int j = 0; j < mfa_data.dom_dim; j++)
-                    param(j) = mfa.params()[j][ijk(j)];
-
-                // compute approximated point for this parameter vector
-                VectorX<T> cpt(last + 1);               // evaluated point
+                auto pt_it  = ps.iterator(r.begin());
+                auto pt_end = ps.iterator(r.end());
+                for (; pt_it != pt_end; ++pt_it)
+                {
+                    VectorX<T>  cpt(last + 1);              // evaluated point
+                    VectorX<T>  param(mfa_data.dom_dim);    // vector of param values
+                    VectorXi    ijk(mfa_data.dom_dim);      // vector of param indices (structured grid only)
+                    pt_it.params(param);  
+                    // compute approximated point for this parameter vector
 
 #ifndef MFA_TMESH   // original version for one tensor product
 
-                if (saved_basis)
-                {
-                    VolPt_saved_basis(ijk, param, cpt, thread_decode_info.local(), mfa_data.tmesh.tensor_prods[0]);
+                    if (saved_basis && ps.structured)
+                    {
+                        pt_it.ijk(ijk);
+                        VolPt_saved_basis(ijk, param, cpt, thread_decode_info.local(), mfa_data.tmesh.tensor_prods[0]);
 
-                    // debug
-                    if (i == 0)
-                        fprintf(stderr, "Using VolPt_saved_basis\n");
-                }
-                else
-                {
-                    VolPt(param, cpt, thread_decode_info.local(), mfa_data.tmesh.tensor_prods[0], derivs);
+                        // debug
+                        if (pt_it.idx() == 0)
+                            fprintf(stderr, "Using VolPt_saved_basis\n");
+                    }
+                    else
+                    {
+                        VolPt(param, cpt, thread_decode_info.local(), mfa_data.tmesh.tensor_prods[0], derivs);
 
-                    // debug
-                    if (i == 0)
-                        fprintf(stderr, "Using VolPt\n");
-                }
+                        // debug
+                        if (pt_it.idx() == 0)
+                            fprintf(stderr, "Using VolPt\n");
+                    }
 
 #else           // tmesh version
 
-                if (i == 0)
-                    fprintf(stderr, "Using VolPt_tmesh\n");
-                VolPt_tmesh(param, cpt);
+                    if (pt_it.idx() == 0)
+                        fprintf(stderr, "Using VolPt_tmesh\n");
+                    VolPt_tmesh(param, cpt);
 
 #endif
 
-                approx.block(i, min_dim, 1, max_dim - min_dim + 1) = cpt.transpose();
+                    ps.domain.block(pt_it.idx(), min_dim, 1, max_dim - min_dim + 1) = cpt.transpose();
+                }
             });
             if (verbose)
                 fprintf(stderr, "100 %% decoded\n");
@@ -235,69 +236,58 @@ namespace mfa
 #endif              // end TBB version
 
 #ifdef MFA_SERIAL   // serial version
-
             DecodeInfo<T> decode_info(mfa_data, derivs);    // reusable decode point info for calling VolPt repeatedly
 
             VectorX<T> cpt(last + 1);                       // evaluated point
-            VectorX<T> param(mfa_data.p.size());            // parameters for one point
+            VectorX<T> param(mfa_data.dom_dim);            // parameters for one point
+            VectorXi   ijk(mfa_data.dom_dim);      // vector of param indices (structured grid only)
 
-            for (size_t i = 0; i < approx.rows(); i++)
+            auto pt_it  = ps.begin();
+            auto pt_end = ps.end();
+            for (; pt_it != pt_end; ++pt_it)
             {
-                // extract parameter vector for one input point of all params
-                for (size_t j = 0; j < mfa_data.dom_dim; j++)
-                    param(j) = mfa.params()[j][iter(j)];
+                // Get parameter values and indices at current point
+                pt_it.params(param);
 
                 // compute approximated point for this parameter vector
 
 #ifndef MFA_TMESH   // original version for one tensor product
 
-                if (saved_basis)
+                if (saved_basis && ps.structured)
                 {
-                    VolPt_saved_basis(iter, param, cpt, decode_info, mfa_data.tmesh.tensor_prods[0]);
+                    pt_it.ijk(ijk);
+                    VolPt_saved_basis(ijk, param, cpt, decode_info, mfa_data.tmesh.tensor_prods[0]);
 
                     // debug
-                    if (i == 0)
+                    if (pt_it.idx() == 0)
                         fprintf(stderr, "Using VolPt_saved_basis\n");
                 }
                 else
                 {
-                    VolPt(param, cpt, decode_info, mfa_data.tmesh.tensor_prods[0], derivs);
-
                     // debug
-                    if (i == 0)
+                    if (pt_it.idx() == 0)
                         fprintf(stderr, "Using VolPt\n");
+
+                    VolPt(param, cpt, decode_info, mfa_data.tmesh.tensor_prods[0], derivs);
                 }
 
 #else           // tmesh version
 
-                if (i == 0)
+                if (pt_it.idx() == 0)
                     fprintf(stderr, "Using VolPt_tmesh\n");
                 VolPt_tmesh(param, cpt);
 
 #endif          // end serial version
 
-                // update the indices in the linearized vector of all params for next input point
-                for (size_t j = 0; j < mfa_data.dom_dim; j++)
-                {
-                    if (iter(j) < mfa.ndom_pts()(j) - 1)
-                    {
-                        iter(j)++;
-                        break;
-                    }
-                    else
-                        iter(j) = 0;
-                }
-
-                approx.block(i, min_dim, 1, max_dim - min_dim + 1) = cpt.transpose();
+                ps.domain.block(pt_it.idx(), min_dim, 1, max_dim - min_dim + 1) = cpt.transpose();
 
                 // print progress
                 if (verbose)
-                    if (i > 0 && approx.rows() >= 100 && i % (approx.rows() / 100) == 0)
-                        fprintf(stderr, "\r%.0f %% decoded", (T)i / (T)(approx.rows()) * 100);
+                    if (pt_it.idx() > 0 && ps.npts >= 100 && pt_it.idx() % (ps.npts / 100) == 0)
+                        fprintf(stderr, "\r%.0f %% decoded", (T)pt_it.idx() / (T)(ps.npts) * 100);
             }
 
 #endif
-
         }
 
         // decode at a regular grid using saved basis that is computed once by this function
@@ -310,34 +300,21 @@ namespace mfa
                         const VectorXi&     ndom_pts)       // number of points to decode in each direction
         {
             // precompute basis functions
-            vector<vector<T>>   params(mfa_data.dom_dim);   // params for points to be decoded
             const VectorXi&     nctrl_pts = mfa_data.tmesh.tensor_prods[0].nctrl_pts;   // reference to control points (assume only one tensor)
-            vector<MatrixX<T>>  NN(mfa_data.dom_dim);       // basis functions for points to be decoded
-            for (int k = 0; k < mfa_data.dom_dim; k++)
-                NN[k] = MatrixX<T>::Zero(ndom_pts(k), nctrl_pts(k));
 
-            // compute params for points to be decoded
-            for (int k = 0; k < mfa_data.dom_dim; k++)
-            {
-                params[k].resize(ndom_pts(k));
-                T step = 0;
-                if (ndom_pts(k) > 1)
-                    step = (max_params(k) - min_params(k)) / (ndom_pts(k) - 1);
-                params[k][0] = min_params(k);
-                for (int i = 1; i < ndom_pts(k); i++)
-                {
-                    params[k][i] = min_params(k) + i * step;
-                    // make sure we are between 0 and 1 !!
-                    if (params[k][i] < 0)
-                        params[k][i] = 0.;
-                    if (params[k][i] > 1.0)
-                        params[k][i] = 1.0;
-                }
-            }
+            Param<T> full_params(ndom_pts, min_params, max_params);
+
+            // TODO: Eventually convert "result" into a PointSet and iterate through that,
+            //       instead of simply using a naked Param object  
+            auto& params = full_params.param_grid;
+
 
             // compute basis functions for points to be decoded
+            vector<MatrixX<T>>  NN(mfa_data.dom_dim);
             for (int k = 0; k < mfa_data.dom_dim; k++)
             {
+                NN[k] = MatrixX<T>::Zero(ndom_pts(k), nctrl_pts(k));
+
                 for (int i = 0; i < NN[k].rows(); i++)
                 {
                     int span = mfa_data.FindSpan(k, params[k][i], nctrl_pts(k));
@@ -360,7 +337,7 @@ namespace mfa
 
             DecodeInfo<T>   decode_info(mfa_data, derivs);  // reusable decode point info for calling VolPt repeatedly
             VectorX<T>      cpt(mfa_data.tmesh.tensor_prods[0].ctrl_pts.cols());                      // evaluated point
-            VectorX<T>      param(mfa_data.p.size());       // parameters for one point
+            VectorX<T>      param(mfa_data.dom_dim);       // parameters for one point
             VectorXi        ijk(mfa_data.dom_dim);          // multidim index in grid
 
             while (!vol_it.done())

@@ -163,6 +163,7 @@ int main(int argc, char** argv)
     d_args.verbose      = 1;
     d_args.r            = 0.0;
     d_args.t            = 0.0;
+    d_args.structured   = true; // adaptive fitting does not yet support unstructured input
     for (int i = 0; i < pt_dim - dom_dim; i++)
         d_args.f[i] = 1.0;
     for (int i = 0; i < dom_dim; i++)
@@ -173,6 +174,8 @@ int main(int argc, char** argv)
         d_args.geom_nctrl_pts[i]    = geom_nctrl;
         d_args.vars_nctrl_pts[0][i] = vars_nctrl;       // assuming one science variable, vars_nctrl_pts[0]
     }
+
+    // initialize input data
 
     // sine function f(x) = sin(x), f(x,y) = sin(x)sin(y), ...
     if (input == "sine")
@@ -202,8 +205,8 @@ int main(int argc, char** argv)
         }
         for (int i = 0; i < pt_dim - dom_dim; i++)      // for all science variables
             d_args.s[i] = 10.0 * (i + 1);                 // scaling factor on range
-        d_args.r            = rot * M_PI / 180.0;   // domain rotation angle in rads
-        d_args.t            = twist;                // twist (waviness) of domain
+        d_args.r = rot * M_PI / 180.0;   // domain rotation angle in rads
+        d_args.t = twist;                // twist (waviness) of domain
         master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
                 { b->generate_analytical_data(cp, input, d_args); });
     }
@@ -251,7 +254,7 @@ int main(int argc, char** argv)
             d_args.max[i]       = 1.0;
         }
         for (int i = 0; i < pt_dim - dom_dim; i++)      // for all science variables
-            d_args.s[i] = 1;                            // scaling factor on range
+            d_args.s[i] = 1.0;                          // scaling factor on range
         master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
                 { b->generate_analytical_data(cp, input, d_args); });
     }
@@ -277,7 +280,7 @@ int main(int argc, char** argv)
             d_args.max[i]       = 0.95;
         }
         for (int i = 0; i < pt_dim - dom_dim; i++)      // for all science variables
-            d_args.s[i] = 1;                            // scaling factor on range
+            d_args.s[i] = 1.0;                          // scaling factor on range
         master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
                 { b->generate_analytical_data(cp, input, d_args); });
     }
@@ -285,11 +288,12 @@ int main(int argc, char** argv)
     // S3D dataset
     if (input == "s3d")
     {
-        d_args.ndom_pts[0]          = 704;
-        d_args.ndom_pts[1]          = 540;
-        d_args.ndom_pts[2]          = 550;
-        d_args.infile               = infile;
-//         d_args.infile               = "/Users/tpeterka/datasets/flame/6_small.xyz";
+        d_args.ndom_pts.resize(3);
+        d_args.ndom_pts[0]  = 704;
+        d_args.ndom_pts[1]  = 540;
+        d_args.ndom_pts[2]  = 550;
+        d_args.infile       = infile;
+//         d_args.infile       = "/Users/tpeterka/datasets/flame/6_small.xyz";
         if (dom_dim == 1)
             master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
                     { b->read_1d_slice_3d_vector_data(cp, d_args); });
@@ -309,10 +313,12 @@ int main(int argc, char** argv)
     // nek5000 dataset
     if (input == "nek")
     {
-        for (int i = 0; i < 3; i++)
-            d_args.ndom_pts[i] = 200;
-        d_args.infile = infile;
-//         d_args.infile = "/Users/tpeterka/datasets/nek5000/200x200x200/0.xyz";
+        d_args.ndom_pts.resize(3);
+        d_args.ndom_pts[0]  = 200;
+        d_args.ndom_pts[1]  = 200;
+        d_args.ndom_pts[2]  = 200;
+        d_args.infile       = infile;
+//         d_args.infile       = "/Users/tpeterka/datasets/nek5000/200x200x200/0.xyz";
         if (dom_dim == 2)
             master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
                     { b->read_2d_slice_3d_vector_data(cp, d_args); });
@@ -329,11 +335,12 @@ int main(int argc, char** argv)
     // rti dataset
     if (input == "rti")
     {
+        d_args.ndom_pts.resize(3);
         d_args.ndom_pts[0]  = 288;
         d_args.ndom_pts[1]  = 512;
         d_args.ndom_pts[2]  = 512;
         d_args.infile       = infile;
-//         d_args.infile = "/Users/tpeterka/datasets/rti/dd07g_xxsmall_le.xyz";
+//         d_args.infile       = "/Users/tpeterka/datasets/rti/dd07g_xxsmall_le.xyz";
         if (dom_dim == 2)
             master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
                     { b->read_2d_slice_3d_vector_data(cp, d_args); });
@@ -349,7 +356,8 @@ int main(int argc, char** argv)
 
     // cesm dataset
     if (input == "cesm")
-    {
+    {   
+        d_args.ndom_pts.resize(2);
         d_args.ndom_pts[0]  = 1800;
         d_args.ndom_pts[1]  = 3600;
         d_args.infile       = infile;

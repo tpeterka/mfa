@@ -33,12 +33,24 @@ add_test                    (NAME fixed-sinc-2d-test-grid
                              COMMAND fixed-test -i sinc -d 3 -m 2 -p 1 -q 5 -v 20 -w 0 -u 20 -u 20
                             )
 
+add_test                    (NAME fixed-sinc-2d-unstructured-test
+                             COMMAND fixed-test -i sinc -d 3 -m 2 -p 1 -q 5 -v 20 -w 0 -x 0
+                            )                           
+
+add_test                    (NAME fixed-sinc-2d-random-test
+                             COMMAND fixed-test -i sinc -d 3 -m 2 -p 1 -q 5 -v 20 -w 0 -x 0 -y 4444
+                            )
+
 add_test                    (NAME fixed-s3d-1d-test
                              COMMAND fixed-test -i s3d -d 2 -m 1 -p 1 -q 3 -w 0 -f ${s3d_infile}
                             )
 
 add_test                    (NAME fixed-s3d-2d-test
                              COMMAND fixed-test -i s3d -d 3 -m 2 -p 1 -q 3 -w 0 -f ${s3d_infile}
+                            )
+
+add_test                    (NAME fixed-s3d-2d-unstructured-test
+                             COMMAND fixed-test -i s3d -d 3 -m 2 -p 1 -q 3 -w 0 -f ${s3d_infile} -x 0
                             )
 
 add_test                    (NAME decode-grid1
