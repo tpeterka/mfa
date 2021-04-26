@@ -281,6 +281,8 @@ int main(int argc, char** argv)
     // S3D dataset
     if (input == "s3d")
     {
+        d_args.ndom_pts.resize(3);
+        d_args.vars_nctrl_pts[0].resize(3);
         d_args.ndom_pts[0]          = 704;
         d_args.ndom_pts[1]          = 540;
         d_args.ndom_pts[2]          = 550;
@@ -323,12 +325,13 @@ int main(int argc, char** argv)
 
     // nek5000 dataset
     if (input == "nek")
-    {
-        for (int i = 0; i < dom_dim; i++)
-        {
+    {   
+        d_args.ndom_pts.resize(3);
+        for (int i = 0; i < 3; i++)
             d_args.ndom_pts[i]          = 200;
+        for (int i = 0; i < dom_dim; i++)
             d_args.vars_nctrl_pts[0][i] = 100;
-        }
+
         d_args.infile = infile;
 //         d_args.infile = "/Users/tpeterka/datasets/nek5000/200x200x200/0.xyz";
         if (dom_dim == 2)
@@ -347,6 +350,8 @@ int main(int argc, char** argv)
     // rti dataset
     if (input == "rti")
     {
+        d_args.ndom_pts.resize(3);
+        d_args.vars_nctrl_pts[0].resize(3);
         d_args.ndom_pts[0]  = 288;
         d_args.ndom_pts[1]  = 512;
         d_args.ndom_pts[2]  = 512;
@@ -384,6 +389,8 @@ int main(int argc, char** argv)
     // cesm dataset
     if (input == "cesm")
     {
+        d_args.ndom_pts.resize(2);
+        d_args.vars_nctrl_pts[0].resize(2);
         d_args.ndom_pts[0]          = 1800;
         d_args.ndom_pts[1]          = 3600;
         d_args.vars_nctrl_pts[0][0] = 180;
