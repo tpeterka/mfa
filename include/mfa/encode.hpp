@@ -727,13 +727,13 @@ namespace mfa
                 int nnz_col = 0;                                                                // num nonzeros in current column
 
                 // iterator over input points
-                VolIterator dom_iter(ndom_pts, dom_starts, mfa.ndom_pts());
+                VolIterator dom_iter(ndom_pts, dom_starts, input.ndom_pts);
                 while (!dom_iter.done())
                 {
                     for (auto k = 0; k < mfa_data.dom_dim; k++)                                 // for all dims
                     {
                         int p = mfa_data.p(k);                                                  // degree of current dim.
-                        T u = mfa.params()[k][dom_iter.idx_dim(k)];                             // parameter of current input point
+                        T u = input.params->param_grid[k][dom_iter.idx_dim(k)];                             // parameter of current input point
                         T B = mfa_data.OneBasisFun(k, u, local_knots[k]);                       // basis function
                         Nfree(dom_iter.cur_iter(), free_iter.cur_iter()) =
                             (k == 0 ? B : Nfree(dom_iter.cur_iter(), free_iter.cur_iter()) * B);
@@ -895,7 +895,7 @@ namespace mfa
             // get input domain points covered by the tensor
             vector<size_t> start_idxs(mfa_data.dom_dim);
             vector<size_t> end_idxs(mfa_data.dom_dim);
-            mfa_data.tmesh.domain_pts(t_idx, false, mfa.params(), start_idxs, end_idxs);
+            mfa_data.tmesh.domain_pts(t_idx, false, input.params->param_grid, start_idxs, end_idxs);
 
             // debug
 //             if (debug)
@@ -910,11 +910,11 @@ namespace mfa
                 dom_starts(k)   = start_idxs[k];                                                    // need Eigen vector from STL vector
             }
             MatrixX<T> Q(ndom_pts.prod(), pt_dim);
-            VolIterator dom_iter(ndom_pts, dom_starts, mfa.ndom_pts());
+            VolIterator dom_iter(ndom_pts, dom_starts, input.ndom_pts);
             while (!dom_iter.done())
             {
                 Q.block(dom_iter.cur_iter(), 0, 1, pt_dim) =
-                    domain.block(dom_iter.sub_full_idx(dom_iter.cur_iter()), mfa_data.min_dim, 1, pt_dim);
+                    input.domain.block(dom_iter.sub_full_idx(dom_iter.cur_iter()), mfa_data.min_dim, 1, pt_dim);
                 dom_iter.incr_iter();
             }
 
@@ -2008,7 +2008,7 @@ namespace mfa
             VectorX<T> myextents = extents.size() ? extents : VectorX<T>::Ones(mfa_data.tmesh.tensor_prods[0].ctrl_pts.cols());
 
             // find new knots
-            mfa::NewKnots<T> nk(mfa, mfa_data);
+            mfa::NewKnots<T> nk(mfa_data, input);
 
             // vectors of new_nctrl_pts, new_ctrl_pts, new_weights, one instance for each knot to be inserted
             vector<VectorXi>    new_nctrl_pts;
@@ -2020,7 +2020,6 @@ namespace mfa
 
             // check all knots spans at a level for error
             bool done = nk.AllErrorSpans(
-                    domain,
                     myextents,
                     err_limit,
                     parent_tensor_idxs,
@@ -2063,7 +2062,7 @@ namespace mfa
                     if (mfa_data.tmesh.insert_knot(j,
                                 inserted_knot_idxs[j][i],
                                 iter + 1,
-                                inserted_knots[j][i], mfa.params()))
+                                inserted_knots[j][i], input.params->param_grid))
                     {
                         inserted[j] = true;
                         // increment subsequent insertions

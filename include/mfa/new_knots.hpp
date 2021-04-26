@@ -752,7 +752,6 @@ namespace mfa
         // returns true if all done, ie, no new knots inserted
         // This version is for tmesh with local solve
         bool AllErrorSpans(
-                const MatrixX<T>&           domain,                 // input points
                 VectorX<T>                  extents,                // extents in each dimension, for normalizing error (size 0 means do not normalize)
                 T                           err_limit,              // max. allowed error
                 vector<TensorIdx>&          parent_tensor_idxs,     // (output) idx of parent tensor of each new knot to be inserted
@@ -772,16 +771,16 @@ namespace mfa
             // debug
             fprintf(stderr, "*** Using local solve in AllErrorSpans ***\n");
 
-            Decoder<T>          decoder(mfa, mfa_data, 1);
+            Decoder<T>          decoder(mfa_data, 1);
             VectorX<T>          param(dom_dim);                             // parameters of domain point
             VectorX<T>          cpt(tmesh.tensor_prods[0].ctrl_pts.cols()); // decoded point
 
             // new knot when splitting a knot span
-            vector<KnotIdx> new_knot_idx(mfa_data.dom_dim);
-            vector<T>       new_knot_val(mfa_data.dom_dim);
+            vector<KnotIdx> new_knot_idx(dom_dim);
+            vector<T>       new_knot_val(dom_dim);
 
             if (!extents.size())
-                extents = VectorX<T>::Ones(domain.cols());
+                extents = VectorX<T>::Ones(input.pt_dim);
 
             // parameters for vol iterator over knot spans in a tensor product and parameters in a knot span
             VectorXi sub_npts(dom_dim);
@@ -790,7 +789,7 @@ namespace mfa
             VectorXi span_ijk(dom_dim);
             VectorXi param_ijk(dom_dim);
 
-            VolIterator dom_iter(mfa.ndom_pts());                           // iterator over input domain points
+            VolIterator dom_iter(input.ndom_pts);                           // iterator over input domain points
 
             for (auto tidx = 0; tidx < tmesh.tensor_prods.size(); tidx++)   // for all tensors
             {
@@ -838,7 +837,7 @@ namespace mfa
                         if (all_knot_levels[k][span_ijk(k)] > t.level)
                             break;
                     }
-                    if (k < mfa.dom_dim)
+                    if (k < dom_dim)
                     {
                         span_iter.incr_iter();
                         continue;
@@ -856,7 +855,7 @@ namespace mfa
                             incr++;
                         ParamIdx max = all_knot_param_idxs[j][span_ijk(j) + incr];      // parameter index at end of span
 
-                        if (max == mfa.params()[j].size() - 1)                          // include last parameter in last knot span
+                        if (max == input.params->param_grid[j].size() - 1)                          // include last parameter in last knot span
                             max++;
 
                         // debug
@@ -883,7 +882,7 @@ namespace mfa
 
                         // decode a point at the input point parameters
                         for (auto j = 0; j < dom_dim; j++)
-                            param(j) = mfa.params()[j][param_ijk(j)];
+                            param(j) = input.params->param_grid[j][param_ijk(j)];
                         decoder.VolPt_tmesh(param, cpt);
 
                         // error between decoded point and input point
@@ -891,7 +890,7 @@ namespace mfa
                         T max_err = 0.0;
                         for (auto j = 0; j < mfa_data.max_dim - mfa_data.min_dim + 1; j++)
                         {
-                            T err = fabs(cpt(j) - domain(dom_idx, mfa_data.min_dim + j)) / extents(mfa_data.min_dim + j);
+                            T err = fabs(cpt(j) - input.domain(dom_idx, mfa_data.min_dim + j)) / extents(mfa_data.min_dim + j);
                             max_err = err > max_err ? err : max_err;
                         }
 
@@ -970,7 +969,7 @@ namespace mfa
 
                 // if the current span were to be split, check whether the resulting spans will have an input point
                 ParamIdx param_idx  = low_idx;
-                while (input.params.param_grid[k][param_idx] < new_knot_val[k])
+                while (input.params->param_grid[k][param_idx] < new_knot_val[k])
                     param_idx++;
                 if (param_idx - low_idx == 0 || high_idx - param_idx == 0)
                     return false;

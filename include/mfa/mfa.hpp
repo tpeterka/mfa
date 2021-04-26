@@ -27,10 +27,10 @@
 // #define WEIGH_ALL_DIMS
 
 // comment out the following line for original single tensor product version
-// #define MFA_TMESH
+#define MFA_TMESH
 
 // linear least squares local solve
-// #define MFA_LINEAR_LOCAL
+#define MFA_LINEAR_LOCAL
 
 // refine as many knot spans in one iteration as possible
 #define MFA_ALL_SPANS
@@ -135,7 +135,7 @@ namespace mfa
         // adaptive encode
         void AdaptiveEncode(
                 MFA_Data<T>&        mfa_data,               // mfa data model
-                const PointSet<T>& input,                  // input points
+                const PointSet<T>&  input,                  // input points
                 T                   err_limit,              // maximum allowable normalized error
                 int                 verbose,                // debug level
                 bool                weighted,               // solve for and use weights (default = true)
