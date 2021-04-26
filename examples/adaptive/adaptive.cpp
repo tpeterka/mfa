@@ -175,6 +175,8 @@ int main(int argc, char** argv)
         d_args.vars_nctrl_pts[0][i] = vars_nctrl;       // assuming one science variable, vars_nctrl_pts[0]
     }
 
+    // initialize input data
+
     // sine function f(x) = sin(x), f(x,y) = sin(x)sin(y), ...
     if (input == "sine")
     {
@@ -203,8 +205,8 @@ int main(int argc, char** argv)
         }
         for (int i = 0; i < pt_dim - dom_dim; i++)      // for all science variables
             d_args.s[i] = 10.0 * (i + 1);                 // scaling factor on range
-        d_args.r            = rot * M_PI / 180.0;   // domain rotation angle in rads
-        d_args.t            = twist;                // twist (waviness) of domain
+        d_args.r = rot * M_PI / 180.0;   // domain rotation angle in rads
+        d_args.t = twist;                // twist (waviness) of domain
         master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
                 { b->generate_analytical_data(cp, input, d_args); });
     }
@@ -252,7 +254,7 @@ int main(int argc, char** argv)
             d_args.max[i]       = 1.0;
         }
         for (int i = 0; i < pt_dim - dom_dim; i++)      // for all science variables
-            d_args.s[i] = 1;                            // scaling factor on range
+            d_args.s[i] = 1.0;                          // scaling factor on range
         master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
                 { b->generate_analytical_data(cp, input, d_args); });
     }
@@ -278,7 +280,7 @@ int main(int argc, char** argv)
             d_args.max[i]       = 0.95;
         }
         for (int i = 0; i < pt_dim - dom_dim; i++)      // for all science variables
-            d_args.s[i] = 1;                            // scaling factor on range
+            d_args.s[i] = 1.0;                          // scaling factor on range
         master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
                 { b->generate_analytical_data(cp, input, d_args); });
     }
@@ -287,11 +289,11 @@ int main(int argc, char** argv)
     if (input == "s3d")
     {
         d_args.ndom_pts.resize(3);
-        d_args.ndom_pts[0]          = 704;
-        d_args.ndom_pts[1]          = 540;
-        d_args.ndom_pts[2]          = 550;
-        d_args.infile               = infile;
-//         d_args.infile               = "/Users/tpeterka/datasets/flame/6_small.xyz";
+        d_args.ndom_pts[0]  = 704;
+        d_args.ndom_pts[1]  = 540;
+        d_args.ndom_pts[2]  = 550;
+        d_args.infile       = infile;
+//         d_args.infile       = "/Users/tpeterka/datasets/flame/6_small.xyz";
         if (dom_dim == 1)
             master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
                     { b->read_1d_slice_3d_vector_data(cp, d_args); });
@@ -312,10 +314,11 @@ int main(int argc, char** argv)
     if (input == "nek")
     {
         d_args.ndom_pts.resize(3);
-        for (int i = 0; i < 3; i++)
-            d_args.ndom_pts[i] = 200;
-        d_args.infile = infile;
-//         d_args.infile = "/Users/tpeterka/datasets/nek5000/200x200x200/0.xyz";
+        d_args.ndom_pts[0]  = 200;
+        d_args.ndom_pts[1]  = 200;
+        d_args.ndom_pts[2]  = 200;
+        d_args.infile       = infile;
+//         d_args.infile       = "/Users/tpeterka/datasets/nek5000/200x200x200/0.xyz";
         if (dom_dim == 2)
             master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
                     { b->read_2d_slice_3d_vector_data(cp, d_args); });
@@ -337,7 +340,7 @@ int main(int argc, char** argv)
         d_args.ndom_pts[1]  = 512;
         d_args.ndom_pts[2]  = 512;
         d_args.infile       = infile;
-//         d_args.infile = "/Users/tpeterka/datasets/rti/dd07g_xxsmall_le.xyz";
+//         d_args.infile       = "/Users/tpeterka/datasets/rti/dd07g_xxsmall_le.xyz";
         if (dom_dim == 2)
             master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
                     { b->read_2d_slice_3d_vector_data(cp, d_args); });
