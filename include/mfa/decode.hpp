@@ -434,7 +434,7 @@ namespace mfa
 
             // debug
             bool debug = false;
-//             if (fabs(param(0) - 0.91) < 1e-3 && fabs(param(1) - 0.04) < 1e-3)
+//             if (fabs(param(0) - 0.010101) < 1e-3 && fabs(param(1) - 0.0) < 1e-3)
 //                 debug = true;
 
             // init
@@ -454,12 +454,12 @@ namespace mfa
                 const TensorProduct<T>& t = mfa_data.tmesh.tensor_prods[k];
 
                 // debug
-//                 if (debug)
-//                 {
-//                     fmt::print(stderr, "VolPt_tmesh(): tensor {}\n", k);
-//                     for (auto j = 0; j < mfa_data.dom_dim; j++)
-//                         fmt::print(stderr, "anchors[{}] = [{}]\n", j, fmt::join(anchors[j], ","));
-//                 }
+                if (debug)
+                {
+                    fmt::print(stderr, "VolPt_tmesh(): tensor {}\n", k);
+                    for (auto j = 0; j < mfa_data.dom_dim; j++)
+                        fmt::print(stderr, "anchors[{}] = [{}]\n", j, fmt::join(anchors[j], ","));
+                }
 
                 // skip entire tensor if knot mins, maxs are too far away from decoded point
                 bool skip = false;
@@ -468,8 +468,8 @@ namespace mfa
                     if (t.knot_maxs[j] < anchors[j].front() || t.knot_mins[j] > anchors[j].back())
                     {
                         // debug
-//                         if (debug)
-//                             cerr << "Skipping tensor " << k << " when decoding point param " << param.transpose() << endl;
+                        if (debug)
+                            cerr << "Skipping tensor " << k << " when decoding point param " << param.transpose() << endl;
 
                         skip = true;
                         break;
@@ -570,16 +570,14 @@ namespace mfa
             }       // tensors
 
             // debug
-//             cerr << "out_pt: " << out_pt.transpose() << " B_sum: " << B_sum << "\n" << endl;
+//             if (debug)
+//                 cerr << "out_pt: " << out_pt.transpose() << " B_sum: " << B_sum << "\n" << endl;
 
             // divide by sum of weighted basis functions to make a partition of unity
             if (B_sum > 0.0)
                 out_pt /= B_sum;
             else
                 cerr << "Warning: VolPt_tmesh(): B_sum = 0 when decoding param: " << param.transpose() << " This should not happen." << endl;
-
-            // debug
-//             cerr << "out_pt: " << out_pt.transpose() << "\n" << endl;
         }
 
 #endif      // MFA_TMESH

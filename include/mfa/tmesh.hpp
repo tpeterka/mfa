@@ -602,6 +602,74 @@ namespace mfa
             return retval;
         }
 
+        // checks if a_mins, maxs intersect b_mins, maxs, with the intersection in c_mins, c_maxs
+        // returns whether there is an intersection (larger than edges just touching)
+        bool intersects(const vector<KnotIdx>&  a_mins,
+                        const vector<KnotIdx>&  a_maxs,
+                        const vector<KnotIdx>&  b_mins,
+                        const vector<KnotIdx>&  b_maxs,
+                        vector<KnotIdx>&        c_mins,
+                        vector<KnotIdx>&        c_maxs) const
+        {
+            // check that sizes are identical
+            size_t a_size = a_mins.size();
+            if (a_size != a_maxs.size() || a_size != b_mins.size() || a_size != b_maxs.size() ||
+                    a_size != c_mins.size() || a_size != c_maxs.size())
+            {
+                fprintf(stderr, "Error: intersects(): size mismatch\n");
+                abort();
+            }
+
+            // check intersection cases
+            for (auto i = 0; i < a_size; i++)
+            {
+                // no intersection
+                if (a_maxs[i] <= b_mins[i] || b_maxs[i] <= a_mins[i])
+                        return false;
+
+                // a is a subset of b
+                else if (a_mins[i] >= b_mins[i] && a_maxs[i] <= b_maxs[i])
+                {
+                    c_mins[i] = a_mins[i];
+                    c_maxs[i] = a_maxs[i];
+                }
+
+                // b is a subset of a
+                else if (b_mins[i] >= a_mins[i] && b_maxs[i] <= a_maxs[i])
+                {
+                    c_mins[i] = b_mins[i];
+                    c_maxs[i] = b_maxs[i];
+                }
+
+                // a is to the left of b but overlaps it
+                else if (a_maxs[i] > b_mins[i] && a_maxs[i] < b_maxs[i])
+                {
+                    c_mins[i] = b_mins[i];
+                    c_maxs[i] = a_maxs[i];
+                }
+
+                // b is to the left of a but overlaps it
+                else if (b_maxs[i] > a_mins[i] && b_maxs[i] < a_maxs[i])
+                {
+                    c_mins[i] = a_mins[i];
+                    c_maxs[i] = b_maxs[i];
+                }
+
+                else
+                {
+                    fprintf(stderr, "Error: intersects(): ran out of cases\n");
+                    abort();
+                }
+            }
+
+            // debug
+//             fmt::print(stderr, "intersects(): min [{}] : max [{}] intersects min [{}] : max[{}] with intersection min [{}] : max [{}]\n",
+//                     fmt::join(a_mins, ","), fmt::join(a_maxs, ","), fmt::join(b_mins, ","), fmt::join(b_maxs, ","),
+//                     fmt::join(c_mins, ","), fmt::join(c_maxs, ","));
+
+            return true;
+        }
+
         // return the next dimension to split a tensor
         int next_split_dim()
         {
@@ -1181,7 +1249,7 @@ namespace mfa
         bool subset(const vector<KnotIdx>& a_mins,
                     const vector<KnotIdx>& a_maxs,
                     const vector<KnotIdx>& b_mins,
-                    const vector<KnotIdx>& b_maxs)
+                    const vector<KnotIdx>& b_maxs) const
         {
             // check that sizes are identical
             size_t a_size = a_mins.size();
@@ -2015,91 +2083,56 @@ namespace mfa
         // determine starting and ending indices of domain input points covered by one tensor product
         // coverage extends to edge of basis functions corresponding to control points in the tensor product
         void domain_pts(TensorIdx               t_idx,              // index of current tensor product
-                // DEPRECATE the pad argument once it is no longer used, currently true only for LocalSolve for optimizer
-                        bool                    pad,                // pad by degree p in each dimension
                         vector<vector<T>>&      params,             // params of input points
                         vector<size_t>&         start_idxs,         // (output) starting idxs of input points
                         vector<size_t>&         end_idxs) const     // (output) ending idxs of input points
         {
             // debug
             bool debug = false;
-//             if (t_idx == 3)
+//             if (t_idx == 1)
 //                 debug = true;
 
             start_idxs.resize(dom_dim_);
             end_idxs.resize(dom_dim_);
-            vector<KnotIdx> min_anchor(dom_dim_);                // anchor for the min. edge basis functions of the new tensor
-            vector<KnotIdx> max_anchor(dom_dim_);                // anchor for the mas. edge basis functions of the new tensor
+            vector<KnotIdx> min_anchor(dom_dim_);                   // anchor for the min. edge basis functions of the new tensor
+            vector<KnotIdx> max_anchor(dom_dim_);                   // anchor for the mas. edge basis functions of the new tensor
             vector<vector<KnotIdx>> local_knot_idxs;                // local knot vector for an anchor
 
             const TensorProduct<T>& tc = tensor_prods[t_idx];
 
             // left edge
             for (auto k = 0; k < dom_dim_; k++)
-            {
                 min_anchor[k] = tc.knot_mins[k];
-                // TODO: the right way to pad is to subtract p here and then find new knot intersections
-                // but this is hard because we would have to visit neighboring tensors to get the right tensor id
-                // for the shifted anchor, so we cheat and subtract p later from the edge of the local knot vector
-                // without any regard for actual knot lines crossed in the tmesh at that time
-                // DEPRECATE pad once no longer needed, currently only used for LocalSolve for optimizer
-            }
             knot_intersections(min_anchor, t_idx, true, local_knot_idxs);
             vector<KnotIdx> start_knot_idxs(dom_dim_);
             for (auto k = 0; k < dom_dim_; k++)
-            {
                 start_knot_idxs[k] = local_knot_idxs[k][1];                             // one knot away from the front
 
-                // DEPRECATE pad once no longer needed, currently only used for LocalSolve for optimizer
-                // TODO: this is not the right place to pad, see comment above
-                // but it's ok for now
-                if (pad)
-                    // casting to long allows checking for a negative value of an expression using an unsigned size_t
-                    start_knot_idxs[k] = (long)start_knot_idxs[k] - p_(k) < 0 ? 0 : start_knot_idxs[k] - p_(k);
-            }
-
-            local_knot_idxs.clear();
-
             // right edge
+            local_knot_idxs.clear();
             for (auto k = 0; k < dom_dim_; k++)
             {
                 if (p_(k) % 2 == 0)
-                {
                     max_anchor[k] = tc.knot_maxs[k] - 1;
-                }
                 else
-                {
                     max_anchor[k] = tc.knot_maxs[k];
-                }
-                // TODO: the right way to pad is to add p here and then find new knot intersections
-                // but this is hard because we would have to visit neighboring tensors to get the right tensor id
-                // for the shifted anchor, so we cheat and add p later from the edge of the local knot vector
-                // without any regard for actual knot lines crossed in the tmesh at that time
-                // DEPRECATE pad once no longer needed, currently only used for LocalSolve for optimizer
             }
             knot_intersections(max_anchor, t_idx, true, local_knot_idxs);
             vector<KnotIdx> end_knot_idxs(dom_dim_);
             for (auto k = 0; k < dom_dim_; k++)
-            {
                 end_knot_idxs[k] = local_knot_idxs[k][local_knot_idxs[k].size() - 2];   // one knot away from the back
-
-                // DEPRECATE pad once no longer needed, currently only used for LocalSolve for optimizer
-                // TODO: this is not the right place to pad, see comment above
-                // but it's ok for now
-                if (pad)
-                    end_knot_idxs[k] = end_knot_idxs[k] + p_(k) >= all_knots[k].size() ? all_knots[k].size() - 1 : end_knot_idxs[k] + p_(k);
-            }
 
             // input points corresponding to start and end knot values
             for (auto k = 0; k < dom_dim_; k++)
             {
-                // start points start at all_knot_param_idxs[start_knot_idxs]
+                // start points begin at all_knot_param_idxs[start_knot_idxs]
                 start_idxs[k]   = all_knot_param_idxs[k][start_knot_idxs[k]];
 
-                // end points go up to all_knot_param_ixs[end_knot_idxs]
-                end_idxs[k]     = all_knot_param_idxs[k][end_knot_idxs[k]];
-                while(params[k][end_idxs[k]] > all_knots[k][end_knot_idxs[k]])
-                    end_idxs[k]--;
+                // end points go up to but do not include all_knot_param_ixs[end_knot_idxs + 1]
+                if (end_knot_idxs[k] < all_knots[k].size() - 1)
+                    end_idxs[k] = all_knot_param_idxs[k][end_knot_idxs[k] + 1] - 1;
+                else
+                    end_idxs[k] = all_knot_param_idxs[k][end_knot_idxs[k]];
             }
 
             // debug
@@ -2142,13 +2175,31 @@ namespace mfa
             ofst_idx    = orig_idx;
             int sgn     = (0 < ofst) - (ofst < 0);                  // sgn = 1 for positive ofst, -1 for negative, 0 for zero
             int p       = p_(cur_dim);                              // degree in current dimension
+            int pad     = edge_check ? p - 1 : 0;
+
+            // t is completely to the right of orig_idx and we're offsetting left
+            // the offsetted point cannpt be inside of t
+            if (sgn == -1 && t.knot_mins[cur_dim] >= orig_idx)
+            {
+                ofst_idx = pad;
+                return false;
+            }
+
+            // t is completely to the left of orig_idx and we're offsetting right
+            // the offsetted point cannpt be inside of t
+            if (sgn == 1 && t.knot_maxs[cur_dim] <= orig_idx)
+            {
+                ofst_idx  = all_knots[cur_dim].size() - 1 - pad;
+                return false;
+            }
+
+            // the offsetted point can be inside of t
             for (auto i = 0; i < abs(ofst); i++)
             {
                 while ((long)ofst_idx + sgn >= t.knot_mins[cur_dim]   &&
                         (long)ofst_idx + sgn <= t.knot_maxs[cur_dim]  &&
                         all_knot_levels[cur_dim][ofst_idx + sgn] > t.level)
                     ofst_idx += sgn;
-                int pad = edge_check ? p - 1 : 0;
                 if (t.knot_mins[cur_dim] == 0 &&
                         (long)ofst_idx + sgn < pad)                           // missing control points at global min edge
                 {
@@ -2182,7 +2233,7 @@ namespace mfa
                 KnotIdx                 min,                        // min knot idx
                 KnotIdx                 max,                        // max knot idx
                 int                     cur_dim,                    // current dimension
-                bool                    inclusive)                  // whether to include max
+                bool                    inclusive) const            // whether to include max
         {
             KnotIdx dist    = 0;
             KnotIdx end     = inclusive ? max + 1 : max;
