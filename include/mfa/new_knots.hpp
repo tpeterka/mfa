@@ -32,16 +32,18 @@ namespace mfa
     class NewKnots
     {
     private:
-
-        const MFA<T>&   mfa;                                // mfa top-level object
-        MFA_Data<T>&    mfa_data;                           // mfa data
+        size_t                  dom_dim;                            // dimensionality of parameter space
+        const PointSet<T>&      input;                              // input points
+        MFA_Data<T>&            mfa_data;                           // mfa data
 
     public:
 
-        NewKnots(const MFA<T>&  mfa_,
-                 MFA_Data<T>&   mfa_data_) :
-                 mfa(mfa_),
-                 mfa_data(mfa_data_) {}
+        NewKnots(   
+                MFA_Data<T>&        mfa_data_,
+                const PointSet<T>&  input_) :
+            dom_dim(mfa_data_.dom_dim),
+            input(input_),
+            mfa_data(mfa_data_) {}
 
         ~NewKnots() {}
 
@@ -52,12 +54,12 @@ namespace mfa
                 vector<vector<int>>&        new_levels,             // new knot levels
                 vector<vector<KnotIdx>>&    inserted_knot_idxs)     // (output) indices in each dim. of inserted knots in full knot vector after insertion
         {
-            vector<vector<T>> temp_knots(mfa.dom_dim);
-            vector<vector<int>> temp_levels(mfa.dom_dim);
-            inserted_knot_idxs.resize(mfa.dom_dim);
+            vector<vector<T>> temp_knots(dom_dim);
+            vector<vector<int>> temp_levels(dom_dim);
+            inserted_knot_idxs.resize(dom_dim);
 
             // insert new_knots into knots: replace old knots with union of old and new (in temp_knots)
-            for (size_t k = 0; k < mfa.dom_dim; k++)                // for all domain dimensions
+            for (size_t k = 0; k < dom_dim; k++)                // for all domain dimensions
             {
                 inserted_knot_idxs[k].clear();
                 auto ninserted = mfa_data.tmesh.all_knots[k].size();      // number of new knots inserted
@@ -104,7 +106,7 @@ namespace mfa
                 for (auto i = 0; i < inserted_knot_idxs[k].size(); i++)
                 {
                     auto idx = inserted_knot_idxs[k][i];
-                    mfa_data.tmesh.insert_knot(k, idx, temp_levels[k][idx], temp_knots[k][idx], mfa.params());
+                    mfa_data.tmesh.insert_knot(k, idx, temp_levels[k][idx], temp_knots[k][idx], input.params->param_grid);
                 }
             }   // for all domain dimensions
         }
@@ -118,12 +120,12 @@ namespace mfa
                 vector<vector<int>>&        new_levels,             // new knot levels
                 vector<vector<KnotIdx>>&    inserted_knot_idxs)     // (output) indices in each dim. of inserted knots in full knot vector after insertion
         {
-            vector<vector<T>> temp_knots(mfa.dom_dim);
-            vector<vector<int>> temp_levels(mfa.dom_dim);
-            inserted_knot_idxs.resize(mfa.dom_dim);
+            vector<vector<T>> temp_knots(dom_dim);
+            vector<vector<int>> temp_levels(dom_dim);
+            inserted_knot_idxs.resize(dom_dim);
 
             // insert new_knots into knots: replace old knots with union of old and new (in temp_knots)
-            for (size_t k = 0; k < mfa.dom_dim; k++)                // for all domain dimensions
+            for (size_t k = 0; k < dom_dim; k++)                // for all domain dimensions
             {
                 inserted_knot_idxs[k].clear();
                 auto ninserted = mfa_data.tmesh.all_knots[k].size();      // number of new knots inserted
@@ -170,13 +172,13 @@ namespace mfa
                 for (auto i = 0; i < inserted_knot_idxs[k].size(); i++)
                 {
                     auto idx = inserted_knot_idxs[k][i];
-                    mfa_data.tmesh.insert_knot(k, idx, temp_levels[k][idx], temp_knots[k][idx], mfa.params());
+                    mfa_data.tmesh.insert_knot(k, idx, temp_levels[k][idx], temp_knots[k][idx], input.params->param_grid);
                 }
             }   // for all domain dimensions
 
             // find parent tensor (assumes only one knot being inserted)
-            vector<KnotIdx> inserted_knot_idx(mfa_data.dom_dim);
-            for (auto j = 0; j < mfa_data.dom_dim; j++)
+            vector<KnotIdx> inserted_knot_idx(dom_dim);
+            for (auto j = 0; j < dom_dim; j++)
                 inserted_knot_idx[j] = inserted_knot_idxs[j][0];    // there is only one inserted knot, index 0, but dimensions are switched, hence the copy
             return mfa_data.tmesh.search_tensors(inserted_knot_idx, mfa_data.p / 2);
         }
@@ -196,19 +198,19 @@ namespace mfa
             int parent_tensor_idx = InsertKnots(new_knots, new_levels, inserted_knot_idxs);
 
             int nnew_knots = new_knots[0].size();                   // number of new knots being inserted
-            VectorX<T> param(mfa.dom_dim);                          // current knot to be inserted
+            VectorX<T> param(dom_dim);                          // current knot to be inserted
             new_nctrl_pts.resize(nnew_knots);
             new_ctrl_pts.resize(nnew_knots);
             new_weights.resize(nnew_knots);
-            vector<KnotIdx> inserted_idx(mfa.dom_dim);
+            vector<KnotIdx> inserted_idx(dom_dim);
 
 #ifdef MFA_LINEAR_LOCAL
 
             TensorProduct<T>& t = mfa_data.tmesh.tensor_prods[parent_tensor_idx];
             for (auto i = 0; i < nnew_knots; i++)
             {
-                new_nctrl_pts[i].resize(mfa_data.dom_dim);
-                for (auto k = 0; k < mfa_data.dom_dim; k++)
+                new_nctrl_pts[i].resize(dom_dim);
+                for (auto k = 0; k < dom_dim; k++)
                     (new_nctrl_pts[i])(k) = t.nctrl_pts(k) + 1;
                 new_ctrl_pts[i].resize(new_nctrl_pts[i].prod(), t.ctrl_pts.cols());
                 new_weights[i].resize(new_ctrl_pts[i].rows());
@@ -221,7 +223,7 @@ namespace mfa
             // call P&T knot insertion
             for (auto i = 0; i < nnew_knots; i++)
             {
-                for (auto j = 0; j < mfa.dom_dim; j++)
+                for (auto j = 0; j < dom_dim; j++)
                 {
                     param(j) = new_knots[j][i];
                     inserted_idx[j] = inserted_knot_idxs[j][i];
@@ -255,7 +257,6 @@ namespace mfa
         // increment ijk in the loop over domain points instead of calling idx2ijk
         // TBB? (currently serial)
         bool FirstErrorSpan(
-                const MatrixX<T>&           domain,                 // input points
                 VectorX<T>                  extents,                // extents in each dimension, for normalizing error (size 0 means do not normalize)
                 T                           err_limit,              // max. allowed error
                 int                         iter,                   // iteration number
@@ -265,36 +266,34 @@ namespace mfa
             // debug
             fprintf(stderr, "*** Using global solve in FirstErrorSpan ***\n");
 
-            Decoder<T>          decoder(mfa, mfa_data, 1);
-            VectorXi            ijk(mfa.dom_dim);                   // i,j,k of domain point
-            VectorX<T>          param(mfa.dom_dim);                 // parameters of domain point
-            vector<int>         span(mfa.dom_dim);                  // knot span in each dimension
+            Decoder<T>          decoder(mfa_data, 1);
+            VectorXi            ijk(dom_dim);                   // i,j,k of domain point
+            VectorX<T>          param(dom_dim);                 // parameters of domain point
+            vector<int>         span(dom_dim);                  // knot span in each dimension
             VectorXi            derivs;                             // size 0 means unused
             DecodeInfo<T>       decode_info(mfa_data, derivs);      // reusable decode point info for calling VolPt repeatedly
-            vector<vector<T>>   new_knots(mfa.dom_dim);             // new knots
-            vector<vector<int>> new_levels(mfa.dom_dim);            // new knot levels
+            vector<vector<T>>   new_knots(dom_dim);             // new knots
+            vector<vector<int>> new_levels(dom_dim);            // new knot levels
 
             if (!extents.size())
-                extents = VectorX<T>::Ones(domain.cols());
+                extents = VectorX<T>::Ones(input.pt_dim);
 
-            for (auto i = 0; i < mfa.ndom_pts().prod(); i++)        // for all input points
+            for (auto pt_it = input.begin(), pt_end = input.end(); pt_it != pt_end; ++pt_it)
             {
-                mfa_data.idx2ijk(mfa.ds(), i, ijk);
-                for (auto k = 0; k < mfa.dom_dim; k++)
-                    param(k) = mfa.params()[k][ijk(k)];
+                pt_it.params(param);
                 VectorX<T> cpt(mfa_data.tmesh.tensor_prods[0].ctrl_pts.cols());
                 decoder.VolPt_tmesh(param, cpt);
 
                 // debug
 //                 cerr << "cpt: " << cpt.transpose() << endl;
 
-                int last = domain.cols() - 1;                       // range coordinate
+                int last = input.pt_dim - 1;                       // range coordinate
 
                 // error
                 T max_err = 0.0;
                 for (auto j = 0; j < mfa_data.max_dim - mfa_data.min_dim + 1; j++)
                 {
-                    T err = fabs(cpt(j) - domain(i, mfa_data.min_dim + j)) / extents(mfa_data.min_dim + j);
+                    T err = fabs(cpt(j) - input.domain(pt_it.idx(), mfa_data.min_dim + j)) / extents(mfa_data.min_dim + j);
                     max_err = err > max_err ? err : max_err;
                 }
 
@@ -302,7 +301,7 @@ namespace mfa
                 {
                     // check that new spans will contain at least one input point
                     bool empty_span = false;
-                    for (auto k = 0; k < mfa.dom_dim; k++)
+                    for (auto k = 0; k < dom_dim; k++)
                     {
                         span[k] = mfa_data.FindSpan(k, param(k));
 
@@ -326,7 +325,7 @@ namespace mfa
 
                         // if the current span were to be split, check whether the resulting spans will have an input point
                         ParamIdx param_idx  = low_idx;
-                        while (mfa.params()[k][param_idx] < new_knot_val)
+                        while (input.params->param_grid[k][param_idx] < new_knot_val)
                             param_idx++;
                         if (param_idx - low_idx == 0 || high_idx - param_idx == 0)
                         {
@@ -338,7 +337,7 @@ namespace mfa
                     if (empty_span)
                         continue;               // next input point
 
-                    for (auto k = 0; k < mfa.dom_dim; k++)
+                    for (auto k = 0; k < dom_dim; k++)
                     {
                         // new knot is the midpoint of the span containing the domain point parameters
                         T new_knot_val = (mfa_data.tmesh.all_knots[k][span[k]] + mfa_data.tmesh.all_knots[k][span[k] + 1]) / 2.0;
@@ -366,7 +365,6 @@ namespace mfa
         // increment ijk in the loop over domain points instead of calling idx2ijk
         // TBB? (currently serial)
         bool FirstErrorSpan(
-                const MatrixX<T>&           domain,                 // input points
                 VectorX<T>                  extents,                // extents in each dimension, for normalizing error (size 0 means do not normalize)
                 T                           err_limit,              // max. allowed error
                 int                         iter,                   // iteration number
@@ -380,47 +378,45 @@ namespace mfa
             // debug
             fprintf(stderr, "*** Using local solve in FirstErrorSpan ***\n");
 
-            Decoder<T>          decoder(mfa, mfa_data, 1);
-            VectorXi            ijk(mfa.dom_dim);                   // i,j,k of domain point
-            VectorX<T>          param(mfa.dom_dim);                 // parameters of domain point
+            Decoder<T>          decoder(mfa_data, 1);
+            VectorXi            ijk(dom_dim);                   // i,j,k of domain point
+            VectorX<T>          param(dom_dim);                 // parameters of domain point
             VectorXi            derivs;                             // size 0 means unused
             DecodeInfo<T>       decode_info(mfa_data, derivs);      // reusable decode point info for calling VolPt repeatedly
-            vector<vector<T>>   new_knots(mfa.dom_dim);             // new knots
-            vector<vector<int>> new_levels(mfa.dom_dim);            // new knot levels
+            vector<vector<T>>   new_knots(dom_dim);             // new knots
+            vector<vector<int>> new_levels(dom_dim);            // new knot levels
 
             if (!extents.size())
-                extents = VectorX<T>::Ones(domain.cols());
+                extents = VectorX<T>::Ones(input.pt_dim);
 
-            for (auto i = 0; i < mfa.ndom_pts().prod(); i++)        // for all input points
+            for (auto pt_it = input.begin(), pt_end = input.end(); pt_it != pt_end; ++pt_it)
             {
-                mfa_data.idx2ijk(mfa.ds(), i, ijk);
-                for (auto k = 0; k < mfa.dom_dim; k++)
-                    param(k) = mfa.params()[k][ijk(k)];
+                pt_it.params(param);
                 VectorX<T> cpt(mfa_data.tmesh.tensor_prods[0].ctrl_pts.cols());
                 decoder.VolPt_tmesh(param, cpt);
 
                 // debug
 //                 cerr << "cpt: " << cpt.transpose() << endl;
 
-                int last = domain.cols() - 1;                       // range coordinate
+                int last = input.pt_dim - 1;                       // range coordinate
 
                 // error
                 T max_err = 0.0;
                 for (auto j = 0; j < mfa_data.max_dim - mfa_data.min_dim + 1; j++)
                 {
-                    T err = fabs(cpt(j) - domain(i, mfa_data.min_dim + j)) / extents(mfa_data.min_dim + j);
+                    T err = fabs(cpt(j) - input.domain(pt_it.idx(), mfa_data.min_dim + j)) / extents(mfa_data.min_dim + j);
                     max_err = err > max_err ? err : max_err;
                 }
 
                 if (max_err > err_limit)
                 {
-                    vector<KnotIdx> span(mfa.dom_dim);              // index space coordinates of span where knot will be inserted
-                    for (auto k = 0; k < mfa.dom_dim; k++)
+                    vector<KnotIdx> span(dom_dim);              // index space coordinates of span where knot will be inserted
+                    for (auto k = 0; k < dom_dim; k++)
                         span[k] = mfa_data.FindSpan(k, param(k));
 
                     // check that new spans will contain at least one input point
                     bool empty_span = false;
-                    for (auto k = 0; k < mfa.dom_dim; k++)
+                    for (auto k = 0; k < dom_dim; k++)
                     {
                         // current span must contain at least two input points
                         size_t low_idx  = mfa_data.tmesh.all_knot_param_idxs[k][span[k]];
@@ -440,7 +436,7 @@ namespace mfa
 
                         // if the current span were to be split, check whether the resulting spans will have an input point
                         ParamIdx param_idx  = low_idx;
-                        while (mfa.params()[k][param_idx] < new_knot_val)
+                        while (input.params->param_grid[k][param_idx] < new_knot_val)
                             param_idx++;
                         if (param_idx - low_idx == 0 || high_idx - param_idx == 0)
                         {
@@ -453,10 +449,10 @@ namespace mfa
                         continue;               // next input point
 
                     // debug: hard code span
-//                     for (auto k = 0; k < mfa.dom_dim; k++)
+//                     for (auto k = 0; k < dom_dim; k++)
 //                         span[k] = 5;
 
-                    for (auto k = 0; k < mfa.dom_dim; k++)
+                    for (auto k = 0; k < dom_dim; k++)
                     {
                         // span should never be the last knot because of the repeated knots at end
                         assert(span[k] < mfa_data.tmesh.all_knots[k].size() - 1);
@@ -500,7 +496,6 @@ namespace mfa
         // increment ijk in the loop over domain points instead of calling idx2ijk
         // TBB? (currently serial)
         bool MaxErrorSpan(
-                const MatrixX<T>&           domain,                 // input points
                 VectorX<T>                  extents,                // extents in each dimension, for normalizing error (size 0 means do not normalize)
                 T                           err_limit,              // max. allowed error
                 int                         iter,                   // iteration number
@@ -510,39 +505,37 @@ namespace mfa
             // debug
             fprintf(stderr, "*** Using global solve in MaxErrorSpan ***\n");
 
-            Decoder<T>          decoder(mfa, mfa_data, 1);
-            VectorXi            ijk(mfa.dom_dim);                   // i,j,k of domain point
-            VectorX<T>          param(mfa.dom_dim);                 // parameters of domain point
-            vector<int>         span(mfa.dom_dim);                  // knot span in each dimension
+            Decoder<T>          decoder(mfa_data, 1);
+            VectorXi            ijk(dom_dim);                   // i,j,k of domain point
+            VectorX<T>          param(dom_dim);                 // parameters of domain point
+            vector<int>         span(dom_dim);                  // knot span in each dimension
             VectorXi            derivs;                             // size 0 means unused
             DecodeInfo<T>       decode_info(mfa_data, derivs);      // reusable decode point info for calling VolPt repeatedly
-            vector<vector<T>>   new_knots(mfa.dom_dim);             // new knots
-            vector<vector<int>> new_levels(mfa.dom_dim);            // new knot levels
+            vector<vector<T>>   new_knots(dom_dim);             // new knots
+            vector<vector<int>> new_levels(dom_dim);            // new knot levels
 
             if (!extents.size())
-                extents = VectorX<T>::Ones(domain.cols());
+                extents = VectorX<T>::Ones(input.pt_dim);
 
             T Max_err = -1.0;                                       // overall max error
-            vector<int> Max_span(mfa.dom_dim);                      // span at location of overall max error
+            vector<int> Max_span(dom_dim);                      // span at location of overall max error
 
-            for (auto i = 0; i < mfa.ndom_pts().prod(); i++)        // for all input points
+            for (auto pt_it = input.begin(), pt_end = input.end(); pt_it != pt_end; ++pt_it)
             {
-                mfa_data.idx2ijk(mfa.ds(), i, ijk);
-                for (auto k = 0; k < mfa.dom_dim; k++)
-                    param(k) = mfa.params()[k][ijk(k)];
+                pt_it.params(param);
                 VectorX<T> cpt(mfa_data.tmesh.tensor_prods[0].ctrl_pts.cols());
                 decoder.VolPt_tmesh(param, cpt);
 
                 // debug
 //                 cerr << "cpt: " << cpt.transpose() << endl;
 
-                int last = domain.cols() - 1;                       // range coordinate
+                int last = input.pt_dim - 1;                       // range coordinate
 
                 // error
                 T max_err = 0.0;                                    // max error over dimensions (eg, science variables)
                 for (auto j = 0; j < mfa_data.max_dim - mfa_data.min_dim + 1; j++)
                 {
-                    T err = fabs(cpt(j) - domain(i, mfa_data.min_dim + j)) / extents(mfa_data.min_dim + j);
+                    T err = fabs(cpt(j) - input.domain(pt_it.idx(), mfa_data.min_dim + j)) / extents(mfa_data.min_dim + j);
                     max_err = err > max_err ? err : max_err;
                 }
 
@@ -550,7 +543,7 @@ namespace mfa
                 {
                     // check that new spans will contain at least one input point
                     bool empty_span = false;
-                    for (auto k = 0; k < mfa.dom_dim; k++)
+                    for (auto k = 0; k < dom_dim; k++)
                     {
                         span[k] = mfa_data.FindSpan(k, param(k));
 
@@ -571,7 +564,7 @@ namespace mfa
 
                         // if the current span were to be split, check whether the resulting spans will have an input point
                         ParamIdx param_idx  = low_idx;
-                        while (mfa.params()[k][param_idx] < new_knot_val)
+                        while (input.params->param_grid[k][param_idx] < new_knot_val)
                             param_idx++;
                         if (param_idx - low_idx == 0 || high_idx - param_idx == 0)
                         {
@@ -585,7 +578,7 @@ namespace mfa
 
                     // record Max_err and Max_span
                     Max_err = max_err;
-                    for (auto k = 0; k < mfa.dom_dim; k++)
+                    for (auto k = 0; k < dom_dim; k++)
                         Max_span[k] = span[k];
                 }   // max_err > err_limit && max_err > Max_err
             }   // for all input points
@@ -593,13 +586,13 @@ namespace mfa
             // debug: hard code span
 //             if (Max_err >= 0.0)
 //             {
-//                 for (auto k = 0; k < mfa.dom_dim; k++)
+//                 for (auto k = 0; k < dom_dim; k++)
 //                     Max_span[k] = 4;
 //             }
 
             if (Max_err >= 0.0)
             {
-                for (auto k = 0; k < mfa.dom_dim; k++)
+                for (auto k = 0; k < dom_dim; k++)
                 {
                     // new knot is the midpoint of the span containing the domain point parameters
                     T new_knot_val = (mfa_data.tmesh.all_knots[k][Max_span[k]] + mfa_data.tmesh.all_knots[k][Max_span[k] + 1]) / 2.0;
@@ -625,7 +618,6 @@ namespace mfa
         // increment ijk in the loop over domain points instead of calling idx2ijk
         // TBB? (currently serial)
         bool MaxErrorSpan(
-                const MatrixX<T>&           domain,                 // input points
                 VectorX<T>                  extents,                // extents in each dimension, for normalizing error (size 0 means do not normalize)
                 T                           err_limit,              // max. allowed error
                 int                         iter,                   // iteration number
@@ -639,50 +631,48 @@ namespace mfa
             // debug
             fprintf(stderr, "*** Using local solve in MaxErrorSpan ***\n");
 
-            Decoder<T>          decoder(mfa, mfa_data, 1);
-            VectorXi            ijk(mfa.dom_dim);                   // i,j,k of domain point
-            VectorX<T>          param(mfa.dom_dim);                 // parameters of domain point
+            Decoder<T>          decoder(mfa_data, 1);
+            VectorXi            ijk(dom_dim);                   // i,j,k of domain point
+            VectorX<T>          param(dom_dim);                 // parameters of domain point
             VectorXi            derivs;                             // size 0 means unused
             DecodeInfo<T>       decode_info(mfa_data, derivs);      // reusable decode point info for calling VolPt repeatedly
-            vector<vector<T>>   new_knots(mfa.dom_dim);             // new knots
-            vector<vector<int>> new_levels(mfa.dom_dim);            // new knot levels
+            vector<vector<T>>   new_knots(dom_dim);             // new knots
+            vector<vector<int>> new_levels(dom_dim);            // new knot levels
 
             if (!extents.size())
-                extents = VectorX<T>::Ones(domain.cols());
+                extents = VectorX<T>::Ones(input.pt_dim);
 
             T Max_err = -1.0;                                       // overall max error
-            vector<KnotIdx> Max_span(mfa.dom_dim);                  // span at location of overall max error
+            vector<KnotIdx> Max_span(dom_dim);                  // span at location of overall max error
 
-            for (auto i = 0; i < mfa.ndom_pts().prod(); i++)        // for all input points
+            for (auto pt_it = input.begin(), pt_end = input.end(); pt_it != pt_end; ++pt_it)
             {
-                mfa_data.idx2ijk(mfa.ds(), i, ijk);
-                for (auto k = 0; k < mfa.dom_dim; k++)
-                    param(k) = mfa.params()[k][ijk(k)];
+                pt_it.params(param);
                 VectorX<T> cpt(mfa_data.tmesh.tensor_prods[0].ctrl_pts.cols());
                 decoder.VolPt_tmesh(param, cpt);
 
                 // debug
 //                 cerr << "cpt: " << cpt.transpose() << endl;
 
-                int last = domain.cols() - 1;                       // range coordinate
+                int last = input.pt_dim - 1;                       // range coordinate
 
                 // error
                 T max_err = 0.0;
                 for (auto j = 0; j < mfa_data.max_dim - mfa_data.min_dim + 1; j++)
                 {
-                    T err = fabs(cpt(j) - domain(i, mfa_data.min_dim + j)) / extents(mfa_data.min_dim + j);
+                    T err = fabs(cpt(j) - input.domain(pt_it.idx(), mfa_data.min_dim + j)) / extents(mfa_data.min_dim + j);
                     max_err = err > max_err ? err : max_err;
                 }
 
                 if (max_err > err_limit && max_err > Max_err)
                 {
-                    vector<KnotIdx> span(mfa.dom_dim);              // index space coordinates of span where knot will be inserted
-                    for (auto k = 0; k < mfa.dom_dim; k++)
+                    vector<KnotIdx> span(dom_dim);              // index space coordinates of span where knot will be inserted
+                    for (auto k = 0; k < dom_dim; k++)
                         span[k] = mfa_data.FindSpan(k, param(k));
 
                     // check that new spans will contain at least one input point
                     bool empty_span = false;
-                    for (auto k = 0; k < mfa.dom_dim; k++)
+                    for (auto k = 0; k < dom_dim; k++)
                     {
                         // current span must contain at least two input points
                         size_t low_idx  = mfa_data.tmesh.all_knot_param_idxs[k][span[k]];
@@ -702,7 +692,7 @@ namespace mfa
 
                         // if the current span were to be split, check whether the resulting spans will have an input point
                         ParamIdx param_idx  = low_idx;
-                        while (mfa.params()[k][param_idx] < new_knot_val)
+                        while (input.params->param_grid[k][param_idx] < new_knot_val)
                             param_idx++;
                         if (param_idx - low_idx == 0 || high_idx - param_idx == 0)
                         {
@@ -716,7 +706,7 @@ namespace mfa
 
                     // record Max_err and Max_span
                     Max_err = max_err;
-                    for (auto k = 0; k < mfa.dom_dim; k++)
+                    for (auto k = 0; k < dom_dim; k++)
                         Max_span[k] = span[k];
                 }   // max_err > err_limit
             }   // for all input points
@@ -724,13 +714,13 @@ namespace mfa
             // debug: hard code span
 //             if (Max_err >= 0.0)
 //             {
-//                 for (auto k = 0; k < mfa.dom_dim; k++)
+//                 for (auto k = 0; k < dom_dim; k++)
 //                     Max_span[k] = 4;
 //             }
 
             if (Max_err >= 0.0)
             {
-                for (auto k = 0; k < mfa.dom_dim; k++)
+                for (auto k = 0; k < dom_dim; k++)
                 {
                     // span should never be the last knot because of the repeated knots at end
                     assert(Max_span[k] < mfa_data.tmesh.all_knots[k].size() - 1);
@@ -777,7 +767,7 @@ namespace mfa
             VectorXi all_npts(dom_dim);
             VectorXi span_ijk(dom_dim);
 
-            VolIterator dom_iter(mfa.ndom_pts());                           // iterator over input domain points
+            VolIterator dom_iter(input.ndom_pts);                           // iterator over input domain points
 
             for (auto tidx = 0; tidx < tmesh.tensor_prods.size(); tidx++)   // for all tensors
             {
@@ -814,7 +804,7 @@ namespace mfa
                         if (all_knot_levels[k][span_ijk(k)] > t.level)
                             break;
                     }
-                    if (k < mfa.dom_dim)
+                    if (k < dom_dim)
                     {
                         span_iter.incr_iter();
                         continue;
@@ -837,14 +827,14 @@ namespace mfa
                             cerr << "CheckAllSpans(): Error: span " << span_ijk.transpose() << " does not have an input point" << endl;
                             return false;
                         }
-                        T min_param = mfa.params()[j][min];
-                        T max_param = mfa.params()[j][max];
+                        T min_param = input.params->param_grid[j][min];
+                        T max_param = input.params->param_grid[j][max];
                         if (min_param < all_knots[j][span_ijk(j)])
                         {
                             cerr << "CheckAllSpans(): Error: min param < range of knot span. This should not happen.\n" << endl;
                             return false;
                         }
-                        if (max < mfa.params()[j].size() - 1 && max_param < all_knots[j][span_ijk(j) + incr])
+                        if (max < input.params->param_grid[j].size() - 1 && max_param < all_knots[j][span_ijk(j) + incr])
                         {
                             cerr << "CheckAllSpans(): Error: max param < range of next knot span. This should not happen.\n" << endl;
                             return false;
@@ -865,7 +855,6 @@ namespace mfa
         // returns true if all done, ie, no new knots inserted
         // This version is for tmesh with local solve
         bool AllErrorSpans(
-                const MatrixX<T>&           domain,                 // input points
                 VectorX<T>                  extents,                // extents in each dimension, for normalizing error (size 0 means do not normalize)
                 T                           err_limit,              // max. allowed error
                 vector<TensorIdx>&          parent_tensor_idxs,     // (output) idx of parent tensor of each new knot to be inserted
@@ -885,16 +874,16 @@ namespace mfa
             // debug
             fprintf(stderr, "*** Using local solve in AllErrorSpans ***\n");
 
-            Decoder<T>          decoder(mfa, mfa_data, 1);
+            Decoder<T>          decoder(mfa_data, 1);
             VectorX<T>          param(dom_dim);                             // parameters of domain point
             VectorX<T>          cpt(tmesh.tensor_prods[0].ctrl_pts.cols()); // decoded point
 
             // new knot when splitting a knot span
-            vector<KnotIdx> new_knot_idx(mfa_data.dom_dim);
-            vector<T>       new_knot_val(mfa_data.dom_dim);
+            vector<KnotIdx> new_knot_idx(dom_dim);
+            vector<T>       new_knot_val(dom_dim);
 
             if (!extents.size())
-                extents = VectorX<T>::Ones(domain.cols());
+                extents = VectorX<T>::Ones(input.pt_dim);
 
             // parameters for vol iterator over knot spans in a tensor product and parameters in a knot span
             VectorXi sub_npts(dom_dim);
@@ -903,7 +892,7 @@ namespace mfa
             VectorXi span_ijk(dom_dim);
             VectorXi param_ijk(dom_dim);
 
-            VolIterator dom_iter(mfa.ndom_pts());                           // iterator over input domain points
+            VolIterator dom_iter(input.ndom_pts);                           // iterator over input domain points
 
             for (auto tidx = 0; tidx < tmesh.tensor_prods.size(); tidx++)   // for all tensors
             {
@@ -951,7 +940,7 @@ namespace mfa
                         if (all_knot_levels[k][span_ijk(k)] > t.level)
                             break;
                     }
-                    if (k < mfa.dom_dim)
+                    if (k < dom_dim)
                     {
                         span_iter.incr_iter();
                         continue;
@@ -969,7 +958,7 @@ namespace mfa
                             incr++;
                         ParamIdx max = all_knot_param_idxs[j][span_ijk(j) + incr];      // parameter index at end of span
 
-                        if (max == mfa.params()[j].size() - 1)                          // include last parameter in last knot span
+                        if (max == input.params->param_grid[j].size() - 1)                          // include last parameter in last knot span
                             max++;
 
                         // debug
@@ -996,7 +985,7 @@ namespace mfa
 
                         // decode a point at the input point parameters
                         for (auto j = 0; j < dom_dim; j++)
-                            param(j) = mfa.params()[j][param_ijk(j)];
+                            param(j) = input.params->param_grid[j][param_ijk(j)];
                         decoder.VolPt_tmesh(param, cpt);
 
                         // error between decoded point and input point
@@ -1004,7 +993,7 @@ namespace mfa
                         T max_err = 0.0;
                         for (auto j = 0; j < mfa_data.max_dim - mfa_data.min_dim + 1; j++)
                         {
-                            T err = fabs(cpt(j) - domain(dom_idx, mfa_data.min_dim + j)) / extents(mfa_data.min_dim + j);
+                            T err = fabs(cpt(j) - input.domain(dom_idx, mfa_data.min_dim + j)) / extents(mfa_data.min_dim + j);
                             max_err = err > max_err ? err : max_err;
                         }
 
@@ -1065,7 +1054,7 @@ namespace mfa
                               vector<KnotIdx>&      new_knot_idx,   // (output) index of new knot in all dims of all_knots
                               vector<T>&            new_knot_val)   // (output) value of new knot in all dims
         {
-            for (auto k = 0; k < mfa.dom_dim; k++)
+            for (auto k = 0; k < mfa_data.dom_dim; k++)
             {
                 // skip higher level knots to get right edge of span
                 KnotIdx next_span;
@@ -1083,7 +1072,7 @@ namespace mfa
 
                 // if the current span were to be split, check whether the resulting spans will have an input point
                 ParamIdx param_idx  = low_idx;
-                while (mfa.params()[k][param_idx] < new_knot_val[k])
+                while (input.params->param_grid[k][param_idx] < new_knot_val[k])
                     param_idx++;
                 if (param_idx - low_idx == 0 || high_idx - param_idx == 0)
                     return false;
@@ -1106,7 +1095,6 @@ namespace mfa
         // increment ijk in the loop over domain points instead of calling idx2ijk
         // TBB? (currently serial)
         bool FirstErrorSpan(
-                       const MatrixX<T>&           domain,                 // input points
                        VectorX<T>                  extents,                // extents in each dimension, for normalizing error (size 0 means do not normalize)
                        T                           err_limit,              // max. allowed error
                        int                         iter,                   // iteration number
@@ -1114,38 +1102,36 @@ namespace mfa
                        vector<vector<KnotIdx>>&    inserted_knot_idxs,     // (output) indices in each dim. of inserted knots in full knot vector after insertion
                        int&                        parent_tensor_idx)      // (output) parent tensor containing new knot to be inserted (assuming only one insertion)
        {
-           Decoder<T>          decoder(mfa, mfa_data, 1);
-           VectorXi            ijk(mfa.dom_dim);                   // i,j,k of domain point
-           VectorX<T>          param(mfa.dom_dim);                 // parameters of domain point
-           vector<int>         span(mfa.dom_dim);                  // knot span in each dimension
+           Decoder<T>          decoder(mfa_data, 1);
+           VectorXi            ijk(dom_dim);                   // i,j,k of domain point
+           VectorX<T>          param(dom_dim);                 // parameters of domain point
+           vector<int>         span(dom_dim);                  // knot span in each dimension
            VectorXi            derivs;                             // size 0 means unused
            DecodeInfo<T>       decode_info(mfa_data, derivs);      // reusable decode point info for calling VolPt repeatedly
-           vector<vector<T>>   new_knots(mfa.dom_dim);             // new knots
-           vector<vector<int>> new_levels(mfa.dom_dim);            // new knot levels
+           vector<vector<T>>   new_knots(dom_dim);             // new knots
+           vector<vector<int>> new_levels(dom_dim);            // new knot levels
 
            if (!extents.size())
-               extents = VectorX<T>::Ones(domain.cols());
+               extents = VectorX<T>::Ones(input.pt_dim);
 
-           for (auto i = 0; i < mfa.ndom_pts().prod(); i++)
-           {
-               mfa_data.idx2ijk(mfa.ds(), i, ijk);
-               for (auto k = 0; k < mfa.dom_dim; k++)
-                   param(k) = mfa.params()[k][ijk(k)];
-               VectorX<T> cpt(domain.cols());                      // approximated point
+            for (auto pt_it = input.begin(), pt_end = input.end(); pt_it != pt_end; ++pt_it)
+            {
+               pt_it.params(param);
+               VectorX<T> cpt(input.pt_dim);                      // approximated point
                decoder.VolPt_tmesh(param, cpt);
-               int last = domain.cols() - 1;                       // range coordinate
+               int last = input.pt_dim - 1;                       // range coordinate
 
                // error
                T max_err = 0.0;
                for (auto j = 0; j < mfa_data.max_dim - mfa_data.min_dim + 1; j++)
                {
-                   T err = fabs(cpt(j) - domain(i, mfa_data.min_dim + j)) / extents(mfa_data.min_dim + j);
+                   T err = fabs(cpt(j) - input.domain(pt_it.idx(), mfa_data.min_dim + j)) / extents(mfa_data.min_dim + j);
                    max_err = err > max_err ? err : max_err;
                }
 
                if (max_err > err_limit)
                {
-                   for (auto k = 0; k < mfa.dom_dim; k++)
+                   for (auto k = 0; k < dom_dim; k++)
                    {
                        span[k] = mfa_data.FindSpan(k, param(k), nctrl_pts(k));
 

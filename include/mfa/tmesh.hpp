@@ -104,7 +104,7 @@ namespace mfa
                          KnotIdx            pos,            // new position in all_knots[dim] of inserted knot
                          int                level,          // refinement level of inserted knot
                          T                  knot,           // knot value to be inserted
-                         vector<vector<T>>& params)         // params of input points
+                         const vector<vector<T>>& params)         // params of input points
         {
             if (!can_insert_knot(dim, pos, knot))
                 return false;

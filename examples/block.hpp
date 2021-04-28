@@ -47,14 +47,24 @@ struct DomainArgs : public ModelInfo
     DomainArgs(int dom_dim, int pt_dim) :
         ModelInfo(dom_dim, pt_dim)
     {
+        tot_ndom_pts = 0;
         starts.resize(dom_dim);
+        ndom_pts.resize(dom_dim);
         full_dom_pts.resize(dom_dim);
         min.resize(dom_dim);
         max.resize(dom_dim);
         s.resize(pt_dim);
         f.resize(pt_dim);
+        r = 0;
+        t = 0;
+        n = 0;
+        multiblock = false;
+        structured = true;   // Assume structured input by default
+        rand_seed  = -1;
     }
+    size_t              tot_ndom_pts;
     vector<int>         starts;                     // starting offsets of ndom_pts (optional, usually assumed 0)
+    vector<int>         ndom_pts;                   // number of points in domain (possibly a subset of full domain)
     vector<int>         full_dom_pts;               // number of points in full domain in case a subset is taken
     vector<real_t>      min;                        // minimum corner of domain
     vector<real_t>      max;                        // maximum corner of domain
@@ -65,12 +75,24 @@ struct DomainArgs : public ModelInfo
     real_t              n;                          // noise factor [0.0 - 1.0]
     string              infile;                     // input filename
     bool                multiblock;                 // multiblock domain, get bounds from block
+    bool                structured;                 // input data lies on unstructured grid
+    int                 rand_seed;                  // seed for generating random data. -1: no randomization, 0: choose seed at random
 };
 
 // block
 template <typename T>
 struct Block : public BlockBase<T>
 {
+    using Base = BlockBase<T>;
+    using Base::dom_dim;
+    using Base::pt_dim;
+    using Base::core_mins;
+    using Base::core_maxs;
+    using Base::bounds_mins;
+    using Base::bounds_maxs;
+    using Base::overlaps;
+    using Base::input;
+
     static
         void* create()              { return mfa::create<Block>(); }
 
@@ -233,20 +255,236 @@ struct Block : public BlockBase<T>
         return retval;
     }
 
-    // synthetic analytical data
     void generate_analytical_data(
+            const diy::Master::ProxyWithLink&   cp,
+            string&                             fun,
+            DomainArgs&                         args)
+    {
+        if (args.rand_seed >= 0)  // random point cloud
+        {
+            cout << "Generating data on random point cloud for function: " << fun << endl;
+
+            if (args.structured)
+            {
+                cerr << "ERROR: Cannot perform structured encoding of random point cloud" << endl;
+                exit(1);
+            }
+
+            // Prep a few more domain arguments which are used by generate_random_analytical_data
+            args.model_dims.resize(2);
+            args.model_dims[0] = dom_dim;
+            args.model_dims[1] = 1;
+
+            args.tot_ndom_pts = 1;
+            for (size_t k = 0; k < dom_dim; k++)
+            {
+                args.tot_ndom_pts *= args.ndom_pts[k];
+            }
+
+            // create unsigned conversion of seed
+            // note: seed is always >= 0 in this code block
+            unsigned useed = (unsigned)args.rand_seed;
+            generate_random_analytical_data(cp, fun, args, useed);
+        }
+        else    // structured grid of points
+        {
+            cout << "Generating data on structured grid for function: " << fun << endl;
+            generate_rectilinear_analytical_data(cp, fun, args);
+        }
+    }
+    
+
+    // synthetic analytic (scalar) data, sampled on unstructured point cloud
+    // when seed = 0, we choose a time-dependent seed for the random number generator
+    void generate_random_analytical_data(
+            const diy::Master::ProxyWithLink&   cp,
+            string&                             fun,
+            DomainArgs&                         args,
+            unsigned int                        seed)
+    {
+        assert(!args.structured);
+
+        DomainArgs* a = &args;
+
+        // Prepare containers
+        size_t nvars = a->model_dims.size()-1;
+        size_t geom_dim = a->model_dims[0];
+        this->vars.resize(nvars);
+        this->max_errs.resize(nvars);
+        this->sum_sq_errs.resize(nvars);
+
+        // Assign min/max dimensions for each model
+        this->geometry.min_dim = 0;
+        this->geometry.max_dim = geom_dim - 1;
+        this->vars[0].min_dim = a->model_dims[0];
+        this->vars[0].max_dim = this->vars[0].min_dim + a->model_dims[0];
+        for (size_t n = 1; n < nvars; n++)
+        {
+            this->vars[n].min_dim = this->vars[n-1].max_dim + 1;
+            this->vars[n].max_dim = this->vars[n].min_dim + a->model_dims[n];
+        }
+
+        // Set block bounds (if not already done by DIY)
+        if (!a->multiblock)
+        {
+            bounds_mins.resize(pt_dim);
+            bounds_maxs.resize(pt_dim);
+            core_mins.resize(geom_dim);
+            core_maxs.resize(geom_dim);
+            for (int i = 0; i < geom_dim; i++)
+            {
+                bounds_mins(i)  = a->min[i];
+                bounds_maxs(i)  = a->max[i];
+                core_mins(i)    = a->min[i];
+                core_maxs(i)    = a->max[i];
+            }
+        }
+
+        // decide overlap in each direction; they should be symmetric for neighbors
+        // so if block a overlaps block b, block b overlaps a the same area
+        for (size_t k = 0; k < geom_dim; k++)
+        {
+            overlaps(k) = fabs(core_mins(k) - bounds_mins(k));
+            T m2 = fabs(bounds_maxs(k) - core_maxs(k));
+            if (m2 > overlaps(k))
+                overlaps(k) = m2;
+        }
+
+
+        // Create input data set and add to block
+        input = new mfa::PointSet<T>(dom_dim, pt_dim, a->tot_ndom_pts);
+        input->set_bounds(core_mins, core_maxs);
+
+        // Choose a system-dependent seed if seed==0
+        if (seed == 0)
+            seed = chrono::system_clock::now().time_since_epoch().count();
+
+        std::default_random_engine df_gen(seed);
+        std::uniform_real_distribution<double> u_dist(0.0, 1.0);
+
+        // Fill domain with randomly distributed points
+        size_t nvoids = 3;
+        double keep_frac = 1.0/5.0;
+        double radii_frac = 1.0/10.0;   // fraction of domain width to set as void radius
+        VectorX<T> radii(nvoids);
+        MatrixX<T> centers(geom_dim, nvoids);
+        for (size_t nv = 0; nv < nvoids; nv++) // Randomly generate the centers of each void
+        {
+            for (size_t k = 0; k < geom_dim; k++)
+            {
+                centers(k,nv) = input->dom_mins(k) + u_dist(df_gen) * (input->dom_maxs(k) - input->dom_mins(k));
+            }
+
+            radii(nv) = radii_frac * (input->dom_maxs - input->dom_mins).minCoeff();
+        }
+
+        for (size_t j = 0; j < input->domain.rows(); j++)
+        {
+
+            VectorX<T> candidate_pt(geom_dim);
+
+            bool keep = true;
+            do
+            {
+                // Generate a random point
+                for (size_t k = 0; k < geom_dim; k++)
+                {
+                    // input->domain(j, k) = input->dom_mins(k) + u_dist(df_gen) * (input->dom_maxs(k) - input->dom_mins(k));
+                    candidate_pt(k) = input->dom_mins(k) + u_dist(df_gen) * (input->dom_maxs(k) - input->dom_mins(k));
+                }
+
+                // Consider discarding point if within a certain radius of a void
+                for (size_t nv = 0; nv < nvoids; nv++)
+                {
+                    if ((candidate_pt - centers.col(nv)).norm() < radii(nv))
+                    {
+                        keep = false;
+                        break;
+                    }
+                }
+
+                // Keep this point anyway a certain fraction of the time
+                if (keep == false)
+                {
+                    if (u_dist(df_gen) <= keep_frac)
+                        keep = true;
+                }
+            } while (!keep);    
+
+            // Add point to Input
+            for (size_t k = 0; k < geom_dim; k++)
+            {
+                input->domain(j,k) = candidate_pt(k);
+            }
+
+            VectorX<T> dom_pt = input->domain.block(j, 0, 1, geom_dim).transpose();
+            T retval;
+            for (size_t n = 0; n < nvars; n++)        // for all science variables
+            {
+                if (fun == "sine")
+                    retval = sine(dom_pt, args, n);
+                if (fun == "sinc")
+                    retval = sinc(dom_pt, args, n);
+                if (fun == "psinc1")
+                    retval = polysinc1(dom_pt, args);
+                if (fun == "psinc2")
+                    retval = polysinc2(dom_pt, args);
+                if (fun == "ml")
+                {
+                    if (this->dom_dim != 3)
+                    {
+                        fprintf(stderr, "Error: Marschner-Lobb function is only defined for a 3d domain.\n");
+                        exit(0);
+                    }
+                    retval = ml(dom_pt, args);
+                }
+                if (fun == "f16")
+                    retval = f16(dom_pt);
+                if (fun == "f17")
+                    retval = f17(dom_pt);
+                if (fun == "f18")
+                    retval = f18(dom_pt);
+                input->domain(j, geom_dim + n) = retval;
+
+                if (j == 0 || input->domain(j, geom_dim + n) > bounds_maxs(geom_dim + n))
+                    bounds_maxs(geom_dim + n) = input->domain(j, geom_dim + n);
+                if (j == 0 || input->domain(j, geom_dim + n) < bounds_mins(geom_dim + n))
+                    bounds_mins(geom_dim + n) = input->domain(j, geom_dim + n);
+            }      
+        }
+
+        input->init_params(core_mins, core_maxs);     // Set explicit bounding box for parameter space
+        this->mfa = new mfa::MFA<T>(dom_dim);
+
+        // extents
+        fprintf(stderr, "gid = %d\n", cp.gid());
+        cerr << "core_mins:\n" << core_mins << endl;
+        cerr << "core_maxs:\n" << core_maxs << endl;
+        cerr << "bounds_mins:\n" << bounds_mins << endl;
+        cerr << "bounds_maxs:\n" << bounds_maxs << endl;
+    }
+
+    // Creates a synthetic dataset on a rectilinear grid of points
+    // This grid can be treated as EITHER a "structured" or "unstructured"
+    // PointSet by setting the args.structured field appropriately
+    void generate_rectilinear_analytical_data(
             const diy::Master::ProxyWithLink&   cp,
             string&                             fun,        // function to evaluate
             DomainArgs&                         args)
     {
         DomainArgs* a   = &args;
+
+        // TODO: This assumes that dom_dim = dimension of ambient geometry.
+        //       Not always true, can model a 2d surface in 3d, e.g.
+        //       Also assumes each var is scalar
         int nvars       = this->pt_dim - this->dom_dim;             // number of science variables
+
         this->vars.resize(nvars);
         this->max_errs.resize(nvars);
         this->sum_sq_errs.resize(nvars);
-        int tot_ndom_pts    = 1;
+        // int tot_ndom_pts    = 1;
         this->geometry.min_dim = 0;
-        this->geometry.max_dim = this->dom_dim - 1;
+        this->geometry.max_dim = this->dom_dim - 1;  // TODO fix dom_dim assumption, see above
         for (int j = 0; j < nvars; j++)
         {
             this->vars[j].min_dim = this->dom_dim + j;
@@ -272,6 +510,8 @@ struct Block : public BlockBase<T>
                 this->core_mins(i)    = a->min[i];
                 this->core_maxs(i)    = a->max[i];
             }
+            this->bounds_mins(dom_dim) = numeric_limits<T>::min();
+            this->bounds_maxs(dom_dim) = numeric_limits<T>::max();
         }
 
         // adjust number of domain points and starting domain point for ghost
@@ -288,7 +528,7 @@ struct Block : public BlockBase<T>
             // max direction
             nghost_pts = floor((this->bounds_maxs(i) - this->core_maxs(i)) / d(i));
             ndom_pts(i) += nghost_pts;
-            tot_ndom_pts *= ndom_pts(i);
+            // tot_ndom_pts *= ndom_pts(i);
 
             // decide overlap in each direction; they should be symmetric for neighbors
             // so if block a overlaps block b, block b overlaps a the same area
@@ -298,7 +538,10 @@ struct Block : public BlockBase<T>
                 this->overlaps(i) = m2;
         }
 
-        this->domain.resize(tot_ndom_pts, this->pt_dim);
+        if (args.structured)
+            input = new mfa::PointSet<T>(dom_dim, pt_dim, ndom_pts.prod(), ndom_pts);
+        else
+            input = new mfa::PointSet<T>(dom_dim, pt_dim, ndom_pts.prod());
 
         // assign values to the domain (geometry)
         mfa::VolIterator vol_it(ndom_pts);
@@ -309,7 +552,7 @@ struct Block : public BlockBase<T>
             int j = (int)vol_it.cur_iter();
             // compute geometry coordinates of domain point
             for (auto i = 0; i < this->dom_dim; i++)
-                this->domain(j, i) = p0(i) + vol_it.idx_dim(i) * d(i);
+                input->domain(j, i) = p0(i) + vol_it.idx_dim(i) * d(i);
 
             vol_it.incr_iter();
         }
@@ -320,9 +563,9 @@ struct Block : public BlockBase<T>
 
         // assign values to the range (science variables)
         VectorX<T> dom_pt(this->dom_dim);
-        for (int j = 0; j < tot_ndom_pts; j++)
+        for (int j = 0; j < input->domain.rows(); j++)
         {
-            dom_pt = this->domain.block(j, 0, 1, this->dom_dim).transpose();
+            dom_pt = input->domain.block(j, 0, 1, this->dom_dim).transpose();
             T retval;
             for (auto k = 0; k < nvars; k++)        // for all science variables
             {
@@ -349,56 +592,56 @@ struct Block : public BlockBase<T>
                     retval = f17(dom_pt);
                 if (fun == "f18")
                     retval = f18(dom_pt);
-                this->domain(j, this->dom_dim + k) = retval;
+                input->domain(j, this->dom_dim + k) = retval;
             }
 
             // add some noise
             double noise = distribution(generator);
-            this->domain(j, this->dom_dim) *= (1.0 + a->n * noise);
+            input->domain(j, this->dom_dim) *= (1.0 + a->n * noise);
 
-            if (j == 0 || this->domain(j, this->dom_dim) > this->bounds_maxs(this->dom_dim))
-                this->bounds_maxs(this->dom_dim) = this->domain(j, this->dom_dim);
-            if (j == 0 || this->domain(j, this->dom_dim) < this->bounds_mins(this->dom_dim))
-                this->bounds_mins(this->dom_dim) = this->domain(j, this->dom_dim);
+            if (j == 0 || input->domain(j, this->dom_dim) > this->bounds_maxs(this->dom_dim))
+                this->bounds_maxs(this->dom_dim) = input->domain(j, this->dom_dim);
+            if (j == 0 || input->domain(j, this->dom_dim) < this->bounds_mins(this->dom_dim))
+                this->bounds_mins(this->dom_dim) = input->domain(j, this->dom_dim);
         }
 
         // optional wavy domain
         if (a->t && this->pt_dim >= 3)
         {
-            for (auto j = 0; j < tot_ndom_pts; j++)
+            for (auto j = 0; j < input->domain.rows(); j++)
             {
-                real_t x = this->domain(j, 0);
-                real_t y = this->domain(j, 1);
-                this->domain(j, 0) += a->t * sin(y);
-                this->domain(j, 1) += a->t * sin(x);
-                if (j == 0 || this->domain(j, 0) < this->bounds_mins(0))
-                    this->bounds_mins(0) = this->domain(j, 0);
-                if (j == 0 || this->domain(j, 1) < this->bounds_mins(1))
-                    this->bounds_mins(1) = this->domain(j, 1);
-                if (j == 0 || this->domain(j, 0) > this->bounds_maxs(0))
-                    this->bounds_maxs(0) = this->domain(j, 0);
-                if (j == 0 || this->domain(j, 1) > this->bounds_maxs(1))
-                    this->bounds_maxs(1) = this->domain(j, 1);
+                real_t x = input->domain(j, 0);
+                real_t y = input->domain(j, 1);
+                input->domain(j, 0) += a->t * sin(y);
+                input->domain(j, 1) += a->t * sin(x);
+                if (j == 0 || input->domain(j, 0) < this->bounds_mins(0))
+                    this->bounds_mins(0) = input->domain(j, 0);
+                if (j == 0 || input->domain(j, 1) < this->bounds_mins(1))
+                    this->bounds_mins(1) = input->domain(j, 1);
+                if (j == 0 || input->domain(j, 0) > this->bounds_maxs(0))
+                    this->bounds_maxs(0) = input->domain(j, 0);
+                if (j == 0 || input->domain(j, 1) > this->bounds_maxs(1))
+                    this->bounds_maxs(1) = input->domain(j, 1);
             }
         }
 
         // optional rotation of the domain
         if (a->r && this->pt_dim >= 3)
         {
-            for (auto j = 0; j < tot_ndom_pts; j++)
+            for (auto j = 0; j < input->domain.rows(); j++)
             {
-                real_t x = this->domain(j, 0);
-                real_t y = this->domain(j, 1);
-                this->domain(j, 0) = x * cos(a->r) - y * sin(a->r);
-                this->domain(j, 1) = x * sin(a->r) + y * cos(a->r);
-                if (j == 0 || this->domain(j, 0) < this->bounds_mins(0))
-                    this->bounds_mins(0) = this->domain(j, 0);
-                if (j == 0 || this->domain(j, 1) < this->bounds_mins(1))
-                    this->bounds_mins(1) = this->domain(j, 1);
-                if (j == 0 || this->domain(j, 0) > this->bounds_maxs(0))
-                    this->bounds_maxs(0) = this->domain(j, 0);
-                if (j == 0 || this->domain(j, 1) > this->bounds_maxs(1))
-                    this->bounds_maxs(1) = this->domain(j, 1);
+                real_t x = input->domain(j, 0);
+                real_t y = input->domain(j, 1);
+                input->domain(j, 0) = x * cos(a->r) - y * sin(a->r);
+                input->domain(j, 1) = x * sin(a->r) + y * cos(a->r);
+                if (j == 0 || input->domain(j, 0) < this->bounds_mins(0))
+                    this->bounds_mins(0) = input->domain(j, 0);
+                if (j == 0 || input->domain(j, 1) < this->bounds_mins(1))
+                    this->bounds_mins(1) = input->domain(j, 1);
+                if (j == 0 || input->domain(j, 0) > this->bounds_maxs(0))
+                    this->bounds_maxs(0) = input->domain(j, 0);
+                if (j == 0 || input->domain(j, 1) > this->bounds_maxs(1))
+                    this->bounds_maxs(1) = input->domain(j, 1);
             }
         }
 
@@ -408,7 +651,8 @@ struct Block : public BlockBase<T>
         for (int k = 0; k < this->dom_dim; k++)
             this->map_dir.push_back(k);
 
-        this->mfa = new mfa::MFA<T>(this->dom_dim, ndom_pts, this->domain);
+        input->init_params();
+        this->mfa = new mfa::MFA<T>(this->dom_dim);
 
         // extents
         fprintf(stderr, "gid = %d\n", cp.gid());
@@ -426,7 +670,7 @@ struct Block : public BlockBase<T>
     void read_1d_slice_3d_vector_data(
             const       diy::Master::ProxyWithLink& cp,
             DomainArgs& args)
-    {
+    {   
         DomainArgs* a = &args;
         int tot_ndom_pts = 1;
         this->geometry.min_dim = 0;
@@ -445,8 +689,13 @@ struct Block : public BlockBase<T>
             ndom_pts(i)                     =  a->ndom_pts[i];
             tot_ndom_pts                    *= ndom_pts(i);
         }
-        this->domain.resize(tot_ndom_pts, this->pt_dim);
         vector<float> vel(3 * tot_ndom_pts);
+
+        // Construct point set to contain input
+        if (args.structured)
+            input = new mfa::PointSet<T>(dom_dim, pt_dim, tot_ndom_pts, ndom_pts);
+        else
+            input = new mfa::PointSet<T>(dom_dim, pt_dim, tot_ndom_pts);
 
         // rest is hard-coded for 1d
 
@@ -463,7 +712,7 @@ struct Block : public BlockBase<T>
         }
         for (size_t i = 0; i < vel.size() / 3; i++)
         {
-            this->domain(i, 1) = sqrt(vel[3 * i    ] * vel[3 * i    ] +
+            input->domain(i, 1) = sqrt(vel[3 * i    ] * vel[3 * i    ] +
                     vel[3 * i + 1] * vel[3 * i + 1] +
                     vel[3 * i + 2] * vel[3 * i + 2]);
             // fprintf(stderr, "vel [%.3f %.3f %.3f] mag %.3f\n",
@@ -471,37 +720,38 @@ struct Block : public BlockBase<T>
         }
 
         // find extent of range
-        for (size_t i = 0; i < (size_t)this->domain.rows(); i++)
+        for (size_t i = 0; i < (size_t)input->domain.rows(); i++)
         {
-            if (i == 0 || this->domain(i, 1) < this->bounds_mins(1))
-                this->bounds_mins(1) = this->domain(i, 1);
-            if (i == 0 || this->domain(i, 1) > this->bounds_maxs(1))
-                this->bounds_maxs(1) = this->domain(i, 1);
+            if (i == 0 || input->domain(i, 1) < bounds_mins(1))
+                bounds_mins(1) = input->domain(i, 1);
+            if (i == 0 || input->domain(i, 1) > bounds_maxs(1))
+                bounds_maxs(1) = input->domain(i, 1);
         }
 
         // set domain values (just equal to i, j; ie, dx, dy = 1, 1)
         int n = 0;
         for (size_t i = 0; i < (size_t)(ndom_pts(0)); i++)
         {
-            this->domain(n, 0) = i;
+            input->domain(n, 0) = i;
             n++;
         }
 
         // extents
-        this->bounds_mins(0) = 0.0;
-        this->bounds_maxs(0) = this->domain(tot_ndom_pts - 1, 0);
-        this->core_mins.resize(this->dom_dim);
-        this->core_maxs.resize(this->dom_dim);
-        for (int i = 0; i < this->dom_dim; i++)
+        bounds_mins(0) = 0.0;
+        bounds_maxs(0) = input->domain(tot_ndom_pts - 1, 0);
+        core_mins.resize(dom_dim);
+        core_maxs.resize(dom_dim);
+        for (int i = 0; i < dom_dim; i++)
         {
-            this->core_mins(i) = this->bounds_mins(i);
-            this->core_maxs(i) = this->bounds_maxs(i);
+            core_mins(i) = bounds_mins(i);
+            core_maxs(i) = bounds_maxs(i);
         }
 
-        this->mfa = new mfa::MFA<T>(this->dom_dim, ndom_pts, this->domain);
+        input->init_params();
+        this->mfa = new mfa::MFA<T>(dom_dim);
 
         // debug
-        cerr << "domain extent:\n min\n" << this->bounds_mins << "\nmax\n" << this->bounds_maxs << endl;
+        cerr << "domain extent:\n min\n" << bounds_mins << "\nmax\n" << bounds_maxs << endl;
     }
 
     // read a floating point 3d vector dataset and take one 2-d surface out of the middle of it
@@ -513,23 +763,28 @@ struct Block : public BlockBase<T>
         DomainArgs* a = &args;
         int tot_ndom_pts = 1;
         this->geometry.min_dim = 0;
-        this->geometry.max_dim = this->dom_dim - 1;
+        this->geometry.max_dim = dom_dim - 1;
         int nvars = 1;
         this->vars.resize(nvars);
         this->max_errs.resize(nvars);
         this->sum_sq_errs.resize(nvars);
-        this->vars[0].min_dim = this->dom_dim;
+        this->vars[0].min_dim = dom_dim;
         this->vars[0].max_dim = this->vars[0].min_dim;
-        VectorXi ndom_pts(this->dom_dim);
-        this->bounds_mins.resize(this->pt_dim);
-        this->bounds_maxs.resize(this->pt_dim);
-        for (int i = 0; i < this->dom_dim; i++)
+        VectorXi ndom_pts(dom_dim);
+        this->bounds_mins.resize(pt_dim);
+        this->bounds_maxs.resize(pt_dim);
+        for (int i = 0; i < dom_dim; i++)
         {
             ndom_pts(i)                     =  a->ndom_pts[i];
             tot_ndom_pts                    *= ndom_pts(i);
         }
-        this->domain.resize(tot_ndom_pts, this->pt_dim);
         vector<float> vel(3 * tot_ndom_pts);
+
+        // Construct point set to contain input
+        if (args.structured)
+            input = new mfa::PointSet<T>(dom_dim, pt_dim, tot_ndom_pts, ndom_pts);
+        else
+            input = new mfa::PointSet<T>(dom_dim, pt_dim, tot_ndom_pts);
 
         // rest is hard-coded for 2d
 
@@ -547,7 +802,7 @@ struct Block : public BlockBase<T>
         }
         for (size_t i = 0; i < vel.size() / 3; i++)
         {
-            this->domain(i, 2) = sqrt(vel[3 * i    ] * vel[3 * i    ] +
+            input->domain(i, 2) = sqrt(vel[3 * i    ] * vel[3 * i    ] +
                     vel[3 * i + 1] * vel[3 * i + 1] +
                     vel[3 * i + 2] * vel[3 * i + 2]);
 //              fprintf(stderr, "vel [%.3f %.3f %.3f]\n",
@@ -555,12 +810,12 @@ struct Block : public BlockBase<T>
         }
 
         // find extent of range
-        for (size_t i = 0; i < (size_t)this->domain.rows(); i++)
+        for (size_t i = 0; i < (size_t)input->domain.rows(); i++)
         {
-            if (i == 0 || this->domain(i, 2) < this->bounds_mins(2))
-                this->bounds_mins(2) = this->domain(i, 2);
-            if (i == 0 || this->domain(i, 2) > this->bounds_maxs(2))
-                this->bounds_maxs(2) = this->domain(i, 2);
+            if (i == 0 || input->domain(i, 2) < bounds_mins(2))
+                bounds_mins(2) = input->domain(i, 2);
+            if (i == 0 || input->domain(i, 2) > bounds_maxs(2))
+                bounds_maxs(2) = input->domain(i, 2);
         }
 
         // set domain values (just equal to i, j; ie, dx, dy = 1, 1)
@@ -568,28 +823,29 @@ struct Block : public BlockBase<T>
         for (size_t j = 0; j < (size_t)(ndom_pts(1)); j++)
             for (size_t i = 0; i < (size_t)(ndom_pts(0)); i++)
             {
-                this->domain(n, 0) = i;
-                this->domain(n, 1) = j;
+                input->domain(n, 0) = i;
+                input->domain(n, 1) = j;
                 n++;
             }
 
         // extents
-        this->bounds_mins(0) = 0.0;
-        this->bounds_mins(1) = 0.0;
-        this->bounds_maxs(0) = this->domain(tot_ndom_pts - 1, 0);
-        this->bounds_maxs(1) = this->domain(tot_ndom_pts - 1, 1);
-        this->core_mins.resize(this->dom_dim);
-        this->core_maxs.resize(this->dom_dim);
+        bounds_mins(0) = 0.0;
+        bounds_mins(1) = 0.0;
+        bounds_maxs(0) = input->domain(tot_ndom_pts - 1, 0);
+        bounds_maxs(1) = input->domain(tot_ndom_pts - 1, 1);
+        core_mins.resize(dom_dim);
+        core_maxs.resize(dom_dim);
         for (int i = 0; i < this->dom_dim; i++)
         {
-            this->core_mins(i) = this->bounds_mins(i);
-            this->core_maxs(i) = this->bounds_maxs(i);
+            core_mins(i) = bounds_mins(i);
+            core_maxs(i) = bounds_maxs(i);
         }
 
-        this->mfa = new mfa::MFA<T>(this->dom_dim, ndom_pts, this->domain);
+        input->init_params();
+        this->mfa = new mfa::MFA<T>(dom_dim);
 
         // debug
-        cerr << "domain extent:\n min\n" << this->bounds_mins << "\nmax\n" << this->bounds_maxs << endl;
+        cerr << "domain extent:\n min\n" << bounds_mins << "\nmax\n" << bounds_maxs << endl;
     }
 
     // read a floating point 3d vector dataset and take one 2d (parallel to x-y plane) subset
@@ -601,23 +857,28 @@ struct Block : public BlockBase<T>
         DomainArgs* a = &args;
         int tot_ndom_pts = 1;
         this->geometry.min_dim = 0;
-        this->geometry.max_dim = this->dom_dim - 1;
+        this->geometry.max_dim = dom_dim - 1;
         int nvars = 1;
         this->vars.resize(nvars);
         this->max_errs.resize(nvars);
         this->sum_sq_errs.resize(nvars);
-        this->vars[0].min_dim = this->dom_dim;
+        this->vars[0].min_dim = dom_dim;
         this->vars[0].max_dim = this->vars[0].min_dim;
-        VectorXi ndom_pts(this->dom_dim);
-        this->bounds_mins.resize(this->pt_dim);
-        this->bounds_maxs.resize(this->pt_dim);
-        for (int i = 0; i < this->dom_dim; i++)
+        VectorXi ndom_pts(dom_dim);
+        bounds_mins.resize(pt_dim);
+        bounds_maxs.resize(pt_dim);
+        for (int i = 0; i < dom_dim; i++)
         {
             ndom_pts(i)     =  a->ndom_pts[i];
             tot_ndom_pts    *= ndom_pts(i);
         }
-        this->domain.resize(tot_ndom_pts, this->pt_dim);
         vector<float> vel(a->full_dom_pts[0] * a->full_dom_pts[1] * 3);
+
+        // Construct point set to contain input
+        if (args.structured)
+            input = new mfa::PointSet<T>(dom_dim, pt_dim, tot_ndom_pts, ndom_pts);
+        else
+            input = new mfa::PointSet<T>(dom_dim, pt_dim, tot_ndom_pts);
 
         FILE *fd = fopen(a->infile.c_str(), "r");
         assert(fd);
@@ -653,10 +914,10 @@ struct Block : public BlockBase<T>
 
             if (keep)
             {
-                this->domain(n, 0) = ijk[0];                  // domain is just i,j
-                this->domain(n, 1) = ijk[1];
+                input->domain(n, 0) = ijk[0];                  // domain is just i,j
+                input->domain(n, 1) = ijk[1];
                 // range (function value) is magnitude of velocity
-                this->domain(n, 2) = sqrt(vel[3 * i    ] * vel[3 * i    ] +
+                input->domain(n, 2) = sqrt(vel[3 * i    ] * vel[3 * i    ] +
                         vel[3 * i + 1] * vel[3 * i + 1] +
                         vel[3 * i + 2] * vel[3 * i + 2]);
                 n++;
@@ -675,32 +936,33 @@ struct Block : public BlockBase<T>
         }
 
         // find extent of range
-        for (size_t i = 0; i < (size_t)this->domain.rows(); i++)
+        for (size_t i = 0; i < (size_t)input->domain.rows(); i++)
         {
-            if (i == 0 || this->domain(i, 2) < this->bounds_mins(2))
-                this->bounds_mins(2) = this->domain(i, 2);
-            if (i == 0 || this->domain(i, 2) > this->bounds_maxs(2))
-                this->bounds_maxs(2) = this->domain(i, 2);
+            if (i == 0 || input->domain(i, 2) < bounds_mins(2))
+                bounds_mins(2) = input->domain(i, 2);
+            if (i == 0 || input->domain(i, 2) > bounds_maxs(2))
+                bounds_maxs(2) = input->domain(i, 2);
         }
 
         // extent of domain is just lower left and upper right corner, which in row-major order
         // is the first point and the last point
-        this->bounds_mins(0) = this->domain(0, 0);
-        this->bounds_mins(1) = this->domain(0, 1);
-        this->bounds_maxs(0) = this->domain(tot_ndom_pts - 1, 0);
-        this->bounds_maxs(1) = this->domain(tot_ndom_pts - 1, 1);
-        this->core_mins.resize(this->dom_dim);
-        this->core_maxs.resize(this->dom_dim);
-        for (int i = 0; i < this->dom_dim; i++)
+        bounds_mins(0) = input->domain(0, 0);
+        bounds_mins(1) = input->domain(0, 1);
+        bounds_maxs(0) = input->domain(tot_ndom_pts - 1, 0);
+        bounds_maxs(1) = input->domain(tot_ndom_pts - 1, 1);
+        core_mins.resize(dom_dim);
+        core_maxs.resize(dom_dim);
+        for (int i = 0; i < dom_dim; i++)
         {
-            this->core_mins(i) = this->bounds_mins(i);
-            this->core_maxs(i) = this->bounds_maxs(i);
+            core_mins(i) = bounds_mins(i);
+            core_maxs(i) = bounds_maxs(i);
         }
 
-        this->mfa = new mfa::MFA<T>(this->dom_dim, ndom_pts, this->domain);
+        input->init_params();
+        this->mfa = new mfa::MFA<T>(dom_dim);
 
         // debug
-        cerr << "domain extent:\n min\n" << this->bounds_mins << "\nmax\n" << this->bounds_maxs << endl;
+        cerr << "domain extent:\n min\n" << bounds_mins << "\nmax\n" << bounds_maxs << endl;
     }
 
     // read a floating point 3d vector dataset
@@ -712,22 +974,27 @@ struct Block : public BlockBase<T>
         DomainArgs* a = &args;
         int tot_ndom_pts = 1;
         this->geometry.min_dim = 0;
-        this->geometry.max_dim = this->dom_dim - 1;
+        this->geometry.max_dim = dom_dim - 1;
         int nvars = 1;
         this->vars.resize(nvars);
         this->max_errs.resize(nvars);
         this->sum_sq_errs.resize(nvars);
-        this->vars[0].min_dim = this->dom_dim;
+        this->vars[0].min_dim = dom_dim;
         this->vars[0].max_dim = this->vars[0].min_dim;
-        VectorXi ndom_pts(this->dom_dim);
-        this->bounds_mins.resize(this->pt_dim);
-        this->bounds_maxs.resize(this->pt_dim);
-        for (int i = 0; i < this->dom_dim; i++)
+        VectorXi ndom_pts(dom_dim);
+        this->bounds_mins.resize(pt_dim);
+        this->bounds_maxs.resize(pt_dim);
+        for (int i = 0; i < dom_dim; i++)
         {
             ndom_pts(i)                     =  a->ndom_pts[i];
             tot_ndom_pts                    *= ndom_pts(i);
         }
-        this->domain.resize(tot_ndom_pts, this->pt_dim);
+
+        // Construct point set to contain input
+        if (args.structured)
+            input = new mfa::PointSet<T>(dom_dim, pt_dim, tot_ndom_pts, ndom_pts);
+        else
+            input = new mfa::PointSet<T>(dom_dim, pt_dim, tot_ndom_pts);
 
         vector<float> vel(3 * tot_ndom_pts);
 
@@ -742,7 +1009,7 @@ struct Block : public BlockBase<T>
         }
         for (size_t i = 0; i < vel.size() / 3; i++)
         {
-            this->domain(i, 3) = sqrt(vel[3 * i    ] * vel[3 * i    ] +
+            input->domain(i, 3) = sqrt(vel[3 * i    ] * vel[3 * i    ] +
                     vel[3 * i + 1] * vel[3 * i + 1] +
                     vel[3 * i + 2] * vel[3 * i + 2]);
 //             if (i < 1000)
@@ -753,12 +1020,12 @@ struct Block : public BlockBase<T>
         // rest is hard-coded for 3d
 
         // find extent of range
-        for (size_t i = 0; i < (size_t)this->domain.rows(); i++)
+        for (size_t i = 0; i < (size_t)input->domain.rows(); i++)
         {
-            if (i == 0 || this->domain(i, 3) < this->bounds_mins(3))
-                this->bounds_mins(3) = this->domain(i, 3);
-            if (i == 0 || this->domain(i, 3) > this->bounds_maxs(3))
-                this->bounds_maxs(3) = this->domain(i, 3);
+            if (i == 0 || input->domain(i, 3) < bounds_mins(3))
+                bounds_mins(3) = input->domain(i, 3);
+            if (i == 0 || input->domain(i, 3) > bounds_maxs(3))
+                bounds_maxs(3) = input->domain(i, 3);
         }
 
         // set domain values (just equal to i, j; ie, dx, dy = 1, 1)
@@ -767,31 +1034,32 @@ struct Block : public BlockBase<T>
             for (size_t j = 0; j < (size_t)(ndom_pts(1)); j++)
                 for (size_t i = 0; i < (size_t)(ndom_pts(0)); i++)
                 {
-                    this->domain(n, 0) = i;
-                    this->domain(n, 1) = j;
-                    this->domain(n, 2) = k;
+                    input->domain(n, 0) = i;
+                    input->domain(n, 1) = j;
+                    input->domain(n, 2) = k;
                     n++;
                 }
 
         // extents
-        this->bounds_mins(0) = 0.0;
-        this->bounds_mins(1) = 0.0;
-        this->bounds_mins(2) = 0.0;
-        this->bounds_maxs(0) = this->domain(tot_ndom_pts - 1, 0);
-        this->bounds_maxs(1) = this->domain(tot_ndom_pts - 1, 1);
-        this->bounds_maxs(2) = this->domain(tot_ndom_pts - 1, 2);
-        this->core_mins.resize(this->dom_dim);
-        this->core_maxs.resize(this->dom_dim);
-        for (int i = 0; i < this->dom_dim; i++)
+        bounds_mins(0) = 0.0;
+        bounds_mins(1) = 0.0;
+        bounds_mins(2) = 0.0;
+        bounds_maxs(0) = input->domain(tot_ndom_pts - 1, 0);
+        bounds_maxs(1) = input->domain(tot_ndom_pts - 1, 1);
+        bounds_maxs(2) = input->domain(tot_ndom_pts - 1, 2);
+        core_mins.resize(dom_dim);
+        core_maxs.resize(dom_dim);
+        for (int i = 0; i < dom_dim; i++)
         {
-            this->core_mins(i) = this->bounds_mins(i);
-            this->core_maxs(i) = this->bounds_maxs(i);
+            core_mins(i) = bounds_mins(i);
+            core_maxs(i) = bounds_maxs(i);
         }
 
-        this->mfa = new mfa::MFA<T>(this->dom_dim, ndom_pts, this->domain);
+        input->init_params();
+        this->mfa = new mfa::MFA<T>(dom_dim);
 
         // debug
-        cerr << "domain extent:\n min\n" << this->bounds_mins << "\nmax\n" << this->bounds_maxs << endl;
+        cerr << "domain extent:\n min\n" << bounds_mins << "\nmax\n" << bounds_maxs << endl;
     }
 
     // read a floating point 3d vector dataset and take a 3d subset out of it
@@ -803,22 +1071,28 @@ struct Block : public BlockBase<T>
         DomainArgs* a = &args;
         int tot_ndom_pts = 1;
         this->geometry.min_dim = 0;
-        this->geometry.max_dim = this->dom_dim - 1;
+        this->geometry.max_dim = dom_dim - 1;
         int nvars = 1;
         this->vars.resize(nvars);
         this->max_errs.resize(nvars);
         this->sum_sq_errs.resize(nvars);
-        this->vars[0].min_dim = this->dom_dim;
+        this->vars[0].min_dim = dom_dim;
         this->vars[0].max_dim = this->vars[0].min_dim;
-        VectorXi ndom_pts(this->dom_dim);
-        this->bounds_mins.resize(this->pt_dim);
-        this->bounds_maxs.resize(this->pt_dim);
-        for (int i = 0; i < this->dom_dim; i++)
+        VectorXi ndom_pts(dom_dim);
+        bounds_mins.resize(pt_dim);
+        bounds_maxs.resize(pt_dim);
+        for (int i = 0; i < dom_dim; i++)
         {
             ndom_pts(i)     =  a->ndom_pts[i];
             tot_ndom_pts    *= ndom_pts(i);
         }
-        this->domain.resize(tot_ndom_pts, this->pt_dim);
+
+        // Construct point set to contain input
+        if (args.structured)
+            input = new mfa::PointSet<T>(dom_dim, pt_dim, tot_ndom_pts, ndom_pts);
+        else
+            input = new mfa::PointSet<T>(dom_dim, pt_dim, tot_ndom_pts);
+
         vector<float> vel(a->full_dom_pts[0] * a->full_dom_pts[1] * a->full_dom_pts[2] * 3);
 
         FILE *fd = fopen(a->infile.c_str(), "r");
@@ -850,10 +1124,10 @@ struct Block : public BlockBase<T>
 
             if (keep)
             {
-                this->domain(n, 0) = ijk[0];                  // domain is just i,j
-                this->domain(n, 1) = ijk[1];
-                this->domain(n, 2) = ijk[2];
-                this->domain(n, 3) = sqrt(vel[3 * i    ] * vel[3 * i    ] +
+                input->domain(n, 0) = ijk[0];                  // domain is just i,j
+                input->domain(n, 1) = ijk[1];
+                input->domain(n, 2) = ijk[2];
+                input->domain(n, 3) = sqrt(vel[3 * i    ] * vel[3 * i    ] +
                         vel[3 * i + 1] * vel[3 * i + 1] +
                         vel[3 * i + 2] * vel[3 * i + 2]);
                 n++;
@@ -878,34 +1152,35 @@ struct Block : public BlockBase<T>
         }
 
         // find extent of range
-        for (size_t i = 0; i < (size_t)this->domain.rows(); i++)
+        for (size_t i = 0; i < (size_t)input->domain.rows(); i++)
         {
-            if (i == 0 || this->domain(i, 3) < this->bounds_mins(3))
-                this->bounds_mins(3) = this->domain(i, 3);
-            if (i == 0 || this->domain(i, 3) > this->bounds_maxs(3))
-                this->bounds_maxs(3) = this->domain(i, 3);
+            if (i == 0 || input->domain(i, 3) < bounds_mins(3))
+                bounds_mins(3) = input->domain(i, 3);
+            if (i == 0 || input->domain(i, 3) > bounds_maxs(3))
+                bounds_maxs(3) = input->domain(i, 3);
         }
 
         // extent of domain is just lower left and upper right corner, which in row-major order
         // is the first point and the last point
-        this->bounds_mins(0) = this->domain(0, 0);
-        this->bounds_mins(1) = this->domain(0, 1);
-        this->bounds_mins(2) = this->domain(0, 2);
-        this->bounds_maxs(0) = this->domain(tot_ndom_pts - 1, 0);
-        this->bounds_maxs(1) = this->domain(tot_ndom_pts - 1, 1);
-        this->bounds_maxs(2) = this->domain(tot_ndom_pts - 1, 2);
-        this->core_mins.resize(this->dom_dim);
-        this->core_maxs.resize(this->dom_dim);
-        for (int i = 0; i < this->dom_dim; i++)
+        bounds_mins(0) = input->domain(0, 0);
+        bounds_mins(1) = input->domain(0, 1);
+        bounds_mins(2) = input->domain(0, 2);
+        bounds_maxs(0) = input->domain(tot_ndom_pts - 1, 0);
+        bounds_maxs(1) = input->domain(tot_ndom_pts - 1, 1);
+        bounds_maxs(2) = input->domain(tot_ndom_pts - 1, 2);
+        core_mins.resize(dom_dim);
+        core_maxs.resize(dom_dim);
+        for (int i = 0; i < dom_dim; i++)
         {
-            this->core_mins(i) = this->bounds_mins(i);
-            this->core_maxs(i) = this->bounds_maxs(i);
+            core_mins(i) = bounds_mins(i);
+            core_maxs(i) = bounds_maxs(i);
         }
 
-        this->mfa = new mfa::MFA<T>(this->dom_dim, ndom_pts, this->domain);
+        input->init_params();
+        this->mfa = new mfa::MFA<T>(dom_dim);
 
         // debug
-        cerr << "domain extent:\n min\n" << this->bounds_mins << "\nmax\n" << this->bounds_maxs << endl;
+        cerr << "domain extent:\n min\n" << bounds_mins << "\nmax\n" << bounds_maxs << endl;
     }
 
     // read a floating point 2d scalar dataset
@@ -917,22 +1192,27 @@ struct Block : public BlockBase<T>
         DomainArgs* a = &args;
         int tot_ndom_pts = 1;
         this->geometry.min_dim = 0;
-        this->geometry.max_dim = this->dom_dim - 1;
+        this->geometry.max_dim = dom_dim - 1;
         int nvars = 1;
         this->vars.resize(nvars);
         this->max_errs.resize(nvars);
         this->sum_sq_errs.resize(nvars);
-        this->vars[0].min_dim = this->dom_dim;
+        this->vars[0].min_dim = dom_dim;
         this->vars[0].max_dim = this->vars[0].min_dim;
-        VectorXi ndom_pts(this->dom_dim);
-        this->bounds_mins.resize(this->pt_dim);
-        this->bounds_maxs.resize(this->pt_dim);
-        for (int i = 0; i < this->dom_dim; i++)
+        VectorXi ndom_pts(dom_dim);
+        bounds_mins.resize(pt_dim);
+        bounds_maxs.resize(pt_dim);
+        for (int i = 0; i < dom_dim; i++)
         {
             ndom_pts(i)     =  a->ndom_pts[i];
             tot_ndom_pts    *= ndom_pts(i);
         }
-        this->domain.resize(tot_ndom_pts, this->pt_dim);
+
+        // Construct point set to contain input
+        if (args.structured)
+            input = new mfa::PointSet<T>(dom_dim, pt_dim, tot_ndom_pts, ndom_pts);
+        else
+            input = new mfa::PointSet<T>(dom_dim, pt_dim, tot_ndom_pts);
 
         vector<float> val(tot_ndom_pts);
 
@@ -946,17 +1226,17 @@ struct Block : public BlockBase<T>
             exit(0);
         }
         for (size_t i = 0; i < val.size(); i++)
-            this->domain(i, 2) = val[i];
+            input->domain(i, 2) = val[i];
 
         // rest is hard-coded for 3d
 
         // find extent of range
-        for (size_t i = 0; i < (size_t)this->domain.rows(); i++)
+        for (size_t i = 0; i < (size_t)input->domain.rows(); i++)
         {
-            if (i == 0 || this->domain(i, 2) < this->bounds_mins(2))
-                this->bounds_mins(2) = this->domain(i, 2);
-            if (i == 0 || this->domain(i, 2) > this->bounds_maxs(2))
-                this->bounds_maxs(2) = this->domain(i, 2);
+            if (i == 0 || input->domain(i, 2) < bounds_mins(2))
+                bounds_mins(2) = input->domain(i, 2);
+            if (i == 0 || input->domain(i, 2) > bounds_maxs(2))
+                bounds_maxs(2) = input->domain(i, 2);
         }
 
         // set domain values (just equal to i, j; ie, dx, dy = 1, 1)
@@ -964,28 +1244,29 @@ struct Block : public BlockBase<T>
         for (size_t j = 0; j < (size_t)(ndom_pts(1)); j++)
             for (size_t i = 0; i < (size_t)(ndom_pts(0)); i++)
             {
-                this->domain(n, 0) = i;
-                this->domain(n, 1) = j;
+                input->domain(n, 0) = i;
+                input->domain(n, 1) = j;
                 n++;
             }
 
         // extents
-        this->bounds_mins(0) = 0.0;
-        this->bounds_mins(1) = 0.0;
-        this->bounds_maxs(0) = this->domain(tot_ndom_pts - 1, 0);
-        this->bounds_maxs(1) = this->domain(tot_ndom_pts - 1, 1);
-        this->core_mins.resize(this->dom_dim);
-        this->core_maxs.resize(this->dom_dim);
-        for (int i = 0; i < this->dom_dim; i++)
+        bounds_mins(0) = 0.0;
+        bounds_mins(1) = 0.0;
+        bounds_maxs(0) = input->domain(tot_ndom_pts - 1, 0);
+        bounds_maxs(1) = input->domain(tot_ndom_pts - 1, 1);
+        core_mins.resize(dom_dim);
+        core_maxs.resize(dom_dim);
+        for (int i = 0; i < dom_dim; i++)
         {
-            this->core_mins(i) = this->bounds_mins(i);
-            this->core_maxs(i) = this->bounds_maxs(i);
+            core_mins(i) = bounds_mins(i);
+            core_maxs(i) = bounds_maxs(i);
         }
 
-        this->mfa = new mfa::MFA<T>(this->dom_dim, ndom_pts, this->domain);
+        input->init_params();
+        this->mfa = new mfa::MFA<T>(dom_dim);
 
         // debug
-        cerr << "domain extent:\n min\n" << this->bounds_mins << "\nmax\n" << this->bounds_maxs << endl;
+        cerr << "domain extent:\n min\n" << bounds_mins << "\nmax\n" << bounds_maxs << endl;
     }
 
     // read a floating point 3d scalar dataset
@@ -997,22 +1278,27 @@ struct Block : public BlockBase<T>
         DomainArgs* a = &args;
         int tot_ndom_pts = 1;
         this->geometry.min_dim = 0;
-        this->geometry.max_dim = this->dom_dim - 1;
+        this->geometry.max_dim = dom_dim - 1;
         int nvars = 1;
         this->vars.resize(nvars);
         this->max_errs.resize(nvars);
         this->sum_sq_errs.resize(nvars);
-        this->vars[0].min_dim = this->dom_dim;
+        this->vars[0].min_dim = dom_dim;
         this->vars[0].max_dim = this->vars[0].min_dim;
-        VectorXi ndom_pts(this->dom_dim);
-        this->bounds_mins.resize(this->pt_dim);
-        this->bounds_maxs.resize(this->pt_dim);
-        for (int i = 0; i < this->dom_dim; i++)
+        VectorXi ndom_pts(dom_dim);
+        bounds_mins.resize(pt_dim);
+        bounds_maxs.resize(pt_dim);
+        for (int i = 0; i < dom_dim; i++)
         {
             ndom_pts(i)     =  a->ndom_pts[i];
             tot_ndom_pts    *= ndom_pts(i);
         }
-        this->domain.resize(tot_ndom_pts, this->pt_dim);
+
+        // Construct point set to contain input
+        if (args.structured)
+            input = new mfa::PointSet<T>(dom_dim, pt_dim, tot_ndom_pts, ndom_pts);
+        else
+            input = new mfa::PointSet<T>(dom_dim, pt_dim, tot_ndom_pts);
 
         vector<float> val(tot_ndom_pts);
 
@@ -1026,17 +1312,17 @@ struct Block : public BlockBase<T>
             exit(0);
         }
         for (size_t i = 0; i < val.size(); i++)
-            this->domain(i, 3) = val[i];
+            input->domain(i, 3) = val[i];
 
         // rest is hard-coded for 3d
 
         // find extent of range
-        for (size_t i = 0; i < (size_t)this->domain.rows(); i++)
+        for (size_t i = 0; i < (size_t)input->domain.rows(); i++)
         {
-            if (i == 0 || this->domain(i, 3) < this->bounds_mins(3))
-                this->bounds_mins(3) = this->domain(i, 3);
-            if (i == 0 || this->domain(i, 3) > this->bounds_maxs(3))
-                this->bounds_maxs(3) = this->domain(i, 3);
+            if (i == 0 || input->domain(i, 3) < bounds_mins(3))
+                bounds_mins(3) = input->domain(i, 3);
+            if (i == 0 || input->domain(i, 3) > bounds_maxs(3))
+                bounds_maxs(3) = input->domain(i, 3);
         }
 
         // set domain values (just equal to i, j; ie, dx, dy = 1, 1)
@@ -1045,31 +1331,110 @@ struct Block : public BlockBase<T>
             for (size_t j = 0; j < (size_t)(ndom_pts(1)); j++)
                 for (size_t i = 0; i < (size_t)(ndom_pts(0)); i++)
                 {
-                    this->domain(n, 0) = i;
-                    this->domain(n, 1) = j;
-                    this->domain(n, 2) = k;
+                    input->domain(n, 0) = i;
+                    input->domain(n, 1) = j;
+                    input->domain(n, 2) = k;
                     n++;
                 }
 
         // extents
-        this->bounds_mins(0) = 0.0;
-        this->bounds_mins(1) = 0.0;
-        this->bounds_mins(2) = 0.0;
-        this->bounds_maxs(0) = this->domain(tot_ndom_pts - 1, 0);
-        this->bounds_maxs(1) = this->domain(tot_ndom_pts - 1, 1);
-        this->bounds_maxs(2) = this->domain(tot_ndom_pts - 1, 2);
-        this->core_mins.resize(this->dom_dim);
-        this->core_maxs.resize(this->dom_dim);
-        for (int i = 0; i < this->dom_dim; i++)
+        bounds_mins(0) = 0.0;
+        bounds_mins(1) = 0.0;
+        bounds_mins(2) = 0.0;
+        bounds_maxs(0) = input->domain(tot_ndom_pts - 1, 0);
+        bounds_maxs(1) = input->domain(tot_ndom_pts - 1, 1);
+        bounds_maxs(2) = input->domain(tot_ndom_pts - 1, 2);
+        core_mins.resize(dom_dim);
+        core_maxs.resize(dom_dim);
+        for (int i = 0; i < dom_dim; i++)
         {
-            this->core_mins(i) = this->bounds_mins(i);
-            this->core_maxs(i) = this->bounds_maxs(i);
+            core_mins(i) = bounds_mins(i);
+            core_maxs(i) = bounds_maxs(i);
         }
 
-        this->mfa = new mfa::MFA<T>(this->dom_dim, ndom_pts, this->domain);
+        input->init_params();
+        this->mfa = new mfa::MFA<T>(dom_dim);
 
         // debug
-        cerr << "domain extent:\n min\n" << this->bounds_mins << "\nmax\n" << this->bounds_maxs << endl;
+        cerr << "domain extent:\n min\n" << bounds_mins << "\nmax\n" << bounds_maxs << endl;
+    }
+    
+    void analytical_error_field(
+        const diy::Master::ProxyWithLink&   cp,
+        string&                             fun,                // function to evaluate
+        T&                                  L1,                 // (output) L-1 norm
+        T&                                  L2,                 // (output) L-2 norm
+        T&                                  Linf,               // (output) L-infinity norm
+        DomainArgs&                         args,               // input args
+        bool                                keep_approx)        // keep the regular grid approximation we create
+    {
+        DomainArgs* a   = &args;
+        
+        // Size of grid on which to test error
+        VectorXi test_pts(dom_dim);
+        for (int i = 0; i < dom_dim; i++)
+        {
+            test_pts(i) = a->ndom_pts[i];
+        }
+
+        // Create parameters to decode at
+        shared_ptr<mfa::Param<T>> grid_params = make_shared<mfa::Param<T>>(test_pts);
+        
+        // Create pointsets to hold decoded points and errors
+        mfa::PointSet<T>* grid_approx = new mfa::PointSet<T>(grid_params, pt_dim);
+        this->errs = new mfa::PointSet<T>(grid_params, pt_dim);
+
+        // Decode on above-specified grid
+        this->mfa->DecodePointSet(*(this->geometry).mfa_data, *grid_approx, 0, 0, dom_dim - 1, false);
+        for (auto i = 0; i < this->vars.size(); i++)
+            this->mfa->DecodePointSet(*(this->vars[i].mfa_data), *grid_approx, 0, dom_dim + i, dom_dim + i, false);
+
+        // Copy geometric point coordinates into errs PointSet
+        this->errs->domain.leftCols(dom_dim) = grid_approx->domain.leftCols(dom_dim);
+
+        // Compute the analytical error at each point
+        T sum_errs      = 0.0;                                  // sum of absolute values of errors (L-1 norm)
+        T sum_sq_errs   = 0.0;                                  // sum of squares of errors (square of L-2 norm)
+        T max_err       = -1.0;                                 // maximum absolute value of error (L-infinity norm)
+        T true_val = 0;
+        T test_val = 0;
+        VectorX<T> dom_pt(dom_dim);
+        for (auto pt_it = this->errs->begin(), pt_end = this->errs->end(); pt_it != pt_end; ++pt_it)
+        {
+            pt_it.coords(dom_pt, 0, dom_dim-1); // extract the first dom_dim coords (i.e. geometric coords)
+            
+            // evaluate function at dom_pt_real
+            if (fun == "sinc")
+                true_val = sinc(dom_pt, args, 0);      // hard-coded for one science variable
+            if (fun == "sine")
+                true_val = sine(dom_pt, args, 0);      // hard-codded for one science variable
+            if (fun == "f16")
+                true_val = f16(dom_pt);
+            if (fun == "f17")
+                true_val = f17(dom_pt);
+            if (fun == "f18")
+                true_val = f18(dom_pt);
+
+            test_val = grid_approx->domain(pt_it.idx(), dom_dim);    // hard-coded for first science variable only
+
+            // compute and accrue error
+            T err = fabs(true_val - test_val);
+            sum_errs += err;                                // L1
+            sum_sq_errs += err * err;                       // L2
+            if (err > max_err)                              // Linf
+                max_err = err;
+
+            this->errs->domain(pt_it.idx(), dom_dim) = err;
+        }
+
+        L1    = sum_errs;
+        L2    = sqrt(sum_sq_errs);
+        Linf  = max_err;
+
+        if (keep_approx)
+            this->approx = grid_approx;
+        else
+            delete grid_approx;
     }
 
     // compute error to synthethic, non-noisy function (for HEP applications)
@@ -1096,7 +1461,7 @@ struct Block : public BlockBase<T>
         T max_err       = -1.0;                                 // maximum absolute value of error (L-infinity norm)
 
         if (!this->dom_dim)
-            this->dom_dim = this->mfa->ndom_pts().size();
+            this->dom_dim = this->mfa->dom_dim;
 
         size_t tot_ndom_pts = 1;
         for (auto i = 0; i < this->dom_dim; i++)
@@ -1236,6 +1601,8 @@ struct Block : public BlockBase<T>
         bool collective = true; //
         reader.read(extBounds, &data[0], collective);
 
+        // assumes one scalar science variable
+        b->pt_dim = b->dom_dim + 1;
         b->geometry.min_dim = 0;
         b->geometry.max_dim = b->dom_dim - 1;
         int nvars = 1;
@@ -1243,13 +1610,13 @@ struct Block : public BlockBase<T>
         b->max_errs.resize(nvars);
         b->sum_sq_errs.resize(nvars);
         b->vars[0].min_dim = b->dom_dim;
-        b->vars[0].max_dim = b->vars[0].min_dim + 1;
-        b->bounds_mins.resize(b->dom_dim);
-        b->bounds_maxs.resize(b->dom_dim);
+        b->vars[0].max_dim = b->vars[0].min_dim;
+        b->bounds_mins.resize(b->pt_dim);
+        b->bounds_maxs.resize(b->pt_dim);
         VectorXi ndom_pts;  // this will be local now, and used in def of mfa
-        ndom_pts.resize(mapDimension.size());
+        ndom_pts.resize(b->dom_dim);
         int tot_ndom_pts = 1;
-        for (size_t j = 0; j < mapDimension.size(); j++) {
+        for (size_t j = 0; j < b->dom_dim; j++) {
             int dir = mapDimension[j];
             int size_in_dir = -bounds.min[dir] + bounds.max[dir] + 1;
             tot_ndom_pts *= size_in_dir;
@@ -1257,7 +1624,26 @@ struct Block : public BlockBase<T>
             if (0 == gid)
                 cerr << "  dimension " << j << " " << size_in_dir << endl;
         }
-        b->domain.resize(tot_ndom_pts, mapDimension.size() + 1);
+
+        if (!transpose && b->dom_dim > 1)
+        {
+            if (b->dom_dim == 2)
+            {
+                int tmp = ndom_pts(0);
+                ndom_pts(0) = ndom_pts(1);
+                ndom_pts(1) = tmp;
+            }
+            else if (b->dom_dim == 3)
+            {
+                int tmp = ndom_pts(2);
+                ndom_pts(2) = ndom_pts(0);
+                ndom_pts(0) = tmp; // reverse counting
+            }
+        }
+
+        // Construct point set to contain input
+        b->input = new mfa::PointSet<T>(b->dom_dim, b->pt_dim, tot_ndom_pts, ndom_pts);
+
         if (0 == gid)
             cerr << " total local size : " << tot_ndom_pts << endl;
         if (b->dom_dim == 1) // 1d problem, the dimension would be x direction
@@ -1265,13 +1651,13 @@ struct Block : public BlockBase<T>
             int dir0 = mapDimension[0];
             b->map_dir.push_back(dir0); // only one dimension, rest are not varying
             for (int i = 0; i < tot_ndom_pts; i++) {
-                b->domain(i, 0) = bounds.min[dir0] + i;
+                b->input->domain(i, 0) = bounds.min[dir0] + i;
                 int idx = 3 * i;
                 float val = 0;
                 for (int k = 0; k < chunk; k++)
                     val += data[idx + k] * data[idx + k];
                 val = sqrt(val);
-                b->domain(i, 1) = val;
+                b->input->domain(i, 1) = val;
             }
             args.vars_nctrl_pts[0][0] = args.vars_nctrl_pts[0][dir0]; // only one direction that matters
         } else if (b->dom_dim == 2) // 2d problem, second direction would be x, first would be y
@@ -1287,13 +1673,13 @@ struct Block : public BlockBase<T>
                 for (int i = 0; i < ndom_pts(0); i++) {
                     for (int j = 0; j < ndom_pts(1); j++) {
                         n = j * ndom_pts(0) + i;
-                        b->domain(n, 0) = bounds.min[dir0] + i; //
-                        b->domain(n, 1) = bounds.min[dir1] + j;
+                        b->input->domain(n, 0) = bounds.min[dir0] + i; //
+                        b->input->domain(n, 1) = bounds.min[dir1] + j;
                         float val = 0;
                         for (int k = 0; k < chunk; k++)
                             val += data[idx + k] * data[idx + k];
                         val = sqrt(val);
-                        b->domain(n, 2) = val;
+                        b->input->domain(n, 2) = val;
                         idx += 3;
                     }
                 }
@@ -1304,19 +1690,16 @@ struct Block : public BlockBase<T>
                 int idx = 0;
                 int dir0 = mapDimension[1]; // so x would vary to 704 in 2d 1 block similar case
                 int dir1 = mapDimension[0];
-                int tmp = ndom_pts(0);
-                ndom_pts(0) = ndom_pts(1);
-                ndom_pts(1) = tmp;
                 b->map_dir.push_back(dir0);
                 b->map_dir.push_back(dir1);
                 for (int j = 0; j < ndom_pts(1); j++) {
                     for (int i = 0; i < ndom_pts(0); i++) {
-                        b->domain(n, 1) = bounds.min[dir1] + j;
-                        b->domain(n, 0) = bounds.min[dir0] + i;
+                        b->input->domain(n, 1) = bounds.min[dir1] + j;
+                        b->input->domain(n, 0) = bounds.min[dir0] + i;
                         float val = 0;
                         for (int k = 0; k < chunk; k++)
                             val += data[idx + k] * data[idx + k];
-                        b->domain(n, 2) = sqrt(val);
+                        b->input->domain(n, 2) = sqrt(val);
                         n++;
                         idx += 3;
                     }
@@ -1340,14 +1723,14 @@ struct Block : public BlockBase<T>
                             //             -ndom_pts(0) + ndom_pts(0)-1 =   ndom_pts(0)*ndom_pts(1)*ndom_pts(2) - 1;
                             n = k * ndom_pts(0) * ndom_pts(1) + j * ndom_pts(0)
                                 + i;
-                            b->domain(n, 0) = bounds.min[0] + i;
-                            b->domain(n, 1) = bounds.min[1] + j;
-                            b->domain(n, 2) = bounds.min[2] + k;
+                            b->input->domain(n, 0) = bounds.min[0] + i;
+                            b->input->domain(n, 1) = bounds.min[1] + j;
+                            b->input->domain(n, 2) = bounds.min[2] + k;
                             float val = 0;
                             for (int k = 0; k < chunk; k++)
                                 val += data[idx + k] * data[idx + k];
                             val = sqrt(val);
-                            b->domain(n, 3) = val;
+                            b->input->domain(n, 3) = val;
                             idx += 3;
                         }
             } else // visualization order
@@ -1357,20 +1740,17 @@ struct Block : public BlockBase<T>
                 b->map_dir.push_back(mapDimension[2]); // reverse
                 b->map_dir.push_back(mapDimension[1]);
                 b->map_dir.push_back(mapDimension[0]);
-                int tmp = ndom_pts(2);
-                ndom_pts(2) = ndom_pts(0);
-                ndom_pts(0) = tmp; // reverse counting
                 // last dimension would correspond to x, as in the 2d example
                 for (int k = 0; k < ndom_pts(2); k++)
                     for (int j = 0; j < ndom_pts(1); j++)
                         for (int i = 0; i < ndom_pts(0); i++) {
-                            b->domain(n, 2) = bounds.min[0] + k;
-                            b->domain(n, 1) = bounds.min[1] + j;
-                            b->domain(n, 0) = bounds.min[2] + i; // this now corresponds to x
+                            b->input->domain(n, 2) = bounds.min[0] + k;
+                            b->input->domain(n, 1) = bounds.min[1] + j;
+                            b->input->domain(n, 0) = bounds.min[2] + i; // this now corresponds to x
                             float val = 0;
                             for (int k = 0; k < chunk; k++)
                                 val += data[idx + k] * data[idx + k];
-                            b->domain(n, 3) = sqrt(val);
+                            b->input->domain(n, 3) = sqrt(val);
                             n++;
                             idx += 3;
                         }
@@ -1396,7 +1776,12 @@ struct Block : public BlockBase<T>
                 b->overlaps(i) = m2;
         }
 
-        b->mfa = new mfa::MFA<T>(b->dom_dim, ndom_pts, b->domain);
+        // set bounds_min/max for science variable (last coordinate)
+        b->bounds_mins(b->dom_dim) = b->input->domain.col(b->dom_dim).minCoeff();
+        b->bounds_maxs(b->dom_dim) = b->input->domain.col(b->dom_dim).maxCoeff();
+
+        b->input->init_params();
+        b->mfa = new mfa::MFA<T>(b->dom_dim);
     }
 
 };

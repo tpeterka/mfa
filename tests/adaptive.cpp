@@ -80,37 +80,6 @@ int main(int argc, char** argv)
     ops >> opts::Option('f', "infile",      infile,         " input file name");
     ops >> opts::Option('h', "help",        help,           " show help");
 
-//     // default command line arguments
-//     real_t norm_err_limit = 1.0;                      // maximum normalized error limit
-//     int    pt_dim         = 3;                        // dimension of input points
-//     int    dom_dim        = 2;                        // dimension of domain (<= pt_dim)
-//     int    geom_degree    = 1;                        // degree for geometry (same for all dims)
-//     int    vars_degree    = 4;                        // degree for science variables (same for all dims)
-//     int    ndomp          = 100;                      // input number of domain points (same for all dims)
-//     string input          = "sinc";                   // input dataset
-//     int    max_rounds     = 0;                        // max. number of rounds (0 = no maximum)
-//     int    weighted       = 1;                        // solve for and use weights (bool 0 or 1)
-//     real_t rot            = 0.0;                      // rotation angle in degrees
-//     real_t twist          = 0.0;                      // twist (waviness) of domain (0.0-1.0)
-//     int    error          = 1;                        // decode all input points and check error (bool 0 or 1)
-//     string infile;                                    // input file name
-//     bool   help;                                      // show help
-// 
-//     // get command line arguments
-//     opts::Options ops;
-//     ops >> opts::Option('e', "error",       norm_err_limit, " maximum normalized error limit");
-//     ops >> opts::Option('d', "pt_dim",      pt_dim,         " dimension of points");
-//     ops >> opts::Option('m', "dom_dim",     dom_dim,        " dimension of domain");
-//     ops >> opts::Option('p', "geom_degree", geom_degree,    " degree in each dimension of geometry");
-//     ops >> opts::Option('q', "vars_degree", vars_degree,    " degree in each dimension of science variables");
-//     ops >> opts::Option('n', "ndomp",       ndomp,          " number of input points in each dimension of domain");
-//     ops >> opts::Option('i', "input",       input,          " input dataset");
-//     ops >> opts::Option('u', "rounds",      max_rounds,     " maximum number of iterations");
-//     ops >> opts::Option('w', "weights",     weighted,       " solve for and use weights");
-//     ops >> opts::Option('r', "rotate",      rot,            " rotation angle of domain in degrees");
-//     ops >> opts::Option('t', "twist",       twist,          " twist (waviness) of domain (0.0-1.0)");
-//     ops >> opts::Option('f', "infile",      infile,         " input file name");
-
     if (!ops.parse(argc, argv) || help)
     {
         if (world.rank() == 0)
@@ -137,10 +106,17 @@ int main(int argc, char** argv)
 #else
     cerr << "parameterization method = domain" << endl;
 #endif
-#ifdef MFA_NO_TBB
-    cerr << "TBB: off" << endl;
-#else
-    cerr << "TBB: on" << endl;
+#ifdef MFA_TBB
+    cerr << "threading: TBB" << endl;
+#endif
+#ifdef MFA_KOKKOS
+    cerr << "threading: Kokkos" << endl;
+#endif
+#ifdef MFA_SYCL
+    cerr << "threading: SYCL" << endl;
+#endif
+#ifdef MFA_SERIAL
+    cerr << "threading: serial" << endl;
 #endif
 #ifdef MFA_NO_WEIGHTS
     cerr << "weighted = 0" << endl;
@@ -148,29 +124,6 @@ int main(int argc, char** argv)
     cerr << "weighted = " << weighted << endl;
 #endif
     fprintf(stderr, "-------------------------------------\n\n");
-
-//     // echo args
-//     fprintf(stderr, "\n--------- Input arguments ----------\n");
-//     cerr <<
-//         "error = "          << norm_err_limit   << " pt_dim = "         << pt_dim       << " dom_dim = "        << dom_dim      <<
-//         "\ngeom_degree = "  << geom_degree      << " vars_degree = "    << vars_degree  <<
-//         "\ninput pts = "    << ndomp            << " input = "          << input        << " max. rounds = "    << max_rounds   << endl;
-// #ifdef CURVE_PARAMS
-//     cerr << "parameterization method = curve" << endl;
-// #else
-//     cerr << "parameterization method = domain" << endl;
-// #endif
-// #ifdef MFA_NO_TBB
-//     cerr << "TBB: off" << endl;
-// #else
-//     cerr << "TBB: on" << endl;
-// #endif
-// #ifdef MFA_NO_WEIGHTS
-//     cerr << "weighted = 0" << endl;
-// #else
-//     cerr << "weighted = " << weighted << endl;
-// #endif
-//     fprintf(stderr, "-------------------------------------\n\n");
 
     // initialize DIY
     diy::FileStorage          storage("./DIY.XXXXXX"); // used for blocks to be moved out of core
@@ -202,10 +155,12 @@ int main(int argc, char** argv)
     // set default args for diy foreach callback functions
     DomainArgs d_args(dom_dim, pt_dim);
     d_args.weighted     = weighted;
+    d_args.n            = noise;
     d_args.multiblock   = false;
     d_args.verbose      = 1;
     d_args.r            = 0.0;
     d_args.t            = 0.0;
+    d_args.structured   = true; // adaptive fitting does not yet support unstructured input
     for (int i = 0; i < pt_dim - dom_dim; i++)
         d_args.f[i] = 1.0;
     for (int i = 0; i < dom_dim; i++)
@@ -215,7 +170,6 @@ int main(int argc, char** argv)
         d_args.ndom_pts[i]          = ndomp;
         d_args.geom_nctrl_pts[i]    = geom_nctrl;
         d_args.vars_nctrl_pts[0][i] = vars_nctrl;       // assuming one science variable, vars_nctrl_pts[0]
-
     }
 
     // initialize input data
@@ -225,8 +179,8 @@ int main(int argc, char** argv)
     {
         for (int i = 0; i < dom_dim; i++)
         {
-            d_args.min[i]               = -4.0 * M_PI;
-            d_args.max[i]               = 4.0  * M_PI;
+            d_args.min[i]       = -4.0 * M_PI;
+            d_args.max[i]       = 4.0  * M_PI;
         }
         for (int i = 0; i < pt_dim - dom_dim; i++)      // for all science variables
             d_args.s[i] = i + 1;                        // scaling factor on range
@@ -239,8 +193,8 @@ int main(int argc, char** argv)
     {
         for (int i = 0; i < dom_dim; i++)
         {
-            d_args.min[i]               = -4.0 * M_PI;
-            d_args.max[i]               = 4.0  * M_PI;
+            d_args.min[i]       = -4.0 * M_PI;
+            d_args.max[i]       = 4.0  * M_PI;
         }
         for (int i = 0; i < pt_dim - dom_dim; i++)      // for all science variables
             d_args.s[i] = 10.0 * (i + 1);                 // scaling factor on range
@@ -281,81 +235,11 @@ int main(int argc, char** argv)
     {
         for (int i = 0; i < dom_dim; i++)
         {
-            d_args.min[i]               = -0.95;
-            d_args.max[i]               = 0.95;
-        }
-        for (int i = 0; i < pt_dim - dom_dim; i++)      // for all science variables
-            d_args.s[i] = 1.0;                          // scaling factor on range
-        master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-                { b->generate_analytical_data(cp, input, d_args); });
-    }
-
-    // sine function f(x) = sin(x), f(x,y) = sin(x)sin(y), ...
-    if (input == "sine")
-    {
-        for (int i = 0; i < dom_dim; i++)
-        {
-            d_args.min[i]       = -4.0 * M_PI;
-            d_args.max[i]       = 4.0  * M_PI;
-        }
-        for (int i = 0; i < pt_dim - dom_dim; i++)      // for all science variables
-            d_args.s[i] = i + 1;                        // scaling factor on range
-        master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-                { b->generate_analytical_data(cp, input, d_args); });
-    }
-
-    // sinc function f(x) = sin(x)/x, f(x,y) = sinc(x)sinc(y), ...
-    if (input == "sinc")
-    {
-        for (int i = 0; i < dom_dim; i++)
-        {
-            d_args.min[i]       = -4.0 * M_PI;
-            d_args.max[i]       = 4.0  * M_PI;
-        }
-        for (int i = 0; i < pt_dim - dom_dim; i++)      // for all science variables
-            d_args.s[i] = 10.0 * (i + 1);                 // scaling factor on range
-        d_args.r            = rot * M_PI / 180.0;   // domain rotation angle in rads
-        d_args.t            = twist;                // twist (waviness) of domain
-        master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-                { b->generate_analytical_data(cp, input, d_args); });
-    }
-
-    // f16 function
-    if (input == "f16")
-    {
-        for (int i = 0; i < dom_dim; i++)
-        {
-            d_args.min[i]       = -1.0;
-            d_args.max[i]       = 1.0;
-        }
-        for (int i = 0; i < pt_dim - dom_dim; i++)      // for all science variables
-            d_args.s[i] = 1;                            // scaling factor on range
-        master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-                { b->generate_analytical_data(cp, input, d_args); });
-    }
-
-    // f17 function
-    if (input == "f17")
-    {
-        d_args.min[0] = 80.0;   d_args.max[0] = 100.0;
-        d_args.min[1] = 5.0;    d_args.max[1] = 10.0;
-        d_args.min[2] = 90.0;   d_args.max[2] = 93.0;
-        for (int i = 0; i < pt_dim - dom_dim; i++)      // for all science variables
-            d_args.s[i] = 1.0;                          // scaling factor on range
-        master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-                { b->generate_analytical_data(cp, input, d_args); });
-    }
-
-    // f18 function
-    if (input == "f18")
-    {
-        for (int i = 0; i < dom_dim; i++)
-        {
             d_args.min[i]       = -0.95;
             d_args.max[i]       = 0.95;
         }
         for (int i = 0; i < pt_dim - dom_dim; i++)      // for all science variables
-            d_args.s[i] = 1;                            // scaling factor on range
+            d_args.s[i] = 1.0;                          // scaling factor on range
         master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
                 { b->generate_analytical_data(cp, input, d_args); });
     }
@@ -363,6 +247,7 @@ int main(int argc, char** argv)
     // S3D dataset
     if (input == "s3d")
     {
+        d_args.ndom_pts.resize(3);
         d_args.ndom_pts[0]  = 704;
         d_args.ndom_pts[1]  = 540;
         d_args.ndom_pts[2]  = 550;
@@ -387,6 +272,7 @@ int main(int argc, char** argv)
     // nek5000 dataset
     if (input == "nek")
     {
+        d_args.ndom_pts.resize(3);
         d_args.ndom_pts[0]  = 200;
         d_args.ndom_pts[1]  = 200;
         d_args.ndom_pts[2]  = 200;
@@ -408,6 +294,7 @@ int main(int argc, char** argv)
     // rti dataset
     if (input == "rti")
     {
+        d_args.ndom_pts.resize(3);
         d_args.ndom_pts[0]  = 288;
         d_args.ndom_pts[1]  = 512;
         d_args.ndom_pts[2]  = 512;
@@ -429,6 +316,7 @@ int main(int argc, char** argv)
     // cesm dataset
     if (input == "cesm")
     {
+        d_args.ndom_pts.resize(2);
         d_args.ndom_pts[0]  = 1800;
         d_args.ndom_pts[1]  = 3600;
         d_args.infile       = infile;
@@ -438,7 +326,7 @@ int main(int argc, char** argv)
                     { b->read_2d_scalar_data(cp, d_args); });
         else
         {
-            fprintf(stderr, "cesm data only available in 2 or 3d domain\n");
+            fprintf(stderr, "cesm data only available in 2d domain\n");
             exit(0);
         }
     }
@@ -481,8 +369,8 @@ int main(int argc, char** argv)
 
     // check the results of the last (only) science variable
     Block<real_t>* b        = static_cast<Block<real_t>*>(master.block(0));
-    int     ndom_dims       = b->mfa->ndom_pts().size();        // domain dimensionality
-    real_t  range_extent    = b->domain.col(ndom_dims).maxCoeff() - b->domain.col(ndom_dims).minCoeff();
+    int     ndom_dims       = b->dom_dim;        // domain dimensionality
+    real_t  range_extent    = b->input->domain.col(ndom_dims).maxCoeff() - b->input->domain.col(ndom_dims).minCoeff();
     real_t  err_factor      = 1.0e-3;
     real_t  our_err         = b->max_errs[0] / range_extent;    // actual normalized max_err
     real_t  expect_err;                                         // expected (normalized max) error

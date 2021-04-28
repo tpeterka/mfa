@@ -250,6 +250,7 @@ int main(int argc, char **argv) {
     d_args.verbose = 0;
     d_args.r = 0.0;
     d_args.t = 0.0;
+    d_args.structured   = true;
     //d_args.vars_p[0]    = vars_degree; // we know we have exactly one science var
     //dom_dim = mapDim.size();
     for (int i = 0; i < dom_dim; i++) {

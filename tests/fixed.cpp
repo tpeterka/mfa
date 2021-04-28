@@ -8,7 +8,6 @@
 //--------------------------------------------------------------
 
 #include <mfa/mfa.hpp>
-#include <mfa/util.hpp>
 
 #include <vector>
 #include <iostream>
@@ -47,13 +46,16 @@ int main(int argc, char** argv)
     int    geom_nctrl   = -1;                   // input number of control points for geometry (same for all dims)
     int    vars_nctrl   = 11;                   // input number of control points for all science variables (same for all dims)
     string input        = "sine";               // input dataset
-    int    weighted     = 1;                    // solve for and use weights (bool 0 or 1)
+    int    weighted     = 1;                    // solve for and use weights (bool 0/1)
     real_t rot          = 0.0;                  // rotation angle in degrees
     real_t twist        = 0.0;                  // twist (waviness) of domain (0.0-1.0)
-    int    error        = 1;                    // decode all input points and check error (bool 0 or 1)
+    int    error        = 1;                    // decode all input points and check error (bool 0/1)
     string infile;                              // input file name
-    bool   help         = false;                // show help
+    int    structured   = 1;                    // input data format (bool 0/1)
+    int    rand_seed    = -1;                   // seed to use for random data generation (-1 == no randomization)
     int    resolutionGrid = 0;
+    bool   help         = false;                // show help
+  
 
     // get command line arguments
     opts::Options ops;
@@ -68,9 +70,12 @@ int main(int argc, char** argv)
     ops >> opts::Option('w', "weights",     weighted,   " solve for and use weights");
     ops >> opts::Option('r', "rotate",      rot,        " rotation angle of domain in degrees");
     ops >> opts::Option('t', "twist",       twist,      " twist (waviness) of domain (0.0-1.0)");
+    ops >> opts::Option('c', "error",       error,      " decode entire error field (default=true)");
     ops >> opts::Option('f', "infile",      infile,     " input file name");
     ops >> opts::Option('h', "help",        help,       " show help");
     ops >> opts::Option('u', "resolution",  resolutionGrid,    " resolution for grid test ");
+    ops >> opts::Option('x', "structured",  structured, " input data format (default=structured=true)");
+    ops >> opts::Option('y', "rand_seed",   rand_seed,  " seed for random point generation (-1 = no randomization, default)");
 
     if (!ops.parse(argc, argv) || help)
     {
@@ -89,16 +94,19 @@ int main(int argc, char** argv)
         "pt_dim = "         << pt_dim       << " dom_dim = "        << dom_dim      <<
         "\ngeom_degree = "  << geom_degree  << " vars_degree = "    << vars_degree  <<
         "\ninput pts = "    << ndomp        << " geom_ctrl pts = "  << geom_nctrl   <<
-        "\nvars_ctrl_pts = "<< vars_nctrl   << " input = "          << input        << endl;
+        "\nvars_ctrl_pts = "<< vars_nctrl   << " input = "          << input        << 
+        "\nstructured = "   << structured   << endl;
+
 #ifdef CURVE_PARAMS
     cerr << "parameterization method = curve" << endl;
 #else
     cerr << "parameterization method = domain" << endl;
 #endif
-#ifdef MFA_NO_TBB
-    cerr << "TBB: off" << endl;
-#else
-    cerr << "TBB: on" << endl;
+#ifdef MFA_TBB
+    cerr << "threading: TBB" << endl;
+#endif
+#ifdef MFA_SERIAL
+    cerr << "threading: serial" << endl;
 #endif
 #ifdef MFA_NO_WEIGHTS
     cerr << "weighted = 0" << endl;
@@ -139,16 +147,20 @@ int main(int argc, char** argv)
     d_args.weighted     = weighted;
     d_args.multiblock   = false;
     d_args.verbose      = 1;
+    d_args.structured   = structured;
+    d_args.rand_seed    = rand_seed;
     for (int i = 0; i < pt_dim - dom_dim; i++)
         d_args.f[i] = 1.0;
     for (int i = 0; i < dom_dim; i++)
     {
-        d_args.geom_p[i]    = geom_degree;
-        d_args.vars_p[0][i] = vars_degree;      // assuming one science variable, vars_p[0]
-        d_args.ndom_pts[i]  = ndomp;
+        d_args.geom_p[i]            = geom_degree;
+        d_args.vars_p[0][i]         = vars_degree;      // assuming one science variable, vars_p[0]
+        d_args.ndom_pts[i]          = ndomp;
+        d_args.geom_nctrl_pts[i]    = geom_nctrl;
+        d_args.vars_nctrl_pts[0][i] = vars_nctrl;       // assuming one science variable, vars_nctrl_pts[0]
     }
 
-    // initilize input data
+    // initialize input data
 
     // sine function f(x) = sin(x), f(x,y) = sin(x)sin(y), ...
     if (input == "sine")
@@ -157,8 +169,6 @@ int main(int argc, char** argv)
         {
             d_args.min[i]               = -4.0 * M_PI;
             d_args.max[i]               = 4.0  * M_PI;
-            d_args.geom_nctrl_pts[i]    = geom_nctrl;
-            d_args.vars_nctrl_pts[0][i] = vars_nctrl;               // assuming one science variable, vars_nctrl_pts[0]
         }
         for (int i = 0; i < pt_dim - dom_dim; i++)      // for all science variables
             d_args.s[i] = i + 1;                        // scaling factor on range
@@ -173,8 +183,6 @@ int main(int argc, char** argv)
         {
             d_args.min[i]               = -4.0 * M_PI;
             d_args.max[i]               = 4.0  * M_PI;
-            d_args.geom_nctrl_pts[i]    = geom_nctrl;
-            d_args.vars_nctrl_pts[0][i] = vars_nctrl;               // assuming one science variable, vars_nctrl_pts[0]
         }
         for (int i = 0; i < pt_dim - dom_dim; i++)      // for all science variables
             d_args.s[i] = 10.0 * (i + 1);                 // scaling factor on range
@@ -187,12 +195,11 @@ int main(int argc, char** argv)
     // S3D dataset
     if (input == "s3d")
     {
+        d_args.ndom_pts.resize(3);
+        d_args.vars_nctrl_pts[0].resize(3);
         d_args.ndom_pts[0]          = 704;
         d_args.ndom_pts[1]          = 540;
         d_args.ndom_pts[2]          = 550;
-        d_args.geom_nctrl_pts[0]    = geom_nctrl;
-        d_args.geom_nctrl_pts[1]    = geom_nctrl;
-        d_args.geom_nctrl_pts[2]    = geom_nctrl;
         d_args.vars_nctrl_pts[0][0] = 140;
         d_args.vars_nctrl_pts[0][1] = 108;
         d_args.vars_nctrl_pts[0][2] = 110;
@@ -217,12 +224,12 @@ int main(int argc, char** argv)
     // nek5000 dataset
     if (input == "nek")
     {
+        d_args.ndom_pts.resize(3);
         for (int i = 0; i < 3; i++)
-        {
             d_args.ndom_pts[i]          = 200;
-            d_args.geom_nctrl_pts[i]    = geom_nctrl;
-            d_args.vars_nctrl_pts[0][i] = vars_nctrl;               // assuming one science variable, vars_nctrl_pts[0]
-        }
+        for (int i = 0; i < dom_dim; i++)
+            d_args.vars_nctrl_pts[0][i] = vars_nctrl;
+
         d_args.infile = infile;
 //         d_args.infile = "/Users/tpeterka/datasets/nek5000/200x200x200/0.xyz";
         if (dom_dim == 2)
@@ -248,16 +255,20 @@ int main(int argc, char** argv)
     fprintf(stderr, "\n\nFixed encoding done.\n\n");
 
     // debug: compute error field for visualization and max error to verify that it is below the threshold
-    fprintf(stderr, "\nFinal decoding and computing max. error...\n");
     double decode_time = MPI_Wtime();
+    if (error)
+    {
+    fprintf(stderr, "\nFinal decoding and computing max. error...\n");
 #ifdef CURVE_PARAMS     // normal distance
     master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
             { b->error(cp, 1, true); });
 #else                   // range coordinate difference
+    bool saved_basis = structured; // TODO: basis functions are currently only saved during encoding of structured data
     master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-            { b->range_error(cp, 1, true, true); });
+            { b->range_error(cp, 1, true, saved_basis); });
 #endif
     decode_time = MPI_Wtime() - decode_time;
+    }
 
     // print results
     fprintf(stderr, "\n------- Final block results --------\n");
@@ -273,14 +284,17 @@ int main(int argc, char** argv)
 
     // check the results of the last (only) science variable
     Block<real_t>* b    = static_cast<Block<real_t>*>(master.block(0));
-    real_t range_extent = b->domain.col(dom_dim).maxCoeff() - b->domain.col(dom_dim).minCoeff();
+    real_t range_extent = b->input->domain.col(dom_dim).maxCoeff() - b->input->domain.col(dom_dim).minCoeff();
     real_t err_factor   = 1.0e-3;
-    real_t expect_err;
+    real_t expect_err   = -0.0;
     // for ./fixed-test -i sinc -d 3 -m 2 -p 1 -q 5 -v 20 -w 0
-    if (input == "sinc" && dom_dim == 2)
+    if (input == "sinc" && dom_dim == 2 && rand_seed == -1)
         expect_err   = 4.304489e-4;
+    // for ./fixed-test -i sinc -d 3 -m 2 -p 1 -q 5 -v 20 -w 0 -x 0 -y 4444
+    if (input == "s3d" && dom_dim == 1 && rand_seed == 4444)
+        expect_err   = 4.282089e-04;
     // for ./fixed-test -i s3d -d 2 -m 1 -p 1 -q 3 -w 0
-    if (input == "s3d" && dom_dim == 1)
+    if (input == "s3d" && dom_dim == 1 && rand_seed == -1)
         expect_err   = 6.819451e-2;
     // for ./fixed-test -i s3d -d 3 -m 2 -p 1 -q 3 -w 0
     if (input == "s3d" && dom_dim == 2)
