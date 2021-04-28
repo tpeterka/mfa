@@ -758,6 +758,109 @@ namespace mfa
             return true;
         }
 
+        // for debugging: checks all knot spans for at least one input point
+        // returns true if all spans check out
+        // This version is for tmesh with local solve
+        bool CheckAllSpans()
+        {
+            // typing shortcuts
+            Tmesh<T>&                   tmesh                   = mfa_data.tmesh;
+            vector<vector<T>>&          all_knots               = tmesh.all_knots;
+            vector<vector<int>>&        all_knot_levels         = tmesh.all_knot_levels;
+            vector<vector<ParamIdx>>&   all_knot_param_idxs     = tmesh.all_knot_param_idxs;
+            int&                        dom_dim                 = mfa_data.dom_dim;
+            VectorXi&                   p                       = mfa_data.p;
+
+            // parameters for vol iterator over knot spans in a tensor product and parameters in a knot span
+            VectorXi sub_npts(dom_dim);
+            VectorXi sub_starts(dom_dim);
+            VectorXi all_npts(dom_dim);
+            VectorXi span_ijk(dom_dim);
+
+            VolIterator dom_iter(mfa.ndom_pts());                           // iterator over input domain points
+
+            for (auto tidx = 0; tidx < tmesh.tensor_prods.size(); tidx++)   // for all tensors
+            {
+                TensorProduct<T>& t = tmesh.tensor_prods[tidx];
+
+                // setup vol iterator over knot spans
+
+                // adjust range of knot spans to include interior spans with input points, skipping repeated knots at global edges
+                for (auto j = 0; j < dom_dim; j++)
+                {
+                    KnotIdx min = t.knot_mins[j] == 0 ? p(j) : t.knot_mins[j];
+                    KnotIdx max = t.knot_maxs[j] == all_knots[j].size() - 1 ?
+                        t.knot_maxs[j] - p(j) - 1 : t.knot_maxs[j] - 1;
+
+                    sub_npts(j)     = max - min + 1;
+                    all_npts(j)     = t.knot_maxs[j];
+                    sub_starts(j)   = min;
+                }
+
+                // debug
+//                 cerr << "CheckAllSpans(): tidx: " << tidx << " sub_npts: " << sub_npts.transpose() << " all_npts: " << all_npts.transpose() << " sub_starts: " << sub_starts.transpose() << endl;
+
+                VolIterator span_iter(sub_npts, sub_starts, all_npts);
+
+                // iterate over knot spans
+                while (!span_iter.done())
+                {
+                    span_iter.idx_ijk(span_iter.cur_iter(), span_ijk);
+
+                    // skip span if knot index in any dim. is deeper level than tensor
+                    int k;
+                    for (k = 0; k < dom_dim; k++)
+                    {
+                        if (all_knot_levels[k][span_ijk(k)] > t.level)
+                            break;
+                    }
+                    if (k < mfa.dom_dim)
+                    {
+                        span_iter.incr_iter();
+                        continue;
+                    }
+
+                    // debug
+//                     cerr << "CheckAllSpans(): span_ijk: " << span_ijk.transpose() << endl;
+
+                    // min and max input points in each span
+                    for (auto j = 0; j < dom_dim; j++)
+                    {
+                        ParamIdx min = all_knot_param_idxs[j][span_ijk(j)];             // parameter index at start of span
+                        int incr = 1;
+                        while (all_knot_levels[j][span_ijk(j) + incr] > t.level)        // find span, skipping deeper knot levels
+                            incr++;
+                        ParamIdx max = all_knot_param_idxs[j][span_ijk(j) + incr];      // parameter index at start of next span
+
+                        if (max - min <= 0)
+                        {
+                            cerr << "CheckAllSpans(): Error: span " << span_ijk.transpose() << " does not have an input point" << endl;
+                            return false;
+                        }
+                        T min_param = mfa.params()[j][min];
+                        T max_param = mfa.params()[j][max];
+                        if (min_param < all_knots[j][span_ijk(j)])
+                        {
+                            cerr << "CheckAllSpans(): Error: min param < range of knot span. This should not happen.\n" << endl;
+                            return false;
+                        }
+                        if (max < mfa.params()[j].size() - 1 && max_param < all_knots[j][span_ijk(j) + incr])
+                        {
+                            cerr << "CheckAllSpans(): Error: max param < range of next knot span. This should not happen.\n" << endl;
+                            return false;
+                        }
+
+                        // debug
+//                         cerr << "CheckAllSpans(): j: " << j << " min: " << min << " max: " << max << endl;
+                    }
+
+                    span_iter.incr_iter();
+                }   // iterator over knot spans
+            }   // for all tensors
+
+            return true;
+        }
+
         // computes error in knot spans and finds all new knots (in all dimensions at once) that should be inserted
         // returns true if all done, ie, no new knots inserted
         // This version is for tmesh with local solve

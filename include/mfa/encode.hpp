@@ -861,8 +861,8 @@ namespace mfa
             mfa_data.tmesh.domain_pts(t_idx, mfa.params(), start_idxs, end_idxs);
 
             // debug
-            if (debug)
-                fmt::print(stderr, "start_idxs [{}] end_idxs [{}]\n", fmt::join(start_idxs, ","), fmt::join(end_idxs, ","));
+//             if (debug)
+//                 fmt::print(stderr, "start_idxs [{}] end_idxs [{}]\n", fmt::join(start_idxs, ","), fmt::join(end_idxs, ","));
 
             // Q matrix of relevant input domain points
             VectorXi ndom_pts(mfa_data.dom_dim);
@@ -912,14 +912,11 @@ namespace mfa
             LocalSolveAllConstraints(t, Pcons, anchors, t_idx_anchors);
 
             // debug
-            if (debug)
-            {
-                for (auto i = 0; i < anchors.size(); i++)
-                    fmt::print(stderr, "EncodeTensorLocalLinear(): anchors[{}]: [{}]\n", i, fmt::join(anchors[i], ","));
-            }
+//             fmt::print(stderr, "Pcons.rows = {} t_idx_anchors.size() = {}\n", Pcons.rows(), t_idx_anchors.size());
 
-            MatrixX<T> Ncons = MatrixX<T>::Constant(ndom_pts.prod(), Pcons.rows(), -1);             // basis functions, -1 means unassigned so far
-            ConsCtrlPtMat(ndom_pts, dom_starts, anchors, t_idx_anchors, Ncons);
+            MatrixX<T> Ncons = MatrixX<T>::Constant(Q.rows(), Pcons.rows(), -1);                    // basis functions, -1 means unassigned so far
+            if (Pcons.rows())
+                ConsCtrlPtMat(ndom_pts, dom_starts, anchors, t_idx_anchors, Ncons);
 
             // timing
             cons_time           = MPI_Wtime() - cons_time;
@@ -927,25 +924,31 @@ namespace mfa
             // normalize Nfree and Ncons such that the row sum of Nfree + Ncons = 1.0
             for (auto i = 0; i < Nfree.rows(); i++)
             {
-                T sum = Nfree.row(i).sum() + Ncons.row(i).sum();
+                T sum = Nfree.row(i).sum();
+                if (Pcons.rows())
+                    sum += Ncons.row(i).sum();
                 if (sum > 0.0)
                 {
                     Nfree.row(i) /= sum;
-                    Ncons.row(i) /= sum;
+                    if (Pcons.rows())
+                        Ncons.row(i) /= sum;
                 }
                 else
                 {
-                    fmt::print(stderr, "Warning: EncodeTensorLocalLinear(): Nfree.row({}).sum() = {}. This should not happen.\n",
-                            i, Nfree.row(i).sum());
-
-                    // debug
-//                     VectorXi ijk(mfa_data.dom_dim);
-//                     dom_iter.idx_ijk(i, ijk);
-//                     cerr << "ijk = " << ijk.transpose() << endl;
-//                     fmt::print(stderr, "params = [ ");
-//                     for (auto k = 0; k < mfa_data.dom_dim; k++)
-//                         fmt::print(stderr, "{} ", mfa.params()[k][ijk(k)]);
-//                     fmt::print(stderr, "]\n");
+                    // print error
+                    if (Pcons.rows())
+                        fmt::print(stderr, "Warning: EncodeTensorLocalLinear(): row {} Nfree row sum = {} Ncons row sum = {}, Nfree + Ncons row sum = {}. This should not happen.\n",
+                            i, Nfree.row(i).sum(), Ncons.row(i).sum(), sum);
+                    else
+                        fmt::print(stderr, "Warning: EncodeTensorLocalLinear(): row {} Nfree row sum = {}. This should not happen.\n",
+                            i, sum);
+                    VectorXi ijk(mfa_data.dom_dim);
+                    dom_iter.idx_ijk(i, ijk);
+                    cerr << "ijk = " << ijk.transpose() << endl;
+                    fmt::print(stderr, "params = [ ");
+                    for (auto k = 0; k < mfa_data.dom_dim; k++)
+                        fmt::print(stderr, "{} ", mfa.params()[k][ijk(k)]);
+                    fmt::print(stderr, "]\n");
                 }
             }
 
@@ -966,7 +969,13 @@ namespace mfa
             double r_time       = MPI_Wtime();
 
             // R is the right hand side needed for solving N * P = R
-            MatrixX<T>  R = Q - Ncons * Pcons;
+            MatrixX<T> R = Q;
+            if (Pcons.rows())
+            {
+                R -= Ncons * Pcons;
+//                 if (debug)
+//                     cerr << "EncodeTensorLocalLinear(): first 200 rows of Ncons * Pcons:\n" << (Ncons * Pcons).block(0, 0, 200, Q.cols()) << endl;
+            }
 
             // timing
             r_time                  = MPI_Wtime() - r_time;
@@ -1033,17 +1042,26 @@ namespace mfa
 #endif
 
             // debug
-            if (debug)
-            {
+//             if (debug)
+//             {
 //             cerr << "input:\n"                               << domain       << endl;
 //                 cerr << "Nfree:\n"                               << Nfree        << endl;
 //             cerr << "Ncons:\n"                               << Ncons        << endl;
-            cerr << "Pcons:\n"                               << Pcons        << endl;
+//             cerr << "Pcons:\n"                               << Pcons        << endl;
 //             cerr << "Q:\n"                                   << Q            << endl;
 //             cerr << "R:\n"                                   << R            << endl;
-                cerr << "\nEncodeTensorLocalLinear() first 100 ctrl_pts:\n" <<
-                    t.ctrl_pts.block(0, 0, 100, t.ctrl_pts.cols())   << endl;
+//                 cerr << "\nEncodeTensorLocalLinear() first 100 ctrl_pts:\n" <<
+//                     t.ctrl_pts.block(0, 0, 100, t.ctrl_pts.cols())   << endl;
 //             cerr << "\nEncodeTensorLocalLinear() weights:\n" << t.weights    << endl;
+//             }
+
+            // debug: check control points for sanity
+            for (auto i = 0; i < t.ctrl_pts.rows(); i++)
+            {
+                    if (t.ctrl_pts.row(i).sum() == 0.0)
+                        cerr << "EncodeTensorLocalLinear(): it's strange that control point " << t.ctrl_pts.row(i) << " has a row sum exactly = 0.0" << endl;
+                    if (fabs(t.ctrl_pts.row(i).sum()) > 1.0e6)
+                        cerr << "EncodeTensorLocalLinear(): it's likely wrong that control point " << t.ctrl_pts.row(i) << " has a very large row sum" << endl;
             }
         }
 
@@ -2203,8 +2221,8 @@ namespace mfa
             for (auto& t: new_tensors)
             {
                 // debug
-                fmt::print(stderr, "\nRefine() appending tensor with knot_mins [{}] knot_maxs [{}]\n",
-                        fmt::join(t.knot_mins, ","), fmt::join(t.knot_maxs, ","));
+//                 fmt::print(stderr, "\nRefine() appending tensor with knot_mins [{}] knot_maxs [{}]\n",
+//                         fmt::join(t.knot_mins, ","), fmt::join(t.knot_maxs, ","));
 
                 // debug
 //                 fmt::print("\nT-mesh before append\n\n");
@@ -2220,8 +2238,14 @@ namespace mfa
                 t0 = MPI_Wtime();
 
                 // debug
-                fmt::print("\nT-mesh after append and before local solve\n\n");
-                mfa_data.tmesh.print();
+//                 fmt::print("\nT-mesh after append and before local solve\n\n");
+//                 mfa_data.tmesh.print();
+//
+                // debug: check all spans before solving
+                if (!nk.CheckAllSpans())
+                    fmt::print(stderr, "Refine(): Error: failed checking all spans for input points\n");
+                else
+                    fmt::print(stderr, "Refine(): All spans checked\n");
 
                 // solve for new control points
                 if (local)
@@ -2411,187 +2435,188 @@ namespace mfa
 
 #endif
 
-        // constraint control points and corresponding anchors for local solve
-        // this version looks at prev and next tensors, but currently misses diagonal neighbors
-        // TODO: either fix to find all constraints or deprecate in favor LocalSolveAllConstraints
-        void LocalSolvePrevNextConstraints(
-                const TensorProduct<T>&     tc,                 // current tensor product being solved
-                MatrixX<T>&                 ctrl_pts,           // (output) constraint control points
-                vector<vector<KnotIdx>>&    anchors,            // (output) corresponding anchors
-                vector<TensorIdx>&          t_idx_anchors)      // (output) tensors containing corresponding anchors
-        {
-            const Tmesh<T>&         tmesh   = mfa_data.tmesh;
-            int                     cols    = tc.ctrl_pts.cols();
-            KnotIdx                 min, max;                   // temporaries
-
-            // get required sizes
-
-            int rows = 0;                                       // number of rows required in ctrl_pts
-            VectorXi npts(mfa_data.dom_dim);
-            for (auto k = 0; k < mfa_data.dom_dim; k++)
-            {
-                for (auto j = 0; j < tc.prev[k].size(); j++)    // previous tensors
-                {
-                    const TensorProduct<T>& tp = tmesh.tensor_prods[tc.prev[k][j]];
-                    for (auto i = 0; i < mfa_data.dom_dim; i++)
-                    {
-                        int p = mfa_data.p(i);
-                        if (i == k)                             // direction of prev
-                            npts(i) = p;
-                        else                                    // direction orthogonal to prev
-                        {
-                            mfa_data.tmesh.knot_idx_ofst(tp, tc.knot_mins[i], -p, i, min);
-                            mfa_data.tmesh.knot_idx_ofst(tp, tc.knot_maxs[i], p, i, max);
-                            if (p % 2)                          // odd degree
-                                npts(i) = mfa_data.tmesh.knot_idx_dist(tp, min, max, i, true);
-                            else                                // even degree
-                                npts(i) = mfa_data.tmesh.knot_idx_dist(tp, min, max, i, false);
-                        }
-                    }
-                    rows += npts.prod();
-                }   // previous tensors
-                for (auto j = 0; j < tc.next[k].size(); j++)    // next tensors
-                {
-                    const TensorProduct<T>& tn = tmesh.tensor_prods[tc.next[k][j]];
-                    for (auto i = 0; i < mfa_data.dom_dim; i++)
-                    {
-                        int p = mfa_data.p(i);
-                        if (i == k)                             // direction of next
-                            npts(i) = p;
-                        else                                    // direction orthogonal to next
-                        {
-                            mfa_data.tmesh.knot_idx_ofst(tn, tc.knot_mins[i], -p, i, min);
-                            mfa_data.tmesh.knot_idx_ofst(tn, tc.knot_maxs[i], p, i, max);
-                            if (p % 2)                          // odd degree
-                                npts(i) = mfa_data.tmesh.knot_idx_dist(tn, min, max, i, true);
-                            else                                // even degree
-                                npts(i) = mfa_data.tmesh.knot_idx_dist(tn, min, max, i, false);
-                        }
-                    }
-                    rows += npts.prod();
-                }
-            }   // next tensors
-            ctrl_pts.resize(rows, cols);
-            anchors.resize(rows);
-            t_idx_anchors.resize(rows);
-
-            // get control points and anchors
-
-            int cur_row = 0;
-            VectorXi sub_starts(mfa_data.dom_dim);
-            VectorXi sub_npts(mfa_data.dom_dim);
-            VectorXi all_npts(mfa_data.dom_dim);
-            vector<KnotIdx> anchor(mfa_data.dom_dim);           // one anchor
-            for (auto k = 0; k < mfa_data.dom_dim; k++)         // for all dimensions
-            {
-                // previous tensors
-                // assumes that all previous tensors have at least the required number of control points (p) in the prev direction
-                for (auto j = 0; j < tc.prev[k].size(); j++)
-                {
-                    const TensorProduct<T>& tp = tmesh.tensor_prods[tc.prev[k][j]];
-                    for (auto i = 0; i < mfa_data.dom_dim; i++)
-                    {
-                        int p = mfa_data.p(i);
-                        if (i == k)                             // direction of prev
-                        {
-                            sub_starts(i)   = tp.nctrl_pts(i) - p;
-                            if (p % 2)                          // odd degree, skip border point
-                                sub_starts(i)--;
-                            sub_npts(i)     = p;
-                        }
-                        else                                    // direction orthogonal to prev
-                        {
-                            mfa_data.tmesh.knot_idx_ofst(tp, tc.knot_mins[i], -p, i, min);
-                            mfa_data.tmesh.knot_idx_ofst(tp, tc.knot_maxs[i], p, i, max);
-
-                            sub_starts(i) = mfa_data.tmesh.knot_idx_dist(tp, tp.knot_mins[i], min, i, false);
-                            if (tp.knot_mins[i] == 0)
-                                sub_starts(i) -= (p + 1) / 2;
-                            if (p % 2)                          // odd degree
-                                sub_npts(i) = mfa_data.tmesh.knot_idx_dist(tp, min, max, i, true);
-                            else                                // even degree
-                                sub_npts(i) = mfa_data.tmesh.knot_idx_dist(tp, min, max, i, false);
-                        }
-                        all_npts(i)         = tp.nctrl_pts(i);
-
-                        // debug
-//                         fprintf(stderr, "prev tensor: dim = %d sub_npts = %d sub_starts = %d all_npts = %d\n",
-//                                 i, sub_npts(i), sub_starts(i), all_npts(i));
-                    }
-                    VolIterator voliter_prev(sub_npts, sub_starts, all_npts);
-                    VectorXi ijk(mfa_data.dom_dim);
-                    while (!voliter_prev.done())
-                    {
-                        // control point
-                        ctrl_pts.row(cur_row) = tp.ctrl_pts.row(voliter_prev.sub_full_idx(voliter_prev.cur_iter()));
-
-                        // anchor
-                        anchors[cur_row].resize(mfa_data.dom_dim);
-                        voliter_prev.idx_ijk(voliter_prev.cur_iter(), ijk);
-                        mfa_data.tmesh.ctrl_pt_anchor(tp, ijk, anchor);
-                        for (auto i = 0; i < mfa_data.dom_dim; i++)
-                            anchors[cur_row][i] = anchor[i];
-                        t_idx_anchors[cur_row] = tc.prev[k][j];
-                        cur_row++;
-                        voliter_prev.incr_iter();
-                    }
-                }   // previous tensors
-
-                // next tensors
-                // assumes that all next tensors have at least the required number of control points (p) in the next direction
-                for (auto j = 0; j < tc.next[k].size(); j++)
-                {
-                    const TensorProduct<T>& tn = tmesh.tensor_prods[tc.next[k][j]];
-                    for (auto i = 0; i < mfa_data.dom_dim; i++)
-                    {
-                        int p = mfa_data.p(i);
-                        if (i == k)                             // direction of next
-                        {
-                            if (p % 2)                          // odd degree, skip border point
-                                sub_starts(i)   = 1;
-                            else
-                                sub_starts(i)   = 0;
-                            sub_npts(i)         = p;
-                        }
-                        else                                    // direction orthogonal to next
-                        {
-                            mfa_data.tmesh.knot_idx_ofst(tn, tc.knot_mins[i], -p, i, min);
-                            mfa_data.tmesh.knot_idx_ofst(tn, tc.knot_maxs[i], p, i, max);
-
-                            sub_starts(i) = mfa_data.tmesh.knot_idx_dist(tn, tn.knot_mins[i], min, i, false);
-                            if (tn.knot_mins[i] == 0)
-                                sub_starts(i) -= (p + 1) / 2;
-                            if (p % 2)                          // odd degree
-                                sub_npts(i) = mfa_data.tmesh.knot_idx_dist(tn, min, max, i, true);
-                            else                                // even degree
-                                sub_npts(i) = mfa_data.tmesh.knot_idx_dist(tn, min, max, i, false);
-                        }
-                        all_npts(i)         = tn.nctrl_pts(i);
-
-                        // debug
-//                         fprintf(stderr, "next tensor: dim = %d sub_npts = %d sub_starts = %d all_npts = %d\n",
-//                                 i, sub_npts(i), sub_starts(i), all_npts(i));
-                    }
-                    VolIterator voliter_next(sub_npts, sub_starts, all_npts);
-                    VectorXi ijk(mfa_data.dom_dim);
-                    while (!voliter_next.done())
-                    {
-                        // control point
-                        ctrl_pts.row(cur_row) = tn.ctrl_pts.row(voliter_next.sub_full_idx(voliter_next.cur_iter()));
-
-                        // anchor
-                        anchors[cur_row].resize(mfa_data.dom_dim);
-                        voliter_next.idx_ijk(voliter_next.cur_iter(), ijk);
-                        mfa_data.tmesh.ctrl_pt_anchor(tn, ijk, anchor);
-                        for (auto i = 0; i < mfa_data.dom_dim; i++)
-                            anchors[cur_row][i] = anchor[i];
-                        t_idx_anchors[cur_row] = tc.next[k][j];
-                        cur_row++;
-                        voliter_next.incr_iter();
-                    }
-                }   // next tensors
-            }   // for all dimensions
-        }
+        // DEPRECATE
+//         // constraint control points and corresponding anchors for local solve
+//         // this version looks at prev and next tensors, but currently misses diagonal neighbors
+//         // TODO: either fix to find all constraints or deprecate in favor LocalSolveAllConstraints
+//         void LocalSolvePrevNextConstraints(
+//                 const TensorProduct<T>&     tc,                 // current tensor product being solved
+//                 MatrixX<T>&                 ctrl_pts,           // (output) constraint control points
+//                 vector<vector<KnotIdx>>&    anchors,            // (output) corresponding anchors
+//                 vector<TensorIdx>&          t_idx_anchors)      // (output) tensors containing corresponding anchors
+//         {
+//             const Tmesh<T>&         tmesh   = mfa_data.tmesh;
+//             int                     cols    = tc.ctrl_pts.cols();
+//             KnotIdx                 min, max;                   // temporaries
+// 
+//             // get required sizes
+// 
+//             int rows = 0;                                       // number of rows required in ctrl_pts
+//             VectorXi npts(mfa_data.dom_dim);
+//             for (auto k = 0; k < mfa_data.dom_dim; k++)
+//             {
+//                 for (auto j = 0; j < tc.prev[k].size(); j++)    // previous tensors
+//                 {
+//                     const TensorProduct<T>& tp = tmesh.tensor_prods[tc.prev[k][j]];
+//                     for (auto i = 0; i < mfa_data.dom_dim; i++)
+//                     {
+//                         int p = mfa_data.p(i);
+//                         if (i == k)                             // direction of prev
+//                             npts(i) = p;
+//                         else                                    // direction orthogonal to prev
+//                         {
+//                             mfa_data.tmesh.knot_idx_ofst(tp, tc.knot_mins[i], -p, i, min);
+//                             mfa_data.tmesh.knot_idx_ofst(tp, tc.knot_maxs[i], p, i, max);
+//                             if (p % 2)                          // odd degree
+//                                 npts(i) = mfa_data.tmesh.knot_idx_dist(tp, min, max, i, true);
+//                             else                                // even degree
+//                                 npts(i) = mfa_data.tmesh.knot_idx_dist(tp, min, max, i, false);
+//                         }
+//                     }
+//                     rows += npts.prod();
+//                 }   // previous tensors
+//                 for (auto j = 0; j < tc.next[k].size(); j++)    // next tensors
+//                 {
+//                     const TensorProduct<T>& tn = tmesh.tensor_prods[tc.next[k][j]];
+//                     for (auto i = 0; i < mfa_data.dom_dim; i++)
+//                     {
+//                         int p = mfa_data.p(i);
+//                         if (i == k)                             // direction of next
+//                             npts(i) = p;
+//                         else                                    // direction orthogonal to next
+//                         {
+//                             mfa_data.tmesh.knot_idx_ofst(tn, tc.knot_mins[i], -p, i, min);
+//                             mfa_data.tmesh.knot_idx_ofst(tn, tc.knot_maxs[i], p, i, max);
+//                             if (p % 2)                          // odd degree
+//                                 npts(i) = mfa_data.tmesh.knot_idx_dist(tn, min, max, i, true);
+//                             else                                // even degree
+//                                 npts(i) = mfa_data.tmesh.knot_idx_dist(tn, min, max, i, false);
+//                         }
+//                     }
+//                     rows += npts.prod();
+//                 }
+//             }   // next tensors
+//             ctrl_pts.resize(rows, cols);
+//             anchors.resize(rows);
+//             t_idx_anchors.resize(rows);
+// 
+//             // get control points and anchors
+// 
+//             int cur_row = 0;
+//             VectorXi sub_starts(mfa_data.dom_dim);
+//             VectorXi sub_npts(mfa_data.dom_dim);
+//             VectorXi all_npts(mfa_data.dom_dim);
+//             vector<KnotIdx> anchor(mfa_data.dom_dim);           // one anchor
+//             for (auto k = 0; k < mfa_data.dom_dim; k++)         // for all dimensions
+//             {
+//                 // previous tensors
+//                 // assumes that all previous tensors have at least the required number of control points (p) in the prev direction
+//                 for (auto j = 0; j < tc.prev[k].size(); j++)
+//                 {
+//                     const TensorProduct<T>& tp = tmesh.tensor_prods[tc.prev[k][j]];
+//                     for (auto i = 0; i < mfa_data.dom_dim; i++)
+//                     {
+//                         int p = mfa_data.p(i);
+//                         if (i == k)                             // direction of prev
+//                         {
+//                             sub_starts(i)   = tp.nctrl_pts(i) - p;
+//                             if (p % 2)                          // odd degree, skip border point
+//                                 sub_starts(i)--;
+//                             sub_npts(i)     = p;
+//                         }
+//                         else                                    // direction orthogonal to prev
+//                         {
+//                             mfa_data.tmesh.knot_idx_ofst(tp, tc.knot_mins[i], -p, i, min);
+//                             mfa_data.tmesh.knot_idx_ofst(tp, tc.knot_maxs[i], p, i, max);
+// 
+//                             sub_starts(i) = mfa_data.tmesh.knot_idx_dist(tp, tp.knot_mins[i], min, i, false);
+//                             if (tp.knot_mins[i] == 0)
+//                                 sub_starts(i) -= (p + 1) / 2;
+//                             if (p % 2)                          // odd degree
+//                                 sub_npts(i) = mfa_data.tmesh.knot_idx_dist(tp, min, max, i, true);
+//                             else                                // even degree
+//                                 sub_npts(i) = mfa_data.tmesh.knot_idx_dist(tp, min, max, i, false);
+//                         }
+//                         all_npts(i)         = tp.nctrl_pts(i);
+// 
+//                         // debug
+// //                         fprintf(stderr, "prev tensor: dim = %d sub_npts = %d sub_starts = %d all_npts = %d\n",
+// //                                 i, sub_npts(i), sub_starts(i), all_npts(i));
+//                     }
+//                     VolIterator voliter_prev(sub_npts, sub_starts, all_npts);
+//                     VectorXi ijk(mfa_data.dom_dim);
+//                     while (!voliter_prev.done())
+//                     {
+//                         // control point
+//                         ctrl_pts.row(cur_row) = tp.ctrl_pts.row(voliter_prev.sub_full_idx(voliter_prev.cur_iter()));
+// 
+//                         // anchor
+//                         anchors[cur_row].resize(mfa_data.dom_dim);
+//                         voliter_prev.idx_ijk(voliter_prev.cur_iter(), ijk);
+//                         mfa_data.tmesh.ctrl_pt_anchor(tp, ijk, anchor);
+//                         for (auto i = 0; i < mfa_data.dom_dim; i++)
+//                             anchors[cur_row][i] = anchor[i];
+//                         t_idx_anchors[cur_row] = tc.prev[k][j];
+//                         cur_row++;
+//                         voliter_prev.incr_iter();
+//                     }
+//                 }   // previous tensors
+// 
+//                 // next tensors
+//                 // assumes that all next tensors have at least the required number of control points (p) in the next direction
+//                 for (auto j = 0; j < tc.next[k].size(); j++)
+//                 {
+//                     const TensorProduct<T>& tn = tmesh.tensor_prods[tc.next[k][j]];
+//                     for (auto i = 0; i < mfa_data.dom_dim; i++)
+//                     {
+//                         int p = mfa_data.p(i);
+//                         if (i == k)                             // direction of next
+//                         {
+//                             if (p % 2)                          // odd degree, skip border point
+//                                 sub_starts(i)   = 1;
+//                             else
+//                                 sub_starts(i)   = 0;
+//                             sub_npts(i)         = p;
+//                         }
+//                         else                                    // direction orthogonal to next
+//                         {
+//                             mfa_data.tmesh.knot_idx_ofst(tn, tc.knot_mins[i], -p, i, min);
+//                             mfa_data.tmesh.knot_idx_ofst(tn, tc.knot_maxs[i], p, i, max);
+// 
+//                             sub_starts(i) = mfa_data.tmesh.knot_idx_dist(tn, tn.knot_mins[i], min, i, false);
+//                             if (tn.knot_mins[i] == 0)
+//                                 sub_starts(i) -= (p + 1) / 2;
+//                             if (p % 2)                          // odd degree
+//                                 sub_npts(i) = mfa_data.tmesh.knot_idx_dist(tn, min, max, i, true);
+//                             else                                // even degree
+//                                 sub_npts(i) = mfa_data.tmesh.knot_idx_dist(tn, min, max, i, false);
+//                         }
+//                         all_npts(i)         = tn.nctrl_pts(i);
+// 
+//                         // debug
+// //                         fprintf(stderr, "next tensor: dim = %d sub_npts = %d sub_starts = %d all_npts = %d\n",
+// //                                 i, sub_npts(i), sub_starts(i), all_npts(i));
+//                     }
+//                     VolIterator voliter_next(sub_npts, sub_starts, all_npts);
+//                     VectorXi ijk(mfa_data.dom_dim);
+//                     while (!voliter_next.done())
+//                     {
+//                         // control point
+//                         ctrl_pts.row(cur_row) = tn.ctrl_pts.row(voliter_next.sub_full_idx(voliter_next.cur_iter()));
+// 
+//                         // anchor
+//                         anchors[cur_row].resize(mfa_data.dom_dim);
+//                         voliter_next.idx_ijk(voliter_next.cur_iter(), ijk);
+//                         mfa_data.tmesh.ctrl_pt_anchor(tn, ijk, anchor);
+//                         for (auto i = 0; i < mfa_data.dom_dim; i++)
+//                             anchors[cur_row][i] = anchor[i];
+//                         t_idx_anchors[cur_row] = tc.next[k][j];
+//                         cur_row++;
+//                         voliter_next.incr_iter();
+//                     }
+//                 }   // next tensors
+//             }   // for all dimensions
+//         }
 
         // constraint control points and corresponding anchors for local solve
         // this version checks all tensors, slower than looking at prev/next, but reliably finds all constraints
@@ -2603,8 +2628,6 @@ namespace mfa
         {
             const Tmesh<T>&         tmesh   = mfa_data.tmesh;
             int                     cols    = tc.ctrl_pts.cols();
-            // DEPRECATE
-//             KnotIdx                 min, max;                   // temporaries
 
             // debug
             bool debug = false;
@@ -2670,6 +2693,10 @@ namespace mfa
                 rows += npts.prod();
             }       // for all tensor products
 
+            // debug
+//             if (debug)
+//                 cerr << "LocalSolveAllConstraints(): rows: " << rows << endl;
+
             ctrl_pts.resize(rows, cols);
             anchors.resize(rows);
             t_idx_anchors.resize(rows);
@@ -2713,6 +2740,10 @@ namespace mfa
                             sub_npts(i) = tmesh.knot_idx_dist(t, intersect_mins[i], intersect_maxs[i], i, false);
                         all_npts(i) = t.nctrl_pts(i);
                     }
+
+//                     if (debug)
+//                         cerr << "LocalSolveAllConstraints(): sub_starts: " << sub_starts.transpose() <<
+//                             " sub_npts: " << sub_npts.transpose() << " all_npts: " << all_npts.transpose() << endl;
 
                     // debug
 //                     if (sub_starts[0] + sub_npts[0] > all_npts[0])
