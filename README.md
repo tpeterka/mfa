@@ -62,10 +62,9 @@ TBB is the only threading model currently implemented, but other threading model
 
 Build dependencies
 
-- C++11 compiler
+- C++11 or higher compiler
 - [MPI](http://www.mpich.org)
 - [TBB (optional)](https://www.threadingbuildingblocks.org)
-- [COIN-OR CLP (optional)](https://projects.coin-or.org/Clp)
 
 Build mfa
 
@@ -81,9 +80,6 @@ cmake .. \
 -Dmfa_thread=tbb \                                              # optional TBB threading, serial (no threading) is the default
 -DTBB_INCLUDE_DIR=/path/to/tbb/include \                        # optional, will try to find TBB automatically if mfa_thread=tbb
 -DTBB_LIBRARY=/path/to/tbb/library \                            # optional, will try to find TBB automatically if mfa_thread=tbb
--DCLP_INCLUDE_DIRS=/path/to/Clp/include \                       # optional, only needed for weights
--DCLP_LIB=/path/to/Clp/lib/libClp.a (.so, .dylib) \             # optional, only needed for weights
--DCOIN_UTILS_LIB=/path/to/Clp/lib/libCoinUtils.a (.so, .dylib)  # optional, only needed for weights
 
 make
 make install
