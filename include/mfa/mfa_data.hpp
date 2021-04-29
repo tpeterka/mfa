@@ -35,106 +35,14 @@
 //
 // ------------------
 
-// DEPRECATED
-// template <typename T>                       // float or double
-// struct KnotSpan
-// {
-//     VectorX<T> min_knot;                  // parameter vector of min knot in this span
-//     VectorX<T> max_knot;                  // parameter vector of max knot in this span
-//     VectorXi   min_knot_ijk;              // i,j,k indices of minimum knot in this span
-//     VectorXi   max_knot_ijk;              // i,j,k indices of maximum knot in this span
-//     VectorX<T> min_param;                 // parameter vector of minimum domain point in this span
-//     VectorX<T> max_param;                 // parameter vector of maximum domain point in this span
-//     VectorXi   min_param_ijk;             // i,j,k indices of minimum domain point in this span
-//     VectorXi   max_param_ijk;             // i,j,k indices of maximum domain point in this span
-//     int        last_split_dim;            // last dimension in which this span was subdivided
-//     bool       done;                      // whether the span has converged (<= error_limit everywhere)
-// };
-
 namespace mfa
 {
-
-    //     DEPRECATE: moved VolIterator to util.hpp
-//     // object for iterating in a flat loop over an n-dimensional volume
-//     struct VolIterator
-//     {
-//         private:
-// 
-//         int                     dom_dim_;                   // number of domain dimensions
-//         VectorXi                npts_dim_;                  // size of volume in each dimension
-//         vector<int>             idx_dim_;                   // current iteration number in each dimension
-//         vector<int>             prev_idx_dim_;              // previous iteration number in each dim., before incrementing
-//         size_t                  cur_iter_;                  // current flattened iteration number
-//         size_t                  tot_iters_;                 // total number of flattened iterations
-//         vector<bool>            done_dim_;                  // whether row, col, etc. in each dimension is done
-// 
-//         public:
-// 
-//         VolIterator(const VectorXi& npts) : npts_dim_(npts) // sizes of volume in each dimension
-//         {
-//             dom_dim_    = npts_dim_.size();
-//             cur_iter_   = 0;
-//             tot_iters_  = npts_dim_.prod();
-//             idx_dim_.resize(dom_dim_);
-//             prev_idx_dim_.resize(dom_dim_);
-//             done_dim_.resize(dom_dim_);
-//         }
-// 
-//         // return total number of iterations in the volume
-//         size_t tot_iters()          { return tot_iters_; }
-// 
-//         // return whether all iterations are done
-//         bool done()                 { return cur_iter_ >= tot_iters_; }
-// 
-//         // return current index in a dimension
-//         int idx_dim(int dim)        { return idx_dim_[dim]; }
-// 
-//         // return previous index, what it was before incrementing, in a dimension
-//         int prev_idx_dim(int dim)   { return prev_idx_dim_[dim]; }
-// 
-//         // return whether a row, col, etc. in a dimension is done
-//         bool done(int dim)          { return done_dim_[dim]; }
-// 
-//         // return current total iteration count
-//         size_t cur_iter()           { return cur_iter_; }
-// 
-//         // increment iteration; user must call incr_iter() near the bottom of the flattened loop
-//         void incr_iter()
-//         {
-//             // save the previous state
-//             for (int i = 0; i < dom_dim_; i++)
-//                 prev_idx_dim_[i] = idx_dim_[i];
-// 
-//             // increment the iteration, flipping to false any done flags that were true
-//             cur_iter_++;
-//             idx_dim_[0]++;
-//             for (int i = 0; i < dom_dim_ - 1; i++)
-//             {
-//                 if (done_dim_[i] == true)
-//                     done_dim_[i] = false;
-//                 else
-//                     break;
-//             }
-// 
-//             // check for last point, flipping any done flags to true
-//             for (int i = 0; i < dom_dim_ - 1; i++)
-//             {
-//                 // reset iteration for current dim and increment next dim.
-//                 if (idx_dim_[i] >= npts_dim_[i])
-//                 {
-//                     done_dim_[i] = true;
-//                     idx_dim_[i] = 0;
-//                     idx_dim_[i + 1]++;
-//                     done_dim_[i + 1] = false;
-//                 }
-//             }
-//         }
-// 
-//     };
-
     template <typename T>                       // float or double
     struct MFA_Data
     {
+        int                       dom_dim;       // number of domain dimensions
+        int                       min_dim;       // starting coordinate of this model in full-dimensional data
+        int                       max_dim;       // ending coordinate of this model in full-dimensional data
         VectorXi                  p;             // polynomial degree in each domain dimension
         vector<MatrixX<T>>        N;             // vector of basis functions for each dimension
                                                  // for all input points (matrix rows) and control points (matrix cols)
@@ -142,29 +50,23 @@ namespace mfa
         T                         max_err;       // unnormalized absolute value of maximum error
         //         DEPRECATED
 //         vector<KnotSpan<T>>       knot_spans;    // knot spans
-        int                       min_dim;       // starting coordinate of this model in full-dimensional data
-        int                       max_dim;       // ending coordinate of this model in full-dimensional data
-        int                       dom_dim;       // number of domain dimensions
 
         // constructor for creating an mfa from input points
         MFA_Data(
                 const VectorXi&             p_,             // polynomial degree in each dimension
-                const VectorXi&             ndom_pts_,      // number of input data points in each dim
-                const MatrixX<T>&           domain_,        // input data points (1st dim changes fastest)
-                const vector<vector<T>>&    params_,        // parameters of input points
                 VectorXi                    nctrl_pts_,     // optional number of control points in each dim (size 0 means minimum p+1)
                 int                         min_dim_ = -1,  // starting coordinate for input data
                 int                         max_dim_ = -1) :// ending coordinate for input data
-            p(p_),
+            dom_dim(p_.size()),
             min_dim(min_dim_),
             max_dim(max_dim_),
-            tmesh(p_.size(), p_, min_dim_, max_dim_),
-            dom_dim(p_.size())
+            p(p_),
+            tmesh(dom_dim, p_, min_dim_, max_dim_)
         {
             if (min_dim_ == -1)
                 min_dim = 0;
             if (max_dim == -1)
-                max_dim = domain_.cols() - 1;
+                max_dim = 0;
 
             // set number of control points to the minimum, p + 1, if they have not been initialized
             if (!nctrl_pts_.size())
@@ -174,43 +76,21 @@ namespace mfa
                     nctrl_pts_(i) = p(i) + 1;
             }
 
-            // allocate basis functions
-            N.resize(dom_dim);
-            for (auto i = 0; i < dom_dim; i++)
-                N[i] = MatrixX<T>::Zero(ndom_pts_(i), nctrl_pts_(i));
-
             // initialize tmesh knots
             tmesh.init_knots(nctrl_pts_);
-
-            // initialize first tensor product
-            vector<size_t> knot_mins(dom_dim);
-            vector<size_t> knot_maxs(dom_dim);
-            for (auto i = 0; i < dom_dim; i++)
-            {
-                knot_mins[i] = 0;
-                knot_maxs[i] = tmesh.all_knots[i].size() - 1;
-            }
-            tmesh.append_tensor(knot_mins, knot_maxs);
-
-#ifdef CURVE_PARAMS
-            Knots(ndom_pts_, params_, tmesh);       // knots spaced according to parameters (per P&T)
-#else
-            UniformKnots(params_, tmesh);                    // knots spaced uniformly
-#endif
         }
 
         // constructor for reading in a solved mfa
         MFA_Data(
                 const VectorXi&     p_,             // polynomial degree in each dimension
-                const VectorXi&     ndom_pts_,      // number of input data points in each dim
                 const Tmesh<T>&     tmesh_,         // solved tmesh
                 int                 min_dim_ = -1,  // starting coordinate for input data
                 int                 max_dim_ = -1) :// ending coordinate for input data
-            p(p_),
+            dom_dim(p_.size()),
             min_dim(min_dim_),
             max_dim(max_dim_),
-            tmesh(tmesh_),
-            dom_dim(p_.size())
+            p(p_),
+            tmesh(tmesh_)
         {
             if (min_dim_ == -1)
                 min_dim = 0;
@@ -224,56 +104,52 @@ namespace mfa
                 size_t              ntensor_prods,  // number of tensor products to allocate in tmesh
                 int                 min_dim_ = -1,  // starting coordinate for input data
                 int                 max_dim_ = -1) :// ending coordinate for input data
-            p(p_),
             dom_dim(p_.size()),
             min_dim(min_dim_),
             max_dim(max_dim_),
-            tmesh(p_.size(), p_, min_dim_, max_dim_, ntensor_prods)
+            p(p_),
+            tmesh(dom_dim, p_, min_dim_, max_dim_, ntensor_prods)
         {
             if (min_dim_ == -1)
                 min_dim = 0;
             if (max_dim_ == -1)
-                max_dim = 1;
+                max_dim = 0;
         }
 
         ~MFA_Data() {}
 
-        // convert linear domain point index into (i,j,k,...) multidimensional index
-        // number of dimensions is the domain dimensionality
-        void idx2ijk(
-                const vector<size_t>&   ds,             // stride for points in each dim.
-                size_t                  idx,            // linear cell indx
-                VectorXi&               ijk) const      // (output) i,j,k,... indices in all dimensions
+        void set_knots(PointSet<T>& input)
         {
-            if (dom_dim == 1)
+            // TODO move this elsewhere (to encode method?), wrapped in "structured==true" block
+            // allocate basis functions
+            if (input.structured)
             {
-                ijk(0) = idx;
-                return;
+                N.resize(dom_dim);
+                for (auto i = 0; i < dom_dim; i++)
+                    N[i] = MatrixX<T>::Zero(input.ndom_pts(i), tmesh.all_knots[i].size() - p(i) - 1);
             }
+            
 
-            for (int i = 0; i < dom_dim; i++)
+            // initialize first tensor product
+            vector<size_t> knot_mins(dom_dim);
+            vector<size_t> knot_maxs(dom_dim);
+            for (auto i = 0; i < dom_dim; i++)
             {
-                if (i < dom_dim - 1)
-                    ijk(i) = (idx % ds[i + 1]) / ds[i];
-                else
-                    ijk(i) = idx / ds[i];
+                knot_mins[i] = 0;
+                knot_maxs[i] = tmesh.all_knots[i].size() - 1;
             }
-        }
+            tmesh.append_tensor(knot_mins, knot_maxs);
 
-        // convert (i,j,k,...) multidimensional index into linear index into domain
-        // number of dimension is the domain dimensionality
-        void ijk2idx(
-                const VectorXi& ndom_pts,               // number of input points in each dimension
-                const VectorXi& ijk,                    // i,j,k,... indices to all dimensions
-                size_t&         idx) const              // (output) linear index
-        {
-            idx           = 0;
-            size_t stride = 1;
-            for (int i = 0; i < dom_dim; i++)
+#ifdef CURVE_PARAMS
+            if (!input.structured)
             {
-                idx += ijk(i) * stride;
-                stride *= ndom_pts(i);
+                cerr << "ERROR: Cannot set curve knots from unstructured input" << endl;
+                exit(1);
             }
+            Knots(input, tmesh);       // knots spaced according to parameters (per P&T)
+#else
+            UniformKnots(input, tmesh);                    // knots spaced uniformly
+#endif
         }
 
         // binary search to find the span in the knots vector containing a given parameter value
@@ -882,6 +758,10 @@ namespace mfa
         // assumes all control points needed are contained within one tensor
         // this version is for a knot already added to the tmesh
         // TODO: expensive deep copies
+        //
+        // TODO: only handles first round or insertion into a tensor that has starts at knot index 0
+        // and has ample (p) control points before insertion point
+        //
         void ExistKnotInsertion(const VectorX<T>&    param,              // new knot value to be inserted
                                 TensorProduct<T>&    tensor)             // (output) tensor product for insertion
         {
@@ -1092,6 +972,10 @@ namespace mfa
         // this version assumes the new knot already exists in the tmesh knot, only updates control points
         // not for inserting a duplicate knot (does not handle knot multiplicity > 1)
         // original algorithm from P&T did handle multiplicity, but I simplified
+        //
+        // TODO: only handles first round or insertion into a tensor that has starts at knot index 0
+        // and has ample (p) control points before insertion point
+        //
         void ExistCurveKnotIns(int                   cur_dim,            // current dimension
                                KnotIdx               inserted_knot_idx,  // index of inserted knot in new all_knots
                                const MatrixX<T>&     old_ctrl_pts,       // old control points of curve
@@ -1319,6 +1203,10 @@ namespace mfa
         // not for inserting a duplicate knot (does not handle knot multiplicity > 1)
         // original algorithm from P&T did handle multiplicity, but I simplified
         // this version assumes the new knot already exists in the tmesh, updates only control points
+        //
+        // TODO: only handles first round or insertion into a tensor that has starts at knot index 0
+        // and has ample (p) control points before insertion point
+        //
         void ExistVolKnotIns(const vector<KnotIdx>       inserted_idx,           // index of inserted knot in new all_knots
                              const MatrixX<T>&           old_ctrl_pts,           // old control points
                              const VectorX<T>&           old_weights,            // old control point weights
@@ -1525,6 +1413,8 @@ namespace mfa
         // compute knots
         // n-d version of eqs. 9.68, 9.69, P&T
         // tmesh version
+        // 
+        // structured input only
         //
         // the set of knots (called U in P&T) is the set of breakpoints in the parameter space between
         // different basis functions. These are the breaks in the piecewise B-spline approximation
@@ -1540,10 +1430,19 @@ namespace mfa
         // total number of knots is the sum of number of knots over the dimensions, much less than the product
         // assumes knots were allocated by caller
         void Knots(
-                const VectorXi&             ndom_pts,               // number of input points in each dim.
-                const vector<vector<T>>&    params,                 // parameters for input points[dimension][index]
+                const PointSet<T>&         input,                  // input domain
+                // const VectorXi&             ndom_pts,               // number of input points in each dim.
+                // const vector<vector<T>>&    params,                 // parameters for input points[dimension][index]
                 Tmesh<T>&                   tmesh) const            // (output) tmesh
         {
+            if (!input.structured)
+            {
+                cerr << "ERROR: Cannot set curve knots from unstructured input" << endl;
+                exit(1);
+            }
+
+            vector<vector<T>>& params = input.params.param_grid;  // reference to array of params
+
             for (size_t k = 0; k < dom_dim; k++)                    // for all domain dimensions
             {
                 // TODO: hard-coded for first tensor product of the tmesh
@@ -1554,7 +1453,7 @@ namespace mfa
                 // in P&T, d is the ratio of number of input points (r+1) to internal knot spans (n-p+1)
                 //         T d = (T)(ndom_pts(k)) / (nctrl_pts - p(k));         // eq. 9.68, r is P&T's m
                 // but I prefer d to be the ratio of input spans r to internal knot spans (n-p+1)
-                T d = (T)(ndom_pts(k) - 1) / (nctrl_pts - p(k));
+                T d = (T)(input.ndom_pts(k) - 1) / (nctrl_pts - p(k));
 
                 // compute n - p internal knots
                 size_t param_idx = 0;                               // index into params
@@ -1572,8 +1471,6 @@ namespace mfa
                     // parameter span containing the knot
                     while (params[k][param_idx] < tmesh.all_knots[k][p(k) + j])
                         param_idx++;
-                    if (param_idx == params[k].size() - 1 || tmesh.all_knots[k][p(k) + j]  < params[k][param_idx])
-                        param_idx--;
                     tmesh.all_knot_param_idxs[k][p(k) + j] = param_idx;
                 }
 
@@ -1601,7 +1498,26 @@ namespace mfa
         // resulting knots are same for all curves and stored once for each dimension (1st dim knots, 2nd dim, ...)
         // total number of knots is the sum of number of knots over the dimensions, much less than the product
         // assumes knots were allocated by caller
-        void UniformKnots(
+        void UniformKnots( const    PointSet<T>&   input,
+                                    Tmesh<T>&       tmesh)
+        {
+            if (input.structured)
+            {
+                // debug
+                cerr << "Using uniform knots (structured input)" << endl;
+                
+                uniform_knots_impl_structured(input.params->param_grid, tmesh);
+            }
+            else
+            {
+                // debug
+                cerr << "Using uniform knots (unstructured input)" << endl;
+
+                uniform_knots_impl_unstructured(tmesh);
+            }
+        }
+
+        void uniform_knots_impl_structured(
                 const vector<vector<T>>&    params,             // parameters for input points[dimension][index]
                 Tmesh<T>&                   tmesh) const        // (output) tmesh
         {
@@ -1630,9 +1546,38 @@ namespace mfa
                     // parameter span containing the knot
                     while (params[k][param_idx] < tmesh.all_knots[k][p(k) + j])
                         param_idx++;
-                    if (param_idx == params[k].size() - 1 || tmesh.all_knots[k][p(k) + j]  < params[k][param_idx])
-                        param_idx--;
                     tmesh.all_knot_param_idxs[k][p(k) + j] = param_idx;
+                }
+            }
+        }
+
+        
+        void uniform_knots_impl_unstructured(Tmesh<T>& tmesh)
+        {
+            cerr << "Warning: Unstable build, tmesh.all_knot_param_idxs remain uninitialized" << endl; 
+            cerr << "  => tmesh.insert_knot() and tmesh.domain_pts() will not be valid" << endl;
+            cerr << "  => use of NewKnots class will not be valid" << endl;
+
+            for (size_t k = 0; k < dom_dim; k++)                // for all domain dimensions
+            {
+                // TODO: hard-coded for first tensor product of the tmesh
+                int nctrl_pts = tmesh.tensor_prods[0].nctrl_pts(k);
+
+                int nknots = nctrl_pts + p(k) + 1;              // number of knots in current dim
+
+                // set p + 1 external knots at each end
+                for (int i = 0; i < p(k) + 1; i++)
+                {
+                    tmesh.all_knots[k][i] = 0.0;
+                    tmesh.all_knots[k][nknots - 1 - i] = 1.0;
+                }
+
+                // compute remaining n - p internal knots
+                T step = 1.0 / (nctrl_pts - p(k));              // size of internal knot span
+                size_t param_idx = 0;                           // index into params
+                for (int j = 1; j <= nctrl_pts - p(k) - 1; j++)
+                {
+                    tmesh.all_knots[k][p(k) + j] = tmesh.all_knots[k][p(k) + j - 1] + step;
                 }
             }
         }

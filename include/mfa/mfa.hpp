@@ -27,15 +27,17 @@
 // #define WEIGH_ALL_DIMS
 
 // comment out the following line for original single tensor product version
-// #define TMESH
+// #define MFA_TMESH
 
-// comment out the following line for separable dimension solve
-// #define MFA_UNIFIED_DIMS
+// linear least squares local solve
+#define MFA_LINEAR_LOCAL
 
-// comment out the following line for linear least squares local solve
-#define MFA_ITERATIVE_SOLVE
+// refine as many knot spans in one iteration as possible
+#define MFA_ALL_SPANS
 
 #include    <Eigen/Dense>
+#include    <Eigen/Sparse>
+#include    <Eigen/OrderingMethods>
 #include    <vector>
 #include    <list>
 #include    <iostream>
@@ -57,20 +59,38 @@ using ArrayXXf = Eigen::ArrayXXf;
 using ArrayXXd = Eigen::ArrayXXd;
 // NB, storing matrices and arrays in row-major order
 template <typename T>
-using MatrixX = Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>;
+using MatrixX = Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic, Eigen::ColMajor>;
 template <typename T>
 using VectorX  = Eigen::Matrix<T, Eigen::Dynamic, 1>;
 template <typename T>
-using ArrayXX  = Eigen::Array<T, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>;
+using ArrayXX  = Eigen::Array<T, Eigen::Dynamic, Eigen::Dynamic, Eigen::ColMajor>;
 template <typename T>
 using ArrayX   = Eigen::Array<T, Eigen::Dynamic, 1>;
+template <typename T>
+using SparseMatrixX = Eigen::SparseMatrix<T, Eigen::ColMajor>;  // Many sparse solvers require column-major format (otherwise, deep copies are made)
+template <typename T>
+using SpMatTriplet = Eigen::Triplet<T>;
+
+#include    <diy/thirdparty/fmt/format.h>
 
 #include    <mfa/util.hpp>
 #include    <mfa/param.hpp>
+#include    <mfa/pointset.hpp>
 #include    <mfa/tmesh.hpp>
 #include    <mfa/mfa_data.hpp>
 #include    <mfa/decode.hpp>
 #include    <mfa/encode.hpp>
+
+// TODO: Move Model's from BlockBase to MFA
+//       Want MFA object to manage construction-destruction of MFA_Data
+// a solved and stored MFA_data model (geometry or science variable or both)
+template <typename T>
+struct Model
+{
+    int                 min_dim;                // starting coordinate of this model in full-dimensional data
+    int                 max_dim;                // ending coordinate of this model in full-dimensional data
+    mfa::MFA_Data<T>    *mfa_data;              // MFA model data
+};
 
 namespace mfa
 {
@@ -78,31 +98,18 @@ namespace mfa
     struct MFA
     {
         int                     dom_dim;            // domain dimensionality
-        Param<T>*               mfa_param;          // pointer to parameterization object
 
-        MFA(
-            int                 dom_dim_,           // domain dimensionality (excluding science variables)
-            const VectorXi&     ndom_pts_,          // number of input data points in each dim
-            const MatrixX<T>&   domain_) :          // input data points (1st dim changes fastest)
+        MFA(size_t dom_dim_) :
             dom_dim(dom_dim_)
-        {
-            mfa_param = new Param<T>(dom_dim_, ndom_pts_, domain_);
-        }
+        { }
 
         ~MFA()
-        {
-            delete mfa_param;
-        }
-
-        VectorXi&               ndom_pts() const    { return mfa_param->ndom_pts; }
-        vector<vector<T>>&      params() const      { return mfa_param->params; }
-        vector<size_t>&         ds() const          { return mfa_param->ds; }
-        vector<vector<size_t>>& co() const          { return mfa_param->co; }
+        { }
 
         // fixed number of control points encode
         void FixedEncode(
                 MFA_Data<T>&        mfa_data,               // mfa data model
-                const MatrixX<T>&   domain,                 // input points
+                const PointSet<T>&  input,                  // input points
                 const VectorXi      nctrl_pts,              // number of control points in each dim
                 int                 verbose,                // debug level
                 bool                weighted) const         // solve for and use weights (default = true)
@@ -111,14 +118,12 @@ namespace mfa
             TensorProduct<T>&t = mfa_data.tmesh.tensor_prods[0];
 
             t.weights = VectorX<T>::Ones(t.nctrl_pts.prod());
-            Encoder<T> encoder(*this, mfa_data, domain, verbose);
+            Encoder<T> encoder(*this, mfa_data, input, verbose);
 
-            // experiment with separable, unified dimension encoding
-#ifdef MFA_UNIFIED_DIMS
-            encoder.EncodeTensor(0, false, false, weighted);   // assumes only one tensor product
-#else
-            encoder.Encode(t.nctrl_pts, t.ctrl_pts, t.weights, weighted);
-#endif
+            if (input.structured)
+                encoder.Encode(t.nctrl_pts, t.ctrl_pts, t.weights, weighted);
+            else
+                encoder.EncodeUnified(0, weighted);  // Assumes only one tensor product
 
             // debug: try inserting a knot
             //             VectorX<T> new_knot(mfa->dom_dim);
@@ -130,7 +135,7 @@ namespace mfa
         // adaptive encode
         void AdaptiveEncode(
                 MFA_Data<T>&        mfa_data,               // mfa data model
-                const MatrixX<T>&   domain,                 // input points
+                const PointSet<T>&  input,                  // input points
                 T                   err_limit,              // maximum allowable normalized error
                 int                 verbose,                // debug level
                 bool                weighted,               // solve for and use weights (default = true)
@@ -138,9 +143,9 @@ namespace mfa
                 const VectorX<T>&   extents,                // extents in each dimension, for normalizing error (size 0 means do not normalize)
                 int                 max_rounds) const       // optional maximum number of rounds
         {
-            Encoder<T> encoder(*this, mfa_data, domain, verbose);
+            Encoder<T> encoder(*this, mfa_data, input, verbose);
 
-#ifndef TMESH               // original adaptive encode for one tensor product
+#ifndef MFA_TMESH           // original adaptive encode for one tensor product
             encoder.OrigAdaptiveEncode(err_limit, weighted, extents, max_rounds);
 #else                       // adaptive encode for tmesh
             encoder.AdaptiveEncode(err_limit, weighted, local, extents, max_rounds);
@@ -148,40 +153,32 @@ namespace mfa
         }
 
         // decode values at all input points
-        void DecodeDomain(
+        void DecodePointSet(
                 const MFA_Data<T>&  mfa_data,               // mfa data model
+                PointSet<T>&        output,                 // (output) decoded point set
                 int                 verbose,                // debug level
-                MatrixX<T>&         approx,                 // decoded points
                 int                 min_dim,                // first dimension to decode
                 int                 max_dim,                // last dimension to decode
                 bool                saved_basis) const      // whether basis functions were saved and can be reused
         {
             VectorXi no_derivs;                             // size-0 means no derivatives
 
-#ifdef MFA_UNIFIED_DIMS
-
-            DecodeDomain(mfa_data, verbose, approx, min_dim, max_dim, false, no_derivs);
-
-#else
-
-            DecodeDomain(mfa_data, verbose, approx, min_dim, max_dim, saved_basis, no_derivs);
-
-#endif
+            DecodePointSet(mfa_data, output, verbose, min_dim, max_dim, saved_basis, no_derivs);
         }
 
         // decode derivatives at all input points
-        void DecodeDomain(
+        void DecodePointSet(
                 const MFA_Data<T>&  mfa_data,               // mfa data model
+                PointSet<T>&        output,                 // (output) decoded point set
                 int                 verbose,                // debug level
-                MatrixX<T>&         approx,                 // decoded values
                 int                 min_dim,                // first dimension to decode
                 int                 max_dim,                // last dimension to decode
                 bool                saved_basis,            // whether basis functions were saved and can be reused
                 const VectorXi&     derivs) const           // derivative to take in each domain dim. (0 = value, 1 = 1st deriv, 2 = 2nd deriv, ...)
                                                             // pass size-0 vector if unused
         {
-            mfa::Decoder<T> decoder(*this, mfa_data, verbose);
-            decoder.DecodeDomain(approx, min_dim, max_dim, saved_basis, derivs);
+            mfa::Decoder<T> decoder(mfa_data, verbose, saved_basis);
+            decoder.DecodePointSet(output, min_dim, max_dim, derivs);
         }
 
         // decode value of single point at the given parameter location
@@ -192,7 +189,7 @@ namespace mfa
         {
             VectorXi no_derivs;
             int verbose = 0;
-            Decoder<T> decoder(*this, mfa_data, verbose);
+            Decoder<T> decoder(mfa_data, verbose);
             // TODO: hard-coded for one tensor product
             decoder.VolPt(param, cpt, mfa_data.tmesh.tensor_prods[0], no_derivs);
         }
@@ -206,7 +203,7 @@ namespace mfa
                 VectorX<T>&         cpt) const              // (output) decoded point
         {
             int verbose = 0;
-            Decoder<T> decoder(*this, mfa_data, verbose);
+            Decoder<T> decoder(mfa_data, verbose);
             // TODO: hard-coded for one tensor product
             decoder.VolPt(param, cpt, mfa_data.tmesh.tensor_prods[0], derivs);
         }
@@ -221,7 +218,7 @@ namespace mfa
                             MatrixX<T>&             result)                 // decoded result
         {
             int verbose = 0;
-            Decoder<T> decoder(*this, mfa_data, verbose);
+            Decoder<T> decoder(mfa_data, verbose);
             decoder.DecodeGrid(result, min_dim, max_dim, par_min, par_max, ndom_pts);
         }
 
@@ -229,30 +226,124 @@ namespace mfa
         // error is not normalized by the data range (absolute, not relative error)
         void AbsCoordError(
                 const MFA_Data<T>&  mfa_data,               // mfa data model
-                const MatrixX<T>&   domain,                 // input points
+                const PointSet<T>&  input,
                 size_t              idx,                    // index of domain point
                 VectorX<T>&         error,                  // (output) absolute value of error at each coordinate
                 int                 verbose) const          // debug level
         {
-            // convert linear idx to multidim. i,j,k... indices in each domain dimension
-            VectorXi ijk(dom_dim);
-            mfa_data.idx2ijk(ds(), idx, ijk);
-
-            // compute parameters for the vertices of the cell
             VectorX<T> param(dom_dim);
-            for (int i = 0; i < dom_dim; i++)
-                param(i) = mfa_param->params[i][ijk(i)];
+            input.pt_params(idx, param);
 
             // NB, assumes at least one tensor product exists and that all have the same ctrl pt dimensionality
             int pt_dim = mfa_data.tmesh.tensor_prods[0].ctrl_pts.cols();
 
             // approximated value
             VectorX<T> cpt(pt_dim);          // approximated point
-            Decoder<T> decoder(*this, mfa_data, verbose);
+            Decoder<T> decoder(mfa_data, verbose);
             decoder.VolPt(param, cpt, mfa_data.tmesh.tensor_prods[0]);      // TODO: hard-coded for first tensor product
 
             for (auto i = 0; i < pt_dim; i++)
-                error(i) = fabs(cpt(i) - domain(idx, mfa_data.min_dim + i));
+                error(i) = fabs(cpt(i) - input.domain(idx, mfa_data.min_dim + i));
+        }
+
+        void AbsPointSetDiff(
+            const   mfa::PointSet<T>& ps1,
+            const   mfa::PointSet<T>& ps2,
+                    mfa::PointSet<T>& diff,
+                    int               verbose)
+        {
+            if (!ps1.is_same_layout(ps2) || !ps1.is_same_layout(diff))
+            {
+                cerr << "ERROR: Incompatible PointSets in AbsPointSetDiff" << endl;
+                exit(1);
+            }
+
+#ifdef MFA_SERIAL
+            int pt_dim = ps1.pt_dim;
+            diff.domain.leftCols(dom_dim) = ps1.domain.leftCols(dom_dim);
+            diff.domain.rightCols(pt_dim-dom_dim) = (ps1.domain.rightCols(pt_dim-dom_dim) - ps2.domain.rightCols(pt_dim-dom_dim)).cwiseAbs();
+#endif // MFA_SERIAL
+#ifdef MFA_TBB
+            parallel_for (size_t(0), (size_t)diff.npts, [&] (size_t i)
+                {
+                    for (auto j = 0; j < dom_dim; j++)
+                    {
+                        diff.domain(i,j) = ps1.domain(i,j); // copy the geometric location of each point
+                    }
+                });
+
+            parallel_for (size_t(0), (size_t)diff.npts, [&] (size_t i)
+                {
+                    for (auto j = dom_dim; j < diff.pt_dim; j++)
+                    {
+                        diff.domain(i,j) = fabs(ps1.domain(i,j) - ps2.domain(i,j)); // compute distance between each science value
+                    }
+                });
+#endif // MFA_TBB
+        }
+
+        void AbsPointSetError(
+            const   mfa::PointSet<T>& base,
+                    mfa::PointSet<T>& error,
+                    vector<Model<T>>& vars,
+                    int               verbose)
+        {
+            if (!base.is_same_layout(error))
+            {
+                cerr << "ERROR: Incompatible PointSets in AbsPointSetError" << endl;
+                exit(1);
+            }
+
+#ifdef MFA_SERIAL
+            // copy geometric point coordinates
+            for (size_t i = 0; i < error.npts; i++)
+            {   
+                for (auto j = 0; j < dom_dim; j++)
+                {
+                    error.domain(i,j) = base.domain(i,j); // copy the geometric location of each point
+                } 
+            }
+
+            // compute errors for each point and model
+            for (size_t i = 0; i < error.npts; i++)
+            {
+                VectorX<T> err_vec;                          // errors for all coordinates in current model
+                for (auto k = 0; k < vars.size(); k++)      // for all science models
+                {
+                    err_vec.resize(vars[k].max_dim - vars[k].min_dim);
+                    AbsCoordError(*(vars[k].mfa_data), base, i, err_vec, verbose);
+
+                    for (auto j = 0; j < err_vec.size(); j++)
+                    {
+                        error.domain(i, vars[k].min_dim + j) = err_vec(j);      // error for each science variable
+                    }
+                }
+            }
+#endif // MFA_SERIAL
+#ifdef MFA_TBB
+            parallel_for (size_t(0), (size_t)error.npts, [&] (size_t i)
+                {
+                    for (auto j = 0; j < dom_dim; j++)
+                    {
+                        error.domain(i,j) = base.domain(i,j); // copy the geometric location of each point
+                    }
+                });
+
+            parallel_for (size_t(0), (size_t)error.npts, [&] (size_t i)
+                {
+                VectorX<T> err_vec;                                 // errors for all coordinates in current model
+                for (auto k = 0; k < vars.size() + 1; k++)      // for all models, geometry + science
+                {
+                    err_vec.resize(vars[k - 1].max_dim - vars[k - 1].min_dim);
+                    AbsCoordError(*(vars[k - 1].mfa_data), base, i, err_vec, verbose);
+
+                    for (auto j = 0; j < err_vec.size(); j++)
+                    {
+                        error.domain(i, vars[k - 1].min_dim + j) = err_vec(j); // error for each science variable
+                    }
+                }
+                });
+#endif // MFA_TBB
         }
     };
 }                                           // namespace

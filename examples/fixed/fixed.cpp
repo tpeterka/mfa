@@ -47,13 +47,16 @@ int main(int argc, char** argv)
     int    geom_nctrl   = -1;                   // input number of control points for geometry (same for all dims)
     int    vars_nctrl   = 11;                   // input number of control points for all science variables (same for all dims)
     string input        = "sinc";               // input dataset
-    int    weighted     = 1;                    // solve for and use weights (bool 1 or 0))
+    int    weighted     = 1;                    // solve for and use weights (bool 0/1)
     real_t rot          = 0.0;                  // rotation angle in degrees
     real_t twist        = 0.0;                  // twist (waviness) of domain (0.0-1.0)
     real_t noise        = 0.0;                  // fraction of noise
-    int    error        = 1;                    // decode all input points and check error (bool 1 or 0)
+    int    error        = 1;                    // decode all input points and check error (bool 0/1)
     string infile;                              // input file name
-    bool   help;                                // show help
+    int    structured   = 1;                    // input data format (bool 0/1)
+    int    rand_seed    = -1;                   // seed to use for random data generation (-1 == no randomization)
+    bool   help         = false;                // show help
+
 
     // get command line arguments
     opts::Options ops;
@@ -73,6 +76,8 @@ int main(int argc, char** argv)
     ops >> opts::Option('c', "error",       error,      " decode entire error field (default=true)");
     ops >> opts::Option('f', "infile",      infile,     " input file name");
     ops >> opts::Option('h', "help",        help,       " show help");
+    ops >> opts::Option('x', "structured",  structured, " input data format (default=structured=true)");
+    ops >> opts::Option('y', "rand_seed",   rand_seed,  " seed for random point generation (-1 = no randomization, default)");
 
     if (!ops.parse(argc, argv) || help)
     {
@@ -94,7 +99,8 @@ int main(int argc, char** argv)
         "\ngeom_degree = "  << geom_degree  << " vars_degree = "    << vars_degree  <<
         "\ninput pts = "    << ndomp        << " geom_ctrl pts = "  << geom_nctrl   <<
         "\nvars_ctrl_pts = "<< vars_nctrl   << " test_points = "    << ntest        <<
-        "\ninput = "        << input        << " noise = "          << noise        << endl;
+        "\ninput = "        << input        << " noise = "          << noise        << 
+        "\nstructured = "   << structured   << endl;
 
 #ifdef CURVE_PARAMS
     cerr << "parameterization method = curve" << endl;
@@ -153,12 +159,14 @@ int main(int argc, char** argv)
     d_args.n            = noise;
     d_args.multiblock   = false;
     d_args.verbose      = 1;
+    d_args.structured   = structured;
+    d_args.rand_seed    = rand_seed;
     for (int i = 0; i < pt_dim - dom_dim; i++)
         d_args.f[i] = 1.0;
     for (int i = 0; i < dom_dim; i++)
     {
         d_args.geom_p[i]            = geom_degree;
-        d_args.vars_p[0][i]         = vars_degree;  // assuming one science variable, vars_p[0]
+        d_args.vars_p[0][i]         = vars_degree;      // assuming one science variable, vars_p[0]
         d_args.ndom_pts[i]          = ndomp;
         d_args.geom_nctrl_pts[i]    = geom_nctrl;
         d_args.vars_nctrl_pts[0][i] = vars_nctrl;       // assuming one science variable, vars_nctrl_pts[0]
@@ -273,6 +281,8 @@ int main(int argc, char** argv)
     // S3D dataset
     if (input == "s3d")
     {
+        d_args.ndom_pts.resize(3);
+        d_args.vars_nctrl_pts[0].resize(3);
         d_args.ndom_pts[0]          = 704;
         d_args.ndom_pts[1]          = 540;
         d_args.ndom_pts[2]          = 550;
@@ -315,11 +325,13 @@ int main(int argc, char** argv)
 
     // nek5000 dataset
     if (input == "nek")
-    {
+    {   
+        d_args.ndom_pts.resize(3);
         for (int i = 0; i < 3; i++)
-            d_args.ndom_pts[i] = 200;
-        for (int i = 0; i < 3; i++)
+            d_args.ndom_pts[i]          = 200;
+        for (int i = 0; i < dom_dim; i++)
             d_args.vars_nctrl_pts[0][i] = 100;
+
         d_args.infile = infile;
 //         d_args.infile = "/Users/tpeterka/datasets/nek5000/200x200x200/0.xyz";
         if (dom_dim == 2)
@@ -338,6 +350,8 @@ int main(int argc, char** argv)
     // rti dataset
     if (input == "rti")
     {
+        d_args.ndom_pts.resize(3);
+        d_args.vars_nctrl_pts[0].resize(3);
         d_args.ndom_pts[0]  = 288;
         d_args.ndom_pts[1]  = 512;
         d_args.ndom_pts[2]  = 512;
@@ -375,12 +389,14 @@ int main(int argc, char** argv)
     // cesm dataset
     if (input == "cesm")
     {
+        d_args.ndom_pts.resize(2);
+        d_args.vars_nctrl_pts[0].resize(2);
         d_args.ndom_pts[0]          = 1800;
         d_args.ndom_pts[1]          = 3600;
         d_args.vars_nctrl_pts[0][0] = 180;
         d_args.vars_nctrl_pts[0][1] = 360;
         d_args.infile = infile;
-        d_args.infile = "/Users/tpeterka/datasets/CESM-ATM-tylor/1800x3600/FLDSC_1_1800_3600.dat";
+//      d_args.infile = "/Users/tpeterka/datasets/CESM-ATM-tylor/1800x3600/FLDSC_1_1800_3600.dat";
         if (dom_dim == 2)
             master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
                     { b->read_2d_scalar_data(cp, d_args); });
@@ -409,8 +425,9 @@ int main(int argc, char** argv)
         master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
                 { b->error(cp, 1, true); });
 #else                   // range coordinate difference
+        bool saved_basis = structured; // TODO: basis functions are currently only saved during encoding of structured data
         master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-                { b->range_error(cp, 1, true, true); });
+                { b->range_error(cp, 1, true, saved_basis); });
 #endif
         decode_time = MPI_Wtime() - decode_time;
     }

@@ -279,8 +279,10 @@ protected:
     struct borrowed_t { };
     struct stolen_t { };
 
+#ifndef DOXYGEN_SHOULD_SKIP_THIS  // Issue in breathe 4.26.1
     template <typename T> friend T reinterpret_borrow(handle);
     template <typename T> friend T reinterpret_steal(handle);
+#endif
 
 public:
     // Only accessible from derived classes and the reinterpret_* functions
@@ -754,7 +756,12 @@ inline bool PyIterable_Check(PyObject *obj) {
 inline bool PyNone_Check(PyObject *o) { return o == Py_None; }
 inline bool PyEllipsis_Check(PyObject *o) { return o == Py_Ellipsis; }
 
+#ifdef PYBIND11_STR_LEGACY_PERMISSIVE
 inline bool PyUnicode_Check_Permissive(PyObject *o) { return PyUnicode_Check(o) || PYBIND11_BYTES_CHECK(o); }
+#define PYBIND11_STR_CHECK_FUN detail::PyUnicode_Check_Permissive
+#else
+#define PYBIND11_STR_CHECK_FUN PyUnicode_Check
+#endif
 
 inline bool PyStaticMethod_Check(PyObject *o) { return o->ob_type == &PyStaticMethod_Type; }
 
@@ -812,11 +819,22 @@ PYBIND11_NAMESPACE_END(detail)
     : Parent(check_(o) ? o.release().ptr() : ConvertFun(o.ptr()), stolen_t{}) \
     { if (!m_ptr) throw error_already_set(); }
 
+#define PYBIND11_OBJECT_CVT_DEFAULT(Name, Parent, CheckFun, ConvertFun) \
+    PYBIND11_OBJECT_CVT(Name, Parent, CheckFun, ConvertFun) \
+    Name() : Parent() { }
+
+#define PYBIND11_OBJECT_CHECK_FAILED(Name, o_ptr) \
+    ::pybind11::type_error("Object of type '" + \
+                           ::pybind11::detail::get_fully_qualified_tp_name(Py_TYPE(o_ptr)) + \
+                           "' is not an instance of '" #Name "'")
+
 #define PYBIND11_OBJECT(Name, Parent, CheckFun) \
     PYBIND11_OBJECT_COMMON(Name, Parent, CheckFun) \
     /* This is deliberately not 'explicit' to allow implicit conversion from object: */ \
-    Name(const object &o) : Parent(o) { } \
-    Name(object &&o) : Parent(std::move(o)) { }
+    Name(const object &o) : Parent(o) \
+    { if (m_ptr && !check_(m_ptr)) throw PYBIND11_OBJECT_CHECK_FAILED(Name, m_ptr); } \
+    Name(object &&o) : Parent(std::move(o)) \
+    { if (m_ptr && !check_(m_ptr)) throw PYBIND11_OBJECT_CHECK_FAILED(Name, m_ptr); }
 
 #define PYBIND11_OBJECT_DEFAULT(Name, Parent, CheckFun) \
     PYBIND11_OBJECT(Name, Parent, CheckFun) \
@@ -927,7 +945,7 @@ class bytes;
 
 class str : public object {
 public:
-    PYBIND11_OBJECT_CVT(str, object, detail::PyUnicode_Check_Permissive, raw_str)
+    PYBIND11_OBJECT_CVT(str, object, PYBIND11_STR_CHECK_FUN, raw_str)
 
     str(const char *c, size_t n)
         : object(PyUnicode_FromStringAndSize(c, (ssize_t) n), stolen_t{}) {
@@ -1054,6 +1072,34 @@ inline str::str(const bytes& b) {
 
 /// \addtogroup pytypes
 /// @{
+class bytearray : public object {
+public:
+    PYBIND11_OBJECT_CVT(bytearray, object, PyByteArray_Check, PyByteArray_FromObject)
+
+    bytearray(const char *c, size_t n)
+        : object(PyByteArray_FromStringAndSize(c, (ssize_t) n), stolen_t{}) {
+        if (!m_ptr) pybind11_fail("Could not allocate bytearray object!");
+    }
+
+    bytearray()
+        : bytearray("", 0) {}
+
+    explicit bytearray(const std::string &s) : bytearray(s.data(), s.size()) { }
+
+    size_t size() const { return static_cast<size_t>(PyByteArray_Size(m_ptr)); }
+
+    explicit operator std::string() const {
+        char *buffer = PyByteArray_AS_STRING(m_ptr);
+        ssize_t size = PyByteArray_GET_SIZE(m_ptr);
+        return std::string(buffer, static_cast<size_t>(size));
+    }
+};
+// Note: breathe >= 4.17.0 will fail to build docs if the below two constructors
+// are included in the doxygen group; close here and reopen after as a workaround
+/// @} pytypes
+
+/// \addtogroup pytypes
+/// @{
 class none : public object {
 public:
     PYBIND11_OBJECT(none, object, detail::PyNone_Check)
@@ -1154,10 +1200,15 @@ public:
 
 class weakref : public object {
 public:
-    PYBIND11_OBJECT_DEFAULT(weakref, object, PyWeakref_Check)
+    PYBIND11_OBJECT_CVT_DEFAULT(weakref, object, PyWeakref_Check, raw_weakref)
     explicit weakref(handle obj, handle callback = {})
         : object(PyWeakref_NewRef(obj.ptr(), callback.ptr()), stolen_t{}) {
         if (!m_ptr) pybind11_fail("Could not allocate weak reference!");
+    }
+
+private:
+    static PyObject *raw_weakref(PyObject *o) {
+        return PyWeakref_NewRef(o, nullptr);
     }
 };
 
@@ -1229,10 +1280,22 @@ public:
     }
 
     template <typename T> operator T *() const {
+        return get_pointer<T>();
+    }
+
+    /// Get the pointer the capsule holds.
+    template<typename T = void>
+    T* get_pointer() const {
         auto name = this->name();
-        T * result = static_cast<T *>(PyCapsule_GetPointer(m_ptr, name));
+        T *result = static_cast<T *>(PyCapsule_GetPointer(m_ptr, name));
         if (!result) pybind11_fail("Unable to extract capsule contents!");
         return result;
+    }
+
+    /// Replaces a capsule's pointer *without* calling the destructor on the existing one.
+    void set_pointer(const void *value) {
+        if (PyCapsule_SetPointer(m_ptr, const_cast<void *>(value)) != 0)
+            pybind11_fail("Could not set capsule pointer");
     }
 
     const char *name() const { return PyCapsule_GetName(m_ptr); }
@@ -1252,6 +1315,15 @@ public:
     detail::tuple_iterator end() const { return {*this, PyTuple_GET_SIZE(m_ptr)}; }
 };
 
+// We need to put this into a separate function because the Intel compiler
+// fails to compile enable_if_t<all_of<is_keyword_or_ds<Args>...>::value> part below
+// (tested with ICC 2021.1 Beta 20200827).
+template <typename... Args>
+constexpr bool args_are_all_keyword_or_ds()
+{
+  return detail::all_of<detail::is_keyword_or_ds<Args>...>::value;
+}
+
 class dict : public object {
 public:
     PYBIND11_OBJECT_CVT(dict, object, PyDict_Check, raw_dict)
@@ -1259,7 +1331,7 @@ public:
         if (!m_ptr) pybind11_fail("Could not allocate dict object!");
     }
     template <typename... Args,
-              typename = detail::enable_if_t<detail::all_of<detail::is_keyword_or_ds<Args>...>::value>,
+              typename = detail::enable_if_t<args_are_all_keyword_or_ds<Args...>()>,
               // MSVC workaround: it can't compile an out-of-line definition, so defer the collector
               typename collector = detail::deferred_t<detail::unpacking_collector<>, Args...>>
     explicit dict(Args &&...args) : dict(collector(std::forward<Args>(args)...).kwargs()) { }
@@ -1511,13 +1583,17 @@ inline memoryview memoryview::from_buffer(
 
 /// \addtogroup python_builtins
 /// @{
+
+/// Get the length of a Python object.
 inline size_t len(handle h) {
     ssize_t result = PyObject_Length(h.ptr());
     if (result < 0)
-        pybind11_fail("Unable to compute length of object");
+        throw error_already_set();
     return (size_t) result;
 }
 
+/// Get the length hint of a Python object.
+/// Returns 0 when this cannot be determined.
 inline size_t len_hint(handle h) {
 #if PY_VERSION_HEX >= 0x03040000
     ssize_t result = PyObject_LengthHint(h.ptr(), 0);

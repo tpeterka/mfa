@@ -8,6 +8,8 @@
 #ifndef _PARAMS_HPP
 #define _PARAMS_HPP
 
+#include    "mfa/util.hpp"
+
 #include    <Eigen/Dense>
 #include    <vector>
 #include    <list>
@@ -26,38 +28,91 @@ namespace mfa
     struct Param
     {
         VectorXi                ndom_pts;           // number of domain points in each dimension
-        vector<vector<T>>       params;             // parameters for input points[dimension][index]
-        T                       range_extent;       // extent of range value of input data points
-        vector<vector<size_t>>  co;                 // starting offset for curves in each dim
-        vector<size_t>          ds;                 // stride for domain points in each dim
+        vector<vector<T>>       param_grid;         // parameters for input points[dimension][index] (for structured case)
+        MatrixX<T>              param_list;         // list of parameters for each input pt (for unstructured case)
+        T                       range_extent;       // extent of range value of input data points  // TODO: what does this have to do with parameters?
         int                     dom_dim;            // dimensionality of domain
+        bool                    structured;         // true if points lie on structured grid
 
-        Param(
-            int                 dom_dim_,           // domain dimensionality (excluding science variables)
-            const VectorXi&     ndom_pts_,          // number of input data points in each dim
-            const MatrixX<T>&   domain_) :          // input data points (1st dim changes fastest)
-            dom_dim(dom_dim_),
-            ndom_pts(ndom_pts_)
+        // Default constructor
+        Param() : range_extent(0), dom_dim(0), structured(true) { }
+
+//         // Construcutor for unstructured input
+//         Param(  int                 dom_dim_,
+//                 const MatrixX<T>&   domain_) :
+//             dom_dim(dom_dim_),
+//             ndom_pts(VectorXi::Zero(dom_dim)),
+//             structured(false)
+//         {
+// #ifdef CURVE_PARAMS
+//             cerr << "ERROR: Cannot set curve parametrization to unstructured input" << endl;
+// #else
+//             setDomainParamsUnstructured(domain_);
+// #endif
+//         }
+
+        // Constructor for equispaced grid over all of parameter space
+        Param(const VectorXi& ndom_pts_) :
+            ndom_pts(ndom_pts_),
+            range_extent(0),
+            dom_dim(ndom_pts.size()),
+            structured(true)
+        { 
+            VectorX<T>  param_mins = VectorX<T>::Zero(dom_dim);
+            VectorX<T>  param_maxs = VectorX<T>::Ones(dom_dim);
+
+            set_grid_params(ndom_pts, param_mins, param_maxs);
+        }
+
+        // Constructor for equispaced grid over subset of parameter space
+        // N.B. If ndom_pts_(k) = 1 in any dimension, then we expect param_mins_(k) == param_maxs_(k)
+        Param(  const VectorXi&     ndom_pts_,
+                const VectorX<T>&   param_mins_, 
+                const VectorX<T>&   param_maxs_) :
+            ndom_pts(ndom_pts_),
+            range_extent(0),
+            dom_dim(ndom_pts.size()),
+            structured(true)
         {
+            set_grid_params(ndom_pts_, param_mins_, param_maxs_);
+        }
+
+        // General constructor for creating params from set of existing points
+        Param(  int                 dom_dim_,           // domain dimensionality (excluding science variables)
+                const VectorX<T>&   dom_mins_,          // minimal extents of bounding box in each dimension (optional, important when data does not cover domain)
+                const VectorX<T>&   dom_maxs_,          // maximal extents of bounding box in each dimension (see above)
+                const VectorXi&     ndom_pts_,          // number of input data points in each dim
+                const MatrixX<T>&   domain_,            // physical coordinates of points
+                bool                structured_) :          // input data points (1st dim changes fastest)
+            dom_dim(dom_dim_),
+            ndom_pts(ndom_pts_),
+            structured(structured_)
+        {
+            // TODO: replace with warnings?
+            if (structured == true)
+                assert(ndom_pts.size() > 0);
+            if (structured == false)
+                assert(ndom_pts.size() == 0);
+
             // check dimensionality for sanity
             assert(dom_dim < domain_.cols());
 
-            // max extent of input data points
-            int last     = domain_.cols() - 1;
-            range_extent = domain_.col(last).maxCoeff() - domain_.col(last).minCoeff();
-
-            // stride for domain points in different dimensions
-            ds.resize(dom_dim, 1);
-            for (size_t i = 1; i < dom_dim; i++)
-                ds[i] = ds[i - 1] * ndom_pts_[i - 1];
-
             // precompute curve parameters and knots for input points
-            params.resize(dom_dim);
+            param_grid.resize(dom_dim);
 
 #ifdef CURVE_PARAMS
-            CurveParams(domain_, params);           // params spaced according to the curve length (per P&T)
+            if (structured)
+                CurveParams(domain_, param_grid);           // params spaced according to the curve length (per P&T)
+            else
+            {
+                cerr << "ERROR: Cannot set curve parametrization to unstructured input" << endl;
+                exit(1);
+            }
 #else
-            DomainParams(domain_, params);          // params spaced according to domain spacing
+            if (structured)
+                setDomainParamsStructured(domain_, dom_mins_, dom_maxs_, param_grid);          // params spaced according to domain spacing
+            else
+                setDomainParamsUnstructured(domain_, dom_mins_, dom_maxs_);
 #endif
 
             // debug
@@ -70,28 +125,93 @@ namespace mfa
 //             }
 //             fprintf(stderr, "-----\n");
 
-            // offsets for curve starting (domain) points in each dimension
-            co.resize(dom_dim);
-            for (auto k = 0; k < dom_dim; k++)
+            // max extent of input data points
+            int last     = domain_.cols() - 1;
+            range_extent = domain_.col(last).maxCoeff() - domain_.col(last).minCoeff();
+        }
+
+        size_t npts()
+        {
+            return structured ? ndom_pts.prod() : param_list.rows();
+        }
+
+        friend void swap(Param& first, Param& second)
+        {
+            first.ndom_pts.swap(second.ndom_pts);
+            swap(first.param_grid, second.param_grid);
+            first.param_list.swap(second.param_list);
+            swap(first.range_extent, second.range_extent);
+            // swap(first.co, second.co);
+            // swap(first.ds, second.ds);
+            swap(first.dom_dim, second.dom_dim);
+            swap(first.structured, second.structured);
+        }
+
+        // Structured data only.
+        // Get params from VolIterator
+        VectorX<T> pt_params(const VolIterator& it) const
+        {
+            VectorX<T> ret(dom_dim);
+            for(int k = 0; k < dom_dim; k++)
             {
-                size_t ncurves  = domain_.rows() / ndom_pts_(k);    // number of curves in this dimension
-                size_t coo      = 0;                                // co at start of contiguous sequence
-                co[k].resize(ncurves);
+                ret(k) = param_grid[k][it.idx_dim(k)];
+            }
 
-                co[k][0] = 0;
+            return ret;
+        }
 
-                for (auto j = 1; j < ncurves; j++)
+        // Structured data only.
+        // Get params from param indices in each dimension
+        VectorX<T> pt_params(const VectorXi& idxs) const
+        {
+            VectorX<T> ret(dom_dim);
+            for(int k = 0; k < dom_dim; k++)
+            {
+                ret(k) = param_grid[k][idxs(k)];
+            }
+
+            return ret;
+        }
+
+        // Unstructured data only.
+        // Get params from linear index
+        VectorX<T> pt_params(int i) const
+        {
+            return param_list.row(i);
+        }
+
+        // Set parameters to be a rectangular, equispaced grid bounded by [param_mins, param_maxs]
+        void set_grid_params(   const VectorXi&     ndom_pts,     // Number of points in each dimension
+                                const VectorX<T>&   param_mins,   // Minimum param in each dimension
+                                const VectorX<T>&   param_maxs)   // Maximum param in each dimension
+        {
+            if (!structured)
+            {
+                cerr << "\nWarning: Setting grid params to unstructured Param object\n" << endl;
+            }
+
+            T step = 0;
+            param_grid.resize(dom_dim);
+
+            for (int k = 0; k < dom_dim; k++)
+            {
+                param_grid[k].resize(ndom_pts(k));
+
+                param_grid[k][0] = param_mins(k);
+
+                if (ndom_pts(k) > 1)
                 {
-                    // adjust offsets for the next curve
-                    if (j % ds[k])
-                        co[k][j] = co[k][j - 1] + 1;
-                    else
+                    param_grid[k][ndom_pts(k)-1] = param_maxs(k);
+
+                    step = (param_maxs(k) - param_mins(k)) / (ndom_pts(k)-1);
+                    for (int j = 1; j < ndom_pts(k)-1; j++)
                     {
-                        co[k][j] = coo + ds[k] * ndom_pts_(k);
-                        coo = co[k][j];
+                        param_grid[k][j] = j * step;
                     }
                 }
             }
+
+            check_param_bounds();
         }
 
         // precompute curve parameters for input data points using the chord-length method
@@ -102,7 +222,7 @@ namespace mfa
         // total number of params is the sum of ndom_pts over the dimensions, much less than the total
         // number of data points (which would be the product)
         // assumes params were allocated by caller
-        void CurveParams(
+        void setCurveParamsStructured(
                 const MatrixX<T>&   domain,                 // input data points (1st dim changes fastest)
                 vector<vector<T>>&  params)                 // (output) parameters for input points[dimension][index]
         {
@@ -169,6 +289,7 @@ namespace mfa
             }                                                    // domain dimensions
             // debug
             //     cerr << "params:\n" << params << endl;
+            check_param_bounds();
         }
 
         // precompute parameters for input data points using domain spacing only (not length along curve)
@@ -176,27 +297,148 @@ namespace mfa
         // total number of params is the sum of ndom_pts over the dimensions, much less than the total
         // number of data points (which would be the product)
         // assumes params were allocated by caller
-        void DomainParams(
+        void setDomainParamsStructured(
                 const MatrixX<T>&     domain,                   // input data points (1st dim changes fastest)
+                const VectorX<T>&     dom_mins,
+                const VectorX<T>&     dom_maxs,
                 vector<vector<T>>&    params)                   // (output) parameters for input points[dimension][index]
         {
+            VectorX<T> mins;
+            VectorX<T> maxs;
+
+            // dom mins/maxs should either be empty or of size dom_dim
+            if (dom_mins.size() > 0 && dom_mins.size() != dom_dim)
+                cerr << "Warning: Invalid size of dom_mins in Param construction" << endl;
+            if (dom_maxs.size() > 0 && dom_maxs.size() != dom_dim)
+                cerr << "Warning: Invalid size of dom_maxs in Param construction" << endl;
+
+            // Set min/max extents in each domain dimension
+            if (dom_mins.size() != dom_dim || dom_maxs.size() != dom_dim)
+            {
+                mins = domain.leftCols(dom_dim).colwise().minCoeff();
+                maxs = domain.leftCols(dom_dim).colwise().maxCoeff();
+            }
+            else
+            {
+                mins = dom_mins;
+                maxs = dom_maxs;
+            }
+
+            VectorX<T> diff = maxs - mins;
+
             size_t cs = 1;                                      // stride for domain points in current dim.
             for (size_t k = 0; k < dom_dim; k++)                // for all domain dimensions
             {
-                params[k].resize(ndom_pts(k));
-                for (size_t i = 1; i < ndom_pts(k) - 1; i++)
-                    params[k][i]= fabs( (domain(cs * i, k) - domain(0, k)) /
-                            (domain(cs * (ndom_pts(k) - 1), k) - domain(0, k)) );
+                param_grid[k].resize(ndom_pts(k));
+                for (size_t i = 0; i < ndom_pts(k); i++)
+                    param_grid[k][i]= (domain(cs * i, k) - mins(k)) / diff(k);
 
-                params[k][ndom_pts(k) - 1] = 1.0;
                 cs *= ndom_pts(k);
             }                                                    // domain dimensions
 
+            check_param_bounds();
             // debug
-            //     cerr << "params:\n" << params << endl;
+//             for (auto k = 0; k < dom_dim; k++)
+//             {
+//                 cerr << "params[" << k << "]:\n" << endl;
+//                 for (auto i = 0; i < params[k].size(); i++)
+//                     cerr << params[k][i] << endl;
+//             }
         }
-    };
 
-}                                               // namespace
+        void setDomainParamsUnstructured(
+            const MatrixX<T>&   domain,
+            const VectorX<T>&   dom_mins,
+            const VectorX<T>&   dom_maxs)
+        {
+            VectorX<T> mins;
+            VectorX<T> maxs;
 
-#endif
+            // dom mins/maxs should either be empty or of size dom_dim
+            if (dom_mins.size() > 0 && dom_mins.size() != dom_dim)
+                cerr << "Warning: Invalid size of dom_mins in Param construction" << endl;
+            if (dom_maxs.size() > 0 && dom_maxs.size() != dom_dim)
+                cerr << "Warning: Invalid size of dom_maxs in Param construction" << endl;
+
+            // Set min/max extents in each domain dimension
+            if (dom_mins.size() != dom_dim || dom_maxs.size() != dom_dim)
+            {
+                mins = domain.leftCols(dom_dim).colwise().minCoeff();
+                maxs = domain.leftCols(dom_dim).colwise().maxCoeff();
+            }
+            else    // Use domain bounds provided by block (input data need not extend to bounds)
+            {
+                mins = dom_mins;
+                maxs = dom_maxs;
+            }
+            
+            int npts = domain.rows();
+            param_list.resize(npts, dom_dim);
+
+            VectorX<T> diff = maxs - mins;
+
+            // Rescale domain values to the interval [0,1], column-by-column
+            for (size_t k = 0; k < dom_dim; k++)
+            {
+                param_list.col(k) = (domain.col(k).array() - mins(k)) * (1/diff(k));
+            }
+        
+            check_param_bounds();
+        }
+
+        // Checks for any parameter values outside the range [0,1].
+        // If found, prints an error message and quits the program.
+        bool check_param_bounds()
+        {
+            bool valid = true;
+            T minp = 0, maxp = 0;
+
+            if (structured)
+            {
+                for (int k = 0; k < dom_dim; k++)
+                {
+                    for (int j = 0; j < ndom_pts(k); j++)
+                    {
+                        if (param_grid[k][j] < 0.0 || param_grid[k][j] > 1.0)
+                        {
+                            valid = false;
+                            break;
+                        }
+                    }
+                    
+                    if (valid == false)  // break of dimension loop if out-of-bounds entry found
+                        break;
+                }
+            }
+            else
+            {
+                for (int k = 0; k < dom_dim; k++)
+                {
+                    minp = param_list.col(k).minCoeff();
+                    if (minp < 0.0)
+                    {
+                        valid = false;
+                        break;
+                    }
+
+                    maxp = param_list.col(k).maxCoeff();
+                    if (maxp > 1.0)
+                    {
+                        valid = false;
+                        break;
+                    }
+                }
+            }
+            
+            if (valid == false)
+            {
+                cerr << "ERROR: Construction of Param object contains out-of-bounds entries" << endl;
+                exit(1);
+            }
+
+            return valid;
+        }
+    };  // struct Param
+}  // namespace mfa
+
+#endif  // _PARAMS_HPP

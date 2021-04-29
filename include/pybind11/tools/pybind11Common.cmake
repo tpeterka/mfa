@@ -15,7 +15,7 @@ Adds the following targets::
 Adds the following functions::
 
     pybind11_strip(target) - strip target after building on linux/macOS
-
+    pybind11_find_import(module) - See if a module is installed.
 
 #]======================================================]
 
@@ -35,6 +35,12 @@ get_property(
 if(NOT is_config)
   set(optional_global GLOBAL)
 endif()
+
+# If not run in Python mode, we still would like this to at least
+# include pybind11's include directory:
+set(pybind11_INCLUDE_DIRS
+    "${pybind11_INCLUDE_DIR}"
+    CACHE INTERNAL "Include directory for pybind11 (Python not requested)")
 
 # --------------------- Shared targets ----------------------------
 
@@ -109,28 +115,32 @@ endif()
 
 add_library(pybind11::windows_extras IMPORTED INTERFACE ${optional_global})
 
-if(MSVC)
-  # /MP enables multithreaded builds (relevant when there are many files), /bigobj is
-  # needed for bigger binding projects due to the limit to 64k addressable sections
+if(MSVC) # That's also clang-cl
+  # /bigobj is needed for bigger binding projects due to the limit to 64k
+  # addressable sections
   set_property(
     TARGET pybind11::windows_extras
     APPEND
     PROPERTY INTERFACE_COMPILE_OPTIONS /bigobj)
 
-  if(CMAKE_VERSION VERSION_LESS 3.11)
-    set_property(
-      TARGET pybind11::windows_extras
-      APPEND
-      PROPERTY INTERFACE_COMPILE_OPTIONS $<$<NOT:$<CONFIG:Debug>>:/MP>)
-  else()
-    # Only set these options for C++ files.  This is important so that, for
-    # instance, projects that include other types of source files like CUDA
-    # .cu files don't get these options propagated to nvcc since that would
-    # cause the build to fail.
-    set_property(
-      TARGET pybind11::windows_extras
-      APPEND
-      PROPERTY INTERFACE_COMPILE_OPTIONS $<$<NOT:$<CONFIG:Debug>>:$<$<COMPILE_LANGUAGE:CXX>:/MP>>)
+  # /MP enables multithreaded builds (relevant when there are many files) for MSVC
+  if("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC") # no Clang no Intel
+    if(CMAKE_VERSION VERSION_LESS 3.11)
+      set_property(
+        TARGET pybind11::windows_extras
+        APPEND
+        PROPERTY INTERFACE_COMPILE_OPTIONS $<$<NOT:$<CONFIG:Debug>>:/MP>)
+    else()
+      # Only set these options for C++ files.  This is important so that, for
+      # instance, projects that include other types of source files like CUDA
+      # .cu files don't get these options propagated to nvcc since that would
+      # cause the build to fail.
+      set_property(
+        TARGET pybind11::windows_extras
+        APPEND
+        PROPERTY INTERFACE_COMPILE_OPTIONS
+                 $<$<NOT:$<CONFIG:Debug>>:$<$<COMPILE_LANGUAGE:CXX>:/MP>>)
+    endif()
   endif()
 endif()
 
@@ -196,6 +206,77 @@ else()
 
 endif()
 
+# --------------------- pybind11_find_import -------------------------------
+
+if(NOT _pybind11_nopython)
+  # Check to see if modules are importable. Use REQUIRED to force an error if
+  # one of the modules is not found. <package_name>_FOUND will be set if the
+  # package was found (underscores replace dashes if present). QUIET will hide
+  # the found message, and VERSION will require a minimum version. A successful
+  # find will cache the result.
+  function(pybind11_find_import PYPI_NAME)
+    # CMake variables need underscores (PyPI doesn't care)
+    string(REPLACE "-" "_" NORM_PYPI_NAME "${PYPI_NAME}")
+
+    # Return if found previously
+    if(${NORM_PYPI_NAME}_FOUND)
+      return()
+    endif()
+
+    set(options "REQUIRED;QUIET")
+    set(oneValueArgs "VERSION")
+    cmake_parse_arguments(ARG "${options}" "${oneValueArgs}" "" ${ARGN})
+
+    if(ARG_REQUIRED)
+      set(status_level FATAL_ERROR)
+    else()
+      set(status_level WARNING)
+    endif()
+
+    execute_process(
+      COMMAND
+        ${${_Python}_EXECUTABLE} -c
+        "from pkg_resources import get_distribution; print(get_distribution('${PYPI_NAME}').version)"
+      RESULT_VARIABLE RESULT_PRESENT
+      OUTPUT_VARIABLE PKG_VERSION
+      ERROR_QUIET)
+
+    string(STRIP "${PKG_VERSION}" PKG_VERSION)
+
+    # If a result is present, this failed
+    if(RESULT_PRESENT)
+      set(${NORM_PYPI_NAME}_FOUND
+          ${NORM_PYPI_NAME}-NOTFOUND
+          CACHE INTERNAL "")
+      # Always warn or error
+      message(
+        ${status_level}
+        "Missing: ${PYPI_NAME} ${ARG_VERSION}\nTry: ${${_Python}_EXECUTABLE} -m pip install ${PYPI_NAME}"
+      )
+    else()
+      if(ARG_VERSION AND PKG_VERSION VERSION_LESS ARG_VERSION)
+        message(
+          ${status_level}
+          "Version incorrect: ${PYPI_NAME} ${PKG_VERSION} found, ${ARG_VERSION} required - try upgrading"
+        )
+      else()
+        set(${NORM_PYPI_NAME}_FOUND
+            YES
+            CACHE INTERNAL "")
+        set(${NORM_PYPI_NAME}_VERSION
+            ${PKG_VERSION}
+            CACHE INTERNAL "")
+      endif()
+      if(NOT ARG_QUIET)
+        message(STATUS "Found ${PYPI_NAME} ${PKG_VERSION}")
+      endif()
+    endif()
+    if(NOT ARG_VERSION OR (NOT PKG_VERSION VERSION_LESS ARG_VERSION))
+      # We have successfully found a good version, cache to avoid calling again.
+    endif()
+  endfunction()
+endif()
+
 # --------------------- LTO -------------------------------
 
 include(CheckCXXCompilerFlag)
@@ -256,7 +337,9 @@ function(_pybind11_generate_lto target prefer_thin_lto)
 
   # Enable LTO flags if found, except for Debug builds
   if(PYBIND11_LTO_CXX_FLAGS)
-    set(not_debug "$<NOT:$<CONFIG:Debug>>")
+    # CONFIG takes multiple values in CMake 3.19+, until then we have to use OR
+    set(is_debug "$<OR:$<CONFIG:Debug>,$<CONFIG:RelWithDebInfo>>")
+    set(not_debug "$<NOT:${is_debug}>")
     set(cxx_lang "$<COMPILE_LANGUAGE:CXX>")
     if(MSVC AND CMAKE_VERSION VERSION_LESS 3.11)
       set(genex "${not_debug}")
