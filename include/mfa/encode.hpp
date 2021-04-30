@@ -956,27 +956,40 @@ namespace mfa
             // timing
             cons_time           = MPI_Wtime() - cons_time;
 
+            // check Nfree + Ncons row sums
             // normalize Nfree and Ncons such that the row sum of Nfree + Ncons = 1.0
+            // TODO: is row sum != 1 a sign of an error, or just needs to be normalized?
             for (auto i = 0; i < Nfree.rows(); i++)
             {
+                bool error = false;
                 T sum = Nfree.row(i).sum();
                 if (Pcons.rows())
                     sum += Ncons.row(i).sum();
+
+                if (fabs(sum - 1.0) > 1e-8)
+                {
+                    cerr << "Nfree + Ncons row " << i << " sum = " << sum << " which should be 1.0?" << endl;
+                    error = true;
+                }
                 if (sum > 0.0)
                 {
+                    // TODO: if sum != 1, is this an error?
                     Nfree.row(i) /= sum;
                     if (Pcons.rows())
                         Ncons.row(i) /= sum;
                 }
                 else
                 {
-                    // print error
                     if (Pcons.rows())
                         fmt::print(stderr, "Warning: EncodeTensorLocalLinear(): row {} Nfree row sum = {} Ncons row sum = {}, Nfree + Ncons row sum = {}. This should not happen.\n",
                             i, Nfree.row(i).sum(), Ncons.row(i).sum(), sum);
                     else
                         fmt::print(stderr, "Warning: EncodeTensorLocalLinear(): row {} Nfree row sum = {}. This should not happen.\n",
                             i, sum);
+                    error = true;
+                }
+                if (error)
+                {
                     VectorXi ijk(mfa_data.dom_dim);
                     dom_iter.idx_ijk(i, ijk);
                     cerr << "ijk = " << ijk.transpose() << endl;
@@ -987,18 +1000,42 @@ namespace mfa
                 }
             }
 
-            // copy from dense to sparse
-            SparseMatrixX<T> Nfree_sparse(Nfree.rows(), Nfree.cols());
-            Nfree_sparse.reserve(VectorXi::Constant(Nfree.cols(), max_nnz_col));
-            for (auto i = 0; i < Nfree.rows(); i++)
+            // multiply by transpose to make the matrix square and smaller
+            MatrixX<T> NtNfree = Nfree.transpose() * Nfree;
+
+// for comparing sparse with dense solve
+// #define MFA_DENSE
+
+#ifndef MFA_DENSE
+
+            // compute max nonzero columns in NtNfree
+            max_nnz_col = 0;
+            for (auto i = 0; i < NtNfree.rows(); i++)
             {
-                for (auto j = 0; j < Nfree.cols(); j++)
+                int nnz_col = 0;
+                for (auto j = 0; j < NtNfree.cols(); j++)
                 {
-                    if (Nfree(i, j) != 0.0)
-                        Nfree_sparse.insert(i, j) = Nfree(i,j);
+                    if (NtNfree(i, j) != 0.0)
+                        nnz_col++;
+                }
+                if (nnz_col > max_nnz_col)
+                    max_nnz_col = nnz_col;
+            }
+
+            // copy from dense to sparse
+            SparseMatrixX<T> NtNfree_sparse(NtNfree.rows(), NtNfree.cols());
+            NtNfree_sparse.reserve(VectorXi::Constant(NtNfree.cols(), max_nnz_col));
+            for (auto i = 0; i < NtNfree.rows(); i++)
+            {
+                for (auto j = 0; j < NtNfree.cols(); j++)
+                {
+                    if (NtNfree(i, j) != 0.0)
+                        NtNfree_sparse.insert(i, j) = NtNfree(i,j);
                 }
             }
-            Nfree_sparse.makeCompressed();
+            NtNfree_sparse.makeCompressed();
+
+#endif
 
             // timing
             double r_time       = MPI_Wtime();
@@ -1006,11 +1043,7 @@ namespace mfa
             // R is the right hand side needed for solving N * P = R
             MatrixX<T> R = Q;
             if (Pcons.rows())
-            {
                 R -= Ncons * Pcons;
-//                 if (debug)
-//                     cerr << "EncodeTensorLocalLinear(): first 200 rows of Ncons * Pcons:\n" << (Ncons * Pcons).block(0, 0, 200, Q.cols()) << endl;
-            }
 
             // timing
             r_time                  = MPI_Wtime() - r_time;
@@ -1023,14 +1056,19 @@ namespace mfa
 
             fmt::print(stderr, "Solving...\n");
 
-// for debugging, or comparing sparse with dense solve
-// #define MFA_DENSE
+            // for debugging, compute condition number of NtNfree
+            // unfortunately SVD takes too long when the matrix is ill-conditioned
+            // ref: https://forum.kde.org/viewtopic.php?f=74&t=117430
+//             Eigen::JacobiSVD<Eigen::MatrixXd> svd(NtNfree);
+//             double cond = svd.singularValues()(0) / svd.singularValues()(svd.singularValues().size()-1);
+//             fmt::print(stderr, "NtNfree has condition number {}\n", cond);
 
-#ifdef MFA_DENSE    // dense solve, DEPRECATE, replaced by sparse solve
+
+#ifdef MFA_DENSE    // dense solve
 
             double dense_solve_time = MPI_Wtime();                  // timing
-            t.ctrl_pts = Nfree.colPivHouseholderQr().solve(R);
-            dense_solve_time            = MPI_Wtime() - dense_solve_time;
+            t.ctrl_pts = (Nfree.transpose() * Nfree).ldlt().solve(Nfree.transpose() * R);
+            dense_solve_time = MPI_Wtime() - dense_solve_time;
 
 #else               // sparse solve
 
@@ -1040,17 +1078,17 @@ namespace mfa
 
             // TODO: iterative least squares conjugate gradient is faster but sometimes fails
             // NtN not necessarily symmetric positive definite?
-            // TODO: is NtN faster to solve than N?
 //             Eigen::LeastSquaresConjugateGradient<SparseMatrixX<T>>  solver;
 
-            solver.compute(Nfree_sparse);
+            solver.compute(NtNfree_sparse);
+
             if (solver.info() != Eigen::Success)
             {
                 cerr << "EncodeTensorLocalLinear(): Error: Matrix decomposition failed" << endl;
                 abort();
             }
 
-            t.ctrl_pts = solver.solve(R);
+            t.ctrl_pts = solver.solve(Nfree.transpose() * R);
             if (solver.info() != Eigen::Success)
             {
                 cerr << "EncodeTensorLocalLinear(): Error: Least-squares solve failed" << endl;
@@ -1090,14 +1128,18 @@ namespace mfa
 //             cerr << "\nEncodeTensorLocalLinear() weights:\n" << t.weights    << endl;
 //             }
 
+            // debug: check relative error of solution
+            double relative_error = (Nfree * t.ctrl_pts - R).norm() / R.norm(); // norm() is L2 norm
+            cerr << "EncodeTensorLocalLinar(): The relative error is " << relative_error << endl;
+
             // debug: check control points for sanity
-            for (auto i = 0; i < t.ctrl_pts.rows(); i++)
-            {
-                    if (t.ctrl_pts.row(i).sum() == 0.0)
-                        cerr << "EncodeTensorLocalLinear(): it's strange that control point " << t.ctrl_pts.row(i) << " has a row sum exactly = 0.0" << endl;
-                    if (fabs(t.ctrl_pts.row(i).sum()) > 1.0e6)
-                        cerr << "EncodeTensorLocalLinear(): it's likely wrong that control point " << t.ctrl_pts.row(i) << " has a very large row sum" << endl;
-            }
+//             for (auto i = 0; i < t.ctrl_pts.rows(); i++)
+//             {
+//                     if (t.ctrl_pts.row(i).norm() == 0.0)
+//                         cerr << "EncodeTensorLocalLinear(): it's strange that control point " << t.ctrl_pts.row(i) << " has norm exactly = 0.0" << endl;
+//                     if (fabs(t.ctrl_pts.row(i).norm()) > 1.0e6)
+//                         cerr << "EncodeTensorLocalLinear(): it's likely wrong that control point " << t.ctrl_pts.row(i) << " has a very large norm" << endl;
+//             }
         }
 
 #endif
