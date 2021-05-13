@@ -291,63 +291,157 @@ namespace mfa
         }
 
         void IntegratePointSet( PointSet<T>&        ps,
-                       const          TensorProduct<T>&   tensor,
+                            const TensorProduct<T>& tensor,
                                 int                 min_dim,
                                 int                 max_dim)
         {
-            int last = mfa_data.tmesh.tensor_prods[0].ctrl_pts.cols();  // dimension of "local" control point
+            assert(ps.dom_dim == mfa_data.dom_dim);
+            assert(max_dim - min_dim + 1 == tensor.ctrl_pts.cols());
+            int dom_dim = ps.dom_dim;
 
-            vector<MatrixX<T>> N(mfa_data.dom_dim);                           // basis functions in each dim.
-            vector<int>         span(mfa_data.p.size());                        // span in each dim.
+            VectorX<T>          param(dom_dim);
+            vector<MatrixX<T>>  Na(dom_dim);        // basis functions in each dim.
+            vector<MatrixX<T>>  Nb(dom_dim);        
+            VectorXi            span(dom_dim);    // span in each dim.
 
-            VectorX<T> cpt(last + 1);                       // evaluated point
-            VectorX<T> param(mfa_data.dom_dim);            // parameters for one point
-            VectorXi   ijk(mfa_data.dom_dim);      // vector of param indices (structured grid only)
+            T a = 0, b = 0; // limits of integration
+
+            // compute basis functions at a
+            for (int i = 0; i < dom_dim; i++)
+            {
+                int spana = mfa_data.FindSpan(i, a, tensor);// - 1;  // GUESS: subtract one b/c we have a "ghost" extra knot for higher order basis?
+                Na[i]     = MatrixX<T>::Zero(1, tensor.nctrl_pts(i)+2);
+                mfa_data.BasisFunsK(mfa_data.p(i)+1, i, a, spana, Na[i], 0);  
+            }
 
             for (auto pt_it = ps.begin(), pt_end = ps.end(); pt_it != pt_end; ++pt_it)
             {
+                VectorX<T> cpt = VectorX<T>::Zero(max_dim-min_dim+1);
                 pt_it.params(param);
 
-                for (auto i = 0; i < ps.dom_dim; i++)
-                {
-                    span[i]    = mfa_data.FindSpan(i, param(i), tensor);
-                    N[i]       = MatrixX<T>::Zero(1, tensor.nctrl_pts(i));
+                cerr << "\n=====================" << endl;
+                    cerr << "BEGIN new param: " << param(0) << endl;
+                    cerr << "=====================" << endl;
 
-                    // dim param-dim span-dim coeff-dim, 0
-                    mfa_data.BasisFunsK(mfa_data.p(i)+1, i, param(i), span[i], N[i], 0);
+
+// Attempt 1
+                // T suma = 0, sumb = 0;
+                // for (int i = 0; i < dom_dim; i++)
+                // {
+                //     b = param(i); // integrate up to the current param in this dimension
+                //     span(i)    = mfa_data.FindSpan(i, b, tensor);
+
+                //     // will be non zero in cols span[i] - p(i)-1 to span[i]
+                //     Nb[i]       = MatrixX<T>::Zero(1, tensor.nctrl_pts(i)+2);
+
+                //     // compute basis functions at b
+                //     mfa_data.BasisFunsK(mfa_data.p(i)+1, i, param(i), span(i), Nb[i], 0);
+
+                // }
+
+        // cerr << "Na ----------------" << endl;
+        // cerr << Na[0] << endl;
+        // cerr << "Nb ----------------" << endl;
+        // cerr << Nb[0] << endl;
+
+                // Get spans in each dimension that contain the point to decode
+                for (int i = 0; i < dom_dim; i++)
+                {                        
+                    span(i) = mfa_data.FindSpan(i, param(i), tensor);
+
+                    // if (span(i) > mfa_data.p(i))
+                    //     span(i) = span(i)-1;
                 }
 
-                // decode integrated point
-                VectorX<T> temp = VectorX<T>::Zero(mfa_data.dom_dim);
-                for (int d = 0; d < ps.dom_dim; d++)
+                VolIterator         cp_it(mfa_data.p + VectorXi::Ones(dom_dim), span - mfa_data.p, tensor.nctrl_pts);     // iterator over control points in the current tensor
+                while (!cp_it.done()) // loop through ctrl points/basis functions
                 {
-                    int p = mfa_data.p(d);
+    cerr << "START new control point " << cp_it.cur_iter_full() << ": " << tensor.ctrl_pts(cp_it.cur_iter_full(), 0) << endl;
+                    int cp_idx = cp_it.cur_iter_full();
+                    // T temp = 1; // will hold product of integrated basis functions (Attempt 1)
 
-                    for (int j = 0; j < p + 2; j++)
+
+                    // Attempt 2   
+                    T k_start, k_end;   // boundaries of support of basis function cp_idx (indices)
+                    k_start = mfa_data.tmesh.all_knots[0][cp_idx];
+                    if (cp_idx + mfa_data.p(0)+1 >= mfa_data.tmesh.all_knots[0].size())
                     {
-                        // index of each basis function with support overlapping span[d]
-                        // the first p spans are width 0
-                        int i = span[d] - p + j;  
-
-                        if (i > tensor.ctrl_pts.cols()) continue;
-
-                        // Compute "integrated control point"
-                        T ctl_sum = 0;
-                        for (int l = 0; l <= i; l++)
-                        {
-                            ctl_sum += tensor.ctrl_pts(l, d);  // sum the first span[i] control points in dimension i
-                        }
-                        T span_width = mfa_data.tmesh.all_knots[d][span[d] + j + 1] - mfa_data.tmesh.all_knots[d][span[d] + j];
-                        T ctlp = span_width/p * ctl_sum;
-
-
-                        // add to decoded point partial sum
-                        temp(d) += ctlp * N[d](0, i);
+                        cerr << "------------>past last knot while computing scaling" << endl;
+                        k_end = mfa_data.tmesh.all_knots[0].back(); // last knot
                     }
+                    else
+                        k_end = mfa_data.tmesh.all_knots[0][cp_idx + mfa_data.p(0)+1];
+
+        cerr << "k_start: " << k_start << endl;
+        cerr << "k_end:   " << k_end << endl;
+
+                    // T scaling = (mfa_data.p(0)+1) / (mfa_data.tmesh.all_knots[0][k_end] - mfa_data.tmesh.all_knots[0][k_start]); 
+                    a = 0;
+                    b = param(0);
+                    T scaling = (mfa_data.p(0)+1) / (k_end - k_start);
+                    T suma = mfa_data.IntBasisFunsHelper(mfa_data.p(0)+1, 0, a, cp_idx);
+                    T sumb = mfa_data.IntBasisFunsHelper(mfa_data.p(0)+1, 0, b, cp_idx);
+                    
+                    // T temp = (sumb-suma);
+                    T temp = 1/scaling*(8*3.14159) * (sumb-suma);
+
+                    cpt += temp * tensor.ctrl_pts.row(cp_it.cur_iter_full());
+        cerr << "suma: " << suma << "   " << "sumb: " << sumb << endl;
+        cerr << "scaling: " << scaling << endl;
+        cerr << "temp: " << temp << endl;
+
+
+// Atempt 1
+        //             for (int i = 0; i < dom_dim; i++)
+        //             {
+        //                 int ncps = tensor.nctrl_pts(i);
+
+        //                 // (sumb-suma) computes the integral of basis functions with unit integral
+        //                 // our basis functions sum to unity, so we need to rescale the integral
+        //                 // T scaling = (mfa_data.p(i)+1) / (mfa_data.tmesh.all_knots[i][span(i)+mfa_data.p(i)+1] - mfa_data.tmesh.all_knots[i][span(i)]);
+        //                 T scaling = 1;
+
+        //                 // sum until end of row; TODO: redundant since most entries are zero
+        //                 suma = Na[i].block(0, cp_idx, 1, ncps - cp_idx).sum();
+        //                 sumb = Nb[i].block(0, cp_idx, 1, ncps - cp_idx).sum();
+
+        //                 temp *= scaling * (sumb-suma);
+        // cerr << "suma: " << suma << "   " << "sumb: " << sumb << endl;
+        // cerr << "temp: " << temp << endl;
+        //             }
+        //             cpt += temp * tensor.ctrl_pts.row(cp_it.cur_iter_full());
+
+
+                    cp_it.incr_iter();
                 }
                 
+            /// sum of all control points up to start of span
+            VolIterator  simple_it(span - mfa_data.p, VectorXi::Zero(dom_dim), tensor.nctrl_pts);     // iterator over control points in the current tensor
+            while (!simple_it.done())
+            {
+                int my_idx = simple_it.cur_iter_full();
+                T k_start, k_end;   // boundaries of support of basis function my_idx (indices)
+                k_start = mfa_data.tmesh.all_knots[0][my_idx];
+                if (my_idx + mfa_data.p(0)+1 >= mfa_data.tmesh.all_knots[0].size())
+                {
+                    cerr << "------------>past last knot while computing scaling" << endl;
+                    k_end = mfa_data.tmesh.all_knots[0].back(); // last knot
+                }
+                else
+                    k_end = mfa_data.tmesh.all_knots[0][my_idx + mfa_data.p(0)+1];
+
+                T scaling = (mfa_data.p(0)+1) / (k_end - k_start);
 
 
+
+                // TODO!! need scaling factor here?
+                cpt += 1/scaling*(8*3.14159) * tensor.ctrl_pts.row(simple_it.cur_iter_full());
+
+                simple_it.incr_iter();
+            }
+
+
+        cerr << "cpt: " << cpt(0) << endl;
                 ps.domain.block(pt_it.idx(), min_dim, 1, max_dim - min_dim + 1) = cpt.transpose();
 
                 // print progress
@@ -356,6 +450,79 @@ namespace mfa
                         fprintf(stderr, "\r%.0f %% decoded (integral)", (T)pt_it.idx() / (T)(ps.npts) * 100);
             }
         }
+
+    //     void IntegratePointSet( PointSet<T>&        ps,
+    //                    const          TensorProduct<T>&   tensor,
+    //                             int                 min_dim,
+    //                             int                 max_dim)
+    //     {
+    //         int last = mfa_data.tmesh.tensor_prods[0].ctrl_pts.cols() - 1;  // dimension of "local" control point
+
+    //         vector<MatrixX<T>> N(mfa_data.dom_dim);                           // basis functions in each dim.
+    //         vector<int>         span(mfa_data.p.size());                        // span in each dim.
+
+    //         VectorX<T> cpt(last + 1);                       // evaluated point
+    //         VectorX<T> param(mfa_data.dom_dim);            // parameters for one point
+    //         VectorXi   ijk(mfa_data.dom_dim);      // vector of param indices (structured grid only)
+
+    //         for (auto pt_it = ps.begin(), pt_end = ps.end(); pt_it != pt_end; ++pt_it)
+    //         {
+    //             pt_it.params(param);
+
+    //             for (auto i = 0; i < ps.dom_dim; i++)
+    //             {
+    //                 span[i]    = mfa_data.FindSpan(i, param(i), tensor);
+    //                 N[i]       = MatrixX<T>::Zero(1, tensor.nctrl_pts(i));
+
+    //                 // dim param-dim span-dim coeff-dim, 0
+    //                 mfa_data.BasisFunsK(mfa_data.p(i)+1, i, param(i), span[i], N[i], 0);
+    //             }
+
+    //             // decode integrated point
+    //             for (int j = 0; j < p + 2; j++) // for each basis function containing the point
+    //             {
+    //                 T temp = 1;
+
+    //                 for (int d = 0; d < ps.dom_dim; d++) // for each param dimension
+    //                 {
+    //                     int p = mfa_data.p(d);
+
+    //     cout << "p: " << p << endl;
+    //                     // index of each basis function with support overlapping span[d]
+    //                     // the first p spans are width 0
+    //                     int i = span[d] - p + j;  
+
+    //                     if (i > tensor.ctrl_pts.rows()) continue;
+
+    //                     // Compute "integrated control point"
+    //                     T ctl_sum = 0;
+    //                     for (int l = 0; l <= i; l++)
+    //                     {
+    //                         ctl_sum += tensor.ctrl_pts(l, d);  // sum the first span[i] control points in dimension i
+    //                     }
+    //                     T span_width = mfa_data.tmesh.all_knots[d][span[d] + j + 1] - mfa_data.tmesh.all_knots[d][span[d] + j];
+    //                     T ctlp = span_width/(p+1) * ctl_sum;
+
+    // cout << "ctl_sum = " << ctl_sum << ", span_width = " << span_width << ", ctlp = " << ctlp << endl;
+    // cout << "d = " << d << ", N[d](0, " << i << ") = " << N[d](0,i) << endl; 
+
+    //                     // add to decoded point partial sum
+    //                     temp *= ctlp * N[d](0, i);
+    //                 } // end param dimen
+
+    //                 cpt(0) += temp;
+
+    //             } // end basis function loop
+                
+    //             ps.domain.block(pt_it.idx(), min_dim, 1, max_dim - min_dim + 1) = cpt.transpose();
+
+
+    //             // print progress
+    //             if (verbose)
+    //                 if (pt_it.idx() > 0 && ps.npts >= 100 && pt_it.idx() % (ps.npts / 100) == 0)
+    //                     fprintf(stderr, "\r%.0f %% decoded (integral)", (T)pt_it.idx() / (T)(ps.npts) * 100);
+    //         }
+    //     }
 
         // decode at a regular grid using saved basis that is computed once by this function
         // and then used to decode all the points in the grid

@@ -328,6 +328,72 @@ namespace mfa
 //             cerr << N << endl;
         }
 
+        // sum of all degree-basis functions at or past b_idx, evaluated at u
+        T IntBasisFunsHelper(
+                int         degree,
+                int         cur_dim,
+                T           u,
+                int         basis_idx) const  // index of basis function to integrate
+                // T           a,
+                // T           b,
+                // MatrixX<T>& N) const
+        {
+            vector<T> loc_knots(degree + 2);
+            VectorX<T> bfs = VectorX<T>::Zero(tmesh.tensor_prods[0].nctrl_pts(cur_dim) + degree - p(cur_dim));
+            // N.row(b_idx).setZero();
+
+            int span = FindSpan(cur_dim, u);
+            int first_idx = span - degree; // idx of the first basis function which is nonzero at u
+
+cerr << "span: " << span << endl;
+cerr << "basis_idx: " << basis_idx << endl;
+cerr << "first_idx: " << first_idx << endl;
+
+            // for each basis function which has support in span
+            // N will contain all of the degree-basis functions evaluated at u
+            for (int j = 0; j < degree + 1; j++)
+            {
+                int idx = first_idx + j;
+                // compute degree-basis funs
+                // first, get extended local knot vector
+                for (int i = 0; i < degree + 2; i++)
+                {
+                    if (idx + i < 0)
+                    {
+                        cerr << "using ghost knot=0.0" << endl;
+                        loc_knots[i] = 0.0;
+                    }
+                    else if (idx + i >= (int)tmesh.all_knots[cur_dim].size())
+                    {
+                        cerr << "using ghost knot=1.0" << endl;
+                        loc_knots[i] = 1.0;
+                    }
+                    else
+                        loc_knots[i] = tmesh.all_knots[cur_dim][idx + i];
+                }
+
+        cerr << "loc_knots: ";
+        for (int ii = 0; ii < loc_knots.size(); ii++) cerr << loc_knots[ii] << " ";
+        cerr << endl;
+
+                bfs(idx) = OneBasisFunK(degree, cur_dim, u, loc_knots);
+
+        cerr << "bf: " << bfs(idx) << endl;
+            }
+
+cerr << "BFs: " << bfs << endl;
+
+            // now sum all basis functions from basis_idx forward, evaluated at u
+            T sum = 0;
+            int sumstart = max(basis_idx, first_idx); // can skip anything before basis_idx or before the first nonzero basis fxn
+            for (int j = sumstart; j < first_idx + degree + 1; j++)
+            {
+                sum += bfs(j);
+            }
+
+            return sum;
+        }
+
         void BasisFunsK(
                 int         degree,
                 int         cur_dim,
@@ -336,34 +402,98 @@ namespace mfa
                 MatrixX<T>& N,
                 int         row) const
         {
-            // // debug
-            // if (span - p(cur_dim) + degree > )
-            // {
-            //     cerr << "Bad span index in BasisFunsK" << endl;
-            //     exit(1);
-            // }
-
-            vector<T> loc_knots(p(cur_dim) + 2);
+            vector<T> loc_knots(degree + 2);
 
             // initialize row to 0
             N.row(row).setZero();
 
             for (auto j = 0; j < degree + 1; j++)
             {
-                // when degree > p, not all spans will have precisely
-                // degree+1 active basis funs; this is because only p+1
-                // knots are pinned.
-                if (span - degree + j < 0 || span - degree + j >= tmesh.all_knots[cur_dim].size()) 
-                {
-                    cerr << "ignored basis function, index " << span-degree+j << endl;
-                    continue;
-                }
+                bool ignore = false;
+                int b_idx = span - degree + j;  // index of the first basis function with support in span
 
                 for (auto i = 0; i < degree + 2; i++)
-                    loc_knots[i] = tmesh.all_knots[cur_dim][span - degree + j + i];
+                {
+                    // when degree > p, not all spans will have precisely
+                    // degree+1 active basis funs; this is because only p+1
+                    // knots are pinned.
+                    if (b_idx + i < 0 || b_idx + i >= tmesh.all_knots[cur_dim].size())
+                    {
+                        cerr << "ignored basis function, index " << b_idx + i << endl;
+                        ignore = true;
+                        continue;
+                    }
 
-                N(row, span - degree + j) = OneBasisFun(cur_dim, u, loc_knots);
+                    loc_knots[i] = tmesh.all_knots[cur_dim][b_idx + i];
+                }
+    cerr << N.rows() << "  " << N.cols() << "  " << row << "  " << b_idx << endl;
+                if (!ignore)
+                    N(row, b_idx) = OneBasisFunK(degree, cur_dim, u, loc_knots);
             }
+        }
+
+        T OneBasisFunK( int         degree,             // degree of the basis function to compute
+                        int         cur_dim,            // current domain dimension
+                        T           u,                  // parameter in current dimension
+                        vector<T>   loc_knots)  const   // knot vector defining the support of the basis function
+        {
+            vector<T> N(degree + 1);                    // triangular table result
+            const vector<T>& U = loc_knots;                 // alias for knot vector for current dimension
+
+            // corner case: 1 at right edge of local knot vector
+            if (u == 1.0)
+            {
+                bool edge = true;
+                for (auto j = 0; j < degree + 1; j++)
+                {
+                    if (loc_knots[1 + j] != 1.0)
+                    {
+                        edge = false;
+                        break;
+                    }
+                }
+                if (edge)
+                    return 1.0;
+                
+                /* else return 0; 
+                TODO? if not edge but u==1.0, then we should always return 0? */
+            }
+
+           // initialize 0-th degree functions
+            for (auto j = 0; j < degree + 1; j++)
+            {
+                if (u >= U[j] && u < U[j + 1])
+                    N[j] = 1.0;
+                else
+                    N[j] = 0.0;
+            }
+
+            // compute triangular table
+            T saved, uleft, uright, temp;
+            for (auto k = 1; k < degree + 1; k++)
+            {
+                if (N[0] == 0.0)
+                    saved = 0.0;
+                else
+                    saved = ((u - U[0]) * N[0]) / (U[k] - U[0]);
+                for (auto j = 0; j < degree - k + 1; j++)
+                {
+                    uleft     = U[j + 1];
+                    uright    = U[j + k + 1];
+                    if (N[j + 1] == 0.0)
+                    {
+                        N[j]    = saved;
+                        saved   = 0.0;
+                    }
+                    else
+                    {
+                        temp    = N[j + 1] / (uright - uleft);
+                        N[j]    = saved + (uright - u) * temp;
+                        saved   = (u - uleft) * temp;
+                    }
+                }
+            }
+            return N[0];
         }
 
         // tmesh version of basis functions that computes one basis function at a time for each local knot vector
@@ -485,6 +615,9 @@ namespace mfa
                 }
                 if (edge)
                     return 1.0;
+                
+                /* else return 0; 
+                TODO? if not edge but u==1.0, then we should always return 0? */
             }
 
             // initialize 0-th degree functions
