@@ -325,7 +325,7 @@ int main(int argc, char** argv)
 
     // nek5000 dataset
     if (input == "nek")
-    {   
+    {
         d_args.ndom_pts.resize(3);
         for (int i = 0; i < 3; i++)
             d_args.ndom_pts[i]          = 200;
@@ -393,8 +393,8 @@ int main(int argc, char** argv)
         d_args.vars_nctrl_pts[0].resize(2);
         d_args.ndom_pts[0]          = 1800;
         d_args.ndom_pts[1]          = 3600;
-        d_args.vars_nctrl_pts[0][0] = 180;
-        d_args.vars_nctrl_pts[0][1] = 360;
+        d_args.vars_nctrl_pts[0][0] = 300;
+        d_args.vars_nctrl_pts[0][1] = 600;
         d_args.infile = infile;
 //      d_args.infile = "/Users/tpeterka/datasets/CESM-ATM-tylor/1800x3600/FLDSC_1_1800_3600.dat";
         if (dom_dim == 2)
@@ -403,6 +403,62 @@ int main(int argc, char** argv)
         else
         {
             fprintf(stderr, "cesm data only available in 2d domain\n");
+            exit(0);
+        }
+    }
+
+    // miranda dataset
+    if (input == "miranda")
+    {
+        d_args.ndom_pts.resize(3);
+        d_args.vars_nctrl_pts[0].resize(3);
+        d_args.ndom_pts[0]          = 256;
+        d_args.ndom_pts[1]          = 384;
+        d_args.ndom_pts[2]          = 384;
+        d_args.vars_nctrl_pts[0][0] = 256;  // 192;
+        d_args.vars_nctrl_pts[0][1] = 384;  // 288;
+        d_args.vars_nctrl_pts[0][2] = 384;  // 288;
+        d_args.infile = infile;
+//      d_args.infile = "/Users/tpeterka/datasets/miranda/SDRBENCH-Miranda-256x384x384/density.d64";
+        if (dom_dim == 3)
+            master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
+                    { b->read_3d_scalar_data<double>(cp, d_args); });
+        else
+        {
+            fprintf(stderr, "miranda data only available in 3d domain\n");
+            exit(0);
+        }
+    }
+
+     // tornado dataset
+    if (input == "tornado")
+    {
+        d_args.ndom_pts.resize(3);
+        d_args.vars_nctrl_pts[0].resize(3);
+        d_args.ndom_pts[0]          = 128;
+        d_args.ndom_pts[1]          = 128;
+        d_args.ndom_pts[2]          = 128;
+        d_args.vars_nctrl_pts[0][0] = 100;
+        d_args.vars_nctrl_pts[0][1] = 100;
+        d_args.vars_nctrl_pts[0][2] = 100;
+        d_args.infile               = infile;
+//         d_args.infile               = "/Users/tpeterka/datasets/tornado/bov/1.vec.bov";
+
+        // scale science variable to be similar extent as domain
+//         d_args.s[0] = 450.0;
+
+        if (dom_dim == 1)
+            master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
+                    { b->read_1d_slice_3d_vector_data(cp, d_args); });
+        else if (dom_dim == 2)
+            master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
+                    { b->read_2d_slice_3d_vector_data(cp, d_args); });
+        else if (dom_dim == 3)
+            master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
+                    { b->read_3d_vector_data(cp, d_args); });
+        else
+        {
+            fprintf(stderr, "tornado data only available in 1, 2, or 3d domain\n");
             exit(0);
         }
     }
@@ -434,8 +490,8 @@ int main(int argc, char** argv)
 
     // debug: write original and approximated data for reading into z-checker
     // only for one block (one file name used, ie, last block will overwrite earlier ones)
-//     master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-//             { b->write_raw(cp); });
+    master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
+            { b->write_raw(cp); });
 
     // debug: save knot span domains for comparing error with location in knot span
 //     master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
