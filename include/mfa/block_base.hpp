@@ -472,6 +472,10 @@ struct BlockBase
         }
         errs = new mfa::PointSet<T>(input->params, input->pt_dim);
 
+        // saved_basis only applies when not using tmesh
+#ifdef MFA_TMESH
+        save_basis = false;
+#endif
         // Decode entire block and then compare to input
         if (decode_block_)
         {

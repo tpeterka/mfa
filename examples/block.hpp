@@ -1443,14 +1443,12 @@ struct Block : public BlockBase<T>
         else
             input = new mfa::PointSet<T>(dom_dim, pt_dim, tot_ndom_pts);
 
-//         vector<float> val(tot_ndom_pts);
         vector<P> val(tot_ndom_pts);
 
         FILE *fd = fopen(a->infile.c_str(), "r");
         assert(fd);
 
         // read data values
-//         if (!fread(&val[0], sizeof(float), tot_ndom_pts, fd))
         if (!fread(&val[0], sizeof(P), tot_ndom_pts, fd))
         {
             fprintf(stderr, "Error: unable to read file\n");

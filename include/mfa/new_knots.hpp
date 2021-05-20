@@ -38,7 +38,7 @@ namespace mfa
 
     public:
 
-        NewKnots(   
+        NewKnots(
                 MFA_Data<T>&        mfa_data_,
                 const PointSet<T>&  input_) :
             dom_dim(mfa_data_.dom_dim),
@@ -241,8 +241,7 @@ namespace mfa
             return parent_tensor_idx;
         }
 
-#ifdef MFA_TMESH
-
+        // DEPRECATE eventually in favor of AllErrorSpans
         // computes error in knot spans and finds first new knot (in all dimensions at once) that should be inserted
         // returns true if all done, ie, no new knots inserted
         //
@@ -282,7 +281,13 @@ namespace mfa
             {
                 pt_it.params(param);
                 VectorX<T> cpt(mfa_data.tmesh.tensor_prods[0].ctrl_pts.cols());
+
+#ifdef MFA_TMESH
                 decoder.VolPt_tmesh(param, cpt);
+#else
+                decoder.VolPt(param, cpt, decode_info, mfa_data.tmesh.tensor_prods[0]);
+#endif
+
 
                 // debug
 //                 cerr << "cpt: " << cpt.transpose() << endl;
@@ -353,6 +358,7 @@ namespace mfa
             return true;
         }
 
+        // DEPRECATE eventually in favor of AllErrorSpans
         // computes error in knot spans and finds first new knot (in all dimensions at once) that should be inserted
         // returns true if all done, ie, no new knots inserted
         //
@@ -393,7 +399,12 @@ namespace mfa
             {
                 pt_it.params(param);
                 VectorX<T> cpt(mfa_data.tmesh.tensor_prods[0].ctrl_pts.cols());
+
+#ifdef MFA_TMESH
                 decoder.VolPt_tmesh(param, cpt);
+#else
+                decoder.VolPt(param, cpt, decode_info, mfa_data.tmesh.tensor_prods[0]);
+#endif
 
                 // debug
 //                 cerr << "cpt: " << cpt.transpose() << endl;
@@ -482,6 +493,7 @@ namespace mfa
             return true;
         }
 
+        // DEPRECATE eventually in favor of AllErrorSpans
         // computes error in knot spans and finds best new knot (span w/ highest error, in all dimensions at once) that should be inserted
         // returns true if all done, ie, no new knots inserted
         //
@@ -524,7 +536,12 @@ namespace mfa
             {
                 pt_it.params(param);
                 VectorX<T> cpt(mfa_data.tmesh.tensor_prods[0].ctrl_pts.cols());
+
+#ifdef MFA_TMESH
                 decoder.VolPt_tmesh(param, cpt);
+#else
+                decoder.VolPt(param, cpt, decode_info, mfa_data.tmesh.tensor_prods[0]);
+#endif
 
                 // debug
 //                 cerr << "cpt: " << cpt.transpose() << endl;
@@ -606,6 +623,7 @@ namespace mfa
             return true;
         }
 
+        // DEPRECATE eventually in favor of AllErrorSpans
         // computes error in knot spans and finds best new knot (span w/ highest error, in all dimensions at once) that should be inserted
         // returns true if all done, ie, no new knots inserted
         //
@@ -649,7 +667,12 @@ namespace mfa
             {
                 pt_it.params(param);
                 VectorX<T> cpt(mfa_data.tmesh.tensor_prods[0].ctrl_pts.cols());
+
+#ifdef MFA_TMESH
                 decoder.VolPt_tmesh(param, cpt);
+#else
+                decoder.VolPt(param, cpt, decode_info, mfa_data.tmesh.tensor_prods[0]);
+#endif
 
                 // debug
 //                 cerr << "cpt: " << cpt.transpose() << endl;
@@ -750,7 +773,6 @@ namespace mfa
 
         // for debugging: checks all knot spans for at least one input point
         // returns true if all spans check out
-        // This version is for tmesh with local solve
         bool CheckAllSpans()
         {
             // typing shortcuts
@@ -853,15 +875,18 @@ namespace mfa
 
         // computes error in knot spans and finds all new knots (in all dimensions at once) that should be inserted
         // returns true if all done, ie, no new knots inserted
-        // This version is for tmesh with local solve
         bool AllErrorSpans(
                 VectorX<T>                  extents,                // extents in each dimension, for normalizing error (size 0 means do not normalize)
                 T                           err_limit,              // max. allowed error
+                bool                        saved_basis,            // whether basis functions were saved and can be re-used
                 vector<TensorIdx>&          parent_tensor_idxs,     // (output) idx of parent tensor of each new knot to be inserted
                 vector<vector<KnotIdx>>&    new_knot_idxs,          // (output) indices in each dim. of (unique) new knots in full knot vector after insertion
                 vector<vector<T>>&          new_knots)              // (output) knot values in each dim. of knots to be inserted (unique)
         {
             bool retval = true;
+
+            VectorXi            derivs;                             // size 0 means unused
+            DecodeInfo<T>       decode_info(mfa_data, derivs);      // reusable decode point info for calling VolPt repeatedly
 
             // typing shortcuts
             Tmesh<T>&                   tmesh                   = mfa_data.tmesh;
@@ -872,7 +897,9 @@ namespace mfa
             VectorXi&                   p                       = mfa_data.p;
 
             // debug
-            fprintf(stderr, "*** Using local solve in AllErrorSpans ***\n");
+//             fprintf(stderr, "*** Using AllErrorSpans ***\n");
+//             fmt::print(stderr, "Tmesh in AllErrorSpans\n\n");
+//             tmesh.print(true, false, true);
 
             Decoder<T>          decoder(mfa_data, 1);
             VectorX<T>          param(dom_dim);                             // parameters of domain point
@@ -986,7 +1013,15 @@ namespace mfa
                         // decode a point at the input point parameters
                         for (auto j = 0; j < dom_dim; j++)
                             param(j) = input.params->param_grid[j][param_ijk(j)];
+
+#ifdef MFA_TMESH
                         decoder.VolPt_tmesh(param, cpt);
+#else
+                        if (saved_basis)
+                            decoder.VolPt_saved_basis(param_ijk, param, cpt, decode_info, t);
+                        else
+                            decoder.VolPt(param, cpt, decode_info, t);
+#endif
 
                         // error between decoded point and input point
                         size_t dom_idx = dom_iter.ijk_idx(param_ijk);
@@ -1001,6 +1036,7 @@ namespace mfa
                         {
                             // debug
 //                             cerr << "tensor tidx " << tidx << " has error above limit in span_ijk: " << span_ijk.transpose() << " param_ijk: " << param_ijk.transpose() << " dom_idx: " << dom_idx << endl;
+//                             cerr << "param: " << param.transpose() << " decoded pt: " << cpt.transpose() << " input pt: " << input.domain.row(dom_idx) << endl;
 
                             if (valid_split_span(span_ijk, t, new_knot_idx, new_knot_val))      // splitting span will have input points
                             {
@@ -1042,8 +1078,6 @@ namespace mfa
 
             return retval;
         }
-
-#endif      // MFA_TMESH
 
         // checks whether splitting a knot span will be empty of input points
         // if the return value is false (an empty, invalid split), then new_knot_idx and new_knot_val are invalid
@@ -1118,7 +1152,13 @@ namespace mfa
             {
                pt_it.params(param);
                VectorX<T> cpt(input.pt_dim);                      // approximated point
-               decoder.VolPt_tmesh(param, cpt);
+
+#ifdef MFA_TMESH
+                decoder.VolPt_tmesh(param, cpt);
+#else
+                decoder.VolPt(param, cpt, decode_info, mfa_data.tmesh.tensor_prods[0]);
+#endif
+
                int last = input.pt_dim - 1;                       // range coordinate
 
                // error

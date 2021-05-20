@@ -100,11 +100,11 @@ namespace mfa
         // insert a knot into all_knots
         // checks for duplicates and invalid insertions
         // returns true if inserted, false if not
-        bool insert_knot(int                dim,            // current dimension
-                         KnotIdx            pos,            // new position in all_knots[dim] of inserted knot
-                         int                level,          // refinement level of inserted knot
-                         T                  knot,           // knot value to be inserted
-                         const vector<vector<T>>& params)         // params of input points
+        bool insert_knot(int                        dim,            // current dimension
+                         KnotIdx                    pos,            // new position in all_knots[dim] of inserted knot
+                         int                        level,          // refinement level of inserted knot
+                         T                          knot,           // knot value to be inserted
+                         const vector<vector<T>>&   params)         // params of input points
         {
             if (!can_insert_knot(dim, pos, knot))
                 return false;
@@ -2320,12 +2320,17 @@ namespace mfa
             }
         }
 
-        void print() const
+        void print(bool print_ctrl_pts = false,
+                   bool print_weights  = false,
+                   bool print_knots_   = true) const
         {
-            print_knots();
-            fprintf(stderr, "\n");
+            if (print_knots_)
+            {
+                print_knots();
+                fprintf(stderr, "\n");
+            }
             fprintf(stderr, "T-mesh has %lu tensor products\n\n", tensor_prods.size());
-            print_tensors();
+            print_tensors(print_ctrl_pts, print_weights);
             fprintf(stderr, "\n");
         }
 
