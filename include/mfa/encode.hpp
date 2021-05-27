@@ -225,8 +225,10 @@ namespace mfa
             // resize matrices in case number of control points changed
             ctrl_pts.resize(nctrl_pts.prod(), pt_dim);
             weights.resize(ctrl_pts.rows());
+
+            // resize basis function matrices and initialize to 0; will only fill nonzeros later
             for (auto k = 0; k < ndims; k++)
-                mfa_data.N[k] = MatrixX<T>::Zero(input.ndom_pts(k), nctrl_pts(k));  // basis functions need to be resized and initialized to 0
+                    mfa_data.N[k] = MatrixX<T>::Zero(input.ndom_pts(k), nctrl_pts(k));
 
             // 2 buffers of temporary control points
             // double buffer needed to write output curves of current dim without changing its input pts
@@ -280,15 +282,6 @@ namespace mfa
                         too   = to[j];
                     }
                 }
-
-                // TODO:
-                // Investigate whether in later dimensions, when input data points are replaced by
-                // control points, need new knots and params computed.
-                // In the next dimension, the coordinates of the dimension didn't change,
-                // but the chord length did, as control points moved away from the data points in
-                // the prior dim. Need to determine how much difference it would make to recompute
-                // params and knots for the new input points
-                // (moot when using domain decomposition)
 
                 // N is a matrix of (m + 1) x (n + 1) scalars that are the basis function coefficients
                 //  _                          _
@@ -1144,69 +1137,76 @@ namespace mfa
 
 #endif
 
-        // DEPRECATE
+#ifdef MFA_LOW_D
+
         // original adaptive encoding for first tensor product only
         // older version using 1-d curves for new knots
-//         void OrigAdaptiveEncode(
-//                 T                   err_limit,              // maximum allowable normalized error
-//                 bool                weighted,               // solve for and use weights
-//                 const VectorX<T>&   extents,                // extents in each dimension, for normalizing error (size 0 means do not normalize)
-//                 int                 max_rounds = 0)         // optional maximum number of rounds
-//         {
-//             vector<vector<T>> new_knots;                               // new knots in each dim.
-// 
-//             // debug
-//             fmt::print(stderr, "Using OrigAdaptiveEncode()\n\n");
-// 
-//             // TODO: use weights for knot insertion
-//             // for now, weights are only used for final full encode
-// 
-//             // loop until no change in knots
-//             for (int iter = 0; ; iter++)
-//             {
-//                 if (max_rounds > 0 && iter >= max_rounds)               // optional cap on number of rounds
-//                     break;
-// 
-//                 if (verbose)
-//                     fprintf(stderr, "\n--- Iteration %d ---\n", iter);
-// 
-//                 // low-d w/ splitting spans in the middle
-//                 bool done = OrigNewKnots_curve(new_knots, err_limit, extents, iter);
-// 
-//                 // no new knots to be added
-//                 if (done)
-//                 {
-//                     if (verbose)
-//                         fprintf(stderr, "\nKnot insertion done after %d iterations; no new knots added.\n\n", iter + 1);
-//                     break;
-//                 }
-// 
-//                 // check if the new knots would make the number of control points >= number of input points in any dim
-//                 done = false;
-//                 for (auto k = 0; k < mfa_data.dom_dim; k++)
-//                     // hard-coded for first tensor
-//                     if (input.ndom_pts(k) <= mfa_data.tmesh.tensor_prods[0].nctrl_pts(k) + new_knots[k].size())
-//                     {
-//                         done = true;
-//                         break;
-//                     }
-//                 if (done)
-//                 {
-//                     if (verbose)
-//                         fprintf(stderr, "\nKnot insertion done after %d iterations; control points would outnumber input points.\n", iter + 1);
-//                     break;
-//                 }
-// 
-//                 // debug
-// //                 mfa_data.tmesh.print();
-//             }
-// 
-//             // final full encoding needed after last knot insertion above
-//             if (verbose)
-//                 fprintf(stderr, "Encoding in full %ldD\n", mfa_data.p.size());
-//             TensorProduct<T>&t = mfa_data.tmesh.tensor_prods[0];        // fixed encode assumes the tmesh has only one tensor product
-//             Encode(t.nctrl_pts, t.ctrl_pts, t.weights, weighted);
-//         }
+        void OrigAdaptiveEncode(
+                T                   err_limit,              // maximum allowable normalized error
+                bool                weighted,               // solve for and use weights
+                const VectorX<T>&   extents,                // extents in each dimension, for normalizing error (size 0 means do not normalize)
+                int                 max_rounds = 0)         // optional maximum number of rounds
+        {
+            vector<vector<T>> new_knots;                               // new knots in each dim.
+
+            // debug
+            fmt::print(stderr, "Using OrigAdaptiveEncode()\n\n");
+
+            // TODO: use weights for knot insertion
+            // for now, weights are only used for final full encode
+
+            // loop until no change in knots
+            for (int iter = 0; ; iter++)
+            {
+                if (max_rounds > 0 && iter >= max_rounds)               // optional cap on number of rounds
+                {
+                    if (verbose)
+                        fprintf(stderr, "\nDone; max iterations reached.\n\n");
+                    break;
+                }
+
+                if (verbose)
+                    fprintf(stderr, "\n--- Iteration %d ---\n", iter);
+
+                // low-d w/ splitting spans in the middle
+                bool done = OrigNewKnots_curve(new_knots, err_limit, extents, iter);
+
+                // no new knots to be added
+                if (done)
+                {
+                    if (verbose)
+                        fprintf(stderr, "\nDone; no new knots added.\n\n");
+                    break;
+                }
+
+                // check if the new knots would make the number of control points >= number of input points in any dim
+                done = false;
+                for (auto k = 0; k < mfa_data.dom_dim; k++)
+                    // hard-coded for first tensor
+                    if (input.ndom_pts(k) <= mfa_data.tmesh.tensor_prods[0].nctrl_pts(k) + new_knots[k].size())
+                    {
+                        done = true;
+                        break;
+                    }
+                if (done)
+                {
+                    if (verbose)
+                        fprintf(stderr, "\nDone; control points would outnumber input points.\n\n");
+                    break;
+                }
+
+                // debug
+//                 mfa_data.tmesh.print();
+            }
+
+            // final full encoding needed after last knot insertion above
+            if (verbose)
+                fprintf(stderr, "Encoding in full %ldD\n", mfa_data.p.size());
+            TensorProduct<T>&t = mfa_data.tmesh.tensor_prods[0];        // fixed encode assumes the tmesh has only one tensor product
+            Encode(t.nctrl_pts, t.ctrl_pts, t.weights, weighted);
+        }
+
+#else       // full-dimensional knot insertion
 
         // original adaptive encoding for first tensor product only
         // latest version using full knot spans (5/19/21)
@@ -1217,6 +1217,7 @@ namespace mfa
                 int                 max_rounds = 0)         // optional maximum number of rounds
         {
             vector<vector<T>> new_knots;                               // new knots in each dim.
+            ErrorStats<T> error_stats;
 
             // debug
             fmt::print(stderr, "Using OrigAdaptiveEncode()\n\n");
@@ -1237,7 +1238,7 @@ namespace mfa
                 if (max_rounds > 0 && iter >= max_rounds)               // optional cap on number of rounds
                 {
                     if (verbose)
-                        fprintf(stderr, "\nKnot insertion done after %d iterations; max_rounds reached.\n\n", iter + 1);
+                        fprintf(stderr, "\nDone; max iterations reached.\n\n");
 
                     // debug
 //                     fmt::print(stderr, "\nFinal Tmesh\n\n");
@@ -1263,13 +1264,14 @@ namespace mfa
                         true,
                         parent_tensor_idxs,
                         inserted_knot_idxs,
-                        inserted_knots);
+                        inserted_knots,
+                        error_stats);
 
                 // no new knots to be added
                 if (done)
                 {
                     if (verbose)
-                        fprintf(stderr, "\nKnot insertion done after %d iterations; no new knots added.\n\n", iter + 1);
+                        fprintf(stderr, "\nDone; no new knots added.\n\n");
 
                     // debug
 //                     fmt::print(stderr, "\nFinal Tmesh\n\n");
@@ -1317,8 +1319,13 @@ namespace mfa
                         }
                     }   // dimension
                 }   // knot insertions
+
+                if (verbose)
+                    PrintAdaptiveStats(error_stats);
             }   // iterations
         }
+
+#endif
 
         // adaptive encoding for tmesh with optional local solve
         void AdaptiveEncode(
@@ -1426,6 +1433,32 @@ namespace mfa
         }
 
     private:
+
+        // print max error, compression factor, and any pother stats at the end of an adaptive iteration
+        void PrintAdaptiveStats(
+                const ErrorStats<T>&    error_stats)
+        {
+            // compute compression
+            float in_coords = (input.npts) * (input.pt_dim);
+            float out_coords = 0.0;
+            for (auto i = 0; i < mfa_data.tmesh.tensor_prods.size(); i++)
+                out_coords += mfa_data.tmesh.tensor_prods[i].ctrl_pts.rows() *
+                    mfa_data.tmesh.tensor_prods[i].ctrl_pts.cols();
+            for (auto j = 0; j < mfa_data.tmesh.all_knots.size(); j++)
+                out_coords += mfa_data.tmesh.all_knots[j].size();
+            float compression = in_coords / out_coords;
+
+            T rms_abs_err = sqrt(error_stats.sum_sq_abs_errs / (input.domain.rows()));
+            T rms_norm_err = sqrt(error_stats.sum_sq_norm_errs / (input.domain.rows()));
+
+            fprintf(stderr, "\n----- estimates of current variable of current model -----\n");
+            fprintf(stderr, "estimated max_err               = %e\n",  error_stats.max_abs_err);
+            fprintf(stderr, "estimated normalized max_err    = %e\n",  error_stats.max_norm_err);
+            fprintf(stderr, "estimated RMS error             = %e\n",  rms_abs_err);
+            fprintf(stderr, "estimated normalized RMS error  = %e\n",  rms_norm_err);
+            fprintf(stderr, "estimated compression ratio     = %.2f\n",  compression);
+            fprintf(stderr, "-----------------------------------------------------------\n");
+        }
 
 #ifndef      MFA_NO_WEIGHTS
 
@@ -2199,6 +2232,7 @@ namespace mfa
             vector<TensorIdx>           parent_tensor_idxs;                     // tensors having knots inserted
 
             VectorX<T> myextents = extents.size() ? extents : VectorX<T>::Ones(mfa_data.tmesh.tensor_prods[0].ctrl_pts.cols());
+            ErrorStats<T> error_stats;
 
             // find new knots
             mfa::NewKnots<T> nk(mfa_data, input);
@@ -2215,10 +2249,11 @@ namespace mfa
             bool done = nk.AllErrorSpans(
                     myextents,
                     err_limit,
-                    false;
+                    false,
                     parent_tensor_idxs,
                     inserted_knot_idxs,
-                    inserted_knots);
+                    inserted_knots,
+                    error_stats);
 
             if (done)                                                           // nothing inserted
                 return true;

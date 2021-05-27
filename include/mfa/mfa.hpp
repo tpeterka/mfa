@@ -18,16 +18,16 @@
 // domain parameterization is the default method if no method is specified
 // #define CURVE_PARAMS
 
-// comment out the following line for low-d knot insertion
-// low-d is the default if no method is specified
-// #define HIGH_D
+// low-d knot insertion
+// high-d is the default if no method is specified
+#define MFA_LOW_D
 
 // comment out the following line for applying weights to only the range dimension
 // weighing the range coordinate only is the default if no method is specified
 // #define WEIGH_ALL_DIMS
 
 // comment out the following line for original single tensor product version
-// #define MFA_TMESH
+#define MFA_TMESH
 
 // linear least squares local solve
 #define MFA_LINEAR_LOCAL
