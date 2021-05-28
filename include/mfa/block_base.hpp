@@ -643,21 +643,43 @@ struct BlockBase
     // compute compression ratio
     float compute_compression()
     {
-        // TODO: hard-coded for one tensor product
         float in_coords = (input->npts) * (input->pt_dim);
-        float out_coords = geometry.mfa_data->tmesh.tensor_prods[0].ctrl_pts.rows() *
-            geometry.mfa_data->tmesh.tensor_prods[0].ctrl_pts.cols();
+        float out_coords = 0.0;
+        for (auto j = 0; j < geometry.mfa_data->tmesh.tensor_prods.size(); j++)
+            out_coords += geometry.mfa_data->tmesh.tensor_prods[j].ctrl_pts.rows() *
+                geometry.mfa_data->tmesh.tensor_prods[j].ctrl_pts.cols();
         for (auto j = 0; j < geometry.mfa_data->tmesh.all_knots.size(); j++)
             out_coords += geometry.mfa_data->tmesh.all_knots[j].size();
         for (auto i = 0; i < vars.size(); i++)
         {
-            out_coords += (vars[i].mfa_data->tmesh.tensor_prods[0].ctrl_pts.rows() *
-                    vars[i].mfa_data->tmesh.tensor_prods[0].ctrl_pts.cols());
+            for (auto j = 0; j < vars[i].mfa_data->tmesh.tensor_prods.size(); j++)
+                out_coords += vars[i].mfa_data->tmesh.tensor_prods[j].ctrl_pts.rows() *
+                    vars[i].mfa_data->tmesh.tensor_prods[j].ctrl_pts.cols();
             for (auto j = 0; j < vars[i].mfa_data->tmesh.all_knots.size(); j++)
                 out_coords += vars[i].mfa_data->tmesh.all_knots[j].size();
         }
         return(in_coords / out_coords);
     }
+
+    //     DEPRECATE
+//     // compute compression ratio
+//     float compute_compression()
+//     {
+//         // TODO: hard-coded for one tensor product
+//         float in_coords = (input->npts) * (input->pt_dim);
+//         float out_coords = geometry.mfa_data->tmesh.tensor_prods[0].ctrl_pts.rows() *
+//             geometry.mfa_data->tmesh.tensor_prods[0].ctrl_pts.cols();
+//         for (auto j = 0; j < geometry.mfa_data->tmesh.all_knots.size(); j++)
+//             out_coords += geometry.mfa_data->tmesh.all_knots[j].size();
+//         for (auto i = 0; i < vars.size(); i++)
+//         {
+//             out_coords += (vars[i].mfa_data->tmesh.tensor_prods[0].ctrl_pts.rows() *
+//                     vars[i].mfa_data->tmesh.tensor_prods[0].ctrl_pts.cols());
+//             for (auto j = 0; j < vars[i].mfa_data->tmesh.all_knots.size(); j++)
+//                 out_coords += vars[i].mfa_data->tmesh.all_knots[j].size();
+//         }
+//         return(in_coords / out_coords);
+//     }
 
     //  debug: print control points and weights in all tensor products of a tmesh
     void print_ctrl_weights(mfa::Tmesh<T>& tmesh)
