@@ -1306,6 +1306,11 @@ namespace mfa
                 bool                    ctrl_pt_anchor,         // whether pt refers to control point anchor (shifted 1/2 space for even degree)
                 int                     skip_dim = -1) const
         {
+            // debug
+//             bool debug;
+//             if (pt[0] == 6 and pt[1] == 2)
+//                 debug = true;
+
             for (auto i = 0; i < pt.size(); i++)
             {
                 if (i == skip_dim)
@@ -1601,14 +1606,11 @@ namespace mfa
         // in Bazilevs 2010, knot indices start at 1, but mine start at 0
         // returns index of tensor containing the parameters of the point to decode
         TensorIdx anchors(const VectorX<T>&          param,             // parameter value in each dim. of desired point
-                // DEPRECATE the expand argument
-//                           bool                       expand,            // whether to expand anchors to one level higher than the desired point
-//                                                                         // a safety mechanism to ensure anchors cover control points in neighboring tensors
                           vector<vector<KnotIdx>>&   anchors) const     // (output) anchor points in index space
         {
             // debug
-            bool debug = false;
-//             if (fabs(param(0) - 0.91) < 1e-6 && fabs(param(1) - 0.04) < 1e-6)
+//             bool debug = false;
+//             if (fabs(param(0) - 0.383838) < 1e-4 && fabs(param(1) - 0.0) < 1e-4)
 //                 debug = true;
 
             anchors.resize(dom_dim_);
@@ -1633,14 +1635,31 @@ namespace mfa
 //                 fmt::print(stderr, "anchors(): target [{}]\n", fmt::join(target, ","));
 
             // find most refined tensor product containing target
+            bool found = false;
             TensorIdx t_idx = 0;
-            int max_level   = 0;
+            int max_level   = -1;
             for (auto j = 0; j < tensor_prods.size(); j++)
-                if (in(target, tensor_prods[j], -1) && tensor_prods[j].level > max_level)
+            {
+                if (in(target, tensor_prods[j], true, -1))
                 {
-                    t_idx       = j;
-                    max_level   = tensor_prods[j].level;
+                    found = true;
+
+                    // debug
+//                     if (debug)
+//                         fmt::print(stderr, "anchors(): found anchor in t_idx {}\n", t_idx);
+
+                    if (tensor_prods[j].level > max_level)
+                    {
+                        t_idx       = j;
+                        max_level   = tensor_prods[j].level;
+                    }
                 }
+            }
+            if (!found)
+            {
+                fmt::print(stderr, "Error: anchors(): target [{}] not found in any tensors\n", fmt::join(target, ","));
+                abort();
+            }
 
             // debug
 //             if (debug)
@@ -1665,6 +1684,7 @@ namespace mfa
                 {
                     fmt::print(stderr, "Error: anchors(): in dim {}, target [{}] is not inside tensor {} knot_mins [{}] knot_maxs [{}].\n",
                             i, fmt::join(target, ","), t_idx, t.knot_mins[i], t.knot_maxs[i]);
+                    cerr << "param: " << param.transpose() << endl;
                     abort();
                 }
             }
@@ -1699,74 +1719,6 @@ namespace mfa
 //                 for (auto j = 0; j < dom_dim_; j++)
 //                     fmt::print(stderr, "anchors(): anchors[{}] = [{}]\n", j, fmt::join(anchors[j], ","));
 //             }
-
-//             DEPRECATE once we're sure we don't need this
-//             // expand anchors by one level higher (smaller value of level)
-//             if (expand)
-//             {
-//                 // find next level higher (smaller value of level) than current
-//                 int expand_level = max_level;
-//                 int min_diff = 0;
-//                 for (auto& t: tensor_prods)
-//                 {
-//                     if (t.level < max_level && (min_diff == 0 || max_level - t.level < min_diff))
-//                     {
-//                         expand_level    = t.level;
-//                         min_diff        = t.level - max_level;
-//                     }
-//                 }
-// 
-//                 // expand anchors to next level higher (smaller value of level) than current
-//                 for (auto i = 0; i < dom_dim_; i++)
-//                 {
-//                     int start = p_(i) % 2 == 0 ? p_(i) / 2 : p_(i) / 2 - 1;        // loop index of target
-//                     // from the target to the left
-//                     int skip = 0;
-//                     for (auto j = start; j >= 0; j--)
-//                     {
-//                         // cast from size_t to long because anchors - skip could be negative
-//                         if (static_cast<long>(anchors[i][j]) - skip < (p_(i) + 1) / 2)
-//                             break;
-// 
-//                         anchors[i][j] -= skip;
-//                         skip = 0;
-//                         while (all_knot_levels[i][anchors[i][j]] > expand_level)
-//                         {
-//                             // cast from size_t to long because anchors - skip could be negative
-//                             if (static_cast<long>(anchors[i][j]) - 1 < (p_(i) + 1) / 2)
-//                                 break;
-// 
-//                             anchors[i][j]--;
-//                             skip++;
-//                         }
-//                     }
-//                     // from after the target to the right
-//                     skip = 0;
-//                     for (auto j = start + 1; j < p_(i) + 1; j++)
-//                     {
-//                         if (anchors[i][j] + skip > all_knots[i].size() - (p_(i) + 1) / 2 - 2)
-//                             break;
-// 
-//                         anchors[i][j] += skip;
-//                         skip = 0;
-//                         while (all_knot_levels[i][anchors[i][j]] > expand_level)
-//                         {
-//                             if (anchors[i][j] + 1 > all_knots[i].size() - (p_(i) + 1) / 2 - 2)
-//                                 break;
-// 
-//                             anchors[i][j]++;
-//                             skip++;
-//                         }
-//                     }
-//                 }
-//             }
-// 
-//             // debug
-// //             if (debug)
-// //             {
-// //                 for (auto j = 0; j < dom_dim_; j++)
-// //                     fmt::print(stderr, "final (possibly expanded) anchors(): anchors[{}] = [{}]\n", j, fmt::join(anchors[j], ","));
-// //             }
 
             return t_idx;
         }

@@ -184,7 +184,7 @@ namespace mfa
             mfa_data(mfa_data_),
             verbose(verbose_),
             input(input_),
-            max_num_curves(1.0e4)                           // max num. curves to check in one dimension of curve version
+            max_num_curves(1.0e5)                           // max num. curves to check in one dimension of curve version
         {}
 
         ~Encoder() {}
@@ -1150,7 +1150,12 @@ namespace mfa
             vector<vector<T>> new_knots;                               // new knots in each dim.
 
             // debug
-            fmt::print(stderr, "Using OrigAdaptiveEncode()\n\n");
+            fmt::print(stderr, "Using OrigAdaptiveEncode() w/ 1-d curve knot splitting\n\n");
+#ifdef MFA_CHECK_ALL_CURVES
+            fmt::print(stderr, "Checking all curves (slower but more accurate)\n");
+#else
+            fmt::print(stderr, "Checking a sampling of curves (faster but less accurate)\n");
+#endif
 
             // TODO: use weights for knot insertion
             // for now, weights are only used for final full encode
@@ -1220,7 +1225,7 @@ namespace mfa
             ErrorStats<T> error_stats;
 
             // debug
-            fmt::print(stderr, "Using OrigAdaptiveEncode()\n\n");
+            fmt::print(stderr, "Using OrigAdaptiveEncode() w/ full-d knot splitting\n\n");
 
             VectorX<T> myextents = extents.size() ? extents : VectorX<T>::Ones(mfa_data.tmesh.tensor_prods[0].ctrl_pts.cols());
 
@@ -3102,10 +3107,12 @@ namespace mfa
                     // starting step size over curves
                     size_t s0 = ncurves / 2 > 0 ? ncurves / 2 : 1;
 
-                    // debug, only one step size s=1
-                    //         s0 = 1;
+#ifdef MFA_CHECK_ALL_CURVES
+                    s0              = 1;
+                    max_num_curves  = ncurves;
+#endif
 
-                    for (size_t s = s0; s >= 1 && ncurves / s < max_num_curves; s /= 2)     // for all step sizes over curves
+                    for (size_t s = s0; s >= 1 && ncurves / s <= max_num_curves; s /= 2)     // for all step sizes over curves
                     {
                         bool new_max_nerr = false;                          // this step size changed the max_nerr
 
@@ -3115,6 +3122,9 @@ namespace mfa
                             // n_step-sizes below)
                             if (j >= n_step_sizes && (j - n_step_sizes) % s == 0)           // this is one of the s-th curves; compute it
                             {
+                                // debug
+//                                 fmt::print(stderr, "OrigNewKnots_curve(): dim {} checking curve {} out of {} curves\n", k, j, ncurves);
+
                                 // compute R from input domain points
                                 RHS(k, N, R, weights, input.g.co[k][j]);
 

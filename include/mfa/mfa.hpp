@@ -22,6 +22,10 @@
 // high-d is the default if no method is specified
 #define MFA_LOW_D
 
+// check all curves for low-d knot insertion
+// default is to sample fewer curves
+// #define MFA_CHECK_ALL_CURVES
+
 // comment out the following line for applying weights to only the range dimension
 // weighing the range coordinate only is the default if no method is specified
 // #define WEIGH_ALL_DIMS

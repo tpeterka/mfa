@@ -1114,7 +1114,6 @@ namespace mfa
                 {
                     new_knot_idx[k] = span(k);
                     new_knot_val[k] = mfa_data.tmesh.all_knots[k][span(k)];
-                    retval          |= false;
                     continue;
                 }
 
@@ -1130,7 +1129,6 @@ namespace mfa
                 {
                     new_knot_idx[k] = span(k);
                     new_knot_val[k] = mfa_data.tmesh.all_knots[k][span(k)];
-                    retval          |= false;
                     continue;
                 }
 
@@ -1145,7 +1143,6 @@ namespace mfa
                 {
                     new_knot_idx[k] = span(k);
                     new_knot_val[k] = mfa_data.tmesh.all_knots[k][span(k)];
-                    retval          |= false;
                     continue;
                 }
 
