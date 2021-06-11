@@ -63,7 +63,7 @@ namespace mfa
                     abort();
                 }
             }
- 
+
             ds_ = VectorXi::Ones(dom_dim_);
             for (size_t i = 1; i < dom_dim_; i++)
                 ds_(i) = ds_(i - 1) * npts_dim_(i - 1);
@@ -89,7 +89,7 @@ namespace mfa
             {
                 idx_dim_ = starts_dim_;
                 prev_idx_dim_ = starts_dim_;
-            }  
+            }
         }
 
         public:

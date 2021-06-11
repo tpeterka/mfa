@@ -54,6 +54,9 @@ namespace mfa
                 vector<vector<int>>&        new_levels,             // new knot levels
                 vector<vector<KnotIdx>>&    inserted_knot_idxs)     // (output) indices in each dim. of inserted knots in full knot vector after insertion
         {
+            // debug
+            fmt::print(stderr, "Inserting knots with OrigInsertKnots()\n");
+
             vector<vector<T>> temp_knots(dom_dim);
             vector<vector<int>> temp_levels(dom_dim);
             inserted_knot_idxs.resize(dom_dim);
@@ -101,6 +104,16 @@ namespace mfa
                         nk++;
                         nl++;
                     }
+                }
+
+                // in case of single tensor and structured data, don't allow more control points than input points
+                if (mfa_data.tmesh.tensor_prods.size() == 1 && input.structured &&
+                        mfa_data.tmesh.tensor_prods[0].nctrl_pts(k) + inserted_knot_idxs[k].size() > input.ndom_pts(k))
+                {
+                    fmt::print(stderr, "OrigInsertKnots(): Unable to insert {} knots in dimension {} because {} control points would outnumber {} input points.\n",
+                            inserted_knot_idxs[k].size(), k, mfa_data.tmesh.tensor_prods[0].nctrl_pts(k) + inserted_knot_idxs[k].size(), input.ndom_pts(k));
+                    inserted_knot_idxs[k].resize(input.ndom_pts(k) - mfa_data.tmesh.tensor_prods[0].nctrl_pts(k));
+                    fmt::print(stderr, "Inserting {} knots instead.\n", inserted_knot_idxs[k].size());
                 }
 
                 for (auto i = 0; i < inserted_knot_idxs[k].size(); i++)
@@ -169,6 +182,17 @@ namespace mfa
                     }
                 }
 
+                // in case of single tensor and structured data, don't allow more control points than input points
+                if (mfa_data.tmesh.tensor_prods.size() == 1 && input.structured &&
+                        mfa_data.tmesh.tensor_prods[0].nctrl_pts(k) + inserted_knot_idxs[k].size() > input.ndom_pts(k))
+                {
+                    fmt::print(stderr, "InsertKnots(): Unable to insert {} knots in dimension {} because {} control points would outnumber {} input points.\n",
+                            inserted_knot_idxs[k].size(), k, mfa_data.tmesh.tensor_prods[0].nctrl_pts(k) + inserted_knot_idxs[k].size(), input.dom_pts(k));
+                    inserted_knot_idxs[k].resize(input.ndom_pts(k) - mfa_data.tmesh.tensor_prods[0].nctrl_pts(k));
+                    fmt::print(stderr, "Inserting {} knots instead.\n", inserted_knot_idxs[k].size());
+                }
+
+                // insert the knots into the tmesh
                 for (auto i = 0; i < inserted_knot_idxs[k].size(); i++)
                 {
                     auto idx = inserted_knot_idxs[k][i];
@@ -839,32 +863,38 @@ namespace mfa
                     for (auto j = 0; j < dom_dim; j++)
                     {
                         ParamIdx min = all_knot_param_idxs[j][span_ijk(j)];             // parameter index at start of span
-                        int incr = 1;
-                        while (all_knot_levels[j][span_ijk(j) + incr] > t.level)        // find span, skipping deeper knot levels
-                            incr++;
-                        ParamIdx max = all_knot_param_idxs[j][span_ijk(j) + incr];      // parameter index at start of next span
+                        KnotIdx next_span;
+                        mfa_data.tmesh.knot_idx_ofst(t, span_ijk(j), 1, j, false, next_span);
+                        ParamIdx max = all_knot_param_idxs[j][next_span];               // parameter index at start of next span
 
                         if (max - min <= 0)
                         {
-                            cerr << "CheckAllSpans(): Error: span " << span_ijk.transpose() << " does not have an input point" << endl;
+                            cerr << "CheckAllSpans(): Error: tidx " << tidx << " span " << span_ijk.transpose() << " does not have an input point" << endl;
                             return false;
                         }
                         T min_param = input.params->param_grid[j][min];
                         T max_param = input.params->param_grid[j][max];
                         if (min_param < all_knots[j][span_ijk(j)])
                         {
-                            cerr << "CheckAllSpans(): Error: min param < range of knot span. This should not happen.\n" << endl;
+                            cerr << "CheckAllSpans(): Error: tidx " << tidx << " span " << span_ijk.transpose() << " min param < range of knot span. This should not happen.\n" << endl;
                             return false;
                         }
-                        if (max < input.params->param_grid[j].size() - 1 && max_param < all_knots[j][span_ijk(j) + incr])
+                        if (min_param >= all_knots[j][next_span])
                         {
-                            cerr << "CheckAllSpans(): Error: max param < range of next knot span. This should not happen.\n" << endl;
+                            cerr << "CheckAllSpans(): Error: tidx " << tidx << " span " << span_ijk.transpose() << " min param > range of knot span. This should not happen.\n" << endl;
+                            return false;
+                        }
+                        if (max < input.params->param_grid[j].size() - 1 && max_param < all_knots[j][next_span])
+                        {
+                            cerr << "CheckAllSpans(): Error: tidx " << tidx << " span " << span_ijk.transpose() << " max param < range of next knot span. This should not happen.\n" << endl;
+                            fmt::print(stderr, "dim {} span {} next_span {} max {} max_param {} param_grid size {} next knot {}\n",
+                                    j, span_ijk(j), next_span, max, max_param, input.params->param_grid[j].size(), all_knots[j][next_span]);
                             return false;
                         }
 
                         // debug
 //                         cerr << "CheckAllSpans(): j: " << j << " min: " << min << " max: " << max << endl;
-                    }
+                    }   // domain dimensions
 
                     span_iter.incr_iter();
                 }   // iterator over knot spans
@@ -1104,6 +1134,10 @@ namespace mfa
                               vector<KnotIdx>&      new_knot_idx,   // (output) index of new knot in all dims of all_knots
                               vector<T>&            new_knot_val)   // (output) value of new knot in all dims
         {
+            bool debug = false;
+//             if (span(0) == 52 && span(1) == 65)
+//                 debug = true;
+
             bool retval = false;
             for (auto k = 0; k < mfa_data.dom_dim; k++)
             {
@@ -1148,12 +1182,21 @@ namespace mfa
 
                 // new knot index could be span + 1 or higher depending on higher-level skipped knots
                 // all_knots needs to remain sorted by knot value
-                new_knot_idx[k] = span(k) + 1;
-                for (int i = span(k) + 1; new_knot_val[k] > mfa_data.tmesh.all_knots[k][i]; i++)
-                    new_knot_idx[k] = i;
+                new_knot_idx[k] = span(k);
+                int i = span(k);
+                while (new_knot_val[k] > mfa_data.tmesh.all_knots[k][i])
+                    new_knot_idx[k] = ++i;
 
                 retval |= true;
             }
+            // debug
+//             if (debug)
+//             {
+//                 cerr << "valid_split_span(): splitting span " << span.transpose() << endl;
+//                 fmt::print(stderr, "new_knot_idx [{}] new_knot_val [{}]\n",
+//                         fmt::join(new_knot_idx, ","), fmt::join(new_knot_val, ","));
+//             }
+
             return retval;
         }
 

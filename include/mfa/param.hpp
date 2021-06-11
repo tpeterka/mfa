@@ -57,7 +57,7 @@ namespace mfa
             range_extent(0),
             dom_dim(ndom_pts.size()),
             structured(true)
-        { 
+        {
             VectorX<T>  param_mins = VectorX<T>::Zero(dom_dim);
             VectorX<T>  param_maxs = VectorX<T>::Ones(dom_dim);
 
@@ -67,7 +67,7 @@ namespace mfa
         // Constructor for equispaced grid over subset of parameter space
         // N.B. If ndom_pts_(k) = 1 in any dimension, then we expect param_mins_(k) == param_maxs_(k)
         Param(  const VectorXi&     ndom_pts_,
-                const VectorX<T>&   param_mins_, 
+                const VectorX<T>&   param_mins_,
                 const VectorX<T>&   param_maxs_) :
             ndom_pts(ndom_pts_),
             range_extent(0),
@@ -116,14 +116,14 @@ namespace mfa
 #endif
 
             // debug
-//             fprintf(stderr, "----- params -----\n");
-//             for (auto i = 0; i < params.size(); i++)
-//             {
-//                 fprintf(stderr, "dimension %d:\n", i);
-//                 for (auto j = 0; j < params[i].size(); j++)
-//                     fprintf(stderr, "params[%d][%d] = %.3lf\n", i, j, params[i][j]);
-//             }
-//             fprintf(stderr, "-----\n");
+            fprintf(stderr, "----- params -----\n");
+            for (auto i = 0; i < param_grid.size(); i++)
+            {
+                fprintf(stderr, "dimension %d:\n", i);
+                for (auto j = 0; j < param_grid[i].size(); j++)
+                    fprintf(stderr, "params[%d][%d] = %.3lf\n", i, j, param_grid[i][j]);
+            }
+            fprintf(stderr, "-----\n");
 
             // max extent of input data points
             int last     = domain_.cols() - 1;

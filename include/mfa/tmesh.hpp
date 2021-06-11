@@ -2286,6 +2286,20 @@ namespace mfa
             fprintf(stderr, "\n");
         }
 
+        // debug: check that knots are nondecreasing
+        // returns true if knots are ordered correctly
+        bool check_knots_order()
+        {
+            for (auto i = 0; i < dom_dim_; i++)
+            {
+                for (auto j = 0; j < all_knots[i].size() - 1; j++)
+                {
+                    if (all_knots[i][j] > all_knots[i][j + 1])
+                        return false;
+                }
+            }
+            return true;
+        }
     };
 }
 
