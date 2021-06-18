@@ -121,7 +121,7 @@ namespace mfa
             {
                 fprintf(stderr, "dimension %d:\n", i);
                 for (auto j = 0; j < param_grid[i].size(); j++)
-                    fprintf(stderr, "params[%d][%d] = %.3lf\n", i, j, param_grid[i][j]);
+                    fmt::print(stderr, "params[{}][{}] = {}\n", i, j, param_grid[i][j]);
             }
             fprintf(stderr, "-----\n");
 

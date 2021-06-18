@@ -2247,7 +2247,7 @@ namespace mfa
                 bool                local)                                      // do the local solve
         {
             bool debug = false;
-//             if (iter == 5)
+//             if (iter == 3)
 //                 debug = true;
 
             vector<vector<KnotIdx>>     inserted_knot_idxs(mfa_data.dom_dim);   // indices in each dim. of inserted knots in full knot vector after insertion
@@ -2298,42 +2298,39 @@ namespace mfa
 
             for (auto i = 0; i < n_insertions; i++)                             // for all knots to be inserted
             {
-                // debug
-//                 if (debug && inserted_knot_idxs[0][i] == 54 && inserted_knot_idxs[1][i] == 66)
+//                 if (debug)
 //                 {
-//                     fmt::print(stderr, "\nTrying to insert knot idx [ ");
+//                     fmt::print(stderr, "\ni {} Trying to insert knot idx [ ", i);
 //                     for (auto j = 0; j < mfa_data.dom_dim; j++)
 //                         fmt::print(stderr, "{} ", inserted_knot_idxs[j][i]);
 //                     fmt::print(stderr, "] with value [ ");
 //                     for (auto j = 0; j < mfa_data.dom_dim; j++)
 //                         fmt::print(stderr, "{} ", inserted_knots[j][i]);
-//                     fmt::print(stderr, "]\n");
+//                     fmt::print(stderr, "] and level {}\n", iter + 1);
 // 
 //                     fprintf(stderr, "\nRefine(): Tmesh knots before insertion:\n");
 //                     mfa_data.tmesh.print_knots();
 //                 }
 
-                // insert the new knots into tmesh all_knots
+                // insert the new knot into tmesh all_knots
+                int retval;
                 for (auto j = 0; j < mfa_data.dom_dim; j++)
                 {
                     inserted[j] = false;
-                    if (mfa_data.tmesh.insert_knot(j,
-                                inserted_knot_idxs[j][i],
+                    retval = mfa_data.tmesh.insert_knot(
+                                j,
                                 iter + 1,
-                                inserted_knots[j][i], input.params->param_grid))
-                    {
+                                inserted_knots[j][i],
+                                input.params->param_grid,
+                                inserted_knot_idxs[j][i]);
+
+                    if (retval == 1 || retval == 2)
                         inserted[j] = true;
-                        // increment subsequent insertions
-                        for (auto k = 0; k < n_insertions; k++)
-                        {
-                            if (inserted_knot_idxs[j][k] > inserted_knot_idxs[j][i])
-                                inserted_knot_idxs[j][k]++;
-                        }
-                    }
                 }
 
                 // debug
-                if (!mfa_data.tmesh.check_knots_order())
+                // TODO: comment out once the code is debugged
+                if (!nk.CheckAllSpans())
                 {
                     fmt::print(stderr, "\nError: Refine(): after inserting knot idx [ ");
                     for (auto j = 0; j < mfa_data.dom_dim; j++)
@@ -2341,7 +2338,7 @@ namespace mfa
                     fmt::print(stderr, "] with value [ ");
                     for (auto j = 0; j < mfa_data.dom_dim; j++)
                         fmt::print(stderr, "{} ", inserted_knots[j][i]);
-                    fmt::print(stderr, "] the knot order is no longer nondecreasing. This should not happen.\n");
+                    fmt::print(stderr, "] CheckAllSpans() failed. This should not happen.\n");
 
                     fprintf(stderr, "\nRefine(): Tmesh knots after insertion:\n");
                     mfa_data.tmesh.print_knots();
@@ -2350,20 +2347,25 @@ namespace mfa
 
                 if (find(inserted.begin(), inserted.end(), true) == inserted.end())
                 {
-                    // debug
-//                     fmt::print(stderr, "all dimensions of this knot are inserted already; skipping\n");
+//                     if (debug)
+//                         fmt::print(stderr, "all dimensions of this knot are inserted already; skipping\n");
 
                     continue;
                 }
 
-                // debug
-//                 fmt::print(stderr, "\nRefine(): inserting knot idx [ ");
-//                 for (auto j = 0; j < mfa_data.dom_dim; j++)
-//                     fmt::print(stderr, "{} ", inserted_knot_idxs[j][i]);
-//                 fmt::print(stderr, "] with value [ ");
-//                 for (auto j = 0; j < mfa_data.dom_dim; j++)
-//                     fmt::print(stderr, "{} ", inserted_knots[j][i]);
-//                 fmt::print(stderr, "]\n");
+//                 if (debug)
+//                 {
+//                     fmt::print(stderr, "\nRefine(): inserting knot idx [ ");
+//                     for (auto j = 0; j < mfa_data.dom_dim; j++)
+//                         fmt::print(stderr, "{} ", inserted_knot_idxs[j][i]);
+//                     fmt::print(stderr, "] with value [ ");
+//                     for (auto j = 0; j < mfa_data.dom_dim; j++)
+//                         fmt::print(stderr, "{} ", inserted_knots[j][i]);
+//                     fmt::print(stderr, "] and level {}\n", iter + 1);
+// 
+//                     fprintf(stderr, "\nRefine(): Tmesh knots after insertion:\n");
+//                     mfa_data.tmesh.print_knots();
+//                 }
 
                 for (auto j = 0; j < mfa_data.dom_dim; j++)
                 {
@@ -2377,9 +2379,9 @@ namespace mfa
                 c.knot_mins = knot_mins;
                 c.knot_maxs = knot_maxs;
 
-                // debug
-//                 fmt::print(stderr, "Refine() candidate tensor with knot mins [{}] knot_maxs[{}]\n",
-//                         fmt::join(c.knot_mins, ","), fmt::join(c.knot_maxs, ","));
+//                 if (debug)
+//                     fmt::print(stderr, "Refine() candidate tensor with knot mins [{}] knot_maxs[{}]\n",
+//                             fmt::join(c.knot_mins, ","), fmt::join(c.knot_maxs, ","));
 
                 // intersection proximity (assumes same for all dims)
                 int pad = mfa_data.p(0) % 2 == 0 ? mfa_data.p(0) : mfa_data.p(0) - 1;
@@ -2402,18 +2404,19 @@ namespace mfa
                     // candidate is a subset of an already scheduled tensor
                     if (mfa_data.tmesh.subset(c.knot_mins, c.knot_maxs, t.knot_mins, t.knot_maxs))
                     {
-                        // debug
-//                         fmt::print(stderr, "Refine() candidate tensor with knot_mins [{}] knot_maxs [{}] is a subset of tensor with knot_mins[{}] knot_maxs[{}]\n",
-//                                 fmt::join(c.knot_mins, ","), fmt::join(c.knot_maxs, ","), fmt::join(t.knot_mins, ","), fmt::join(t.knot_maxs, ","));
+//                         if (debug)
+//                             fmt::print(stderr, "Refine() candidate tensor with knot_mins [{}] knot_maxs [{}] is a subset of tensor with knot_mins[{}] knot_maxs[{}]\n",
+//                                     fmt::join(c.knot_mins, ","), fmt::join(c.knot_maxs, ","), fmt::join(t.knot_mins, ","), fmt::join(t.knot_maxs, ","));
 
                         add = false;
                     }
+
                     // an already scheduled tensor is a subset of the candidate
                     else if (mfa_data.tmesh.subset(t.knot_mins, t.knot_maxs, c.knot_mins, c.knot_maxs))
                     {
-                        // debug
-//                         fmt::print(stderr, "Refine() candidate tensor with knot_mins [{}] knot_maxs [{}] is a superset of tensor with knot_mins[{}] knot_maxs[{}]\n",
-//                                 fmt::join(c.knot_mins, ","), fmt::join(c.knot_maxs, ","), fmt::join(t.knot_mins, ","), fmt::join(t.knot_maxs, ","));
+//                         if (debug)
+//                             fmt::print(stderr, "Refine() candidate tensor with knot_mins [{}] knot_maxs [{}] is a superset of tensor with knot_mins[{}] knot_maxs[{}]\n",
+//                                     fmt::join(c.knot_mins, ","), fmt::join(c.knot_maxs, ","), fmt::join(t.knot_mins, ","), fmt::join(t.knot_maxs, ","));
 
                         t.knot_mins = c.knot_mins;
                         t.knot_maxs = c.knot_maxs;
@@ -2421,12 +2424,13 @@ namespace mfa
                         changed = true;
                         add = false;
                     }
+
                     // candidate intersects an already scheduled tensor, to within some proximity
                     else if (mfa_data.tmesh.intersect(c, t, pad))
                     {
-                        // debug
-//                         fmt::print(stderr, "Refine() candidate tensor with knot_mins [{}] knot_maxs [{}] intersects tensor with knot_mins[{}] knot_maxs[{}]\n",
-//                                 fmt::join(c.knot_mins, ","), fmt::join(c.knot_maxs, ","), fmt::join(t.knot_mins, ","), fmt::join(t.knot_maxs, ","));
+//                         if (debug)
+//                             fmt::print(stderr, "Refine() candidate tensor with knot_mins [{}] knot_maxs [{}] intersects tensor with knot_mins[{}] knot_maxs[{}]\n",
+//                                     fmt::join(c.knot_mins, ","), fmt::join(c.knot_maxs, ","), fmt::join(t.knot_mins, ","), fmt::join(t.knot_maxs, ","));
 
                         vector<KnotIdx> merge_mins(mfa_data.dom_dim);
                         vector<KnotIdx> merge_maxs(mfa_data.dom_dim);
@@ -2453,9 +2457,9 @@ namespace mfa
                                 t.knot_mins[j] = tp.knot_mins[j];
                         }
 
-                        // debug
-//                         fmt::print(stderr, "Refine() modifying previously scheduled tensor with new knot_mins [{}] knot_maxs [{}]\n",
-//                                 fmt::join(t.knot_mins, ","), fmt::join(t.knot_maxs, ","));
+//                         if (debug)
+//                             fmt::print(stderr, "Refine() modifying previously scheduled tensor with new knot_mins [{}] knot_maxs [{}]\n",
+//                                     fmt::join(t.knot_mins, ","), fmt::join(t.knot_maxs, ","));
                     }
                 }       // for all tensors scheduled to be added so far
 
@@ -2475,8 +2479,8 @@ namespace mfa
                             c.knot_mins[j] = tp.knot_mins[j];
                     }
 
-                    // debug
-//                     fmt::print(stderr, "Refine() scheduling tensor to be added with knot_mins [{}] knot_maxs [{}] to be added\n",
+//                     if (debug)
+//                         fmt::print(stderr, "Refine() scheduling tensor to be added with knot_mins [{}] knot_maxs [{}] to be added\n",
 //                                 fmt::join(c.knot_mins, ","), fmt::join(c.knot_maxs, ","));
 
                     new_tensors.push_back(c);
@@ -2492,13 +2496,15 @@ namespace mfa
 
             for (auto& t: new_tensors)
             {
-                // debug
-//                 fmt::print(stderr, "\nRefine() appending tensor with knot_mins [{}] knot_maxs [{}]\n",
-//                         fmt::join(t.knot_mins, ","), fmt::join(t.knot_maxs, ","));
+//                 if (debug)
+//                     fmt::print(stderr, "\nRefine() appending tensor with knot_mins [{}] knot_maxs [{}]\n",
+//                             fmt::join(t.knot_mins, ","), fmt::join(t.knot_maxs, ","));
 
-                // debug
-//                 fmt::print("\nT-mesh before append\n\n");
-//                 mfa_data.tmesh.print();
+//                 if (debug)
+//                 {
+//                     fmt::print("\nT-mesh before append\n\n");
+//                     mfa_data.tmesh.print();
+//                 }
 
                 // timing
                 double t0 = MPI_Wtime();
@@ -2509,18 +2515,19 @@ namespace mfa
                 append_time += (MPI_Wtime() - t0);
                 t0 = MPI_Wtime();
 
-                // debug
-                fmt::print("\nT-mesh after append and before local solve\n\n");
-                mfa_data.tmesh.print();
+//                 if (debug)
+//                 {
+//                     fmt::print("\nT-mesh after append and before local solve\n\n");
+//                     mfa_data.tmesh.print();
+//                 }
 
                 // debug: check all spans before solving
+                // TODO: comment out once the code is debugged
                 if (!nk.CheckAllSpans())
                 {
                     fmt::print(stderr, "Refine(): Error: failed checking all spans for input points\n");
                     abort();
                 }
-                else
-                    fmt::print(stderr, "Refine(): All spans checked\n");
 
                 // solve for new control points
                 if (local)
