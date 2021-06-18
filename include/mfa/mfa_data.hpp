@@ -345,9 +345,9 @@ namespace mfa
             int span = FindSpan(cur_dim, u);
             int first_idx = span - degree; // idx of the first basis function which is nonzero at u
 
-cerr << "span: " << span << endl;
-cerr << "basis_idx: " << basis_idx << endl;
-cerr << "first_idx: " << first_idx << endl;
+// cerr << "span: " << span << endl;
+// cerr << "basis_idx: " << basis_idx << endl;
+// cerr << "first_idx: " << first_idx << endl;
 
             // for each basis function which has support in span
             // N will contain all of the degree-basis functions evaluated at u
@@ -360,28 +360,34 @@ cerr << "first_idx: " << first_idx << endl;
                 {
                     if (idx + i < 0)
                     {
-                        cerr << "using ghost knot=0.0" << endl;
+                        // cerr << "using ghost knot=0.0" << endl;
                         loc_knots[i] = 0.0;
                     }
                     else if (idx + i >= (int)tmesh.all_knots[cur_dim].size())
                     {
-                        cerr << "using ghost knot=1.0" << endl;
+                        // cerr << "using ghost knot=1.0" << endl;
                         loc_knots[i] = 1.0;
                     }
                     else
                         loc_knots[i] = tmesh.all_knots[cur_dim][idx + i];
                 }
 
-        cerr << "loc_knots: ";
-        for (int ii = 0; ii < loc_knots.size(); ii++) cerr << loc_knots[ii] << " ";
-        cerr << endl;
+        // cerr << "loc_knots: ";
+        // for (int ii = 0; ii < loc_knots.size(); ii++) cerr << loc_knots[ii] << " ";
+        // cerr << endl;
 
-                bfs(idx) = OneBasisFunK(degree, cur_dim, u, loc_knots);
-
-        cerr << "bf: " << bfs(idx) << endl;
+                if (idx >= 0)
+                {
+                    bfs(idx) = OneBasisFunK(degree, cur_dim, u, loc_knots);
+                    // cerr << "bf: " << bfs(idx) << endl;
+                }
+                else
+                {
+                    // cerr << "bf: ----" << endl;
+                }
             }
 
-cerr << "BFs: " << bfs << endl;
+// cerr << "BFs: " << bfs << endl;
 
             // now sum all basis functions from basis_idx forward, evaluated at u
             T sum = 0;
@@ -419,14 +425,14 @@ cerr << "BFs: " << bfs << endl;
                     // knots are pinned.
                     if (b_idx + i < 0 || b_idx + i >= tmesh.all_knots[cur_dim].size())
                     {
-                        cerr << "ignored basis function, index " << b_idx + i << endl;
+                        // cerr << "ignored basis function, index " << b_idx + i << endl;
                         ignore = true;
                         continue;
                     }
 
                     loc_knots[i] = tmesh.all_knots[cur_dim][b_idx + i];
                 }
-    cerr << N.rows() << "  " << N.cols() << "  " << row << "  " << b_idx << endl;
+    // cerr << N.rows() << "  " << N.cols() << "  " << row << "  " << b_idx << endl;
                 if (!ignore)
                     N(row, b_idx) = OneBasisFunK(degree, cur_dim, u, loc_knots);
             }

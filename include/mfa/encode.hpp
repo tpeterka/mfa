@@ -609,7 +609,7 @@ namespace mfa
 #endif
 
 // EXPERIMENTAL search for potential infinite ctrl points >>
-#if 0
+#if 1
             Mat.prune(1e-5);
             // Check for unconstrained control points (we set to zero later)
             // this can happen if there is no input data within the support of a 
@@ -652,7 +652,7 @@ namespace mfa
 
 
 // EXPERIMENTAL search for potential infinite ctrl points >>
-#if 0
+#if 1
             for (auto& idx : undef_ctrl_pts)
             {
                 cerr << "idx=" << idx << ", value(s)=" << t.ctrl_pts(idx,0) << endl;

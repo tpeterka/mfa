@@ -428,8 +428,7 @@ int main(int argc, char** argv)
         bool saved_basis = structured; // TODO: basis functions are currently only saved during encoding of structured data
         master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
                 // { b->range_error(cp, 1, true, saved_basis); });
-                { b->integrate_block(cp); 
-                    cout << b->approx->domain << endl;});
+                { b->integrate_block(cp); });
 #endif
         decode_time = MPI_Wtime() - decode_time;
     }
