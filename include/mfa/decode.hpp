@@ -164,8 +164,8 @@ namespace mfa
         {
             VectorXi no_ders;                       // size 0 means no derivatives
             DecodePointSet(ps, min_dim, max_dim, no_ders);
-        }    
-    
+        }
+
         // computes approximated points from a given set of parameter values  and an n-d NURBS volume
         // P&T eq. 9.77, p. 424
         // assumes ps contains parameter values to decode at; 
@@ -179,14 +179,14 @@ namespace mfa
         {
             if (saved_basis && !ps.structured)
                 cerr << "Warning: Saved basis decoding not implemented with unstructured input. Proceeding with standard decoding" << endl;
-            
+
             int last = mfa_data.tmesh.tensor_prods[0].ctrl_pts.cols() - 1;       // last coordinate of control point
 
 #ifdef MFA_TBB                                          // TBB version, faster (~3X) than serial
             // thread-local DecodeInfo
             // ref: https://www.threadingbuildingblocks.org/tutorial-intel-tbb-thread-local-storage
             enumerable_thread_specific<DecodeInfo<T>> thread_decode_info(mfa_data, derivs);
-            
+
             parallel_for (blocked_range<size_t>(0, ps.npts), [&](blocked_range<size_t>& r)
             {
                 auto pt_it  = ps.iterator(r.begin());
@@ -196,7 +196,7 @@ namespace mfa
                     VectorX<T>  cpt(last + 1);              // evaluated point
                     VectorX<T>  param(mfa_data.dom_dim);    // vector of param values
                     VectorXi    ijk(mfa_data.dom_dim);      // vector of param indices (structured grid only)
-                    pt_it.params(param);  
+                    pt_it.params(param);
                     // compute approximated point for this parameter vector
 
 #ifndef MFA_TMESH   // original version for one tensor product
@@ -397,8 +397,6 @@ namespace mfa
 
         }
 
-#ifdef MFA_TMESH
-
         // decode a point in the t-mesh
         // TODO: serial implementation, no threading
         // TODO: no derivatives as yet
@@ -556,8 +554,6 @@ namespace mfa
             else
                 cerr << "Warning: VolPt_tmesh(): B_sum = 0 when decoding param: " << param.transpose() << " This should not happen." << endl;
         }
-
-#endif      // MFA_TMESH
 
         // compute a point from a NURBS n-d volume at a given parameter value
         // slower version for single points

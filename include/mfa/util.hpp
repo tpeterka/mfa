@@ -10,6 +10,16 @@
 
 namespace mfa
 {
+    // error statistics
+    template <typename T>
+        struct ErrorStats
+        {
+            T max_abs_err;          // max of absolute errors (absolute value)
+            T max_norm_err;         // max of normalized errors (absolute value)
+            T sum_sq_abs_errs;      // sum of squared absolute errors
+            T sum_sq_norm_errs;     // sum of squared normalized errors
+        };
+
     // object for iterating in a flat loop over an n-dimensional volume
     struct VolIterator
     {
@@ -53,7 +63,7 @@ namespace mfa
                     abort();
                 }
             }
- 
+
             ds_ = VectorXi::Ones(dom_dim_);
             for (size_t i = 1; i < dom_dim_; i++)
                 ds_(i) = ds_(i - 1) * npts_dim_(i - 1);
@@ -79,7 +89,7 @@ namespace mfa
             {
                 idx_dim_ = starts_dim_;
                 prev_idx_dim_ = starts_dim_;
-            }  
+            }
         }
 
         public:
@@ -112,7 +122,7 @@ namespace mfa
         VolIterator(const VolIterator& other) = default;
 
         // move constructor
-        VolIterator(VolIterator&& other) : 
+        VolIterator(VolIterator&& other) :
             VolIterator()
         {
             swap(*this, other);
@@ -224,7 +234,7 @@ namespace mfa
         }
 
         // return current iteration count within full volume
-        size_t cur_iter_full() const 
+        size_t cur_iter_full() const
         {
             return ijk_idx(idx_dim_);
         }
@@ -344,7 +354,6 @@ namespace mfa
         }
     };  // GridInfo
 
-    
 }   // namespace mfa
 #endif
 

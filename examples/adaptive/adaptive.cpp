@@ -356,18 +356,38 @@ int main(int argc, char** argv)
 
     // cesm dataset
     if (input == "cesm")
-    {   
+    {
         d_args.ndom_pts.resize(2);
         d_args.ndom_pts[0]  = 1800;
         d_args.ndom_pts[1]  = 3600;
         d_args.infile       = infile;
-        d_args.infile       = "/Users/tpeterka/datasets/CESM-ATM-tylor/1800x3600/FLDSC_1_1800_3600.dat";
+//         d_args.infile       = "/Users/tpeterka/datasets/CESM-ATM-tylor/1800x3600/FLDSC_1_1800_3600.dat";
         if (dom_dim == 2)
             master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
                     { b->read_2d_scalar_data(cp, d_args); });
         else
         {
             fprintf(stderr, "cesm data only available in 2d domain\n");
+            exit(0);
+        }
+    }
+
+    // miranda dataset
+    if (input == "miranda")
+    {
+        d_args.ndom_pts.resize(3);
+        d_args.vars_nctrl_pts[0].resize(3);
+        d_args.ndom_pts[0]          = 256;
+        d_args.ndom_pts[1]          = 384;
+        d_args.ndom_pts[2]          = 384;
+        d_args.infile = infile;
+//      d_args.infile = "/Users/tpeterka/datasets/miranda/SDRBENCH-Miranda-256x384x384/density.d64";
+        if (dom_dim == 3)
+            master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
+                    { b->read_3d_scalar_data<double>(cp, d_args); });
+        else
+        {
+            fprintf(stderr, "miranda data only available in 3d domain\n");
             exit(0);
         }
     }
@@ -391,16 +411,16 @@ int main(int argc, char** argv)
                 { b->error(cp, 1, true); });
 #else                   // range coordinate difference
         master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-                { b->range_error(cp, 1, true, false); });   // saved_basis =  false; saved basis functions do not apply to t-mesh
+                { b->range_error(cp, 1, true, true); });   // saved_basis =  true, re-use basis functions if possible (tmesh will override to false)
 #endif
         decode_time = MPI_Wtime() - decode_time;
     }
 
-//     // debug: write original and approximated data for reading into z-checker
-//     // only for one block (one file name used, ie, last block will overwrite earlier ones)
+    // debug: write original and approximated data for reading into z-checker
+    // only for one block (one file name used, ie, last block will overwrite earlier ones)
 //     master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
 //             { b->write_raw(cp); });
-// 
+
 //     // debug: save knot span domains for comparing error with location in knot span
 //     master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
 //             { b->knot_span_domains(cp); });

@@ -184,7 +184,7 @@ namespace mfa
             mfa_data(mfa_data_),
             verbose(verbose_),
             input(input_),
-            max_num_curves(1.0e4)                           // max num. curves to check in one dimension of curve version
+            max_num_curves(1.0e5)                           // max num. curves to check in one dimension of curve version
         {}
 
         ~Encoder() {}
@@ -225,8 +225,10 @@ namespace mfa
             // resize matrices in case number of control points changed
             ctrl_pts.resize(nctrl_pts.prod(), pt_dim);
             weights.resize(ctrl_pts.rows());
+
+            // resize basis function matrices and initialize to 0; will only fill nonzeros later
             for (auto k = 0; k < ndims; k++)
-                mfa_data.N[k] = MatrixX<T>::Zero(input.ndom_pts(k), nctrl_pts(k));  // basis functions need to be resized and initialized to 0
+                    mfa_data.N[k] = MatrixX<T>::Zero(input.ndom_pts(k), nctrl_pts(k));
 
             // 2 buffers of temporary control points
             // double buffer needed to write output curves of current dim without changing its input pts
@@ -280,15 +282,6 @@ namespace mfa
                         too   = to[j];
                     }
                 }
-
-                // TODO:
-                // Investigate whether in later dimensions, when input data points are replaced by
-                // control points, need new knots and params computed.
-                // In the next dimension, the coordinates of the dimension didn't change,
-                // but the chord length did, as control points moved away from the data points in
-                // the prior dim. Need to determine how much difference it would make to recompute
-                // params and knots for the new input points
-                // (moot when using domain decomposition)
 
                 // N is a matrix of (m + 1) x (n + 1) scalars that are the basis function coefficients
                 //  _                          _
@@ -414,7 +407,7 @@ namespace mfa
             t.ctrl_pts.resize(t.nctrl_pts.prod(), pt_dim);
             t.weights.resize(t.ctrl_pts.rows());
             assert(Nt.rows() == t.nctrl_pts.prod());
-            assert(Nt.cols() == ndom_pts.prod());
+            assert(Nt.cols() == input.ndom_pts.prod());
 
             // Reserve space in sparse matrix; don't forget to call makeCompressed() at end!
             int bf_per_pt = (mfa_data.p + VectorXi::Ones(mfa_data.dom_dim)).prod();       // nonzero basis functions per input point
@@ -432,7 +425,7 @@ namespace mfa
                     T   u   = param(k);
 
                     spans[k] = mfa_data.FindSpan(k, u);
-                    
+
                     ctrl_starts(k) = spans[k] - p - t.knot_mins[k];
 
                     // basis functions
@@ -609,6 +602,7 @@ namespace mfa
 #endif
 
 // EXPERIMENTAL search for potential infinite ctrl points >>
+#if 0
             Mat.prune(1e-5);
             // Check for unconstrained control points (we set to zero later)
             // this can happen if there is no input data within the support of a 
@@ -619,6 +613,7 @@ namespace mfa
                 if (Mat.coeff(i,i)==0)
                     undef_ctrl_pts.push_back(i);
             }     
+#endif
 // << EXPERIMENTAL
 
             MatrixX<T>  R(Nt.cols(), pt_dim);           // R is the right hand side 
@@ -650,6 +645,7 @@ namespace mfa
 
 
 // EXPERIMENTAL search for potential infinite ctrl points >>
+#if 0
             for (auto& idx : undef_ctrl_pts)
             {
                 cerr << "idx=" << idx << ", value(s)=" << t.ctrl_pts(idx,0) << endl;
@@ -679,6 +675,7 @@ namespace mfa
                     }
                 }
             }
+#endif
 // << EXPERIMENTAL
         }
 
@@ -956,12 +953,22 @@ namespace mfa
             // timing
             cons_time           = MPI_Wtime() - cons_time;
 
+            // check Nfree + Ncons row sums
             // normalize Nfree and Ncons such that the row sum of Nfree + Ncons = 1.0
+            // TODO: is row sum != 1 a sign of an error, or just needs to be normalized?
             for (auto i = 0; i < Nfree.rows(); i++)
             {
+                bool error = false;
                 T sum = Nfree.row(i).sum();
                 if (Pcons.rows())
                     sum += Ncons.row(i).sum();
+
+                    // TODO: if sum != 1, is this an error?
+//                 if (fabs(sum - 1.0) > 1e-3)
+//                 {
+//                     cerr << "Nfree + Ncons row " << i << " sum = " << sum << " which should be 1.0?" << endl;
+//                     error = true;
+//                 }
                 if (sum > 0.0)
                 {
                     Nfree.row(i) /= sum;
@@ -970,13 +977,16 @@ namespace mfa
                 }
                 else
                 {
-                    // print error
                     if (Pcons.rows())
                         fmt::print(stderr, "Warning: EncodeTensorLocalLinear(): row {} Nfree row sum = {} Ncons row sum = {}, Nfree + Ncons row sum = {}. This should not happen.\n",
                             i, Nfree.row(i).sum(), Ncons.row(i).sum(), sum);
                     else
                         fmt::print(stderr, "Warning: EncodeTensorLocalLinear(): row {} Nfree row sum = {}. This should not happen.\n",
                             i, sum);
+                    error = true;
+                }
+                if (error)
+                {
                     VectorXi ijk(mfa_data.dom_dim);
                     dom_iter.idx_ijk(i, ijk);
                     cerr << "ijk = " << ijk.transpose() << endl;
@@ -987,18 +997,42 @@ namespace mfa
                 }
             }
 
-            // copy from dense to sparse
-            SparseMatrixX<T> Nfree_sparse(Nfree.rows(), Nfree.cols());
-            Nfree_sparse.reserve(VectorXi::Constant(Nfree.cols(), max_nnz_col));
-            for (auto i = 0; i < Nfree.rows(); i++)
+            // multiply by transpose to make the matrix square and smaller
+            MatrixX<T> NtNfree = Nfree.transpose() * Nfree;
+
+// for comparing sparse with dense solve
+// #define MFA_DENSE
+
+#ifndef MFA_DENSE
+
+            // compute max nonzero columns in NtNfree
+            max_nnz_col = 0;
+            for (auto i = 0; i < NtNfree.rows(); i++)
             {
-                for (auto j = 0; j < Nfree.cols(); j++)
+                int nnz_col = 0;
+                for (auto j = 0; j < NtNfree.cols(); j++)
                 {
-                    if (Nfree(i, j) != 0.0)
-                        Nfree_sparse.insert(i, j) = Nfree(i,j);
+                    if (NtNfree(i, j) != 0.0)
+                        nnz_col++;
+                }
+                if (nnz_col > max_nnz_col)
+                    max_nnz_col = nnz_col;
+            }
+
+            // copy from dense to sparse
+            SparseMatrixX<T> NtNfree_sparse(NtNfree.rows(), NtNfree.cols());
+            NtNfree_sparse.reserve(VectorXi::Constant(NtNfree.cols(), max_nnz_col));
+            for (auto i = 0; i < NtNfree.rows(); i++)
+            {
+                for (auto j = 0; j < NtNfree.cols(); j++)
+                {
+                    if (NtNfree(i, j) != 0.0)
+                        NtNfree_sparse.insert(i, j) = NtNfree(i,j);
                 }
             }
-            Nfree_sparse.makeCompressed();
+            NtNfree_sparse.makeCompressed();
+
+#endif
 
             // timing
             double r_time       = MPI_Wtime();
@@ -1006,11 +1040,7 @@ namespace mfa
             // R is the right hand side needed for solving N * P = R
             MatrixX<T> R = Q;
             if (Pcons.rows())
-            {
                 R -= Ncons * Pcons;
-//                 if (debug)
-//                     cerr << "EncodeTensorLocalLinear(): first 200 rows of Ncons * Pcons:\n" << (Ncons * Pcons).block(0, 0, 200, Q.cols()) << endl;
-            }
 
             // timing
             r_time                  = MPI_Wtime() - r_time;
@@ -1023,14 +1053,19 @@ namespace mfa
 
             fmt::print(stderr, "Solving...\n");
 
-// for debugging, or comparing sparse with dense solve
-// #define MFA_DENSE
+            // for debugging, compute condition number of NtNfree
+            // unfortunately SVD takes too long when the matrix is ill-conditioned
+            // ref: https://forum.kde.org/viewtopic.php?f=74&t=117430
+//             Eigen::JacobiSVD<Eigen::MatrixXd> svd(NtNfree);
+//             double cond = svd.singularValues()(0) / svd.singularValues()(svd.singularValues().size()-1);
+//             fmt::print(stderr, "NtNfree has condition number {}\n", cond);
 
-#ifdef MFA_DENSE    // dense solve, DEPRECATE, replaced by sparse solve
+
+#ifdef MFA_DENSE    // dense solve
 
             double dense_solve_time = MPI_Wtime();                  // timing
-            t.ctrl_pts = Nfree.colPivHouseholderQr().solve(R);
-            dense_solve_time            = MPI_Wtime() - dense_solve_time;
+            t.ctrl_pts = (Nfree.transpose() * Nfree).ldlt().solve(Nfree.transpose() * R);
+            dense_solve_time = MPI_Wtime() - dense_solve_time;
 
 #else               // sparse solve
 
@@ -1040,17 +1075,17 @@ namespace mfa
 
             // TODO: iterative least squares conjugate gradient is faster but sometimes fails
             // NtN not necessarily symmetric positive definite?
-            // TODO: is NtN faster to solve than N?
 //             Eigen::LeastSquaresConjugateGradient<SparseMatrixX<T>>  solver;
 
-            solver.compute(Nfree_sparse);
+            solver.compute(NtNfree_sparse);
+
             if (solver.info() != Eigen::Success)
             {
                 cerr << "EncodeTensorLocalLinear(): Error: Matrix decomposition failed" << endl;
                 abort();
             }
 
-            t.ctrl_pts = solver.solve(R);
+            t.ctrl_pts = solver.solve(Nfree.transpose() * R);
             if (solver.info() != Eigen::Success)
             {
                 cerr << "EncodeTensorLocalLinear(): Error: Least-squares solve failed" << endl;
@@ -1090,19 +1125,26 @@ namespace mfa
 //             cerr << "\nEncodeTensorLocalLinear() weights:\n" << t.weights    << endl;
 //             }
 
+            // debug: check relative error of solution
+            double relative_error = (Nfree * t.ctrl_pts - R).norm() / R.norm(); // norm() is L2 norm
+            cerr << "EncodeTensorLocalLinar(): The relative error is " << relative_error << endl;
+
             // debug: check control points for sanity
-            for (auto i = 0; i < t.ctrl_pts.rows(); i++)
-            {
-                    if (t.ctrl_pts.row(i).sum() == 0.0)
-                        cerr << "EncodeTensorLocalLinear(): it's strange that control point " << t.ctrl_pts.row(i) << " has a row sum exactly = 0.0" << endl;
-                    if (fabs(t.ctrl_pts.row(i).sum()) > 1.0e6)
-                        cerr << "EncodeTensorLocalLinear(): it's likely wrong that control point " << t.ctrl_pts.row(i) << " has a very large row sum" << endl;
-            }
+//             for (auto i = 0; i < t.ctrl_pts.rows(); i++)
+//             {
+//                     if (t.ctrl_pts.row(i).norm() == 0.0)
+//                         cerr << "EncodeTensorLocalLinear(): it's strange that control point " << t.ctrl_pts.row(i) << " has norm exactly = 0.0" << endl;
+//                     if (fabs(t.ctrl_pts.row(i).norm()) > 1.0e6)
+//                         cerr << "EncodeTensorLocalLinear(): it's likely wrong that control point " << t.ctrl_pts.row(i) << " has a very large norm" << endl;
+//             }
         }
 
 #endif
 
+#ifdef MFA_LOW_D
+
         // original adaptive encoding for first tensor product only
+        // older version using 1-d curves for new knots
         void OrigAdaptiveEncode(
                 T                   err_limit,              // maximum allowable normalized error
                 bool                weighted,               // solve for and use weights
@@ -1111,6 +1153,14 @@ namespace mfa
         {
             vector<vector<T>> new_knots;                               // new knots in each dim.
 
+            // debug
+            fmt::print(stderr, "Using OrigAdaptiveEncode() w/ 1-d curve knot splitting\n");
+#ifdef MFA_CHECK_ALL_CURVES
+            fmt::print(stderr, "Checking all curves (slower but more accurate)\n");
+#else
+            fmt::print(stderr, "Checking a sampling of curves (faster but less accurate)\n");
+#endif
+
             // TODO: use weights for knot insertion
             // for now, weights are only used for final full encode
 
@@ -1118,10 +1168,14 @@ namespace mfa
             for (int iter = 0; ; iter++)
             {
                 if (max_rounds > 0 && iter >= max_rounds)               // optional cap on number of rounds
+                {
+                    if (verbose)
+                        fprintf(stderr, "\nDone; max iterations reached.\n\n");
                     break;
+                }
 
                 if (verbose)
-                    fprintf(stderr, "Iteration %d...\n", iter);
+                    fprintf(stderr, "\n--- Iteration %d ---\n", iter);
 
                 // low-d w/ splitting spans in the middle
                 bool done = OrigNewKnots_curve(new_knots, err_limit, extents, iter);
@@ -1130,7 +1184,7 @@ namespace mfa
                 if (done)
                 {
                     if (verbose)
-                        fprintf(stderr, "\nKnot insertion done after %d iterations; no new knots added.\n\n", iter + 1);
+                        fprintf(stderr, "\nDone; no new knots added.\n\n");
                     break;
                 }
 
@@ -1146,7 +1200,7 @@ namespace mfa
                 if (done)
                 {
                     if (verbose)
-                        fprintf(stderr, "\nKnot insertion done after %d iterations; control points would outnumber input points.\n", iter + 1);
+                        fprintf(stderr, "\nDone; control points would outnumber input points.\n\n");
                     break;
                 }
 
@@ -1160,6 +1214,127 @@ namespace mfa
             TensorProduct<T>&t = mfa_data.tmesh.tensor_prods[0];        // fixed encode assumes the tmesh has only one tensor product
             Encode(t.nctrl_pts, t.ctrl_pts, t.weights, weighted);
         }
+
+#else       // full-dimensional knot insertion
+
+        // original adaptive encoding for first tensor product only
+        // latest version using full knot spans (5/19/21)
+        void OrigAdaptiveEncode(
+                T                   err_limit,              // maximum allowable normalized error
+                bool                weighted,               // solve for and use weights
+                const VectorX<T>&   extents,                // extents in each dimension, for normalizing error (size 0 means do not normalize)
+                int                 max_rounds = 0)         // optional maximum number of rounds
+        {
+            vector<vector<T>> new_knots;                               // new knots in each dim.
+            ErrorStats<T> error_stats;
+
+            // debug
+            fmt::print(stderr, "Using OrigAdaptiveEncode() w/ full-d knot splitting\n\n");
+
+            VectorX<T> myextents = extents.size() ? extents : VectorX<T>::Ones(mfa_data.tmesh.tensor_prods[0].ctrl_pts.cols());
+
+            mfa::NewKnots<T> nk(mfa_data, input);
+
+            // loop until no change in knots
+            for (int iter = 0; ; iter++)
+            {
+                // encode tensor product 0
+                TensorProduct<T>&t = mfa_data.tmesh.tensor_prods[0];
+                for (auto j = 0; j < mfa_data.dom_dim; j++)
+                    t.nctrl_pts[j] = mfa_data.tmesh.all_knots[j].size() - mfa_data.p(j) - 1;
+                Encode(t.nctrl_pts, t.ctrl_pts, t.weights, weighted);
+
+                if (max_rounds > 0 && iter >= max_rounds)               // optional cap on number of rounds
+                {
+                    if (verbose)
+                        fprintf(stderr, "\nDone; max iterations reached.\n\n");
+
+                    // debug
+//                     fmt::print(stderr, "\nFinal Tmesh\n\n");
+//                     mfa_data.tmesh.print();
+
+                    break;
+                }
+
+                if (verbose)
+                    fprintf(stderr, "\n--- Iteration %d ---\n", iter);
+
+                // debug
+//                 fmt::print(stderr, "\nTmesh at start of iteration\n\n");
+//                 mfa_data.tmesh.print();
+
+                // check all knots spans for error
+                vector<vector<KnotIdx>>     inserted_knot_idxs(mfa_data.dom_dim);   // indices in each dim. of inserted knots in full knot vector after insertion
+                vector<vector<T>>           inserted_knots(mfa_data.dom_dim);       // knots to be inserted in each dim.
+                vector<TensorIdx>           parent_tensor_idxs;                     // tensors having knots inserted
+                bool done = nk.AllErrorSpans(
+                        myextents,
+                        err_limit,
+                        true,
+                        parent_tensor_idxs,
+                        inserted_knot_idxs,
+                        inserted_knots,
+                        error_stats);
+
+                // no new knots to be added
+                if (done)
+                {
+                    if (verbose)
+                        fprintf(stderr, "\nDone; no new knots added.\n\n");
+
+                    // debug
+//                     fmt::print(stderr, "\nFinal Tmesh\n\n");
+//                     mfa_data.tmesh.print();
+
+                    break;
+                }
+
+                // insert new knots into knot vectors
+                int n_insertions = parent_tensor_idxs.size();                       // number of knots to insert
+                for (auto j = 0; j < mfa_data.dom_dim; j++)
+                    assert(inserted_knot_idxs[j].size() == n_insertions &&
+                            inserted_knots[j].size() == n_insertions);
+
+                vector<bool> inserted(mfa_data.dom_dim);                            // whether the current insertion succeed (in each dim)
+
+                for (auto i = 0; i < n_insertions; i++)                             // for all knots to be inserted
+                {
+                    // debug
+//                     fmt::print(stderr, "Knot insertion {} of {}: ", i, n_insertions);
+//                     fmt::print(stderr, "\nTrying to insert knot idx [ ");
+//                     for (auto j = 0; j < mfa_data.dom_dim; j++)
+//                         fmt::print(stderr, "{} ", inserted_knot_idxs[j][i]);
+//                     fmt::print(stderr, "] with value [ ");
+//                     for (auto j = 0; j < mfa_data.dom_dim; j++)
+//                         fmt::print(stderr, "{} ", inserted_knots[j][i]);
+//                     fmt::print(stderr, "]\n");
+
+                    // insert the new knots into tmesh all_knots
+                    for (auto j = 0; j < mfa_data.dom_dim; j++)
+                    {
+                        inserted[j] = false;
+                        if (mfa_data.tmesh.insert_knot_at_pos(j,
+                                    inserted_knot_idxs[j][i],
+                                    0,                                              // all knots at level 0 in this version
+                                    inserted_knots[j][i], input.params->param_grid))
+                        {
+                            inserted[j] = true;
+                            // increment subsequent insertions
+                            for (auto k = 0; k < n_insertions; k++)
+                            {
+                                if (inserted_knot_idxs[j][k] > inserted_knot_idxs[j][i])
+                                    inserted_knot_idxs[j][k]++;
+                            }
+                        }
+                    }   // dimension
+                }   // knot insertions
+
+                if (verbose)
+                    PrintAdaptiveStats(error_stats);
+            }   // iterations
+        }
+
+#endif
 
         // adaptive encoding for tmesh with optional local solve
         void AdaptiveEncode(
@@ -1264,9 +1439,46 @@ namespace mfa
             fprintf(stderr, "\n----- final T-mesh -----\n\n");
             mfa_data.tmesh.print();
             fprintf(stderr, "--------------------------\n\n");
+
+            // debug: check all spans
+            mfa::NewKnots<T> nk(mfa_data, input);
+            if (!nk.CheckAllSpans())
+            {
+                fmt::print(stderr, "AdaptiveEncode(): Error: failed checking all spans for input points\n");
+                abort();
+            }
+            else
+                fmt::print(stderr, "AdaptiveEncode(): All spans checked\n");
+
         }
 
     private:
+
+        // print max error, compression factor, and any pother stats at the end of an adaptive iteration
+        void PrintAdaptiveStats(
+                const ErrorStats<T>&    error_stats)
+        {
+            // compute compression
+            float in_coords = (input.npts) * (input.pt_dim);
+            float out_coords = 0.0;
+            for (auto i = 0; i < mfa_data.tmesh.tensor_prods.size(); i++)
+                out_coords += mfa_data.tmesh.tensor_prods[i].ctrl_pts.rows() *
+                    mfa_data.tmesh.tensor_prods[i].ctrl_pts.cols();
+            for (auto j = 0; j < mfa_data.tmesh.all_knots.size(); j++)
+                out_coords += mfa_data.tmesh.all_knots[j].size();
+            float compression = in_coords / out_coords;
+
+            T rms_abs_err = sqrt(error_stats.sum_sq_abs_errs / (input.domain.rows()));
+            T rms_norm_err = sqrt(error_stats.sum_sq_norm_errs / (input.domain.rows()));
+
+            fprintf(stderr, "\n----- estimates of current variable of current model -----\n");
+            fprintf(stderr, "estimated max_err               = %e\n",  error_stats.max_abs_err);
+            fprintf(stderr, "estimated normalized max_err    = %e\n",  error_stats.max_norm_err);
+            fprintf(stderr, "estimated RMS error             = %e\n",  rms_abs_err);
+            fprintf(stderr, "estimated normalized RMS error  = %e\n",  rms_norm_err);
+            fprintf(stderr, "estimated compression ratio     = %.2f\n",  compression);
+            fprintf(stderr, "-----------------------------------------------------------\n");
+        }
 
 #ifndef      MFA_NO_WEIGHTS
 
@@ -1988,8 +2200,14 @@ namespace mfa
                     max_err = err > max_err ? err : max_err;
                 }
 
-                if (max_err > err_limit)
+                if (max_err > err_limit &&
+                        // don't allow more control points than input points
+                        mfa_data.tmesh.tensor_prods.size() == 1 &&
+                        tensor.nctrl_pts(k) + err_spans.size() <= input.ndom_pts(k))
                 {
+                    // debug
+//                     fmt::print(stderr, "ErrorCurve(): 1: dim {} i {} max_err {}\n", k, i, max_err);
+
                     // don't duplicate spans
                     set<int>::iterator it = err_spans.find(span);
                     if (!err_spans.size() || it == err_spans.end())
@@ -2035,11 +2253,16 @@ namespace mfa
                 int                 iter,                                       // current iteration number
                 bool                local)                                      // do the local solve
         {
+            bool debug = false;
+//             if (iter == 3)
+//                 debug = true;
+
             vector<vector<KnotIdx>>     inserted_knot_idxs(mfa_data.dom_dim);   // indices in each dim. of inserted knots in full knot vector after insertion
             vector<vector<T>>           inserted_knots(mfa_data.dom_dim);       // knots to be inserted in each dim.
             vector<TensorIdx>           parent_tensor_idxs;                     // tensors having knots inserted
 
             VectorX<T> myextents = extents.size() ? extents : VectorX<T>::Ones(mfa_data.tmesh.tensor_prods[0].ctrl_pts.cols());
+            ErrorStats<T> error_stats;
 
             // find new knots
             mfa::NewKnots<T> nk(mfa_data, input);
@@ -2052,13 +2275,15 @@ namespace mfa
             // timing
             double error_spans_time = MPI_Wtime();
 
-            // check all knots spans at a level for error
+            // check all knots spans for error
             bool done = nk.AllErrorSpans(
                     myextents,
                     err_limit,
+                    false,
                     parent_tensor_idxs,
                     inserted_knot_idxs,
-                    inserted_knots);
+                    inserted_knots,
+                    error_stats);
 
             if (done)                                                           // nothing inserted
                 return true;
@@ -2072,7 +2297,7 @@ namespace mfa
                 assert(inserted_knot_idxs[j].size() == n_insertions &&
                         inserted_knots[j].size() == n_insertions);
 
-            vector<bool> inserted(mfa_data.dom_dim);                            // whether the current insertion succeed (in each dim)
+            vector<bool> inserted(mfa_data.dom_dim);                            // whether the current insertion succeeded (in each dim)
 
             // timing
             error_spans_time    = MPI_Wtime() - error_spans_time;
@@ -2080,54 +2305,74 @@ namespace mfa
 
             for (auto i = 0; i < n_insertions; i++)                             // for all knots to be inserted
             {
-                // debug
-//                 fmt::print(stderr, "\nTrying to insert knot idx [ ");
-//                 for (auto j = 0; j < mfa_data.dom_dim; j++)
-//                     fmt::print(stderr, "{} ", inserted_knot_idxs[j][i]);
-//                 fmt::print(stderr, "] with value [ ");
-//                 for (auto j = 0; j < mfa_data.dom_dim; j++)
-//                     fmt::print(stderr, "{} ", inserted_knots[j][i]);
-//                 fmt::print(stderr, "]\n");
+//                 if (debug)
+//                 {
+//                     fmt::print(stderr, "\ni {} Trying to insert knot idx [ ", i);
+//                     for (auto j = 0; j < mfa_data.dom_dim; j++)
+//                         fmt::print(stderr, "{} ", inserted_knot_idxs[j][i]);
+//                     fmt::print(stderr, "] with value [ ");
+//                     for (auto j = 0; j < mfa_data.dom_dim; j++)
+//                         fmt::print(stderr, "{} ", inserted_knots[j][i]);
+//                     fmt::print(stderr, "] and level {}\n", iter + 1);
+// 
+//                     fprintf(stderr, "\nRefine(): Tmesh knots before insertion:\n");
+//                     mfa_data.tmesh.print_knots();
+//                 }
 
-                // insert the new knots into tmesh all_knots
+                // insert the new knot into tmesh all_knots
+                int retval;
                 for (auto j = 0; j < mfa_data.dom_dim; j++)
                 {
                     inserted[j] = false;
-                    if (mfa_data.tmesh.insert_knot(j,
-                                inserted_knot_idxs[j][i],
+                    retval = mfa_data.tmesh.insert_knot(
+                                j,
                                 iter + 1,
-                                inserted_knots[j][i], input.params->param_grid))
-                    {
+                                inserted_knots[j][i],
+                                input.params->param_grid,
+                                inserted_knot_idxs[j][i]);
+
+                    if (retval == 1 || retval == 2)
                         inserted[j] = true;
-                        // increment subsequent insertions
-                        for (auto k = 0; k < n_insertions; k++)
-                        {
-                            if (inserted_knot_idxs[j][k] > inserted_knot_idxs[j][i])
-                                inserted_knot_idxs[j][k]++;
-                        }
-                    }
                 }
 
-                // debug: print knots after insertion
-//                 fprintf(stderr, "\nRefine(): Tmesh knots after insertion:\n");
-//                 mfa_data.tmesh.print_knots();
+                // debug
+                // TODO: comment out once the code is debugged
+                if (!nk.CheckAllSpans())
+                {
+                    fmt::print(stderr, "\nError: Refine(): after inserting knot idx [ ");
+                    for (auto j = 0; j < mfa_data.dom_dim; j++)
+                        fmt::print(stderr, "{} ", inserted_knot_idxs[j][i]);
+                    fmt::print(stderr, "] with value [ ");
+                    for (auto j = 0; j < mfa_data.dom_dim; j++)
+                        fmt::print(stderr, "{} ", inserted_knots[j][i]);
+                    fmt::print(stderr, "] CheckAllSpans() failed. This should not happen.\n");
+
+                    fprintf(stderr, "\nRefine(): Tmesh knots after insertion:\n");
+                    mfa_data.tmesh.print_knots();
+                    abort();
+                }
 
                 if (find(inserted.begin(), inserted.end(), true) == inserted.end())
                 {
-                    // debug
-//                     fmt::print(stderr, "all dimensions of this knot are inserted already; skipping\n");
+//                     if (debug)
+//                         fmt::print(stderr, "all dimensions of this knot are inserted already; skipping\n");
 
                     continue;
                 }
 
-                // debug
-//                 fmt::print(stderr, "\nRefine(): inserting knot idx [ ");
-//                 for (auto j = 0; j < mfa_data.dom_dim; j++)
-//                     fmt::print(stderr, "{} ", inserted_knot_idxs[j][i]);
-//                 fmt::print(stderr, "] with value [ ");
-//                 for (auto j = 0; j < mfa_data.dom_dim; j++)
-//                     fmt::print(stderr, "{} ", inserted_knots[j][i]);
-//                 fmt::print(stderr, "]\n");
+//                 if (debug)
+//                 {
+//                     fmt::print(stderr, "\nRefine(): inserting knot idx [ ");
+//                     for (auto j = 0; j < mfa_data.dom_dim; j++)
+//                         fmt::print(stderr, "{} ", inserted_knot_idxs[j][i]);
+//                     fmt::print(stderr, "] with value [ ");
+//                     for (auto j = 0; j < mfa_data.dom_dim; j++)
+//                         fmt::print(stderr, "{} ", inserted_knots[j][i]);
+//                     fmt::print(stderr, "] and level {}\n", iter + 1);
+// 
+//                     fprintf(stderr, "\nRefine(): Tmesh knots after insertion:\n");
+//                     mfa_data.tmesh.print_knots();
+//                 }
 
                 for (auto j = 0; j < mfa_data.dom_dim; j++)
                 {
@@ -2141,9 +2386,9 @@ namespace mfa
                 c.knot_mins = knot_mins;
                 c.knot_maxs = knot_maxs;
 
-                // debug
-//                 fmt::print(stderr, "Refine() candidate tensor with knot mins [{}] knot_maxs[{}]\n",
-//                         fmt::join(c.knot_mins, ","), fmt::join(c.knot_maxs, ","));
+//                 if (debug)
+//                     fmt::print(stderr, "Refine() candidate tensor with knot mins [{}] knot_maxs[{}]\n",
+//                             fmt::join(c.knot_mins, ","), fmt::join(c.knot_maxs, ","));
 
                 // intersection proximity (assumes same for all dims)
                 int pad = mfa_data.p(0) % 2 == 0 ? mfa_data.p(0) : mfa_data.p(0) - 1;
@@ -2166,18 +2411,19 @@ namespace mfa
                     // candidate is a subset of an already scheduled tensor
                     if (mfa_data.tmesh.subset(c.knot_mins, c.knot_maxs, t.knot_mins, t.knot_maxs))
                     {
-                        // debug
-//                         fmt::print(stderr, "Refine() candidate tensor with knot_mins [{}] knot_maxs [{}] is a subset of tensor with knot_mins[{}] knot_maxs[{}]\n",
-//                                 fmt::join(c.knot_mins, ","), fmt::join(c.knot_maxs, ","), fmt::join(t.knot_mins, ","), fmt::join(t.knot_maxs, ","));
+//                         if (debug)
+//                             fmt::print(stderr, "Refine() candidate tensor with knot_mins [{}] knot_maxs [{}] is a subset of tensor with knot_mins[{}] knot_maxs[{}]\n",
+//                                     fmt::join(c.knot_mins, ","), fmt::join(c.knot_maxs, ","), fmt::join(t.knot_mins, ","), fmt::join(t.knot_maxs, ","));
 
                         add = false;
                     }
+
                     // an already scheduled tensor is a subset of the candidate
                     else if (mfa_data.tmesh.subset(t.knot_mins, t.knot_maxs, c.knot_mins, c.knot_maxs))
                     {
-                        // debug
-//                         fmt::print(stderr, "Refine() candidate tensor with knot_mins [{}] knot_maxs [{}] is a superset of tensor with knot_mins[{}] knot_maxs[{}]\n",
-//                                 fmt::join(c.knot_mins, ","), fmt::join(c.knot_maxs, ","), fmt::join(t.knot_mins, ","), fmt::join(t.knot_maxs, ","));
+//                         if (debug)
+//                             fmt::print(stderr, "Refine() candidate tensor with knot_mins [{}] knot_maxs [{}] is a superset of tensor with knot_mins[{}] knot_maxs[{}]\n",
+//                                     fmt::join(c.knot_mins, ","), fmt::join(c.knot_maxs, ","), fmt::join(t.knot_mins, ","), fmt::join(t.knot_maxs, ","));
 
                         t.knot_mins = c.knot_mins;
                         t.knot_maxs = c.knot_maxs;
@@ -2185,12 +2431,13 @@ namespace mfa
                         changed = true;
                         add = false;
                     }
+
                     // candidate intersects an already scheduled tensor, to within some proximity
                     else if (mfa_data.tmesh.intersect(c, t, pad))
                     {
-                        // debug
-//                         fmt::print(stderr, "Refine() candidate tensor with knot_mins [{}] knot_maxs [{}] intersects tensor with knot_mins[{}] knot_maxs[{}]\n",
-//                                 fmt::join(c.knot_mins, ","), fmt::join(c.knot_maxs, ","), fmt::join(t.knot_mins, ","), fmt::join(t.knot_maxs, ","));
+//                         if (debug)
+//                             fmt::print(stderr, "Refine() candidate tensor with knot_mins [{}] knot_maxs [{}] intersects tensor with knot_mins[{}] knot_maxs[{}]\n",
+//                                     fmt::join(c.knot_mins, ","), fmt::join(c.knot_maxs, ","), fmt::join(t.knot_mins, ","), fmt::join(t.knot_maxs, ","));
 
                         vector<KnotIdx> merge_mins(mfa_data.dom_dim);
                         vector<KnotIdx> merge_maxs(mfa_data.dom_dim);
@@ -2217,9 +2464,9 @@ namespace mfa
                                 t.knot_mins[j] = tp.knot_mins[j];
                         }
 
-                        // debug
-//                         fmt::print(stderr, "Refine() modifying previously scheduled tensor with new knot_mins [{}] knot_maxs [{}]\n",
-//                                 fmt::join(t.knot_mins, ","), fmt::join(t.knot_maxs, ","));
+//                         if (debug)
+//                             fmt::print(stderr, "Refine() modifying previously scheduled tensor with new knot_mins [{}] knot_maxs [{}]\n",
+//                                     fmt::join(t.knot_mins, ","), fmt::join(t.knot_maxs, ","));
                     }
                 }       // for all tensors scheduled to be added so far
 
@@ -2239,8 +2486,8 @@ namespace mfa
                             c.knot_mins[j] = tp.knot_mins[j];
                     }
 
-                    // debug
-//                     fmt::print(stderr, "Refine() scheduling tensor to be added with knot_mins [{}] knot_maxs [{}] to be added\n",
+//                     if (debug)
+//                         fmt::print(stderr, "Refine() scheduling tensor to be added with knot_mins [{}] knot_maxs [{}] to be added\n",
 //                                 fmt::join(c.knot_mins, ","), fmt::join(c.knot_maxs, ","));
 
                     new_tensors.push_back(c);
@@ -2256,13 +2503,15 @@ namespace mfa
 
             for (auto& t: new_tensors)
             {
-                // debug
-//                 fmt::print(stderr, "\nRefine() appending tensor with knot_mins [{}] knot_maxs [{}]\n",
-//                         fmt::join(t.knot_mins, ","), fmt::join(t.knot_maxs, ","));
+//                 if (debug)
+//                     fmt::print(stderr, "\nRefine() appending tensor with knot_mins [{}] knot_maxs [{}]\n",
+//                             fmt::join(t.knot_mins, ","), fmt::join(t.knot_maxs, ","));
 
-                // debug
-//                 fmt::print("\nT-mesh before append\n\n");
-//                 mfa_data.tmesh.print();
+//                 if (debug)
+//                 {
+//                     fmt::print("\nT-mesh before append\n\n");
+//                     mfa_data.tmesh.print();
+//                 }
 
                 // timing
                 double t0 = MPI_Wtime();
@@ -2273,15 +2522,19 @@ namespace mfa
                 append_time += (MPI_Wtime() - t0);
                 t0 = MPI_Wtime();
 
-                // debug
-//                 fmt::print("\nT-mesh after append and before local solve\n\n");
-//                 mfa_data.tmesh.print();
-//
+//                 if (debug)
+//                 {
+//                     fmt::print("\nT-mesh after append and before local solve\n\n");
+//                     mfa_data.tmesh.print();
+//                 }
+
                 // debug: check all spans before solving
+                // TODO: comment out once the code is debugged
                 if (!nk.CheckAllSpans())
+                {
                     fmt::print(stderr, "Refine(): Error: failed checking all spans for input points\n");
-                else
-                    fmt::print(stderr, "Refine(): All spans checked\n");
+                    abort();
+                }
 
                 // solve for new control points
                 if (local)
@@ -2907,10 +3160,12 @@ namespace mfa
                     // starting step size over curves
                     size_t s0 = ncurves / 2 > 0 ? ncurves / 2 : 1;
 
-                    // debug, only one step size s=1
-                    //         s0 = 1;
+#ifdef MFA_CHECK_ALL_CURVES
+                    s0              = 1;
+                    max_num_curves  = ncurves;
+#endif
 
-                    for (size_t s = s0; s >= 1 && ncurves / s < max_num_curves; s /= 2)     // for all step sizes over curves
+                    for (size_t s = s0; s >= 1 && ncurves / s <= max_num_curves; s /= 2)     // for all step sizes over curves
                     {
                         bool new_max_nerr = false;                          // this step size changed the max_nerr
 
@@ -2920,6 +3175,9 @@ namespace mfa
                             // n_step-sizes below)
                             if (j >= n_step_sizes && (j - n_step_sizes) % s == 0)           // this is one of the s-th curves; compute it
                             {
+                                // debug
+//                                 fmt::print(stderr, "OrigNewKnots_curve(): dim {} checking curve {} out of {} curves\n", k, j, ncurves);
+
                                 // compute R from input domain points
                                 RHS(k, N, R, weights, input.g.co[k][j]);
 
@@ -2941,6 +3199,9 @@ namespace mfa
 
                                 // compute the error on the curve (number of input points with error > err_limit)
                                 size_t nerr = ErrorCurve(k, t, input.g.co[k][j], P, weights, extents, err_spans, err_limit);
+
+                                // debug
+//                                 fmt::print(stderr, "OrigNewKnots_curve(): nerr {}\n", nerr);
 
                                 if (nerr > max_nerr)
                                 {
@@ -2980,8 +3241,12 @@ namespace mfa
                     }
 
                     // print progress
-                    //         fprintf(stderr, "\rdimension %ld of %d encoded\n", k + 1, mfa_data.dom_dim);
+//                     fprintf(stderr, "\rdimension %ld of %d encoded\n", k + 1, mfa_data.dom_dim);
                 }                                                           // domain dimensions
+
+                // debug
+                for (auto i = 0; i < mfa_data.dom_dim; i++)
+                    fmt::print(stderr, "new_knots in dim {}: [{}]\n", i, fmt::join(new_knots[i], ","));
 
                 // insert the new knots
                 mfa::NewKnots<T> nk(mfa_data, input);
@@ -2998,16 +3263,6 @@ namespace mfa
                 t.ctrl_pts.resize(tot_nctrl_pts, t.ctrl_pts.cols());
                 t.weights =  VectorX<T>::Ones(tot_nctrl_pts);
             }                                                               // tensor products
-
-            // debug
-//             cerr << "new_knots:\n"  << endl;
-//             for (auto i = 0; i < new_knots.size(); i++)
-//             {
-//                 for (auto j = 0; j < new_knots[i].size(); j++)
-//                     cerr << new_knots[i][j] << " ";
-//                  cerr << endl;
-//             }
-//             cerr << endl;
 
             return(tot_nnew_knots ? 0 : 1);
         }
