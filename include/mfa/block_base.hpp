@@ -472,6 +472,10 @@ struct BlockBase
         }
         errs = new mfa::PointSet<T>(input->params, input->pt_dim);
 
+        // saved_basis only applies when not using tmesh
+#ifdef MFA_TMESH
+        saved_basis = false;
+#endif
         // Decode entire block and then compare to input
         if (decode_block_)
         {
@@ -506,7 +510,7 @@ struct BlockBase
             max_errs_reduce[2 * i] = max_errs[i];
             max_errs_reduce[2 * i + 1] = cp.gid(); // use converter from type T to integer
         }
-     } 
+     }
 
     void print_block(const diy::Master::ProxyWithLink& cp,
             bool                              error)       // error was computed
