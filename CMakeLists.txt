@@ -98,7 +98,7 @@ set                         (libraries
 enable_testing              ()
 include                     (CTest)
 add_subdirectory            (examples)
-# add_subdirectory            (tests)
+add_subdirectory            (tests)
 if                          (python)
     add_subdirectory        (include/pybind11)
     add_subdirectory        (python)

@@ -196,7 +196,7 @@ namespace mfa
                     VectorX<T>  cpt(last + 1);              // evaluated point
                     VectorX<T>  param(mfa_data.dom_dim);    // vector of param values
                     VectorXi    ijk(mfa_data.dom_dim);      // vector of param indices (structured grid only)
-                    pt_it.params(param);  
+                    pt_it.params(param);
                     // compute approximated point for this parameter vector
 
 #ifndef MFA_TMESH   // original version for one tensor product

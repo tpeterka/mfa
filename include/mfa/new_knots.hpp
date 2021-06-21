@@ -55,7 +55,7 @@ namespace mfa
                 vector<vector<KnotIdx>>&    inserted_knot_idxs)     // (output) indices in each dim. of inserted knots in full knot vector after insertion
         {
             // debug
-            fmt::print(stderr, "Inserting knots with OrigInsertKnots()\n");
+//             fmt::print(stderr, "Inserting knots with OrigInsertKnots()\n");
 
             vector<vector<T>> temp_knots(dom_dim);
             vector<vector<int>> temp_levels(dom_dim);
@@ -119,7 +119,7 @@ namespace mfa
                 for (auto i = 0; i < inserted_knot_idxs[k].size(); i++)
                 {
                     auto idx = inserted_knot_idxs[k][i];
-                    mfa_data.tmesh.insert_knot(k, idx, temp_levels[k][idx], temp_knots[k][idx], input.params->param_grid);
+                    mfa_data.tmesh.insert_knot_at_pos(k, idx, temp_levels[k][idx], temp_knots[k][idx], input.params->param_grid);
                 }
             }   // for all domain dimensions
         }

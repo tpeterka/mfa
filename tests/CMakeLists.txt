@@ -35,7 +35,7 @@ add_test                    (NAME fixed-sinc-2d-test-grid
 
 add_test                    (NAME fixed-sinc-2d-unstructured-test
                              COMMAND fixed-test -i sinc -d 3 -m 2 -p 1 -q 5 -v 20 -w 0 -x 0
-                            )                           
+                            )
 
 add_test                    (NAME fixed-sinc-2d-random-test
                              COMMAND fixed-test -i sinc -d 3 -m 2 -p 1 -q 5 -v 20 -w 0 -x 0 -y 4444

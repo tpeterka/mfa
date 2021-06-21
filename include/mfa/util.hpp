@@ -122,7 +122,7 @@ namespace mfa
         VolIterator(const VolIterator& other) = default;
 
         // move constructor
-        VolIterator(VolIterator&& other) : 
+        VolIterator(VolIterator&& other) :
             VolIterator()
         {
             swap(*this, other);
@@ -234,7 +234,7 @@ namespace mfa
         }
 
         // return current iteration count within full volume
-        size_t cur_iter_full() const 
+        size_t cur_iter_full() const
         {
             return ijk_idx(idx_dim_);
         }
@@ -354,7 +354,6 @@ namespace mfa
         }
     };  // GridInfo
 
-    
 }   // namespace mfa
 #endif
 

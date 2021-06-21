@@ -1154,7 +1154,7 @@ namespace mfa
             vector<vector<T>> new_knots;                               // new knots in each dim.
 
             // debug
-            fmt::print(stderr, "Using OrigAdaptiveEncode() w/ 1-d curve knot splitting\n\n");
+            fmt::print(stderr, "Using OrigAdaptiveEncode() w/ 1-d curve knot splitting\n");
 #ifdef MFA_CHECK_ALL_CURVES
             fmt::print(stderr, "Checking all curves (slower but more accurate)\n");
 #else
@@ -1313,7 +1313,7 @@ namespace mfa
                     for (auto j = 0; j < mfa_data.dom_dim; j++)
                     {
                         inserted[j] = false;
-                        if (mfa_data.tmesh.insert_knot(j,
+                        if (mfa_data.tmesh.insert_knot_at_pos(j,
                                     inserted_knot_idxs[j][i],
                                     0,                                              // all knots at level 0 in this version
                                     inserted_knots[j][i], input.params->param_grid))
@@ -2203,8 +2203,11 @@ namespace mfa
                 if (max_err > err_limit &&
                         // don't allow more control points than input points
                         mfa_data.tmesh.tensor_prods.size() == 1 &&
-                        tensor.nctrl_pts(k) + err_spans.size() >= input.ndom_pts(k))
+                        tensor.nctrl_pts(k) + err_spans.size() <= input.ndom_pts(k))
                 {
+                    // debug
+//                     fmt::print(stderr, "ErrorCurve(): 1: dim {} i {} max_err {}\n", k, i, max_err);
+
                     // don't duplicate spans
                     set<int>::iterator it = err_spans.find(span);
                     if (!err_spans.size() || it == err_spans.end())
@@ -3197,6 +3200,9 @@ namespace mfa
                                 // compute the error on the curve (number of input points with error > err_limit)
                                 size_t nerr = ErrorCurve(k, t, input.g.co[k][j], P, weights, extents, err_spans, err_limit);
 
+                                // debug
+//                                 fmt::print(stderr, "OrigNewKnots_curve(): nerr {}\n", nerr);
+
                                 if (nerr > max_nerr)
                                 {
                                     max_nerr     = nerr;
@@ -3235,12 +3241,12 @@ namespace mfa
                     }
 
                     // print progress
-                    //         fprintf(stderr, "\rdimension %ld of %d encoded\n", k + 1, mfa_data.dom_dim);
+//                     fprintf(stderr, "\rdimension %ld of %d encoded\n", k + 1, mfa_data.dom_dim);
                 }                                                           // domain dimensions
 
                 // debug
-//                 for (auto i = 0; i < mfa_data.dom_dim; i++)
-//                     fmt::print(stderr, "new_knots in dim {}: [{}]\n", i, fmt::join(new_knots[i], ","));
+                for (auto i = 0; i < mfa_data.dom_dim; i++)
+                    fmt::print(stderr, "new_knots in dim {}: [{}]\n", i, fmt::join(new_knots[i], ","));
 
                 // insert the new knots
                 mfa::NewKnots<T> nk(mfa_data, input);
@@ -3257,16 +3263,6 @@ namespace mfa
                 t.ctrl_pts.resize(tot_nctrl_pts, t.ctrl_pts.cols());
                 t.weights =  VectorX<T>::Ones(tot_nctrl_pts);
             }                                                               // tensor products
-
-            // debug
-//             cerr << "new_knots:\n"  << endl;
-//             for (auto i = 0; i < new_knots.size(); i++)
-//             {
-//                 for (auto j = 0; j < new_knots[i].size(); j++)
-//                     cerr << new_knots[i][j] << " ";
-//                  cerr << endl;
-//             }
-//             cerr << endl;
 
             return(tot_nnew_knots ? 0 : 1);
         }
