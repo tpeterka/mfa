@@ -48,7 +48,6 @@ namespace mfa
         ~NewKnots() {}
 
         // inserts a set of knots (in all dimensions) into the original knot set
-        // also increases the numbers of control points (in all dimensions) that will result
         void OrigInsertKnots(
                 vector<vector<T>>&          new_knots,              // new knots
                 vector<vector<int>>&        new_levels,             // new knot levels
@@ -112,8 +111,16 @@ namespace mfa
                 {
                     fmt::print(stderr, "OrigInsertKnots(): Unable to insert {} knots in dimension {} because {} control points would outnumber {} input points.\n",
                             inserted_knot_idxs[k].size(), k, mfa_data.tmesh.tensor_prods[0].nctrl_pts(k) + inserted_knot_idxs[k].size(), input.ndom_pts(k));
-                    inserted_knot_idxs[k].resize(input.ndom_pts(k) - mfa_data.tmesh.tensor_prods[0].nctrl_pts(k));
-                    fmt::print(stderr, "Inserting {} knots instead.\n", inserted_knot_idxs[k].size());
+                    if (mfa_data.tmesh.tensor_prods[0].nctrl_pts(k) > input.ndom_pts(k))
+                    {
+                        fmt::print(stderr, "Error: OrigInsertKnots(): control points already outnumber input points in dimension {}. This should not happen.\n", k);
+                        abort();
+                    }
+                    size_t nknots = input.ndom_pts(k) - mfa_data.tmesh.tensor_prods[0].nctrl_pts(k);
+                    inserted_knot_idxs[k].resize(nknots);
+                    new_knots[k].resize(nknots);
+                    new_levels[k].resize(nknots);
+                    fmt::print(stderr, "Inserting {} knots instead.\n", nknots);
                 }
 
                 for (auto i = 0; i < inserted_knot_idxs[k].size(); i++)
@@ -125,7 +132,6 @@ namespace mfa
         }
 
         // inserts a set of knots (in all dimensions) into all_knots of the tmesh
-        // also increases the numbers of control points (in all dimensions) that will result
         // this version is for global solve, also called inside of local solve
         // returns idx of parent tensor containing new knot to be inserted (assuming single knot insertion)
         int InsertKnots(
@@ -188,8 +194,16 @@ namespace mfa
                 {
                     fmt::print(stderr, "InsertKnots(): Unable to insert {} knots in dimension {} because {} control points would outnumber {} input points.\n",
                             inserted_knot_idxs[k].size(), k, mfa_data.tmesh.tensor_prods[0].nctrl_pts(k) + inserted_knot_idxs[k].size(), input.dom_pts(k));
-                    inserted_knot_idxs[k].resize(input.ndom_pts(k) - mfa_data.tmesh.tensor_prods[0].nctrl_pts(k));
-                    fmt::print(stderr, "Inserting {} knots instead.\n", inserted_knot_idxs[k].size());
+                    if (mfa_data.tmesh.tensor_prods[0].nctrl_pts(k) > input.ndom_pts(k))
+                    {
+                        fmt::print(stderr, "Error: InsertKnots(): control points already outnumber input points in dimension {}. This should not happen.\n", k);
+                        abort();
+                    }
+                    size_t nknots = input.ndom_pts(k) - mfa_data.tmesh.tensor_prods[0].nctrl_pts(k);
+                    inserted_knot_idxs[k].resize(nknots);
+                    new_knots[k].resize(nknots);
+                    new_levels[k].resize(nknots);
+                    fmt::print(stderr, "Inserting {} knots instead.\n", nknots);
                 }
 
                 // insert the knots into the tmesh
