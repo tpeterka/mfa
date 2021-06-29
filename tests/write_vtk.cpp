@@ -25,6 +25,11 @@
 template<typename T>
 void write_pointset_vtk(mfa::PointSet<T>* ps, char* filename)
 {
+    if (ps == nullptr)
+    {
+        cout << "Did not write " << filename << " due to uninitialized pointset" << endl;
+        return;
+    }
     if (ps->npts == 0)
     {
         cout << "Did not write " << filename << " due to empty pointset" << endl;
@@ -120,8 +125,6 @@ void write_pointset_vtk(mfa::PointSet<T>* ps, char* filename)
 // package rendering data
 void PrepRenderingData(
         int&                        nvars,
-        vector<int>&                geom_nctrl_pts,
-        vector< vector <int> >&     vars_nctrl_pts,
         vector<vec3d>&              geom_ctrl_pts,
         vector< vector <vec3d> >&   vars_ctrl_pts,
         float**&                    vars_ctrl_data,
@@ -133,19 +136,8 @@ void PrepRenderingData(
     // number of geometry dimensions and science variables
     int ndom_dims   = block->geometry.mfa_data->tmesh.tensor_prods[0].ctrl_pts.cols();          // number of geometry dims
     nvars           = block->vars.size();                       // number of science variables
-    pt_dim          = block->input->domain.cols();                     // dimensionality of point
+    pt_dim          = block->input->pt_dim;                     // dimensionality of point
 
-    // number of geometry control points
-    // TODO: hard-coded for one tensor product
-    for (size_t j = 0; j < (size_t)(block->geometry.mfa_data->tmesh.tensor_prods[0].nctrl_pts.size()); j++)
-        geom_nctrl_pts.push_back(block->geometry.mfa_data->tmesh.tensor_prods[0].nctrl_pts(j));
-
-    // number of science variable control points
-    // TODO: hard-coded for one tensor product
-    vars_nctrl_pts.resize(nvars);
-    for (size_t i = 0; i < nvars; i++)
-        for (size_t j = 0; j < (size_t)(block->vars[i].mfa_data->tmesh.tensor_prods[0].nctrl_pts.size()); j++)
-            vars_nctrl_pts[i].push_back(block->vars[i].mfa_data->tmesh.tensor_prods[0].nctrl_pts(j));
 
     // geometry control points
 
@@ -267,35 +259,18 @@ void write_vtk_files(
         int&           pt_dim)                      // (output) point dimensionality
 {
     int                         nvars;              // number of science variables (excluding geometry)
-    vector <int>                geom_nctrl_pts;     // number of control pts in each dim of geometry
-    vector < vector <int> >     vars_nctrl_pts;     // number of control pts in each dim. of each science variable
     vector<vec3d>               geom_ctrl_pts;      // control points (<= 3d) in geometry
     vector < vector <vec3d> >   vars_ctrl_pts;      // control points (<= 3d) in science variables
     float**                     vars_ctrl_data;     // control point data values (4d)
 
     // package rendering data
     PrepRenderingData(nvars,
-                      geom_nctrl_pts,
-                      vars_nctrl_pts,
                       geom_ctrl_pts,
                       vars_ctrl_pts,
                       vars_ctrl_data,
                       b,
                       pt_dim);
 
-    // pad dimensions up to 3
-    dom_dim = geom_nctrl_pts.size();
-    for (auto i = 0; i < 3 - dom_dim; i++)
-    {
-        geom_nctrl_pts.push_back(1);
-    }
-
-    for (size_t j = 0; j < nvars; j++)
-    {
-        dom_dim = vars_nctrl_pts[j].size();
-        for (auto i = 0; i < 3 - dom_dim; i++)
-            vars_nctrl_pts[j].push_back(1);
-    }
 
     // science variable settings
     int vardim          = 1;
@@ -315,14 +290,14 @@ void write_vtk_files(
     // write geometry control points
     char filename[256];
     sprintf(filename, "geom_control_points_gid_%d.vtk", cp.gid());
-    write_curvilinear_mesh(
+    if (geom_ctrl_pts.size())
+        write_point_mesh(
             /* const char *filename */                      filename,
             /* int useBinary */                             0,
-            /* int *dims */                                 &geom_nctrl_pts[0],
+            /* int npts */                                  geom_ctrl_pts.size(),
             /* float *pts */                                &(geom_ctrl_pts[0].x),
             /* int nvars */                                 0,
             /* int *vardim */                               NULL,
-            /* int *centering */                            NULL,
             /* const char * const *varnames */              NULL,
             /* float **vars */                              NULL);
 
@@ -330,14 +305,14 @@ void write_vtk_files(
     for (auto i = 0; i < nvars; i++)
     {
         sprintf(filename, "var%d_control_points_gid_%d.vtk", i, cp.gid());
-        write_curvilinear_mesh(
+        if (vars_ctrl_pts[i].size())
+            write_point_mesh(
             /* const char *filename */                      filename,
             /* int useBinary */                             0,
-            /* int *dims */                                 &vars_nctrl_pts[i][0],
+            /* int npts */                                  vars_ctrl_pts[i].size(),
             /* float *pts */                                &(vars_ctrl_pts[i][0].x),
             /* int nvars */                                 nvars,
             /* int *vardim */                               vardims,
-            /* int *centering */                            centerings,
             /* const char * const *varnames */              varnames,
             /* float **vars */                              vars_ctrl_data);
     }
@@ -348,9 +323,9 @@ void write_vtk_files(
     sprintf(input_filename, "initial_points_gid_%d.vtk", cp.gid());
     sprintf(approx_filename, "approx_points_gid_%d.vtk", cp.gid());
     sprintf(errs_filename, "error_gid_%d.vtk", cp.gid());
-    write_pointset_vtk(b->input, input_filename);
-    write_pointset_vtk(b->approx, approx_filename);
-    write_pointset_vtk(b->errs, errs_filename);
+    write_pointset_vtk(b->input, input_filename); cerr << "A" << endl;
+    write_pointset_vtk(b->approx, approx_filename); cerr << "B" << endl;
+    write_pointset_vtk(b->errs, errs_filename); cerr << "C" << endl;
 
     delete[] vardims;
     for (int i = 0; i < nvars; i++)
@@ -492,8 +467,6 @@ int main(int argc, char ** argv)
     vector<int>                 nraw_pts;           // number of input points in each dim.
     vector<vec3d>               raw_pts;            // input raw data points (<= 3d)
     float**                     raw_data;           // input raw data values (4d)
-    vector <int>                geom_nctrl_pts;     // number of control pts in each dim of geometry
-    vector < vector <int> >     vars_nctrl_pts;     // number of control pts in each dim. of each science variable
     vector<vec3d>               geom_ctrl_pts;      // control points (<= 3d) in geometry
     vector < vector <vec3d> >   vars_ctrl_pts;      // control points (<= 3d) in science variables
     float**                     vars_ctrl_data;     // control point data values (4d)
@@ -525,10 +498,17 @@ int main(int argc, char ** argv)
     cerr << "infile = " << infile << " test_points = "    << ntest <<        endl;
     if (ntest)
         cerr << "input = "          << input     << endl;
-#ifdef MFA_NO_TBB
-    cerr << "TBB: off" << endl;
-#else
-    cerr << "TBB: on" << endl;
+#ifdef MFA_TBB
+    cerr << "threading: TBB" << endl;
+#endif
+#ifdef MFA_KOKKOS
+    cerr << "threading: Kokkos" << endl;
+#endif
+#ifdef MFA_SYCL
+    cerr << "threading: SYCL" << endl;
+#endif
+#ifdef MFA_SERIAL
+    cerr << "threading: serial" << endl;
 #endif
     fprintf(stderr, "-------------------------------------\n\n");
 
