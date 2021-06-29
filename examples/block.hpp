@@ -127,7 +127,7 @@ struct Block : public BlockBase<T>
     // evaluate sine function
     T sine(VectorX<T>&  domain_pt,
            DomainArgs&  args,
-           int          k)                  // current science variable
+           int          k) const             // current science variable
     {
         DomainArgs* a = &args;
         T retval = 1.0;
@@ -138,10 +138,38 @@ struct Block : public BlockBase<T>
         return retval;
     }
 
+    T cosine(VectorX<T>& domain_pt,
+             DomainArgs& args,
+             int         k) const
+    {
+        DomainArgs* a = &args;
+        T retval = 1.0;
+        for (auto i = 0; i < this->dom_dim; i++)
+            retval *= cos(domain_pt(i) * a->f[k]);
+        retval *= a->s[k];
+
+        return retval;        
+    }
+
+    // evaluate the "negative cosine plus one" (f(x) = -cos(x)+1) function
+    // used primarily to test integration of sine
+    T ncosp1(VectorX<T>& domain_pt,
+            DomainArgs& args,
+            int         k) const
+    {
+        DomainArgs* a = &args;
+        T retval = 1.0;
+        for (auto i = 0; i < this->dom_dim; i++)
+            retval *= 1 - cos(domain_pt(i) * a->f[k]);
+        retval *= a->s[k];
+
+        return retval;        
+    }
+
     // evaluate sinc function
     T sinc(VectorX<T>&  domain_pt,
            DomainArgs&  args,
-           int          k)                  // current science variable
+           int          k) const            // current science variable
     {
         DomainArgs* a = &args;
         T retval = 1.0;
@@ -157,7 +185,7 @@ struct Block : public BlockBase<T>
 
     // evaluate 2d poly-sinc function version 1
     T polysinc1(VectorX<T>& domain_pt,
-                DomainArgs& args)
+                DomainArgs& args) const
     {
         // only for 2d
         if (this->dom_dim != 2)
@@ -176,7 +204,7 @@ struct Block : public BlockBase<T>
 
     // evaluate 2d poly-sinc function version 2
     T polysinc2(VectorX<T>& domain_pt,
-                DomainArgs& args)
+                DomainArgs& args) const
     {
         // only for 2d
         if (this->dom_dim != 2)
@@ -197,7 +225,7 @@ struct Block : public BlockBase<T>
     // only for a 3d domain
     // using args f[0] and s[0] for f_M and alpha, respectively, in the paper
     T ml(VectorX<T>&  domain_pt,
-           DomainArgs&  args)
+           DomainArgs&  args) const
     {
         DomainArgs* a   = &args;
         T& fm           = a->f[0];
@@ -216,7 +244,7 @@ struct Block : public BlockBase<T>
     }
 
     // evaluate f16 function
-    T f16(VectorX<T>&   domain_pt)
+    T f16(VectorX<T>&   domain_pt) const
     {
         T retval =
             (pow(domain_pt(0), 4)                        +
@@ -231,7 +259,7 @@ struct Block : public BlockBase<T>
     }
 
     // evaluate f17 function
-    T f17(VectorX<T>&   domain_pt)
+    T f17(VectorX<T>&   domain_pt) const
     {
         T E         = domain_pt(0);
         T G         = domain_pt(1);
@@ -244,7 +272,7 @@ struct Block : public BlockBase<T>
     }
 
     // evaluate f18 function
-    T f18(VectorX<T>&   domain_pt)
+    T f18(VectorX<T>&   domain_pt) const
     {
         T x1        = domain_pt(0);
         T x2        = domain_pt(1);
