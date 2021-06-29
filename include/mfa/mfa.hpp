@@ -181,15 +181,18 @@ namespace mfa
             decoder.DecodePointSet(output, min_dim, max_dim, derivs);
         }
 
+        // Integrates with respect to parameter space
+        // Multiply by extent of each domain dimension to obtain integral wrt physical space
         void IntegratePointSet(
                 const MFA_Data<T>&  mfa_data,
                 PointSet<T>&        output,
+                int                 verbose,
                 int                 min_dim,
                 int                 max_dim)
         {
             const TensorProduct<T>&t = mfa_data.tmesh.tensor_prods[0];
 
-            mfa::Decoder<T> decoder(mfa_data, 0, false);
+            mfa::Decoder<T> decoder(mfa_data, verbose, false);
             decoder.IntegratePointSet(output, t, min_dim, max_dim);
         }
 

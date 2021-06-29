@@ -334,20 +334,12 @@ namespace mfa
                 int         cur_dim,
                 T           u,
                 int         basis_idx) const  // index of basis function to integrate
-                // T           a,
-                // T           b,
-                // MatrixX<T>& N) const
         {
             vector<T> loc_knots(degree + 2);
             VectorX<T> bfs = VectorX<T>::Zero(tmesh.tensor_prods[0].nctrl_pts(cur_dim) + degree - p(cur_dim));
-            // N.row(b_idx).setZero();
 
             int span = FindSpan(cur_dim, u);
             int first_idx = span - degree; // idx of the first basis function which is nonzero at u
-
-// cerr << "span: " << span << endl;
-// cerr << "basis_idx: " << basis_idx << endl;
-// cerr << "first_idx: " << first_idx << endl;
 
             // for each basis function which has support in span
             // N will contain all of the degree-basis functions evaluated at u
@@ -372,9 +364,6 @@ namespace mfa
                         loc_knots[i] = tmesh.all_knots[cur_dim][idx + i];
                 }
 
-        // cerr << "loc_knots: ";
-        // for (int ii = 0; ii < loc_knots.size(); ii++) cerr << loc_knots[ii] << " ";
-        // cerr << endl;
 
                 if (idx >= 0)
                 {

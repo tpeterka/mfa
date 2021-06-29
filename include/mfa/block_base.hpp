@@ -398,7 +398,8 @@ struct BlockBase
     }
 
     void integrate_block(
-            const diy::Master::ProxyWithLink& cp)
+            const diy::Master::ProxyWithLink&   cp,
+            int                                 verbose)
     {
         approx = new mfa::PointSet<T>(input->params, input->pt_dim);
 
@@ -406,8 +407,14 @@ struct BlockBase
 
         for (auto k = 0; k < vars.size(); k++)
         {
-            mfa->IntegratePointSet(*(vars[k].mfa_data), *approx, dom_dim + k, dom_dim + k);
+            mfa->IntegratePointSet(*(vars[k].mfa_data), *approx, verbose, dom_dim + k, dom_dim + k);
         }
+        
+        // scale the integral 
+        // MFA computes integral with respect to parameter space
+        // This scaling factor returns the integral wrt physical space (assuming domain parameterization)
+        T scale = (core_maxs - core_mins).prod();
+        approx->domain.rightCols(vars.size()) *= scale;
     }
 
     // differentiate entire block
