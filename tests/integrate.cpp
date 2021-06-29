@@ -1,0 +1,242 @@
+//--------------------------------------------------------------
+// example of encoding / decoding higher dimensional data w/ fixed number of control points and a
+// single block in a split model w/ one model containing geometry and other model science variables
+//
+// Tom Peterka
+// Argonne National Laboratory
+// tpeterka@mcs.anl.gov
+//--------------------------------------------------------------
+
+#include <mfa/mfa.hpp>
+
+#include <vector>
+#include <iostream>
+#include <cmath>
+#include <string>
+
+#include <diy/master.hpp>
+#include <diy/reduce-operations.hpp>
+#include <diy/decomposition.hpp>
+#include <diy/assigner.hpp>
+#include <diy/io/block.hpp>
+
+#include "opts.h"
+
+#include "block.hpp"
+
+using namespace std;
+
+int main(int argc, char** argv)
+{
+    // initialize MPI
+    diy::mpi::environment  env(argc, argv);     // equivalent of MPI_Init(argc, argv)/MPI_Finalize()
+    diy::mpi::communicator world;               // equivalent of MPI_COMM_WORLD
+
+    int nblocks     = 1;                        // number of local blocks
+    int tot_blocks  = nblocks * world.size();   // number of global blocks
+    int mem_blocks  = -1;                       // everything in core for now
+    int num_threads = 1;                        // needed in order to do timing
+
+    // default command line arguments
+    int    pt_dim       = 3;                    // dimension of input points
+    int    dom_dim      = 2;                    // dimension of domain (<= pt_dim)
+    int    geom_degree  = 1;                    // degree for geometry (same for all dims)
+    int    vars_degree  = 4;                    // degree for science variables (same for all dims)
+    int    ndomp        = 100;                  // input number of domain points (same for all dims)
+    int    geom_nctrl   = -1;                   // input number of control points for geometry (same for all dims)
+    int    vars_nctrl   = 11;                   // input number of control points for all science variables (same for all dims)
+    string input        = "sine";               // input dataset
+    int    weighted     = 1;                    // solve for and use weights (bool 0/1)
+    real_t rot          = 0.0;                  // rotation angle in degrees
+    real_t twist        = 0.0;                  // twist (waviness) of domain (0.0-1.0)
+    int    error        = 1;                    // decode all input points and check error (bool 0/1)
+    string infile;                              // input file name
+    int    structured   = 1;                    // input data format (bool 0/1)
+    int    rand_seed    = -1;                   // seed to use for random data generation (-1 == no randomization)
+    int    resolutionGrid = 0;
+    bool   help         = false;                // show help
+  
+
+    // get command line arguments
+    opts::Options ops;
+    ops >> opts::Option('d', "pt_dim",      pt_dim,     " dimension of points");
+    ops >> opts::Option('m', "dom_dim",     dom_dim,    " dimension of domain");
+    ops >> opts::Option('p', "geom_degree", geom_degree," degree in each dimension of geometry");
+    ops >> opts::Option('q', "vars_degree", vars_degree," degree in each dimension of science variables");
+    ops >> opts::Option('n', "ndomp",       ndomp,      " number of input points in each dimension of domain");
+    ops >> opts::Option('g', "geom_nctrl",  geom_nctrl, " number of control points in each dimension of geometry");
+    ops >> opts::Option('v', "vars_nctrl",  vars_nctrl, " number of control points in each dimension of all science variables");
+    ops >> opts::Option('i', "input",       input,      " input dataset");
+    ops >> opts::Option('w', "weights",     weighted,   " solve for and use weights");
+    ops >> opts::Option('r', "rotate",      rot,        " rotation angle of domain in degrees");
+    ops >> opts::Option('t', "twist",       twist,      " twist (waviness) of domain (0.0-1.0)");
+    ops >> opts::Option('c', "error",       error,      " decode entire error field (default=true)");
+    ops >> opts::Option('f', "infile",      infile,     " input file name");
+    ops >> opts::Option('h', "help",        help,       " show help");
+    ops >> opts::Option('u', "resolution",  resolutionGrid,    " resolution for grid test ");
+    ops >> opts::Option('x', "structured",  structured, " input data format (default=structured=true)");
+    ops >> opts::Option('y', "rand_seed",   rand_seed,  " seed for random point generation (-1 = no randomization, default)");
+
+    if (!ops.parse(argc, argv) || help)
+    {
+        if (world.rank() == 0)
+            std::cout << ops;
+        return 1;
+    }
+
+    // minimal number of geometry control points if not specified
+    if (geom_nctrl == -1)
+        geom_nctrl = geom_degree + 1;
+
+    // echo args
+    fprintf(stderr, "\n--------- Input arguments ----------\n");
+    cerr <<
+        "pt_dim = "         << pt_dim       << " dom_dim = "        << dom_dim      <<
+        "\ngeom_degree = "  << geom_degree  << " vars_degree = "    << vars_degree  <<
+        "\ninput pts = "    << ndomp        << " geom_ctrl pts = "  << geom_nctrl   <<
+        "\nvars_ctrl_pts = "<< vars_nctrl   << " input = "          << input        << 
+        "\nstructured = "   << structured   << endl;
+
+#ifdef CURVE_PARAMS
+    cerr << "ERROR: Cannot an MFA with curve parameters" << endl;
+    exit(1);
+#else
+    cerr << "parameterization method = domain" << endl;
+#endif
+#ifdef MFA_TBB
+    cerr << "threading: TBB" << endl;
+#endif
+#ifdef MFA_SERIAL
+    cerr << "threading: serial" << endl;
+#endif
+#ifdef MFA_NO_WEIGHTS
+    cerr << "weighted = 0" << endl;
+#else
+    cerr << "weighted = " << weighted << endl;
+#endif
+    fprintf(stderr, "-------------------------------------\n\n");
+
+    // initialize DIY
+    diy::FileStorage          storage("./DIY.XXXXXX"); // used for blocks to be moved out of core
+    diy::Master               master(world,
+                                     num_threads,
+                                     mem_blocks,
+                                     &Block<real_t>::create,
+                                     &Block<real_t>::destroy,
+                                     &storage,
+                                     &Block<real_t>::save,
+                                     &Block<real_t>::load);
+    diy::ContiguousAssigner   assigner(world.size(), tot_blocks);
+
+    // even though this is a single-block example, we want diy to do a proper decomposition with a link
+    // so that everything works downstream (reading file with links, e.g.)
+    // therefore, set some dummy global domain bounds and decompose the domain
+    Bounds<real_t> dom_bounds(dom_dim);
+    for (int i = 0; i < dom_dim; ++i)
+    {
+        dom_bounds.min[i] = 0.0;
+        dom_bounds.max[i] = 1.0;
+    }
+    Decomposer<real_t> decomposer(dom_dim, dom_bounds, tot_blocks);
+    decomposer.decompose(world.rank(),
+                         assigner,
+                         [&](int gid, const Bounds<real_t>& core, const Bounds<real_t>& bounds, const Bounds<real_t>& domain, const RCLink<real_t>& link)
+                         { Block<real_t>::add(gid, core, bounds, domain, link, master, dom_dim, pt_dim, 0.0); });
+
+    // set default args for diy foreach callback functions
+    DomainArgs d_args(dom_dim, pt_dim);
+    d_args.weighted     = weighted;
+    d_args.multiblock   = false;
+    d_args.verbose      = 1;
+    d_args.structured   = structured;
+    d_args.rand_seed    = rand_seed;
+    for (int i = 0; i < pt_dim - dom_dim; i++)
+        d_args.f[i] = 1.0;
+    for (int i = 0; i < dom_dim; i++)
+    {
+        d_args.geom_p[i]            = geom_degree;
+        d_args.vars_p[0][i]         = vars_degree;      // assuming one science variable, vars_p[0]
+        d_args.ndom_pts[i]          = ndomp;
+        d_args.geom_nctrl_pts[i]    = geom_nctrl;
+        d_args.vars_nctrl_pts[0][i] = vars_nctrl;       // assuming one science variable, vars_nctrl_pts[0]
+    }
+
+    // initialize input data
+
+    // sine function f(x) = sin(x), f(x,y) = sin(x)sin(y), ...
+    if (input == "sine")
+    {
+        for (int i = 0; i < dom_dim; i++)
+        {
+            d_args.min[i]               = -4.0 * M_PI;
+            d_args.max[i]               = 4.0  * M_PI;
+        }
+        for (int i = 0; i < pt_dim - dom_dim; i++)      // for all science variables
+            d_args.s[i] = i + 1;                        // scaling factor on range
+        master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
+                { b->generate_analytical_data(cp, input, d_args); });
+    }
+    else
+    {
+        cerr << "ERROR: Invalid input dataset for integral test" << endl;
+        exit(1);
+    }
+
+    // compute the MFA
+
+    fprintf(stderr, "\nStarting fixed encoding...\n\n");
+    double encode_time = MPI_Wtime();
+    master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
+            { b->fixed_encode_block(cp, d_args); });
+    encode_time = MPI_Wtime() - encode_time;
+    fprintf(stderr, "\n\nFixed encoding done.\n\n");
+
+    // debug: compute error field for visualization and max error to verify that it is below the threshold
+    double decode_time = MPI_Wtime();
+    fprintf(stderr, "\nComputing integral...\n");
+    master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
+            { b->integrate_block(cp, 1); });
+
+    decode_time = MPI_Wtime() - decode_time;
+
+    // print results
+    fprintf(stderr, "\n------- Final block results --------\n");
+    master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
+            { b->print_block(cp, error); });
+    fprintf(stderr, "encoding time         = %.3lf s.\n", encode_time);
+    if (error)
+        fprintf(stderr, "decoding time         = %.3lf s.\n", decode_time);
+    fprintf(stderr, "-------------------------------------\n\n");
+
+    // save the results in diy format
+    diy::io::write_blocks("approx.out", world, master);
+
+    // check the results of the last (only) science variable
+    Block<real_t>* b    = static_cast<Block<real_t>*>(master.block(0));
+    real_t range_extent = b->input->domain.col(dom_dim).maxCoeff() - b->input->domain.col(dom_dim).minCoeff();
+    real_t err_factor   = 1.0e-3;
+    real_t expect_err   = -0.0;
+    real_t l1_error = 0, l2_error = 0, linf_error = 0;
+    b->analytical_error_pointset(b->approx, "ncosp1", l1_error, l2_error, linf_error, d_args);
+
+    if (input == "sine" && dom_dim == 1)        // for ./integrate-test -i sine -d 2 -m 1 -p 1 -q 4 -v 20 -n 100 -w 0
+        expect_err = 0.000861878;
+    else if (input == "sine" && dom_dim == 2)   // for ./integrate-test -i sine -d 3 -m 2 -p 1 -q 4 -v 20 -n 100 -w 0
+        expect_err = 0.00276654;
+    else if (input == "sine" && dom_dim == 3)    // for ./integrate-test -i sine -d 4 -m 3 -p 1 -q 4 -v 20 -n 50 -w 0
+        expect_err = 0.00716293;
+    else
+    {
+        cerr << "ERROR: Unexpected test arguments." << endl;
+        exit(1);
+    }
+
+    real_t our_err = linf_error / range_extent;
+
+    if (fabs(expect_err - our_err) / expect_err > err_factor)
+    {
+        cerr << "our error (" << our_err << ") and expected error (" << expect_err << ") differ by more than a factor of " << err_factor;
+        cerr << endl;
+        exit(1);
+    }
+}

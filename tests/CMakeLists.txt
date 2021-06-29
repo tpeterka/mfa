@@ -16,6 +16,9 @@ target_link_libraries       (fixed-s3d-blend                        ${libraries}
 add_executable              (adaptive-test                          adaptive.cpp)
 target_link_libraries       (adaptive-test                          ${libraries})
 
+add_executable              (integrate-test                         integrate.cpp)
+target_link_libraries       (integrate-test                         ${libraries})
+
 add_executable              (differentiate-test                     differentiate.cpp)
 target_link_libraries       (differentiate-test                     ${libraries})
 
@@ -56,6 +59,19 @@ add_test                    (NAME fixed-s3d-2d-unstructured-test
 add_test                    (NAME decode-grid1
                              COMMAND decode-grid-test -a 10 -b 0 -c 0 -r 10 -s 30 -t 25 -x 1 -y 1 -z 1 -v 6 -W -f ${s3d_infile} -u 20 -u 20 -u 20
                             )
+
+add_test                    (NAME integrate-1d-test
+                             COMMAND integrate-test -i sine -d 2 -m 1 -p 1 -q 4 -v 20 -n 100 -w 0
+                            )
+
+add_test                    (NAME integrate-2d-test
+                             COMMAND integrate-test -i sine -d 3 -m 2 -p 1 -q 4 -v 20 -n 100 -w 0
+                            )
+
+# integration is too slow to test in 3d for now
+# add_test                    (NAME integrate-3d-test
+#                              COMMAND integrate-test -i sine -d 4 -m 3 -p 1 -q 4 -v 20 -n 50 -w 0
+#                             )
 
 add_test                    (NAME differentiate-fixed-test
                              COMMAND differentiate-test -i approx.out -d 1
