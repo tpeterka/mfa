@@ -1387,9 +1387,61 @@ struct Block : public BlockBase<T>
         cerr << "domain extent:\n min\n" << bounds_mins << "\nmax\n" << bounds_maxs << endl;
     }
     
+        // Compute error metrics between a pointset and an analytical function
+        // evaluated at the points in the pointset
+        // N.B. assumes only one science variable
+        void analytical_error_pointset(
+            mfa::PointSet<T>*       ps,
+            string                  fun,
+            T&                      L1, 
+            T&                      L2,
+            T&                      Linf,
+            DomainArgs&             args) const
+        {
+            // Compute the analytical error at each point
+            T sum_errs      = 0.0;                                  // sum of absolute values of errors (L-1 norm)
+            T sum_sq_errs   = 0.0;                                  // sum of squares of errors (square of L-2 norm)
+            T max_err       = -1.0;                                 // maximum absolute value of error (L-infinity norm)
+            T true_val = 0;
+            T test_val = 0;
+            VectorX<T> dom_pt(dom_dim);
+            for (auto pt_it = ps->begin(), pt_end = ps->end(); pt_it != pt_end; ++pt_it)
+            {
+                pt_it.coords(dom_pt, 0, dom_dim-1); // extract the first dom_dim coords (i.e. geometric coords)
+                
+                // evaluate function at dom_pt_real
+                if (fun == "sinc")
+                    true_val = sinc(dom_pt, args, 0);       // hard-coded for one science variable
+                if (fun == "sine")
+                    true_val = sine(dom_pt, args, 0);       // hard-coded for one science variable
+                if (fun == "cosine")
+                    true_val = cosine(dom_pt, args, 0);     // hard-coded for one science variable
+                if (fun == "ncosp1")
+                    true_val = ncosp1(dom_pt, args, 0);      // hard-coded for one science variable
+                if (fun == "f16")
+                    true_val = f16(dom_pt);
+                if (fun == "f17")
+                    true_val = f17(dom_pt);
+                if (fun == "f18")
+                    true_val = f18(dom_pt);
+
+                test_val = ps->domain(pt_it.idx(), dom_dim);    // hard-coded for first science variable only
+
+                // compute and accrue error
+                T err = fabs(true_val - test_val);
+                sum_errs += err;                                // L1
+                sum_sq_errs += err * err;                       // L2
+                if (err > max_err)                              // Linf
+                    max_err = err;
+            }
+
+            L1    = sum_errs;
+            L2    = sqrt(sum_sq_errs);
+            Linf  = max_err;
+        }
+
     void analytical_error_field(
-        const diy::Master::ProxyWithLink&   cp,
-        string&                             fun,                // function to evaluate
+        string                              fun,                // function to evaluate
         T&                                  L1,                 // (output) L-1 norm
         T&                                  L2,                 // (output) L-2 norm
         T&                                  Linf,               // (output) L-infinity norm
@@ -1433,9 +1485,13 @@ struct Block : public BlockBase<T>
             
             // evaluate function at dom_pt_real
             if (fun == "sinc")
-                true_val = sinc(dom_pt, args, 0);      // hard-coded for one science variable
+                true_val = sinc(dom_pt, args, 0);       // hard-coded for one science variable
             if (fun == "sine")
-                true_val = sine(dom_pt, args, 0);      // hard-codded for one science variable
+                true_val = sine(dom_pt, args, 0);       // hard-coded for one science variable
+            if (fun == "cosine")
+                true_val = cosine(dom_pt, args, 0);     // hard-coded for one science variable
+            if (fun == "ncosp1")
+                true_val = ncosp1(dom_pt, args, 0);      // hard-coded for one science variable
             if (fun == "f16")
                 true_val = f16(dom_pt);
             if (fun == "f17")
@@ -1527,7 +1583,11 @@ struct Block : public BlockBase<T>
             if (fun == "sinc")
                 true_val = sinc(dom_pt_real, args, 0);      // hard-coded for one science variable
             if (fun == "sine")
-                true_val = sine(dom_pt_real, args, 0);      // hard-codded for one science variable
+                true_val = sine(dom_pt_real, args, 0);      // hard-coded for one science variable
+            if (fun == "cosine")
+                true_val = cosine(dom_pt_real, args, 0);    // hard-coded for one science variable
+            if (fun == "ncosp1")
+                true_val = ncosp1(dom_pt_real, args, 0);     // hard-coded for one science variable
             if (fun == "f16")
                 true_val = f16(dom_pt_real);
             if (fun == "f17")
