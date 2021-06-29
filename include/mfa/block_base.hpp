@@ -397,6 +397,22 @@ struct BlockBase
         }
     }
 
+    void definite_integral(
+            const diy::Master::ProxyWithLink&   cp,
+            int                                 verbose,
+                  VectorX<T>&                   output,
+            const VectorX<T>&                   lim_a,
+            const VectorX<T>&                   lim_b)
+    {
+        for (auto k = 0; k < vars.size(); k++)
+        {
+            mfa->DefiniteIntegral(*(vars[k].mfa_data), output, verbose, lim_a, lim_b);
+        }
+
+        T scale = (core_maxs - core_mins).prod();
+        output *= scale;
+    }
+
     void integrate_block(
             const diy::Master::ProxyWithLink&   cp,
             int                                 verbose)

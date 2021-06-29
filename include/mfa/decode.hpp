@@ -290,6 +290,73 @@ namespace mfa
 #endif
         }
 
+        void DefiniteIntegral(  const TensorProduct<T>& tensor,
+                                const VectorX<T>&       a,          // start limit of integration (parameter)
+                                const VectorX<T>&       b,          // end limit of integration (parameter)
+                                VectorX<T>&             output)
+        {
+            assert(max_dim - min_dim + 1 == tensor.ctrl_pts.cols());
+            assert(a.size() == b.size() && a.size() == mfa_data.dom_dim);
+            assert(output.size() == max_dim - min_dim + 1);
+
+            int      dom_dim = mfa_data.dom_dim;
+            int      local_pt_dim = tensor.ctrl_pts.cols();
+            VectorXi spana(dom_dim);
+            VectorXi spanb(dom_dim);
+            output = VectorX<T>::Zero(local_pt_dim);     // reset output to zero
+
+            for (int i = 0; i < dom_dim; i++)
+            {
+                spana(i) = mfa_data.FindSpan(i, a(i), tensor);
+                spanb(i) = mfa_data.FindSpan(i, b(i), tensor);
+            }
+
+            VolIterator cp_it(spanb - spana + mfa_data.p + VectorXi::Ones(dom_dim), spana - mfa_data.p, tensor.nctrl_pts);
+            while (!cp_it.done())
+            {
+                VectorXi ctrl_idxs = cp_it.idx_dim();
+                T coeff = 1;
+
+                for (int l = 0; l < dom_dim; l++)
+                {
+                    int ctrl_idx = ctrl_idxs(l);
+                    int lower_span = ctrl_idx;                      // knot index of lower bound of basis support
+                    int upper_span = ctrl_idx + mfa_data.p(l) + 1;  // knot index of upper bound of basis support
+
+                    T k_start   = mfa_data.tmesh.all_knots[l][lower_span];
+                    T k_end     = mfa_data.tmesh.all_knots[l][upper_span];
+                    // T scaling   = (mfa_data.p(l)+1) / (k_end - k_start);
+                    T scaling   = (k_end - k_start) / (mfa_data.p(l)+1);
+                    T suma      = 0;
+                    T sumb      = 0;
+
+                    if (spana(l) < lower_span)
+                    {
+                        suma = 0;
+                    }
+                    else
+                    {
+                        suma = mfa_data.IntBasisFunsHelper(mfa_data.p(l)+1, l, a(l), ctrl_idx);
+                    }
+
+                    if (spanb(l) >= upper_span)
+                    {
+                        sumb = 1;
+                    }
+                    else
+                    {
+                        sumb = mfa_data.IntBasisFunsHelper(mfa_data.p(l)+1, l, b(l), ctrl_idx);
+                    }
+                    
+                    coeff *= scaling * (sumb-suma);                        
+                }
+
+                output += coeff * tensor.ctrl_pts.row(cp_it.cur_iter_full());
+
+                cp_it.incr_iter();
+            }
+        }
+
         void IntegratePointSet( PointSet<T>&            ps,
                                 const TensorProduct<T>& tensor,
                                 int                     min_dim,
