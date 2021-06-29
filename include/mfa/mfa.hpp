@@ -274,41 +274,6 @@ namespace mfa
                 error(i) = fabs(cpt(i) - input.domain(idx, mfa_data.min_dim + i));
         }
 
-        void AbsPointSetDiff(
-            const   mfa::PointSet<T>& ps1,
-            const   mfa::PointSet<T>& ps2,
-                    mfa::PointSet<T>& diff,
-                    int               verbose)
-        {
-            if (!ps1.is_same_layout(ps2) || !ps1.is_same_layout(diff))
-            {
-                cerr << "ERROR: Incompatible PointSets in AbsPointSetDiff" << endl;
-                exit(1);
-            }
-
-#ifdef MFA_SERIAL
-            int pt_dim = ps1.pt_dim;
-            diff.domain.leftCols(dom_dim) = ps1.domain.leftCols(dom_dim);
-            diff.domain.rightCols(pt_dim-dom_dim) = (ps1.domain.rightCols(pt_dim-dom_dim) - ps2.domain.rightCols(pt_dim-dom_dim)).cwiseAbs();
-#endif // MFA_SERIAL
-#ifdef MFA_TBB
-            parallel_for (size_t(0), (size_t)diff.npts, [&] (size_t i)
-                {
-                    for (auto j = 0; j < dom_dim; j++)
-                    {
-                        diff.domain(i,j) = ps1.domain(i,j); // copy the geometric location of each point
-                    }
-                });
-
-            parallel_for (size_t(0), (size_t)diff.npts, [&] (size_t i)
-                {
-                    for (auto j = dom_dim; j < diff.pt_dim; j++)
-                    {
-                        diff.domain(i,j) = fabs(ps1.domain(i,j) - ps2.domain(i,j)); // compute distance between each science value
-                    }
-                });
-#endif // MFA_TBB
-        }
 
         void AbsPointSetError(
             const   mfa::PointSet<T>& base,

@@ -513,7 +513,7 @@ struct BlockBase
         {
             decode_block(cp, verbose, saved_basis);
 
-            mfa->AbsPointSetDiff(*input, *approx, *errs, verbose);
+            input->abs_diff(*approx, *errs, verbose);
         }
         else // Compute error at each input point on the fly
         {

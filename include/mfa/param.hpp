@@ -37,20 +37,6 @@ namespace mfa
         // Default constructor
         Param() : range_extent(0), dom_dim(0), structured(true) { }
 
-//         // Construcutor for unstructured input
-//         Param(  int                 dom_dim_,
-//                 const MatrixX<T>&   domain_) :
-//             dom_dim(dom_dim_),
-//             ndom_pts(VectorXi::Zero(dom_dim)),
-//             structured(false)
-//         {
-// #ifdef CURVE_PARAMS
-//             cerr << "ERROR: Cannot set curve parametrization to unstructured input" << endl;
-// #else
-//             setDomainParamsUnstructured(domain_);
-// #endif
-//         }
-
         // Constructor for equispaced grid over all of parameter space
         Param(const VectorXi& ndom_pts_) :
             ndom_pts(ndom_pts_),

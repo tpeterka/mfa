@@ -105,6 +105,13 @@ namespace mfa
         //        domain points during Param construction.
         void init_params()
         {
+            // If mins/maxs are NULL, set them to be the min/max coordinates of the pointset
+            if (dom_mins.size() == 0 || dom_maxs.size() == 0)
+            {
+                dom_mins = domain.leftCols(dom_dim).colwise().minCoeff();
+                dom_maxs = domain.leftCols(dom_dim).colwise().maxCoeff();
+            }
+
             params = make_shared<Param<T>>(dom_dim, dom_mins, dom_maxs, ndom_pts, domain, structured);
         }
 
@@ -234,6 +241,40 @@ namespace mfa
 
                 return is_same;
             }
+        }
+
+        void abs_diff(
+            const   mfa::PointSet<T>& other,
+                    mfa::PointSet<T>& diff,
+                    int               verbose) const
+        {
+            if (!this->is_same_layout(other) || !this->is_same_layout(diff))
+            {
+                cerr << "ERROR: Incompatible PointSets in PointSet::abs_diff" << endl;
+                exit(1);
+            }
+
+#ifdef MFA_SERIAL
+            diff.domain.leftCols(dom_dim) = this->domain.leftCols(dom_dim);
+            diff.domain.rightCols(pt_dim-dom_dim) = (this->domain.rightCols(pt_dim-dom_dim) - other.domain.rightCols(pt_dim-dom_dim)).cwiseAbs();
+#endif // MFA_SERIAL
+#ifdef MFA_TBB
+            parallel_for (size_t(0), (size_t)diff.npts, [&] (size_t i)
+                {
+                    for (auto j = 0; j < dom_dim; j++)
+                    {
+                        diff.domain(i,j) = this->domain(i,j); // copy the geometric location of each point
+                    }
+                });
+
+            parallel_for (size_t(0), (size_t)npts, [&] (size_t i)
+                {
+                    for (auto j = dom_dim; j < pt_dim; j++)
+                    {
+                        diff.domain(i,j) = fabs(this->domain(i,j) - other.domain(i,j)); // compute distance between each science value
+                    }
+                });
+#endif // MFA_TBB
         }
 
         PointSet(const PointSet&) = delete;
