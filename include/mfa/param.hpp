@@ -116,14 +116,14 @@ namespace mfa
 #endif
 
             // debug
-//             fprintf(stderr, "----- params -----\n");
-//             for (auto i = 0; i < param_grid.size(); i++)
-//             {
-//                 fprintf(stderr, "dimension %d:\n", i);
-//                 for (auto j = 0; j < param_grid[i].size(); j++)
-//                     fmt::print(stderr, "params[{}][{}] = {}\n", i, j, param_grid[i][j]);
-//             }
-//             fprintf(stderr, "-----\n");
+            fprintf(stderr, "----- params -----\n");
+            for (auto i = 0; i < param_grid.size(); i++)
+            {
+                fprintf(stderr, "dimension %d:\n", i);
+                for (auto j = 0; j < param_grid[i].size(); j++)
+                    fmt::print(stderr, "params[{}][{}] = {}\n", i, j, param_grid[i][j]);
+            }
+            fprintf(stderr, "-----\n");
 
             // max extent of input data points
             int last     = domain_.cols() - 1;
