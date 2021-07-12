@@ -6,8 +6,11 @@ target_link_libraries       (differentiate_block        ${libraries})
 add_executable              (eval                       eval.cpp)
 target_link_libraries       (eval                       ${libraries})
 
-set_property                (TARGET  differentiate_block eval PROPERTY INSTALL_RPATH_USE_LINK_PATH TRUE)
-install                     (TARGETS differentiate_block eval
+add_executable              (decode_speed               decode_speed.cpp)
+target_link_libraries       (decode_speed               ${libraries})
+
+set_property                (TARGET  differentiate_block eval decode_speed PROPERTY INSTALL_RPATH_USE_LINK_PATH TRUE)
+install                     (TARGETS differentiate_block eval decode_speed
                             DESTINATION ${CMAKE_INSTALL_PREFIX}/examples/eval/
                             PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE
                             GROUP_READ GROUP_WRITE GROUP_EXECUTE

@@ -37,6 +37,40 @@
 
 namespace mfa
 {
+    template<typename T>
+    struct BasisFunInfo
+    {
+        // vector<T>   scratch;
+        vector<T>   right;
+        vector<T>   left;
+        int qmax;
+
+        BasisFunInfo(const vector<int>& q) :
+            qmax(0)
+        {
+            for (int i = 0; i < q.size(); i++)
+            {
+
+                if (q[i] > qmax)
+                    qmax = q[i];
+            }
+
+            right.resize(qmax);
+            left.resize(qmax);
+        }
+
+        void reset(int dim)
+        {
+            // left/right is of size max_p + 1, but we will only ever access
+            // the first q(i) entries when considering dimension 'i'
+            for (int i = 0; i < qmax; i++)
+            {
+                left[i] = 0;
+                right[i] = 0;
+            }
+        }
+    };
+
     template <typename T>                       // float or double
     struct MFA_Data
     {
@@ -326,6 +360,42 @@ namespace mfa
 
             // debug
 //             cerr << N << endl;
+        }
+
+        // same as OrigBasisFuns but allocate left/right scratch space ahead of time,
+        // and compute N vector in place
+        // NOTE: In a threaded environment, a thread-local BasisFunInfo should be passed
+        //       as an argument. Concurrent access to the same BFI will cause a data race.
+        // 
+        // NOTE: In this version, N is assumed to be size p+1, and we compute in place instead
+        //       of using a "scratch" vector
+        void FastBasisFuns(
+            int                 cur_dim,
+            T                   u,
+            int                 span,
+            VectorX<T>&         N,
+            BasisFunInfo<T>&    bfi) const
+        {
+            // nb. we do not need to zero out the entirety of N, since the existing entries of N 
+            //     are never accessed (they are always overwritten first)
+            N[0] = 1;   
+
+            for (int j = 1; j <= p(cur_dim); j++)
+            {
+                // left[j] is u - the jth knot in the correct level to the left of span
+                // right[j] is the jth knot in the correct level to the right of span - u
+                bfi.left[j]  = u - tmesh.all_knots[cur_dim][span + 1 - j];
+                bfi.right[j] = tmesh.all_knots[cur_dim][span + j] - u;
+
+                T saved = 0.0;
+                for (int r = 0; r < j; r++)
+                {
+                    T temp = N[r] / (bfi.right[r + 1] + bfi.left[j - r]);
+                    N[r] = saved + bfi.right[r + 1] * temp;
+                    saved = bfi.left[j - r] * temp;
+                }
+                N[j] = saved;
+            }
         }
 
         // tmesh version of basis functions that computes one basis function at a time for each local knot vector
