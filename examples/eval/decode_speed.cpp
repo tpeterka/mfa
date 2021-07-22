@@ -101,7 +101,7 @@ int main(int argc, char** argv)
     params *= 0.5; // scale random numbers to [0,1]
 
     VectorX<real_t> out_pt_full(pt_dim);        // out_pt (science + geom)
-    MatrixX<real_t> outpts_full = MatrixX<real_t>::Zero(num_iters, pt_dim - dom_dim);
+    MatrixX<real_t> outpts_full = MatrixX<real_t>::Zero(num_iters, pt_dim);
     VectorX<real_t> out_pt(pt_dim-dom_dim);     // out_pt (science variable only)
     MatrixX<real_t> outpts = MatrixX<real_t>::Zero(num_iters, pt_dim-dom_dim);
 
@@ -115,16 +115,9 @@ int main(int argc, char** argv)
                 for (int l = 0; l < num_iters; l++)
                 {
                     b->decode_point(cp, params.row(l), out_pt_full); 
-                    outpts_full.row(l) = out_pt_full;           
+                    outpts_full.row(l) = out_pt_full;  
                 } 
             });
-    // for (int l = 0; l < num_iters; l++)
-    // {
-    //     master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-    //         { b->decode_point(cp, params.row(l), out_pt_full); });
-    //     // b->my_decode_point(params.row(l), out_pt_full);
-    //     outpts_full.row(l) = out_pt_full;
-    // }
     decode_time_og = MPI_Wtime() - decode_time_og;
     cerr << "   done." << endl;
     sums.push_back(outpts_full.sum());
