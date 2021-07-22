@@ -407,7 +407,7 @@ namespace mfa
             t.ctrl_pts.resize(t.nctrl_pts.prod(), pt_dim);
             t.weights.resize(t.ctrl_pts.rows());
             assert(Nt.rows() == t.nctrl_pts.prod());
-            assert(Nt.cols() == input.ndom_pts.prod());
+            assert(Nt.cols() == input.npts);
 
             // Reserve space in sparse matrix; don't forget to call makeCompressed() at end!
             int bf_per_pt = (mfa_data.p + VectorXi::Ones(mfa_data.dom_dim)).prod();       // nonzero basis functions per input point
