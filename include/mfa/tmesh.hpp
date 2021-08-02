@@ -35,7 +35,21 @@ struct TensorProduct
     vector<vector<KnotIdx>>     knot_idxs;              // all_knots indices of knots belonging to this tensor [dim][index] (sorted)
     bool                        done;                   // no more knots need to be added to this tensor
 
+    // following is used for candidate tensors during refinement only and otherwise not maintained
+    // TODO: if deemed useful for other purposes, set and maintain for all tensors
+    TensorIdx                   parent;                 // parent from which this tensor was refined
+    bool                        parent_exists;          // parent exists and the index to it is valid
+
     TensorProduct() : done(false)   {}
+    TensorProduct(int dom_dim) : done(false)
+    {
+        knot_mins.resize(dom_dim);
+        knot_maxs.resize(dom_dim);
+        nctrl_pts.resize(dom_dim);
+        next.resize(dom_dim);
+        prev.resize(dom_dim);
+        knot_idxs.resize(dom_dim);
+    }
 };
 
 namespace mfa
@@ -119,6 +133,7 @@ namespace mfa
 
         // insert a knot into all_knots at a given position
         // checks for duplicates and invalid insertions
+        // adjusts all tensor products knot_mins, knot_maxs accordingly
         // returns:
         // 0: no change in knots or levels
         // 1: changed level of an existing knot
@@ -226,9 +241,7 @@ namespace mfa
             }
 
             // create a new tensor product
-            TensorProduct<T> new_tensor;
-            new_tensor.next.resize(dom_dim_);
-            new_tensor.prev.resize(dom_dim_);
+            TensorProduct<T> new_tensor(dom_dim_);
             new_tensor.knot_mins = knot_mins;
             new_tensor.knot_maxs = knot_maxs;
 
@@ -432,9 +445,7 @@ namespace mfa
             bool tensor_inserted = false;           // the desired tensor was already inserted
 
             // create a new tensor product
-            TensorProduct<T> new_tensor;
-            new_tensor.next.resize(dom_dim_);
-            new_tensor.prev.resize(dom_dim_);
+            TensorProduct<T> new_tensor(dom_dim_);
             new_tensor.knot_mins = knot_mins;
             new_tensor.knot_maxs = knot_maxs;
 
@@ -580,15 +591,25 @@ namespace mfa
         }
 
         // checks if two tensors intersect to within a padding distance
-        // adjacency (to within pad distance) counts as an intersection, as does subset
+        // adjacency (to within pad distance) counts as an intersection if adjacency_counts = true (default)
+        // subset also counts as intersection
         bool intersect(TensorProduct<T>&    t1,
                        TensorProduct<T>&    t2,
-                       KnotIdx              pad = 0)
+                       KnotIdx              pad = 0,
+                       bool                 adjacency_counts = true)
         {
             for (auto k = 0; k < dom_dim_; k++)
             {
-                if (t1.knot_maxs[k] + pad < t2.knot_mins[k] || t2.knot_maxs[k] + pad < t1.knot_mins[k])
-                    return false;
+                if (adjacency_counts)
+                {
+                    if (t1.knot_maxs[k] + pad < t2.knot_mins[k] || t2.knot_maxs[k] + pad < t1.knot_mins[k])
+                        return false;
+                }
+                if (!adjacency_counts)
+                {
+                    if (t1.knot_maxs[k] + pad <= t2.knot_mins[k] || t2.knot_maxs[k] + pad <= t1.knot_mins[k])
+                        return false;
+                }
             }
             return true;
         }
@@ -737,10 +758,7 @@ namespace mfa
             TensorProduct<T>& exist_tensor  = tensor_prods[exist_tensor_idx];
 
             // intialize a new side_tensor for the minimum or maximum side of the existing tensor
-            TensorProduct<T> side_tensor;
-            side_tensor.next.resize(dom_dim_);
-            side_tensor.prev.resize(dom_dim_);
-            side_tensor.nctrl_pts.resize(dom_dim_);
+            TensorProduct<T> side_tensor(dom_dim_);
             side_tensor.knot_mins   = exist_tensor.knot_mins;
             side_tensor.knot_maxs   = exist_tensor.knot_maxs;
             if (split_side == -1 || split_side == 2)
@@ -2309,6 +2327,31 @@ namespace mfa
                         t.knot_idxs[k].push_back(i);
                 }
             }
+        }
+
+        // check number of knots belonging to this tensor against the number of control points (for debugging)
+        bool check_num_knots_ctrl_pts(TensorIdx tidx)
+        {
+            TensorProduct<T>& t = tensor_prods[tidx];
+            for (auto i = 0; i < dom_dim_; i++)
+            {
+                int nctrl = t.knot_idxs[i].size() - 1;
+                if (p_(i) % 2)                                  // odd degree
+                    nctrl++;
+                if (t.knot_mins[i] == 0)                        // min. edge of global domain
+                    nctrl -= (p_(i) + 1) / 2;
+                if (t.knot_maxs[i] == all_knots[i].size() - 1)  // max. edge of global domain
+                    nctrl -= (p_(i) + 1) / 2;
+
+                if (nctrl != t.nctrl_pts(i))
+                {
+                    fmt::print(stderr, "Error: check_num_knots_ctrl_pts(): Number of knots and control points in tensor {} in dim. {} do not agree.\n",
+                            tidx, i);
+                    print_tensor(t, true, false, false);
+                    abort();
+                }
+            }
+            return true;
         }
 
         void print_tensor(

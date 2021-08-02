@@ -279,535 +279,535 @@ namespace mfa
             return parent_tensor_idx;
         }
 
-        // DEPRECATE eventually in favor of AllErrorSpans
-        // computes error in knot spans and finds first new knot (in all dimensions at once) that should be inserted
-        // returns true if all done, ie, no new knots inserted
-        //
-        // This version is for the tmesh with global solve
-        // It takes a full tensor product of ctrl_pts and weights of the same quantities as all_knots in the tmesh
-        // and decodes that in order to determine first error span.
-        //
-        // TODO: lots of optimizations possible; this is completely naive so far
-        // optimizations:
-        // each time called, resume search at next domain point
-        // step through domain points fineer each time the end is reached
-        // increment ijk in the loop over domain points instead of calling idx2ijk
-        // TBB? (currently serial)
-        bool FirstErrorSpan(
-                VectorX<T>                  extents,                // extents in each dimension, for normalizing error (size 0 means do not normalize)
-                T                           err_limit,              // max. allowed error
-                int                         iter,                   // iteration number
-                int&                        parent_tensor_idx,      // (output) idx of parent tensor of error span
-                vector<vector<KnotIdx>>&    inserted_knot_idxs)     // (output) indices in each dim. of inserted knots in full knot vector after insertion
-        {
-            // debug
-            fprintf(stderr, "*** Using global solve in FirstErrorSpan ***\n");
-
-            Decoder<T>          decoder(mfa_data, 1);
-            VectorXi            ijk(dom_dim);                   // i,j,k of domain point
-            VectorX<T>          param(dom_dim);                 // parameters of domain point
-            vector<int>         span(dom_dim);                  // knot span in each dimension
-            VectorXi            derivs;                             // size 0 means unused
-            DecodeInfo<T>       decode_info(mfa_data, derivs);      // reusable decode point info for calling VolPt repeatedly
-            vector<vector<T>>   new_knots(dom_dim);             // new knots
-            vector<vector<int>> new_levels(dom_dim);            // new knot levels
-
-            if (!extents.size())
-                extents = VectorX<T>::Ones(input.pt_dim);
-
-            for (auto pt_it = input.begin(), pt_end = input.end(); pt_it != pt_end; ++pt_it)
-            {
-                pt_it.params(param);
-                VectorX<T> cpt(mfa_data.tmesh.tensor_prods[0].ctrl_pts.cols());
-
-#ifdef MFA_TMESH
-                decoder.VolPt_tmesh(param, cpt);
-#else
-                decoder.VolPt(param, cpt, decode_info, mfa_data.tmesh.tensor_prods[0]);
-#endif
-
-
-                // debug
-//                 cerr << "cpt: " << cpt.transpose() << endl;
-
-                int last = input.pt_dim - 1;                       // range coordinate
-
-                // error
-                T max_err = 0.0;
-                for (auto j = 0; j < mfa_data.max_dim - mfa_data.min_dim + 1; j++)
-                {
-                    T err = fabs(cpt(j) - input.domain(pt_it.idx(), mfa_data.min_dim + j)) / extents(mfa_data.min_dim + j);
-                    max_err = err > max_err ? err : max_err;
-                }
-
-                if (max_err > err_limit)
-                {
-                    // check that new spans will contain at least one input point
-                    bool empty_span = false;
-                    for (auto k = 0; k < dom_dim; k++)
-                    {
-                        span[k] = mfa_data.FindSpan(k, param(k));
-
-                        // debug: hard code span
-//                         span[k] = 5;
-
-                        // span should never be the last knot because of the repeated knots at end
-                        assert(span[k] < mfa_data.tmesh.all_knots[k].size() - 1);
-
-                        // current span must contain at least two input points
-                        size_t low_idx  = mfa_data.tmesh.all_knot_param_idxs[k][span[k]];
-                        size_t high_idx = mfa_data.tmesh.all_knot_param_idxs[k][span[k] + 1];
-                        if (high_idx - low_idx < 2)
-                        {
-                            empty_span = true;
-                            break;
-                        }
-
-                        // new knot would be the midpoint of the span containing the domain point parameters
-                        T new_knot_val = (mfa_data.tmesh.all_knots[k][span[k]] + mfa_data.tmesh.all_knots[k][span[k] + 1]) / 2.0;
-
-                        // if the current span were to be split, check whether the resulting spans will have an input point
-                        ParamIdx param_idx  = low_idx;
-                        while (input.params->param_grid[k][param_idx] < new_knot_val)
-                            param_idx++;
-                        if (param_idx - low_idx == 0 || high_idx - param_idx == 0)
-                        {
-                            empty_span =  true;
-                            break;
-                        }
-                    }
-
-                    if (empty_span)
-                        continue;               // next input point
-
-                    for (auto k = 0; k < dom_dim; k++)
-                    {
-                        // new knot is the midpoint of the span containing the domain point parameters
-                        T new_knot_val = (mfa_data.tmesh.all_knots[k][span[k]] + mfa_data.tmesh.all_knots[k][span[k] + 1]) / 2.0;
-                        new_knots[k].push_back(new_knot_val);
-                        new_levels[k].push_back(iter + 1);  // adapt at the next level, for now every iteration is a new level
-                    }
-
-                    parent_tensor_idx = InsertKnots(new_knots, new_levels, inserted_knot_idxs);
-                    return false;
-                }   // max_err > err_limit
-            }   // for all input points
-
-            return true;
-        }
-
-        // DEPRECATE eventually in favor of AllErrorSpans
-        // computes error in knot spans and finds first new knot (in all dimensions at once) that should be inserted
-        // returns true if all done, ie, no new knots inserted
-        //
-        // This version is for tmesh with local solve
-        //
-        // TODO: lots of optimizations possible; this is completely naive so far
-        // optimizations:
-        // each time called, resume search at next domain point
-        // step through domain points fineer each time the end is reached
-        // increment ijk in the loop over domain points instead of calling idx2ijk
-        // TBB? (currently serial)
-        bool FirstErrorSpan(
-                VectorX<T>                  extents,                // extents in each dimension, for normalizing error (size 0 means do not normalize)
-                T                           err_limit,              // max. allowed error
-                int                         iter,                   // iteration number
-                int&                        parent_tensor_idx,      // (output) idx of parent tensor of error span
-                vector<vector<KnotIdx>>&    inserted_knot_idxs,     // (output) indices in each dim. of inserted knots in full knot vector after insertion
-                vector<VectorXi>&           new_nctrl_pts,          // (output) new number of control points in each dim. from P&T knot insertion, one std:vector element per knot inserted
-                vector<MatrixX<T>>&         new_ctrl_pts,           // (output) new control points from P&T knot insertion, one std::vector element per knot inserted
-                vector<VectorX<T>>&         new_weights,            // (output) new weights from P&T knot insertion, one std::vector element per knot inserted
-                bool&                       local)                  // (output) span allows local solve to proceed (sufficient constraints exist)
-        {
-            // debug
-            fprintf(stderr, "*** Using local solve in FirstErrorSpan ***\n");
-
-            Decoder<T>          decoder(mfa_data, 1);
-            VectorXi            ijk(dom_dim);                   // i,j,k of domain point
-            VectorX<T>          param(dom_dim);                 // parameters of domain point
-            VectorXi            derivs;                             // size 0 means unused
-            DecodeInfo<T>       decode_info(mfa_data, derivs);      // reusable decode point info for calling VolPt repeatedly
-            vector<vector<T>>   new_knots(dom_dim);             // new knots
-            vector<vector<int>> new_levels(dom_dim);            // new knot levels
-
-            if (!extents.size())
-                extents = VectorX<T>::Ones(input.pt_dim);
-
-            for (auto pt_it = input.begin(), pt_end = input.end(); pt_it != pt_end; ++pt_it)
-            {
-                pt_it.params(param);
-                VectorX<T> cpt(mfa_data.tmesh.tensor_prods[0].ctrl_pts.cols());
-
-#ifdef MFA_TMESH
-                decoder.VolPt_tmesh(param, cpt);
-#else
-                decoder.VolPt(param, cpt, decode_info, mfa_data.tmesh.tensor_prods[0]);
-#endif
-
-                // debug
-//                 cerr << "cpt: " << cpt.transpose() << endl;
-
-                int last = input.pt_dim - 1;                       // range coordinate
-
-                // error
-                T max_err = 0.0;
-                for (auto j = 0; j < mfa_data.max_dim - mfa_data.min_dim + 1; j++)
-                {
-                    T err = fabs(cpt(j) - input.domain(pt_it.idx(), mfa_data.min_dim + j)) / extents(mfa_data.min_dim + j);
-                    max_err = err > max_err ? err : max_err;
-                }
-
-                if (max_err > err_limit)
-                {
-                    vector<KnotIdx> span(dom_dim);              // index space coordinates of span where knot will be inserted
-                    for (auto k = 0; k < dom_dim; k++)
-                        span[k] = mfa_data.FindSpan(k, param(k));
-
-                    // check that new spans will contain at least one input point
-                    bool empty_span = false;
-                    for (auto k = 0; k < dom_dim; k++)
-                    {
-                        // current span must contain at least two input points
-                        size_t low_idx  = mfa_data.tmesh.all_knot_param_idxs[k][span[k]];
-                        size_t high_idx = mfa_data.tmesh.all_knot_param_idxs[k][span[k] + 1];
-                        if (high_idx - low_idx < 2)
-                        {
-                            // debug
-//                             fprintf(stderr, "Insufficient input points when attempting to split span %lu: low_idx = %lu high_idx = %lu\n",
-//                                     span[k], low_idx, high_idx);
-
-                            empty_span = true;
-                            break;
-                        }
-
-                        // new knot would be the midpoint of the span containing the domain point parameters
-                        T new_knot_val = (mfa_data.tmesh.all_knots[k][span[k]] + mfa_data.tmesh.all_knots[k][span[k] + 1]) / 2.0;
-
-                        // if the current span were to be split, check whether the resulting spans will have an input point
-                        ParamIdx param_idx  = low_idx;
-                        while (input.params->param_grid[k][param_idx] < new_knot_val)
-                            param_idx++;
-                        if (param_idx - low_idx == 0 || high_idx - param_idx == 0)
-                        {
-                            empty_span =  true;
-                            break;
-                        }
-                    }
-
-                    if (empty_span)
-                        continue;               // next input point
-
-                    // debug: hard code span
+//         // DEPRECATE eventually in favor of AllErrorSpans
+//         // computes error in knot spans and finds first new knot (in all dimensions at once) that should be inserted
+//         // returns true if all done, ie, no new knots inserted
+//         //
+//         // This version is for the tmesh with global solve
+//         // It takes a full tensor product of ctrl_pts and weights of the same quantities as all_knots in the tmesh
+//         // and decodes that in order to determine first error span.
+//         //
+//         // TODO: lots of optimizations possible; this is completely naive so far
+//         // optimizations:
+//         // each time called, resume search at next domain point
+//         // step through domain points fineer each time the end is reached
+//         // increment ijk in the loop over domain points instead of calling idx2ijk
+//         // TBB? (currently serial)
+//         bool FirstErrorSpan(
+//                 VectorX<T>                  extents,                // extents in each dimension, for normalizing error (size 0 means do not normalize)
+//                 T                           err_limit,              // max. allowed error
+//                 int                         iter,                   // iteration number
+//                 int&                        parent_tensor_idx,      // (output) idx of parent tensor of error span
+//                 vector<vector<KnotIdx>>&    inserted_knot_idxs)     // (output) indices in each dim. of inserted knots in full knot vector after insertion
+//         {
+//             // debug
+//             fprintf(stderr, "*** Using global solve in FirstErrorSpan ***\n");
+// 
+//             Decoder<T>          decoder(mfa_data, 1);
+//             VectorXi            ijk(dom_dim);                   // i,j,k of domain point
+//             VectorX<T>          param(dom_dim);                 // parameters of domain point
+//             vector<int>         span(dom_dim);                  // knot span in each dimension
+//             VectorXi            derivs;                             // size 0 means unused
+//             DecodeInfo<T>       decode_info(mfa_data, derivs);      // reusable decode point info for calling VolPt repeatedly
+//             vector<vector<T>>   new_knots(dom_dim);             // new knots
+//             vector<vector<int>> new_levels(dom_dim);            // new knot levels
+// 
+//             if (!extents.size())
+//                 extents = VectorX<T>::Ones(input.pt_dim);
+// 
+//             for (auto pt_it = input.begin(), pt_end = input.end(); pt_it != pt_end; ++pt_it)
+//             {
+//                 pt_it.params(param);
+//                 VectorX<T> cpt(mfa_data.tmesh.tensor_prods[0].ctrl_pts.cols());
+// 
+// #ifdef MFA_TMESH
+//                 decoder.VolPt_tmesh(param, cpt);
+// #else
+//                 decoder.VolPt(param, cpt, decode_info, mfa_data.tmesh.tensor_prods[0]);
+// #endif
+// 
+// 
+//                 // debug
+// //                 cerr << "cpt: " << cpt.transpose() << endl;
+// 
+//                 int last = input.pt_dim - 1;                       // range coordinate
+// 
+//                 // error
+//                 T max_err = 0.0;
+//                 for (auto j = 0; j < mfa_data.max_dim - mfa_data.min_dim + 1; j++)
+//                 {
+//                     T err = fabs(cpt(j) - input.domain(pt_it.idx(), mfa_data.min_dim + j)) / extents(mfa_data.min_dim + j);
+//                     max_err = err > max_err ? err : max_err;
+//                 }
+// 
+//                 if (max_err > err_limit)
+//                 {
+//                     // check that new spans will contain at least one input point
+//                     bool empty_span = false;
 //                     for (auto k = 0; k < dom_dim; k++)
-//                         span[k] = 5;
-
-                    for (auto k = 0; k < dom_dim; k++)
-                    {
-                        // span should never be the last knot because of the repeated knots at end
-                        assert(span[k] < mfa_data.tmesh.all_knots[k].size() - 1);
-
-                        // new knot is the midpoint of the span containing the domain point parameters
-                        T new_knot_val = (mfa_data.tmesh.all_knots[k][span[k]] + mfa_data.tmesh.all_knots[k][span[k] + 1]) / 2.0;
-                        new_knots[k].push_back(new_knot_val);
-                        new_levels[k].push_back(iter + 1);  // adapt at the next level, for now every iteration is a new level
-                    }
-
-                    if (local)
-                        parent_tensor_idx = InsertKnots(new_knots,
-                                                        new_levels,
-                                                        inserted_knot_idxs,
-                                                        new_nctrl_pts,
-                                                        new_ctrl_pts,
-                                                        new_weights);
-                    else
-                        parent_tensor_idx = InsertKnots(new_knots,
-                                                        new_levels,
-                                                        inserted_knot_idxs);
-
-                    return false;
-                }   // max_err > err_limit
-            }   // for all input points
-
-            return true;
-        }
-
-        // DEPRECATE eventually in favor of AllErrorSpans
-        // computes error in knot spans and finds best new knot (span w/ highest error, in all dimensions at once) that should be inserted
-        // returns true if all done, ie, no new knots inserted
-        //
-        // This version is for the tmesh with global solve
-        // It takes a full tensor product of ctrl_pts and weights of the same quantities as all_knots in the tmesh
-        // and decodes that in order to determine first error span.
-        //
-        // TODO: lots of optimizations possible; this is completely naive so far
-        // optimizations:
-        // each time called, resume search at next domain point
-        // step through domain points finer each time the end is reached
-        // increment ijk in the loop over domain points instead of calling idx2ijk
-        // TBB? (currently serial)
-        bool MaxErrorSpan(
-                VectorX<T>                  extents,                // extents in each dimension, for normalizing error (size 0 means do not normalize)
-                T                           err_limit,              // max. allowed error
-                int                         iter,                   // iteration number
-                int&                        parent_tensor_idx,      // (output) idx of parent tensor of error span
-                vector<vector<KnotIdx>>&    inserted_knot_idxs)     // (output) indices in each dim. of inserted knots in full knot vector after insertion
-        {
-            // debug
-            fprintf(stderr, "*** Using global solve in MaxErrorSpan ***\n");
-
-            Decoder<T>          decoder(mfa_data, 1);
-            VectorXi            ijk(dom_dim);                   // i,j,k of domain point
-            VectorX<T>          param(dom_dim);                 // parameters of domain point
-            vector<int>         span(dom_dim);                  // knot span in each dimension
-            VectorXi            derivs;                             // size 0 means unused
-            DecodeInfo<T>       decode_info(mfa_data, derivs);      // reusable decode point info for calling VolPt repeatedly
-            vector<vector<T>>   new_knots(dom_dim);             // new knots
-            vector<vector<int>> new_levels(dom_dim);            // new knot levels
-
-            if (!extents.size())
-                extents = VectorX<T>::Ones(input.pt_dim);
-
-            T Max_err = -1.0;                                       // overall max error
-            vector<int> Max_span(dom_dim);                      // span at location of overall max error
-
-            for (auto pt_it = input.begin(), pt_end = input.end(); pt_it != pt_end; ++pt_it)
-            {
-                pt_it.params(param);
-                VectorX<T> cpt(mfa_data.tmesh.tensor_prods[0].ctrl_pts.cols());
-
-#ifdef MFA_TMESH
-                decoder.VolPt_tmesh(param, cpt);
-#else
-                decoder.VolPt(param, cpt, decode_info, mfa_data.tmesh.tensor_prods[0]);
-#endif
-
-                // debug
-//                 cerr << "cpt: " << cpt.transpose() << endl;
-
-                int last = input.pt_dim - 1;                       // range coordinate
-
-                // error
-                T max_err = 0.0;                                    // max error over dimensions (eg, science variables)
-                for (auto j = 0; j < mfa_data.max_dim - mfa_data.min_dim + 1; j++)
-                {
-                    T err = fabs(cpt(j) - input.domain(pt_it.idx(), mfa_data.min_dim + j)) / extents(mfa_data.min_dim + j);
-                    max_err = err > max_err ? err : max_err;
-                }
-
-                if (max_err > err_limit && max_err > Max_err)
-                {
-                    // check that new spans will contain at least one input point
-                    bool empty_span = false;
-                    for (auto k = 0; k < dom_dim; k++)
-                    {
-                        span[k] = mfa_data.FindSpan(k, param(k));
-
-                        // span should never be the last knot because of the repeated knots at end
-                        assert(span[k] < mfa_data.tmesh.all_knots[k].size() - 1);
-
-                        // current span must contain at least two input points
-                        size_t low_idx  = mfa_data.tmesh.all_knot_param_idxs[k][span[k]];
-                        size_t high_idx = mfa_data.tmesh.all_knot_param_idxs[k][span[k] + 1];
-                        if (high_idx - low_idx < 2)
-                        {
-                            empty_span = true;
-                            break;
-                        }
-
-                        // new knot would be the midpoint of the span containing the domain point parameters
-                        T new_knot_val = (mfa_data.tmesh.all_knots[k][span[k]] + mfa_data.tmesh.all_knots[k][span[k] + 1]) / 2.0;
-
-                        // if the current span were to be split, check whether the resulting spans will have an input point
-                        ParamIdx param_idx  = low_idx;
-                        while (input.params->param_grid[k][param_idx] < new_knot_val)
-                            param_idx++;
-                        if (param_idx - low_idx == 0 || high_idx - param_idx == 0)
-                        {
-                            empty_span =  true;
-                            break;
-                        }
-                    }
-
-                    if (empty_span)
-                        continue;               // next input point
-
-                    // record Max_err and Max_span
-                    Max_err = max_err;
-                    for (auto k = 0; k < dom_dim; k++)
-                        Max_span[k] = span[k];
-                }   // max_err > err_limit && max_err > Max_err
-            }   // for all input points
-
-            // debug: hard code span
+//                     {
+//                         span[k] = mfa_data.FindSpan(k, param(k));
+// 
+//                         // debug: hard code span
+// //                         span[k] = 5;
+// 
+//                         // span should never be the last knot because of the repeated knots at end
+//                         assert(span[k] < mfa_data.tmesh.all_knots[k].size() - 1);
+// 
+//                         // current span must contain at least two input points
+//                         size_t low_idx  = mfa_data.tmesh.all_knot_param_idxs[k][span[k]];
+//                         size_t high_idx = mfa_data.tmesh.all_knot_param_idxs[k][span[k] + 1];
+//                         if (high_idx - low_idx < 2)
+//                         {
+//                             empty_span = true;
+//                             break;
+//                         }
+// 
+//                         // new knot would be the midpoint of the span containing the domain point parameters
+//                         T new_knot_val = (mfa_data.tmesh.all_knots[k][span[k]] + mfa_data.tmesh.all_knots[k][span[k] + 1]) / 2.0;
+// 
+//                         // if the current span were to be split, check whether the resulting spans will have an input point
+//                         ParamIdx param_idx  = low_idx;
+//                         while (input.params->param_grid[k][param_idx] < new_knot_val)
+//                             param_idx++;
+//                         if (param_idx - low_idx == 0 || high_idx - param_idx == 0)
+//                         {
+//                             empty_span =  true;
+//                             break;
+//                         }
+//                     }
+// 
+//                     if (empty_span)
+//                         continue;               // next input point
+// 
+//                     for (auto k = 0; k < dom_dim; k++)
+//                     {
+//                         // new knot is the midpoint of the span containing the domain point parameters
+//                         T new_knot_val = (mfa_data.tmesh.all_knots[k][span[k]] + mfa_data.tmesh.all_knots[k][span[k] + 1]) / 2.0;
+//                         new_knots[k].push_back(new_knot_val);
+//                         new_levels[k].push_back(iter + 1);  // adapt at the next level, for now every iteration is a new level
+//                     }
+// 
+//                     parent_tensor_idx = InsertKnots(new_knots, new_levels, inserted_knot_idxs);
+//                     return false;
+//                 }   // max_err > err_limit
+//             }   // for all input points
+// 
+//             return true;
+//         }
+// 
+//         // DEPRECATE eventually in favor of AllErrorSpans
+//         // computes error in knot spans and finds first new knot (in all dimensions at once) that should be inserted
+//         // returns true if all done, ie, no new knots inserted
+//         //
+//         // This version is for tmesh with local solve
+//         //
+//         // TODO: lots of optimizations possible; this is completely naive so far
+//         // optimizations:
+//         // each time called, resume search at next domain point
+//         // step through domain points fineer each time the end is reached
+//         // increment ijk in the loop over domain points instead of calling idx2ijk
+//         // TBB? (currently serial)
+//         bool FirstErrorSpan(
+//                 VectorX<T>                  extents,                // extents in each dimension, for normalizing error (size 0 means do not normalize)
+//                 T                           err_limit,              // max. allowed error
+//                 int                         iter,                   // iteration number
+//                 int&                        parent_tensor_idx,      // (output) idx of parent tensor of error span
+//                 vector<vector<KnotIdx>>&    inserted_knot_idxs,     // (output) indices in each dim. of inserted knots in full knot vector after insertion
+//                 vector<VectorXi>&           new_nctrl_pts,          // (output) new number of control points in each dim. from P&T knot insertion, one std:vector element per knot inserted
+//                 vector<MatrixX<T>>&         new_ctrl_pts,           // (output) new control points from P&T knot insertion, one std::vector element per knot inserted
+//                 vector<VectorX<T>>&         new_weights,            // (output) new weights from P&T knot insertion, one std::vector element per knot inserted
+//                 bool&                       local)                  // (output) span allows local solve to proceed (sufficient constraints exist)
+//         {
+//             // debug
+//             fprintf(stderr, "*** Using local solve in FirstErrorSpan ***\n");
+// 
+//             Decoder<T>          decoder(mfa_data, 1);
+//             VectorXi            ijk(dom_dim);                   // i,j,k of domain point
+//             VectorX<T>          param(dom_dim);                 // parameters of domain point
+//             VectorXi            derivs;                             // size 0 means unused
+//             DecodeInfo<T>       decode_info(mfa_data, derivs);      // reusable decode point info for calling VolPt repeatedly
+//             vector<vector<T>>   new_knots(dom_dim);             // new knots
+//             vector<vector<int>> new_levels(dom_dim);            // new knot levels
+// 
+//             if (!extents.size())
+//                 extents = VectorX<T>::Ones(input.pt_dim);
+// 
+//             for (auto pt_it = input.begin(), pt_end = input.end(); pt_it != pt_end; ++pt_it)
+//             {
+//                 pt_it.params(param);
+//                 VectorX<T> cpt(mfa_data.tmesh.tensor_prods[0].ctrl_pts.cols());
+// 
+// #ifdef MFA_TMESH
+//                 decoder.VolPt_tmesh(param, cpt);
+// #else
+//                 decoder.VolPt(param, cpt, decode_info, mfa_data.tmesh.tensor_prods[0]);
+// #endif
+// 
+//                 // debug
+// //                 cerr << "cpt: " << cpt.transpose() << endl;
+// 
+//                 int last = input.pt_dim - 1;                       // range coordinate
+// 
+//                 // error
+//                 T max_err = 0.0;
+//                 for (auto j = 0; j < mfa_data.max_dim - mfa_data.min_dim + 1; j++)
+//                 {
+//                     T err = fabs(cpt(j) - input.domain(pt_it.idx(), mfa_data.min_dim + j)) / extents(mfa_data.min_dim + j);
+//                     max_err = err > max_err ? err : max_err;
+//                 }
+// 
+//                 if (max_err > err_limit)
+//                 {
+//                     vector<KnotIdx> span(dom_dim);              // index space coordinates of span where knot will be inserted
+//                     for (auto k = 0; k < dom_dim; k++)
+//                         span[k] = mfa_data.FindSpan(k, param(k));
+// 
+//                     // check that new spans will contain at least one input point
+//                     bool empty_span = false;
+//                     for (auto k = 0; k < dom_dim; k++)
+//                     {
+//                         // current span must contain at least two input points
+//                         size_t low_idx  = mfa_data.tmesh.all_knot_param_idxs[k][span[k]];
+//                         size_t high_idx = mfa_data.tmesh.all_knot_param_idxs[k][span[k] + 1];
+//                         if (high_idx - low_idx < 2)
+//                         {
+//                             // debug
+// //                             fprintf(stderr, "Insufficient input points when attempting to split span %lu: low_idx = %lu high_idx = %lu\n",
+// //                                     span[k], low_idx, high_idx);
+// 
+//                             empty_span = true;
+//                             break;
+//                         }
+// 
+//                         // new knot would be the midpoint of the span containing the domain point parameters
+//                         T new_knot_val = (mfa_data.tmesh.all_knots[k][span[k]] + mfa_data.tmesh.all_knots[k][span[k] + 1]) / 2.0;
+// 
+//                         // if the current span were to be split, check whether the resulting spans will have an input point
+//                         ParamIdx param_idx  = low_idx;
+//                         while (input.params->param_grid[k][param_idx] < new_knot_val)
+//                             param_idx++;
+//                         if (param_idx - low_idx == 0 || high_idx - param_idx == 0)
+//                         {
+//                             empty_span =  true;
+//                             break;
+//                         }
+//                     }
+// 
+//                     if (empty_span)
+//                         continue;               // next input point
+// 
+//                     // debug: hard code span
+// //                     for (auto k = 0; k < dom_dim; k++)
+// //                         span[k] = 5;
+// 
+//                     for (auto k = 0; k < dom_dim; k++)
+//                     {
+//                         // span should never be the last knot because of the repeated knots at end
+//                         assert(span[k] < mfa_data.tmesh.all_knots[k].size() - 1);
+// 
+//                         // new knot is the midpoint of the span containing the domain point parameters
+//                         T new_knot_val = (mfa_data.tmesh.all_knots[k][span[k]] + mfa_data.tmesh.all_knots[k][span[k] + 1]) / 2.0;
+//                         new_knots[k].push_back(new_knot_val);
+//                         new_levels[k].push_back(iter + 1);  // adapt at the next level, for now every iteration is a new level
+//                     }
+// 
+//                     if (local)
+//                         parent_tensor_idx = InsertKnots(new_knots,
+//                                                         new_levels,
+//                                                         inserted_knot_idxs,
+//                                                         new_nctrl_pts,
+//                                                         new_ctrl_pts,
+//                                                         new_weights);
+//                     else
+//                         parent_tensor_idx = InsertKnots(new_knots,
+//                                                         new_levels,
+//                                                         inserted_knot_idxs);
+// 
+//                     return false;
+//                 }   // max_err > err_limit
+//             }   // for all input points
+// 
+//             return true;
+//         }
+// 
+//         // DEPRECATE eventually in favor of AllErrorSpans
+//         // computes error in knot spans and finds best new knot (span w/ highest error, in all dimensions at once) that should be inserted
+//         // returns true if all done, ie, no new knots inserted
+//         //
+//         // This version is for the tmesh with global solve
+//         // It takes a full tensor product of ctrl_pts and weights of the same quantities as all_knots in the tmesh
+//         // and decodes that in order to determine first error span.
+//         //
+//         // TODO: lots of optimizations possible; this is completely naive so far
+//         // optimizations:
+//         // each time called, resume search at next domain point
+//         // step through domain points finer each time the end is reached
+//         // increment ijk in the loop over domain points instead of calling idx2ijk
+//         // TBB? (currently serial)
+//         bool MaxErrorSpan(
+//                 VectorX<T>                  extents,                // extents in each dimension, for normalizing error (size 0 means do not normalize)
+//                 T                           err_limit,              // max. allowed error
+//                 int                         iter,                   // iteration number
+//                 int&                        parent_tensor_idx,      // (output) idx of parent tensor of error span
+//                 vector<vector<KnotIdx>>&    inserted_knot_idxs)     // (output) indices in each dim. of inserted knots in full knot vector after insertion
+//         {
+//             // debug
+//             fprintf(stderr, "*** Using global solve in MaxErrorSpan ***\n");
+// 
+//             Decoder<T>          decoder(mfa_data, 1);
+//             VectorXi            ijk(dom_dim);                   // i,j,k of domain point
+//             VectorX<T>          param(dom_dim);                 // parameters of domain point
+//             vector<int>         span(dom_dim);                  // knot span in each dimension
+//             VectorXi            derivs;                             // size 0 means unused
+//             DecodeInfo<T>       decode_info(mfa_data, derivs);      // reusable decode point info for calling VolPt repeatedly
+//             vector<vector<T>>   new_knots(dom_dim);             // new knots
+//             vector<vector<int>> new_levels(dom_dim);            // new knot levels
+// 
+//             if (!extents.size())
+//                 extents = VectorX<T>::Ones(input.pt_dim);
+// 
+//             T Max_err = -1.0;                                       // overall max error
+//             vector<int> Max_span(dom_dim);                      // span at location of overall max error
+// 
+//             for (auto pt_it = input.begin(), pt_end = input.end(); pt_it != pt_end; ++pt_it)
+//             {
+//                 pt_it.params(param);
+//                 VectorX<T> cpt(mfa_data.tmesh.tensor_prods[0].ctrl_pts.cols());
+// 
+// #ifdef MFA_TMESH
+//                 decoder.VolPt_tmesh(param, cpt);
+// #else
+//                 decoder.VolPt(param, cpt, decode_info, mfa_data.tmesh.tensor_prods[0]);
+// #endif
+// 
+//                 // debug
+// //                 cerr << "cpt: " << cpt.transpose() << endl;
+// 
+//                 int last = input.pt_dim - 1;                       // range coordinate
+// 
+//                 // error
+//                 T max_err = 0.0;                                    // max error over dimensions (eg, science variables)
+//                 for (auto j = 0; j < mfa_data.max_dim - mfa_data.min_dim + 1; j++)
+//                 {
+//                     T err = fabs(cpt(j) - input.domain(pt_it.idx(), mfa_data.min_dim + j)) / extents(mfa_data.min_dim + j);
+//                     max_err = err > max_err ? err : max_err;
+//                 }
+// 
+//                 if (max_err > err_limit && max_err > Max_err)
+//                 {
+//                     // check that new spans will contain at least one input point
+//                     bool empty_span = false;
+//                     for (auto k = 0; k < dom_dim; k++)
+//                     {
+//                         span[k] = mfa_data.FindSpan(k, param(k));
+// 
+//                         // span should never be the last knot because of the repeated knots at end
+//                         assert(span[k] < mfa_data.tmesh.all_knots[k].size() - 1);
+// 
+//                         // current span must contain at least two input points
+//                         size_t low_idx  = mfa_data.tmesh.all_knot_param_idxs[k][span[k]];
+//                         size_t high_idx = mfa_data.tmesh.all_knot_param_idxs[k][span[k] + 1];
+//                         if (high_idx - low_idx < 2)
+//                         {
+//                             empty_span = true;
+//                             break;
+//                         }
+// 
+//                         // new knot would be the midpoint of the span containing the domain point parameters
+//                         T new_knot_val = (mfa_data.tmesh.all_knots[k][span[k]] + mfa_data.tmesh.all_knots[k][span[k] + 1]) / 2.0;
+// 
+//                         // if the current span were to be split, check whether the resulting spans will have an input point
+//                         ParamIdx param_idx  = low_idx;
+//                         while (input.params->param_grid[k][param_idx] < new_knot_val)
+//                             param_idx++;
+//                         if (param_idx - low_idx == 0 || high_idx - param_idx == 0)
+//                         {
+//                             empty_span =  true;
+//                             break;
+//                         }
+//                     }
+// 
+//                     if (empty_span)
+//                         continue;               // next input point
+// 
+//                     // record Max_err and Max_span
+//                     Max_err = max_err;
+//                     for (auto k = 0; k < dom_dim; k++)
+//                         Max_span[k] = span[k];
+//                 }   // max_err > err_limit && max_err > Max_err
+//             }   // for all input points
+// 
+//             // debug: hard code span
+// //             if (Max_err >= 0.0)
+// //             {
+// //                 for (auto k = 0; k < dom_dim; k++)
+// //                     Max_span[k] = 4;
+// //             }
+// 
 //             if (Max_err >= 0.0)
 //             {
 //                 for (auto k = 0; k < dom_dim; k++)
-//                     Max_span[k] = 4;
+//                 {
+//                     // new knot is the midpoint of the span containing the domain point parameters
+//                     T new_knot_val = (mfa_data.tmesh.all_knots[k][Max_span[k]] + mfa_data.tmesh.all_knots[k][Max_span[k] + 1]) / 2.0;
+//                     new_knots[k].push_back(new_knot_val);
+//                     new_levels[k].push_back(iter + 1);  // adapt at the next level, for now every iteration is a new level
+//                 }
+// 
+//                 parent_tensor_idx = InsertKnots(new_knots, new_levels, inserted_knot_idxs);
+//                 return false;
 //             }
-
-            if (Max_err >= 0.0)
-            {
-                for (auto k = 0; k < dom_dim; k++)
-                {
-                    // new knot is the midpoint of the span containing the domain point parameters
-                    T new_knot_val = (mfa_data.tmesh.all_knots[k][Max_span[k]] + mfa_data.tmesh.all_knots[k][Max_span[k] + 1]) / 2.0;
-                    new_knots[k].push_back(new_knot_val);
-                    new_levels[k].push_back(iter + 1);  // adapt at the next level, for now every iteration is a new level
-                }
-
-                parent_tensor_idx = InsertKnots(new_knots, new_levels, inserted_knot_idxs);
-                return false;
-            }
-            return true;
-        }
-
-        // DEPRECATE eventually in favor of AllErrorSpans
-        // computes error in knot spans and finds best new knot (span w/ highest error, in all dimensions at once) that should be inserted
-        // returns true if all done, ie, no new knots inserted
-        //
-        // This version is for tmesh with local solve
-        //
-        // TODO: lots of optimizations possible; this is completely naive so far
-        // optimizations:
-        // each time called, resume search at next domain point
-        // step through domain points fineer each time the end is reached
-        // increment ijk in the loop over domain points instead of calling idx2ijk
-        // TBB? (currently serial)
-        bool MaxErrorSpan(
-                VectorX<T>                  extents,                // extents in each dimension, for normalizing error (size 0 means do not normalize)
-                T                           err_limit,              // max. allowed error
-                int                         iter,                   // iteration number
-                int&                        parent_tensor_idx,      // (output) idx of parent tensor of error span
-                vector<vector<KnotIdx>>&    inserted_knot_idxs,     // (output) indices in each dim. of inserted knots in full knot vector after insertion
-                vector<VectorXi>&           new_nctrl_pts,          // (output) new number of control points in each dim. from P&T knot insertion, one std:vector element per knot inserted
-                vector<MatrixX<T>>&         new_ctrl_pts,           // (output) new control points from P&T knot insertion, one std::vector element per knot inserted
-                vector<VectorX<T>>&         new_weights,            // (output) new weights from P&T knot insertion, one std::vector element per knot inserted
-                bool&                       local)                  // (output) span allows local solve to proceed (sufficient constraints exist)
-        {
-            // debug
-            fprintf(stderr, "*** Using local solve in MaxErrorSpan ***\n");
-
-            Decoder<T>          decoder(mfa_data, 1);
-            VectorXi            ijk(dom_dim);                   // i,j,k of domain point
-            VectorX<T>          param(dom_dim);                 // parameters of domain point
-            VectorXi            derivs;                             // size 0 means unused
-            DecodeInfo<T>       decode_info(mfa_data, derivs);      // reusable decode point info for calling VolPt repeatedly
-            vector<vector<T>>   new_knots(dom_dim);             // new knots
-            vector<vector<int>> new_levels(dom_dim);            // new knot levels
-
-            if (!extents.size())
-                extents = VectorX<T>::Ones(input.pt_dim);
-
-            T Max_err = -1.0;                                       // overall max error
-            vector<KnotIdx> Max_span(dom_dim);                  // span at location of overall max error
-
-            for (auto pt_it = input.begin(), pt_end = input.end(); pt_it != pt_end; ++pt_it)
-            {
-                pt_it.params(param);
-                VectorX<T> cpt(mfa_data.tmesh.tensor_prods[0].ctrl_pts.cols());
-
-#ifdef MFA_TMESH
-                decoder.VolPt_tmesh(param, cpt);
-#else
-                decoder.VolPt(param, cpt, decode_info, mfa_data.tmesh.tensor_prods[0]);
-#endif
-
-                // debug
-//                 cerr << "cpt: " << cpt.transpose() << endl;
-
-                int last = input.pt_dim - 1;                       // range coordinate
-
-                // error
-                T max_err = 0.0;
-                for (auto j = 0; j < mfa_data.max_dim - mfa_data.min_dim + 1; j++)
-                {
-                    T err = fabs(cpt(j) - input.domain(pt_it.idx(), mfa_data.min_dim + j)) / extents(mfa_data.min_dim + j);
-                    max_err = err > max_err ? err : max_err;
-                }
-
-                if (max_err > err_limit && max_err > Max_err)
-                {
-                    vector<KnotIdx> span(dom_dim);              // index space coordinates of span where knot will be inserted
-                    for (auto k = 0; k < dom_dim; k++)
-                        span[k] = mfa_data.FindSpan(k, param(k));
-
-                    // check that new spans will contain at least one input point
-                    bool empty_span = false;
-                    for (auto k = 0; k < dom_dim; k++)
-                    {
-                        // current span must contain at least two input points
-                        size_t low_idx  = mfa_data.tmesh.all_knot_param_idxs[k][span[k]];
-                        size_t high_idx = mfa_data.tmesh.all_knot_param_idxs[k][span[k] + 1];
-                        if (high_idx - low_idx < 2)
-                        {
-                            // debug
-//                             fprintf(stderr, "Insufficient input points when attempting to split span %lu: low_idx = %lu high_idx = %lu\n",
-//                                     span[k], low_idx, high_idx);
-
-                            empty_span = true;
-                            break;
-                        }
-
-                        // new knot would be the midpoint of the span containing the domain point parameters
-                        T new_knot_val = (mfa_data.tmesh.all_knots[k][span[k]] + mfa_data.tmesh.all_knots[k][span[k] + 1]) / 2.0;
-
-                        // if the current span were to be split, check whether the resulting spans will have an input point
-                        ParamIdx param_idx  = low_idx;
-                        while (input.params->param_grid[k][param_idx] < new_knot_val)
-                            param_idx++;
-                        if (param_idx - low_idx == 0 || high_idx - param_idx == 0)
-                        {
-                            empty_span =  true;
-                            break;
-                        }
-                    }
-
-                    if (empty_span)
-                        continue;               // next input point
-
-                    // record Max_err and Max_span
-                    Max_err = max_err;
-                    for (auto k = 0; k < dom_dim; k++)
-                        Max_span[k] = span[k];
-                }   // max_err > err_limit
-            }   // for all input points
-
-            // debug: hard code span
+//             return true;
+//         }
+// 
+//         // DEPRECATE eventually in favor of AllErrorSpans
+//         // computes error in knot spans and finds best new knot (span w/ highest error, in all dimensions at once) that should be inserted
+//         // returns true if all done, ie, no new knots inserted
+//         //
+//         // This version is for tmesh with local solve
+//         //
+//         // TODO: lots of optimizations possible; this is completely naive so far
+//         // optimizations:
+//         // each time called, resume search at next domain point
+//         // step through domain points fineer each time the end is reached
+//         // increment ijk in the loop over domain points instead of calling idx2ijk
+//         // TBB? (currently serial)
+//         bool MaxErrorSpan(
+//                 VectorX<T>                  extents,                // extents in each dimension, for normalizing error (size 0 means do not normalize)
+//                 T                           err_limit,              // max. allowed error
+//                 int                         iter,                   // iteration number
+//                 int&                        parent_tensor_idx,      // (output) idx of parent tensor of error span
+//                 vector<vector<KnotIdx>>&    inserted_knot_idxs,     // (output) indices in each dim. of inserted knots in full knot vector after insertion
+//                 vector<VectorXi>&           new_nctrl_pts,          // (output) new number of control points in each dim. from P&T knot insertion, one std:vector element per knot inserted
+//                 vector<MatrixX<T>>&         new_ctrl_pts,           // (output) new control points from P&T knot insertion, one std::vector element per knot inserted
+//                 vector<VectorX<T>>&         new_weights,            // (output) new weights from P&T knot insertion, one std::vector element per knot inserted
+//                 bool&                       local)                  // (output) span allows local solve to proceed (sufficient constraints exist)
+//         {
+//             // debug
+//             fprintf(stderr, "*** Using local solve in MaxErrorSpan ***\n");
+// 
+//             Decoder<T>          decoder(mfa_data, 1);
+//             VectorXi            ijk(dom_dim);                   // i,j,k of domain point
+//             VectorX<T>          param(dom_dim);                 // parameters of domain point
+//             VectorXi            derivs;                             // size 0 means unused
+//             DecodeInfo<T>       decode_info(mfa_data, derivs);      // reusable decode point info for calling VolPt repeatedly
+//             vector<vector<T>>   new_knots(dom_dim);             // new knots
+//             vector<vector<int>> new_levels(dom_dim);            // new knot levels
+// 
+//             if (!extents.size())
+//                 extents = VectorX<T>::Ones(input.pt_dim);
+// 
+//             T Max_err = -1.0;                                       // overall max error
+//             vector<KnotIdx> Max_span(dom_dim);                  // span at location of overall max error
+// 
+//             for (auto pt_it = input.begin(), pt_end = input.end(); pt_it != pt_end; ++pt_it)
+//             {
+//                 pt_it.params(param);
+//                 VectorX<T> cpt(mfa_data.tmesh.tensor_prods[0].ctrl_pts.cols());
+// 
+// #ifdef MFA_TMESH
+//                 decoder.VolPt_tmesh(param, cpt);
+// #else
+//                 decoder.VolPt(param, cpt, decode_info, mfa_data.tmesh.tensor_prods[0]);
+// #endif
+// 
+//                 // debug
+// //                 cerr << "cpt: " << cpt.transpose() << endl;
+// 
+//                 int last = input.pt_dim - 1;                       // range coordinate
+// 
+//                 // error
+//                 T max_err = 0.0;
+//                 for (auto j = 0; j < mfa_data.max_dim - mfa_data.min_dim + 1; j++)
+//                 {
+//                     T err = fabs(cpt(j) - input.domain(pt_it.idx(), mfa_data.min_dim + j)) / extents(mfa_data.min_dim + j);
+//                     max_err = err > max_err ? err : max_err;
+//                 }
+// 
+//                 if (max_err > err_limit && max_err > Max_err)
+//                 {
+//                     vector<KnotIdx> span(dom_dim);              // index space coordinates of span where knot will be inserted
+//                     for (auto k = 0; k < dom_dim; k++)
+//                         span[k] = mfa_data.FindSpan(k, param(k));
+// 
+//                     // check that new spans will contain at least one input point
+//                     bool empty_span = false;
+//                     for (auto k = 0; k < dom_dim; k++)
+//                     {
+//                         // current span must contain at least two input points
+//                         size_t low_idx  = mfa_data.tmesh.all_knot_param_idxs[k][span[k]];
+//                         size_t high_idx = mfa_data.tmesh.all_knot_param_idxs[k][span[k] + 1];
+//                         if (high_idx - low_idx < 2)
+//                         {
+//                             // debug
+// //                             fprintf(stderr, "Insufficient input points when attempting to split span %lu: low_idx = %lu high_idx = %lu\n",
+// //                                     span[k], low_idx, high_idx);
+// 
+//                             empty_span = true;
+//                             break;
+//                         }
+// 
+//                         // new knot would be the midpoint of the span containing the domain point parameters
+//                         T new_knot_val = (mfa_data.tmesh.all_knots[k][span[k]] + mfa_data.tmesh.all_knots[k][span[k] + 1]) / 2.0;
+// 
+//                         // if the current span were to be split, check whether the resulting spans will have an input point
+//                         ParamIdx param_idx  = low_idx;
+//                         while (input.params->param_grid[k][param_idx] < new_knot_val)
+//                             param_idx++;
+//                         if (param_idx - low_idx == 0 || high_idx - param_idx == 0)
+//                         {
+//                             empty_span =  true;
+//                             break;
+//                         }
+//                     }
+// 
+//                     if (empty_span)
+//                         continue;               // next input point
+// 
+//                     // record Max_err and Max_span
+//                     Max_err = max_err;
+//                     for (auto k = 0; k < dom_dim; k++)
+//                         Max_span[k] = span[k];
+//                 }   // max_err > err_limit
+//             }   // for all input points
+// 
+//             // debug: hard code span
+// //             if (Max_err >= 0.0)
+// //             {
+// //                 for (auto k = 0; k < dom_dim; k++)
+// //                     Max_span[k] = 4;
+// //             }
+// 
 //             if (Max_err >= 0.0)
 //             {
 //                 for (auto k = 0; k < dom_dim; k++)
-//                     Max_span[k] = 4;
-//             }
-
-            if (Max_err >= 0.0)
-            {
-                for (auto k = 0; k < dom_dim; k++)
-                {
-                    // span should never be the last knot because of the repeated knots at end
-                    assert(Max_span[k] < mfa_data.tmesh.all_knots[k].size() - 1);
-
-                    // new knot is the midpoint of the span containing the domain point parameters
-                    T new_knot_val = (mfa_data.tmesh.all_knots[k][Max_span[k]] + mfa_data.tmesh.all_knots[k][Max_span[k] + 1]) / 2.0;
-                    new_knots[k].push_back(new_knot_val);
-                    new_levels[k].push_back(iter + 1);  // adapt at the next level, for now every iteration is a new level
-                }
-
-                if (local)
-                    parent_tensor_idx = InsertKnots(new_knots,
-                                                    new_levels,
-                                                    inserted_knot_idxs,
-                                                    new_nctrl_pts,
-                                                    new_ctrl_pts,
-                                                    new_weights);
-                else
-                    parent_tensor_idx = InsertKnots(new_knots,
-                                                    new_levels,
-                                                    inserted_knot_idxs);
-
-                return false;
-            }   // Max_err >= 0.0
-            return true;
-        }
+//                 {
+//                     // span should never be the last knot because of the repeated knots at end
+//                     assert(Max_span[k] < mfa_data.tmesh.all_knots[k].size() - 1);
+// 
+//                     // new knot is the midpoint of the span containing the domain point parameters
+//                     T new_knot_val = (mfa_data.tmesh.all_knots[k][Max_span[k]] + mfa_data.tmesh.all_knots[k][Max_span[k] + 1]) / 2.0;
+//                     new_knots[k].push_back(new_knot_val);
+//                     new_levels[k].push_back(iter + 1);  // adapt at the next level, for now every iteration is a new level
+//                 }
+// 
+//                 if (local)
+//                     parent_tensor_idx = InsertKnots(new_knots,
+//                                                     new_levels,
+//                                                     inserted_knot_idxs,
+//                                                     new_nctrl_pts,
+//                                                     new_ctrl_pts,
+//                                                     new_weights);
+//                 else
+//                     parent_tensor_idx = InsertKnots(new_knots,
+//                                                     new_levels,
+//                                                     inserted_knot_idxs);
+// 
+//                 return false;
+//             }   // Max_err >= 0.0
+//             return true;
+//         }
 
         // for debugging: checks all knot spans for at least one input point and for nondecreasing order
         // returns true if all spans check out
@@ -867,9 +867,10 @@ namespace mfa
             return true;
         }
 
-        // computes error in knot spans and finds all new knots (in all dimensions at once) that should be inserted
+        // computes error in knot spans and finds all new knots (in all dimensions at once) that should be inserted at one level
         // returns true if all done, ie, no new knots inserted
         bool AllErrorSpans(
+                int                         parent_level,           // level of parent tensor to check
                 VectorX<T>                  extents,                // extents in each dimension, for normalizing error (size 0 means do not normalize)
                 T                           err_limit,              // max. allowed error, assumed to be normalized
                 bool                        saved_basis,            // whether basis functions were saved and can be re-used
@@ -929,7 +930,7 @@ namespace mfa
 
                 TensorProduct<T>& t = tmesh.tensor_prods[tidx];
 
-                if (t.done)
+                if (t.level > parent_level || t.done)
                     continue;
 
                 bool tensor_done    = true;                         // no new knots added in the current tensor
