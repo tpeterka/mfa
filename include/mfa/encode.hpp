@@ -1430,23 +1430,30 @@ namespace mfa
                 int nknots = 1;
                 for (auto i = 0; i < mfa_data.dom_dim; i++)
                     nknots *= mfa_data.tmesh.all_knots[i].size();
-                if (nknots == prev_nknots)
+
+                // debug
+//                 fmt::print(stderr, "bottom of iteration {} no_change_iter {} nknots {} prev_nknots {}\n",
+//                         iter, no_change_iter, nknots, prev_nknots);
+
+                if (nknots == prev_nknots)                                      // number of knots did not change
                 {
-                    if (no_change_iter >= 0 && iter - no_change_iter > 1)
+                    if (no_change_iter < 0)
+                        no_change_iter = iter;
+                    if (iter - no_change_iter)                                  // two iterations with no change
                     {
                         if (verbose)
                             fprintf(stderr, "\nKnot insertion done after %d iterations; no new knots added.\n\n", iter + 1);
                         break;
                     }
-                    else
+                    else                                                        // one iteration with no change
                         parent_level++;
                 }
-                else
+                else                                                            // number of knots changed
                 {
                     prev_nknots     = nknots;
                     no_change_iter  = -1;
                 }
-            }
+            }   // iterations
 
             // debug: print tmesh
             fprintf(stderr, "\n----- final T-mesh -----\n\n");
@@ -2334,6 +2341,7 @@ namespace mfa
 
                 // insert the new knot into tmesh all_knots
                 int retval;
+                bool new_candidate = false;                         // make new candidate tensor for this knot
                 for (auto j = 0; j < dom_dim; j++)
                 {
                     inserted[j] = false;
@@ -2345,7 +2353,10 @@ namespace mfa
                                 inserted_knot_idxs[j][i]);
 
                     if (retval == 1 || retval == 2)
+                    {
                         inserted[j] = true;
+                        new_candidate = true;
+                    }
                 }
 
                 // debug
@@ -2357,25 +2368,27 @@ namespace mfa
 //                     fmt::print(stderr, "{} ", inserted_knots[j][i]);
 //                 fmt::print(stderr, " ] parent tensor idx {}\n\n", parent_tensor_idxs[i]);
 
-                // debug
-                // check all spans for input points
-                // TODO: comment out once the code is debugged
-                if (!nk.CheckAllSpans())
+                // it's possible that all components of the knot exist separately but not together
+                // in this case check if the full-dimension knot is already part of a candidate tensor before skipping
+                if (find(inserted.begin(), inserted.end(), true) == inserted.end())     // knot exists in all dimensions separately
                 {
-                    fmt::print(stderr, "\nError: Refine(): after inserting knot idx [ ");
+                    vector<KnotIdx> knot(dom_dim);                                      // full-dim. knot
                     for (auto j = 0; j < dom_dim; j++)
-                        fmt::print(stderr, "{} ", inserted_knot_idxs[j][i]);
-                    fmt::print(stderr, "] with value [ ");
-                    for (auto j = 0; j < dom_dim; j++)
-                        fmt::print(stderr, "{} ", inserted_knots[j][i]);
-                    fmt::print(stderr, "] CheckAllSpans() failed. This should not happen.\n");
+                        knot[j] = inserted_knot_idxs[j][i];
 
-                    fprintf(stderr, "\nRefine(): Tmesh knots after insertion:\n");
-                    tmesh.print_knots();
-                    abort();
+                    TensorIdx k;
+                    for (k = 0; k < new_tensors.size(); k++)                            // check all candidate tensors
+                    {
+                        auto& c = new_tensors[k];
+                        if (tmesh.in(knot, c, false))
+                            break;
+                    }
+                    // TODO: this causes a seg fault in iteration 7
+                    if (k == new_tensors.size())                                        // no candidates contain the knot
+                            new_candidate = true;
                 }
 
-                if (find(inserted.begin(), inserted.end(), true) == inserted.end())
+                if (!new_candidate)
                     continue;
 
                 // make a candidate tensor of some size, eg., p+1 or p+2 control points
@@ -2460,8 +2473,13 @@ namespace mfa
                     }
                 }
 
-                // check/adjust candidate knot mins and maxs against tensors to be added so far
-                bool add = true;
+                // debug
+//                 fmt::print(stderr, "candidate tensor knot_mins [{}] knot_maxs[{}] level {} parent {}\n",
+//                         fmt::join(c.knot_mins, ","), fmt::join(c.knot_maxs, ","), c.level, c.parent);
+//                 fmt::print(stderr, "knot_min_vals [{}, {}] knot_max_vals [{}, {}]\n",
+//                         all_knots[0][c.knot_mins[0]], all_knots[1][c.knot_mins[1]], all_knots[0][c.knot_maxs[0]], all_knots[1][c.knot_maxs[1]]);
+
+                // adjust knot mins, maxs of tensors to be added so far because of inserted knots
                 for (auto tidx = 0; tidx < new_tensors.size(); tidx++)          // for all tensors scheduled to be added so far
                 {
                     auto& t = new_tensors[tidx];
@@ -2474,6 +2492,13 @@ namespace mfa
                         if (inserted[j] && inserted_knot_idxs[j][i] <= t.knot_maxs[j])
                             t.knot_maxs[j]++;
                     }
+                }
+
+                // check/adjust candidate knot mins and maxs subset and intersection against tensors to be added so far
+                bool add    = true;
+                for (auto tidx = 0; tidx < new_tensors.size(); tidx++)          // for all tensors scheduled to be added so far
+                {
+                    auto& t = new_tensors[tidx];
 
                     // candidate is a subset of an already scheduled tensor
                     if (tmesh.subset(c.knot_mins, c.knot_maxs, t.knot_mins, t.knot_maxs))
@@ -2484,12 +2509,10 @@ namespace mfa
                     {
                         t.knot_mins = c.knot_mins;
                         t.knot_maxs = c.knot_maxs;
-                        add = false;
+                        add         = false;
                     }
 
                     // candidate intersects an already scheduled tensor, to within some proximity
-                    // TODO: not sure whether to merge here or adjust mins, maxs to align but keep two separate tensors
-                    // this may be the cause of some very large tensors that take a long time to solve
                     else if (tmesh.intersect(c, t, pad))
                     {
                         if (c.parent == t.parent)       // only merge tensors refined from the same parent
@@ -2499,14 +2522,61 @@ namespace mfa
                             tmesh.merge(t.knot_mins, t.knot_maxs, c.knot_mins, c.knot_maxs, merge_mins, merge_maxs);
                             t.knot_mins = merge_mins;
                             t.knot_maxs = merge_maxs;
-                            add = false;
+                            add         = false;
                         }
                     }
                 }       // for all tensors scheduled to be added so far
 
                 // schedule the tensor to be added
                 if (add)
+                {
+                    // debug
+//                     fmt::print(stderr, "i {} adding new tensor c knot_mins [{}] knot_maxs [{}] level {}\n",
+//                             i, fmt::join(c.knot_mins, ","), fmt::join(c.knot_maxs, ","), c.level);
+
                     new_tensors.push_back(c);
+                }
+
+                // check/adjust tensors scheduled to be added against each other
+                // use level = -1 to indicate removing the tensor from the schedule
+                for (auto tidx = 0; tidx < new_tensors.size(); tidx++)          // for all tensors scheduled to be added so far
+                {
+                    auto& t = new_tensors[tidx];
+
+                    if (t.level < 0)
+                        continue;
+
+                    for (auto tidx1 = 0; tidx1 < new_tensors.size(); tidx1++)   // for all tensors scheduled to be added so far
+                    {
+                        auto& t1 = new_tensors[tidx1];
+
+                        if (tidx == tidx1 || t1.level < 0)
+                            continue;
+
+                        // t is a subset of t1
+                        if (tmesh.subset(t.knot_mins, t.knot_maxs, t1.knot_mins, t1.knot_maxs))
+                            t.level = -1;                   // remove t from the schedule
+
+                        // t is a superset of t1
+                        else if (tmesh.subset(t.knot_mins, t.knot_maxs, c.knot_mins, c.knot_maxs))
+                            t1.level = -1;                  // remove t1 from the schedule
+
+                        // candidate intersects an already scheduled tensor, to within some proximity
+                        else if (tmesh.intersect(c, t, pad))
+                        {
+                            if (t.parent == t1.parent)       // only merge tensors refined from the same parent
+                            {
+                                vector<KnotIdx> merge_mins(dom_dim);
+                                vector<KnotIdx> merge_maxs(dom_dim);
+                                tmesh.merge(t.knot_mins, t.knot_maxs, c.knot_mins, c.knot_maxs, merge_mins, merge_maxs);
+                                t.knot_mins = merge_mins;   // adjust t to the merged extents
+                                t.knot_maxs = merge_maxs;
+                                t1.level    = -1;           // remove t1 from the schedule
+                            }
+                        }
+                    }   // tidx1
+                }   // tidx
+
 
             }   // for all knots to be inserted
 
@@ -2520,10 +2590,17 @@ namespace mfa
             {
                 auto& t = new_tensors[k];
 
+                if (t.level < 0)                        // tensor was removed from the schedule
+                    continue;
+
                 // timing
                 double t0 = MPI_Wtime();
 
-                int tensor_idx = tmesh.append_tensor(t.knot_mins, t.knot_maxs, parent_level + 1);
+                // debug
+//                 fmt::print(stderr, "appending tensor k {} level {}, knot_mins [{}] knot_maxs [{}]\n",
+//                         k, t.level, fmt::join(t.knot_mins, ","), fmt::join(t.knot_maxs, ","));
+
+                int tensor_idx = tmesh.append_tensor(t.knot_mins, t.knot_maxs, t.level);
 
                 // timing
                 append_time += (MPI_Wtime() - t0);

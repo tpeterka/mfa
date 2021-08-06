@@ -925,12 +925,9 @@ namespace mfa
 
             for (auto tidx = 0; tidx < tmesh.tensor_prods.size(); tidx++)   // for all tensors
             {
-                // debug
-//                 cerr << "tensor " << tidx << endl;
-
                 TensorProduct<T>& t = tmesh.tensor_prods[tidx];
 
-                if (t.level > parent_level || t.done)
+                if (t.level != parent_level || t.done)
                     continue;
 
                 bool tensor_done    = true;                         // no new knots added in the current tensor
