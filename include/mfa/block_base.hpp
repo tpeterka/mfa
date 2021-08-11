@@ -62,6 +62,7 @@ struct ModelInfo
     vector<vector<int>> vars_nctrl_pts;         // number of input pts in each dim of each science variable vars_nctrl_pts[var][dim]
     bool                weighted;               // solve for and use weights (default = true)
     bool                local;                  // solve locally (with constraints) each round (default = false)
+    float               regularization;         // smoothing parameter for unstructured data with nonuniform point density (value of 0 does nothing)
     int                 verbose;                // debug level
 };
 
@@ -200,7 +201,7 @@ struct BlockBase
 
         geometry.mfa_data->set_knots(*input);
         // TODO: consider not weighting the geometry (only science variables), depends on geometry complexity
-        mfa->FixedEncode(*geometry.mfa_data, *input, nctrl_pts, a->verbose, a->weighted);
+        mfa->FixedEncode(*geometry.mfa_data, *input, nctrl_pts, a->verbose, 0, a->weighted);
 
         // encode science variables
         for (auto i = 0; i< vars.size(); i++)
@@ -220,7 +221,7 @@ struct BlockBase
                     dom_dim + i);
 
             vars[i].mfa_data->set_knots(*input);
-            mfa->FixedEncode(*(vars[i].mfa_data), *input, nctrl_pts, a->verbose, a->weighted);
+            mfa->FixedEncode(*(vars[i].mfa_data), *input, nctrl_pts, a->verbose, a->regularization, a->weighted);
         }
     }
 

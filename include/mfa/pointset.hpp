@@ -330,6 +330,17 @@ namespace mfa
                 ijk_vec = vol_it.idx_dim();
             }
 
+            int ijk(int k)
+            {
+                if (!structured)
+                {
+                    cerr << "ERROR: No ijk values in PtIterator for unstructured input" << endl;
+                    exit(1);
+                }
+
+                return vol_it.idx_dim(k);
+            }
+
             int idx()
             {
                 return structured ? vol_it.cur_iter() : lin_idx;

@@ -374,6 +374,158 @@ namespace mfa
         }
 
 
+
+        void ConsMatrix(    TensorIdx           t_idx,
+                            int                 deriv,
+                            T                   c_target,
+                            const SparseMatrixX<T>& Nt,
+                            SparseMatrixX<T>&   Ct)
+        {
+            cerr << "regularization matrix construction" << endl;
+            clock_t fill_time = clock();
+
+            TensorProduct<T>& t = mfa_data.tmesh.tensor_prods[t_idx];
+            VectorXi spans(mfa_data.dom_dim);                                       // current knot span in each dimension
+
+            vector<vector<MatrixX<T>>>  B(mfa_data.dom_dim);   // list of 1D basis functions valued at a given parameter (one per dimension, one per derivative)
+
+            B.resize(mfa_data.dom_dim);
+            for (int k = 0; k < mfa_data.dom_dim; k++) // for each derivative
+            {
+                B[k].resize(mfa_data.dom_dim);
+                for (int l = 0; l < mfa_data.dom_dim; l++)  // for each dimension
+                {
+                    B[k][l].resize(deriv+1, t.nctrl_pts(l));
+                }
+            }
+
+            int n_entries = (mfa_data.p.array() + 1).prod();
+            Ct.reserve(VectorXi::Constant(Ct.cols(), n_entries));
+
+            // Construct a pointset to hold one entry per control point anchor
+            PointSet<T> anchors(mfa_data.dom_dim, mfa_data.dom_dim + mfa_data.max_dim - mfa_data.min_dim + 1, t.nctrl_pts.prod(), t.nctrl_pts);
+
+            // Construct set of parameters corresponding to each control point anchor
+            shared_ptr<Param<T>> anchor_params = make_shared<mfa::Param<T>>();
+            anchor_params->dom_dim = mfa_data.dom_dim;
+            anchor_params->structured = true;
+            anchor_params->ndom_pts = t.nctrl_pts;
+            anchor_params->param_grid.resize(mfa_data.dom_dim);
+            for (int i = 0; i < mfa_data.dom_dim; i++) 
+            {
+                int pc = mfa_data.p(i);     // current p for this dimension
+                int nc = t.nctrl_pts(i);    // current total ctrl pts for this dimension
+                anchor_params->param_grid[i].resize(t.nctrl_pts(i));
+                for (int j = 0; j < t.nctrl_pts(i); j++)
+                {
+                    // TODO this is for ODD DEGREE ONLY currently
+                    if (j < pc)
+                    {
+                        anchor_params->param_grid[i][j] = ((double)j/pc) * mfa_data.tmesh.all_knots[i][pc + (pc+1)/2];
+                    }
+                    else if (j > nc - pc - 1)
+                    {
+                        T frac = (j-(nc-pc-1)) / (double)pc;
+                        anchor_params->param_grid[i][j] = (1-frac) * mfa_data.tmesh.all_knots[i][nc-(pc+1)/2] + frac * mfa_data.tmesh.all_knots[i][nc];
+                    }
+                    else
+                    {
+                        anchor_params->param_grid[i][j] = mfa_data.tmesh.all_knots[i][j+(pc+1)/2];
+                    }   
+                }
+
+    // for (auto r = 0; r < anchor_params->param_grid[i].size(); r++)
+    //     cerr << anchor_params->param_grid[i][r] << " ";
+    // cerr << endl;
+            }
+
+            anchors.set_params(anchor_params);
+
+            VectorXi ctrl_starts(mfa_data.dom_dim);                                 // subvolume ctrl pt indices in each dimension
+            VectorXi nctrl_patch = mfa_data.p + VectorXi::Ones(mfa_data.dom_dim);   // number of nonzero basis functions at a given parameter, in each dimension
+
+            VectorX<T> param(mfa_data.dom_dim);
+            for (auto pit = anchors.begin(), pend = anchors.end(); pit != pend; ++pit)
+            {
+                pit.params(param);
+                for (int dk = 0; dk < mfa_data.dom_dim; dk++) // compute each
+                {
+                    for (int k = 0; k < mfa_data.dom_dim; k++)
+                    {
+                        param(k) = anchor_params->param_grid[k][pit.ijk(k)];
+                        int p = mfa_data.p(k);
+                        T u = param(k);
+                        spans[k] = mfa_data.FindSpan(k, u);
+                        ctrl_starts(k) = spans[k] - p - t.knot_mins[k];
+                        B[dk][k].setZero();
+
+                        // Compute derivative if this is the direction to differentiate in (given by dk)
+                        // otherwise, compute 0th deriv
+                        mfa_data.DerBasisFuns(k, u, spans[k], (k==dk) ? deriv : 0, B[dk][k]);
+                        
+            // for (auto r = 0; r < B[dk][k].cols(); r++)
+            //     cerr << B[dk][k]((k==dk) ? deriv : 0, r) << " ";
+            // cerr << endl;
+                    }
+                }
+                
+
+                VolIterator ctrl_vol_iter(nctrl_patch, ctrl_starts, t.nctrl_pts);
+                while (!ctrl_vol_iter.done())
+                {
+                    int ctrl_idx_full = ctrl_vol_iter.cur_iter_full();
+                    T coeff = 0;
+                    T coeff_prod = 1;
+                    for (int dk = 0; dk < mfa_data.dom_dim; dk++)
+                    {
+                        coeff_prod = 1;
+                        for (auto k = 0; k < mfa_data.dom_dim; k++)
+                        {
+                            int idx = ctrl_vol_iter.idx_dim(k);                                 // index in current dim of this control point
+
+                            // multiply by the derivative if k==dk, otherwise normal basis func
+                            coeff_prod *= B[dk][k]((k==dk) ? deriv : 0, idx);  // new for regularizer
+
+                            // if (coeff_prod == 0)
+                            // {
+                            //     cerr << "coeff_prod = 0" << endl;
+                            //     cerr << "  ptID = " << pit.idx() << endl;
+                            //     cerr << "  ctID = " << ctrl_idx_full << endl;
+                            //     cerr << "  dk=" << dk << " k=" << k << endl;
+                            //     cerr << "  B: " << B[dk][k]((k==dk) ? deriv : 0, idx) << endl;
+                            // }
+                        }
+
+                        coeff += coeff_prod;    // one contribution per derivative
+
+                // cerr << coeff << " ";
+                    }
+        // cerr << endl;
+                    
+                    Ct.insertBackUncompressed(ctrl_idx_full, pit.idx()) = coeff;  
+
+                    ctrl_vol_iter.incr_iter();
+                }
+            }
+
+            Eigen::DiagonalMatrix<T, Eigen::Dynamic> lambda(Ct.cols());
+            for (int i = 0; i < Ct.cols(); i++)
+            {
+                T c_sum = Nt.row(i).sum();
+                T c_add = (c_sum < c_target) ? c_target - c_sum : 0;
+                // // cerr << "i, colsum=" << i << ", " << Ct.col(i).cwiseAbs().sum() << endl;
+                // cerr << "i, colsum=" << i << ", " << Ct.row(i).cwiseAbs().sum() << endl;
+                // cerr << "   c_sum=" << c_sum << endl;
+                // cerr << "   c_add=" << c_add << endl;
+
+                lambda.diagonal()(i) = c_add / Ct.row(i).cwiseAbs().sum();
+                // cerr << "   lambda=" << lambda.diagonal()(i) << endl;
+                
+            }
+
+            Ct = Ct * lambda;
+        }
+
         // Assemble B-spline collocation matrix for a full tensor, using sparse matrices
         // Here we are filling Nt (transpose of N)
         // Nt is a matrix of n x m scalars that are the basis function coefficients
@@ -385,7 +537,8 @@ namespace mfa
         void CollMatrixUnified( TensorIdx           t_idx,    // index of tensor product containing input points and control points
                                 // vector<size_t>&     start_idxs,
                                 // vector<size_t>&     end_idxs,
-                                SparseMatrixX<T>&   Nt)     // (output) transpose of collocation matrix
+                                SparseMatrixX<T>&   Nt,  // (output) transpose of collocation matrix
+                                int deriv = 0)     // optional, determines what deriv of basis functions to use (for experimental regularization)
         {
             cerr << "begin matrix construction" << endl;
             clock_t fill_time = clock();
@@ -398,7 +551,8 @@ namespace mfa
             vector<MatrixX<T>>  B(mfa_data.dom_dim);                                // list of 1D basis functions valued at a given parameter (one per dimension)
             for (auto k = 0; k < mfa_data.dom_dim; k++)
             {
-                B[k].resize(1, t.nctrl_pts(k));
+                // B[k].resize(1, t.nctrl_pts(k));      // orig
+                B[k].resize(deriv+1, t.nctrl_pts(k));   // for regularizer
             }
 
 
@@ -437,8 +591,14 @@ namespace mfa
                         for (auto i = 0; i < p + 2; i++)
                             loc_knots[i] = mfa_data.tmesh.all_knots[k][spans[k] - p + j + i];
                         int col = spans[k] - p + j - t.knot_mins[k];
-                        if (col >= 0 && col < B[k].cols())
-                            B[k](0, col) = mfa_data.OneBasisFun(k, u, loc_knots);
+
+
+    // orig:
+                        // if (col >= 0 && col < B[k].cols())
+                        //     B[k](0, col) = mfa_data.OneBasisFun(k, u, loc_knots);
+
+    // new for regularizer:
+                        mfa_data.DerBasisFuns(k, u, spans[k], deriv, B[k]);
                     }
                 }
 
@@ -451,7 +611,8 @@ namespace mfa
                     for (auto k = 0; k < mfa_data.dom_dim; k++)
                     {
                         int idx = ctrl_vol_iter.idx_dim(k);                                 // index in current dim of this control point
-                        coeff_prod *= B[k](0,idx);
+                        // coeff_prod *= B[k](0,idx);   // orig
+                        coeff_prod *= B[k](deriv,idx);  // new for regularizer
                     }
 
                     Nt.insertBackUncompressed(ctrl_idx_full, input_it.idx()) = coeff_prod;  
@@ -561,6 +722,7 @@ namespace mfa
        // Necessary for encoding unstructured input data, where parameter values
        // corresponding to input do not lie on structured grid
         void EncodeUnified( TensorIdx   t_idx,                      // tensor product being encoded
+                            T           regularization=0,           // parameter to set smoothing of artifacts from non-uniform data
                             bool        weighted=true)                   // solve for and use weights 
         {
             // debug
@@ -586,6 +748,28 @@ namespace mfa
             // Assemble collocation matrix
             SparseMatrixX<T> Nt(t.nctrl_pts.prod() , input.npts);
             CollMatrixUnified(t_idx, /*start_idxs, end_idxs,*/ Nt);
+
+            bool regularize = false;
+            if (regularization > 0)
+                regularize = true;
+
+            if (regularize)
+            {
+                T c_target = regularization;
+                SparseMatrixX<T> Ct(t.nctrl_pts.prod(), t.nctrl_pts.prod());
+                SparseMatrixX<T> Ct1(t.nctrl_pts.prod(), t.nctrl_pts.prod());
+                SparseMatrixX<T> Ct2(t.nctrl_pts.prod(), t.nctrl_pts.prod());
+
+                ConsMatrix(t_idx, 1, c_target, Nt, Ct1);
+                ConsMatrix(t_idx, 2, c_target, Nt, Ct2);
+                Ct = Ct1 + Ct2;         // C1 and C2 regularization
+                // Ct = Ct2;            // only C2 regularization
+
+                SparseMatrixX<T> augNt(Nt.rows(), Nt.cols() + Ct.cols());
+                augNt.leftCols(Nt.cols()) = Nt;
+                augNt.rightCols(Ct.cols()) = Ct;
+                Nt = augNt;
+            }
 
             // Set up linear system
             SparseMatrixX<T> Mat(Nt.rows(), Nt.rows()); // Mat will be the matrix on the LHS
@@ -617,7 +801,11 @@ namespace mfa
 // << EXPERIMENTAL
 
             MatrixX<T>  R(Nt.cols(), pt_dim);           // R is the right hand side 
-            RHSUnified(/*start_idxs, end_idxs,*/ Nt, R);
+
+            if (!regularize)
+                RHSUnified(/*start_idxs, end_idxs,*/ Nt, R);
+            else
+                RHSUnified_REGULARIZER(Nt, R);
 
             // Solve Linear System
             // Eigen::ConjugateGradient<SparseMatrixX<T>, Eigen::Lower|Eigen::Upper, Eigen::IncompleteLUT<T>>  solver;
@@ -652,29 +840,29 @@ namespace mfa
                 t.ctrl_pts.row(idx).setZero();
             }
 
-            for (int i = 0; i < t.ctrl_pts.rows(); i++)
-            {
-                for (int k = 0; k < t.ctrl_pts.cols(); k++)
-                {
-                    if (fabs(t.ctrl_pts(i,k)) > 1e3)
-                    {
-                        cerr << "Extremely large control point:" << endl;
-                        cerr << "  (i,j) = " << i << " " << k << endl;
-                        cerr << "  value = " << t.ctrl_pts(i,k) << endl;
-                        cerr << " row i nnzs: " << Mat.col(i).nonZeros() << endl;
+            // for (int i = 0; i < t.ctrl_pts.rows(); i++)
+            // {
+            //     for (int k = 0; k < t.ctrl_pts.cols(); k++)
+            //     {
+            //         if (fabs(t.ctrl_pts(i,k)) > 1e3)
+            //         {
+            //             cerr << "Extremely large control point:" << endl;
+            //             cerr << "  (i,j) = " << i << " " << k << endl;
+            //             cerr << "  value = " << t.ctrl_pts(i,k) << endl;
+            //             cerr << " row i nnzs: " << Mat.col(i).nonZeros() << endl;
 
-                        T* vals = Mat.valuePtr();
-                        int* outerIds = Mat.outerIndexPtr();
-                        T rowmax = -1;
-                        for (int l = outerIds[i]; l < outerIds[i+1]; l++)
-                        {
-                            if (vals[l] > rowmax) rowmax = vals[l];
-                        }
-                        cerr << " row i max:  " << rowmax << endl;
-                        t.ctrl_pts(i,k) = 0;
-                    }
-                }
-            }
+            //             T* vals = Mat.valuePtr();
+            //             int* outerIds = Mat.outerIndexPtr();
+            //             T rowmax = -1;
+            //             for (int l = outerIds[i]; l < outerIds[i+1]; l++)
+            //             {
+            //                 if (vals[l] > rowmax) rowmax = vals[l];
+            //             }
+            //             cerr << " row i max:  " << rowmax << endl;
+            //             t.ctrl_pts(i,k) = 0;
+            //         }
+            //     }
+            // }
 #endif
 // << EXPERIMENTAL
         }
@@ -1785,6 +1973,41 @@ namespace mfa
             if (R.rows() != input.npts)
                 cerr << "Error: Incorrect matrix dimensions in RHSUnified (rows)" << endl;
 
+            VectorX<T> pt_coords(input.dom_dim);
+            for (auto input_it = input.begin(); input_it != input.end(); ++input_it)
+            {
+                // extract coordinates in dimension min_dim<-->max_dim and place in pt_coords
+                input_it.coords(pt_coords, mfa_data.min_dim, mfa_data.max_dim);
+                R.row(input_it.idx()) = pt_coords;
+            }
+
+            R = Nt * R;
+        }
+
+         void RHSUnified_REGULARIZER(
+            // const vector<size_t>&   start_idxs,
+            // const vector<size_t>&   end_idxs,
+            SparseMatrixX<T>&       Nt,
+            MatrixX<T>&             R)
+        {
+            // REQUIRED for TMesh
+            // VectorXi ndom_pts(mfa_data.dom_dim);
+            // VectorXi dom_starts(mfa_data.dom_dim);
+            // for (auto k = 0; k < mfa_data.dom_dim; k++)
+            // {
+            //     ndom_pts(k)     = end_idxs[k] - start_idxs[k] + 1;
+            //     dom_starts(k)   = start_idxs[k];
+            // }
+
+            if (R.cols() != mfa_data.max_dim - mfa_data.min_dim + 1)
+                cerr << "Error: Incorrect matrix dimensions in RHSUnified_REGULARIZER (cols)" << endl;
+            if (R.rows() != Nt.cols())
+                cerr << "Error: Incorrect matrix dimensions in RHSUnified_REGULARIZER (rows)" << endl;
+
+            R.setZero();
+
+            // This loop will not fill the entirety of R if regularization conditions are contained in Nt
+            // Rows related to derivative conditions should be set to zero
             VectorX<T> pt_coords(input.dom_dim);
             for (auto input_it = input.begin(); input_it != input.end(); ++input_it)
             {

@@ -116,6 +116,7 @@ namespace mfa
                 const PointSet<T>&  input,                  // input points
                 const VectorXi      nctrl_pts,              // number of control points in each dim
                 int                 verbose,                // debug level
+                T                   regularization,
                 bool                weighted) const         // solve for and use weights (default = true)
         {
             // fixed encode assumes the tmesh has only one tensor product
@@ -127,7 +128,7 @@ namespace mfa
             if (input.structured)
                 encoder.Encode(t.nctrl_pts, t.ctrl_pts, t.weights, weighted);
             else
-                encoder.EncodeUnified(0, weighted);  // Assumes only one tensor product
+                encoder.EncodeUnified(0, regularization, weighted);  // Assumes only one tensor product
 
             // debug: try inserting a knot
             //             VectorX<T> new_knot(mfa->dom_dim);

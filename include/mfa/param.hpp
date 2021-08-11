@@ -130,7 +130,7 @@ namespace mfa
             range_extent = domain_.col(last).maxCoeff() - domain_.col(last).minCoeff();
         }
 
-        size_t npts()
+        size_t npts() const
         {
             return structured ? ndom_pts.prod() : param_list.rows();
         }
