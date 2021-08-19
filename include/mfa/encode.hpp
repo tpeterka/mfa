@@ -1366,10 +1366,9 @@ namespace mfa
 //             mfa_data.tmesh.print();
 //             fprintf(stderr, "--------------------------\n\n");
 
-            // loop until no change in knots or number of control points >= input points
-            int prev_nknots     = -1;                                   // total number of knots in previous iteration
             int no_change_iter  = -1;                                   // last iteration with no new knots
 
+            // loop until no change in knots or number of control points >= input points
             for (int iter = 0; ; iter++)
             {
                 if (max_rounds > 0 && iter >= max_rounds)               // optional cap on number of rounds
@@ -1387,7 +1386,7 @@ namespace mfa
 //                 fmt::print(stderr, "\nTmesh before refinement\n\n");
 //                 mfa_data.tmesh.print(true, true, false, false);
 
-                Refine(parent_level, err_limit, extents, local);
+                bool retval = Refine(parent_level, err_limit, extents, local);
 
                 if (!local)
                 {
@@ -1426,33 +1425,25 @@ namespace mfa
 //                 mfa_data.tmesh.print(true, true, false, false);
 //                 fprintf(stderr, "--------------------------\n\n");
 
-                // check if total number of knots changed
-                int nknots = 1;
-                for (auto i = 0; i < mfa_data.dom_dim; i++)
-                    nknots *= mfa_data.tmesh.all_knots[i].size();
-
                 // debug
-//                 fmt::print(stderr, "bottom of iteration {} no_change_iter {} nknots {} prev_nknots {}\n",
-//                         iter, no_change_iter, nknots, prev_nknots);
+//                 fmt::print(stderr, "bottom of iteration {} no_change_iter {} retval {}\n",
+//                         iter, no_change_iter, retval);
 
-                if (nknots == prev_nknots)                                      // number of knots did not change
+                if (retval)                                                     // this iteration is done
                 {
                     if (no_change_iter < 0)
                         no_change_iter = iter;
-                    if (iter - no_change_iter)                                  // two iterations with no change
+                    if (iter - no_change_iter)                                  // two consecutive iterations are done
                     {
                         if (verbose)
                             fprintf(stderr, "\nKnot insertion done after %d iterations; no new knots added.\n\n", iter + 1);
                         break;
                     }
-                    else                                                        // one iteration with no change
+                    else                                                        // one iteration only is done
                         parent_level++;
                 }
-                else                                                            // number of knots changed
-                {
-                    prev_nknots     = nknots;
+                else                                                            // this iteration is not done
                     no_change_iter  = -1;
-                }
             }   // iterations
 
             // debug: print tmesh
@@ -2266,7 +2257,7 @@ namespace mfa
 
         // refines a T-mesh at a given parent level
         // this is the version used currently for local solve
-        // returns true if all done, ie, no new knots inserted
+        // returns true no change in knots; all tensors at the parent level are done
         bool Refine(
                 int                 parent_level,                               // level of parent tensors to refine
                 T                   err_limit,                                  // max allowable error

@@ -868,7 +868,7 @@ namespace mfa
         }
 
         // computes error in knot spans and finds all new knots (in all dimensions at once) that should be inserted at one level
-        // returns true if all done, ie, no new knots inserted
+        // returns true if no change in knots; all tensors at the parent level are done
         bool AllErrorSpans(
                 int                         parent_level,           // level of parent tensor to check
                 VectorX<T>                  extents,                // extents in each dimension, for normalizing error (size 0 means do not normalize)
