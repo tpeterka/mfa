@@ -21,6 +21,9 @@ namespace mfa
     template <typename T>                                   // float or double
     struct MFA;
 
+    template <typename T>
+    class Decoder;
+
     template <typename T>                                   // float or double
     struct DecodeInfo
     {
@@ -88,18 +91,67 @@ namespace mfa
         }
     };
 
+    // Custom DecodeInfo to be used with FastVolPt
+    template <typename T>
+    struct FastDecodeInfo
+    {
+        const Decoder<T>&   decoder;        // reference to decoder which uses this FastDecodeInfo
+        int                 dom_dim;        // domain dimension of model
+        vector<VectorX<T>>  N;              // vectors to hold basis functions
+        vector<vector<T>>   t;              // vector of temps
+        vector<int>         span;           // vector to hold spans which contain the given parameter
+        int                 ctrl_idx;       // index of the current control point
+        BasisFunInfo<T>     bfi;            // struct with pre-allocated scratch space for basis function computation
+
+        FastDecodeInfo(const Decoder<T>& decoder_) :
+            decoder(decoder_),
+            dom_dim(decoder.dom_dim),
+            bfi(decoder.q)
+        {
+            N.resize(dom_dim);
+            span.resize(dom_dim);
+            t.resize(dom_dim);
+
+            for (size_t i = 0; i < dom_dim; i++)
+            {
+                N[i]        = VectorX<T>::Zero(decoder.q[i]); // note this is different size than DecodeInfo
+            }
+
+            for (int i = 0; i < dom_dim - 1; i++)
+            {
+                t[i].resize(decoder.tot_iters / decoder.ds[i+1]);
+            }
+            t[dom_dim-1].resize(1);
+        }
+
+        // reset basic decode info
+        // Basic version: recomputing basis functions, no weights, no derivs, no TMesh
+        void Reset()
+        {
+            // FastVolPt does not require FastDecodeInfo to be reset as written
+        }
+    };
+
+
     template <typename T>                               // float or double
     class Decoder
     {
-    private:
+        friend FastDecodeInfo<T>;
 
-        int                 tot_iters;                  // total iterations in flattened decoding of all dimensions
+    private:
+        const MFA_Data<T>&  mfa_data;                   // the mfa data model
+        const int           dom_dim;
+        const int           tot_iters;                  // total iterations in flattened decoding of all dimensions
         MatrixXi            ct;                         // coordinates of first control point of curve for given iteration
                                                         // of decoding loop, relative to start of box of
                                                         // control points
-        vector<size_t>      cs;                         // control point stride (only in decoder, not mfa)
+        VectorXi            cs;                         // control point stride (only in decoder, not mfa)
+        vector<int>         ds; // subvolume stride
+        VectorXi            jumps;                      // total jump in index from start ctrl_idx for each ctrl point
+        int                 q0;                         // p+1 in first dimension (used for FastVolPt)
+        vector<int>         q;
+
         int                 verbose;                    // output level
-        const MFA_Data<T>&  mfa_data;                   // the mfa data model
         bool                saved_basis;                // flag to use saved basis functions within mfa_data
 
     public:
@@ -109,6 +161,9 @@ namespace mfa
                 int                 verbose_,               // debug level
                 bool                saved_basis_=false) :   // flag to reuse saved basis functions   
             mfa_data(mfa_data_),
+            dom_dim(mfa_data_.dom_dim),
+            tot_iters((mfa_data.p + VectorXi::Ones(dom_dim)).prod()),
+            q0(mfa_data_.p(0)+1),
             verbose(verbose_),
             saved_basis(saved_basis_)
         {
@@ -126,13 +181,17 @@ namespace mfa
             // initialize decoding data structures
             // TODO: hard-coded for first tensor product only
             // needs to be expanded for multiple tensor products, maybe moved into the tensor product
-            cs.resize(mfa_data.p.size(), 1);
-            tot_iters = 1;                              // total number of iterations in the flattened decoding loop
+            cs = VectorXi::Ones(mfa_data.dom_dim);
+            ds.resize(dom_dim, 1);
+            q.resize(dom_dim);
             for (size_t i = 0; i < mfa_data.p.size(); i++)   // for all dims
             {
-                tot_iters  *= (mfa_data.p(i) + 1);
+                q[i] = mfa_data.p(i) + 1;
                 if (i > 0)
+                {
                     cs[i] = cs[i - 1] * mfa_data.tmesh.tensor_prods[0].nctrl_pts[i - 1];
+                    ds[i] = ds[i-1] * q[i];
+                }
             }
             ct.resize(tot_iters, mfa_data.p.size());
 
@@ -149,6 +208,8 @@ namespace mfa
                     i_temp   -= (ct(i, j) * div);
                 }
             }
+
+            jumps = ct * cs;
         }
 
         ~Decoder() {}
@@ -1040,6 +1101,80 @@ namespace mfa
             out_pt   = di.temp[mfa_data.dom_dim - 1];
             out_pt(last) /= denom;
 #endif
+        }
+
+        // Fast implementation of VolPt for simple MFA models
+        // Requirements:
+        //   * Model does not use weights (must define MFA_NO_WEIGHTS)
+        //   * Science variable must be one-dimensional
+        //   * Cannot compute derivatives
+        //   * Does not support TMesh
+        void FastVolPt(
+            const VectorX<T>&           param,      // parameter value in each dim. of desired point
+                VectorX<T>&             out_pt,     // (output) point, allocated by caller
+                FastDecodeInfo<T>&      di,         // reusable decode info allocated by caller (more efficient when calling VolPt multiple times)
+                const TensorProduct<T>& tensor) const    // tensor product to use for decoding
+        {
+#ifdef MFA_TMESH
+cerr << "ERROR: Cannot use BasicVolPt with TMesh" << endl;
+exit(1);
+#endif
+#ifndef MFA_NO_WEIGHTS
+cerr << "ERROR: Must define MFA_NO_WEIGHTS to use BasicVolPt" << endl;
+exit(1);
+#endif
+            // compute spans and basis functions for the given parameters
+            for (int i = 0; i < dom_dim; i++)
+            {
+                di.span[i] = mfa_data.FindSpan(i, param(i));
+
+                mfa_data.FastBasisFuns(i, param(i), di.span[i], di.N[i], di.bfi);
+            }
+
+            // compute linear index of first control point
+            int start_ctrl_idx = 0;
+            for (int j = 0; j < mfa_data.dom_dim; j++)
+                start_ctrl_idx += (di.span[j] - mfa_data.p(j)) * cs[j];
+
+
+            // * The remaining loops perform the sums and products of basis functions across different
+            //   dimensions. This loop looks different from the old VolPt loop in order to remove the
+            //   step to check if a control point is at the "end" of some dimension. Instead, we compute
+            //   a series of temporary sums, which are stored in di.t[i] (i = current dimension).
+            // * We separate out the first dimension because this is the only place where
+            //   control points are accessed. 
+            // * This setup requires more temporary vectors (the largest of which is of size q^{d-1}), but
+            //   the time spent accumulating basis functions is reduced by about 10-20%
+
+            // First domain dimension, we multiply basis functions with control points
+            for (int m = 0, id = 0; m < tot_iters; m += q0, id++)
+            {
+                di.t[0][id] = 0;
+                di.ctrl_idx = start_ctrl_idx + jumps(m);
+
+                for (int a = 0; a < q0; a++)
+                {
+                    di.t[0][id] += di.N[0](a) * tensor.ctrl_pts(di.ctrl_idx + a);
+                }
+            }
+
+            // For all subsequent dimensions, we multiply basis functions with temporary sums
+            int qcur = 0, tsz = 0;
+            for (int k = 1; k < mfa_data.dom_dim; k++)
+            {
+                qcur = q[k];
+                tsz = di.t[k-1].size();
+                for (int m = 0, id = 0; m < tsz; m += qcur, id++)
+                {
+                    di.t[k][id] = 0;
+                    for (int l = 0; l < qcur; l++)
+                    {
+                        di.t[k][id] += di.N[k](l) * di.t[k-1][m + l];
+                    }
+                }
+            }
+
+            out_pt(0) = di.t[mfa_data.dom_dim - 1][0];
         }
 
         // compute a point from a NURBS curve at a given parameter value
