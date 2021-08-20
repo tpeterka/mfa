@@ -137,6 +137,7 @@ namespace mfa
                 T                   err_limit,              // maximum allowable normalized error
                 int                 verbose,                // debug level
                 bool                weighted,               // solve for and use weights (default = true)
+                // TOOD: always use local = true and deprecate the local argument
                 bool                local,                  // solve locally (with constraints) each round
                 const VectorX<T>&   extents,                // extents in each dimension, for normalizing error (size 0 means do not normalize)
                 int                 max_rounds) const       // optional maximum number of rounds

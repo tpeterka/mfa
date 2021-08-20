@@ -242,9 +242,6 @@ namespace mfa
             new_weights.resize(nnew_knots);
             vector<KnotIdx> inserted_idx(dom_dim);
 
-            // DEPRECATE
-// #ifdef MFA_LINEAR_LOCAL
-
             TensorProduct<T>& t = mfa_data.tmesh.tensor_prods[parent_tensor_idx];
             for (auto i = 0; i < nnew_knots; i++)
             {
@@ -256,27 +253,6 @@ namespace mfa
                 // linear local solve does not solve for weights; set to 1
                 new_weights[i] = VectorX<T>::Ones(new_weights[i].size());
             }
-
-            // DEPRECATE
-// #else
-// 
-//             // call P&T knot insertion
-//             for (auto i = 0; i < nnew_knots; i++)
-//             {
-//                 for (auto j = 0; j < dom_dim; j++)
-//                 {
-//                     param(j) = new_knots[j][i];
-//                     inserted_idx[j] = inserted_knot_idxs[j][i];
-//                 }
-//                 mfa_data.ExistKnotInsertion(inserted_idx,
-//                                             param,
-//                                             mfa_data.tmesh.tensor_prods[parent_tensor_idx],
-//                                             new_nctrl_pts[i],
-//                                             new_ctrl_pts[i],
-//                                             new_weights[i]);
-//             }
-// 
-// #endif
 
             return parent_tensor_idx;
         }
