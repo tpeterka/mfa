@@ -52,7 +52,7 @@ int main(int argc, char** argv)
     string input          = "sinc";                   // input dataset
     int    max_rounds     = 0;                        // max. number of rounds (0 = no maximum)
     int    weighted       = 1;                        // solve for and use weights (bool 0 or 1)
-    int    local          = 0;                        // solve locally (with constraints) each round
+    int    local          = 1;                        // solve locally (with constraints) each round
     real_t rot            = 0.0;                      // rotation angle in degrees
     real_t twist          = 0.0;                      // twist (waviness) of domain (0.0-1.0)
     real_t noise          = 0.0;                      // fraction of noise

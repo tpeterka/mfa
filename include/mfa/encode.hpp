@@ -33,21 +33,6 @@
 
 #endif
 
-#if defined MFA_TMESH && !defined MFA_LINEAR_LOCAL
-
-#include    <cppoptlib/problem.h>
-#include    <cppoptlib/boundedproblem.h>
-#include    <cppoptlib/solver/bfgssolver.h>
-#include    <cppoptlib/solver/lbfgssolver.h>
-#include    <cppoptlib/solver/lbfgsbsolver.h>
-#include    <cppoptlib/solver/newtondescentsolver.h>
-#include    <cppoptlib/solver/cmaessolver.h>
-#include    <cppoptlib/solver/neldermeadsolver.h>
-#include    <cppoptlib/solver/conjugatedgradientdescentsolver.h>
-#include    <cppoptlib/solver/gradientdescentsolver.h>
-
-#endif
-
 typedef Eigen::MatrixXf MatrixXf;
 typedef Eigen::MatrixXi MatrixXi;
 typedef Eigen::VectorXf VectorXf;
@@ -55,111 +40,15 @@ typedef Eigen::VectorXi VectorXi;
 
 using namespace std;
 
-template <typename T>                       // float or double
+template <typename T>                                       // float or double
 class NewKnots;
 
-template <typename T>                               // float or double
+template <typename T>                                       // float or double
 struct MFA;
 
 namespace mfa
 {
-
-#if defined MFA_TMESH && !defined MFA_LINEAR_LOCAL
-
-    using namespace cppoptlib;
-
-    template <typename T>                   // float or double
-    class LocalLSQ : public Problem<T>
-    {
-    private:
-        const MFA<T>&       mfa;            // the mfa object
-        MFA_Data<T>&        mfa_data;       // the mfa data object
-        const PointSet<T>& input;          // input points
-        vector<size_t>      start_idxs;     // start and end of the local subdomain
-        vector<size_t>      end_idxs;       // in input point space
-        int                 verbose;        // more output
-        size_t              niters;         // number of iterations
-        T                   lsq_error;      // error of decoding points
-        T                   cons_error;     // error of constraints
-        T                   tot_error;      // total error = lsq_error + weight * cons_error
-
-    public:
-        LocalLSQ(const MFA<T>&          mfa_,
-                 MFA_Data<T>&           mfa_data_,
-                 const PointSet<T>&     input_,
-                 vector<size_t>         starts_,
-                 vector<size_t>         ends_,
-                 int                    verb_): mfa(mfa_),
-                                                mfa_data(mfa_data_),
-                                                input(input_),
-                                                start_idxs(starts_),
-                                                end_idxs(ends_),
-                                                verbose(verb_),
-                                                niters(0)
-
-        {}
-
-        ~LocalLSQ()                         {}
-
-        using typename Problem<T>::TVector;
-
-        size_t iters() { return niters; }
-
-        // objective function evaluation
-        // n-d version
-        T value(const TVector &x)
-        {
-            niters++;
-            Tmesh<T>&           tmesh   = mfa_data.tmesh;
-            TensorProduct<T>&   tc      = tmesh.tensor_prods.back();                            // current (newly appended) tensor
-            int                 cols    = tc.ctrl_pts.cols();
-
-            // convert candidate solution vector back to a matrix
-            VectorX<T>  x1      = x;                                                            // need non-const vector to pass to Map, cannot find other way than deep copy
-            Eigen::Map<MatrixX<T>> ctrlpts_tosolve(x1.data(), x1.size() / cols, cols);          // matrix version of the vector x
-
-            // copy candidate solution back to current tensor control points
-            tc.ctrl_pts = ctrlpts_tosolve.block(0, 0, tc.ctrl_pts.rows(), cols);
-
-            // loop from substart to subend, decode.VolPt_tmesh(param(idx), cpt) - domain(idx)
-            lsq_error = 0.0;
-            mfa::Decoder<T> decoder(mfa_data, verbose);
-            VectorX<T> cpt(cols);                                               // decoded curve point
-            VectorX<T> param(mfa_data.dom_dim);                                 // parameters for one point
-            VectorXi npts(mfa_data.dom_dim);                                    // number of points to decode
-            VectorXi starts(mfa_data.dom_dim);                                  // starting indices of points to decode
-            for (auto k = 0; k < mfa_data.dom_dim; k++)
-            {
-                starts(k)   = start_idxs[k];
-                npts(k)     = end_idxs[k] - start_idxs[k] + 1;
-            }
-            VolIterator vol_iter(npts, starts, input.ndom_pts);
-            VectorXi ijk(mfa_data.dom_dim);
-
-            while(!vol_iter.done())
-            {
-                for (auto k = 0; k < mfa_data.dom_dim; k++)
-                    param(k) = input.params->param_grid[k][vol_iter.idx_dim(k)];
-
-                decoder.VolPt_tmesh(param, cpt);
-                vol_iter.idx_ijk(vol_iter.cur_iter(), ijk);                     // multi-dim index into domain points
-                size_t dom_idx = vol_iter.ijk_idx(ijk);                         // linear index into domain points
-                for (auto j = 0; j < mfa_data.max_dim - mfa_data.min_dim + 1; j++)
-                {
-                    T diff = cpt[j] - input.domain(dom_idx, mfa_data.dom_dim + j);
-                    lsq_error += (diff * diff);
-                }
-                vol_iter.incr_iter();
-            }
-
-            return lsq_error;
-        }
-
-    };          // LocalLSQ class
-
-#endif
-
-    template <typename T>                               // float or double
+    template <typename T>                                   // float or double
     class Encoder
     {
     private:
@@ -170,7 +59,7 @@ namespace mfa
         const MFA<T>&       mfa;                            // the mfa top-level object
         MFA_Data<T>&        mfa_data;                       // the mfa data model
         int                 verbose;                        // output level
-        const PointSet<T>&  input;                         // input points
+        const PointSet<T>&  input;                          // input points
         size_t              max_num_curves;                 // max num. curves per dimension to check in curve version
 
     public:
@@ -178,7 +67,7 @@ namespace mfa
         Encoder(
                 const MFA<T>&       mfa_,                   // MFA top-level object
                 MFA_Data<T>&        mfa_data_,              // MFA data model
-                const PointSet<T>&  input_,                // input points
+                const PointSet<T>&  input_,                 // input points
                 int                 verbose_) :             // debug level
             mfa(mfa_),
             mfa_data(mfa_data_),
@@ -1340,10 +1229,13 @@ namespace mfa
         void AdaptiveEncode(
                 T                   err_limit,                  // maximum allowable normalized error
                 bool                weighted,                   // solve for and use weights
+                // TODO: always use local = true and deprecate the local argument
                 bool                local,                      // solve locally (with constraints) each round
                 const VectorX<T>&   extents,                    // extents in each dimension, for normalizing error (size 0 means do not normalize)
                 int                 max_rounds = 0)             // optional maximum number of rounds
         {
+            int parent_level = 0;                               // parent level currently being refined
+
             // debug
             if (local)
                 fprintf(stderr, "*** Using local solve in AdaptiveEncode ***\n");
@@ -1364,80 +1256,68 @@ namespace mfa
 //             mfa_data.tmesh.print();
 //             fprintf(stderr, "--------------------------\n\n");
 
+            int no_change_iter  = -1;                                   // last iteration with no new knots
+
             // loop until no change in knots or number of control points >= input points
-            int prev_nknots   = -1;                                     // total number of knots in previous iteration
             for (int iter = 0; ; iter++)
             {
                 if (max_rounds > 0 && iter >= max_rounds)               // optional cap on number of rounds
                     break;
 
                 if (verbose)
+                {
                     fprintf(stderr, "\n--- Iteration %d ---\n", iter);
-
-#ifdef MFA_ALL_SPANS
-
-                if (verbose)
-                        fmt::print(stderr, "Refining level {}\n", iter);
+                    fmt::print(stderr, "Refining level {}\n", parent_level);
+                }
 
                 // debug
 //                 fmt::print(stderr, "\nTmesh before refinement\n\n");
-//                 mfa_data.tmesh.print();
+//                 mfa_data.tmesh.print(true, true, false, false);
 
-                Refine(err_limit, extents, iter, local);
-                if (!local)
-                {
-                    for (auto k = 0; k < mfa_data.dom_dim; k++)
-                        nctrl_pts(k) = mfa_data.tmesh.all_knots[k].size() - mfa_data.p(k) - 1;
-                    ctrl_pts.resize(nctrl_pts.prod(), mfa_data.max_dim - mfa_data.min_dim + 1);
-                    weights.resize(ctrl_pts.rows());
+                bool retval = Refine(parent_level, err_limit, extents, local);
 
-                    Encode(nctrl_pts, ctrl_pts, weights);
-                    mfa_data.tmesh.scatter_ctrl_pts(nctrl_pts, ctrl_pts, weights);
-                }
-
-#else
-
-                // using NewKnots_full high-d span splitting with tmesh (for now)
-                bool temp_local = local;                        // ability to do local solve temporarily for this round depends on whether new knots permits local solve
-                NewKnots_full(err_limit, extents, iter, temp_local);
-
-                // if not doing local solve,
-                // resize temporary control points and weights and global encode and scatter of control points to tensors
-                if (!local || !temp_local)
-                {
-                    for (auto k = 0; k < mfa_data.dom_dim; k++)
-                        nctrl_pts(k) = mfa_data.tmesh.all_knots[k].size() - mfa_data.p(k) - 1;
-                    ctrl_pts.resize(nctrl_pts.prod(), mfa_data.max_dim - mfa_data.min_dim + 1);
-                    weights.resize(ctrl_pts.rows());
-
-                    Encode(nctrl_pts, ctrl_pts, weights);
-                    mfa_data.tmesh.scatter_ctrl_pts(nctrl_pts, ctrl_pts, weights);
-                }
-
-#endif
+                // Fast, but incorrect version for global solve
+                // TODO: DEPRECATE
+//                 if (!local)
+//                 {
+//                     for (auto k = 0; k < mfa_data.dom_dim; k++)
+//                         nctrl_pts(k) = mfa_data.tmesh.all_knots[k].size() - mfa_data.p(k) - 1;
+//                     ctrl_pts.resize(nctrl_pts.prod(), mfa_data.max_dim - mfa_data.min_dim + 1);
+//                     weights.resize(ctrl_pts.rows());
+// 
+//                     Encode(nctrl_pts, ctrl_pts, weights);
+//                     mfa_data.tmesh.scatter_ctrl_pts(nctrl_pts, ctrl_pts, weights);
+//                 }
 
                 // debug: print tmesh
 //                 fprintf(stderr, "\n----- T-mesh at the end of iteration %d-----\n\n", iter);
-//                 mfa_data.tmesh.print();
+//                 mfa_data.tmesh.print(true, true, false, false);
 //                 fprintf(stderr, "--------------------------\n\n");
 
-                // check if total number of knots changed
-                int nknots = 1;
-                for (auto i = 0; i < mfa_data.dom_dim; i++)
-                    nknots *= mfa_data.tmesh.all_knots[i].size();
-                if (nknots == prev_nknots)
+                // debug
+//                 fmt::print(stderr, "bottom of iteration {} no_change_iter {} retval {}\n",
+//                         iter, no_change_iter, retval);
+
+                if (retval)                                                     // this iteration is done
                 {
-                    if (verbose)
-                        fprintf(stderr, "\nKnot insertion done after %d iterations; no new knots added.\n\n", iter + 1);
-                    break;
+                    if (no_change_iter < 0)
+                        no_change_iter = iter;
+                    if (iter - no_change_iter)                                  // two consecutive iterations are done
+                    {
+                        if (verbose)
+                            fprintf(stderr, "\nKnot insertion done after %d iterations; no new knots added.\n\n", iter + 1);
+                        break;
+                    }
+                    else                                                        // one iteration only is done
+                        parent_level++;
                 }
-                else
-                    prev_nknots = nknots;
-            }
+                else                                                            // this iteration is not done
+                    no_change_iter  = -1;
+            }   // iterations
 
             // debug: print tmesh
             fprintf(stderr, "\n----- final T-mesh -----\n\n");
-            mfa_data.tmesh.print();
+            mfa_data.tmesh.print(true, true, false, false);
             fprintf(stderr, "--------------------------\n\n");
 
             // debug: check all spans
@@ -2244,24 +2124,30 @@ namespace mfa
 
 #ifdef MFA_TMESH
 
-        // refines a T-mesh one level deeper
+        // refines a T-mesh at a given parent level
         // this is the version used currently for local solve
-        // returns true if all done, ie, no new knots inserted
+        // returns true no change in knots; all tensors at the parent level are done
         bool Refine(
+                int                 parent_level,                               // level of parent tensors to refine
                 T                   err_limit,                                  // max allowable error
                 const VectorX<T>&   extents,                                    // extents in each dimension, for normalizing error (size 0 means do not normalize)
-                int                 iter,                                       // current iteration number
-                bool                local)                                      // do the local solve
+                // TODO: always use local=true and deprecate the local argument
+                bool                local = true)                               // do the local solve
         {
-            bool debug = false;
-//             if (iter == 3)
-//                 debug = true;
+            // typing shortcuts
+            Tmesh<T>&                   tmesh                   = mfa_data.tmesh;
+            vector<vector<T>>&          all_knots               = tmesh.all_knots;
+            vector<vector<int>>&        all_knot_levels         = tmesh.all_knot_levels;
+            vector<vector<ParamIdx>>&   all_knot_param_idxs     = tmesh.all_knot_param_idxs;
+            vector<TensorProduct<T>>&   tensor_prods            = tmesh.tensor_prods;
+            int&                        dom_dim                 = mfa_data.dom_dim;
+            VectorXi&                   p                       = mfa_data.p;
 
-            vector<vector<KnotIdx>>     inserted_knot_idxs(mfa_data.dom_dim);   // indices in each dim. of inserted knots in full knot vector after insertion
-            vector<vector<T>>           inserted_knots(mfa_data.dom_dim);       // knots to be inserted in each dim.
+            vector<vector<KnotIdx>>     inserted_knot_idxs(dom_dim);            // indices in each dim. of inserted knots in full knot vector after insertion
+            vector<vector<T>>           inserted_knots(dom_dim);                // knots to be inserted in each dim.
             vector<TensorIdx>           parent_tensor_idxs;                     // tensors having knots inserted
 
-            VectorX<T> myextents = extents.size() ? extents : VectorX<T>::Ones(mfa_data.tmesh.tensor_prods[0].ctrl_pts.cols());
+            VectorX<T> myextents = extents.size() ? extents : VectorX<T>::Ones(tensor_prods[0].ctrl_pts.cols());
             ErrorStats<T> error_stats;
 
             // find new knots
@@ -2277,6 +2163,7 @@ namespace mfa
 
             // check all knots spans for error
             bool done = nk.AllErrorSpans(
+                    parent_level,
                     myextents,
                     err_limit,
                     false,
@@ -2288,16 +2175,14 @@ namespace mfa
             if (done)                                                           // nothing inserted
                 return true;
 
-            vector<KnotIdx>             knot_mins(mfa_data.dom_dim);            // knot mins and maxs of candidate tensor to be appended
-            vector<KnotIdx>             knot_maxs(mfa_data.dom_dim);
             vector<TensorProduct<T>>    new_tensors;                            // newly refined tensors to be added
 
             int n_insertions = parent_tensor_idxs.size();                       // number of knots to insert
-            for (auto j = 0; j < mfa_data.dom_dim; j++)
+            for (auto j = 0; j < dom_dim; j++)
                 assert(inserted_knot_idxs[j].size() == n_insertions &&
                         inserted_knots[j].size() == n_insertions);
 
-            vector<bool> inserted(mfa_data.dom_dim);                            // whether the current insertion succeeded (in each dim)
+            vector<bool> inserted(dom_dim);                                     // whether the current insertion succeeded (in each dim)
 
             // timing
             error_spans_time    = MPI_Wtime() - error_spans_time;
@@ -2305,193 +2190,255 @@ namespace mfa
 
             for (auto i = 0; i < n_insertions; i++)                             // for all knots to be inserted
             {
-//                 if (debug)
-//                 {
-//                     fmt::print(stderr, "\ni {} Trying to insert knot idx [ ", i);
-//                     for (auto j = 0; j < mfa_data.dom_dim; j++)
-//                         fmt::print(stderr, "{} ", inserted_knot_idxs[j][i]);
-//                     fmt::print(stderr, "] with value [ ");
-//                     for (auto j = 0; j < mfa_data.dom_dim; j++)
-//                         fmt::print(stderr, "{} ", inserted_knots[j][i]);
-//                     fmt::print(stderr, "] and level {}\n", iter + 1);
-// 
-//                     fprintf(stderr, "\nRefine(): Tmesh knots before insertion:\n");
-//                     mfa_data.tmesh.print_knots();
-//                 }
+                // debug: check that parent tensor level matches refinement level
+                // TODO: remove after code works
+                if (tensor_prods[parent_tensor_idxs[i]].level > parent_level)
+                {
+                    fmt::print(stderr, "Error: Refine(): insertion index {} with parent tensor idx {} "
+                            "at level {}, but parent_level is {}. This should not happen.\n",
+                            i, parent_tensor_idxs[i], tensor_prods[parent_tensor_idxs[i]].level, parent_level);
+                    abort();
+                }
 
                 // insert the new knot into tmesh all_knots
                 int retval;
-                for (auto j = 0; j < mfa_data.dom_dim; j++)
+                bool new_candidate = false;                         // make new candidate tensor for this knot
+                for (auto j = 0; j < dom_dim; j++)
                 {
                     inserted[j] = false;
-                    retval = mfa_data.tmesh.insert_knot(
+                    retval = tmesh.insert_knot(
                                 j,
-                                iter + 1,
+                                parent_level + 1,
                                 inserted_knots[j][i],
                                 input.params->param_grid,
                                 inserted_knot_idxs[j][i]);
 
                     if (retval == 1 || retval == 2)
+                    {
                         inserted[j] = true;
+                        new_candidate = true;
+                    }
                 }
 
                 // debug
-                // TODO: comment out once the code is debugged
-                if (!nk.CheckAllSpans())
-                {
-                    fmt::print(stderr, "\nError: Refine(): after inserting knot idx [ ");
-                    for (auto j = 0; j < mfa_data.dom_dim; j++)
-                        fmt::print(stderr, "{} ", inserted_knot_idxs[j][i]);
-                    fmt::print(stderr, "] with value [ ");
-                    for (auto j = 0; j < mfa_data.dom_dim; j++)
-                        fmt::print(stderr, "{} ", inserted_knots[j][i]);
-                    fmt::print(stderr, "] CheckAllSpans() failed. This should not happen.\n");
+//                 fmt::print(stderr, "\ninsertion index {}: inserted knot idx [ ", i);
+//                 for (auto j = 0; j < dom_dim; j++)
+//                     fmt::print(stderr, "{} ", inserted_knot_idxs[j][i]);
+//                 fmt::print(stderr, "] with value [ ");
+//                 for (auto j = 0; j < dom_dim; j++)
+//                     fmt::print(stderr, "{} ", inserted_knots[j][i]);
+//                 fmt::print(stderr, " ] parent tensor idx {}\n\n", parent_tensor_idxs[i]);
 
-                    fprintf(stderr, "\nRefine(): Tmesh knots after insertion:\n");
-                    mfa_data.tmesh.print_knots();
-                    abort();
+                // it's possible that all components of the knot exist separately but not together
+                // in this case check if the full-dimension knot is already part of a candidate tensor before skipping
+                if (find(inserted.begin(), inserted.end(), true) == inserted.end())     // knot exists in all dimensions separately
+                {
+                    vector<KnotIdx> knot(dom_dim);                                      // full-dim. knot
+                    for (auto j = 0; j < dom_dim; j++)
+                        knot[j] = inserted_knot_idxs[j][i];
+
+                    TensorIdx k;
+                    for (k = 0; k < new_tensors.size(); k++)                            // check all candidate tensors
+                    {
+                        auto& c = new_tensors[k];
+                        if (tmesh.in(knot, c, false))
+                            break;
+                    }
+                    // TODO: this causes a seg fault in iteration 7
+                    if (k == new_tensors.size())                                        // no candidates contain the knot
+                            new_candidate = true;
                 }
 
-                if (find(inserted.begin(), inserted.end(), true) == inserted.end())
-                {
-//                     if (debug)
-//                         fmt::print(stderr, "all dimensions of this knot are inserted already; skipping\n");
-
+                if (!new_candidate)
                     continue;
-                }
 
-//                 if (debug)
-//                 {
-//                     fmt::print(stderr, "\nRefine(): inserting knot idx [ ");
-//                     for (auto j = 0; j < mfa_data.dom_dim; j++)
-//                         fmt::print(stderr, "{} ", inserted_knot_idxs[j][i]);
-//                     fmt::print(stderr, "] with value [ ");
-//                     for (auto j = 0; j < mfa_data.dom_dim; j++)
-//                         fmt::print(stderr, "{} ", inserted_knots[j][i]);
-//                     fmt::print(stderr, "] and level {}\n", iter + 1);
-// 
-//                     fprintf(stderr, "\nRefine(): Tmesh knots after insertion:\n");
-//                     mfa_data.tmesh.print_knots();
-//                 }
-
-                for (auto j = 0; j < mfa_data.dom_dim; j++)
+                // make a candidate tensor of some size, eg., p+1 or p+2 control points
+                TensorProduct<T> c(dom_dim);
+                for (auto j = 0; j < dom_dim; j++)
                 {
                     // make p + 1 control points in the added tensor
-                    knot_mins[j] = inserted_knot_idxs[j][i] - mfa_data.p(j) / 2;
-                    knot_maxs[j] = inserted_knot_idxs[j][i] + mfa_data.p(j) / 2 + 1;
+                    c.knot_mins[j] = inserted_knot_idxs[j][i] - p(j) / 2     >= 0                  ? inserted_knot_idxs[j][i] - p(j) / 2     : 0;
+                    c.knot_maxs[j] = inserted_knot_idxs[j][i] + p(j) / 2 + 1 < all_knots[j].size() ? inserted_knot_idxs[j][i] + p(j) / 2 + 1 : all_knots[j].size() - 1;
+
+                    // ---- or -----
+
+                    // make p + 2 control points in the added tensor
+//                     c.knot_mins[j] = inserted_knot_idxs[j][i] - p(j) / 2 - 1 >= 0                  ? inserted_knot_idxs[j][i] - p(j) / 2 - 1 : 0;
+//                     c.knot_maxs[j] = inserted_knot_idxs[j][i] + p(j) / 2 + 1 < all_knots[j].size() ? inserted_knot_idxs[j][i] + p(j) / 2 + 1 : all_knots[j].size() - 1;
+                }
+                c.level     = parent_level + 1;
+                c.parent    = parent_tensor_idxs[i];
+                c.parent_exists = true;
+
+                TensorProduct<T>& pt = tensor_prods[parent_tensor_idxs[i]];             // parent tensor of the candidate tensor
+
+                // constrain candidate to be no larger than parent in any dimension
+                for (auto j = 0; j < dom_dim; j++)
+                {
+                    c.knot_mins[j] = c.knot_mins[j] < pt.knot_mins[j] ? pt.knot_mins[j] : c.knot_mins[j];
+                    c.knot_maxs[j] = c.knot_maxs[j] > pt.knot_maxs[j] ? pt.knot_maxs[j] : c.knot_maxs[j];
                 }
 
-                // candidate tensor
-                TensorProduct<T> c;
-                c.knot_mins = knot_mins;
-                c.knot_maxs = knot_maxs;
-
-//                 if (debug)
-//                     fmt::print(stderr, "Refine() candidate tensor with knot mins [{}] knot_maxs[{}]\n",
-//                             fmt::join(c.knot_mins, ","), fmt::join(c.knot_maxs, ","));
-
                 // intersection proximity (assumes same for all dims)
-                int pad = mfa_data.p(0) % 2 == 0 ? mfa_data.p(0) : mfa_data.p(0) - 1;
+                int pad = p(0) % 2 == 0 ? p(0) + 1 : p(0);
 
-                // check candidate knot mins and maxs against tensors to be added so far
-                bool add = true;
-                for (auto& t: new_tensors)                                      // for all tensors scheduled to be added so far
+                // check candidate knot mins and maxs against existing tensors
+                // adjust if intersection would result in a small remainder
+                // however do not allow candidate tensor bounds to be beyond those of parent tensor
+                for (auto k = 0; k < tensor_prods.size(); k++)         // for all existing tensors
                 {
-                    bool changed = false;                                       // current tensor knot mins, maxs changed
+                    auto& t = tensor_prods[k];
+                    if (tmesh.intersect(c, t, pad))
+                    {
+                        for (auto j = 0; j < dom_dim; j++)
+                        {
+                            while (fabs(c.knot_mins[j] - t.knot_mins[j]) <= pad && c.knot_mins[j] > pt.knot_mins[j])
+                                c.knot_mins[j]--;
+                            while (fabs(t.knot_maxs[j] - c.knot_maxs[j]) <= pad && c.knot_maxs[j] < pt.knot_maxs[j])
+                                c.knot_maxs[j]++;
+                        }
+                    }
+                }   // for all existing tensors
+
+                // force candidate tensor bounds to be at level no deeper than previous level
+                // however do not allow candidate tensor bounds to be beyond those of parent tensor
+                int level = (parent_level ? parent_level - 1 : 0);
+                for (auto j = 0; j < dom_dim; j++)
+                {
+                    while (all_knot_levels[j][c.knot_mins[j]] > level && c.knot_mins[j] > pt.knot_mins[j])
+                        c.knot_mins[j]--;
+                    while (all_knot_levels[j][c.knot_maxs[j]] > level && c.knot_maxs[j] < pt.knot_maxs[j])
+                        c.knot_maxs[j]++;
+                }
+
+                // debug
+                // check that candidate tensor does not extend beyond parent anywhere
+                // TODO: comment out this check after code is stable
+                for (auto j = 0; j < dom_dim; j++)
+                {
+                    if (c.knot_mins[j] < pt.knot_mins[j])
+                    {
+                        fmt::print(stderr, "Error: Refine(): candidate tensor knot_mins [{}] knot_maxs [{}] extends beyond parent tensor idx {} "
+                                "knot_mins [{}] knot_maxs[{}] in min. dir. of dim. {}. This should not happen.",
+                                fmt::join(c.knot_mins, ","), fmt::join(c.knot_maxs, ","),
+                                c.parent, fmt::join(pt.knot_mins, ","), fmt::join(pt.knot_maxs, ","), j);
+                        abort();
+                    }
+                    if (c.knot_maxs[j] > pt.knot_maxs[j])
+                    {
+                        fmt::print(stderr, "Error: Refine(): candidate tensor knot_mins [{}] knot_maxs [{}] extends beyond parent tensor idx {} "
+                                "knot_mins [{}] knot_maxs[{}] in max. dir. of dim. {}. This should not happen.",
+                                fmt::join(c.knot_mins, ","), fmt::join(c.knot_maxs, ","),
+                                c.parent, fmt::join(pt.knot_mins, ","), fmt::join(pt.knot_maxs, ","), j);
+                        abort();
+                    }
+                }
+
+                // debug
+//                 fmt::print(stderr, "candidate tensor knot_mins [{}] knot_maxs[{}] level {} parent {}\n",
+//                         fmt::join(c.knot_mins, ","), fmt::join(c.knot_maxs, ","), c.level, c.parent);
+//                 fmt::print(stderr, "knot_min_vals [{}, {}] knot_max_vals [{}, {}]\n",
+//                         all_knots[0][c.knot_mins[0]], all_knots[1][c.knot_mins[1]], all_knots[0][c.knot_maxs[0]], all_knots[1][c.knot_maxs[1]]);
+
+                // adjust knot mins, maxs of tensors to be added so far because of inserted knots
+                for (auto tidx = 0; tidx < new_tensors.size(); tidx++)          // for all tensors scheduled to be added so far
+                {
+                    auto& t = new_tensors[tidx];
 
                     // adjust previously scheduled tensor knot mins, maxs for new knot insertion
-                    for (auto j = 0; j < mfa_data.dom_dim; j++)
+                    for (auto j = 0; j < dom_dim; j++)
                     {
                         if (inserted[j] && inserted_knot_idxs[j][i] <= t.knot_mins[j])
                             t.knot_mins[j]++;
                         if (inserted[j] && inserted_knot_idxs[j][i] <= t.knot_maxs[j])
                             t.knot_maxs[j]++;
                     }
+                }
+
+                // check/adjust candidate knot mins and maxs subset and intersection against tensors to be added so far
+                bool add    = true;
+                for (auto tidx = 0; tidx < new_tensors.size(); tidx++)          // for all tensors scheduled to be added so far
+                {
+                    auto& t = new_tensors[tidx];
 
                     // candidate is a subset of an already scheduled tensor
-                    if (mfa_data.tmesh.subset(c.knot_mins, c.knot_maxs, t.knot_mins, t.knot_maxs))
-                    {
-//                         if (debug)
-//                             fmt::print(stderr, "Refine() candidate tensor with knot_mins [{}] knot_maxs [{}] is a subset of tensor with knot_mins[{}] knot_maxs[{}]\n",
-//                                     fmt::join(c.knot_mins, ","), fmt::join(c.knot_maxs, ","), fmt::join(t.knot_mins, ","), fmt::join(t.knot_maxs, ","));
-
+                    if (tmesh.subset(c.knot_mins, c.knot_maxs, t.knot_mins, t.knot_maxs))
                         add = false;
-                    }
 
                     // an already scheduled tensor is a subset of the candidate
-                    else if (mfa_data.tmesh.subset(t.knot_mins, t.knot_maxs, c.knot_mins, c.knot_maxs))
+                    else if (tmesh.subset(t.knot_mins, t.knot_maxs, c.knot_mins, c.knot_maxs))
                     {
-//                         if (debug)
-//                             fmt::print(stderr, "Refine() candidate tensor with knot_mins [{}] knot_maxs [{}] is a superset of tensor with knot_mins[{}] knot_maxs[{}]\n",
-//                                     fmt::join(c.knot_mins, ","), fmt::join(c.knot_maxs, ","), fmt::join(t.knot_mins, ","), fmt::join(t.knot_maxs, ","));
-
                         t.knot_mins = c.knot_mins;
                         t.knot_maxs = c.knot_maxs;
-
-                        changed = true;
-                        add = false;
+                        add         = false;
                     }
 
                     // candidate intersects an already scheduled tensor, to within some proximity
-                    else if (mfa_data.tmesh.intersect(c, t, pad))
+                    else if (tmesh.intersect(c, t, pad))
                     {
-//                         if (debug)
-//                             fmt::print(stderr, "Refine() candidate tensor with knot_mins [{}] knot_maxs [{}] intersects tensor with knot_mins[{}] knot_maxs[{}]\n",
-//                                     fmt::join(c.knot_mins, ","), fmt::join(c.knot_maxs, ","), fmt::join(t.knot_mins, ","), fmt::join(t.knot_maxs, ","));
-
-                        vector<KnotIdx> merge_mins(mfa_data.dom_dim);
-                        vector<KnotIdx> merge_maxs(mfa_data.dom_dim);
-                        mfa_data.tmesh.merge(t.knot_mins, t.knot_maxs, c.knot_mins, c.knot_maxs, merge_mins, merge_maxs);
-                        t.knot_mins = merge_mins;
-                        t.knot_maxs = merge_maxs;
-
-                        changed = true;
-                        add = false;
-                    }
-
-                    if (changed)
-                    {
-                        // check that we don't leave the parent tensor with less than p control points anywhere
-                        for (auto j = 0; j < mfa_data.dom_dim; j++)
+                        if (c.parent == t.parent)       // only merge tensors refined from the same parent
                         {
-                            TensorProduct<T>& tp = mfa_data.tmesh.tensor_prods[parent_tensor_idxs[i]];
-                            int odd_degree = mfa_data.p(j) % 2 == 0 ? 0 : 1;
-                            if (tp.knot_maxs[j] - t.knot_maxs[j] < mfa_data.p(j) - odd_degree ||
-                                    t.knot_maxs[j] >= mfa_data.tmesh.all_knots[j].size() - 1 - mfa_data.p(j))
-                                t.knot_maxs[j] = tp.knot_maxs[j];
-                            if (t.knot_mins[j] - tp.knot_mins[j] < mfa_data.p(j) - odd_degree ||
-                                    t.knot_mins[j] <= mfa_data.p(j))
-                                t.knot_mins[j] = tp.knot_mins[j];
+                            vector<KnotIdx> merge_mins(dom_dim);
+                            vector<KnotIdx> merge_maxs(dom_dim);
+                            tmesh.merge(t.knot_mins, t.knot_maxs, c.knot_mins, c.knot_maxs, merge_mins, merge_maxs);
+                            t.knot_mins = merge_mins;
+                            t.knot_maxs = merge_maxs;
+                            add         = false;
                         }
-
-//                         if (debug)
-//                             fmt::print(stderr, "Refine() modifying previously scheduled tensor with new knot_mins [{}] knot_maxs [{}]\n",
-//                                     fmt::join(t.knot_mins, ","), fmt::join(t.knot_maxs, ","));
                     }
                 }       // for all tensors scheduled to be added so far
 
                 // schedule the tensor to be added
                 if (add)
                 {
-                    // check that we don't leave the parent tensor with less than p control points anywhere
-                    for (auto j = 0; j < mfa_data.dom_dim; j++)
-                    {
-                        TensorProduct<T>& tp = mfa_data.tmesh.tensor_prods[parent_tensor_idxs[i]];
-                        int odd_degree = mfa_data.p(j) % 2 == 0 ? 0 : 1;
-                        if (tp.knot_maxs[j] - c.knot_maxs[j] < mfa_data.p(j) - odd_degree ||
-                                c.knot_maxs[j] >= mfa_data.tmesh.all_knots[j].size() - 1 - mfa_data.p(j))
-                            c.knot_maxs[j] = tp.knot_maxs[j];
-                        if (c.knot_mins[j] - tp.knot_mins[j] < mfa_data.p(j) - odd_degree ||
-                                c.knot_mins[j] <= mfa_data.p(j))
-                            c.knot_mins[j] = tp.knot_mins[j];
-                    }
-
-//                     if (debug)
-//                         fmt::print(stderr, "Refine() scheduling tensor to be added with knot_mins [{}] knot_maxs [{}] to be added\n",
-//                                 fmt::join(c.knot_mins, ","), fmt::join(c.knot_maxs, ","));
+                    // debug
+//                     fmt::print(stderr, "i {} adding new tensor c knot_mins [{}] knot_maxs [{}] level {}\n",
+//                             i, fmt::join(c.knot_mins, ","), fmt::join(c.knot_maxs, ","), c.level);
 
                     new_tensors.push_back(c);
                 }
+
+                // check/adjust tensors scheduled to be added against each other
+                // use level = -1 to indicate removing the tensor from the schedule
+                for (auto tidx = 0; tidx < new_tensors.size(); tidx++)          // for all tensors scheduled to be added so far
+                {
+                    auto& t = new_tensors[tidx];
+
+                    if (t.level < 0)
+                        continue;
+
+                    for (auto tidx1 = 0; tidx1 < new_tensors.size(); tidx1++)   // for all tensors scheduled to be added so far
+                    {
+                        auto& t1 = new_tensors[tidx1];
+
+                        if (tidx == tidx1 || t1.level < 0)
+                            continue;
+
+                        // t is a subset of t1
+                        if (tmesh.subset(t.knot_mins, t.knot_maxs, t1.knot_mins, t1.knot_maxs))
+                            t.level = -1;                   // remove t from the schedule
+
+                        // t is a superset of t1
+                        else if (tmesh.subset(t.knot_mins, t.knot_maxs, c.knot_mins, c.knot_maxs))
+                            t1.level = -1;                  // remove t1 from the schedule
+
+                        // candidate intersects an already scheduled tensor, to within some proximity
+                        else if (tmesh.intersect(c, t, pad))
+                        {
+                            if (t.parent == t1.parent)       // only merge tensors refined from the same parent
+                            {
+                                vector<KnotIdx> merge_mins(dom_dim);
+                                vector<KnotIdx> merge_maxs(dom_dim);
+                                tmesh.merge(t.knot_mins, t.knot_maxs, c.knot_mins, c.knot_maxs, merge_mins, merge_maxs);
+                                t.knot_mins = merge_mins;   // adjust t to the merged extents
+                                t.knot_maxs = merge_maxs;
+                                t1.level    = -1;           // remove t1 from the schedule
+                            }
+                        }
+                    }   // tidx1
+                }   // tidx
+
+
             }   // for all knots to be inserted
 
             // timing
@@ -2500,33 +2447,25 @@ namespace mfa
             double encode_time  = 0.0;
 
             // append the tensors
-
-            for (auto& t: new_tensors)
+            for (auto k = 0; k < new_tensors.size(); k++)
             {
-//                 if (debug)
-//                     fmt::print(stderr, "\nRefine() appending tensor with knot_mins [{}] knot_maxs [{}]\n",
-//                             fmt::join(t.knot_mins, ","), fmt::join(t.knot_maxs, ","));
+                auto& t = new_tensors[k];
 
-//                 if (debug)
-//                 {
-//                     fmt::print("\nT-mesh before append\n\n");
-//                     mfa_data.tmesh.print();
-//                 }
+                if (t.level < 0)                        // tensor was removed from the schedule
+                    continue;
 
                 // timing
                 double t0 = MPI_Wtime();
 
-                int tensor_idx = mfa_data.tmesh.append_tensor(t.knot_mins, t.knot_maxs, iter + 1);
+                // debug
+//                 fmt::print(stderr, "appending tensor k {} level {}, knot_mins [{}] knot_maxs [{}]\n",
+//                         k, t.level, fmt::join(t.knot_mins, ","), fmt::join(t.knot_maxs, ","));
+
+                int tensor_idx = tmesh.append_tensor(t.knot_mins, t.knot_maxs, t.level);
 
                 // timing
                 append_time += (MPI_Wtime() - t0);
                 t0 = MPI_Wtime();
-
-//                 if (debug)
-//                 {
-//                     fmt::print("\nT-mesh after append and before local solve\n\n");
-//                     mfa_data.tmesh.print();
-//                 }
 
                 // debug: check all spans before solving
                 // TODO: comment out once the code is debugged
@@ -2536,12 +2475,23 @@ namespace mfa
                     abort();
                 }
 
+                // debug: check all knot vs control point quantities
+                // TODO: comment out once the code is debugged
+                for (auto k = 0; k < tmesh.tensor_prods.size(); k++)
+                    tmesh.check_num_knots_ctrl_pts(k);
+
                 // solve for new control points
-                if (local)
+
+                // TODO: global is inaccurate, always use local, DEPRECATE this test
+//                 if (local)
                     EncodeTensorLocalLinear(tensor_idx);
 
                 // timing
                 encode_time += (MPI_Wtime() - t0);
+
+                // debug
+//                 fmt::print(stderr, "\nRefine(): T-mesh after appending k = {} new tensor\n", k);
+//                 tmesh.print(true, true, false, false);
             }
 
             // timing
@@ -2553,357 +2503,6 @@ namespace mfa
 
             return false;
         }
-
-        // this is the version used currently for tmesh global or local solve
-        // encodes at full dimensionality and decodes at full dimensionality
-        // decodes full-d points in each knot span and adds new knot spans where error > err_limit
-        // returns 1 if knots were added, 0 if no knots were added, -1 if number of control points >= input points
-        int NewKnots_full(
-                T                   err_limit,                  // max allowable error
-                const VectorX<T>&   extents,                    // extents in each dimension, for normalizing error (size 0 means do not normalize)
-                int                 iter,                       // iteration number of caller (for debugging)
-                bool&               local)                      // (input, output) solve locally (with constraints)
-        {
-            // debug
-            if (local)
-                fprintf(stderr, "*** Using local solve in NewKnots_full ***\n");
-            else
-                fprintf(stderr, "*** Using global solve in NewKnots_full ***\n");
-
-            bool done = true;
-
-            // indices in tensor, in each dim. of inserted knots in full knot vector after insertion
-            vector<vector<KnotIdx>> inserted_knot_idxs(mfa_data.dom_dim);
-
-            VectorX<T> myextents = extents.size() ? extents : VectorX<T>::Ones(mfa_data.tmesh.tensor_prods[0].ctrl_pts.cols());
-
-            int parent_tensor_idx;                              // idx of parent tensor of new knot (assuming only one new knot)
-
-            // find new knots
-            mfa::NewKnots<T> nk(mfa_data, input);
-
-            // vectors of new_nctrl_pts, new_ctrl_pts, new_weights, one instance for each knot to be inserted
-            // we're only inserting one knot at a time, but the NewKnots object supports multiple knot insertions, hence std::vector
-            vector<VectorXi>    new_nctrl_pts;
-            vector<MatrixX<T>>  new_ctrl_pts;
-            vector<VectorX<T>>  new_weights;
-
-            if (local)
-            {
-//                 done &= nk.FirstErrorSpan(domain,
-                done &=   nk.MaxErrorSpan(myextents,
-                                          err_limit,
-                                          iter,
-                                          parent_tensor_idx,
-                                          inserted_knot_idxs,
-                                          new_nctrl_pts,
-                                          new_ctrl_pts,
-                                          new_weights,
-                                          local);
-            }
-            else
-//                 done &= nk.FirstErrorSpan(domain,
-                done &=   nk.MaxErrorSpan(myextents,
-                                          err_limit,
-                                          iter,
-                                          parent_tensor_idx,
-                                          inserted_knot_idxs);
-
-            if (local)
-                assert(inserted_knot_idxs[0].size() == new_ctrl_pts.size());    // sanity check: number of inserted knots is consistent across things that depend on it
-
-            if (done)                                                           // nothing inserted
-                return 0;
-
-            // knot mins and maxs of tensor to be appended
-            // this is where we decide how many knots and control points the added tensor has
-            vector<KnotIdx> knot_mins(mfa_data.dom_dim);
-            vector<KnotIdx> knot_maxs(mfa_data.dom_dim);
-            for (auto j = 0; j < mfa_data.dom_dim; j++)
-            {
-                // following makes p control points in the added tensor
-                knot_mins[j] = inserted_knot_idxs[j][0] - mfa_data.p(j) / 2;
-                knot_maxs[j] = inserted_knot_idxs[j][0] + mfa_data.p(j) / 2;
-
-                // debug: try making a bigger tensor with p + 1 control points
-                knot_maxs[j]++;             // correct for both even and odd degree
-
-                // check that we don't leave the parent tensor with less than p control points anywhere
-                TensorProduct<T>& t = mfa_data.tmesh.tensor_prods[parent_tensor_idx];
-                int odd_degree = mfa_data.p(j) % 2 == 0 ? 0 : 1;
-                if (t.knot_maxs[j] - knot_maxs[j] < mfa_data.p(j) - odd_degree)
-                    knot_maxs[j] = t.knot_maxs[j];
-                if (knot_mins[j] - t.knot_mins[j] < mfa_data.p(j) - odd_degree)
-                    knot_mins[j] = t.knot_mins[j];
-            }
-
-            // debug
-            fmt::print(stderr, "NewKnots_full() appending tensor with knot_mins [{}] knot_maxs [{}]\n",
-                    fmt::join(knot_mins, ","), fmt::join(knot_maxs, ","));
-
-            // append the tensor
-            // only doing one new knot insertion, hence the [0] index on new_nctrl_pts, new_ctrl_pts, new_weights
-            if (local)
-                mfa_data.tmesh.append_tensor(knot_mins,
-                                             knot_maxs,
-                                             new_nctrl_pts[0],
-                                             new_ctrl_pts[0],
-                                             new_weights[0],
-                                             parent_tensor_idx);
-            else
-                mfa_data.tmesh.append_tensor(knot_mins,
-                                             knot_maxs);
-
-            // debug
-//             mfa_data.tmesh.print();
-
-            // local solve newly appended tensor
-            // experimenting with the difference between iterative and linear least squares
-            if (local)
-#ifdef MFA_LINEAR_LOCAL
-
-                EncodeTensorLocalLinear(mfa_data.tmesh.tensor_prods.size() - 1);
-
-#else
-
-                LocalSolve();
-
-#endif
-
-            for (auto k = 0; k < mfa_data.dom_dim; k++)
-                if (input.ndom_pts(k) <= mfa_data.tmesh.all_knots[k].size() - (mfa_data.p(k) + 1))
-                    return -1;
-
-            return 1;
-        }
-
-#ifndef MFA_LINEAR_LOCAL
-
-        // set up and run iterative solver for constrained local solve
-        // of a previously added tensor to the back of the tensor products in the tmesh
-        // n-d version
-        void LocalSolve()
-        {
-            const Tmesh<T>&         tmesh   = mfa_data.tmesh;
-            const TensorProduct<T>& tc      = tmesh.tensor_prods.back();                                    // current (newly appended) tensor
-            int                     cols    = tc.ctrl_pts.cols();
-
-            // fill control points to solve (both interior and constraints)
-            MatrixX<T> ctrlpts_tosolve;
-
-            // control points to solve are only free control points
-            // constraints come from decoding input points that are covered by the constrained control points
-            ctrlpts_tosolve = tc.ctrl_pts;
-
-            // get the subset of the domain points needed for the local solve
-            vector<size_t> start_idxs(mfa_data.dom_dim);
-            vector<size_t> end_idxs(mfa_data.dom_dim);
-            tmesh.domain_pts(tmesh.tensor_prods.size() - 1, input.params->param_grid, start_idxs, end_idxs);        // true = pad by degree on each side
-
-            // set up the optimization
-            LocalLSQ<T> llsq(mfa, mfa_data, input, start_idxs, end_idxs, verbose);
-            // trying various different solvers
-            BfgsSolver<LocalLSQ<T>> solver;
-//             LbfgsSolver<LocalLSQ<T>> solver;
-//             NewtonDescentSolver<LocalLSQ<T>> solver;
-//             CMAesSolver<LocalLSQ<T>> solver;         // does not compile
-//             NelderMeadSolver<LocalLSQ<T>> solver;
-//             ConjugatedGradientDescentSolver<LocalLSQ<T>> solver;
-//             GradientDescentSolver<LocalLSQ<T>> solver;
-
-            // minimize the function
-            VectorX<T> x1(Eigen::Map<VectorX<T>>(ctrlpts_tosolve.data(), ctrlpts_tosolve.size()));  // size() = rows() * cols()
-            fprintf(stderr, "\nIterative solver optimizing control points...\n");
-            solver.minimize(llsq, x1);
-
-            // debug
-            fprintf(stderr, "\nSolver converged in %lu iterations.\n", llsq.iters());
-        }
-
-#endif
-
-        // DEPRECATE
-//         // constraint control points and corresponding anchors for local solve
-//         // this version looks at prev and next tensors, but currently misses diagonal neighbors
-//         // TODO: either fix to find all constraints or deprecate in favor LocalSolveAllConstraints
-//         void LocalSolvePrevNextConstraints(
-//                 const TensorProduct<T>&     tc,                 // current tensor product being solved
-//                 MatrixX<T>&                 ctrl_pts,           // (output) constraint control points
-//                 vector<vector<KnotIdx>>&    anchors,            // (output) corresponding anchors
-//                 vector<TensorIdx>&          t_idx_anchors)      // (output) tensors containing corresponding anchors
-//         {
-//             const Tmesh<T>&         tmesh   = mfa_data.tmesh;
-//             int                     cols    = tc.ctrl_pts.cols();
-//             KnotIdx                 min, max;                   // temporaries
-// 
-//             // get required sizes
-// 
-//             int rows = 0;                                       // number of rows required in ctrl_pts
-//             VectorXi npts(mfa_data.dom_dim);
-//             for (auto k = 0; k < mfa_data.dom_dim; k++)
-//             {
-//                 for (auto j = 0; j < tc.prev[k].size(); j++)    // previous tensors
-//                 {
-//                     const TensorProduct<T>& tp = tmesh.tensor_prods[tc.prev[k][j]];
-//                     for (auto i = 0; i < mfa_data.dom_dim; i++)
-//                     {
-//                         int p = mfa_data.p(i);
-//                         if (i == k)                             // direction of prev
-//                             npts(i) = p;
-//                         else                                    // direction orthogonal to prev
-//                         {
-//                             mfa_data.tmesh.knot_idx_ofst(tp, tc.knot_mins[i], -p, i, min);
-//                             mfa_data.tmesh.knot_idx_ofst(tp, tc.knot_maxs[i], p, i, max);
-//                             if (p % 2)                          // odd degree
-//                                 npts(i) = mfa_data.tmesh.knot_idx_dist(tp, min, max, i, true);
-//                             else                                // even degree
-//                                 npts(i) = mfa_data.tmesh.knot_idx_dist(tp, min, max, i, false);
-//                         }
-//                     }
-//                     rows += npts.prod();
-//                 }   // previous tensors
-//                 for (auto j = 0; j < tc.next[k].size(); j++)    // next tensors
-//                 {
-//                     const TensorProduct<T>& tn = tmesh.tensor_prods[tc.next[k][j]];
-//                     for (auto i = 0; i < mfa_data.dom_dim; i++)
-//                     {
-//                         int p = mfa_data.p(i);
-//                         if (i == k)                             // direction of next
-//                             npts(i) = p;
-//                         else                                    // direction orthogonal to next
-//                         {
-//                             mfa_data.tmesh.knot_idx_ofst(tn, tc.knot_mins[i], -p, i, min);
-//                             mfa_data.tmesh.knot_idx_ofst(tn, tc.knot_maxs[i], p, i, max);
-//                             if (p % 2)                          // odd degree
-//                                 npts(i) = mfa_data.tmesh.knot_idx_dist(tn, min, max, i, true);
-//                             else                                // even degree
-//                                 npts(i) = mfa_data.tmesh.knot_idx_dist(tn, min, max, i, false);
-//                         }
-//                     }
-//                     rows += npts.prod();
-//                 }
-//             }   // next tensors
-//             ctrl_pts.resize(rows, cols);
-//             anchors.resize(rows);
-//             t_idx_anchors.resize(rows);
-// 
-//             // get control points and anchors
-// 
-//             int cur_row = 0;
-//             VectorXi sub_starts(mfa_data.dom_dim);
-//             VectorXi sub_npts(mfa_data.dom_dim);
-//             VectorXi all_npts(mfa_data.dom_dim);
-//             vector<KnotIdx> anchor(mfa_data.dom_dim);           // one anchor
-//             for (auto k = 0; k < mfa_data.dom_dim; k++)         // for all dimensions
-//             {
-//                 // previous tensors
-//                 // assumes that all previous tensors have at least the required number of control points (p) in the prev direction
-//                 for (auto j = 0; j < tc.prev[k].size(); j++)
-//                 {
-//                     const TensorProduct<T>& tp = tmesh.tensor_prods[tc.prev[k][j]];
-//                     for (auto i = 0; i < mfa_data.dom_dim; i++)
-//                     {
-//                         int p = mfa_data.p(i);
-//                         if (i == k)                             // direction of prev
-//                         {
-//                             sub_starts(i)   = tp.nctrl_pts(i) - p;
-//                             if (p % 2)                          // odd degree, skip border point
-//                                 sub_starts(i)--;
-//                             sub_npts(i)     = p;
-//                         }
-//                         else                                    // direction orthogonal to prev
-//                         {
-//                             mfa_data.tmesh.knot_idx_ofst(tp, tc.knot_mins[i], -p, i, min);
-//                             mfa_data.tmesh.knot_idx_ofst(tp, tc.knot_maxs[i], p, i, max);
-// 
-//                             sub_starts(i) = mfa_data.tmesh.knot_idx_dist(tp, tp.knot_mins[i], min, i, false);
-//                             if (tp.knot_mins[i] == 0)
-//                                 sub_starts(i) -= (p + 1) / 2;
-//                             if (p % 2)                          // odd degree
-//                                 sub_npts(i) = mfa_data.tmesh.knot_idx_dist(tp, min, max, i, true);
-//                             else                                // even degree
-//                                 sub_npts(i) = mfa_data.tmesh.knot_idx_dist(tp, min, max, i, false);
-//                         }
-//                         all_npts(i)         = tp.nctrl_pts(i);
-// 
-//                         // debug
-// //                         fprintf(stderr, "prev tensor: dim = %d sub_npts = %d sub_starts = %d all_npts = %d\n",
-// //                                 i, sub_npts(i), sub_starts(i), all_npts(i));
-//                     }
-//                     VolIterator voliter_prev(sub_npts, sub_starts, all_npts);
-//                     VectorXi ijk(mfa_data.dom_dim);
-//                     while (!voliter_prev.done())
-//                     {
-//                         // control point
-//                         ctrl_pts.row(cur_row) = tp.ctrl_pts.row(voliter_prev.sub_full_idx(voliter_prev.cur_iter()));
-// 
-//                         // anchor
-//                         anchors[cur_row].resize(mfa_data.dom_dim);
-//                         voliter_prev.idx_ijk(voliter_prev.cur_iter(), ijk);
-//                         mfa_data.tmesh.ctrl_pt_anchor(tp, ijk, anchor);
-//                         for (auto i = 0; i < mfa_data.dom_dim; i++)
-//                             anchors[cur_row][i] = anchor[i];
-//                         t_idx_anchors[cur_row] = tc.prev[k][j];
-//                         cur_row++;
-//                         voliter_prev.incr_iter();
-//                     }
-//                 }   // previous tensors
-// 
-//                 // next tensors
-//                 // assumes that all next tensors have at least the required number of control points (p) in the next direction
-//                 for (auto j = 0; j < tc.next[k].size(); j++)
-//                 {
-//                     const TensorProduct<T>& tn = tmesh.tensor_prods[tc.next[k][j]];
-//                     for (auto i = 0; i < mfa_data.dom_dim; i++)
-//                     {
-//                         int p = mfa_data.p(i);
-//                         if (i == k)                             // direction of next
-//                         {
-//                             if (p % 2)                          // odd degree, skip border point
-//                                 sub_starts(i)   = 1;
-//                             else
-//                                 sub_starts(i)   = 0;
-//                             sub_npts(i)         = p;
-//                         }
-//                         else                                    // direction orthogonal to next
-//                         {
-//                             mfa_data.tmesh.knot_idx_ofst(tn, tc.knot_mins[i], -p, i, min);
-//                             mfa_data.tmesh.knot_idx_ofst(tn, tc.knot_maxs[i], p, i, max);
-// 
-//                             sub_starts(i) = mfa_data.tmesh.knot_idx_dist(tn, tn.knot_mins[i], min, i, false);
-//                             if (tn.knot_mins[i] == 0)
-//                                 sub_starts(i) -= (p + 1) / 2;
-//                             if (p % 2)                          // odd degree
-//                                 sub_npts(i) = mfa_data.tmesh.knot_idx_dist(tn, min, max, i, true);
-//                             else                                // even degree
-//                                 sub_npts(i) = mfa_data.tmesh.knot_idx_dist(tn, min, max, i, false);
-//                         }
-//                         all_npts(i)         = tn.nctrl_pts(i);
-// 
-//                         // debug
-// //                         fprintf(stderr, "next tensor: dim = %d sub_npts = %d sub_starts = %d all_npts = %d\n",
-// //                                 i, sub_npts(i), sub_starts(i), all_npts(i));
-//                     }
-//                     VolIterator voliter_next(sub_npts, sub_starts, all_npts);
-//                     VectorXi ijk(mfa_data.dom_dim);
-//                     while (!voliter_next.done())
-//                     {
-//                         // control point
-//                         ctrl_pts.row(cur_row) = tn.ctrl_pts.row(voliter_next.sub_full_idx(voliter_next.cur_iter()));
-// 
-//                         // anchor
-//                         anchors[cur_row].resize(mfa_data.dom_dim);
-//                         voliter_next.idx_ijk(voliter_next.cur_iter(), ijk);
-//                         mfa_data.tmesh.ctrl_pt_anchor(tn, ijk, anchor);
-//                         for (auto i = 0; i < mfa_data.dom_dim; i++)
-//                             anchors[cur_row][i] = anchor[i];
-//                         t_idx_anchors[cur_row] = tc.next[k][j];
-//                         cur_row++;
-//                         voliter_next.incr_iter();
-//                     }
-//                 }   // next tensors
-//             }   // for all dimensions
-//         }
 
         // constraint control points and corresponding anchors for local solve
         // this version checks all tensors, slower than looking at prev/next, but reliably finds all constraints
@@ -2918,8 +2517,6 @@ namespace mfa
 
             // debug
             bool debug = false;
-//             if (tc.knot_mins[0] == 0 && tc.knot_mins[1] == 0)
-//                 debug = true;
 
             // mins, maxs of tc padded by degree p
             vector<KnotIdx> tc_pad_mins(mfa_data.dom_dim);
@@ -2942,10 +2539,6 @@ namespace mfa
                 if (t.level > tc.level)
                     continue;
 
-                // debug
-//                 if (debug)
-//                     fmt::print(stderr, "LocalSolveAllConstraints(): tensor {}\n", k);
-
                 // pad mins and maxs of tc
                 for (auto i = 0; i < mfa_data.dom_dim; i++)
                 {
@@ -2953,12 +2546,6 @@ namespace mfa
                     tmesh.knot_idx_ofst(t, tc.knot_mins[i], -p, i, true, tc_pad_mins[i]);
                     tmesh.knot_idx_ofst(t, tc.knot_maxs[i], p, i, true, tc_pad_maxs[i]);
                 }
-
-                // debug
-//                 if (debug)
-//                     fmt::print(stderr, "LocalSolveAllConstraints(): tc_pad_mins [{}] : tc_pad_maxs [{}] t.knot_mins [{}] : t.knot_maxs [{}]\n",
-//                             fmt::join(tc_pad_mins, ","), fmt::join(tc_pad_maxs, ","),
-//                             fmt::join(t.knot_mins, ","), fmt::join(t.knot_maxs, ","));
 
                 // intersect padded bounds with tensor t
                 if (tmesh.intersects(tc_pad_mins, tc_pad_maxs, t.knot_mins, t.knot_maxs, intersect_mins, intersect_maxs))
@@ -2973,16 +2560,8 @@ namespace mfa
                     }
                 }
 
-                // debug
-//                 if (debug)
-//                     cerr << "LocalSolveAllConstraints(): npts: " << npts.transpose() << endl;
-
                 rows += npts.prod();
             }       // for all tensor products
-
-            // debug
-//             if (debug)
-//                 cerr << "LocalSolveAllConstraints(): rows: " << rows << endl;
 
             ctrl_pts.resize(rows, cols);
             anchors.resize(rows);
@@ -3027,21 +2606,6 @@ namespace mfa
                             sub_npts(i) = tmesh.knot_idx_dist(t, intersect_mins[i], intersect_maxs[i], i, false);
                         all_npts(i) = t.nctrl_pts(i);
                     }
-
-//                     if (debug)
-//                         cerr << "LocalSolveAllConstraints(): sub_starts: " << sub_starts.transpose() <<
-//                             " sub_npts: " << sub_npts.transpose() << " all_npts: " << all_npts.transpose() << endl;
-
-                    // debug
-//                     if (sub_starts[0] + sub_npts[0] > all_npts[0])
-//                     {
-//                         cerr << "LocalSolveAllConstraints(): Error: sub_starts: " << sub_starts.transpose() <<
-//                             " sub_npts: " << sub_npts.transpose() << " all_npts: " << all_npts.transpose() << endl;
-//                         fmt::print("neighbor tensor:\n");
-//                         mfa_data.tmesh.print_tensor(t);
-//                         fmt::print("all tensors:\n");
-//                         mfa_data.tmesh.print();
-//                     }
 
                     VolIterator voliter(sub_npts, sub_starts, all_npts);
                     VectorXi ijk(mfa_data.dom_dim);
@@ -3092,17 +2656,17 @@ namespace mfa
             new_knots.resize(mfa_data.dom_dim);
             vector<vector<int>> new_levels(mfa_data.dom_dim);
 
-            for (TensorProduct<T>& t : mfa_data.tmesh.tensor_prods)             // for all tensor products in the tmesh
+            for (auto& t : mfa_data.tmesh.tensor_prods)                             // for all tensor products in the tmesh
             {
                 // check and assign main quantities
-                VectorXi n = t.nctrl_pts - VectorXi::Ones(mfa_data.dom_dim);     // number of control point spans in each domain dim
-                VectorXi m = input.ndom_pts  - VectorXi::Ones(mfa_data.dom_dim);   // number of input data point spans in each domain dim
+                VectorXi n = t.nctrl_pts - VectorXi::Ones(mfa_data.dom_dim);        // number of control point spans in each domain dim
+                VectorXi m = input.ndom_pts  - VectorXi::Ones(mfa_data.dom_dim);    // number of input data point spans in each domain dim
 
                 // resize control points and weights
                 t.ctrl_pts.resize(t.nctrl_pts.prod(), mfa_data.max_dim - mfa_data.min_dim + 1);
                 t.weights = VectorX<T>::Ones(t.ctrl_pts.rows());
 
-                for (size_t k = 0; k < mfa_data.dom_dim; k++)                    // for all domain dimensions
+                for (size_t k = 0; k < mfa_data.dom_dim; k++)                       // for all domain dimensions
                 {
                     new_knots[k].resize(0);
                     new_levels[k].resize(0);
@@ -3262,6 +2826,7 @@ namespace mfa
                 auto tot_nctrl_pts = t.nctrl_pts.prod();
                 t.ctrl_pts.resize(tot_nctrl_pts, t.ctrl_pts.cols());
                 t.weights =  VectorX<T>::Ones(tot_nctrl_pts);
+                mfa_data.tmesh.tensor_knot_idxs(t);
             }                                                               // tensor products
 
             return(tot_nnew_knots ? 0 : 1);
