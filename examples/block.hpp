@@ -1387,58 +1387,284 @@ struct Block : public BlockBase<T>
         cerr << "domain extent:\n min\n" << bounds_mins << "\nmax\n" << bounds_maxs << endl;
     }
     
-        // Compute error metrics between a pointset and an analytical function
-        // evaluated at the points in the pointset
-        // N.B. assumes only one science variable
-        void analytical_error_pointset(
-            mfa::PointSet<T>*       ps,
-            string                  fun,
-            T&                      L1, 
-            T&                      L2,
-            T&                      Linf,
-            DomainArgs&             args) const
+
+    // ONLY 2d AT THEM MOMENT
+    void create_ray_model(
+        const       diy::Master::ProxyWithLink& cp,
+        DomainArgs& args)
+    {
+        DomainArgs* a = &args;
+
+        const double pi = 3.14159265358979;
+        assert (dom_dim == 2); // TODO: extended to any dimensionality
+
+        // precondition: Block already contains a fully encoded MFA
+        //  DomainArgs* a = &args;
+
+        int new_dd = dom_dim + 1;   // new dom_dim
+        int new_pd = pt_dim + 1;    // new pt_dim
+        mfa::PointSet<T>* new_input;
+        mfa::MFA<T>* new_mfa;
+
+        Model<T> new_geom;
+        // vector<Model<T>> new_vars;
+
+        new_geom.min_dim = 0;
+        new_geom.max_dim = new_dd - 1;
+
+        int nvars = this->vars.size();
+        // new_vars.resize(nvars);
+        // new_vars[0].min_dim = new_dd;
+        // new_vars[0].max_dim = new_vars[0].min_dim;
+        // for (int i = 1; i < nvars; i++)
+        // {
+        //     new_vars[i].min_dim = new_vars[i-1].max_dim + 1;
+        //     new_vars[i].max_dim = new_vars[i].min_dim;
+        // }
+
+        
+        const int n_alpha = 40;    // Number of angle values to sample
+        const int n_rho = 150;      // Number of rho values to sample
+        const int n_samples = 150;  // Number of times to sample each ray
+        const double r_lim = 6*pi;     // min/max rho value
+        const double dr = r_lim * 2 / (n_rho-1);
+        const double da = pi / (n_alpha-1); // d_alpha; amount to rotate on each slice
+
+        // extents of domain in physical space
+        const T xl = bounds_mins(0);
+        const T xh = bounds_maxs(0);
+        const T yl = bounds_mins(1);
+        const T yh = bounds_maxs(1);
+
+        double alpha = 0;   // angle of rotation
+        double rho = -r_lim;
+
+        VectorXi ndom_pts(new_dd);
+        ndom_pts(0) = n_samples;
+        ndom_pts(1) = n_rho;
+        ndom_pts(2) = n_alpha;
+        int npts = n_samples * n_alpha * n_rho;
+
+
+        new_input = new mfa::PointSet<T>(new_dd, new_pd, npts, ndom_pts);
+
+        VectorX<T> param(dom_dim);
+        VectorX<T> outpt(1);
+
+        for (int ia = 0; ia < n_alpha; ia++)
         {
-            // Compute the analytical error at each point
-            T sum_errs      = 0.0;                                  // sum of absolute values of errors (L-1 norm)
-            T sum_sq_errs   = 0.0;                                  // sum of squares of errors (square of L-2 norm)
-            T max_err       = -1.0;                                 // maximum absolute value of error (L-infinity norm)
-            T true_val = 0;
-            T test_val = 0;
-            VectorX<T> dom_pt(dom_dim);
-            for (auto pt_it = ps->begin(), pt_end = ps->end(); pt_it != pt_end; ++pt_it)
+            alpha = ia * da;
+            for (int ir = 0; ir < n_rho; ir++)
             {
-                pt_it.coords(dom_pt, 0, dom_dim-1); // extract the first dom_dim coords (i.e. geometric coords)
-                
-                // evaluate function at dom_pt_real
-                if (fun == "sinc")
-                    true_val = sinc(dom_pt, args, 0);       // hard-coded for one science variable
-                if (fun == "sine")
-                    true_val = sine(dom_pt, args, 0);       // hard-coded for one science variable
-                if (fun == "cosine")
-                    true_val = cosine(dom_pt, args, 0);     // hard-coded for one science variable
-                if (fun == "ncosp1")
-                    true_val = ncosp1(dom_pt, args, 0);      // hard-coded for one science variable
-                if (fun == "f16")
-                    true_val = f16(dom_pt);
-                if (fun == "f17")
-                    true_val = f17(dom_pt);
-                if (fun == "f18")
-                    true_val = f18(dom_pt);
+                rho = -r_lim + ir * dr;
 
-                test_val = ps->domain(pt_it.idx(), dom_dim);    // hard-coded for first science variable only
+                T yh_int = (rho - yh * sin(alpha)) / cos(alpha);
+                T yl_int = (rho - yl * sin(alpha)) / cos(alpha);
+                T xh_int = (rho - xh * cos(alpha)) / sin(alpha);
+                T xl_int = (rho - xl * cos(alpha)) / sin(alpha);
 
-                // compute and accrue error
-                T err = fabs(true_val - test_val);
-                sum_errs += err;                                // L1
-                sum_sq_errs += err * err;                       // L2
-                if (err > max_err)                              // Linf
-                    max_err = err;
+
+
+                // "rotating chords" setup
+                // start/end coordinates of the chord formed by intersecting 
+                // the line with the circle of radius r_lim
+                // T delta_x = 2*sqrt(r_lim*r_lim - rho*rho) * sin(alpha);
+                // T delta_y = 2*sqrt(r_lim*r_lim - rho*rho) * cos(alpha);
+                // T x0 = rho * cos(alpha) - delta_x/2;
+                // T x1 = rho * cos(alpha) + delta_x/2;
+                // T y0 = rho * sin(alpha) + delta_y/2;
+                // T y1 = rho * sin(alpha) - delta_y/2;
+
+                // "parallel-plate setup"
+                // start/end coordinates of the ray (alpha, rho)
+                // In this setup the length of every segment (x0,y0)--(x1,y1) is constant
+                T delta_x = 2 * r_lim * sin(alpha);
+                T delta_y = 2 * r_lim * cos(alpha);
+                T x0 = rho * cos(alpha) - r_lim * sin(alpha);
+                T x1 = rho * cos(alpha) + r_lim * sin(alpha);
+                T y0 = rho * sin(alpha) + r_lim * cos(alpha);
+                T y1 = rho * sin(alpha) - r_lim * cos(alpha);
+
+
+                T dx = delta_x / (n_samples-1);
+                T dy = delta_y / (n_samples-1);
+
+                for (int is = 0; is < n_samples; is++)
+                {
+                    int idx = ia*n_rho*n_samples + ir*n_samples + is;
+                    new_input->domain(idx, 0) = (double)is / (n_samples-1);
+                    new_input->domain(idx, 1) = rho;
+                    new_input->domain(idx, 2) = alpha;
+
+                    T x = x0 + is * dx;
+                    T y = y0 - is * dy;
+
+                    // If this point is not in domain, then set zero
+                    if (x < xl || x > xh || y < yl || y > yh)
+                    {
+                        new_input->domain(idx,3) = 5;
+                    }
+                    else    // point is in domain, decode value from existing MFA
+                    {
+                        param(0) = (x - xl) / (xh - xl);
+                        param(1) = (y - yl) / (yh - yl);
+                        this->mfa->DecodePt(*(this->vars[0].mfa_data), param, outpt);
+                        new_input->domain(idx, 3) = outpt(0);
+                    }
+                                       
+                }
+            }
+        }
+        
+        // Set parameters for new input
+        new_input->init_params();
+
+        // replace original input with ray-model input
+        delete input;
+        input = new_input;
+
+        // replace old top-level MFA with a new one
+        mfa::MFA<T>* ray_mfa = new mfa::MFA<T>(new_dd);
+        delete this->mfa;
+        this->mfa = ray_mfa;
+
+        // Replace existing models with new models
+        delete this->geometry.mfa_data;
+        this->geometry = new_geom;
+        // for (int i = 0; i < vars.size(); i++)
+        // {
+        //     delete vars[i].mfa_data;
+        // }
+        // vars = new_vars;
+
+        // Set nctrl_pts, degree for geometry
+        VectorXi nctrl_pts(new_dd);
+        VectorXi p(new_dd);
+        for (int k = 0; k < new_dd; k++)
+        {
+            nctrl_pts(k) = 2;
+            p(k) = 1;
+        }
+
+        // encode (new) geometry
+        this->geometry.mfa_data = new mfa::MFA_Data<T>(p, nctrl_pts, 0, new_dd - 1);
+        this->geometry.mfa_data->set_knots(*new_input);
+        this->mfa->FixedEncode(*(this->geometry.mfa_data), *new_input, nctrl_pts, 1, 0);
+
+        // encode (new) science variables
+        for (auto i = 0; i< this->vars.size(); i++)
+        {
+            int min_p = 20;
+            int max_nctrl_pts = 0;
+            for (int j = 0; j < dom_dim; j++)
+            {
+                if (this->vars[i].mfa_data->p(j) < min_p)
+                    min_p = this->vars[i].mfa_data->p(j);
+
+                if (this->vars[i].mfa_data->tmesh.tensor_prods[0].nctrl_pts(j) > max_nctrl_pts)
+                    max_nctrl_pts = this->vars[i].mfa_data->tmesh.tensor_prods[0].nctrl_pts(j);
             }
 
-            L1    = sum_errs;
-            L2    = sqrt(sum_sq_errs);
-            Linf  = max_err;
+            // reset this vars Model to the new ray model
+            this->vars[i].min_dim = new_dd + i;
+            this->vars[i].max_dim = new_dd + i;
+            delete this->vars[i].mfa_data;
+
+
+            // TODO: this needs to be fixed
+            // its possible that max_nctrl_pts is too many if one dimension is much smaller than the others.
+            for (auto j = 0; j < new_dd; j++)
+            {
+                p(j)            = min_p;
+                nctrl_pts(j)    = max_nctrl_pts;
+            }
+
+            this->vars[i].mfa_data = new mfa::MFA_Data<T>(p, nctrl_pts, new_dd + i, new_dd + i);
+            this->vars[i].mfa_data->set_knots(*new_input);
+            this->mfa->FixedEncode(*(this->vars[i].mfa_data), *new_input, nctrl_pts, 1, 0);
         }
+
+        // reset block members as needed
+        dom_dim = new_dd;
+        pt_dim = new_pd;
+
+        VectorX<T> old_bounds_mins = bounds_mins;
+        VectorX<T> old_bounds_maxs = bounds_maxs;
+
+        bounds_mins.resize(pt_dim);
+        bounds_maxs.resize(pt_dim);
+        bounds_mins(0) = 0;
+        bounds_maxs(0) = 1;
+        bounds_mins(1) = -r_lim;
+        bounds_maxs(1) = r_lim;
+        bounds_mins(2) = 0;
+        bounds_maxs(2) = pi;
+        for (int i = 0; i < nvars; i++)
+        {
+            bounds_mins(3+i) = old_bounds_mins(2+i);
+            bounds_maxs(3+i) = old_bounds_maxs(2+i);
+        }
+        core_mins = bounds_mins.head(dom_dim);
+        core_maxs = bounds_maxs.head(dom_dim);
+
+        this->max_errs.resize(this->vars.size());
+        this->sum_sq_errs.resize(this->vars.size());
+
+        this->decode_block(cp, 1, 0);
+    }
+
+    // Compute error metrics between a pointset and an analytical function
+    // evaluated at the points in the pointset
+    // N.B. assumes only one science variable
+    void analytical_error_pointset(
+        mfa::PointSet<T>*       ps,
+        string                  fun,
+        T&                      L1, 
+        T&                      L2,
+        T&                      Linf,
+        DomainArgs&             args) const
+    {
+        // Compute the analytical error at each point
+        T sum_errs      = 0.0;                                  // sum of absolute values of errors (L-1 norm)
+        T sum_sq_errs   = 0.0;                                  // sum of squares of errors (square of L-2 norm)
+        T max_err       = -1.0;                                 // maximum absolute value of error (L-infinity norm)
+        T true_val = 0;
+        T test_val = 0;
+        VectorX<T> dom_pt(dom_dim);
+        for (auto pt_it = ps->begin(), pt_end = ps->end(); pt_it != pt_end; ++pt_it)
+        {
+            pt_it.coords(dom_pt, 0, dom_dim-1); // extract the first dom_dim coords (i.e. geometric coords)
+            
+            // evaluate function at dom_pt_real
+            if (fun == "sinc")
+                true_val = sinc(dom_pt, args, 0);       // hard-coded for one science variable
+            if (fun == "sine")
+                true_val = sine(dom_pt, args, 0);       // hard-coded for one science variable
+            if (fun == "cosine")
+                true_val = cosine(dom_pt, args, 0);     // hard-coded for one science variable
+            if (fun == "ncosp1")
+                true_val = ncosp1(dom_pt, args, 0);      // hard-coded for one science variable
+            if (fun == "f16")
+                true_val = f16(dom_pt);
+            if (fun == "f17")
+                true_val = f17(dom_pt);
+            if (fun == "f18")
+                true_val = f18(dom_pt);
+
+            test_val = ps->domain(pt_it.idx(), dom_dim);    // hard-coded for first science variable only
+
+            // compute and accrue error
+            T err = fabs(true_val - test_val);
+            sum_errs += err;                                // L1
+            sum_sq_errs += err * err;                       // L2
+            if (err > max_err)                              // Linf
+                max_err = err;
+        }
+
+        L1    = sum_errs;
+        L2    = sqrt(sum_sq_errs);
+        Linf  = max_err;
+    }
 
     void analytical_error_field(
         string                              fun,                // function to evaluate

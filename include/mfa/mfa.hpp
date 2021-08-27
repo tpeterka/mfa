@@ -87,9 +87,9 @@ using SpMatTriplet = Eigen::Triplet<T>;
 template <typename T>
 struct Model
 {
-    int                 min_dim;                // starting coordinate of this model in full-dimensional data
-    int                 max_dim;                // ending coordinate of this model in full-dimensional data
-    mfa::MFA_Data<T>    *mfa_data;              // MFA model data
+    int                 min_dim{0};                // starting coordinate of this model in full-dimensional data
+    int                 max_dim{0};                // ending coordinate of this model in full-dimensional data
+    mfa::MFA_Data<T>    *mfa_data{nullptr};              // MFA model data
 };
 
 namespace mfa

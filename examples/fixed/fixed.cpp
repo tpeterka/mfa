@@ -407,6 +407,9 @@ int main(int argc, char** argv)
         }
     }
 
+    // write initial points
+    diy::io::write_blocks("initial.out", world, master);
+
     // compute the MFA
 
     fprintf(stderr, "\nStarting fixed encoding...\n\n");
@@ -427,7 +430,10 @@ int main(int argc, char** argv)
 #else                   // range coordinate difference
         bool saved_basis = structured; // TODO: basis functions are currently only saved during encoding of structured data
         master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-                { b->range_error(cp, 1, true, saved_basis); });
+                { 
+                    // b->range_error(cp, 1, true, saved_basis);
+                    b->create_ray_model(cp, d_args);
+                     });
 #endif
         decode_time = MPI_Wtime() - decode_time;
     }

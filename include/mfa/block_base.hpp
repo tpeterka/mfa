@@ -1363,43 +1363,13 @@ namespace mfa
             diy::save(bb, b->errs);
 
             // geometry
-            diy::save(bb, b->geometry.mfa_data->p);
-            diy::save(bb, b->geometry.mfa_data->tmesh.tensor_prods.size());
-            for (TensorProduct<T>& t: b->geometry.mfa_data->tmesh.tensor_prods)
-                diy::save(bb, t.nctrl_pts);
-            for (TensorProduct<T>& t: b->geometry.mfa_data->tmesh.tensor_prods)
-                diy::save(bb, t.ctrl_pts);
-            for (TensorProduct<T>& t: b->geometry.mfa_data->tmesh.tensor_prods)
-                diy::save(bb, t.weights);
-            for (TensorProduct<T>& t: b->geometry.mfa_data->tmesh.tensor_prods)
-                diy::save(bb, t.knot_mins);
-            for (TensorProduct<T>& t: b->geometry.mfa_data->tmesh.tensor_prods)
-                diy::save(bb, t.knot_maxs);
-            for (TensorProduct<T>& t: b->geometry.mfa_data->tmesh.tensor_prods)
-                diy::save(bb, t.level);
-            diy::save(bb, b->geometry.mfa_data->tmesh.all_knots);
-            diy::save(bb, b->geometry.mfa_data->tmesh.all_knot_levels);
+            diy::save(bb, b->geometry.mfa_data);
 
             // science variables
             diy::save(bb, b->vars.size());
             for (auto i = 0; i < b->vars.size(); i++)
             {
-                diy::save(bb, b->vars[i].mfa_data->p);
-                diy::save(bb, b->vars[i].mfa_data->tmesh.tensor_prods.size());
-                for (TensorProduct<T>& t: b->vars[i].mfa_data->tmesh.tensor_prods)
-                    diy::save(bb, t.nctrl_pts);
-                for (TensorProduct<T>& t: b->vars[i].mfa_data->tmesh.tensor_prods)
-                    diy::save(bb, t.ctrl_pts);
-                for (TensorProduct<T>& t: b->vars[i].mfa_data->tmesh.tensor_prods)
-                    diy::save(bb, t.weights);
-                for (TensorProduct<T>& t: b->vars[i].mfa_data->tmesh.tensor_prods)
-                    diy::save(bb, t.knot_mins);
-                for (TensorProduct<T>& t: b->vars[i].mfa_data->tmesh.tensor_prods)
-                    diy::save(bb, t.knot_maxs);
-                for (TensorProduct<T>& t: b->vars[i].mfa_data->tmesh.tensor_prods)
-                    diy::save(bb, t.level);
-                diy::save(bb, b->vars[i].mfa_data->tmesh.all_knots);
-                diy::save(bb, b->vars[i].mfa_data->tmesh.all_knot_levels);
+                diy::save(bb, b->vars[i].mfa_data);
             }
 
             // output for blending
@@ -1430,27 +1400,8 @@ namespace mfa
             diy::load(bb, b->approx);
             diy::load(bb, b->errs);
 
-            VectorXi    p;                  // degree of the mfa
-            size_t      ntensor_prods;      // number of tensor products in the tmesh
-
             // geometry
-            diy::load(bb, p);
-            diy::load(bb, ntensor_prods);
-            b->geometry.mfa_data = new mfa::MFA_Data<T>(p, ntensor_prods);
-            for (TensorProduct<T>& t: b->geometry.mfa_data->tmesh.tensor_prods)
-                diy::load(bb, t.nctrl_pts);
-            for (TensorProduct<T>& t: b->geometry.mfa_data->tmesh.tensor_prods)
-                diy::load(bb, t.ctrl_pts);
-            for (TensorProduct<T>& t: b->geometry.mfa_data->tmesh.tensor_prods)
-                diy::load(bb, t.weights);
-            for (TensorProduct<T>& t: b->geometry.mfa_data->tmesh.tensor_prods)
-                diy::load(bb, t.knot_mins);
-            for (TensorProduct<T>& t: b->geometry.mfa_data->tmesh.tensor_prods)
-                diy::load(bb, t.knot_maxs);
-            for (TensorProduct<T>& t: b->geometry.mfa_data->tmesh.tensor_prods)
-                diy::load(bb, t.level);
-            diy::load(bb, b->geometry.mfa_data->tmesh.all_knots);
-            diy::load(bb, b->geometry.mfa_data->tmesh.all_knot_levels);
+            diy::load(bb, b->geometry.mfa_data);
 
             // science variables
             size_t nvars;
@@ -1458,23 +1409,7 @@ namespace mfa
             b->vars.resize(nvars);
             for (auto i = 0; i < b->vars.size(); i++)
             {
-                diy::load(bb, p);
-                diy::load(bb, ntensor_prods);
-                b->vars[i].mfa_data = new mfa::MFA_Data<T>(p, ntensor_prods);
-                for (TensorProduct<T>& t: b->vars[i].mfa_data->tmesh.tensor_prods)
-                    diy::load(bb, t.nctrl_pts);
-                for (TensorProduct<T>& t: b->vars[i].mfa_data->tmesh.tensor_prods)
-                    diy::load(bb, t.ctrl_pts);
-                for (TensorProduct<T>& t: b->vars[i].mfa_data->tmesh.tensor_prods)
-                    diy::load(bb, t.weights);
-                for (TensorProduct<T>& t: b->vars[i].mfa_data->tmesh.tensor_prods)
-                    diy::load(bb, t.knot_mins);
-                for (TensorProduct<T>& t: b->vars[i].mfa_data->tmesh.tensor_prods)
-                    diy::load(bb, t.knot_maxs);
-                for (TensorProduct<T>& t: b->vars[i].mfa_data->tmesh.tensor_prods)
-                    diy::load(bb, t.level);
-                diy::load(bb, b->vars[i].mfa_data->tmesh.all_knots);
-                diy::load(bb, b->vars[i].mfa_data->tmesh.all_knot_levels);
+                diy::load(bb, b->vars[i].mfa_data);
             }
 
             // output for blending
@@ -1666,6 +1601,76 @@ namespace diy
 
                         // Point info
                         diy::load(bb, ps->domain);
+                    }   
+                }
+        };
+
+        // Template for pointers to MFA_Data so that we can read/write uninitialized models
+        template <typename T>
+        struct Serialization<mfa::MFA_Data<T>*>
+        {
+            static
+                void save(diy::BinaryBuffer& bb, mfa::MFA_Data<T>* const & md)
+                {
+                    if (md == nullptr)
+                        diy::save(bb, (int) 0);
+                    else
+                    {
+                        diy::save(bb, (int) 1); // indicate that there is a MFA_Data to load
+
+                        diy::save(bb, md->p);
+                        diy::save(bb, md->tmesh.tensor_prods.size());
+                        for (TensorProduct<T>& t: md->tmesh.tensor_prods)
+                            diy::save(bb, t.nctrl_pts);
+                        for (TensorProduct<T>& t: md->tmesh.tensor_prods)
+                            diy::save(bb, t.ctrl_pts);
+                        for (TensorProduct<T>& t: md->tmesh.tensor_prods)
+                            diy::save(bb, t.weights);
+                        for (TensorProduct<T>& t: md->tmesh.tensor_prods)
+                            diy::save(bb, t.knot_mins);
+                        for (TensorProduct<T>& t: md->tmesh.tensor_prods)
+                            diy::save(bb, t.knot_maxs);
+                        for (TensorProduct<T>& t: md->tmesh.tensor_prods)
+                            diy::save(bb, t.level);
+                        diy::save(bb, md->tmesh.all_knots);
+                        diy::save(bb, md->tmesh.all_knot_levels);
+                    }
+                }
+            static
+                // NOTE: we use reference to pointer so the pointer is updated after a call to new
+                void load(diy::BinaryBuffer& bb, mfa::MFA_Data<T>*& md) 
+                {
+                    int load_flag;
+                    diy::load(bb, load_flag);
+
+                    if (load_flag == 0)
+                    {
+                        md = nullptr;
+                    }
+                    else
+                    {
+                        VectorXi    p;                  // degree of the mfa
+                        size_t      ntensor_prods;      // number of tensor products in the tmesh
+
+                        // geometry
+                        diy::load(bb, p);
+                        diy::load(bb, ntensor_prods);
+                        md = new mfa::MFA_Data<T>(p, ntensor_prods);
+
+                        for (TensorProduct<T>& t: md->tmesh.tensor_prods)
+                            diy::load(bb, t.nctrl_pts);
+                        for (TensorProduct<T>& t: md->tmesh.tensor_prods)
+                            diy::load(bb, t.ctrl_pts);
+                        for (TensorProduct<T>& t: md->tmesh.tensor_prods)
+                            diy::load(bb, t.weights);
+                        for (TensorProduct<T>& t: md->tmesh.tensor_prods)
+                            diy::load(bb, t.knot_mins);
+                        for (TensorProduct<T>& t: md->tmesh.tensor_prods)
+                            diy::load(bb, t.knot_maxs);
+                        for (TensorProduct<T>& t: md->tmesh.tensor_prods)
+                            diy::load(bb, t.level);
+                        diy::load(bb, md->tmesh.all_knots);
+                        diy::load(bb, md->tmesh.all_knot_levels);
                     }   
                 }
         };
