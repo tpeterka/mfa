@@ -300,8 +300,8 @@ namespace mfa
             // compute errors for each point and model
             for (size_t i = 0; i < error.npts; i++)
             {
-                VectorX<T> err_vec;                          // errors for all coordinates in current model
-                for (auto k = 0; k < vars.size(); k++)      // for all science models
+                VectorX<T> err_vec;                             // errors for all coordinates in current model
+                for (auto k = 0; k < vars.size(); k++)          // for all science models
                 {
                     err_vec.resize(vars[k].max_dim - vars[k].min_dim);
                     AbsCoordError(*(vars[k].mfa_data), base, i, err_vec, verbose);
@@ -325,14 +325,14 @@ namespace mfa
             parallel_for (size_t(0), (size_t)error.npts, [&] (size_t i)
                 {
                 VectorX<T> err_vec;                                 // errors for all coordinates in current model
-                for (auto k = 0; k < vars.size() + 1; k++)      // for all models, geometry + science
+                for (auto k = 0; k < vars.size(); k++)              // for all science models
                 {
-                    err_vec.resize(vars[k - 1].max_dim - vars[k - 1].min_dim);
-                    AbsCoordError(*(vars[k - 1].mfa_data), base, i, err_vec, verbose);
+                    err_vec.resize(vars[k].max_dim - vars[k].min_dim);
+                    AbsCoordError(*(vars[k].mfa_data), base, i, err_vec, verbose);
 
                     for (auto j = 0; j < err_vec.size(); j++)
                     {
-                        error.domain(i, vars[k - 1].min_dim + j) = err_vec(j); // error for each science variable
+                        error.domain(i, vars[k].min_dim + j) = err_vec(j); // error for each science variable
                     }
                 }
                 });
