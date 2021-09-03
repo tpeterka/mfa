@@ -389,7 +389,7 @@ int main(int argc, char** argv)
         expect_nctrl    = 91;
     }
 
-    int our_nctrl       = b->vars[0].mfa_data->tmesh.tensor_prods[0].ctrl_pts.rows();
+    int our_nctrl       = b->mfa->var(0).tmesh.tensor_prods[0].ctrl_pts.rows();
     if (fabs(expect_err - our_err) / expect_err > err_factor)
     {
         fprintf(stderr, "our error (%e) and expected error (%e) differ by more than a factor of %e\n", our_err, expect_err, err_factor);

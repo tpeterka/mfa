@@ -81,39 +81,227 @@ using SpMatTriplet = Eigen::Triplet<T>;
 #include    <mfa/decode.hpp>
 #include    <mfa/encode.hpp>
 
-// TODO: Move Model's from BlockBase to MFA
-//       Want MFA object to manage construction-destruction of MFA_Data
-// a solved and stored MFA_data model (geometry or science variable or both)
-template <typename T>
-struct Model
+// // TODO: Move Model's from BlockBase to MFA
+// //       Want MFA object to manage construction-destruction of MFA_Data
+// // a solved and stored MFA_data model (geometry or science variable or both)
+// template <typename T>
+// struct Model
+// {
+//     int                 min_dim{0};                // starting coordinate of this model in full-dimensional data
+//     int                 max_dim{0};                // ending coordinate of this model in full-dimensional data
+//     mfa::MFA_Data<T>    *mfa_data{nullptr};              // MFA model data
+// };
+
+namespace diy
 {
-    int                 min_dim{0};                // starting coordinate of this model in full-dimensional data
-    int                 max_dim{0};                // ending coordinate of this model in full-dimensional data
-    mfa::MFA_Data<T>    *mfa_data{nullptr};              // MFA model data
-};
+    template <typename U>
+    struct Serialization;
+}
 
 namespace mfa
 {
     template <typename T>                           // float or double
-    struct MFA
+    class MFA
     {
-        int                     dom_dim;            // domain dimensionality
+        template <typename U> friend struct diy::Serialization;
+        
 
-        MFA(size_t dom_dim_) :
-            dom_dim(dom_dim_)
+        unique_ptr<MFA_Data<T>>         geometry;
+        vector<unique_ptr<MFA_Data<T>>> vars;
+
+        int                             verbose{0};
+
+        // Recomputes pt_dim so that the MFA stays consistent after each model is added.
+        // In theory, pt_dim should always equal the max_dim of the last science variable
+        // This method emits a warning if this is not the case.
+        int recompute_pt_dim()
+        {
+            pt_dim = geom_dim;
+
+            for (int i = 0; i < vars.size(); i++)
+            {
+                if (vars[i])
+                    pt_dim += vars[i]->dim();
+                else
+                    cerr << "WARNING: Encountered null variable model in MFA::recompute_pt_dim()" << endl;
+            }
+
+            if (vars.size() > 0)
+            {
+                if (pt_dim != vars.back()->max_dim)
+                {
+                    cerr << "WARNING: MFA pt_dim is inconsistent" << endl;
+                }
+            }
+
+            return pt_dim;
+        }
+    
+    public:
+        int                 dom_dim{0};            // domain dimensionality
+        int                 geom_dim{0};           // dimension of geometry model (physical space)
+        int                 pt_dim{0};             // full control point dimensionality
+
+        MFA(int dom_dim_, int verbose_ = 0) :
+            dom_dim(dom_dim_),
+            verbose(verbose_)
         { }
+
+        // This constructor is intended to be used for loading MFAs in and out of core
+        // and can lead to an inconsistent state if the MFA_Data pointers are not set properly
+        // 
+        // NOTE: this constructor takes ownership of the MFA_Data pointers.
+        //       these raw pointers should be set to nullptr after the MFA is constructed 
+        //       to avoid double-frees and the like
+        MFA(int dom_dim_, int verbose_, MFA_Data<T>* geom_, vector<MFA_Data<T>*> vars_) :
+            dom_dim(dom_dim_),
+            verbose(verbose_)
+        {
+            // If vars_ is nonempty, then we should always have a geometry model
+            if (geom_ == nullptr && vars_.size() > 0)
+                cerr << "WARNING: Constructing MFA with a null geometry model" << endl;
+
+            // Each entry of vars should typically be non-null
+            for (int i = 0; i < vars_.size(); i++)
+            {
+                if (vars_[i] == nullptr)
+                    cerr << "WARNING: null variable model added during MFA construction" << endl;
+            }
+
+            // Set geometry model and geom_dim
+            geometry.reset(geom_);
+            if (geometry != nullptr)
+                geom_dim = geometry->max_dim + 1;
+
+            // Set variable models and pt_dim
+            vars.resize(vars_.size());
+            for (int i = 0; i < vars.size(); i++)
+            {
+                vars[i].reset(vars_[i]);
+            }
+
+            recompute_pt_dim();
+        }
 
         ~MFA()
-        { }
+        { 
+            // delete geometry;
+            // for (int i = 0; i < vars.size(); i++)
+            // {
+            //     delete vars[i];
+            // }
+        }
+
+        const MFA_Data<T>& geom() const
+        {
+            return *geometry;
+        }
+
+        const MFA_Data<T>& var(int i) const
+        {
+            if (i < 0 || i >= nvars())
+            {
+                cerr << "ERROR: var index out of range in MFA::var()" << endl;
+                exit(1);
+            }
+
+            return *(vars[i]);
+        }
+
+        int nvars() const
+        {
+            return vars.size();
+        }
+
+        void AddGeometry(const VectorXi& degree, const VectorXi& nctrl_pts, int dim)
+        {
+            if (verbose) 
+                cout << "MFA: Adding geometry model" << endl;
+
+            if (degree.size() != dom_dim || degree.minCoeff() < 0)
+            {
+                cerr << "ERROR: AddGeometry failed (degree invalid)" << endl;
+                exit(1);
+            }
+            if (nctrl_pts.size() != dom_dim || (nctrl_pts - degree - VectorXi::Ones(dom_dim)).minCoeff() < 0)
+            {
+                cerr << "ERROR: AddGeometry failed (nctrl_pts invalid)" << endl;
+                exit(1);
+            }
+            if (dim < 0)
+            {
+                cerr << "ERROR: AddGeometry failed (dim invalid)" << endl;
+                exit(1);
+            }
+
+            // set geom_dim
+            geom_dim = dim;
+
+            // set up geometry model
+            int min_dim = 0;
+            int max_dim = dim - 1;
+            geometry.reset(new MFA_Data<T>(degree, nctrl_pts, min_dim, max_dim));
+
+            recompute_pt_dim();
+        }
+
+        void AddVariable(const VectorXi& degree, const VectorXi& nctrl_pts, int dim)
+        {
+            if (verbose) 
+                cout << "MFA: Adding variable model " << vars.size() << endl;
+
+            if (!geometry)
+            {
+                cerr << "ERROR: Cannot add variable model before adding geometry model" << endl;
+                exit(1);
+            }
+            if (degree.size() != dom_dim || degree.minCoeff() < 0)
+            {
+                cerr << "ERROR: AddVariable failed (degree invalid)" << endl;
+                exit(1);
+            }
+            if (nctrl_pts.size() != dom_dim || (nctrl_pts - degree - VectorXi::Ones(dom_dim)).minCoeff() < 0)
+            {
+                cerr << "ERROR: AddVariable failed (nctrl_pts invalid)" << endl;
+                exit(1);
+            }
+            if (dim < 0)
+            {
+                cerr << "ERROR: AddVariable failed (dim invalid)" << endl;
+                exit(1);
+            }
+
+            // Update vars vector
+            int id = vars.size();
+
+            // Compute min/max dim
+            int min_dim = 0, max_dim = 0;            
+            if (id == 0)
+            {
+                min_dim = geometry->max_dim + 1;
+                max_dim = min_dim + dim - 1;
+            }
+            else
+            {
+                min_dim = vars[id-1]->max_dim + 1;
+                max_dim = min_dim + dim - 1;
+            }
+
+            // Set up variable model
+            vars.push_back(nullptr);                                                // Increase the size of the vars vector
+            vars[id].reset(new MFA_Data<T>(degree, nctrl_pts, min_dim, max_dim));   // Add model to vars vector
+
+            recompute_pt_dim();
+        }
 
         // fixed number of control points encode
-        void FixedEncode(
+        void FixedEncodeImpl(
                 MFA_Data<T>&        mfa_data,               // mfa data model
                 const PointSet<T>&  input,                  // input points
-                const VectorXi      nctrl_pts,              // number of control points in each dim
-                int                 verbose,                // debug level
-                bool                weighted) const         // solve for and use weights (default = true)
+                bool                weighted)         // solve for and use weights (default = true)
         {
+            mfa_data.set_knots(input);
+
             // fixed encode assumes the tmesh has only one tensor product
             TensorProduct<T>&t = mfa_data.tmesh.tensor_prods[0];
 
@@ -133,16 +321,17 @@ namespace mfa
         }
 
         // adaptive encode
-        void AdaptiveEncode(
+        void AdaptiveEncodeImpl(
                 MFA_Data<T>&        mfa_data,               // mfa data model
                 const PointSet<T>&  input,                  // input points
                 T                   err_limit,              // maximum allowable normalized error
-                int                 verbose,                // debug level
                 bool                weighted,               // solve for and use weights (default = true)
                 bool                local,                  // solve locally (with constraints) each round
                 const VectorX<T>&   extents,                // extents in each dimension, for normalizing error (size 0 means do not normalize)
                 int                 max_rounds) const       // optional maximum number of rounds
         {
+            mfa_data.set_knots(input);
+            
             Encoder<T> encoder(*this, mfa_data, input, verbose);
 
 #ifndef MFA_TMESH           // original adaptive encode for one tensor product
@@ -152,33 +341,130 @@ namespace mfa
 #endif
         }
 
-        // decode values at all input points
-        void DecodePointSet(
-                const MFA_Data<T>&  mfa_data,               // mfa data model
-                PointSet<T>&        output,                 // (output) decoded point set
-                int                 verbose,                // debug level
-                int                 min_dim,                // first dimension to decode
-                int                 max_dim,                // last dimension to decode
-                bool                saved_basis) const      // whether basis functions were saved and can be reused
+        // Decode geometry model at set of points
+        void DecodeGeom(
+                PointSet<T>&        output,
+                bool                saved_basis,
+                const VectorXi&     derivs = VectorXi()) const
         {
-            VectorXi no_derivs;                             // size-0 means no derivatives
+            cout << endl << "--- Decoding geometry ---" << endl << endl;
 
-            DecodePointSet(mfa_data, output, verbose, min_dim, max_dim, saved_basis, no_derivs);
+            mfa::Decoder<T> decoder(*geometry, verbose, saved_basis);
+            decoder.DecodePointSet(output, geometry->min_dim, geometry->max_dim, derivs);
         }
 
-        // decode derivatives at all input points
-        void DecodePointSet(
-                const MFA_Data<T>&  mfa_data,               // mfa data model
-                PointSet<T>&        output,                 // (output) decoded point set
-                int                 verbose,                // debug level
-                int                 min_dim,                // first dimension to decode
-                int                 max_dim,                // last dimension to decode
-                bool                saved_basis,            // whether basis functions were saved and can be reused
-                const VectorXi&     derivs) const           // derivative to take in each domain dim. (0 = value, 1 = 1st deriv, 2 = 2nd deriv, ...)
-                                                            // pass size-0 vector if unused
+        // Decode geometry model at single point
+        void DecodeGeom(
+                const VectorX<T>&   param,
+                VectorX<T>&         out_point,
+                const VectorXi&     derivs = VectorXi()) const
         {
-            mfa::Decoder<T> decoder(mfa_data, verbose, saved_basis);
-            decoder.DecodePointSet(output, min_dim, max_dim, derivs);
+            if (out_point.size() != geometry->dim())
+            {
+                cerr << "ERROR: Incorrect output vector dimension in MFA::DecodeGeom()" << endl;
+                exit(1);
+            }
+
+            Decoder<T> decoder(*geometry, 0);        // nb. turning off verbose output when decoding single points
+            
+            // TODO: hard-coded for one tensor product
+            decoder.VolPt(param, out_point, geometry->tmesh.tensor_prods[0], derivs);
+        }
+
+        // Decode variable model at set of points
+        void DecodeVar(
+                int                 i,
+                PointSet<T>&        output,
+                bool                saved_basis,
+                const VectorXi&     derivs = VectorXi()) const
+        {
+            cout << endl << "--- Decoding science variable " << i << " ---" << endl << endl;
+
+            if (i < 0 || i >= nvars())
+            {
+                cerr << "ERROR: var index out of range in MFA::DecodeVar()" << endl;
+                exit(1);
+            }
+
+            mfa::Decoder<T> decoder(*(vars[i]), verbose, saved_basis);
+            decoder.DecodePointSet(output, vars[i]->min_dim, vars[i]->max_dim, derivs);
+        }
+
+        // Decode variable model at single point
+        void DecodeVar(
+                int                 i,
+                const VectorX<T>&   param,
+                VectorX<T>&         out_point,
+                const VectorXi&     derivs = VectorXi()) const
+        {
+            if (i < 0 || i >= nvars())
+            {
+                cerr << "ERROR: var index out of range in MFA::DecodeVar()" << endl;
+                exit(1);
+            }
+
+            if (out_point.size() != vars[i]->dim())
+            {
+                cerr << "ERROR: Incorrect output vector dimension in MFA::DecodeVar()" << endl;
+                exit(1);
+            }
+
+            mfa::Decoder<T> decoder(*(vars[i]), 0);     // nb. turning off verbose output when decoding single points
+
+            // TODO: hard-coded for one tensor product
+            decoder.VolPt(param, out_point, vars[i]->tmesh.tensor_prods[0], derivs);
+        }
+
+        // Decode all models at set of points
+        void Decode(
+                PointSet<T>&        output,
+                bool                saved_basis,
+                const VectorXi&     derivs = VectorXi()) const
+        {
+            DecodeGeom(output, saved_basis, derivs);
+            for (int i = 0; i < nvars(); i++)
+            {
+                DecodeVar(i, output, saved_basis, derivs);
+            }
+        }
+
+        // Decode all models at single point
+        // 
+        // Note: 
+        // If desired, we can re-rewrite this to avoid the copies from temp_out into out_point by writing decode
+        // functions to take MatrixBase<> objects instead of vectors. This allows "block" expressions like
+        // out_point.segment(a,b) to be passed to VolPt, and decoding can be done in-place.
+        // However, we would need to refactor DecodeVar, DecodeGeom, and potentially all of the VolPt functions
+        // to accept MatrixBase<> inputs. This would not be hard, but could be confusing to read; also this function
+        // is not intended to be high-performance anyway, so the benefit may be minimal.
+        // 
+        // See: http://eigen.tuxfamily.org/dox/TopicFunctionTakingEigenTypes.html
+        void Decode(
+                const VectorX<T>&       param,
+                Eigen::Ref<VectorX<T>>  out_point,
+                const VectorXi&         derivs = VectorXi()) const
+        {
+            if (out_point.size() != pt_dim)
+            {
+                cerr << "ERROR: Incorrect output vector dimension in MFA::Decode()" << endl;
+                exit(1);
+            }
+
+            // We need an lvalue for passing into DecodeGeom and DecodeVar
+            VectorX<T> temp_out = out_point.head(geom_dim);
+
+            // Decode geometry
+            DecodeGeom(param, temp_out, derivs);
+            out_point.head(geometry->dim()) = temp_out;
+
+            // Decode variables
+            for (int i = 0; i < nvars(); i++)
+            {
+                temp_out.resize(vars[i]->dim());
+                DecodeVar(i, param, temp_out, derivs);
+
+                out_point.segment(vars[i]->min_dim, vars[i]->dim()) = temp_out;
+            }
         }
 
         void DefiniteIntegral(
@@ -209,32 +495,6 @@ namespace mfa
             decoder.IntegratePointSet(output, t, min_dim, max_dim);
         }
 
-        // decode value of single point at the given parameter location
-        void DecodePt(
-                const MFA_Data<T>&  mfa_data,               // mfa data model
-                const VectorX<T>&   param,                  // parameters of point to decode
-                VectorX<T>&         cpt) const              // (output) decoded point
-        {
-            VectorXi no_derivs;
-            int verbose = 0;
-            Decoder<T> decoder(mfa_data, verbose);
-            // TODO: hard-coded for one tensor product
-            decoder.VolPt(param, cpt, mfa_data.tmesh.tensor_prods[0], no_derivs);
-        }
-
-        // decode derivative of single point at the given parameter location
-        void DecodePt(
-                const MFA_Data<T>&  mfa_data,               // mfa data model
-                const VectorX<T>&   param,                  // parameters of point to decode
-                const VectorXi&     derivs,                 // derivative to take in each domain dim. (0 = value, 1 = 1st deriv, 2 = 2nd deriv, ...)
-                                                            // pass size-0 vector if unused
-                VectorX<T>&         cpt) const              // (output) decoded point
-        {
-            int verbose = 0;
-            Decoder<T> decoder(mfa_data, verbose);
-            // TODO: hard-coded for one tensor product
-            decoder.VolPt(param, cpt, mfa_data.tmesh.tensor_prods[0], derivs);
-        }
 
         // decode points on grid in parameter space
         void DecodeAtGrid(  const MFA_Data<T>&      mfa_data,               // mfa_data
@@ -278,7 +538,6 @@ namespace mfa
         void AbsPointSetError(
             const   mfa::PointSet<T>& base,
                     mfa::PointSet<T>& error,
-                    vector<Model<T>>& vars,
                     int               verbose)
         {
             if (!base.is_same_layout(error))
@@ -303,12 +562,12 @@ namespace mfa
                 VectorX<T> err_vec;                             // errors for all coordinates in current model
                 for (auto k = 0; k < vars.size(); k++)          // for all science models
                 {
-                    err_vec.resize(vars[k].max_dim - vars[k].min_dim);
-                    AbsCoordError(*(vars[k].mfa_data), base, i, err_vec, verbose);
+                    err_vec.resize(vars[k]->max_dim - vars[k]->min_dim);
+                    AbsCoordError(*(vars[k]), base, i, err_vec, verbose);
 
                     for (auto j = 0; j < err_vec.size(); j++)
                     {
-                        error.domain(i, vars[k].min_dim + j) = err_vec(j);      // error for each science variable
+                        error.domain(i, vars[k]->min_dim + j) = err_vec(j);      // error for each science variable
                     }
                 }
             }
@@ -327,17 +586,186 @@ namespace mfa
                 VectorX<T> err_vec;                                 // errors for all coordinates in current model
                 for (auto k = 0; k < vars.size(); k++)              // for all science models
                 {
-                    err_vec.resize(vars[k].max_dim - vars[k].min_dim);
-                    AbsCoordError(*(vars[k].mfa_data), base, i, err_vec, verbose);
+                    err_vec.resize(vars[k]->max_dim - vars[k]->min_dim);
+                    AbsCoordError(*(vars[k]), base, i, err_vec, verbose);
 
                     for (auto j = 0; j < err_vec.size(); j++)
                     {
-                        error.domain(i, vars[k].min_dim + j) = err_vec(j); // error for each science variable
+                        error.domain(i, vars[k]->min_dim + j) = err_vec(j); // error for each science variable
                     }
                 }
                 });
 #endif // MFA_TBB
         }
+
+        //-------------------------------------//
+        //-------Convenience Functions---------//
+
+        // Convenience function for adding linear geometry model
+        void AddGeometry(int dim)
+        {
+            VectorXi degree = VectorXi::Ones(dom_dim);
+            VectorXi nctrl_pts = VectorXi::Constant(dom_dim, 2);
+
+            AddGeometry(degree, nctrl_pts, dim);
+        }
+
+        // Convenience function for adding models with same degree in each dimension
+        void AddVariable(int degree, const VectorXi& nctrl_pts, int dim)
+        {
+            VectorXi degree_vec = VectorXi::Constant(dom_dim, degree);
+
+            AddVariable(degree_vec, nctrl_pts, dim);
+        }
+
+        // Fixed encode geometry model only
+        // Useful if input arguments vary between models, or different models are encoded by different threads
+        void FixedEncodeGeom(const PointSet<T>& input, bool weighted)
+        {
+            if (verbose)
+                cout << "MFA: Encoding geometry model (fixed)" << endl;
+
+            FixedEncodeImpl(*geometry, input, weighted);
+        }
+
+        // Fixed encode single variable model only
+        // Useful if input arguments vary between models, or different models are encoded by different threads 
+        void FixedEncodeVar(int i, const PointSet<T>& input, bool weighted)
+        {
+            if (i < 0 || i >= nvars())
+            {
+                cerr << "ERROR: var index out of range in MFA::FixedEncodeVar()" << endl;
+                exit(1);
+            }
+
+            if (verbose)
+                cout << "MFA: Encoding variable model " << i << " (fixed)" << endl;
+
+            FixedEncodeImpl(*(vars[i]), input, weighted);
+        }
+
+        // Fixed encode all models simultaneously
+        void FixedEncode(const PointSet<T>& input, bool weighted)
+        {
+            FixedEncodeGeom(input, weighted);
+
+            for (int i = 0; i < vars.size(); i++)
+            {
+                FixedEncodeVar(i, input, weighted);
+            }
+        }
+
+        // Adaptive encode geometry model only
+        // Useful if input arguments vary between models, or different models are encoded by different threads
+        void AdaptiveEncodeGeom(const PointSet<T>&  input,
+                                T                   err_limit,
+                                bool                weighted,
+                                bool                local,
+                                const VectorX<T>&   extents,
+                                int                 max_rounds)
+        {
+            if (verbose)
+                cout << "MFA: Encoding geometry model (adaptive)" << endl;
+
+            AdaptiveEncodeImpl(*geometry, input, err_limit, weighted, local, extents, max_rounds);
+        }
+
+        // Adaptive encode single variable model only
+        // Useful if input arguments vary between models, or different models are encoded by different threads
+        void AdaptiveEncodeVar( int i,
+                                const PointSet<T>&  input,
+                                T                   err_limit,
+                                bool                weighted,
+                                bool                local,
+                                const VectorX<T>&   extents,
+                                int                 max_rounds)
+        {
+            if (i < 0 || i >= nvars())
+            {
+                cerr << "ERROR: var index out of range in MFA::AdaptiveEncodeVar()" << endl;
+                exit(1);
+            }
+
+            if (verbose)
+                cout << "MFA: Encoding variable model " << i << " (adaptive)" << endl;
+            
+            AdaptiveEncodeImpl(*(vars[i]), input, err_limit, weighted, local, extents, max_rounds);
+        }
+
+        // Adaptive encode all models simultaneously
+        void AdaptiveEncode(const PointSet<T>&  input,
+                            T                   err_limit,
+                            bool                weighted,
+                            bool                local,
+                            const VectorX<T>&   extents,
+                            int                 max_rounds)
+        {
+            AdaptiveEncodeGeom(input, err_limit, weighted, local, extents, max_rounds);
+
+            for (int i = 0; i < vars.size(); i++)
+            {
+                AdaptiveEncodeVar(i, input, err_limit, weighted, local, extents, max_rounds);
+            }
+        }
+
+
+
+        // // decode values at all input points
+        // void DecodePointSet(
+        //         const MFA_Data<T>&  mfa_data,               // mfa data model
+        //         PointSet<T>&        output,                 // (output) decoded point set
+        //         int                 verbose,                // debug level
+        //         int                 min_dim,                // first dimension to decode
+        //         int                 max_dim,                // last dimension to decode
+        //         bool                saved_basis) const      // whether basis functions were saved and can be reused
+        // {
+        //     VectorXi no_derivs;                             // size-0 means no derivatives
+
+        //     DecodePointSet(mfa_data, output, verbose, min_dim, max_dim, saved_basis, no_derivs);
+        // }
+
+        // // decode derivatives at all input points
+        // void DecodePointSet(
+        //         const MFA_Data<T>&  mfa_data,               // mfa data model
+        //         PointSet<T>&        output,                 // (output) decoded point set
+        //         int                 verbose,                // debug level
+        //         int                 min_dim,                // first dimension to decode
+        //         int                 max_dim,                // last dimension to decode
+        //         bool                saved_basis,            // whether basis functions were saved and can be reused
+        //         const VectorXi&     derivs) const           // derivative to take in each domain dim. (0 = value, 1 = 1st deriv, 2 = 2nd deriv, ...)
+        //                                                     // pass size-0 vector if unused
+        // {
+        //     mfa::Decoder<T> decoder(mfa_data, verbose, saved_basis);
+        //     decoder.DecodePointSet(output, min_dim, max_dim, derivs);
+        // }
+
+        // // decode value of single point at the given parameter location
+        // void DecodePt(
+        //         const MFA_Data<T>&  mfa_data,               // mfa data model
+        //         const VectorX<T>&   param,                  // parameters of point to decode
+        //         VectorX<T>&         cpt) const              // (output) decoded point
+        // {
+        //     VectorXi no_derivs;
+        //     int verbose = 0;
+        //     Decoder<T> decoder(mfa_data, verbose);
+        //     // TODO: hard-coded for one tensor product
+        //     decoder.VolPt(param, cpt, mfa_data.tmesh.tensor_prods[0], no_derivs);
+        // }
+
+        // // decode derivative of single point at the given parameter location
+        // void DecodePt(
+        //         const MFA_Data<T>&  mfa_data,               // mfa data model
+        //         const VectorX<T>&   param,                  // parameters of point to decode
+        //         const VectorXi&     derivs,                 // derivative to take in each domain dim. (0 = value, 1 = 1st deriv, 2 = 2nd deriv, ...)
+        //                                                     // pass size-0 vector if unused
+        //         VectorX<T>&         cpt) const              // (output) decoded point
+        // {
+        //     int verbose = 0;
+        //     Decoder<T> decoder(mfa_data, verbose);
+        //     // TODO: hard-coded for one tensor product
+        //     decoder.VolPt(param, cpt, mfa_data.tmesh.tensor_prods[0], derivs);
+        // }
+
     };
 }                                           // namespace
 

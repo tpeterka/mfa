@@ -40,7 +40,10 @@ struct ModelInfo
 {
     ModelInfo(int dom_dim_, int pt_dim_) :
         dom_dim(dom_dim_),
-        pt_dim(pt_dim_)
+        pt_dim(pt_dim_),
+        weighted(true),
+        local(false),
+        verbose(1)
     {
         geom_p.resize(dom_dim);
         vars_p.resize(pt_dim - dom_dim);
@@ -62,7 +65,7 @@ struct ModelInfo
     vector<vector<int>> vars_nctrl_pts;         // number of input pts in each dim of each science variable vars_nctrl_pts[var][dim]
     bool                weighted;               // solve for and use weights (default = true)
     bool                local;                  // solve locally (with constraints) each round (default = false)
-    int                 verbose;                // debug level
+    int                 verbose;                // debug level (default = 1)
 };
 
 
@@ -86,9 +89,9 @@ struct BlockBase
     // MFA object
     mfa::MFA<T>         *mfa;
 
-    // MFA models
-    Model<T>            geometry;               // geometry MFA
-    vector<Model<T>>    vars;                   // science variable MFAs
+    // // MFA models
+    // Model<T>            geometry;               // geometry MFA
+    // vector<Model<T>>    vars;                   // science variable MFAs
 
 
     // errors for each science variable
@@ -123,12 +126,6 @@ struct BlockBase
         delete input;
         delete approx;
         delete errs;
-
-        delete geometry.mfa_data;
-        for (int i = 0; i < vars.size(); i++)
-        {
-            delete vars[i].mfa_data;
-        }
     }
 
     // initialize an empty block that was previously added
@@ -174,54 +171,80 @@ struct BlockBase
 //         cerr << "bounds_maxs: " << bounds_maxs.transpose() << endl;
     }
 
+    void setup_models(
+            const       diy::Master::ProxyWithLink& cp,
+            int         num_vars,
+            ModelInfo&  info)
+    {
+        if (mfa == nullptr)
+        {
+            cerr << "ERROR: Attempted to set up MFA models before MFA was constructed" << endl;
+            exit(1);
+        }
+
+        ModelInfo*  a = &info;
+        VectorXi    nctrl_pts(dom_dim);
+        VectorXi    p(dom_dim);
+
+        for (auto j = 0; j < dom_dim; j++)
+        {
+            nctrl_pts(j)    = a->geom_nctrl_pts[j];
+            p(j)            = a->geom_p[j];
+        }
+        mfa->AddGeometry(p, nctrl_pts, dom_dim);
+
+        if (a->vars_p.size() != num_vars)
+        {
+            cerr << "ERROR: vars_p and num_vars invalid in BlockBase::setup_models()" << endl;
+            exit(1);
+        }
+        if (a->vars_nctrl_pts.size() != num_vars)
+        {
+            cerr << "ERROR: vars_nctrl_pts and num_vars invalid in BlockBase::setup_models()" << endl;
+            exit(1);
+        }
+
+        for (auto i = 0; i < num_vars; i++)
+        {
+            for (auto j = 0; j < dom_dim; j++)
+            {
+                p(j)            = a->vars_p[i][j];
+                nctrl_pts(j)    = a->vars_nctrl_pts[i][j];
+            }
+            mfa->AddVariable(p, nctrl_pts, 1);   // assumes variable is scalar (1d)
+        }
+    }
+
 
     // fixed number of control points encode block
     void fixed_encode_block(
             const       diy::Master::ProxyWithLink& cp,
             ModelInfo&  info)
     {
-        ModelInfo* a = &info;
+        ModelInfo*  a = &info;
+        // VectorXi    nctrl_pts(dom_dim);
+        // VectorXi    p(dom_dim);
 
-        VectorXi nctrl_pts(dom_dim);
-        VectorXi p(dom_dim);
-        for (auto j = 0; j < dom_dim; j++)
-        {
-            nctrl_pts(j)    = a->geom_nctrl_pts[j];
-            p(j)            = a->geom_p[j];
-        }
+        // for (auto j = 0; j < dom_dim; j++)
+        // {
+        //     nctrl_pts(j)    = a->geom_nctrl_pts[j];
+        //     p(j)            = a->geom_p[j];
+        // }
+        // mfa->AddGeometry(p, nctrl_pts, dom_dim);
+        // //mfa->AddGeom(dom_dim);    // alternate convenience function for linear geometry
 
-        // encode geometry
-        if (a->verbose && cp.master()->communicator().rank() == 0)
-            fprintf(stderr, "\nEncoding geometry\n\n");
-        geometry.mfa_data = new mfa::MFA_Data<T>(p,
-                nctrl_pts,
-                0,
-                dom_dim - 1);
+        // // encode science variables
+        // for (auto i = 0; i < mfa->nvars(); i++)
+        // {
+        //     for (auto j = 0; j < dom_dim; j++)
+        //     {
+        //         p(j)            = a->vars_p[i][j];
+        //         nctrl_pts(j)    = a->vars_nctrl_pts[i][j];
+        //     }
+        //     mfa->AddVariable(p, nctrl_pts, 1);   // assumes variable is scalar (1d)
+        // }
 
-        geometry.mfa_data->set_knots(*input);
-        // TODO: consider not weighting the geometry (only science variables), depends on geometry complexity
-        mfa->FixedEncode(*geometry.mfa_data, *input, nctrl_pts, a->verbose, a->weighted);
-
-        // encode science variables
-        for (auto i = 0; i< vars.size(); i++)
-        {
-            if (a->verbose && cp.master()->communicator().rank() == 0)
-                fprintf(stderr, "\nEncoding science variable %d\n\n", i);
-
-            for (auto j = 0; j < dom_dim; j++)
-            {
-                p(j)            = a->vars_p[i][j];
-                nctrl_pts(j)    = a->vars_nctrl_pts[i][j];
-            }
-
-            vars[i].mfa_data = new mfa::MFA_Data<T>(p,
-                    nctrl_pts,
-                    dom_dim + i,        // assumes each variable is scalar
-                    dom_dim + i);
-
-            vars[i].mfa_data->set_knots(*input);
-            mfa->FixedEncode(*(vars[i].mfa_data), *input, nctrl_pts, a->verbose, a->weighted);
-        }
+        mfa->FixedEncode(*input, a->weighted);
     }
 
     // adaptively encode block to desired error limit
@@ -240,47 +263,31 @@ struct BlockBase
         }
 
         ModelInfo* a = &info;
-        VectorXi nctrl_pts(dom_dim);
-        VectorXi p(dom_dim);
-        VectorXi ndom_pts(dom_dim);
+        // VectorXi nctrl_pts(dom_dim);
+        // VectorXi p(dom_dim);
+        // VectorXi ndom_pts(dom_dim);
         VectorX<T> extents = bounds_maxs - bounds_mins;
-        for (auto j = 0; j < dom_dim; j++)
-        {
-            nctrl_pts(j)    = a->geom_nctrl_pts[j];
-            // ndom_pts(j)     = a->ndom_pts[j];
-            p(j)            = a->geom_p[j];
-        }
+        
+        // for (auto j = 0; j < dom_dim; j++)
+        // {
+        //     nctrl_pts(j)    = a->geom_nctrl_pts[j];
+        //     // ndom_pts(j)     = a->ndom_pts[j];
+        //     p(j)            = a->geom_p[j];
+        // }
+        // mfa->AddGeometry(p, nctrl_pts, dom_dim);
 
-        // encode geometry
-        if (a->verbose && cp.master()->communicator().rank() == 0)
-            fprintf(stderr, "\nEncoding geometry\n\n");
-        geometry.mfa_data = new mfa::MFA_Data<T>(p,
-                nctrl_pts,
-                0,
-                dom_dim - 1);
-        geometry.mfa_data->set_knots(*input);
-        // TODO: consider not weighting the geometry (only science variables), depends on geometry complexity
-        mfa->AdaptiveEncode(*geometry.mfa_data, *input, err_limit, a->verbose, a->weighted, a->local, extents, max_rounds);
+        // // encode science variables
+        // for (auto i = 0; i< mfa->nvars(); i++)
+        // {
+        //     for (auto j = 0; j < dom_dim; j++)
+        //     {
+        //         p(j)            = a->vars_p[i][j];
+        //         nctrl_pts(j)    = a->vars_nctrl_pts[i][j];
+        //     }
+        //     mfa->AddVariable(p, nctrl_pts, 1);
+        // }
 
-        // encode science variables
-        for (auto i = 0; i< vars.size(); i++)
-        {
-            if (a->verbose && cp.master()->communicator().rank() == 0)
-                fprintf(stderr, "\nEncoding science variable %d\n\n", i);
-
-            for (auto j = 0; j < dom_dim; j++)
-            {
-                p(j)            = a->vars_p[i][j];
-                nctrl_pts(j)    = a->vars_nctrl_pts[i][j];
-            }
-
-            vars[i].mfa_data = new mfa::MFA_Data<T>(p,
-                    nctrl_pts,
-                    dom_dim + i,        // assumes each variable is scalar
-                    dom_dim + i);
-            vars[i].mfa_data->set_knots(*input);
-            mfa->AdaptiveEncode(*(vars[i].mfa_data), *input, err_limit, a->verbose, a->weighted, a->local, extents, max_rounds);
-        }
+        mfa->AdaptiveEncode(*input, err_limit, a->weighted, a->local, extents, max_rounds);
     }
 
     // decode entire block
@@ -289,20 +296,27 @@ struct BlockBase
             int                                 verbose,        // debug level
             bool                                saved_basis)    // whether basis functions were saved and can be reused
     {
+        if (approx)
+        {
+            cerr << "WARNING: Overwriting \"approx\" pointset in BlockBase::decode_block" << endl;
+            delete approx;
+        }
         approx = new mfa::PointSet<T>(input->params, input->pt_dim);  // Set decode params from input params
 
-        // geometry
-        fprintf(stderr, "\n--- Decoding geometry ---\n\n");
-        mfa->DecodePointSet(*geometry.mfa_data, *approx, verbose, 0, dom_dim - 1, saved_basis);
+        mfa->Decode(*approx, saved_basis);
 
-        // science variables
-        for (auto i = 0; i < vars.size(); i++)
-        {
-            fprintf(stderr, "\n--- Decoding science variable %d ---\n\n", i);
+        // // geometry
+        // fprintf(stderr, "\n--- Decoding geometry ---\n\n");
+        // mfa->DecodePointSet(*geometry.mfa_data, *approx, verbose, 0, dom_dim - 1, saved_basis);
 
-            // assumes each variable is scalar
-            mfa->DecodePointSet(*(vars[i].mfa_data), *approx, verbose, dom_dim + i, dom_dim + i, saved_basis);
-        }
+        // // science variables
+        // for (auto i = 0; i < mfa->nvars(); i++)
+        // {
+        //     fprintf(stderr, "\n--- Decoding science variable %d ---\n\n", i);
+
+        //     // assumes each variable is scalar
+        //     mfa->DecodePointSet(*(vars[i].mfa_data), *approx, verbose, dom_dim + i, dom_dim + i, saved_basis);
+        // }
     }
 
     // decode entire block over a regular grid
@@ -318,20 +332,28 @@ struct BlockBase
         }
 
         shared_ptr<mfa::Param<T>> grid_params = make_shared<mfa::Param<T>>(grid_npts, VectorX<T>::Zero(dom_dim), VectorX<T>::Ones(dom_dim));
+
+        if (approx)
+        {
+            cerr << "WARNING: Overwriting \"approx\" pointset in BlockBase::decode_block_grid" << endl;
+            delete approx;
+        }
         approx = new mfa::PointSet<T>(grid_params, input->pt_dim);
 
-        // geometry
-        fprintf(stderr, "\n--- Decoding geometry ---\n\n");
-        mfa->DecodePointSet(*geometry.mfa_data, *approx, verbose, 0, dom_dim - 1, false);
+        mfa->Decode(*approx, false);
 
-        // science variables
-        for (auto i = 0; i < vars.size(); i++)
-        {
-            fprintf(stderr, "\n--- Decoding science variable %d ---\n\n", i);
+        // // geometry
+        // fprintf(stderr, "\n--- Decoding geometry ---\n\n");
+        // mfa->DecodePointSet(*geometry.mfa_data, *approx, verbose, 0, dom_dim - 1, false);
 
-            // assumes each variable is scalar
-            mfa->DecodePointSet(*(vars[i].mfa_data), *approx, verbose, dom_dim + i, dom_dim + i, false);
-        }
+        // // science variables
+        // for (auto i = 0; i < mfa->nvars(); i++)
+        // {
+        //     fprintf(stderr, "\n--- Decoding science variable %d ---\n\n", i);
+
+        //     // assumes each variable is scalar
+        //     mfa->DecodePointSet(*(vars[i].mfa_data), *approx, verbose, dom_dim + i, dom_dim + i, false);
+        // }
     }
 
     // decode one point
@@ -341,19 +363,21 @@ struct BlockBase
             Eigen::Ref<VectorX<T>>              cpt)            // (output) decoded point
                                                                 // using Eigen::Ref instead of C++ reference so that pybind11 can pass by reference
     {
-        // geometry
-        VectorX<T> geom_cpt(dom_dim);
-        mfa->DecodePt(*geometry.mfa_data, param, geom_cpt);
-        for (auto i = 0; i < dom_dim; i++)
-            cpt(i) = geom_cpt(i);
+        mfa->Decode(param, cpt);
 
-        // science variables
-        VectorX<T> var_cpt(1);                                  // each variable is a scalar
-        for (auto i = 0; i < vars.size(); i++)
-        {
-            mfa->DecodePt(*(vars[i].mfa_data), param, var_cpt);
-            cpt(dom_dim + i) = var_cpt(0);
-        }
+        // // geometry
+        // VectorX<T> geom_cpt(dom_dim);
+        // mfa->DecodePt(*geometry.mfa_data, param, geom_cpt);
+        // for (auto i = 0; i < dom_dim; i++)
+        //     cpt(i) = geom_cpt(i);
+
+        // // science variables
+        // VectorX<T> var_cpt(1);                                  // each variable is a scalar
+        // for (auto i = 0; i < mfa->nvars(); i++)
+        // {
+        //     mfa->DecodePt(*(vars[i].mfa_data), param, var_cpt);
+        //     cpt(dom_dim + i) = var_cpt(0);
+        // }
     }
 
     // differentiate one point
@@ -382,19 +406,21 @@ struct BlockBase
             }
         }
 
-        // geometry
-        VectorX<T> geom_cpt(dom_dim);
-        mfa->DecodePt(*geometry.mfa_data, param, derivs, geom_cpt);
-        for (auto i = 0; i < dom_dim; i++)
-            cpt(i) = geom_cpt(i);
+        mfa->Decode(param, cpt, derivs);
 
-        // science variables
-        VectorX<T> var_cpt(1);                                  // each variable is a scalar
-        for (auto i = 0; i < vars.size(); i++)
-        {
-            mfa->DecodePt(*(vars[i].mfa_data), param, derivs, var_cpt);
-            cpt(dom_dim + i) = var_cpt(0);
-        }
+        // // geometry
+        // VectorX<T> geom_cpt(dom_dim);
+        // mfa->DecodePt(*geometry.mfa_data, param, derivs, geom_cpt);
+        // for (auto i = 0; i < dom_dim; i++)
+        //     cpt(i) = geom_cpt(i);
+
+        // // science variables
+        // VectorX<T> var_cpt(1);                                  // each variable is a scalar
+        // for (auto i = 0; i < mfa->nvars(); i++)
+        // {
+        //     mfa->DecodePt(*(vars[i].mfa_data), param, derivs, var_cpt);
+        //     cpt(dom_dim + i) = var_cpt(0);
+        // }
     }
 
     void definite_integral(
@@ -404,9 +430,9 @@ struct BlockBase
             const VectorX<T>&                   lim_a,
             const VectorX<T>&                   lim_b)
     {
-        for (auto k = 0; k < vars.size(); k++)
+        for (auto k = 0; k < mfa->nvars(); k++)
         {
-            mfa->DefiniteIntegral(*(vars[k].mfa_data), output, verbose, lim_a, lim_b);
+            mfa->DefiniteIntegral(mfa->var(k), output, verbose, lim_a, lim_b);
         }
 
         T scale = (core_maxs - core_mins).prod();
@@ -417,20 +443,25 @@ struct BlockBase
             const diy::Master::ProxyWithLink&   cp,
             int                                 verbose)
     {
+        if (approx)
+        {
+            cerr << "WARNING: Overwriting \"approx\" pointset in BlockBase::integrate_block" << endl;
+            delete approx;
+        }
         approx = new mfa::PointSet<T>(input->params, input->pt_dim);
 
         approx->domain.leftCols(dom_dim) = input->domain.leftCols(dom_dim);
 
-        for (auto k = 0; k < vars.size(); k++)
+        for (auto k = 0; k < mfa->nvars(); k++)
         {
-            mfa->IntegratePointSet(*(vars[k].mfa_data), *approx, verbose, dom_dim + k, dom_dim + k);
+            mfa->IntegratePointSet(mfa->var(k), *approx, verbose, dom_dim + k, dom_dim + k);
         }
         
         // scale the integral 
         // MFA computes integral with respect to parameter space
         // This scaling factor returns the integral wrt physical space (assuming domain parameterization)
         T scale = (core_maxs - core_mins).prod();
-        approx->domain.rightCols(vars.size()) *= scale;
+        approx->domain.rightCols(mfa->pt_dim - mfa->geom_dim) *= scale;
     }
 
     // differentiate entire block
@@ -441,6 +472,11 @@ struct BlockBase
             int                               partial,  // limit to partial derivative in just this dimension (-1 = no limit)
             int                               var)      // differentiate only this one science variable (0 to nvars -1, -1 = all vars)
     {
+        if (approx)
+        {
+            cerr << "WARNING: Overwriting \"approx\" pointset in BlockBase::differentiate_block" << endl;
+            delete approx;
+        }
         approx = new mfa::PointSet<T>(input->params, input->pt_dim);  // Set decode params from input params
         
         VectorXi derivs = deriv * VectorXi::Ones(dom_dim);
@@ -453,19 +489,21 @@ struct BlockBase
             }
         }
 
-        // science variables
-        for (auto i = 0; i < vars.size(); i++)
-            if (var < 0 || var == i)
-            {
-                // TODO: remove duplication of MFA_Data? Also, this leaks memory as-is
-                // TODO: hard-coded for one tensor product
-                vars[i].mfa_data = new mfa::MFA_Data<T>(vars[i].mfa_data->p,
-                        vars[i].mfa_data->tmesh,
-                        dom_dim + i,        // assumes each variable is scalar
-                        dom_dim + i);
+        mfa->Decode(*approx, false, derivs);
 
-                mfa->DecodePointSet(*(vars[i].mfa_data), *approx, verbose, dom_dim + i, dom_dim + i, false, derivs); // assumes each variable is scalar
-            }
+        // // science variables
+        // for (auto i = 0; i < mfa->nvars(); i++)
+        //     if (var < 0 || var == i)
+        //     {
+        //         // TODO: remove duplication of MFA_Data? Also, this leaks memory as-is
+        //         // TODO: hard-coded for one tensor product
+        //         vars[i].mfa_data = new mfa::MFA_Data<T>(vars[i].mfa_data->p,
+        //                 vars[i].mfa_data->tmesh,
+        //                 dom_dim + i,        // assumes each variable is scalar
+        //                 dom_dim + i);
+
+        //         mfa->DecodePointSet(*(vars[i].mfa_data), *approx, verbose, dom_dim + i, dom_dim + i, false, derivs); // assumes each variable is scalar
+        //     }
 
         // the derivative is a vector of same dimensionality as domain
         // derivative needs to be scaled by domain extent because u,v,... are in [0.0, 1.0]
@@ -503,7 +541,7 @@ struct BlockBase
         }
         if (errs != nullptr)
         {
-            cerr << "Warning: Overwriting existing error field" << endl;
+            cerr << "Warning: Overwriting existing error field in BlockBase::range_error" << endl;
             delete errs;
         }
         errs = new mfa::PointSet<T>(input->params, input->pt_dim);
@@ -517,7 +555,7 @@ struct BlockBase
         }
         else // Compute error at each input point on the fly
         {
-            mfa->AbsPointSetError(*input, *errs, vars, verbose);
+            mfa->AbsPointSetError(*input, *errs, verbose);
         }
 
         // Compute error metrics
@@ -554,18 +592,18 @@ struct BlockBase
         T all_max_err, all_max_norm_err, all_max_sum_sq_err, all_max_rms_err, all_max_norm_rms_err;
         int all_max_var, all_max_norm_var, all_max_sum_sq_var, all_max_rms_var, all_max_norm_rms_var;   // variables where the max error occurs
 
-        VectorXi tot_nctrl_pts_dim = VectorXi::Zero(geometry.mfa_data->dom_dim);        // total num. ctrl. pts. per dim.
+        VectorXi tot_nctrl_pts_dim = VectorXi::Zero(dom_dim);        // total num. ctrl. pts. per dim.
         size_t tot_nctrl_pts = 0;                                                       // total number of control points
 
         // geometry
         cerr << "\n------- geometry model -------" << endl;
-        for (auto j = 0; j < geometry.mfa_data->tmesh.tensor_prods.size(); j++)
+        for (auto j = 0; j < mfa->geom().tmesh.tensor_prods.size(); j++)
         {
-            tot_nctrl_pts_dim += geometry.mfa_data->tmesh.tensor_prods[j].nctrl_pts;
-            tot_nctrl_pts += geometry.mfa_data->tmesh.tensor_prods[j].nctrl_pts.prod();
+            tot_nctrl_pts_dim += mfa->geom().tmesh.tensor_prods[j].nctrl_pts;
+            tot_nctrl_pts += mfa->geom().tmesh.tensor_prods[j].nctrl_pts.prod();
         }
         // print number of control points per dimension only if there is one tensor
-        if (geometry.mfa_data->tmesh.tensor_prods.size() == 1)
+        if (mfa->geom().tmesh.tensor_prods.size() == 1)
             cerr << "# output ctrl pts     = [ " << tot_nctrl_pts_dim.transpose() << " ]" << endl;
         cerr << "tot # output ctrl pts = " << tot_nctrl_pts << endl;
 
@@ -575,9 +613,9 @@ struct BlockBase
 //         print_knots(geometry.mfa_data->tmesh);
 
         fprintf(stderr, "# output knots        = [ ");
-        for (auto j = 0 ; j < geometry.mfa_data->tmesh.all_knots.size(); j++)
+        for (auto j = 0 ; j < mfa->geom().tmesh.all_knots.size(); j++)
         {
-            fprintf(stderr, "%ld ", geometry.mfa_data->tmesh.all_knots[j].size());
+            fprintf(stderr, "%ld ", mfa->geom().tmesh.all_knots[j].size());
         }
         fprintf(stderr, "]\n");
 
@@ -585,32 +623,32 @@ struct BlockBase
 
         // science variables
         cerr << "\n----- science variable models -----" << endl;
-        for (auto i = 0; i < vars.size(); i++)
+        for (auto i = 0; i < mfa->nvars(); i++)
         {
             T range_extent = input->domain.col(dom_dim + i).maxCoeff() - input->domain.col(dom_dim + i).minCoeff();
             cerr << "\n---------- var " << i << " ----------" << endl;
-            tot_nctrl_pts_dim   = VectorXi::Zero(vars[i].mfa_data->dom_dim);
+            tot_nctrl_pts_dim   = VectorXi::Zero(dom_dim);
             tot_nctrl_pts       = 0;
-            for (auto j = 0; j < vars[i].mfa_data->tmesh.tensor_prods.size(); j++)
+            for (auto j = 0; j < mfa->var(i).tmesh.tensor_prods.size(); j++)
             {
-                tot_nctrl_pts_dim   += vars[i].mfa_data->tmesh.tensor_prods[j].nctrl_pts;
-                tot_nctrl_pts       += vars[i].mfa_data->tmesh.tensor_prods[j].nctrl_pts.prod();
+                tot_nctrl_pts_dim   += mfa->var(i).tmesh.tensor_prods[j].nctrl_pts;
+                tot_nctrl_pts       += mfa->var(i).tmesh.tensor_prods[j].nctrl_pts.prod();
             }
             // print number of control points per dimension only if there is one tensor
-            if (vars[i].mfa_data->tmesh.tensor_prods.size() == 1)
+            if (mfa->var(i).tmesh.tensor_prods.size() == 1)
                 cerr << "# ouput ctrl pts      = [ " << tot_nctrl_pts_dim.transpose() << " ]" << endl;
             cerr << "tot # output ctrl pts = " << tot_nctrl_pts << endl;
 
             //  debug: print control points and weights
-//             print_ctrl_weights(vars[i].mfa_data->tmesh);
+//             print_ctrl_weights(mfa->var(i)->tmesh);
             // debug: print knots
-//             print_knots(vars[i].mfa_data->tmesh);
+//             print_knots(mfa->var(i)->tmesh);
 
 
             fprintf(stderr, "# output knots        = [ ");
-            for (auto j = 0 ; j < vars[i].mfa_data->tmesh.all_knots.size(); j++)
+            for (auto j = 0 ; j < mfa->var(i).tmesh.all_knots.size(); j++)
             {
-                fprintf(stderr, "%ld ", vars[i].mfa_data->tmesh.all_knots[j].size());
+                fprintf(stderr, "%ld ", mfa->var(i).tmesh.all_knots[j].size());
             }
             fprintf(stderr, "]\n");
 
@@ -618,7 +656,7 @@ struct BlockBase
 
             if (error)
             {
-                T rms_err = sqrt(sum_sq_errs[i] / (input->domain.rows()));
+                T rms_err = sqrt(sum_sq_errs[i] / (input->npts));
                 fprintf(stderr, "range extent          = %e\n",  range_extent);
                 fprintf(stderr, "max_err               = %e\n",  max_errs[i]);
                 fprintf(stderr, "normalized max_err    = %e\n",  max_errs[i] / range_extent);
@@ -672,7 +710,7 @@ struct BlockBase
         //  debug: print approximated points
 //         cerr << approx->npts << " approximated points\n" << approx->domain << endl;
 
-        fprintf(stderr, "# input points        = %ld\n", input->domain.rows());
+        fprintf(stderr, "# input points        = %ld\n", input->npts);
         fprintf(stderr, "compression ratio     = %.2f\n", compute_compression());
     }
 
@@ -681,16 +719,16 @@ struct BlockBase
     {
         // TODO: hard-coded for one tensor product
         float in_coords = (input->npts) * (input->pt_dim);
-        float out_coords = geometry.mfa_data->tmesh.tensor_prods[0].ctrl_pts.rows() *
-            geometry.mfa_data->tmesh.tensor_prods[0].ctrl_pts.cols();
-        for (auto j = 0; j < geometry.mfa_data->tmesh.all_knots.size(); j++)
-            out_coords += geometry.mfa_data->tmesh.all_knots[j].size();
-        for (auto i = 0; i < vars.size(); i++)
+        float out_coords = mfa->geom().tmesh.tensor_prods[0].ctrl_pts.rows() *
+            mfa->geom().tmesh.tensor_prods[0].ctrl_pts.cols();
+        for (auto j = 0; j < mfa->geom().tmesh.all_knots.size(); j++)
+            out_coords += mfa->geom().tmesh.all_knots[j].size();
+        for (auto i = 0; i < mfa->nvars(); i++)
         {
-            out_coords += (vars[i].mfa_data->tmesh.tensor_prods[0].ctrl_pts.rows() *
-                    vars[i].mfa_data->tmesh.tensor_prods[0].ctrl_pts.cols());
-            for (auto j = 0; j < vars[i].mfa_data->tmesh.all_knots.size(); j++)
-                out_coords += vars[i].mfa_data->tmesh.all_knots[j].size();
+            out_coords += (mfa->var(i).tmesh.tensor_prods[0].ctrl_pts.rows() *
+                    mfa->var(i).tmesh.tensor_prods[0].ctrl_pts.cols());
+            for (auto j = 0; j < mfa->var(i).tmesh.all_knots.size(); j++)
+                out_coords += mfa->var(i).tmesh.all_knots[j].size();
         }
         return(in_coords / out_coords);
     }
@@ -785,17 +823,17 @@ struct BlockBase
     {
         VectorXi &ndpts = input->ndom_pts;
 
-        VectorX<T> min_bd(this->dom_dim);
-        VectorX<T> max_bd(this->dom_dim);
+        VectorX<T> min_bd(dom_dim);
+        VectorX<T> max_bd(dom_dim);
         size_t cs = 1;
-        for (int i = 0; i < this->dom_dim; i++) {
+        for (int i = 0; i < dom_dim; i++) {
             min_bd(i) = input->domain(0, i);
             max_bd(i) = input->domain(cs * (ndpts(i) - 1), i);
             cs *= ndpts(i);
         }
         if (verbose) {
             std::cerr << " actual bounds, for full local decoded domain:\n";
-            for (int i = 0; i < this->dom_dim; i++) {
+            for (int i = 0; i < dom_dim; i++) {
                 std::cerr << "   " << min_bd(i) << " " << max_bd(i) << "\n";
             }
 
@@ -804,19 +842,19 @@ struct BlockBase
         // determine the max and min extension of localBlock, and dimensions of localBlock
         // it is an inverse problem, from the block extensions, find out the maximum and index
         //
-        VectorXi grid_counts(this->dom_dim);
-        VectorX<T> min_block(this->dom_dim);
-        VectorX<T> max_block(this->dom_dim);
-        VectorXi index_max(this->dom_dim);
-        for (int i=0; i<dom_dim; i++)
+        VectorXi grid_counts(dom_dim);
+        VectorX<T> min_block(dom_dim);
+        VectorX<T> max_block(dom_dim);
+        VectorXi index_max(dom_dim);
+        for (int i = 0; i < dom_dim; i++)
         {
-            min_block[i] = localBlock(0,i);
-            max_block[i] = localBlock(0,i); // this will be modified in the next loop
+            min_block[i] = localBlock(0, i);
+            max_block[i] = localBlock(0, i); // this will be modified in the next loop
         }
         int num_rows = (int) localBlock.rows();
-        for (int k=0; k < num_rows; k++)
+        for (int k = 0; k < num_rows; k++)
         {
-            for (int i=0; i < dom_dim; i++)
+            for (int i = 0; i < dom_dim; i++)
             {
                 if (max_block[i] < localBlock(k,i))
                 {
@@ -826,7 +864,7 @@ struct BlockBase
             }
         }
         cs = 1;
-        for (int i=0; i < dom_dim; i++)
+        for (int i = 0; i < dom_dim; i++)
         {
             grid_counts[i] = index_max[i] / cs + 1;
             cs = cs * grid_counts[i];
@@ -851,8 +889,8 @@ struct BlockBase
         // geometry first
         /*mfa->DecodeAtGrid(*geometry.mfa_data, 0, dom_dim - 1, p_min, p_max,
                 grid_counts, griddom); */
-        for (size_t j = 0; j < vars.size(); j++) {
-            mfa->DecodeAtGrid(*(this->vars[j].mfa_data), dom_dim + j,
+        for (size_t j = 0; j < mfa->nvars(); j++) {
+            mfa->DecodeAtGrid(mfa->var(j), dom_dim + j,
                     dom_dim + j, p_min, p_max, grid_counts, localBlock);
         }
     }
@@ -1297,13 +1335,13 @@ struct BlockBase
     void print_brief_block(const diy::Master::ProxyWithLink &cp, bool error) // error was computed
             {
 
-        for (auto i = 0; i < vars.size(); i++) {
+        for (auto i = 0; i < mfa->nvars(); i++) {
             cerr << "block gid = " << cp.gid() << " var: " << i
                     << " max error: " << max_errs[i] << "\n";
         }
 
         if (0 == cp.gid()) {
-            for (auto i = 0; i < vars.size(); i++) {
+            for (auto i = 0; i < mfa->nvars(); i++) {
                 cerr << " \n Maximum error:" << max_errs_reduce[2 * i]
                         << " at block id::" << max_errs_reduce[2 * i + 1]
                         << "\n";
@@ -1362,15 +1400,8 @@ namespace mfa
             diy::save(bb, b->approx);
             diy::save(bb, b->errs);
 
-            // geometry
-            diy::save(bb, b->geometry.mfa_data);
-
-            // science variables
-            diy::save(bb, b->vars.size());
-            for (auto i = 0; i < b->vars.size(); i++)
-            {
-                diy::save(bb, b->vars[i].mfa_data);
-            }
+            // save mfa
+            diy::save(bb, b->mfa);
 
             // output for blending
             diy::save(bb, b->ndom_outpts);
@@ -1387,7 +1418,6 @@ namespace mfa
             // top-level mfa data
             diy::load(bb, b->dom_dim);
             diy::load(bb, b->pt_dim);
-            b->mfa = new mfa::MFA<T>(b->dom_dim);
 
             // block bounds
             diy::load(bb, b->bounds_mins);
@@ -1400,17 +1430,11 @@ namespace mfa
             diy::load(bb, b->approx);
             diy::load(bb, b->errs);
 
-            // geometry
-            diy::load(bb, b->geometry.mfa_data);
+            // load mfa
+            diy::load(bb, b->mfa);
 
-            // science variables
-            size_t nvars;
-            diy::load(bb, nvars);
-            b->vars.resize(nvars);
-            for (auto i = 0; i < b->vars.size(); i++)
-            {
-                diy::load(bb, b->vars[i].mfa_data);
-            }
+            if (b->pt_dim != b->mfa->pt_dim)
+                cerr << "WARNING: Block::pt_dim and MFA::pt_dim do not match!" << endl;
 
             // output for blending
             diy::load(bb, b->ndom_outpts);
@@ -1672,6 +1696,72 @@ namespace diy
                         diy::load(bb, md->tmesh.all_knots);
                         diy::load(bb, md->tmesh.all_knot_levels);
                     }   
+                }
+        };
+
+        template <typename T>
+        struct Serialization<mfa::MFA<T>*>
+        {
+            static
+                void save(diy::BinaryBuffer& bb, mfa::MFA<T>* const & mfa)
+                {
+                    if (mfa == nullptr)
+                    {
+                        diy::save(bb, (int) 0);
+                    }
+                    else
+                    {
+                        diy::save(bb, (int) 1);
+
+                        diy::save(bb, mfa->dom_dim);
+                        diy::save(bb, mfa->verbose);
+                        diy::save(bb, mfa->nvars());
+                        diy::save(bb, mfa->geometry.get());
+                        for (int i = 0; i < mfa->nvars(); i++)
+                        {
+                            diy::save(bb, mfa->vars[i].get());
+                        }
+                    }
+                }
+            static
+                void load(diy::BinaryBuffer& bb, mfa::MFA<T>*& mfa)
+                {
+                    int load_flag = 0;
+                    diy::load(bb, load_flag);
+                    
+                    if (load_flag == 0)
+                    {
+                        mfa = nullptr;
+                    }
+                    else
+                    {
+                        int dom_dim = 0;
+                        int verbose = 0;
+                        int nvars = 0;
+                        mfa::MFA_Data<T>* geometry;
+                        vector<mfa::MFA_Data<T>*> vars;
+
+                        diy::load(bb, dom_dim);
+                        diy::load(bb, verbose);
+                        diy::load(bb, nvars);
+                        vars.resize(nvars);
+                        diy::load(bb, geometry);
+                        for (int i = 0; i < vars.size(); i++)
+                        {
+                            diy::load(bb, vars[i]);
+                        }
+
+                        // n.b. this constructor takes ownership of MFA_Data pointers
+                        mfa = new mfa::MFA<T>(dom_dim, verbose, geometry, vars);
+
+                        // zero-out raw pointers; the resources are now managed by MFA
+                        // not strictly necessary, but just good practice
+                        geometry = nullptr;
+                        for (int i = 0; i < vars.size(); i++)
+                        {
+                            vars[i] = nullptr;
+                        }
+                    }
                 }
         };
 }                       // namespace

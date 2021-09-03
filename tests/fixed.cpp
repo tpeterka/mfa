@@ -334,7 +334,7 @@ int main(int argc, char** argv)
                 int ix = vol_it.idx_dim(ii); // index along direction ii in grid
                 param[ii] = ix / (resolutionGrid - 1.);
             }
-            b->mfa->DecodePt(*(b->vars[0].mfa_data), param, var_cpt);
+            b->mfa->DecodeVar(0, param, var_cpt);
             // compare with our blend result
             if (fabs(var_cpt(0) - result(jj, 2)) > 1.e-10) {
                 fprintf(stderr, " %e != %e , params: %f %f, ix: %d %d \n",

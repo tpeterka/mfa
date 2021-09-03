@@ -178,7 +178,7 @@ void PrepTmeshTensorExtents(
     {
         vec3d min_real, max_real, min_index, max_index;         // extents in real and index space
 
-        mfa::Tmesh<real_t>& tmesh = block->vars[j].mfa_data->tmesh;
+        const mfa::Tmesh<real_t>& tmesh = block->mfa->var(j).tmesh;
 
         // form extents in index and real space
         for (auto k = 0; k < tmesh.tensor_prods.size(); k++)
@@ -261,9 +261,9 @@ void PrepRenderingData(
     vec3d p;
 
     // number of geometry dimensions and science variables
-    int ndom_dims   = block->geometry.mfa_data->tmesh.tensor_prods[0].ctrl_pts.cols();          // number of geometry dims
-    nvars           = block->vars.size();                       // number of science variables
-    pt_dim          = block->input->pt_dim;                     // dimensionality of point
+    int ndom_dims   = block->mfa->geom_dim;          // number of geometry dims
+    nvars           = block->mfa->nvars();                       // number of science variables
+    pt_dim          = block->mfa->pt_dim;                     // dimensionality of point
 
     // number of output points for blend
     for (size_t j = 0; j < (size_t)(block->ndom_outpts.size()); j++)
@@ -273,9 +273,9 @@ void PrepRenderingData(
 
     // compute vectors of individual control point coordinates for the tensor product
     vector<vector<float>> ctrl_pts_coords(ndom_dims);
-    for (auto t = 0; t < block->geometry.mfa_data->tmesh.tensor_prods.size(); t++)                      // tensor products
+    for (auto t = 0; t < block->mfa->geom().tmesh.tensor_prods.size(); t++)                      // tensor products
     {
-        TensorProduct<real_t>& tc = block->geometry.mfa_data->tmesh.tensor_prods[t];
+        const TensorProduct<real_t>& tc = block->mfa->geom().tmesh.tensor_prods[t];
         mfa::VolIterator vol_iter(tc.nctrl_pts);
         for (auto k = 0; k < ndom_dims; k++)                                                            // domain dimensions
         {
@@ -285,12 +285,12 @@ void PrepRenderingData(
             if (knot_min)
             {
                 // skip knots at a deeper level than the tensor
-                for (auto l = 0; l < block->geometry.mfa_data->p(k); l++)
+                for (auto l = 0; l < block->mfa->geom().p(k); l++)
                 {
-                    while (block->geometry.mfa_data->tmesh.all_knot_levels[k][knot_min - l - skip] > tc.level)
+                    while (block->mfa->geom().tmesh.all_knot_levels[k][knot_min - l - skip] > tc.level)
                         skip++;
                 }
-                knot_min -= (block->geometry.mfa_data->p(k) - 1 + skip);
+                knot_min -= (block->mfa->geom().p(k) - 1 + skip);
             }
 
             for (auto j = 0; j < tc.nctrl_pts(k); j++)                      // control points
@@ -298,14 +298,14 @@ void PrepRenderingData(
                 float tsum  = 0.0;
                 int skip1   = skip;                                         // number of knots at a deeper level that should be skipped
                 // skip knots at a deeper level than the tensor
-                for (int l = 1; l < block->geometry.mfa_data->p(k) + 1; l++)
+                for (int l = 1; l < block->mfa->geom().p(k) + 1; l++)
                 {
                     // skip knots at a deeper level than the tensor
-                    while (block->geometry.mfa_data->tmesh.all_knot_levels[k][knot_min + j + l + skip1] > tc.level)
+                    while (block->mfa->geom().tmesh.all_knot_levels[k][knot_min + j + l + skip1] > tc.level)
                         skip1++;
-                    tsum += block->geometry.mfa_data->tmesh.all_knots[k][knot_min + j + l + skip1];
+                    tsum += block->mfa->geom().tmesh.all_knots[k][knot_min + j + l + skip1];
                 }
-                tsum /= float(block->geometry.mfa_data->p(k));
+                tsum /= float(block->mfa->geom().p(k));
                 ctrl_pts_coords[k].push_back(block->core_mins(k) + tsum * (block->core_maxs(k) - block->core_mins(k)));
 
                 // debug
@@ -316,9 +316,9 @@ void PrepRenderingData(
 
     // form the tensor product of control points from the vectors of individual coordinates
     VectorXi ofst = VectorXi::Zero(3);                              // offset of indices for current tensor
-    for (auto t = 0; t < block->geometry.mfa_data->tmesh.tensor_prods.size(); t++)                      // tensor products
+    for (auto t = 0; t < block->mfa->geom().tmesh.tensor_prods.size(); t++)                      // tensor products
     {
-        TensorProduct<real_t>& tc   = block->geometry.mfa_data->tmesh.tensor_prods[t];
+        const TensorProduct<real_t>& tc   = block->mfa->geom().tmesh.tensor_prods[t];
         mfa::VolIterator vol_iter(tc.nctrl_pts);
         VectorXi ijk(ndom_dims);
         while (!vol_iter.done())                                    // control points
@@ -358,20 +358,20 @@ void PrepRenderingData(
     for (size_t i = 0; i < nvars; i++)                              // science variables
     {
         size_t nctrl_pts = 0;
-        for (auto t = 0; t < block->vars[i].mfa_data->tmesh.tensor_prods.size(); t++)                   // tensor products
+        for (auto t = 0; t < block->mfa->var(i).tmesh.tensor_prods.size(); t++)                   // tensor products
         {
             size_t prod = 1;
             for (auto k = 0; k < ndom_dims; k++)                                                        // domain dimensions
-                prod *= block->vars[i].mfa_data->tmesh.tensor_prods[t].nctrl_pts(k);
+                prod *= block->mfa->var(i).tmesh.tensor_prods[t].nctrl_pts(k);
             nctrl_pts += prod;
         }
         vars_ctrl_data[i] = new float[nctrl_pts];
 
         // compute vectors of individual control point coordinates for the tensor product
         vector<vector<float>> ctrl_pts_coords(ndom_dims);
-        for (auto t = 0; t < block->vars[i].mfa_data->tmesh.tensor_prods.size(); t++)                   // tensor products
+        for (auto t = 0; t < block->mfa->var(i).tmesh.tensor_prods.size(); t++)                   // tensor products
         {
-            TensorProduct<real_t>& tc = block->vars[i].mfa_data->tmesh.tensor_prods[t];
+            const TensorProduct<real_t>& tc = block->mfa->var(i).tmesh.tensor_prods[t];
             mfa::VolIterator vol_iter(tc.nctrl_pts);
             for (auto k = 0; k < ndom_dims; k++)                                                        // domain dimensions
             {
@@ -381,26 +381,26 @@ void PrepRenderingData(
                 if (knot_min)
                 {
                     // skip knots at a deeper level than the tensor
-                    for (auto l = 0; l < block->vars[i].mfa_data->p(k); l++)
+                    for (auto l = 0; l < block->mfa->var(i).p(k); l++)
                     {
-                        while (block->vars[i].mfa_data->tmesh.all_knot_levels[k][knot_min - l - skip] > tc.level)
+                        while (block->mfa->var(i).tmesh.all_knot_levels[k][knot_min - l - skip] > tc.level)
                             skip++;
                     }
-                    knot_min -= (block->vars[i].mfa_data->p(k) - 1 + skip);
+                    knot_min -= (block->mfa->var(i).p(k) - 1 + skip);
                 }
 
                 int skip1   = skip;                                 // number of knots at a deeper level that should be skipped
                 for (auto j = 0; j < tc.nctrl_pts(k); j++)              // control points
                 {
                     float tsum  = 0.0;
-                    for (auto l = 1; l < block->vars[i].mfa_data->p(k) + 1; l++)
+                    for (auto l = 1; l < block->mfa->var(i).p(k) + 1; l++)
                     {
                         // skip knots at a deeper level than the tensor
-                        while (block->vars[i].mfa_data->tmesh.all_knot_levels[k][knot_min + j + l + skip1] > tc.level)
+                        while (block->mfa->var(i).tmesh.all_knot_levels[k][knot_min + j + l + skip1] > tc.level)
                             skip1++;
-                        tsum += block->vars[i].mfa_data->tmesh.all_knots[k][knot_min + j + l + skip1];
+                        tsum += block->mfa->var(i).tmesh.all_knots[k][knot_min + j + l + skip1];
                     }
-                    tsum /= float(block->vars[i].mfa_data->p(k));
+                    tsum /= float(block->mfa->var(i).p(k));
                     ctrl_pts_coords[k].push_back(block->core_mins(k) + tsum * (block->core_maxs(k) - block->core_mins(k)));
 
                     // debug
@@ -411,9 +411,9 @@ void PrepRenderingData(
 
         // form the tensor product of control points from the vectors of individual coordinates
         VectorXi ofst = VectorXi::Zero(3);                              // offset of indices for current tensor
-        for (auto t = 0; t < block->vars[i].mfa_data->tmesh.tensor_prods.size(); t++)                  // tensor products
+        for (auto t = 0; t < block->mfa->var(i).tmesh.tensor_prods.size(); t++)                  // tensor products
         {
-            TensorProduct<real_t>& tc   = block->vars[i].mfa_data->tmesh.tensor_prods[t];
+            const TensorProduct<real_t>& tc   = block->mfa->var(i).tmesh.tensor_prods[t];
             mfa::VolIterator vol_iter(tc.nctrl_pts);
             VectorXi ijk(ndom_dims);
             while (!vol_iter.done())                                        // control points
@@ -676,9 +676,9 @@ void test_and_write(Block<real_t>*                      b,
 
     DomainArgs* a   = &args;
 
-    nvars = b->vars.size();
+    nvars = b->mfa->nvars();
     if (!b->dom_dim)
-        b->dom_dim =  b->input->ndom_pts.size();
+        b->dom_dim =  b->input->dom_dim;
 
     // default args for evaluating analytical functions
     for (auto i = 0; i < nvars; i++)

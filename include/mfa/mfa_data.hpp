@@ -118,7 +118,12 @@ namespace mfa
 
         ~MFA_Data() {}
 
-        void set_knots(PointSet<T>& input)
+        inline int dim() const 
+        {
+            return max_dim - min_dim + 1;
+        }
+
+        void set_knots(const PointSet<T>& input)
         {
             // TODO move this elsewhere (to encode method?), wrapped in "structured==true" block
             // allocate basis functions

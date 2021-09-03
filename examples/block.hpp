@@ -299,6 +299,7 @@ struct Block : public BlockBase<T>
             }
 
             // Prep a few more domain arguments which are used by generate_random_analytical_data
+            // TODO: currently hard-coded for one scalar science variable
             args.model_dims.resize(2);
             args.model_dims[0] = dom_dim;
             args.model_dims[1] = 1;
@@ -337,20 +338,20 @@ struct Block : public BlockBase<T>
         // Prepare containers
         size_t nvars = a->model_dims.size()-1;
         size_t geom_dim = a->model_dims[0];
-        this->vars.resize(nvars);
+        // this->vars.resize(nvars);
         this->max_errs.resize(nvars);
         this->sum_sq_errs.resize(nvars);
 
-        // Assign min/max dimensions for each model
-        this->geometry.min_dim = 0;
-        this->geometry.max_dim = geom_dim - 1;
-        this->vars[0].min_dim = a->model_dims[0];
-        this->vars[0].max_dim = this->vars[0].min_dim + a->model_dims[0];
-        for (size_t n = 1; n < nvars; n++)
-        {
-            this->vars[n].min_dim = this->vars[n-1].max_dim + 1;
-            this->vars[n].max_dim = this->vars[n].min_dim + a->model_dims[n];
-        }
+        // // Assign min/max dimensions for each model
+        // this->geometry.min_dim = 0;
+        // this->geometry.max_dim = geom_dim - 1;
+        // this->vars[0].min_dim = a->model_dims[0];
+        // this->vars[0].max_dim = this->vars[0].min_dim + a->model_dims[0];
+        // for (size_t n = 1; n < nvars; n++)
+        // {
+        //     this->vars[n].min_dim = this->vars[n-1].max_dim + 1;
+        //     this->vars[n].max_dim = this->vars[n].min_dim + a->model_dims[n];
+        // }
 
         // Set block bounds (if not already done by DIY)
         if (!a->multiblock)
@@ -482,7 +483,12 @@ struct Block : public BlockBase<T>
         }
 
         input->init_params(core_mins, core_maxs);     // Set explicit bounding box for parameter space
-        this->mfa = new mfa::MFA<T>(dom_dim);
+        
+        int verbose = a->verbose && cp.master()->communicator().rank() == 0; 
+        this->mfa = new mfa::MFA<T>(dom_dim, verbose);
+
+        // initialize MFA models (geometry, vars, etc)
+        this->setup_models(cp, nvars, args);
 
         // extents
         fprintf(stderr, "gid = %d\n", cp.gid());
@@ -507,17 +513,17 @@ struct Block : public BlockBase<T>
         //       Also assumes each var is scalar
         int nvars       = this->pt_dim - this->dom_dim;             // number of science variables
 
-        this->vars.resize(nvars);
+        // this->vars.resize(nvars);
         this->max_errs.resize(nvars);
         this->sum_sq_errs.resize(nvars);
         // int tot_ndom_pts    = 1;
-        this->geometry.min_dim = 0;
-        this->geometry.max_dim = this->dom_dim - 1;  // TODO fix dom_dim assumption, see above
-        for (int j = 0; j < nvars; j++)
-        {
-            this->vars[j].min_dim = this->dom_dim + j;
-            this->vars[j].max_dim = this->vars[j].min_dim;
-        }
+        // this->geometry.min_dim = 0;
+        // this->geometry.max_dim = this->dom_dim - 1;  // TODO fix dom_dim assumption, see above
+        // for (int j = 0; j < nvars; j++)
+        // {
+        //     this->vars[j].min_dim = this->dom_dim + j;
+        //     this->vars[j].max_dim = this->vars[j].min_dim;
+        // }
         VectorXi ndom_pts(this->dom_dim);
         for (int i = 0; i < this->dom_dim; i++)
             ndom_pts(i) = a->ndom_pts[i];
@@ -680,7 +686,12 @@ struct Block : public BlockBase<T>
             this->map_dir.push_back(k);
 
         input->init_params();
-        this->mfa = new mfa::MFA<T>(this->dom_dim);
+
+        int verbose = a->verbose && cp.master()->communicator().rank() == 0; 
+        this->mfa = new mfa::MFA<T>(dom_dim, verbose);
+
+        // initialize MFA models (geometry, vars, etc)
+        this->setup_models(cp, nvars, args);
 
         // extents
         fprintf(stderr, "gid = %d\n", cp.gid());
@@ -701,14 +712,15 @@ struct Block : public BlockBase<T>
     {   
         DomainArgs* a = &args;
         int tot_ndom_pts = 1;
-        this->geometry.min_dim = 0;
-        this->geometry.max_dim = this->dom_dim - 1;
+        // this->geometry.min_dim = 0;
+        // this->geometry.max_dim = this->dom_dim - 1;
         int nvars = 1;
-        this->vars.resize(nvars);
+        // this->vars.resize(nvars);
         this->max_errs.resize(nvars);
         this->sum_sq_errs.resize(nvars);
-        this->vars[0].min_dim = this->dom_dim;
-        this->vars[0].max_dim = this->vars[0].min_dim;
+        // this->vars[0].min_dim = this->dom_dim;
+        // this->vars[0].max_dim = this->vars[0].min_dim;
+
         VectorXi ndom_pts(this->dom_dim);
         this->bounds_mins.resize(this->pt_dim);
         this->bounds_maxs.resize(this->pt_dim);
@@ -776,7 +788,12 @@ struct Block : public BlockBase<T>
         }
 
         input->init_params();
-        this->mfa = new mfa::MFA<T>(dom_dim);
+
+        int verbose = a->verbose && cp.master()->communicator().rank() == 0; 
+        this->mfa = new mfa::MFA<T>(dom_dim, verbose);
+        
+        // initialize MFA models (geometry, vars, etc)
+        this->setup_models(cp, nvars, args);
 
         // debug
         cerr << "domain extent:\n min\n" << bounds_mins << "\nmax\n" << bounds_maxs << endl;
@@ -790,14 +807,14 @@ struct Block : public BlockBase<T>
     {
         DomainArgs* a = &args;
         int tot_ndom_pts = 1;
-        this->geometry.min_dim = 0;
-        this->geometry.max_dim = dom_dim - 1;
+        // this->geometry.min_dim = 0;
+        // this->geometry.max_dim = dom_dim - 1;
         int nvars = 1;
-        this->vars.resize(nvars);
+        // this->vars.resize(nvars);
         this->max_errs.resize(nvars);
         this->sum_sq_errs.resize(nvars);
-        this->vars[0].min_dim = dom_dim;
-        this->vars[0].max_dim = this->vars[0].min_dim;
+        // this->vars[0].min_dim = dom_dim;
+        // this->vars[0].max_dim = this->vars[0].min_dim;
         VectorXi ndom_pts(dom_dim);
         this->bounds_mins.resize(pt_dim);
         this->bounds_maxs.resize(pt_dim);
@@ -870,7 +887,12 @@ struct Block : public BlockBase<T>
         }
 
         input->init_params();
-        this->mfa = new mfa::MFA<T>(dom_dim);
+
+        int verbose = a->verbose && cp.master()->communicator().rank() == 0; 
+        this->mfa = new mfa::MFA<T>(dom_dim, verbose);
+
+        // initialize MFA models (geometry, vars, etc)
+        this->setup_models(cp, nvars, args);
 
         // debug
         cerr << "domain extent:\n min\n" << bounds_mins << "\nmax\n" << bounds_maxs << endl;
@@ -884,14 +906,14 @@ struct Block : public BlockBase<T>
     {
         DomainArgs* a = &args;
         int tot_ndom_pts = 1;
-        this->geometry.min_dim = 0;
-        this->geometry.max_dim = dom_dim - 1;
+        // this->geometry.min_dim = 0;
+        // this->geometry.max_dim = dom_dim - 1;
         int nvars = 1;
-        this->vars.resize(nvars);
+        // this->vars.resize(nvars);
         this->max_errs.resize(nvars);
         this->sum_sq_errs.resize(nvars);
-        this->vars[0].min_dim = dom_dim;
-        this->vars[0].max_dim = this->vars[0].min_dim;
+        // this->vars[0].min_dim = dom_dim;
+        // this->vars[0].max_dim = this->vars[0].min_dim;
         VectorXi ndom_pts(dom_dim);
         bounds_mins.resize(pt_dim);
         bounds_maxs.resize(pt_dim);
@@ -987,7 +1009,12 @@ struct Block : public BlockBase<T>
         }
 
         input->init_params();
-        this->mfa = new mfa::MFA<T>(dom_dim);
+
+        int verbose = a->verbose && cp.master()->communicator().rank() == 0; 
+        this->mfa = new mfa::MFA<T>(dom_dim, verbose);
+
+        // initialize MFA models (geometry, vars, etc)
+        this->setup_models(cp, nvars, args);
 
         // debug
         cerr << "domain extent:\n min\n" << bounds_mins << "\nmax\n" << bounds_maxs << endl;
@@ -1001,14 +1028,14 @@ struct Block : public BlockBase<T>
     {
         DomainArgs* a = &args;
         int tot_ndom_pts = 1;
-        this->geometry.min_dim = 0;
-        this->geometry.max_dim = dom_dim - 1;
+        // this->geometry.min_dim = 0;
+        // this->geometry.max_dim = dom_dim - 1;
         int nvars = 1;
-        this->vars.resize(nvars);
+        // this->vars.resize(nvars);
         this->max_errs.resize(nvars);
         this->sum_sq_errs.resize(nvars);
-        this->vars[0].min_dim = dom_dim;
-        this->vars[0].max_dim = this->vars[0].min_dim;
+        // this->vars[0].min_dim = dom_dim;
+        // this->vars[0].max_dim = this->vars[0].min_dim;
         VectorXi ndom_pts(dom_dim);
         this->bounds_mins.resize(pt_dim);
         this->bounds_maxs.resize(pt_dim);
@@ -1084,7 +1111,12 @@ struct Block : public BlockBase<T>
         }
 
         input->init_params();
-        this->mfa = new mfa::MFA<T>(dom_dim);
+
+        int verbose = a->verbose && cp.master()->communicator().rank() == 0; 
+        this->mfa = new mfa::MFA<T>(dom_dim, verbose);
+
+        // initialize MFA models (geometry, vars, etc)
+        this->setup_models(cp, nvars, args);
 
         // debug
         cerr << "domain extent:\n min\n" << bounds_mins << "\nmax\n" << bounds_maxs << endl;
@@ -1098,14 +1130,14 @@ struct Block : public BlockBase<T>
     {
         DomainArgs* a = &args;
         int tot_ndom_pts = 1;
-        this->geometry.min_dim = 0;
-        this->geometry.max_dim = dom_dim - 1;
+        // this->geometry.min_dim = 0;
+        // this->geometry.max_dim = dom_dim - 1;
         int nvars = 1;
-        this->vars.resize(nvars);
+        // this->vars.resize(nvars);
         this->max_errs.resize(nvars);
         this->sum_sq_errs.resize(nvars);
-        this->vars[0].min_dim = dom_dim;
-        this->vars[0].max_dim = this->vars[0].min_dim;
+        // this->vars[0].min_dim = dom_dim;
+        // this->vars[0].max_dim = this->vars[0].min_dim;
         VectorXi ndom_pts(dom_dim);
         bounds_mins.resize(pt_dim);
         bounds_maxs.resize(pt_dim);
@@ -1205,7 +1237,12 @@ struct Block : public BlockBase<T>
         }
 
         input->init_params();
-        this->mfa = new mfa::MFA<T>(dom_dim);
+
+        int verbose = a->verbose && cp.master()->communicator().rank() == 0; 
+        this->mfa = new mfa::MFA<T>(dom_dim, verbose);
+
+        // initialize MFA models (geometry, vars, etc)
+        this->setup_models(cp, nvars, args);
 
         // debug
         cerr << "domain extent:\n min\n" << bounds_mins << "\nmax\n" << bounds_maxs << endl;
@@ -1219,14 +1256,14 @@ struct Block : public BlockBase<T>
     {
         DomainArgs* a = &args;
         int tot_ndom_pts = 1;
-        this->geometry.min_dim = 0;
-        this->geometry.max_dim = dom_dim - 1;
+        // this->geometry.min_dim = 0;
+        // this->geometry.max_dim = dom_dim - 1;
         int nvars = 1;
-        this->vars.resize(nvars);
+        // this->vars.resize(nvars);
         this->max_errs.resize(nvars);
         this->sum_sq_errs.resize(nvars);
-        this->vars[0].min_dim = dom_dim;
-        this->vars[0].max_dim = this->vars[0].min_dim;
+        // this->vars[0].min_dim = dom_dim;
+        // this->vars[0].max_dim = this->vars[0].min_dim;
         VectorXi ndom_pts(dom_dim);
         bounds_mins.resize(pt_dim);
         bounds_maxs.resize(pt_dim);
@@ -1291,7 +1328,12 @@ struct Block : public BlockBase<T>
         }
 
         input->init_params();
-        this->mfa = new mfa::MFA<T>(dom_dim);
+
+        int verbose = a->verbose && cp.master()->communicator().rank() == 0; 
+        this->mfa = new mfa::MFA<T>(dom_dim, verbose);
+
+        // initialize MFA models (geometry, vars, etc)
+        this->setup_models(cp, nvars, args);
 
         // debug
         cerr << "domain extent:\n min\n" << bounds_mins << "\nmax\n" << bounds_maxs << endl;
@@ -1305,14 +1347,14 @@ struct Block : public BlockBase<T>
     {
         DomainArgs* a = &args;
         int tot_ndom_pts = 1;
-        this->geometry.min_dim = 0;
-        this->geometry.max_dim = dom_dim - 1;
+        // this->geometry.min_dim = 0;
+        // this->geometry.max_dim = dom_dim - 1;
         int nvars = 1;
-        this->vars.resize(nvars);
+        // this->vars.resize(nvars);
         this->max_errs.resize(nvars);
         this->sum_sq_errs.resize(nvars);
-        this->vars[0].min_dim = dom_dim;
-        this->vars[0].max_dim = this->vars[0].min_dim;
+        // this->vars[0].min_dim = dom_dim;
+        // this->vars[0].max_dim = this->vars[0].min_dim;
         VectorXi ndom_pts(dom_dim);
         bounds_mins.resize(pt_dim);
         bounds_maxs.resize(pt_dim);
@@ -1381,7 +1423,12 @@ struct Block : public BlockBase<T>
         }
 
         input->init_params();
-        this->mfa = new mfa::MFA<T>(dom_dim);
+
+        int verbose = a->verbose && cp.master()->communicator().rank() == 0; 
+        this->mfa = new mfa::MFA<T>(dom_dim, verbose);
+
+        // initialize MFA models (geometry, vars, etc)
+        this->setup_models(cp, nvars, args);
 
         // debug
         cerr << "domain extent:\n min\n" << bounds_mins << "\nmax\n" << bounds_maxs << endl;
@@ -1404,15 +1451,15 @@ struct Block : public BlockBase<T>
         int new_dd = dom_dim + 1;   // new dom_dim
         int new_pd = pt_dim + 1;    // new pt_dim
         mfa::PointSet<T>* new_input;
-        mfa::MFA<T>* new_mfa;
+        // mfa::MFA<T>* new_mfa;
 
-        Model<T> new_geom;
+        // Model<T> new_geom;
         // vector<Model<T>> new_vars;
 
-        new_geom.min_dim = 0;
-        new_geom.max_dim = new_dd - 1;
+        // new_geom.min_dim = 0;
+        // new_geom.max_dim = new_dd - 1;
 
-        int nvars = this->vars.size();
+        // int nvars = this->vars.size();
         // new_vars.resize(nvars);
         // new_vars[0].min_dim = new_dd;
         // new_vars[0].max_dim = new_vars[0].min_dim;
@@ -1508,8 +1555,20 @@ struct Block : public BlockBase<T>
                     {
                         param(0) = (x - xl) / (xh - xl);
                         param(1) = (y - yl) / (yh - yl);
-                        this->mfa->DecodePt(*(this->vars[0].mfa_data), param, outpt);
-                        new_input->domain(idx, 3) = outpt(0);
+
+                        outpt.resize(pt_dim);
+                        this->mfa->Decode(param, outpt);
+                        new_input->domain.block(idx, new_dd, 1, pt_dim - dom_dim) = outpt.transpose();
+
+                        // for (int l = 0; l < this->mfa->nvars(); l++)
+                        // {
+                        //     outpt.resize(this->mfa->var(l).max_dim - this->mfa->var(l).min_dim + 1);
+                        //     this->mfa->DecodeVar(l, param, outpt);
+
+                        //     TODO fix this: use Decode() only
+                        //     new_input->domain(idx, 3 + l) = outpt(0);
+                        // }
+                        
                     }
                                        
                 }
@@ -1524,13 +1583,15 @@ struct Block : public BlockBase<T>
         input = new_input;
 
         // replace old top-level MFA with a new one
-        mfa::MFA<T>* ray_mfa = new mfa::MFA<T>(new_dd);
-        delete this->mfa;
-        this->mfa = ray_mfa;
+        int verbose = a->verbose && cp.master()->communicator().rank() == 0; 
+        mfa::MFA<T>* ray_mfa = new mfa::MFA<T>(new_dd, verbose);
+        // delete this->mfa;
+        // this->mfa = ray_mfa;
 
         // Replace existing models with new models
-        delete this->geometry.mfa_data;
-        this->geometry = new_geom;
+        // delete this->geometry.mfa_data;
+        // this->geometry = new_geom;
+
         // for (int i = 0; i < vars.size(); i++)
         // {
         //     delete vars[i].mfa_data;
@@ -1547,28 +1608,29 @@ struct Block : public BlockBase<T>
         }
 
         // encode (new) geometry
-        this->geometry.mfa_data = new mfa::MFA_Data<T>(p, nctrl_pts, 0, new_dd - 1);
-        this->geometry.mfa_data->set_knots(*new_input);
-        this->mfa->FixedEncode(*(this->geometry.mfa_data), *new_input, nctrl_pts, 1, 0);
+        // this->geometry.mfa_data = new mfa::MFA_Data<T>(p, nctrl_pts, 0, new_dd - 1);
+        // this->geometry.mfa_data->set_knots(*new_input);
+        ray_mfa->AddGeometry(p, nctrl_pts, new_dd);
+        // ray_mfa->FixedEncodeGeom(*new_input, false);
 
         // encode (new) science variables
-        for (auto i = 0; i< this->vars.size(); i++)
+        for (auto i = 0; i< this->mfa->nvars(); i++)
         {
             int min_p = 20;
             int max_nctrl_pts = 0;
             for (int j = 0; j < dom_dim; j++)
             {
-                if (this->vars[i].mfa_data->p(j) < min_p)
-                    min_p = this->vars[i].mfa_data->p(j);
+                if (this->mfa->var(i).p(j) < min_p)
+                    min_p = this->mfa->var(i).p(j);
 
-                if (this->vars[i].mfa_data->tmesh.tensor_prods[0].nctrl_pts(j) > max_nctrl_pts)
-                    max_nctrl_pts = this->vars[i].mfa_data->tmesh.tensor_prods[0].nctrl_pts(j);
+                if (this->mfa->var(i).tmesh.tensor_prods[0].nctrl_pts(j) > max_nctrl_pts)
+                    max_nctrl_pts = this->mfa->var(i).tmesh.tensor_prods[0].nctrl_pts(j);
             }
 
-            // reset this vars Model to the new ray model
-            this->vars[i].min_dim = new_dd + i;
-            this->vars[i].max_dim = new_dd + i;
-            delete this->vars[i].mfa_data;
+            // // reset this vars Model to the new ray model
+            // this->vars[i].min_dim = new_dd + i;
+            // this->vars[i].max_dim = new_dd + i;
+            // delete this->vars[i].mfa_data;
 
 
             // TODO: this needs to be fixed
@@ -1579,14 +1641,26 @@ struct Block : public BlockBase<T>
                 nctrl_pts(j)    = max_nctrl_pts;
             }
 
-            this->vars[i].mfa_data = new mfa::MFA_Data<T>(p, nctrl_pts, new_dd + i, new_dd + i);
-            this->vars[i].mfa_data->set_knots(*new_input);
-            this->mfa->FixedEncode(*(this->vars[i].mfa_data), *new_input, nctrl_pts, 1, 0);
+            // this->vars[i].mfa_data = new mfa::MFA_Data<T>(p, nctrl_pts, new_dd + i, new_dd + i);
+            // this->vars[i].mfa_data->set_knots(*new_input);
+            ray_mfa->AddVariable(p, nctrl_pts, 1);
+            // ray_mfa->FixedEncodeVar(i, *new_input, false);
         }
+        ray_mfa->FixedEncode(*new_input, false);
+
+        delete this->mfa;
+        this->mfa = ray_mfa;
+        ray_mfa = nullptr;
 
         // reset block members as needed
         dom_dim = new_dd;
         pt_dim = new_pd;
+
+        if (new_pd != this->mfa->pt_dim)
+        {
+            cerr << "ERROR: pt_dim does not match in create_ray_model()" << endl;
+            exit(1);
+        }
 
         VectorX<T> old_bounds_mins = bounds_mins;
         VectorX<T> old_bounds_maxs = bounds_maxs;
@@ -1599,7 +1673,7 @@ struct Block : public BlockBase<T>
         bounds_maxs(1) = r_lim;
         bounds_mins(2) = 0;
         bounds_maxs(2) = pi;
-        for (int i = 0; i < nvars; i++)
+        for (int i = 0; i < this->mfa->nvars(); i++)
         {
             bounds_mins(3+i) = old_bounds_mins(2+i);
             bounds_maxs(3+i) = old_bounds_maxs(2+i);
@@ -1607,8 +1681,8 @@ struct Block : public BlockBase<T>
         core_mins = bounds_mins.head(dom_dim);
         core_maxs = bounds_maxs.head(dom_dim);
 
-        this->max_errs.resize(this->vars.size());
-        this->sum_sq_errs.resize(this->vars.size());
+        this->max_errs.resize(this->mfa->nvars());
+        this->sum_sq_errs.resize(this->mfa->nvars());
 
         this->decode_block(cp, 1, 0);
     }
@@ -1691,9 +1765,10 @@ struct Block : public BlockBase<T>
         this->errs = new mfa::PointSet<T>(grid_params, pt_dim);
 
         // Decode on above-specified grid
-        this->mfa->DecodePointSet(*(this->geometry).mfa_data, *grid_approx, 0, 0, dom_dim - 1, false);
-        for (auto i = 0; i < this->vars.size(); i++)
-            this->mfa->DecodePointSet(*(this->vars[i].mfa_data), *grid_approx, 0, dom_dim + i, dom_dim + i, false);
+        this->mfa->Decode(*grid_approx, false);
+        // this->mfa->DecodePointSet(*(this->geometry).mfa_data, *grid_approx, 0, 0, dom_dim - 1, false);
+        // for (auto i = 0; i < this->vars.size(); i++)
+        //     this->mfa->DecodePointSet(*(this->vars[i].mfa_data), *grid_approx, 0, dom_dim + i, dom_dim + i, false);
 
         // Copy geometric point coordinates into errs PointSet
         this->errs->domain.leftCols(dom_dim) = grid_approx->domain.leftCols(dom_dim);
@@ -1823,7 +1898,8 @@ struct Block : public BlockBase<T>
 
             // evaluate MFA at dom_pt_param
             VectorX<T> cpt(1);                              // hard-coded for one science variable
-            this->mfa->DecodePt(*(this->vars[0].mfa_data), dom_pt_param, cpt);       // hard-coded for one science variable
+            // this->mfa->DecodePt(*(this->vars[0].mfa_data), dom_pt_param, cpt);       // hard-coded for one science variable
+            this->mfa->DecodeVar(0, dom_pt_param, cpt);
             T test_val = cpt(0);
 
             // compute and accrue error
@@ -1917,14 +1993,14 @@ struct Block : public BlockBase<T>
 
         // assumes one scalar science variable
         b->pt_dim = b->dom_dim + 1;
-        b->geometry.min_dim = 0;
-        b->geometry.max_dim = b->dom_dim - 1;
+        // b->geometry.min_dim = 0;
+        // b->geometry.max_dim = b->dom_dim - 1;
         int nvars = 1;
-        b->vars.resize(nvars);
+        // b->vars.resize(nvars);
         b->max_errs.resize(nvars);
         b->sum_sq_errs.resize(nvars);
-        b->vars[0].min_dim = b->dom_dim;
-        b->vars[0].max_dim = b->vars[0].min_dim;
+        // b->vars[0].min_dim = b->dom_dim;
+        // b->vars[0].max_dim = b->vars[0].min_dim;
         b->bounds_mins.resize(b->pt_dim);
         b->bounds_maxs.resize(b->pt_dim);
         VectorXi ndom_pts;  // this will be local now, and used in def of mfa
@@ -2096,6 +2172,10 @@ struct Block : public BlockBase<T>
 
         b->input->init_params();
         b->mfa = new mfa::MFA<T>(b->dom_dim);
+
+        // TODO: check that this construction of ProxyWithLink is valid
+        // b->setup_models(diy::Master::ProxyWithLink(diy::Master::Proxy(&m, gid), b, l), nvars, args);     // adds models to MFA
+        b->setup_models(m.proxy(m.lid(gid)), nvars, args);
     }
 
 };
