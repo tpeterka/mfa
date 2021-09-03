@@ -1525,6 +1525,8 @@ namespace diy
 
                         diy::save(bb, md->p);
                         diy::save(bb, md->tmesh.tensor_prods.size());
+                        diy::save(bb, md->min_dim);
+                        diy::save(bb, md->max_dim);
                         for (TensorProduct<T>& t: md->tmesh.tensor_prods)
                             diy::save(bb, t.nctrl_pts);
                         for (TensorProduct<T>& t: md->tmesh.tensor_prods)
@@ -1556,11 +1558,15 @@ namespace diy
                     {
                         VectorXi    p;                  // degree of the mfa
                         size_t      ntensor_prods;      // number of tensor products in the tmesh
+                        int         min_dim;
+                        int         max_dim;
 
                         // geometry
                         diy::load(bb, p);
                         diy::load(bb, ntensor_prods);
-                        md = new mfa::MFA_Data<T>(p, ntensor_prods);
+                        diy::load(bb, min_dim);
+                        diy::load(bb, max_dim);
+                        md = new mfa::MFA_Data<T>(p, ntensor_prods, min_dim, max_dim);
 
                         for (TensorProduct<T>& t: md->tmesh.tensor_prods)
                             diy::load(bb, t.nctrl_pts);
