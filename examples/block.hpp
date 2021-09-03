@@ -338,20 +338,8 @@ struct Block : public BlockBase<T>
         // Prepare containers
         size_t nvars = a->model_dims.size()-1;
         size_t geom_dim = a->model_dims[0];
-        // this->vars.resize(nvars);
         this->max_errs.resize(nvars);
         this->sum_sq_errs.resize(nvars);
-
-        // // Assign min/max dimensions for each model
-        // this->geometry.min_dim = 0;
-        // this->geometry.max_dim = geom_dim - 1;
-        // this->vars[0].min_dim = a->model_dims[0];
-        // this->vars[0].max_dim = this->vars[0].min_dim + a->model_dims[0];
-        // for (size_t n = 1; n < nvars; n++)
-        // {
-        //     this->vars[n].min_dim = this->vars[n-1].max_dim + 1;
-        //     this->vars[n].max_dim = this->vars[n].min_dim + a->model_dims[n];
-        // }
 
         // Set block bounds (if not already done by DIY)
         if (!a->multiblock)
@@ -513,19 +501,10 @@ struct Block : public BlockBase<T>
         //       Also assumes each var is scalar
         int nvars       = this->pt_dim - this->dom_dim;             // number of science variables
 
-        // this->vars.resize(nvars);
         this->max_errs.resize(nvars);
         this->sum_sq_errs.resize(nvars);
-        // int tot_ndom_pts    = 1;
-        // this->geometry.min_dim = 0;
-        // this->geometry.max_dim = this->dom_dim - 1;  // TODO fix dom_dim assumption, see above
-        // for (int j = 0; j < nvars; j++)
-        // {
-        //     this->vars[j].min_dim = this->dom_dim + j;
-        //     this->vars[j].max_dim = this->vars[j].min_dim;
-        // }
-        VectorXi ndom_pts(this->dom_dim);
-        for (int i = 0; i < this->dom_dim; i++)
+        VectorXi ndom_pts(dom_dim);
+        for (int i = 0; i < dom_dim; i++)
             ndom_pts(i) = a->ndom_pts[i];
 
         // get local block bounds
@@ -533,43 +512,47 @@ struct Block : public BlockBase<T>
         // if multiblock, they were decomposed by diy and are already in the block's bounds_mins, maxs
         if (!a->multiblock)
         {
-            this->bounds_mins.resize(this->pt_dim);
-            this->bounds_maxs.resize(this->pt_dim);
-            this->core_mins.resize(this->dom_dim);
-            this->core_maxs.resize(this->dom_dim);
-            for (int i = 0; i < this->dom_dim; i++)
+            bounds_mins.resize(pt_dim);
+            bounds_maxs.resize(pt_dim);
+            core_mins.resize(dom_dim);
+            core_maxs.resize(dom_dim);
+            for (int i = 0; i < dom_dim; i++)
             {
-                this->bounds_mins(i)  = a->min[i];
-                this->bounds_maxs(i)  = a->max[i];
-                this->core_mins(i)    = a->min[i];
-                this->core_maxs(i)    = a->max[i];
+                bounds_mins(i)  = a->min[i];
+                bounds_maxs(i)  = a->max[i];
+                core_mins(i)    = a->min[i];
+                core_maxs(i)    = a->max[i];
             }
-            this->bounds_mins(dom_dim) = numeric_limits<T>::min();
-            this->bounds_maxs(dom_dim) = numeric_limits<T>::max();
+            for (int i = dom_dim; i < pt_dim; i++)
+            {
+                bounds_mins(i) = numeric_limits<T>::min();
+                bounds_maxs(i) = numeric_limits<T>::max();
+            }
+            
         }
 
         // adjust number of domain points and starting domain point for ghost
-        VectorX<T> d(this->dom_dim);               // step in domain points in each dimension
-        VectorX<T> p0(this->dom_dim);              // starting point in each dimension
+        VectorX<T> d(dom_dim);               // step in domain points in each dimension
+        VectorX<T> p0(dom_dim);              // starting point in each dimension
         int nghost_pts;                         // number of ghost points in current dimension
-        for (int i = 0; i < this->dom_dim; i++)
+        for (int i = 0; i < dom_dim; i++)
         {
-            d(i) = (this->core_maxs(i) - this->core_mins(i)) / (ndom_pts(i) - 1);
+            d(i) = (core_maxs(i) - core_mins(i)) / (ndom_pts(i) - 1);
             // min direction
-            nghost_pts = floor((this->core_mins(i) - this->bounds_mins(i)) / d(i));
+            nghost_pts = floor((core_mins(i) - bounds_mins(i)) / d(i));
             ndom_pts(i) += nghost_pts;
-            p0(i) = this->core_mins(i) - nghost_pts * d(i);
+            p0(i) = core_mins(i) - nghost_pts * d(i);
             // max direction
-            nghost_pts = floor((this->bounds_maxs(i) - this->core_maxs(i)) / d(i));
+            nghost_pts = floor((bounds_maxs(i) - core_maxs(i)) / d(i));
             ndom_pts(i) += nghost_pts;
             // tot_ndom_pts *= ndom_pts(i);
 
             // decide overlap in each direction; they should be symmetric for neighbors
             // so if block a overlaps block b, block b overlaps a the same area
-            this->overlaps(i) = fabs(this->core_mins(i) - this->bounds_mins(i));
-            T m2 = fabs(this->bounds_maxs(i) - this->core_maxs(i));
-            if (m2 > this->overlaps(i))
-                this->overlaps(i) = m2;
+            this->overlaps(i) = fabs(core_mins(i) - bounds_mins(i));
+            T m2 = fabs(bounds_maxs(i) - core_maxs(i));
+            if (m2 > overlaps(i))
+                overlaps(i) = m2;
         }
 
         if (args.structured)
@@ -585,7 +568,7 @@ struct Block : public BlockBase<T>
         {
             int j = (int)vol_it.cur_iter();
             // compute geometry coordinates of domain point
-            for (auto i = 0; i < this->dom_dim; i++)
+            for (auto i = 0; i < dom_dim; i++)
                 input->domain(j, i) = p0(i) + vol_it.idx_dim(i) * d(i);
 
             vol_it.incr_iter();
@@ -596,10 +579,10 @@ struct Block : public BlockBase<T>
         normal_distribution<double> distribution(0.0, 1.0);
 
         // assign values to the range (science variables)
-        VectorX<T> dom_pt(this->dom_dim);
+        VectorX<T> dom_pt(dom_dim);
         for (int j = 0; j < input->domain.rows(); j++)
         {
-            dom_pt = input->domain.block(j, 0, 1, this->dom_dim).transpose();
+            dom_pt = input->domain.block(j, 0, 1, dom_dim).transpose();
             T retval;
             for (auto k = 0; k < nvars; k++)        // for all science variables
             {
@@ -631,16 +614,16 @@ struct Block : public BlockBase<T>
 
             // add some noise
             double noise = distribution(generator);
-            input->domain(j, this->dom_dim) *= (1.0 + a->n * noise);
+            input->domain(j, dom_dim) *= (1.0 + a->n * noise);
 
-            if (j == 0 || input->domain(j, this->dom_dim) > this->bounds_maxs(this->dom_dim))
-                this->bounds_maxs(this->dom_dim) = input->domain(j, this->dom_dim);
-            if (j == 0 || input->domain(j, this->dom_dim) < this->bounds_mins(this->dom_dim))
-                this->bounds_mins(this->dom_dim) = input->domain(j, this->dom_dim);
+            if (j == 0 || input->domain(j, dom_dim) > this->bounds_maxs(dom_dim))
+                this->bounds_maxs(dom_dim) = input->domain(j, dom_dim);
+            if (j == 0 || input->domain(j, dom_dim) < this->bounds_mins(dom_dim))
+                this->bounds_mins(dom_dim) = input->domain(j, dom_dim);
         }
 
         // optional wavy domain
-        if (a->t && this->pt_dim >= 3)
+        if (a->t && pt_dim >= 3)
         {
             for (auto j = 0; j < input->domain.rows(); j++)
             {
@@ -648,19 +631,19 @@ struct Block : public BlockBase<T>
                 real_t y = input->domain(j, 1);
                 input->domain(j, 0) += a->t * sin(y);
                 input->domain(j, 1) += a->t * sin(x);
-                if (j == 0 || input->domain(j, 0) < this->bounds_mins(0))
-                    this->bounds_mins(0) = input->domain(j, 0);
-                if (j == 0 || input->domain(j, 1) < this->bounds_mins(1))
-                    this->bounds_mins(1) = input->domain(j, 1);
-                if (j == 0 || input->domain(j, 0) > this->bounds_maxs(0))
-                    this->bounds_maxs(0) = input->domain(j, 0);
-                if (j == 0 || input->domain(j, 1) > this->bounds_maxs(1))
-                    this->bounds_maxs(1) = input->domain(j, 1);
+                if (j == 0 || input->domain(j, 0) < bounds_mins(0))
+                    bounds_mins(0) = input->domain(j, 0);
+                if (j == 0 || input->domain(j, 1) < bounds_mins(1))
+                    bounds_mins(1) = input->domain(j, 1);
+                if (j == 0 || input->domain(j, 0) > bounds_maxs(0))
+                    bounds_maxs(0) = input->domain(j, 0);
+                if (j == 0 || input->domain(j, 1) > bounds_maxs(1))
+                    bounds_maxs(1) = input->domain(j, 1);
             }
         }
 
         // optional rotation of the domain
-        if (a->r && this->pt_dim >= 3)
+        if (a->r && pt_dim >= 3)
         {
             for (auto j = 0; j < input->domain.rows(); j++)
             {
@@ -668,21 +651,21 @@ struct Block : public BlockBase<T>
                 real_t y = input->domain(j, 1);
                 input->domain(j, 0) = x * cos(a->r) - y * sin(a->r);
                 input->domain(j, 1) = x * sin(a->r) + y * cos(a->r);
-                if (j == 0 || input->domain(j, 0) < this->bounds_mins(0))
-                    this->bounds_mins(0) = input->domain(j, 0);
-                if (j == 0 || input->domain(j, 1) < this->bounds_mins(1))
-                    this->bounds_mins(1) = input->domain(j, 1);
-                if (j == 0 || input->domain(j, 0) > this->bounds_maxs(0))
-                    this->bounds_maxs(0) = input->domain(j, 0);
-                if (j == 0 || input->domain(j, 1) > this->bounds_maxs(1))
-                    this->bounds_maxs(1) = input->domain(j, 1);
+                if (j == 0 || input->domain(j, 0) < bounds_mins(0))
+                    bounds_mins(0) = input->domain(j, 0);
+                if (j == 0 || input->domain(j, 1) < bounds_mins(1))
+                    bounds_mins(1) = input->domain(j, 1);
+                if (j == 0 || input->domain(j, 0) > bounds_maxs(0))
+                    bounds_maxs(0) = input->domain(j, 0);
+                if (j == 0 || input->domain(j, 1) > bounds_maxs(1))
+                    bounds_maxs(1) = input->domain(j, 1);
             }
         }
 
         // map_dir is used in blending discrete, but because we need to aggregate the discrete logic, we have to use
         // it even for continuous bounds, so in analytical data
         // this is used in s3d data because the actual domain dim is derived
-        for (int k = 0; k < this->dom_dim; k++)
+        for (int k = 0; k < dom_dim; k++)
             this->map_dir.push_back(k);
 
         input->init_params();
@@ -712,19 +695,14 @@ struct Block : public BlockBase<T>
     {   
         DomainArgs* a = &args;
         int tot_ndom_pts = 1;
-        // this->geometry.min_dim = 0;
-        // this->geometry.max_dim = this->dom_dim - 1;
         int nvars = 1;
-        // this->vars.resize(nvars);
         this->max_errs.resize(nvars);
         this->sum_sq_errs.resize(nvars);
-        // this->vars[0].min_dim = this->dom_dim;
-        // this->vars[0].max_dim = this->vars[0].min_dim;
 
-        VectorXi ndom_pts(this->dom_dim);
-        this->bounds_mins.resize(this->pt_dim);
-        this->bounds_maxs.resize(this->pt_dim);
-        for (int i = 0; i < this->dom_dim; i++)
+        VectorXi ndom_pts(dom_dim);
+        this->bounds_mins.resize(pt_dim);
+        this->bounds_maxs.resize(pt_dim);
+        for (int i = 0; i < dom_dim; i++)
         {
             ndom_pts(i)                     =  a->ndom_pts[i];
             tot_ndom_pts                    *= ndom_pts(i);
@@ -807,14 +785,9 @@ struct Block : public BlockBase<T>
     {
         DomainArgs* a = &args;
         int tot_ndom_pts = 1;
-        // this->geometry.min_dim = 0;
-        // this->geometry.max_dim = dom_dim - 1;
         int nvars = 1;
-        // this->vars.resize(nvars);
         this->max_errs.resize(nvars);
         this->sum_sq_errs.resize(nvars);
-        // this->vars[0].min_dim = dom_dim;
-        // this->vars[0].max_dim = this->vars[0].min_dim;
         VectorXi ndom_pts(dom_dim);
         this->bounds_mins.resize(pt_dim);
         this->bounds_maxs.resize(pt_dim);
@@ -906,14 +879,9 @@ struct Block : public BlockBase<T>
     {
         DomainArgs* a = &args;
         int tot_ndom_pts = 1;
-        // this->geometry.min_dim = 0;
-        // this->geometry.max_dim = dom_dim - 1;
         int nvars = 1;
-        // this->vars.resize(nvars);
         this->max_errs.resize(nvars);
         this->sum_sq_errs.resize(nvars);
-        // this->vars[0].min_dim = dom_dim;
-        // this->vars[0].max_dim = this->vars[0].min_dim;
         VectorXi ndom_pts(dom_dim);
         bounds_mins.resize(pt_dim);
         bounds_maxs.resize(pt_dim);
@@ -1028,14 +996,9 @@ struct Block : public BlockBase<T>
     {
         DomainArgs* a = &args;
         int tot_ndom_pts = 1;
-        // this->geometry.min_dim = 0;
-        // this->geometry.max_dim = dom_dim - 1;
         int nvars = 1;
-        // this->vars.resize(nvars);
         this->max_errs.resize(nvars);
         this->sum_sq_errs.resize(nvars);
-        // this->vars[0].min_dim = dom_dim;
-        // this->vars[0].max_dim = this->vars[0].min_dim;
         VectorXi ndom_pts(dom_dim);
         this->bounds_mins.resize(pt_dim);
         this->bounds_maxs.resize(pt_dim);
@@ -1130,14 +1093,9 @@ struct Block : public BlockBase<T>
     {
         DomainArgs* a = &args;
         int tot_ndom_pts = 1;
-        // this->geometry.min_dim = 0;
-        // this->geometry.max_dim = dom_dim - 1;
         int nvars = 1;
-        // this->vars.resize(nvars);
         this->max_errs.resize(nvars);
         this->sum_sq_errs.resize(nvars);
-        // this->vars[0].min_dim = dom_dim;
-        // this->vars[0].max_dim = this->vars[0].min_dim;
         VectorXi ndom_pts(dom_dim);
         bounds_mins.resize(pt_dim);
         bounds_maxs.resize(pt_dim);
@@ -1256,14 +1214,9 @@ struct Block : public BlockBase<T>
     {
         DomainArgs* a = &args;
         int tot_ndom_pts = 1;
-        // this->geometry.min_dim = 0;
-        // this->geometry.max_dim = dom_dim - 1;
         int nvars = 1;
-        // this->vars.resize(nvars);
         this->max_errs.resize(nvars);
         this->sum_sq_errs.resize(nvars);
-        // this->vars[0].min_dim = dom_dim;
-        // this->vars[0].max_dim = this->vars[0].min_dim;
         VectorXi ndom_pts(dom_dim);
         bounds_mins.resize(pt_dim);
         bounds_maxs.resize(pt_dim);
@@ -1347,14 +1300,9 @@ struct Block : public BlockBase<T>
     {
         DomainArgs* a = &args;
         int tot_ndom_pts = 1;
-        // this->geometry.min_dim = 0;
-        // this->geometry.max_dim = dom_dim - 1;
         int nvars = 1;
-        // this->vars.resize(nvars);
         this->max_errs.resize(nvars);
         this->sum_sq_errs.resize(nvars);
-        // this->vars[0].min_dim = dom_dim;
-        // this->vars[0].max_dim = this->vars[0].min_dim;
         VectorXi ndom_pts(dom_dim);
         bounds_mins.resize(pt_dim);
         bounds_maxs.resize(pt_dim);
@@ -1446,29 +1394,10 @@ struct Block : public BlockBase<T>
         assert (dom_dim == 2); // TODO: extended to any dimensionality
 
         // precondition: Block already contains a fully encoded MFA
-        //  DomainArgs* a = &args;
 
         int new_dd = dom_dim + 1;   // new dom_dim
         int new_pd = pt_dim + 1;    // new pt_dim
         mfa::PointSet<T>* new_input;
-        // mfa::MFA<T>* new_mfa;
-
-        // Model<T> new_geom;
-        // vector<Model<T>> new_vars;
-
-        // new_geom.min_dim = 0;
-        // new_geom.max_dim = new_dd - 1;
-
-        // int nvars = this->vars.size();
-        // new_vars.resize(nvars);
-        // new_vars[0].min_dim = new_dd;
-        // new_vars[0].max_dim = new_vars[0].min_dim;
-        // for (int i = 1; i < nvars; i++)
-        // {
-        //     new_vars[i].min_dim = new_vars[i-1].max_dim + 1;
-        //     new_vars[i].max_dim = new_vars[i].min_dim;
-        // }
-
         
         const int n_alpha = 40;    // Number of angle values to sample
         const int n_rho = 150;      // Number of rho values to sample
@@ -1766,9 +1695,6 @@ struct Block : public BlockBase<T>
 
         // Decode on above-specified grid
         this->mfa->Decode(*grid_approx, false);
-        // this->mfa->DecodePointSet(*(this->geometry).mfa_data, *grid_approx, 0, 0, dom_dim - 1, false);
-        // for (auto i = 0; i < this->vars.size(); i++)
-        //     this->mfa->DecodePointSet(*(this->vars[i].mfa_data), *grid_approx, 0, dom_dim + i, dom_dim + i, false);
 
         // Copy geometric point coordinates into errs PointSet
         this->errs->domain.leftCols(dom_dim) = grid_approx->domain.leftCols(dom_dim);
@@ -1993,14 +1919,9 @@ struct Block : public BlockBase<T>
 
         // assumes one scalar science variable
         b->pt_dim = b->dom_dim + 1;
-        // b->geometry.min_dim = 0;
-        // b->geometry.max_dim = b->dom_dim - 1;
         int nvars = 1;
-        // b->vars.resize(nvars);
         b->max_errs.resize(nvars);
         b->sum_sq_errs.resize(nvars);
-        // b->vars[0].min_dim = b->dom_dim;
-        // b->vars[0].max_dim = b->vars[0].min_dim;
         b->bounds_mins.resize(b->pt_dim);
         b->bounds_maxs.resize(b->pt_dim);
         VectorXi ndom_pts;  // this will be local now, and used in def of mfa

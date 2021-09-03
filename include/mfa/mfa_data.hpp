@@ -118,7 +118,7 @@ namespace mfa
 
         ~MFA_Data() {}
 
-        inline int dim() const 
+        inline int dim() const
         {
             return max_dim - min_dim + 1;
         }

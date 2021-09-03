@@ -81,17 +81,7 @@ using SpMatTriplet = Eigen::Triplet<T>;
 #include    <mfa/decode.hpp>
 #include    <mfa/encode.hpp>
 
-// // TODO: Move Model's from BlockBase to MFA
-// //       Want MFA object to manage construction-destruction of MFA_Data
-// // a solved and stored MFA_data model (geometry or science variable or both)
-// template <typename T>
-// struct Model
-// {
-//     int                 min_dim{0};                // starting coordinate of this model in full-dimensional data
-//     int                 max_dim{0};                // ending coordinate of this model in full-dimensional data
-//     mfa::MFA_Data<T>    *mfa_data{nullptr};              // MFA model data
-// };
-
+// forward-declare diy::Serialization so that it can be declared as a friend by MFA
 namespace diy
 {
     template <typename U>
@@ -105,7 +95,6 @@ namespace mfa
     {
         template <typename U> friend struct diy::Serialization;
         
-
         unique_ptr<MFA_Data<T>>         geometry;
         vector<unique_ptr<MFA_Data<T>>> vars;
 
@@ -152,7 +141,7 @@ namespace mfa
         // 
         // NOTE: this constructor takes ownership of the MFA_Data pointers.
         //       these raw pointers should be set to nullptr after the MFA is constructed 
-        //       to avoid double-frees and the like
+        //       to avoid double-frees, etc
         MFA(int dom_dim_, int verbose_, MFA_Data<T>* geom_, vector<MFA_Data<T>*> vars_) :
             dom_dim(dom_dim_),
             verbose(verbose_)
@@ -183,14 +172,7 @@ namespace mfa
             recompute_pt_dim();
         }
 
-        ~MFA()
-        { 
-            // delete geometry;
-            // for (int i = 0; i < vars.size(); i++)
-            // {
-            //     delete vars[i];
-            // }
-        }
+        ~MFA() { }
 
         const MFA_Data<T>& geom() const
         {
@@ -312,12 +294,6 @@ namespace mfa
                 encoder.Encode(t.nctrl_pts, t.ctrl_pts, t.weights, weighted);
             else
                 encoder.EncodeUnified(0, weighted);  // Assumes only one tensor product
-
-            // debug: try inserting a knot
-            //             VectorX<T> new_knot(mfa->dom_dim);
-            //             for (auto i = 0; i < mfa->dom_dim; i++)
-            //                 new_knot(i) = 0.5;
-            //             mfa->KnotInsertion(new_knot, tmesh().tensor_prods[0]);
         }
 
         // adaptive encode
@@ -707,66 +683,7 @@ namespace mfa
                 AdaptiveEncodeVar(i, input, err_limit, weighted, local, extents, max_rounds);
             }
         }
-
-
-
-        // // decode values at all input points
-        // void DecodePointSet(
-        //         const MFA_Data<T>&  mfa_data,               // mfa data model
-        //         PointSet<T>&        output,                 // (output) decoded point set
-        //         int                 verbose,                // debug level
-        //         int                 min_dim,                // first dimension to decode
-        //         int                 max_dim,                // last dimension to decode
-        //         bool                saved_basis) const      // whether basis functions were saved and can be reused
-        // {
-        //     VectorXi no_derivs;                             // size-0 means no derivatives
-
-        //     DecodePointSet(mfa_data, output, verbose, min_dim, max_dim, saved_basis, no_derivs);
-        // }
-
-        // // decode derivatives at all input points
-        // void DecodePointSet(
-        //         const MFA_Data<T>&  mfa_data,               // mfa data model
-        //         PointSet<T>&        output,                 // (output) decoded point set
-        //         int                 verbose,                // debug level
-        //         int                 min_dim,                // first dimension to decode
-        //         int                 max_dim,                // last dimension to decode
-        //         bool                saved_basis,            // whether basis functions were saved and can be reused
-        //         const VectorXi&     derivs) const           // derivative to take in each domain dim. (0 = value, 1 = 1st deriv, 2 = 2nd deriv, ...)
-        //                                                     // pass size-0 vector if unused
-        // {
-        //     mfa::Decoder<T> decoder(mfa_data, verbose, saved_basis);
-        //     decoder.DecodePointSet(output, min_dim, max_dim, derivs);
-        // }
-
-        // // decode value of single point at the given parameter location
-        // void DecodePt(
-        //         const MFA_Data<T>&  mfa_data,               // mfa data model
-        //         const VectorX<T>&   param,                  // parameters of point to decode
-        //         VectorX<T>&         cpt) const              // (output) decoded point
-        // {
-        //     VectorXi no_derivs;
-        //     int verbose = 0;
-        //     Decoder<T> decoder(mfa_data, verbose);
-        //     // TODO: hard-coded for one tensor product
-        //     decoder.VolPt(param, cpt, mfa_data.tmesh.tensor_prods[0], no_derivs);
-        // }
-
-        // // decode derivative of single point at the given parameter location
-        // void DecodePt(
-        //         const MFA_Data<T>&  mfa_data,               // mfa data model
-        //         const VectorX<T>&   param,                  // parameters of point to decode
-        //         const VectorXi&     derivs,                 // derivative to take in each domain dim. (0 = value, 1 = 1st deriv, 2 = 2nd deriv, ...)
-        //                                                     // pass size-0 vector if unused
-        //         VectorX<T>&         cpt) const              // (output) decoded point
-        // {
-        //     int verbose = 0;
-        //     Decoder<T> decoder(mfa_data, verbose);
-        //     // TODO: hard-coded for one tensor product
-        //     decoder.VolPt(param, cpt, mfa_data.tmesh.tensor_prods[0], derivs);
-        // }
-
-    };
-}                                           // namespace
+    };      // class MFA
+}       // namespace mfa
 
 #endif

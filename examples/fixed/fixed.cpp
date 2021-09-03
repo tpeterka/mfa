@@ -431,8 +431,8 @@ int main(int argc, char** argv)
         bool saved_basis = structured; // TODO: basis functions are currently only saved during encoding of structured data
         master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
                 { 
-                    // b->range_error(cp, 1, true, saved_basis);
-                    b->create_ray_model(cp, d_args);
+                    b->range_error(cp, 1, true, saved_basis);
+                    // b->create_ray_model(cp, d_args);
                      });
 #endif
         decode_time = MPI_Wtime() - decode_time;

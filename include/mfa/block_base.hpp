@@ -89,11 +89,6 @@ struct BlockBase
     // MFA object
     mfa::MFA<T>         *mfa;
 
-    // // MFA models
-    // Model<T>            geometry;               // geometry MFA
-    // vector<Model<T>>    vars;                   // science variable MFAs
-
-
     // errors for each science variable
     vector<T>           max_errs;               // maximum (abs value) distance from input points to curve
     vector<T>           sum_sq_errs;            // sum of squared errors
@@ -221,30 +216,7 @@ struct BlockBase
             const       diy::Master::ProxyWithLink& cp,
             ModelInfo&  info)
     {
-        ModelInfo*  a = &info;
-        // VectorXi    nctrl_pts(dom_dim);
-        // VectorXi    p(dom_dim);
-
-        // for (auto j = 0; j < dom_dim; j++)
-        // {
-        //     nctrl_pts(j)    = a->geom_nctrl_pts[j];
-        //     p(j)            = a->geom_p[j];
-        // }
-        // mfa->AddGeometry(p, nctrl_pts, dom_dim);
-        // //mfa->AddGeom(dom_dim);    // alternate convenience function for linear geometry
-
-        // // encode science variables
-        // for (auto i = 0; i < mfa->nvars(); i++)
-        // {
-        //     for (auto j = 0; j < dom_dim; j++)
-        //     {
-        //         p(j)            = a->vars_p[i][j];
-        //         nctrl_pts(j)    = a->vars_nctrl_pts[i][j];
-        //     }
-        //     mfa->AddVariable(p, nctrl_pts, 1);   // assumes variable is scalar (1d)
-        // }
-
-        mfa->FixedEncode(*input, a->weighted);
+        mfa->FixedEncode(*input, info.weighted);
     }
 
     // adaptively encode block to desired error limit
@@ -262,35 +234,12 @@ struct BlockBase
             exit(1);
         }
 
-        ModelInfo* a = &info;
-        // VectorXi nctrl_pts(dom_dim);
-        // VectorXi p(dom_dim);
-        // VectorXi ndom_pts(dom_dim);
         VectorX<T> extents = bounds_maxs - bounds_mins;
-        
-        // for (auto j = 0; j < dom_dim; j++)
-        // {
-        //     nctrl_pts(j)    = a->geom_nctrl_pts[j];
-        //     // ndom_pts(j)     = a->ndom_pts[j];
-        //     p(j)            = a->geom_p[j];
-        // }
-        // mfa->AddGeometry(p, nctrl_pts, dom_dim);
 
-        // // encode science variables
-        // for (auto i = 0; i< mfa->nvars(); i++)
-        // {
-        //     for (auto j = 0; j < dom_dim; j++)
-        //     {
-        //         p(j)            = a->vars_p[i][j];
-        //         nctrl_pts(j)    = a->vars_nctrl_pts[i][j];
-        //     }
-        //     mfa->AddVariable(p, nctrl_pts, 1);
-        // }
-
-        mfa->AdaptiveEncode(*input, err_limit, a->weighted, a->local, extents, max_rounds);
+        mfa->AdaptiveEncode(*input, err_limit, info.weighted, info.local, extents, max_rounds);
     }
 
-    // decode entire block
+    // decode entire block at the same parameter locations as 'input'
     void decode_block(
             const   diy::Master::ProxyWithLink& cp,
             int                                 verbose,        // debug level
@@ -304,19 +253,6 @@ struct BlockBase
         approx = new mfa::PointSet<T>(input->params, input->pt_dim);  // Set decode params from input params
 
         mfa->Decode(*approx, saved_basis);
-
-        // // geometry
-        // fprintf(stderr, "\n--- Decoding geometry ---\n\n");
-        // mfa->DecodePointSet(*geometry.mfa_data, *approx, verbose, 0, dom_dim - 1, saved_basis);
-
-        // // science variables
-        // for (auto i = 0; i < mfa->nvars(); i++)
-        // {
-        //     fprintf(stderr, "\n--- Decoding science variable %d ---\n\n", i);
-
-        //     // assumes each variable is scalar
-        //     mfa->DecodePointSet(*(vars[i].mfa_data), *approx, verbose, dom_dim + i, dom_dim + i, saved_basis);
-        // }
     }
 
     // decode entire block over a regular grid
@@ -341,19 +277,6 @@ struct BlockBase
         approx = new mfa::PointSet<T>(grid_params, input->pt_dim);
 
         mfa->Decode(*approx, false);
-
-        // // geometry
-        // fprintf(stderr, "\n--- Decoding geometry ---\n\n");
-        // mfa->DecodePointSet(*geometry.mfa_data, *approx, verbose, 0, dom_dim - 1, false);
-
-        // // science variables
-        // for (auto i = 0; i < mfa->nvars(); i++)
-        // {
-        //     fprintf(stderr, "\n--- Decoding science variable %d ---\n\n", i);
-
-        //     // assumes each variable is scalar
-        //     mfa->DecodePointSet(*(vars[i].mfa_data), *approx, verbose, dom_dim + i, dom_dim + i, false);
-        // }
     }
 
     // decode one point
@@ -364,20 +287,6 @@ struct BlockBase
                                                                 // using Eigen::Ref instead of C++ reference so that pybind11 can pass by reference
     {
         mfa->Decode(param, cpt);
-
-        // // geometry
-        // VectorX<T> geom_cpt(dom_dim);
-        // mfa->DecodePt(*geometry.mfa_data, param, geom_cpt);
-        // for (auto i = 0; i < dom_dim; i++)
-        //     cpt(i) = geom_cpt(i);
-
-        // // science variables
-        // VectorX<T> var_cpt(1);                                  // each variable is a scalar
-        // for (auto i = 0; i < mfa->nvars(); i++)
-        // {
-        //     mfa->DecodePt(*(vars[i].mfa_data), param, var_cpt);
-        //     cpt(dom_dim + i) = var_cpt(0);
-        // }
     }
 
     // differentiate one point
@@ -407,20 +316,6 @@ struct BlockBase
         }
 
         mfa->Decode(param, cpt, derivs);
-
-        // // geometry
-        // VectorX<T> geom_cpt(dom_dim);
-        // mfa->DecodePt(*geometry.mfa_data, param, derivs, geom_cpt);
-        // for (auto i = 0; i < dom_dim; i++)
-        //     cpt(i) = geom_cpt(i);
-
-        // // science variables
-        // VectorX<T> var_cpt(1);                                  // each variable is a scalar
-        // for (auto i = 0; i < mfa->nvars(); i++)
-        // {
-        //     mfa->DecodePt(*(vars[i].mfa_data), param, derivs, var_cpt);
-        //     cpt(dom_dim + i) = var_cpt(0);
-        // }
     }
 
     void definite_integral(
@@ -464,7 +359,7 @@ struct BlockBase
         approx->domain.rightCols(mfa->pt_dim - mfa->geom_dim) *= scale;
     }
 
-    // differentiate entire block
+    // differentiate entire block at the same parameter locations as 'input'
     void differentiate_block(
             const diy::Master::ProxyWithLink& cp,
             int                               verbose,  // debug level
@@ -490,20 +385,6 @@ struct BlockBase
         }
 
         mfa->Decode(*approx, false, derivs);
-
-        // // science variables
-        // for (auto i = 0; i < mfa->nvars(); i++)
-        //     if (var < 0 || var == i)
-        //     {
-        //         // TODO: remove duplication of MFA_Data? Also, this leaks memory as-is
-        //         // TODO: hard-coded for one tensor product
-        //         vars[i].mfa_data = new mfa::MFA_Data<T>(vars[i].mfa_data->p,
-        //                 vars[i].mfa_data->tmesh,
-        //                 dom_dim + i,        // assumes each variable is scalar
-        //                 dom_dim + i);
-
-        //         mfa->DecodePointSet(*(vars[i].mfa_data), *approx, verbose, dom_dim + i, dom_dim + i, false, derivs); // assumes each variable is scalar
-        //     }
 
         // the derivative is a vector of same dimensionality as domain
         // derivative needs to be scaled by domain extent because u,v,... are in [0.0, 1.0]
