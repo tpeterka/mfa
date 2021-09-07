@@ -117,7 +117,7 @@ namespace mfa
 
             if (vars.size() > 0)
             {
-                if (pt_dim != vars.back()->max_dim)
+                if (pt_dim != vars.back()->max_dim + 1)
                 {
                     cerr << "WARNING: MFA pt_dim is inconsistent" << endl;
                 }
