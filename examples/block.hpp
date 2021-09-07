@@ -1383,7 +1383,7 @@ struct Block : public BlockBase<T>
     }
     
 
-    // ONLY 2d AT THEM MOMENT
+    // ONLY 2d AT THE MOMENT
     void create_ray_model(
         const       diy::Master::ProxyWithLink& cp,
         DomainArgs& args)
@@ -1487,7 +1487,7 @@ struct Block : public BlockBase<T>
 
                         outpt.resize(pt_dim);
                         this->mfa->Decode(param, outpt);
-                        new_input->domain.block(idx, new_dd, 1, pt_dim - dom_dim) = outpt.transpose();
+                        new_input->domain.block(idx, new_dd, 1, pt_dim - dom_dim) = outpt.tail(pt_dim - dom_dim).transpose();
 
                         // for (int l = 0; l < this->mfa->nvars(); l++)
                         // {
