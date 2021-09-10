@@ -1397,23 +1397,10 @@ struct Block : public BlockBase<T>
 
         int new_dd = dom_dim + 1;   // new dom_dim
         int new_pd = pt_dim + 1;    // new pt_dim
-        mfa::PointSet<T>* new_input;
         
-        const int n_alpha = 40;    // Number of angle values to sample
-        const int n_rho = 150;      // Number of rho values to sample
-        const int n_samples = 150;  // Number of times to sample each ray
-        const double r_lim = 6*pi;     // min/max rho value
-        const double dr = r_lim * 2 / (n_rho-1);
-        const double da = pi / (n_alpha-1); // d_alpha; amount to rotate on each slice
-
-        // extents of domain in physical space
-        const T xl = bounds_mins(0);
-        const T xh = bounds_maxs(0);
-        const T yl = bounds_mins(1);
-        const T yh = bounds_maxs(1);
-
-        double alpha = 0;   // angle of rotation
-        double rho = -r_lim;
+        const int n_alpha = 120;    // Number of angle values to sample
+        const int n_rho = 120;      // Number of rho values to sample
+        const int n_samples = 80;  // Number of times to sample each ray
 
         VectorXi ndom_pts(new_dd);
         ndom_pts(0) = n_samples;
@@ -1421,15 +1408,32 @@ struct Block : public BlockBase<T>
         ndom_pts(2) = n_alpha;
         int npts = n_samples * n_alpha * n_rho;
 
+        mfa::PointSet<T>* ray_input = new mfa::PointSet<T>(new_dd, new_pd, npts, ndom_pts);
 
-        new_input = new mfa::PointSet<T>(new_dd, new_pd, npts, ndom_pts);
-
+        // extents of domain in physical space
         VectorX<T> param(dom_dim);
-        VectorX<T> outpt(1);
+        VectorX<T> outpt(pt_dim);
+        const T xl = bounds_mins(0);
+        const T xh = bounds_maxs(0);
+        const T yl = bounds_mins(1);
+        const T yh = bounds_maxs(1);
 
+        // TODO: in general, don't scale by 0.99, and zero pad the corner cases where segment does not register as intersected?
+        double r_lim = 0.99 * xh; // HACK this only works for square domains centered at origin, and for the "box intersection" setup
+        // double r_lim = 6*pi;     // min/max rho value
+        double dr = r_lim * 2 / (n_rho-1);
+        double da = pi / (n_alpha-1); // d_alpha; amount to rotate on each slice
+
+        cerr << "xl = " << xl << " xh = " << xh << endl;
+        cerr << "yl = " << yl << " yh = " << yh << endl;
+
+        // fill ray data set
+        double alpha    = 0;   // angle of rotation
+        double rho      = -r_lim;
         for (int ia = 0; ia < n_alpha; ia++)
         {
             alpha = ia * da;
+
             for (int ir = 0; ir < n_rho; ir++)
             {
                 rho = -r_lim + ir * dr;
@@ -1438,7 +1442,144 @@ struct Block : public BlockBase<T>
                 T yl_int = (rho - yl * sin(alpha)) / cos(alpha);
                 T xh_int = (rho - xh * cos(alpha)) / sin(alpha);
                 T xl_int = (rho - xl * cos(alpha)) / sin(alpha);
+                T x0, x1, y0, y1;
 
+                // cerr << "ia=" << ia << ", ir=" << ir << endl;
+                // cerr << "rho=" << rho << ", alpha=" << alpha << endl;
+                // cerr << xl_int << " " << xh_int << " " << yl_int << " " << yh_int << endl;
+
+                // "box intersection" setup
+                // start/end coordinates of the ray formed by intersecting 
+                // the line with bounding box of the data
+                if (ia == 0)    // vertical lines (top to bottom)
+                {
+                    x0 = rho;
+                    y0 = yh;
+                    x1 = rho;
+                    y1 = yl;
+                }
+                else if (ia == n_alpha - 1) // vertical lines (bottom to top)
+                {
+                    x0 = rho;
+                    y0 = yl;
+                    x1 = rho;
+                    y1 = yh;
+                }
+                else if (cos(alpha)==0) // horizontal lines
+                {
+                    x0 = xl;
+                    y0 = rho;
+                    x1 = xh;
+                    y1 = rho;
+                }
+                else if (xl_int >= yl && xl_int <= yh)  // enter left
+                {
+                    x0 = xl;
+                    y0 = xl_int;
+
+                    if (yl_int >= xl && yl_int <= xh)   // enter left, exit bottom
+                    {
+                        y1 = yl;
+                        x1 = yl_int;
+                    }
+                    else if (yh_int >= xl && yh_int <= xh)  // enter left, exit top
+                    {
+                        y1 = yh;
+                        x1 = yh_int;
+                    }
+                    else if (xh_int >= yl && xh_int <= yh)  // enter left, exit right
+                    {
+                        x1 = xh;
+                        y1 = xh_int;
+                    }
+                    else
+                    {
+                        cerr << "ERROR: invalid state 1" << endl;
+                        cerr << "ia = " << ia << ", ir = " << ir << endl;
+                        exit(1);
+                    }
+                }
+                else if (yl_int >= xl && yl_int <= xh)  // enter or exit bottom
+                {
+                    if (yh_int >= xl && yh_int <= xh)   // enter/exit top & bottom
+                    {
+                        if (ia == 0)    // vertical line case (should have been handled above)
+                        {
+                            cerr << "ERROR: invalid state 6" << endl;
+                            x0 = yl_int;
+                            y0 = yl;
+                            x1 = yh_int;
+                            y1 = yh;
+                        }
+                        else if (ia == n_alpha - 1)     // opposite vertical line case (should have been handled above)
+                        {
+                            cerr << "ERROR: invalid state 7" << endl;
+                            x0 = yh_int;
+                            y0 = yh;
+                            x1 = yl_int;
+                            y1 = yl;
+                        }
+                        // else if (yl_int < yh_int)   // enter bottom, exit top
+                        else if (alpha > pi/2)
+                        { 
+                            x0 = yl_int;
+                            y0 = yl;
+                            x1 = yh_int;
+                            y1 = yh;
+                        }
+                        // else if (yl_int > yh_int)   // enter top, exit bottom
+                        else if (alpha < pi/2)
+                        {
+                            x0 = yh_int;
+                            y0 = yh;
+                            x1 = yl_int;
+                            y1 = yl;
+                        }
+                        else
+                        {
+                            cerr << "ERROR: invalid state 2" << endl;
+                            cerr << "ia = " << ia << ", ir = " << ir << endl;
+                            exit(1);
+                        }
+                    }
+                    else if (xh_int >= yl && xh_int <= yh)  // enter bottom, exit right
+                    {
+                        x0 = yl_int;
+                        y0 = yl;
+                        x1 = xh;
+                        y1 = xh_int;
+                    }
+                    else
+                    {
+                        cerr << "ERROR: invalid state 3" << endl;
+                        cerr << "ia = " << ia << ", ir = " << ir << endl;
+                        exit(1);
+                    }
+                }
+                else if (yh_int >= xl && yh_int <= xh)  // enter top (cannot be exit top b/c of cases handled previously)
+                {
+                    if (xh_int >= yl && xh_int <= yh)   // enter top, exit right
+                    {
+                        x0 = yh_int;
+                        y0 = yh;
+                        x1 = xh;
+                        y1 = xh_int;
+                    }
+                    else
+                    {
+                        cerr << "ERROR: invalid state 4" << endl;
+                        cerr << "ia = " << ia << ", ir = " << ir << endl;
+                        exit(1);
+                    }
+                }
+                else
+                {
+                    cerr << "ERROR: invalid state 5" << endl;
+                    cerr << "ia = " << ia << ", ir = " << ir << endl;
+                    exit(1);
+                }
+                T delta_x = x1 - x0;
+                T delta_y = y1 - y0;
 
 
                 // "rotating chords" setup
@@ -1454,50 +1595,58 @@ struct Block : public BlockBase<T>
                 // "parallel-plate setup"
                 // start/end coordinates of the ray (alpha, rho)
                 // In this setup the length of every segment (x0,y0)--(x1,y1) is constant
-                T delta_x = 2 * r_lim * sin(alpha);
-                T delta_y = 2 * r_lim * cos(alpha);
-                T x0 = rho * cos(alpha) - r_lim * sin(alpha);
-                T x1 = rho * cos(alpha) + r_lim * sin(alpha);
-                T y0 = rho * sin(alpha) + r_lim * cos(alpha);
-                T y1 = rho * sin(alpha) - r_lim * cos(alpha);
+                // T delta_x = 2 * r_lim * sin(alpha);
+                // T delta_y = 2 * r_lim * cos(alpha);
+                // T x0 = rho * cos(alpha) - r_lim * sin(alpha);
+                // T x1 = rho * cos(alpha) + r_lim * sin(alpha);
+                // T y0 = rho * sin(alpha) + r_lim * cos(alpha);
+                // T y1 = rho * sin(alpha) - r_lim * cos(alpha);
 
 
                 T dx = delta_x / (n_samples-1);
                 T dy = delta_y / (n_samples-1);
 
+                // cerr << "x0: " << x0 << ", x1: " << x1 << endl;
+                // cerr << "y0: " << y0 << ", y1: " << y1 << endl;
+                // cerr << "dx: " << dx << endl;
+                // cerr << "dy: " << dy << endl;
+                // cerr << "delta_x: " << delta_x << endl;
+                // cerr << "delta_y: " << delta_y << endl;
+
                 for (int is = 0; is < n_samples; is++)
                 {
                     int idx = ia*n_rho*n_samples + ir*n_samples + is;
-                    new_input->domain(idx, 0) = (double)is / (n_samples-1);
-                    new_input->domain(idx, 1) = rho;
-                    new_input->domain(idx, 2) = alpha;
+                    ray_input->domain(idx, 0) = (double)is / (n_samples-1);
+                    ray_input->domain(idx, 1) = rho;
+                    ray_input->domain(idx, 2) = alpha;
 
                     T x = x0 + is * dx;
-                    T y = y0 - is * dy;
+                    // T y = y0 - is * dy;
+                    T y = y0 + is * dy;
+
+                    // cerr << x << "\t" << y << endl;
 
                     // If this point is not in domain, then set zero
-                    if (x < xl || x > xh || y < yl || y > yh)
+                    if (x < xl - 1e-8 || x > xh + 1e-8 || y < yl - 1e-8 || y > yh + 1e-8)
                     {
-                        new_input->domain(idx,3) = 5;
+                        cerr << "NOT IN DOMAIN" << endl;
+                        cerr << "  " << x << "\t" << y << endl;
+                        cerr << "  " << xl_int << " " << xh_int << " " << yl_int << " " << yh_int << endl;
+                        ray_input->domain(idx,3) = 5;
                     }
                     else    // point is in domain, decode value from existing MFA
                     {
                         param(0) = (x - xl) / (xh - xl);
                         param(1) = (y - yl) / (yh - yl);
 
+                        param(0) = param(0) < 0 ? 0 : param(0);
+                        param(1) = param(1) < 0 ? 0 : param(1);
+                        param(0) = param(0) > 1 ? 1 : param(0);
+                        param(1) = param(1) > 1 ? 1 : param(1);
+
                         outpt.resize(pt_dim);
                         this->mfa->Decode(param, outpt);
-                        new_input->domain.block(idx, new_dd, 1, pt_dim - dom_dim) = outpt.tail(pt_dim - dom_dim).transpose();
-
-                        // for (int l = 0; l < this->mfa->nvars(); l++)
-                        // {
-                        //     outpt.resize(this->mfa->var(l).max_dim - this->mfa->var(l).min_dim + 1);
-                        //     this->mfa->DecodeVar(l, param, outpt);
-
-                        //     TODO fix this: use Decode() only
-                        //     new_input->domain(idx, 3 + l) = outpt(0);
-                        // }
-                        
+                        ray_input->domain.block(idx, new_dd, 1, pt_dim - dom_dim) = outpt.tail(pt_dim - dom_dim).transpose();
                     }
                                        
                 }
@@ -1505,44 +1654,20 @@ struct Block : public BlockBase<T>
         }
         
         // Set parameters for new input
-        new_input->init_params();
+        ray_input->init_params();
 
-        // replace original input with ray-model input
-        delete input;
-        input = new_input;
-
-        // replace old top-level MFA with a new one
+        // ------------ Creation of new MFA ------------- //
+        //
+        // Create a new top-level MFA
         int verbose = a->verbose && cp.master()->communicator().rank() == 0; 
         mfa::MFA<T>* ray_mfa = new mfa::MFA<T>(new_dd, verbose);
-        // delete this->mfa;
-        // this->mfa = ray_mfa;
 
-        // Replace existing models with new models
-        // delete this->geometry.mfa_data;
-        // this->geometry = new_geom;
+        // Set up new geometry
+        ray_mfa->AddGeometry(new_dd);
 
-        // for (int i = 0; i < vars.size(); i++)
-        // {
-        //     delete vars[i].mfa_data;
-        // }
-        // vars = new_vars;
-
-        // Set nctrl_pts, degree for geometry
+        // Set nctrl_pts, degree for variables
         VectorXi nctrl_pts(new_dd);
         VectorXi p(new_dd);
-        for (int k = 0; k < new_dd; k++)
-        {
-            nctrl_pts(k) = 2;
-            p(k) = 1;
-        }
-
-        // encode (new) geometry
-        // this->geometry.mfa_data = new mfa::MFA_Data<T>(p, nctrl_pts, 0, new_dd - 1);
-        // this->geometry.mfa_data->set_knots(*new_input);
-        ray_mfa->AddGeometry(p, nctrl_pts, new_dd);
-        // ray_mfa->FixedEncodeGeom(*new_input, false);
-
-        // encode (new) science variables
         for (auto i = 0; i< this->mfa->nvars(); i++)
         {
             int min_p = 20;
@@ -1556,12 +1681,6 @@ struct Block : public BlockBase<T>
                     max_nctrl_pts = this->mfa->var(i).tmesh.tensor_prods[0].nctrl_pts(j);
             }
 
-            // // reset this vars Model to the new ray model
-            // this->vars[i].min_dim = new_dd + i;
-            // this->vars[i].max_dim = new_dd + i;
-            // delete this->vars[i].mfa_data;
-
-
             // TODO: this needs to be fixed
             // its possible that max_nctrl_pts is too many if one dimension is much smaller than the others.
             for (auto j = 0; j < new_dd; j++)
@@ -1570,22 +1689,29 @@ struct Block : public BlockBase<T>
                 nctrl_pts(j)    = max_nctrl_pts;
             }
 
-            // this->vars[i].mfa_data = new mfa::MFA_Data<T>(p, nctrl_pts, new_dd + i, new_dd + i);
-            // this->vars[i].mfa_data->set_knots(*new_input);
             ray_mfa->AddVariable(p, nctrl_pts, 1);
-            // ray_mfa->FixedEncodeVar(i, *new_input, false);
         }
-        ray_mfa->FixedEncode(*new_input, false);
 
-        delete this->mfa;
-        this->mfa = ray_mfa;
-        ray_mfa = nullptr;
+        // Encode ray model
+        ray_mfa->FixedEncode(*ray_input, false);
 
+
+        // ----------- Replace old block members with new ---------- //
         // reset block members as needed
         dom_dim = new_dd;
         pt_dim = new_pd;
 
-        if (new_pd != this->mfa->pt_dim)
+        // replace original mfa with ray-mfa
+        delete this->mfa;
+        this->mfa = ray_mfa;
+        ray_mfa = nullptr;
+
+        // replace original input with ray-model input
+        delete input;
+        input = ray_input;
+        ray_input = nullptr;
+
+        if (new_pd != this->mfa->pt_dim)    // sanity check
         {
             cerr << "ERROR: pt_dim does not match in create_ray_model()" << endl;
             exit(1);
@@ -1602,7 +1728,7 @@ struct Block : public BlockBase<T>
         bounds_maxs(1) = r_lim;
         bounds_mins(2) = 0;
         bounds_maxs(2) = pi;
-        for (int i = 0; i < this->mfa->nvars(); i++)
+        for (int i = 0; i < this->mfa->pt_dim - this->mfa->geom_dim; i++)
         {
             bounds_mins(3+i) = old_bounds_mins(2+i);
             bounds_maxs(3+i) = old_bounds_maxs(2+i);
@@ -1613,7 +1739,10 @@ struct Block : public BlockBase<T>
         this->max_errs.resize(this->mfa->nvars());
         this->sum_sq_errs.resize(this->mfa->nvars());
 
-        this->decode_block(cp, 1, 0);
+
+        // --------- Decode (for visualization) --------- //
+        // this->decode_block(cp, 1, 0);
+        this->range_error(cp, 1, true, true);
     }
 
     // Compute error metrics between a pointset and an analytical function
