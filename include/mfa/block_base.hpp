@@ -110,10 +110,10 @@ struct BlockBase
 
     // zero-initialize pointers during default construction
     BlockBase() : 
-        mfa(NULL), 
-        input(NULL), 
-        approx(NULL), 
-        errs(NULL) { }
+        mfa(nullptr), 
+        input(nullptr), 
+        approx(nullptr), 
+        errs(nullptr) { }
 
     ~BlockBase()
     {
