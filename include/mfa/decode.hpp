@@ -290,6 +290,103 @@ namespace mfa
 #endif
         }
 
+        void AxisIntegral(  const TensorProduct<T>& tensor,
+                            int                     dim,
+                            T                       u0,
+                            T                       u1,
+                            const VectorX<T>&       params, // params at which axis line is fixed (we ignore params(dim))
+                            VectorX<T>&             output)
+        {
+            assert(params.size() == dom_dim);
+            assert(output.size() == max_dim - min_dim + 1);
+            assert(dim > 0 && dim < dom_dim);
+
+            output = VectorX<T>::Zero(mfa_data.dim());     // reset output to zero
+
+            int dom_dim = mfa_data.dom_dim;
+            VectorXi            spans(dom_dim);
+            vector<MatrixX<T>>  N(mfa_data.p.size());                           // basis functions in each dim.
+
+            for (int i = 0; i < dom_dim; i++)
+            {
+                if (i == dim) continue;
+                else
+                {
+                    N[i]       = MatrixX<T>::Zero(1, tensor.nctrl_pts(i));
+
+    cerr << "spans(" << i << ")" << endl;
+                    spans(i) = mfa_data.FindSpan(i, params(i), tensor);
+                    mfa_data.BasisFuns(i, params(i), spans[i], N[i], 0);
+                }
+            }
+cerr << "span0. u0 = " << u0 << endl;
+            T span0 = mfa_data.FindSpan(dim, u0, tensor); 
+cerr << "span1. u1 = " << u1 << endl;
+            T span1 = mfa_data.FindSpan(dim, u1, tensor);
+
+            spans(dim) = span0;     // set this so we can pass 'spans' to the VolIterator below
+
+            // Compute integrated basis functions in dimension 'dim'
+            N[dim] = MatrixX<T>::Zero(1, tensor.nctrl_pts(dim));
+            for (int s = span0; s <= span1; s++)
+            {
+                int lower_span = s;
+                int upper_span = s + mfa_data.p(dim) + 1;
+                int ctrl_idx = s;
+// int ctrl_idx = ctrl_idxs(l);
+//                     int lower_span = ctrl_idx;                      // knot index of lower bound of basis support
+//                     int upper_span = ctrl_idx + mfa_data.p(l) + 1;  // knot index of upper bound of basis support
+
+                T k_start   = mfa_data.tmesh.all_knots[dim][lower_span];
+                T k_end     = mfa_data.tmesh.all_knots[dim][upper_span];
+                // T scaling   = (mfa_data.p(l)+1) / (k_end - k_start);
+                T scaling   = (k_end - k_start) / (mfa_data.p(dim)+1);
+                T suma      = 0;
+                T sumb      = 0;
+
+                if (span0 < lower_span)
+                {
+                    suma = 0;
+                }
+                else
+                {
+                    suma = mfa_data.IntBasisFunsHelper(mfa_data.p(dim)+1, dim, u0, ctrl_idx);
+                }
+
+                if (span1 >= upper_span)
+                {
+                    sumb = 1;
+                }
+                else
+                {
+                    sumb = mfa_data.IntBasisFunsHelper(mfa_data.p(dim)+1, dim, u1, ctrl_idx);
+                }
+
+                N[dim](0, ctrl_idx) = scaling * (sumb - suma);
+            }
+
+
+            // evluate b-spline with integrated one dimension of integrated basis functions
+            VectorXi subvolume = mfa_data.p + VectorXi::Ones(dom_dim);
+            subvolume(dim) += span1 - span0 + 1;
+            VolIterator cp_it(subvolume, spans, tensor.nctrl_pts);
+            while (!cp_it.done())
+            {
+                VectorXi ctrl_idxs = cp_it.idx_dim();
+                T coeff = 1;
+                for (int l = 0; l < dom_dim; l++)
+                {
+                    coeff *= N[l](0, ctrl_idxs(l));
+                }
+
+                output += coeff * tensor.ctrl_pts.row(cp_it.cur_iter_full());
+
+                cp_it.incr_iter();
+            }
+
+            
+        }
+
         void DefiniteIntegral(  const TensorProduct<T>& tensor,
                                 const VectorX<T>&       a,          // start limit of integration (parameter)
                                 const VectorX<T>&       b,          // end limit of integration (parameter)

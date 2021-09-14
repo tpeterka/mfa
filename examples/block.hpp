@@ -1383,6 +1383,163 @@ struct Block : public BlockBase<T>
     }
     
 
+    void get_box_intersections(
+        T alpha,
+        T rho,
+        T& x0,
+        T& y0,
+        T& x1,
+        T& y1,
+        const VectorX<T>& mins,
+        const VectorX<T>& maxs)
+    {
+        T xl = mins(0);
+        T xh = maxs(0);
+        T yl = mins(1);
+        T yh = maxs(1);
+
+        T yh_int = (rho - yh * sin(alpha)) / cos(alpha);
+        T yl_int = (rho - yl * sin(alpha)) / cos(alpha);
+        T xh_int = (rho - xh * cos(alpha)) / sin(alpha);
+        T xl_int = (rho - xl * cos(alpha)) / sin(alpha);
+        // T x0, x1, y0, y1;
+
+        // cerr << "ia=" << ia << ", ir=" << ir << endl;
+        // cerr << "rho=" << rho << ", alpha=" << alpha << endl;
+        // cerr << xl_int << " " << xh_int << " " << yl_int << " " << yh_int << endl;
+
+        // "box intersection" setup
+        // start/end coordinates of the ray formed by intersecting 
+        // the line with bounding box of the data
+        if (alpha == 0)    // vertical lines (top to bottom)
+        {
+            x0 = rho;
+            y0 = yh;
+            x1 = rho;
+            y1 = yl;
+        }
+        else if (sin(alpha) == 0 && alpha > 0) // vertical lines (bottom to top)
+        {
+            x0 = rho;
+            y0 = yl;
+            x1 = rho;
+            y1 = yh;
+        }
+        else if (cos(alpha)==0) // horizontal lines
+        {
+            x0 = xl;
+            y0 = rho;
+            x1 = xh;
+            y1 = rho;
+        }
+        else if (xl_int >= yl && xl_int <= yh)  // enter left
+        {
+            x0 = xl;
+            y0 = xl_int;
+
+            if (yl_int >= xl && yl_int <= xh)   // enter left, exit bottom
+            {
+                y1 = yl;
+                x1 = yl_int;
+            }
+            else if (yh_int >= xl && yh_int <= xh)  // enter left, exit top
+            {
+                y1 = yh;
+                x1 = yh_int;
+            }
+            else if (xh_int >= yl && xh_int <= yh)  // enter left, exit right
+            {
+                x1 = xh;
+                y1 = xh_int;
+            }
+            else
+            {
+                cerr << "ERROR: invalid state 1" << endl;
+                // cerr << "ia = " << ia << ", ir = " << ir << endl;
+                exit(1);
+            }
+        }
+        else if (yl_int >= xl && yl_int <= xh)  // enter or exit bottom
+        {
+            if (yh_int >= xl && yh_int <= xh)   // enter/exit top & bottom
+            {
+                if (sin(alpha) == 0)    // vertical line case (should have been handled above)
+                {
+                    cerr << "ERROR: invalid state 6" << endl;
+                    x0 = yl_int;
+                    y0 = yl;
+                    x1 = yh_int;
+                    y1 = yh;
+                }
+                else if (sin(alpha) == 0 && alpha > 0)     // opposite vertical line case (should have been handled above)
+                {
+                    cerr << "ERROR: invalid state 7" << endl;
+                    x0 = yh_int;
+                    y0 = yh;
+                    x1 = yl_int;
+                    y1 = yl;
+                }
+                // else if (yl_int < yh_int)   // enter bottom, exit top
+                else if (alpha > 3.14159265358979/2)
+                { 
+                    x0 = yl_int;
+                    y0 = yl;
+                    x1 = yh_int;
+                    y1 = yh;
+                }
+                // else if (yl_int > yh_int)   // enter top, exit bottom
+                else if (alpha < 3.14159265358979/2)
+                {
+                    x0 = yh_int;
+                    y0 = yh;
+                    x1 = yl_int;
+                    y1 = yl;
+                }
+                else
+                {
+                    cerr << "ERROR: invalid state 2" << endl;
+                    // cerr << "ia = " << ia << ", ir = " << ir << endl;
+                    exit(1);
+                }
+            }
+            else if (xh_int >= yl && xh_int <= yh)  // enter bottom, exit right
+            {
+                x0 = yl_int;
+                y0 = yl;
+                x1 = xh;
+                y1 = xh_int;
+            }
+            else
+            {
+                cerr << "ERROR: invalid state 3" << endl;
+                // cerr << "ia = " << ia << ", ir = " << ir << endl;
+                exit(1);
+            }
+        }
+        else if (yh_int >= xl && yh_int <= xh)  // enter top (cannot be exit top b/c of cases handled previously)
+        {
+            if (xh_int >= yl && xh_int <= yh)   // enter top, exit right
+            {
+                x0 = yh_int;
+                y0 = yh;
+                x1 = xh;
+                y1 = xh_int;
+            }
+            else
+            {
+                cerr << "ERROR: invalid state 4" << endl;
+                // cerr << "ia = " << ia << ", ir = " << ir << endl;
+                exit(1);
+            }
+        }
+        else
+        {
+            cerr << "ERROR: invalid state 5" << endl;
+            // cerr << "ia = " << ia << ", ir = " << ir << endl;
+            exit(1);
+        }
+    }
+
     // ONLY 2d AT THE MOMENT
     void create_ray_model(
         const       diy::Master::ProxyWithLink& cp,
@@ -1418,6 +1575,9 @@ struct Block : public BlockBase<T>
         const T yl = bounds_mins(1);
         const T yh = bounds_maxs(1);
 
+        this->box_mins = bounds_mins.head(dom_dim);
+        this->box_maxs = bounds_maxs.head(dom_dim);
+
         // TODO: in general, don't scale by 0.99, and zero pad the corner cases where segment does not register as intersected?
         double r_lim = 0.99 * xh; // HACK this only works for square domains centered at origin, and for the "box intersection" setup
         // double r_lim = 6*pi;     // min/max rho value
@@ -1438,146 +1598,9 @@ struct Block : public BlockBase<T>
             {
                 rho = -r_lim + ir * dr;
 
-                T yh_int = (rho - yh * sin(alpha)) / cos(alpha);
-                T yl_int = (rho - yl * sin(alpha)) / cos(alpha);
-                T xh_int = (rho - xh * cos(alpha)) / sin(alpha);
-                T xl_int = (rho - xl * cos(alpha)) / sin(alpha);
-                T x0, x1, y0, y1;
-
-                // cerr << "ia=" << ia << ", ir=" << ir << endl;
-                // cerr << "rho=" << rho << ", alpha=" << alpha << endl;
-                // cerr << xl_int << " " << xh_int << " " << yl_int << " " << yh_int << endl;
-
-                // "box intersection" setup
-                // start/end coordinates of the ray formed by intersecting 
-                // the line with bounding box of the data
-                if (ia == 0)    // vertical lines (top to bottom)
-                {
-                    x0 = rho;
-                    y0 = yh;
-                    x1 = rho;
-                    y1 = yl;
-                }
-                else if (ia == n_alpha - 1) // vertical lines (bottom to top)
-                {
-                    x0 = rho;
-                    y0 = yl;
-                    x1 = rho;
-                    y1 = yh;
-                }
-                else if (cos(alpha)==0) // horizontal lines
-                {
-                    x0 = xl;
-                    y0 = rho;
-                    x1 = xh;
-                    y1 = rho;
-                }
-                else if (xl_int >= yl && xl_int <= yh)  // enter left
-                {
-                    x0 = xl;
-                    y0 = xl_int;
-
-                    if (yl_int >= xl && yl_int <= xh)   // enter left, exit bottom
-                    {
-                        y1 = yl;
-                        x1 = yl_int;
-                    }
-                    else if (yh_int >= xl && yh_int <= xh)  // enter left, exit top
-                    {
-                        y1 = yh;
-                        x1 = yh_int;
-                    }
-                    else if (xh_int >= yl && xh_int <= yh)  // enter left, exit right
-                    {
-                        x1 = xh;
-                        y1 = xh_int;
-                    }
-                    else
-                    {
-                        cerr << "ERROR: invalid state 1" << endl;
-                        cerr << "ia = " << ia << ", ir = " << ir << endl;
-                        exit(1);
-                    }
-                }
-                else if (yl_int >= xl && yl_int <= xh)  // enter or exit bottom
-                {
-                    if (yh_int >= xl && yh_int <= xh)   // enter/exit top & bottom
-                    {
-                        if (ia == 0)    // vertical line case (should have been handled above)
-                        {
-                            cerr << "ERROR: invalid state 6" << endl;
-                            x0 = yl_int;
-                            y0 = yl;
-                            x1 = yh_int;
-                            y1 = yh;
-                        }
-                        else if (ia == n_alpha - 1)     // opposite vertical line case (should have been handled above)
-                        {
-                            cerr << "ERROR: invalid state 7" << endl;
-                            x0 = yh_int;
-                            y0 = yh;
-                            x1 = yl_int;
-                            y1 = yl;
-                        }
-                        // else if (yl_int < yh_int)   // enter bottom, exit top
-                        else if (alpha > pi/2)
-                        { 
-                            x0 = yl_int;
-                            y0 = yl;
-                            x1 = yh_int;
-                            y1 = yh;
-                        }
-                        // else if (yl_int > yh_int)   // enter top, exit bottom
-                        else if (alpha < pi/2)
-                        {
-                            x0 = yh_int;
-                            y0 = yh;
-                            x1 = yl_int;
-                            y1 = yl;
-                        }
-                        else
-                        {
-                            cerr << "ERROR: invalid state 2" << endl;
-                            cerr << "ia = " << ia << ", ir = " << ir << endl;
-                            exit(1);
-                        }
-                    }
-                    else if (xh_int >= yl && xh_int <= yh)  // enter bottom, exit right
-                    {
-                        x0 = yl_int;
-                        y0 = yl;
-                        x1 = xh;
-                        y1 = xh_int;
-                    }
-                    else
-                    {
-                        cerr << "ERROR: invalid state 3" << endl;
-                        cerr << "ia = " << ia << ", ir = " << ir << endl;
-                        exit(1);
-                    }
-                }
-                else if (yh_int >= xl && yh_int <= xh)  // enter top (cannot be exit top b/c of cases handled previously)
-                {
-                    if (xh_int >= yl && xh_int <= yh)   // enter top, exit right
-                    {
-                        x0 = yh_int;
-                        y0 = yh;
-                        x1 = xh;
-                        y1 = xh_int;
-                    }
-                    else
-                    {
-                        cerr << "ERROR: invalid state 4" << endl;
-                        cerr << "ia = " << ia << ", ir = " << ir << endl;
-                        exit(1);
-                    }
-                }
-                else
-                {
-                    cerr << "ERROR: invalid state 5" << endl;
-                    cerr << "ia = " << ia << ", ir = " << ir << endl;
-                    exit(1);
-                }
+                T x0, y0, x1, y1;
+                get_box_intersections(alpha, rho, x0, y0, x1, y1, this->box_mins, this->box_maxs);
+                
                 T delta_x = x1 - x0;
                 T delta_y = y1 - y0;
 
@@ -1631,7 +1654,7 @@ struct Block : public BlockBase<T>
                     {
                         cerr << "NOT IN DOMAIN" << endl;
                         cerr << "  " << x << "\t" << y << endl;
-                        cerr << "  " << xl_int << " " << xh_int << " " << yl_int << " " << yh_int << endl;
+                        // cerr << "  " << xl_int << " " << xh_int << " " << yl_int << " " << yh_int << endl;
                         ray_input->domain(idx,3) = 5;
                     }
                     else    // point is in domain, decode value from existing MFA
@@ -1743,6 +1766,86 @@ struct Block : public BlockBase<T>
         // --------- Decode (for visualization) --------- //
         // this->decode_block(cp, 1, 0);
         this->range_error(cp, 1, true, true);
+    }
+
+    T integrate_ray(
+        const       diy::Master::ProxyWithLink& cp,
+        const VectorX<T>& a,
+        const VectorX<T>& b)
+    {
+        const double pi = 3.14159265358979;
+
+        // TODO: This is for 2d only right now
+        if (a.size() != 2 && b.size() != 2)
+        {
+            cerr << "Incorrect dimension in integrate ray" << endl;
+            exit(1);
+        }
+
+        T x0 = a(0);    // TODO rename these: these are segment endpoints, not the box intersections below
+        T y0 = a(1);
+        T x1 = b(0);
+        T y1 = b(1);
+
+cerr << a(0) << " " << a(1) << " " << b(0) << " " << b(1) << endl;
+cerr << y1 - y0 << "  " << x1-x0 << endl;
+        T m = (y1-y0)/(x1-x0);
+        T alpha = -1;
+        T rho = 0;
+
+        if (x1 == x0)
+        {
+            alpha = pi/2;
+            rho = x0;
+        }
+        else
+        {
+cerr << "m: " << m << ", atan(-m): " << atan(-m) << endl;
+            alpha = pi/2 - atan(-m);          // acot(x) = pi/2 - atan(x)
+            rho = (y0 - m)/(sqrt(1+m*m));     // cos(atan(x)) = 1/sqrt(1+m*m), sin(pi/2-x) = cos(x)
+        }
+        
+
+cerr << "RAY: (" << a(0) << ", " << a(1) << ") ---- (" << b(0) << ", " << b(1) << ")" << endl;
+cerr << "|  alpha: " << alpha << ",   rho: " << rho << endl;
+
+        T a_x, a_y, b_x, b_y;   // box intersection points
+        get_box_intersections(alpha, rho, a_x, a_y, b_x, b_y, this->box_mins, this->box_maxs);
+
+        // distance in x and y between the endpoints of the segment
+        T delta_x = x1 - x0;
+        T delta_y = y1 - y0;
+        T length = sqrt(delta_x*delta_x + delta_y*delta_y);
+
+        // distance in x and y between intersection points of the line with box
+        T x_sep = abs(b_x - a_x);
+        T y_sep = abs(b_y - a_y);
+
+
+        // VectorX<T> p0(2);
+        // VectorX<T> p1(2);
+
+        // parameter values along ray for 'start' and 'end'
+        T u0 = 0, u1 = 0;
+        if (delta_x == 0)
+        {
+            u0 = (y0 - a_y) / y_sep;
+            u1 = (y1 - a_y) / y_sep;
+        }
+        else 
+        {
+            u0 = (x0 - a_x) / x_sep;
+            u1 = (x1 - a_x) / x_sep;
+        }
+
+cerr << "|  x_sep: " << x_sep << ",   y_sep:" << y_sep << endl;
+cerr << "|  u0: " << u0 << ",  u1: " << u1 << endl;
+cerr << "+---------------------------------------\n" << endl;
+
+        VectorX<T> output(1); // todo: this is hardcoded for the first (scalar) variable only
+        this->integrate_axis_ray(cp, alpha, rho, u0, u1, length, output);
+
+        return output(0);
     }
 
     // Compute error metrics between a pointset and an analytical function

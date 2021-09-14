@@ -81,6 +81,9 @@ struct BlockBase
     VectorX<T>          core_mins;              // local domain minimum corner w/o ghost
     VectorX<T>          core_maxs;              // local domain maximum corner w/o ghost
 
+    VectorX<T>  box_mins;   // TODO remove this. This is solely for line integrals but should not be a permanent member
+    VectorX<T>  box_maxs;   
+
     // data sets
     mfa::PointSet<T>    *input;                 // input data
     mfa::PointSet<T>    *approx;                // output data
@@ -331,6 +334,31 @@ struct BlockBase
         }
 
         T scale = (core_maxs - core_mins).prod();
+        output *= scale;
+    }
+
+    void integrate_axis_ray(
+        const diy::Master::ProxyWithLink&   cp,
+        T                                   alpha,
+        T                                   rho,
+        T                                   u0,
+        T                                   u1,
+        T                                   scale,
+        VectorX<T>&                         output)
+    {
+
+        // this is a MESS; need to standardize order of dimensions
+        // need to turns alpha/rho_bounds into mins/maxs like everything else
+        // mfa->IntegrateAxisRay should take parameters only, normalization should be done here and not in MFA
+        VectorX<T> alpha_bounds(2);
+        VectorX<T> rho_bounds(2);
+        alpha_bounds(0) = bounds_mins(2);
+        alpha_bounds(1) = bounds_maxs(2);
+        rho_bounds(0) = bounds_mins(1);
+        rho_bounds(1) = bounds_maxs(1);
+        
+        mfa->IntegrateAxisRay(mfa->var(0), alpha, rho, alpha_bounds, rho_bounds, u0, u1, output);
+
         output *= scale;
     }
 

@@ -434,6 +434,11 @@ int main(int argc, char** argv)
                     b->range_error(cp, 1, true, saved_basis);
                     b->print_block(cp, true);
                     b->create_ray_model(cp, d_args);
+
+            VectorX<real_t> start_pt(2), end_pt(2);
+            start_pt(0) = -3*M_PI; start_pt(1) = 0;
+            end_pt(0) = 3*M_PI; end_pt(1) = 0;
+            cerr << "Integral result: " << b->integrate_ray(cp, start_pt, end_pt) << endl;
                      });
 #endif
         decode_time = MPI_Wtime() - decode_time;

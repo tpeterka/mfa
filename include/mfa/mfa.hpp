@@ -443,6 +443,28 @@ namespace mfa
             }
         }
 
+        void IntegrateAxisRay(
+            const MFA_Data<T>&  mfa_data,
+            T                   alpha, 
+            T                   rho, 
+            const VectorX<T>&   alpha_bounds,
+            const VectorX<T>&   rho_bounds,
+            T                   u0, 
+            T                   u1, 
+            VectorX<T>&         output)
+        {
+    cerr << "MFA IntegrateAxisRay" << endl;
+            const TensorProduct<T>& t = mfa_data.tmesh.tensor_prods[0];
+
+            mfa::Decoder<T> decoder(mfa_data, verbose, false);
+
+            VectorX<T> params = VectorX<T>::Zero(dom_dim);
+            params(0) = 0; // ignored
+            params(1) = (rho - rho_bounds(0)) / (rho_bounds(1) - rho_bounds(0));
+            params(2) = (alpha - alpha_bounds(0)) / (alpha_bounds(1) - alpha_bounds(0));
+            decoder.AxisIntegral(t, 0, u0, u1, params, output);
+        }
+
         void DefiniteIntegral(
             const MFA_Data<T>&  mfa_data,
                   VectorX<T>&   output,
