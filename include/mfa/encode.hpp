@@ -785,21 +785,6 @@ namespace mfa
                 Mat = Nt * Nt.transpose();
 #endif
 
-// EXPERIMENTAL search for potential infinite ctrl points >>
-#if 0
-            Mat.prune(1e-5);
-            // Check for unconstrained control points (we set to zero later)
-            // this can happen if there is no input data within the support of a 
-            // tensor basis function
-            vector<int> undef_ctrl_pts;
-            for (int i = 0; i < Mat.cols(); i++)
-            {
-                if (Mat.coeff(i,i)==0)
-                    undef_ctrl_pts.push_back(i);
-            }     
-#endif
-// << EXPERIMENTAL
-
             MatrixX<T>  R(Nt.cols(), pt_dim);           // R is the right hand side 
 
             if (!regularize)
@@ -830,41 +815,6 @@ namespace mfa
                 cerr << "Sparse matrix solve successful" << endl;
                 cerr << "  # iterations: " << solver.iterations() << endl;
             }
-
-
-// EXPERIMENTAL search for potential infinite ctrl points >>
-#if 0
-            for (auto& idx : undef_ctrl_pts)
-            {
-                cerr << "idx=" << idx << ", value(s)=" << t.ctrl_pts(idx,0) << endl;
-                t.ctrl_pts.row(idx).setZero();
-            }
-
-            // for (int i = 0; i < t.ctrl_pts.rows(); i++)
-            // {
-            //     for (int k = 0; k < t.ctrl_pts.cols(); k++)
-            //     {
-            //         if (fabs(t.ctrl_pts(i,k)) > 1e3)
-            //         {
-            //             cerr << "Extremely large control point:" << endl;
-            //             cerr << "  (i,j) = " << i << " " << k << endl;
-            //             cerr << "  value = " << t.ctrl_pts(i,k) << endl;
-            //             cerr << " row i nnzs: " << Mat.col(i).nonZeros() << endl;
-
-            //             T* vals = Mat.valuePtr();
-            //             int* outerIds = Mat.outerIndexPtr();
-            //             T rowmax = -1;
-            //             for (int l = outerIds[i]; l < outerIds[i+1]; l++)
-            //             {
-            //                 if (vals[l] > rowmax) rowmax = vals[l];
-            //             }
-            //             cerr << " row i max:  " << rowmax << endl;
-            //             t.ctrl_pts(i,k) = 0;
-            //         }
-            //     }
-            // }
-#endif
-// << EXPERIMENTAL
         }
 
 #ifdef MFA_TMESH
