@@ -37,6 +37,10 @@
 
 namespace mfa
 {
+
+    // n.b. We don't store this as a member of MFA_Data because we want multiple threads to 
+    //      interact with the same MFA_Data simultaneously. In a threaded environment,
+    //      BasisFunInfo should be thread-local
     template<typename T>
     struct BasisFunInfo
     {
@@ -363,7 +367,7 @@ namespace mfa
         }
 
         // same as OrigBasisFuns but allocate left/right scratch space ahead of time,
-        // and compute N vector in place
+        // and compute N vector in place.
         // NOTE: In a threaded environment, a thread-local BasisFunInfo should be passed
         //       as an argument. Concurrent access to the same BFI will cause a data race.
         // 

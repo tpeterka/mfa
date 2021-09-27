@@ -368,9 +368,9 @@ struct Block : public BlockBase<T>
         std::uniform_real_distribution<double> u_dist(0.0, 1.0);
 
         // Fill domain with randomly distributed points
-        size_t nvoids = 3;
-        double keep_frac = 1.0/5.0;
-        double radii_frac = 1.0/10.0;   // fraction of domain width to set as void radius
+        size_t nvoids = 4;
+        double keep_frac = 1.0/50.0;
+        double radii_frac = 1.0/8.0;   // fraction of domain width to set as void radius
         VectorX<T> radii(nvoids);
         MatrixX<T> centers(geom_dim, nvoids);
         for (size_t nv = 0; nv < nvoids; nv++) // Randomly generate the centers of each void

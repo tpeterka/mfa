@@ -50,6 +50,8 @@ struct ModelInfo
         vars_nctrl_pts.resize(pt_dim - dom_dim);
         for (auto i = 0; i < vars_nctrl_pts.size(); i++)
             vars_nctrl_pts[i].resize(dom_dim);
+
+        regularization = 0;
     }
     virtual ~ModelInfo()                        {}
 

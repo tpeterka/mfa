@@ -55,6 +55,7 @@ int main(int argc, char** argv)
     string infile;                              // input file name
     int    structured   = 1;                    // input data format (bool 0/1)
     int    rand_seed    = -1;                   // seed to use for random data generation (-1 == no randomization)
+    float   regularization = 0;                   // smoothing parameter for models with non-uniform input density (0 == no smoothing)
     bool   help         = false;                // show help
 
 
@@ -78,6 +79,7 @@ int main(int argc, char** argv)
     ops >> opts::Option('h', "help",        help,       " show help");
     ops >> opts::Option('x', "structured",  structured, " input data format (default=structured=true)");
     ops >> opts::Option('y', "rand_seed",   rand_seed,  " seed for random point generation (-1 = no randomization, default)");
+    ops >> opts::Option('b', "regularization", regularization, "smoothing parameter for models with non-uniform input density");
 
     if (!ops.parse(argc, argv) || help)
     {
@@ -161,6 +163,7 @@ int main(int argc, char** argv)
     d_args.verbose      = 1;
     d_args.structured   = structured;
     d_args.rand_seed    = rand_seed;
+    d_args.regularization   = regularization;
     for (int i = 0; i < pt_dim - dom_dim; i++)
         d_args.f[i] = 1.0;
     for (int i = 0; i < dom_dim; i++)

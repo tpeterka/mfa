@@ -378,10 +378,10 @@ namespace mfa
         void ConsMatrix(    TensorIdx           t_idx,
                             int                 deriv,
                             T                   c_target,
-                            const SparseMatrixX<T>& Nt,
+                            const SparseMatrixX<T>& N,
                             SparseMatrixX<T>&   Ct)
         {
-            cerr << "regularization matrix construction" << endl;
+            cerr << "Adjusting matrix for regularization..." << endl;
             clock_t fill_time = clock();
 
             TensorProduct<T>& t = mfa_data.tmesh.tensor_prods[t_idx];
@@ -438,7 +438,7 @@ namespace mfa
     //     cerr << anchor_params->param_grid[i][r] << " ";
     // cerr << endl;
             }
-
+cerr << "A" << endl;
             anchors.set_params(anchor_params);
 
             VectorXi ctrl_starts(mfa_data.dom_dim);                                 // subvolume ctrl pt indices in each dimension
@@ -469,7 +469,6 @@ namespace mfa
                     }
                 }
                 
-
                 VolIterator ctrl_vol_iter(nctrl_patch, ctrl_starts, t.nctrl_pts);
                 while (!ctrl_vol_iter.done())
                 {
@@ -508,10 +507,13 @@ namespace mfa
                 }
             }
 
+cerr << "C " << Ct.cols() << endl;
             Eigen::DiagonalMatrix<T, Eigen::Dynamic> lambda(Ct.cols());
             for (int i = 0; i < Ct.cols(); i++)
             {
-                T c_sum = Nt.row(i).sum();
+                if (i%1000 == 0) cerr << i/1000 << endl;
+
+                T c_sum = N.col(i).sum();
                 T c_add = (c_sum < c_target) ? c_target - c_sum : 0;
                 // // cerr << "i, colsum=" << i << ", " << Ct.col(i).cwiseAbs().sum() << endl;
                 // cerr << "i, colsum=" << i << ", " << Ct.row(i).cwiseAbs().sum() << endl;
@@ -519,11 +521,16 @@ namespace mfa
                 // cerr << "   c_add=" << c_add << endl;
 
                 lambda.diagonal()(i) = c_add / Ct.row(i).cwiseAbs().sum();
+
                 // cerr << "   lambda=" << lambda.diagonal()(i) << endl;
                 
             }
 
+cerr << "D" << endl;
             Ct = Ct * lambda;
+cerr << "E" << endl;
+            fill_time = clock() - fill_time;
+            cerr << "Regularization Adjustment Time: " << setprecision(3) << ((double)fill_time)/CLOCKS_PER_SEC << "s." << endl;
         }
 
         // Assemble B-spline collocation matrix for a full tensor, using sparse matrices
@@ -537,6 +544,7 @@ namespace mfa
         void CollMatrixUnified( TensorIdx           t_idx,    // index of tensor product containing input points and control points
                                 // vector<size_t>&     start_idxs,
                                 // vector<size_t>&     end_idxs,
+                                SparseMatrixX<T>&   N, // (output) collocation matrix 
                                 SparseMatrixX<T>&   Nt,  // (output) transpose of collocation matrix
                                 int deriv = 0)     // optional, determines what deriv of basis functions to use (for experimental regularization)
         {
@@ -544,6 +552,28 @@ namespace mfa
             clock_t fill_time = clock();
 
             TensorProduct<T>& t = mfa_data.tmesh.tensor_prods[t_idx];
+
+            // basis function order in each dimension (std::vector needed for BasisFunInfo)
+            vector<int> q(mfa_data.dom_dim);
+            for (int k = 0; k < mfa_data.dom_dim; k++)
+            {
+                q[k] = mfa_data.p(k) + 1;
+            }
+
+            // control point strides
+            VectorXi cps = VectorXi::Ones(mfa_data.dom_dim); 
+            for (int k = 1; k < mfa_data.dom_dim; k++)
+            {
+                cps(k) = cps(k-1) * t.nctrl_pts(k-1);
+            }
+
+            BasisFunInfo<T> bfi(q);
+
+            vector<VectorX<T>> lB(mfa_data.dom_dim);
+            for (int k = 0; k < mfa_data.dom_dim; k++)
+            {
+                lB[k].resize(q[k]);
+            }
 
             VectorXi ctrl_starts(mfa_data.dom_dim);                                 // subvolume ctrl pt indices in each dimension
             VectorXi spans(mfa_data.dom_dim);                                       // current knot span in each dimension
@@ -567,6 +597,9 @@ namespace mfa
             int bf_per_pt = (mfa_data.p + VectorXi::Ones(mfa_data.dom_dim)).prod();       // nonzero basis functions per input point
             Nt.reserve(VectorXi::Constant(Nt.cols(), bf_per_pt));
 
+            int tot_nnzs = 0;
+            vector<int> row_nnzs(Nt.rows(), 0);
+
             // Iterate thru every point in subvolume given by tensor
             VectorX<T> param(input.dom_dim);
             for (auto input_it = input.begin(), input_end = input.end(); input_it != input_end; ++input_it)
@@ -582,26 +615,11 @@ namespace mfa
 
                     ctrl_starts(k) = spans[k] - p - t.knot_mins[k];
 
-                    // basis functions
-                    vector<T> loc_knots(p + 2);
-                    B[k].row(0).setZero();
+                    mfa_data.FastBasisFuns(k, u, spans[k], lB[k], bfi);
 
-                    for (auto j = 0; j < p + 1; j++)
-                    {
-                        for (auto i = 0; i < p + 2; i++)
-                            loc_knots[i] = mfa_data.tmesh.all_knots[k][spans[k] - p + j + i];
-                        int col = spans[k] - p + j - t.knot_mins[k];
-
-
-    // orig:
-                        // if (col >= 0 && col < B[k].cols())
-                        //     B[k](0, col) = mfa_data.OneBasisFun(k, u, loc_knots);
-
-    // new for regularizer:
-                        mfa_data.DerBasisFuns(k, u, spans[k], deriv, B[k]);
-                    }
                 }
 
+#if 0
                 // Iterate over all basis functions (ctrl points) which are nonzero at the given input point
                 VolIterator ctrl_vol_iter(nctrl_patch, ctrl_starts, t.nctrl_pts);
                 while (!ctrl_vol_iter.done())
@@ -611,9 +629,29 @@ namespace mfa
                     for (auto k = 0; k < mfa_data.dom_dim; k++)
                     {
                         int idx = ctrl_vol_iter.idx_dim(k);                                 // index in current dim of this control point
-                        // coeff_prod *= B[k](0,idx);   // orig
-                        coeff_prod *= B[k](deriv,idx);  // new for regularizer
+                        coeff_prod *= B[k](0,idx);   // orig
+                        // coeff_prod *= B[k](deriv,idx);  // new for regularizer
                     }
+
+#else
+                VolIterator ctrl_vol_iter(nctrl_patch);
+                while (!ctrl_vol_iter.done())
+                {
+                    int ctrl_idx_full = 0;
+                    T coeff_prod = 1;
+                    for (int k = 0; k < mfa_data.dom_dim; k++)
+                    {
+                        int idx = ctrl_vol_iter.idx_dim(k);
+                        ctrl_idx_full += (idx + ctrl_starts(k)) * cps(k);
+                        coeff_prod *= lB[k](idx);
+                        // cerr << idx << "   " << ctrl_starts(k) << "   " << cps(k) << endl;
+                    }
+#endif
+                    // cerr << ctrl_idx_full << endl;
+
+                    // increment number of entries in this row
+                    row_nnzs[ctrl_idx_full];
+                    tot_nnzs++;
 
                     Nt.insertBackUncompressed(ctrl_idx_full, input_it.idx()) = coeff_prod;  
                     // FRAGILE command; reserve() must be called prior, **with vector signature**
@@ -631,6 +669,56 @@ namespace mfa
 
             Nt.makeCompressed();  // not necessary if using prune(), as prune always returns compressed form
             // Nt.prune(1,1e-5);  // remove entries less than a given value (and compress matrix)
+
+
+
+            // Must do this after Nt is in compressed mode!
+            // 
+            // We are creating a compressed sparse row representation from the existing
+            //     compressed sparse column representation, without duplicating the underlying
+            //     matrix entries. This allows us to do things like fast row sums (useful for   )
+            // std::vector<int> row_starts(Nt.rows());
+            // std::vector<int> col_ids(tot_nnzs);
+            // std::vector<T> tr_values(tot_nnzs);
+            int* row_starts = N.outerIndexPtr();
+            int* col_ids = N.innerIndexPtr();
+            T* tr_values = N.valuePtr();
+            int* row_inner_nnzs = N.innerNonZeroPtr();
+
+            N.reserve(row_nnzs);    // allocate innerIndexPtr and valuePtr to store each row
+
+            // // Set the start index for each column on N (row of Nt)
+            // row_starts[0] = 0;
+            // for (int i = 0; i < Nt.rows(); i++)
+            // {
+            //     row_starts[i+1] = row_starts[i] + row_nnzs[i]; 
+            //     row_nnzs[i] = 0;    // reset row_nnzs for use below
+            // }
+
+            int* oip = Nt.outerIndexPtr();  // oip has Nt.cols() + 1 entries
+            int* iip = Nt.innerIndexPtr();  // iip[oip[o]] is the row index of the first entry in the o^th column
+            T*   values = Nt.valuePtr();   
+            for (int o = 0; o < Nt.cols(); o++) // loop through columns of Nt
+            {
+                for (int i = 0; i < oip[o+1] - oip[o]; i++) // loop through entries in column o of Nt
+                {
+                    int row = iip[oip[o]+i];
+                    col_ids[row_starts[row] + row_inner_nnzs[o]] = o;
+                    tr_values[row_starts[row] + row_inner_nnzs[o]] = values[oip[o]+i];
+
+                    // row_nnzs tracks how many entries we have inserted into each row buffer
+                    // Since we loop through the columns in order, the column indices within
+                    //     each row buffer are strictly increasing
+                    row_inner_nnzs[o]++;
+                }
+            }
+
+            N.makeCompressed();
+
+            // Create a col-major SparseMap to represent N matrix (read only)
+            // see: https://eigen.tuxfamily.org/dox/group__SparseQuickRefPage.html
+            // N = Eigen::Map<SparseMatrixX<T>>(Nt.cols(), Nt.rows(), tot_nnzs, &row_starts[0], &col_ids[0], &tr_values[0]);
+
 
             fill_time = clock() - fill_time;
             cerr << "Matrix Construction Time: " << setprecision(3) << ((double)fill_time)/CLOCKS_PER_SEC << "s." << endl;
@@ -746,22 +834,20 @@ namespace mfa
                 tot_dom_pts *= end_idxs[k] - start_idxs[k] + 1;
 
             // Assemble collocation matrix
-            SparseMatrixX<T> Nt(t.nctrl_pts.prod() , input.npts);
-            CollMatrixUnified(t_idx, /*start_idxs, end_idxs,*/ Nt);
+            SparseMatrixX<T> N(input.npts, t.nctrl_pts.prod());
+            SparseMatrixX<T> Nt(t.nctrl_pts.prod(), input.npts);
+            CollMatrixUnified(t_idx, /*start_idxs, end_idxs,*/ N, Nt);
 
-            bool regularize = false;
             if (regularization > 0)
-                regularize = true;
-
-            if (regularize)
             {
+                cerr << "Applying model regularization with strength r=" << regularization << endl;
                 T c_target = regularization;
                 SparseMatrixX<T> Ct(t.nctrl_pts.prod(), t.nctrl_pts.prod());
                 SparseMatrixX<T> Ct1(t.nctrl_pts.prod(), t.nctrl_pts.prod());
                 SparseMatrixX<T> Ct2(t.nctrl_pts.prod(), t.nctrl_pts.prod());
 
-                ConsMatrix(t_idx, 1, c_target, Nt, Ct1);
-                ConsMatrix(t_idx, 2, c_target, Nt, Ct2);
+                ConsMatrix(t_idx, 1, c_target, N, Ct1);
+                ConsMatrix(t_idx, 2, c_target, N, Ct2);
                 Ct = Ct1 + Ct2;         // C1 and C2 regularization
                 // Ct = Ct2;            // only C2 regularization
 
@@ -770,10 +856,10 @@ namespace mfa
                 augNt.rightCols(Ct.cols()) = Ct;
                 Nt = augNt;
             }
-
+cerr << "A" << endl;
             // Set up linear system
             SparseMatrixX<T> Mat(Nt.rows(), Nt.rows()); // Mat will be the matrix on the LHS
-
+cerr << "AA" << endl;
 #ifdef MFA_TBB  // TBB version
                 // TODO potentially unnecessary deep copies, maybe make N and Nt in col-major form simultaneously?
                 // Creating a separate matrix for N makes threading the sparse matrix product easier
@@ -785,13 +871,16 @@ namespace mfa
                 Mat = Nt * Nt.transpose();
 #endif
 
+cerr << "B" << endl;
             MatrixX<T>  R(Nt.cols(), pt_dim);           // R is the right hand side 
 
-            if (!regularize)
+cerr << "C" << endl;
+            if (regularization == 0)
                 RHSUnified(/*start_idxs, end_idxs,*/ Nt, R);
             else
                 RHSUnified_REGULARIZER(Nt, R);
 
+cerr << "D" << endl;
             // Solve Linear System
             // Eigen::ConjugateGradient<SparseMatrixX<T>, Eigen::Lower|Eigen::Upper, Eigen::IncompleteLUT<T>>  solver;
             Eigen::ConjugateGradient<SparseMatrixX<T>, Eigen::Lower|Eigen::Upper>  solver;  // Default preconditioner is Jacobi
