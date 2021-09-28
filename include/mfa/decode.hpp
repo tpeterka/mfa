@@ -328,7 +328,7 @@ cerr << "span1. u1 = " << u1 << endl;
 
             // Compute integrated basis functions in dimension 'dim'
             N[dim] = MatrixX<T>::Zero(1, tensor.nctrl_pts(dim));
-            for (int s = span0; s <= span1; s++)
+            for (int s = span0 - mfa_data.p(dim); s <= span1; s++)
             {
                 int lower_span = s;
                 int upper_span = s + mfa_data.p(dim) + 1;
@@ -368,8 +368,11 @@ cerr << "span1. u1 = " << u1 << endl;
 
             // evluate b-spline with integrated one dimension of integrated basis functions
             VectorXi subvolume = mfa_data.p + VectorXi::Ones(dom_dim);
-            subvolume(dim) += span1 - span0 + 1;
-            VolIterator cp_it(subvolume, spans, tensor.nctrl_pts);
+            subvolume(dim) += span1 - span0;
+cerr << "spans: " << spans << endl;
+cerr << "subvolume: " << subvolume << endl;
+cerr << "nctrl: " << tensor.nctrl_pts << endl;
+            VolIterator cp_it(subvolume, spans - mfa_data.p, tensor.nctrl_pts);
             while (!cp_it.done())
             {
                 VectorXi ctrl_idxs = cp_it.idx_dim();

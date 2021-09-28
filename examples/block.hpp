@@ -1802,7 +1802,7 @@ cerr << y1 - y0 << "  " << x1-x0 << endl;
         {
 cerr << "m: " << m << ", atan(-m): " << atan(-m) << endl;
             alpha = pi/2 - atan(-m);          // acot(x) = pi/2 - atan(x)
-            rho = (y0 - m)/(sqrt(1+m*m));     // cos(atan(x)) = 1/sqrt(1+m*m), sin(pi/2-x) = cos(x)
+            rho = (y0 - m*x0)/(sqrt(1+m*m));     // cos(atan(x)) = 1/sqrt(1+m*m), sin(pi/2-x) = cos(x)
         }
         
 
@@ -1815,12 +1815,12 @@ cerr << "|  alpha: " << alpha << ",   rho: " << rho << endl;
         // distance in x and y between the endpoints of the segment
         T delta_x = x1 - x0;
         T delta_y = y1 - y0;
-        T length = sqrt(delta_x*delta_x + delta_y*delta_y);
+        // T length = sqrt(delta_x*delta_x + delta_y*delta_y);
 
         // distance in x and y between intersection points of the line with box
         T x_sep = abs(b_x - a_x);
         T y_sep = abs(b_y - a_y);
-
+        T length = sqrt(x_sep*x_sep + y_sep*y_sep);
 
         // VectorX<T> p0(2);
         // VectorX<T> p1(2);
