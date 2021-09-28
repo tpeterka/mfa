@@ -441,13 +441,17 @@ int main(int argc, char** argv)
             // start_pt(0) = -3*M_PI; start_pt(1) = 0;
             // end_pt(0) = 3*M_PI; end_pt(1) = 0;
             
-            // = 5.75864344326
-            start_pt(0) = 0, start_pt(1) = 0;
-            end_pt(0) = 8, end_pt(1) = 8;   
+            // // = 5.75864344326
+            // start_pt(0) = 0, start_pt(1) = 0;
+            // end_pt(0) = 8, end_pt(1) = 8;   
 
             // // = 2.0
             // start_pt(0) = 0; start_pt(1) = M_PI/2;
             // end_pt(0) = M_PI; end_pt(1) = M_PI/2;
+
+            // = 1.2198958397433
+            start_pt(0) = -2; start_pt(1) = -4;
+            end_pt(0) = 3; end_pt(1) = 11;
             cerr << "Integral result: " << b->integrate_ray(cp, start_pt, end_pt) << endl;
                      });
 #endif
