@@ -50,6 +50,17 @@ struct TensorProduct
         prev.resize(dom_dim);
         knot_idxs.resize(dom_dim);
     }
+    TensorProduct(vector<KnotIdx>& knot_mins_, vector<KnotIdx>& knot_maxs_) :
+        done(false),
+        knot_mins(knot_mins_),
+        knot_maxs(knot_maxs_)
+    {
+        int dom_dim = knot_mins.size();
+        nctrl_pts.resize(dom_dim);
+        next.resize(dom_dim);
+        prev.resize(dom_dim);
+        knot_idxs.resize(dom_dim);
+    }
 };
 
 namespace mfa

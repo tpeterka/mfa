@@ -365,6 +365,7 @@ namespace mfa
         }
 
 #ifdef MFA_TBB
+
         // Computes the product of two Eigen sparse matrices using TBB.  All matrices must be in column major format.
         void MatProdThreaded(   Eigen::SparseMatrix<T, Eigen::ColMajor>& lhs,
                                 Eigen::SparseMatrix<T, Eigen::ColMajor>& rhs,
@@ -443,6 +444,40 @@ namespace mfa
             }, ap );
 
             res.makeCompressed();
+        }
+
+        // Computes N^T * N using TBB
+        // NB: slower than Eigen dense matrix multiply; use that instead of this
+        MatrixX<T> NtNThreaded(const MatrixX<T>&   N)
+        {
+            MatrixX<T> NtN= MatrixX<T>::Zero(N.cols(), N.cols());
+            parallel_for (size_t(0), size_t(NtN.rows()), [&](size_t r)
+            {
+                parallel_for (size_t(0), size_t(NtN.cols()), [&](size_t c)
+                {
+                    parallel_for (size_t(0), size_t(N.rows()), [&](size_t c1)
+                    {
+                        NtN(r, c) += N(c1, r) * N(c1, c);
+                    });
+                });
+            });
+
+            return NtN;
+        }
+
+        // Computes the product of two Eigen dense matrices using TBB
+        void MatProdThreaded(const MatrixX<T>&  lhs,
+                             const MatrixX<T>&  rhs,
+                             MatrixX<T>&        res)
+        {
+            affinity_partitioner ap;
+            parallel_for(blocked_range<size_t>(0, rhs.cols()), [&](blocked_range<size_t>& r)
+            {
+                int start = r.begin();
+                int end = r.end();
+                res.middleCols(start, end - start) = lhs * rhs.middleCols(start, end - start);
+            }, ap);
+
         }
 #endif // MFA_TBB
 
@@ -612,12 +647,33 @@ namespace mfa
 
                 // iterator over input points
                 VolIterator dom_iter(ndom_pts, dom_starts, input.ndom_pts);
+
+#ifdef MFA_TBB  // TBB
+
+                enumerable_thread_specific<VectorXi> thread_dom_ijk(mfa_data.dom_dim);          // multidim index of domain point
+                parallel_for (size_t(0), (size_t)dom_iter.tot_iters(), [&] (size_t j)
+                {
+                    for (auto k = 0; k < mfa_data.dom_dim; k++)
+                    {
+                        int p = mfa_data.p(k);                                                  // degree of current dim.
+                        dom_iter.idx_ijk(j, thread_dom_ijk.local());                            // ijk of domain point
+                        T u = input.params->param_grid[k][thread_dom_ijk.local()(k)];           // parameter of current input point
+                        T B = mfa_data.OneBasisFun(k, u, local_knots[k]);                       // basis function
+                        Nfree(j, free_iter.cur_iter()) =
+                            (k == 0 ? B : Nfree(j, free_iter.cur_iter()) * B);
+                    }
+                    if (Nfree(j, free_iter.cur_iter()) != 0.0)
+                        nnz_col++;
+                });
+
+#else           // serial
+
                 while (!dom_iter.done())
                 {
                     for (auto k = 0; k < mfa_data.dom_dim; k++)                                 // for all dims
                     {
                         int p = mfa_data.p(k);                                                  // degree of current dim.
-                        T u = input.params->param_grid[k][dom_iter.idx_dim(k)];                             // parameter of current input point
+                        T u = input.params->param_grid[k][dom_iter.idx_dim(k)];                 // parameter of current input point
                         T B = mfa_data.OneBasisFun(k, u, local_knots[k]);                       // basis function
                         Nfree(dom_iter.cur_iter(), free_iter.cur_iter()) =
                             (k == 0 ? B : Nfree(dom_iter.cur_iter(), free_iter.cur_iter()) * B);
@@ -626,6 +682,8 @@ namespace mfa
                         nnz_col++;
                     dom_iter.incr_iter();
                 }       // domain point iterator
+
+#endif          // TBB or serial
 
                 if (nnz_col > max_nnz_col)
                     max_nnz_col = nnz_col;
@@ -842,9 +900,8 @@ namespace mfa
             // timing
             cons_time           = MPI_Wtime() - cons_time;
 
-            // check Nfree + Ncons row sums
             // normalize Nfree and Ncons such that the row sum of Nfree + Ncons = 1.0
-            // TODO: is row sum != 1 a sign of an error, or just needs to be normalized?
+            double norm_time    = MPI_Wtime();              // timing
             for (auto i = 0; i < Nfree.rows(); i++)
             {
                 bool error = false;
@@ -852,12 +909,6 @@ namespace mfa
                 if (Pcons.rows())
                     sum += Ncons.row(i).sum();
 
-                    // TODO: if sum != 1, is this an error?
-//                 if (fabs(sum - 1.0) > 1e-3)
-//                 {
-//                     cerr << "Nfree + Ncons row " << i << " sum = " << sum << " which should be 1.0?" << endl;
-//                     error = true;
-//                 }
                 if (sum > 0.0)
                 {
                     Nfree.row(i) /= sum;
@@ -885,9 +936,31 @@ namespace mfa
                     fmt::print(stderr, "]\n");
                 }
             }
+            norm_time = MPI_Wtime() - norm_time;                // timing
 
             // multiply by transpose to make the matrix square and smaller
-            MatrixX<T> NtNfree = Nfree.transpose() * Nfree;
+            double mult_time    = MPI_Wtime();                  // timing
+
+#if 0
+// #ifdef MFA_TBB       // experimenting with some threading approaches to matrix multiply, not used in production
+
+            // NB, slower than Eigen dense matrix multiply; don't use this
+//             MatrixX<T> NtNfree = NtNThreaded(Nfree);
+
+            // marginally faster than dense matrix multiply, when the matrix has > ~3000 columns
+            MatrixX<T> NtNfree(Nfree.cols(), Nfree.cols());
+            MatProdThreaded(Nfree.transpose(), Nfree, NtNfree);
+
+            // debug
+            fmt::print(stderr, "Matrix Nfree has {} columns\n", Nfree.cols());
+
+#else
+
+            MatrixX<T> NtNfree  = Nfree.transpose() * Nfree;
+
+#endif
+
+            mult_time           = MPI_Wtime() - mult_time;      // timing
 
 // for comparing sparse with dense solve
 // #define MFA_DENSE
@@ -988,11 +1061,10 @@ namespace mfa
             // timing
             fmt::print(stderr, "EncodeTensorLocalLinear() timing:\n");
             fmt::print(stderr, "setup time: {} s.\n", setup_time);
-//             fmt::print(stderr, "    = q time {} + free time {} + cons time {} + r time {} s.\n",
-//                     q_time, free_time, cons_time, r_time);
+            fmt::print(stderr, "    = q time {} + free time {} + cons time {} + norm time {} + mult time {} r time {} s.\n",
+                    q_time, free_time, cons_time, norm_time, mult_time, r_time);
 //             fmt::print(stderr, "free_time {} = free_iter_time {} + dom_iter_time {} s.\n",
 //                     free_time, free_iter_time, dom_iter_time);
-//             fmt::print(stderr, "r time {} s.\n", r_time);
 
 #ifdef MFA_DENSE
             fmt::print(stderr, "dense_solve time: {} s.\n", dense_solve_time);
@@ -1275,28 +1347,6 @@ namespace mfa
 //                 mfa_data.tmesh.print(true, true, false, false);
 
                 bool retval = Refine(parent_level, err_limit, extents, local);
-
-                // Fast, but incorrect version for global solve
-                // TODO: DEPRECATE
-//                 if (!local)
-//                 {
-//                     for (auto k = 0; k < mfa_data.dom_dim; k++)
-//                         nctrl_pts(k) = mfa_data.tmesh.all_knots[k].size() - mfa_data.p(k) - 1;
-//                     ctrl_pts.resize(nctrl_pts.prod(), mfa_data.max_dim - mfa_data.min_dim + 1);
-//                     weights.resize(ctrl_pts.rows());
-// 
-//                     Encode(nctrl_pts, ctrl_pts, weights);
-//                     mfa_data.tmesh.scatter_ctrl_pts(nctrl_pts, ctrl_pts, weights);
-//                 }
-
-                // debug: print tmesh
-//                 fprintf(stderr, "\n----- T-mesh at the end of iteration %d-----\n\n", iter);
-//                 mfa_data.tmesh.print(true, true, false, false);
-//                 fprintf(stderr, "--------------------------\n\n");
-
-                // debug
-//                 fmt::print(stderr, "bottom of iteration {} no_change_iter {} retval {}\n",
-//                         iter, no_change_iter, retval);
 
                 if (retval)                                                     // this iteration is done
                 {
@@ -2188,6 +2238,10 @@ namespace mfa
             error_spans_time    = MPI_Wtime() - error_spans_time;
             double insert_time  = MPI_Wtime();
 
+            // debug
+//             fmt::print(stderr, "\nRefine(): T-mesh before doing any insertions\n");
+//             tmesh.print(true, true, false, false);
+
             for (auto i = 0; i < n_insertions; i++)                             // for all knots to be inserted
             {
                 // debug: check that parent tensor level matches refinement level
@@ -2201,6 +2255,8 @@ namespace mfa
                 }
 
                 // insert the new knot into tmesh all_knots
+                // NB: insert_knot adjusts knot_mins, maxs of existing tensors, meaning
+                // no further adjustment to existing tensors should be done here
                 int retval;
                 bool new_candidate = false;                         // make new candidate tensor for this knot
                 for (auto j = 0; j < dom_dim; j++)
@@ -2220,15 +2276,6 @@ namespace mfa
                     }
                 }
 
-                // debug
-//                 fmt::print(stderr, "\ninsertion index {}: inserted knot idx [ ", i);
-//                 for (auto j = 0; j < dom_dim; j++)
-//                     fmt::print(stderr, "{} ", inserted_knot_idxs[j][i]);
-//                 fmt::print(stderr, "] with value [ ");
-//                 for (auto j = 0; j < dom_dim; j++)
-//                     fmt::print(stderr, "{} ", inserted_knots[j][i]);
-//                 fmt::print(stderr, " ] parent tensor idx {}\n\n", parent_tensor_idxs[i]);
-
                 // it's possible that all components of the knot exist separately but not together
                 // in this case check if the full-dimension knot is already part of a candidate tensor before skipping
                 if (find(inserted.begin(), inserted.end(), true) == inserted.end())     // knot exists in all dimensions separately
@@ -2244,13 +2291,24 @@ namespace mfa
                         if (tmesh.in(knot, c, false))
                             break;
                     }
-                    // TODO: this causes a seg fault in iteration 7
                     if (k == new_tensors.size())                                        // no candidates contain the knot
                             new_candidate = true;
                 }
 
                 if (!new_candidate)
                     continue;
+
+                // debug
+//                 if (i == 0)
+//                 {
+//                     fmt::print(stderr, "\ninsertion index {}: inserted knot idx [ ", i);
+//                     for (auto j = 0; j < dom_dim; j++)
+//                         fmt::print(stderr, "{} ", inserted_knot_idxs[j][i]);
+//                     fmt::print(stderr, "] with value [ ");
+//                     for (auto j = 0; j < dom_dim; j++)
+//                         fmt::print(stderr, "{} ", inserted_knots[j][i]);
+//                     fmt::print(stderr, " ] parent tensor idx {}\n\n", parent_tensor_idxs[i]);
+//                 }
 
                 // make a candidate tensor of some size, eg., p+1 or p+2 control points
                 TensorProduct<T> c(dom_dim);
@@ -2270,6 +2328,11 @@ namespace mfa
                 c.parent    = parent_tensor_idxs[i];
                 c.parent_exists = true;
 
+                // debug
+//                 if (i == 0)
+//                     fmt::print(stderr, "candidate tensor before any adjustments knot_mins [{}] knot_maxs[{}] level {} parent {}\n",
+//                         fmt::join(c.knot_mins, ","), fmt::join(c.knot_maxs, ","), c.level, c.parent);
+
                 TensorProduct<T>& pt = tensor_prods[parent_tensor_idxs[i]];             // parent tensor of the candidate tensor
 
                 // constrain candidate to be no larger than parent in any dimension
@@ -2278,6 +2341,11 @@ namespace mfa
                     c.knot_mins[j] = c.knot_mins[j] < pt.knot_mins[j] ? pt.knot_mins[j] : c.knot_mins[j];
                     c.knot_maxs[j] = c.knot_maxs[j] > pt.knot_maxs[j] ? pt.knot_maxs[j] : c.knot_maxs[j];
                 }
+
+                // debug
+//                 if (i == 0)
+//                     fmt::print(stderr, "candidate tensor after adjustment 1: knot_mins [{}] knot_maxs[{}] level {} parent {}\n",
+//                         fmt::join(c.knot_mins, ","), fmt::join(c.knot_maxs, ","), c.level, c.parent);
 
                 // intersection proximity (assumes same for all dims)
                 int pad = p(0) % 2 == 0 ? p(0) + 1 : p(0);
@@ -2456,6 +2524,10 @@ namespace mfa
 
                 // timing
                 double t0 = MPI_Wtime();
+
+                // debug
+//                 fmt::print(stderr, "\nRefine(): T-mesh before appending tensor k {}\n", k);
+//                 tmesh.print(true, true, false, false);
 
                 // debug
 //                 fmt::print(stderr, "appending tensor k {} level {}, knot_mins [{}] knot_maxs [{}]\n",
