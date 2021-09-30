@@ -446,39 +446,6 @@ namespace mfa
             res.makeCompressed();
         }
 
-        // Computes N^T * N using TBB
-        // NB: slower than Eigen dense matrix multiply; use that instead of this
-        MatrixX<T> NtNThreaded(const MatrixX<T>&   N)
-        {
-            MatrixX<T> NtN= MatrixX<T>::Zero(N.cols(), N.cols());
-            parallel_for (size_t(0), size_t(NtN.rows()), [&](size_t r)
-            {
-                parallel_for (size_t(0), size_t(NtN.cols()), [&](size_t c)
-                {
-                    parallel_for (size_t(0), size_t(N.rows()), [&](size_t c1)
-                    {
-                        NtN(r, c) += N(c1, r) * N(c1, c);
-                    });
-                });
-            });
-
-            return NtN;
-        }
-
-        // Computes the product of two Eigen dense matrices using TBB
-        void MatProdThreaded(const MatrixX<T>&  lhs,
-                             const MatrixX<T>&  rhs,
-                             MatrixX<T>&        res)
-        {
-            affinity_partitioner ap;
-            parallel_for(blocked_range<size_t>(0, rhs.cols()), [&](blocked_range<size_t>& r)
-            {
-                int start = r.begin();
-                int end = r.end();
-                res.middleCols(start, end - start) = lhs * rhs.middleCols(start, end - start);
-            }, ap);
-
-        }
 #endif // MFA_TBB
 
        // Encodes ctrl points in each dimensions simultaneously
@@ -940,26 +907,7 @@ namespace mfa
 
             // multiply by transpose to make the matrix square and smaller
             double mult_time    = MPI_Wtime();                  // timing
-
-#if 0
-// #ifdef MFA_TBB       // experimenting with some threading approaches to matrix multiply, not used in production
-
-            // NB, slower than Eigen dense matrix multiply; don't use this
-//             MatrixX<T> NtNfree = NtNThreaded(Nfree);
-
-            // marginally faster than dense matrix multiply, when the matrix has > ~3000 columns
-            MatrixX<T> NtNfree(Nfree.cols(), Nfree.cols());
-            MatProdThreaded(Nfree.transpose(), Nfree, NtNfree);
-
-            // debug
-            fmt::print(stderr, "Matrix Nfree has {} columns\n", Nfree.cols());
-
-#else
-
             MatrixX<T> NtNfree  = Nfree.transpose() * Nfree;
-
-#endif
-
             mult_time           = MPI_Wtime() - mult_time;      // timing
 
 // for comparing sparse with dense solve

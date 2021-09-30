@@ -54,6 +54,14 @@ else                        ()
     add_definitions         (-DMFA_SERIAL)
 endif                       ()
 
+# Eigen threading (requires OpenMP to be available)
+if                          (eigen_thread)
+    find_package            (OpenMP)
+    message                 ("Using OpenMP for Eigen")
+    add_definitions         (-DEIGEN_OPENMP)
+    set                     (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fopenmp")
+endif                       ()
+
 # Threads
 find_package                (Threads)
 

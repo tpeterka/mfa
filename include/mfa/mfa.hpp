@@ -99,10 +99,25 @@ namespace mfa
 
         MFA(size_t dom_dim_) :
             dom_dim(dom_dim_)
-        { }
+        {
+
+#ifdef EIGEN_OPENMP
+
+            // set openMP threading for Eigen
+            Eigen::initParallel();          // strictly not necessary for Eigen 3.3, but a good safety measure
+            // Most modern CPUs have 2 hyperthreads per core, and openmp (hence Eigen) uses the number hyperthreads by default.
+            // We want an automatic way to set the number of threads to number of physical cores, to prevent oversubscription.
+            // So we set the number of Eigen threads to be half the default.
+            Eigen::setNbThreads(Eigen::nbThreads()  / 2);
+            fmt::print(stderr, "\nEigen is using {} openMP threads.\n\n", Eigen::nbThreads());
+
+#endif
+        }
 
         ~MFA()
-        { }
+
+
+       { }
 
         // fixed number of control points encode
         void FixedEncode(
