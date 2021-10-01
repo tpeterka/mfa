@@ -617,20 +617,27 @@ namespace mfa
 
 #ifdef MFA_TBB  // TBB
 
-                enumerable_thread_specific<VectorXi> thread_dom_ijk(mfa_data.dom_dim);          // multidim index of domain point
+                enumerable_thread_specific<VectorXi>    thread_dom_ijk(mfa_data.dom_dim);       // multidim index of domain point
+                enumerable_thread_specific<int>         thread_nnz_col(0);                      // number of nonzero columns
                 parallel_for (size_t(0), (size_t)dom_iter.tot_iters(), [&] (size_t j)
                 {
+                    dom_iter.idx_ijk(j, thread_dom_ijk.local());                                // ijk of domain point
                     for (auto k = 0; k < mfa_data.dom_dim; k++)
                     {
                         int p = mfa_data.p(k);                                                  // degree of current dim.
-                        dom_iter.idx_ijk(j, thread_dom_ijk.local());                            // ijk of domain point
                         T u = input.params->param_grid[k][thread_dom_ijk.local()(k)];           // parameter of current input point
                         T B = mfa_data.OneBasisFun(k, u, local_knots[k]);                       // basis function
                         Nfree(j, free_iter.cur_iter()) =
                             (k == 0 ? B : Nfree(j, free_iter.cur_iter()) * B);
                     }
                     if (Nfree(j, free_iter.cur_iter()) != 0.0)
-                        nnz_col++;
+                        thread_nnz_col.local()++;
+                });
+
+                // combine thread-safe nnz_col
+                thread_nnz_col.combine_each([&](int n)
+                {
+                    nnz_col  += n;
                 });
 
 #else           // serial
