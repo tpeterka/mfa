@@ -294,7 +294,7 @@ int main(int argc, char **argv) {
     // save the results in diy format
     double write_time;
     if (write_output) {
-        diy::io::write_blocks("approx.out", world, master);
+        diy::io::write_blocks("approx.mfa", world, master);
         world.barrier();
         write_time = MPI_Wtime();
     }

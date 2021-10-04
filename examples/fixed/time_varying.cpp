@@ -231,5 +231,5 @@ int main(int argc, char** argv)
     fprintf(stderr, "-------------------------------------\n\n");
 
     // save the results in diy format
-    diy::io::write_blocks("approx.out", world, master);
+    diy::io::write_blocks("approx.mfa", world, master);
 }

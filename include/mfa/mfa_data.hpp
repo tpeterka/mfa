@@ -13,20 +13,6 @@
 // using Eigen dense MartrixX to represent vectors of n-dimensional points
 // rows: points; columns: point coordinates
 //
-// using Eigen VectorX to represent a single point
-// to use a single point from a set of many points,
-// explicitly copying from a row of a matrix to a vector before using the vector for math
-// (and Eigen matrix row and vector are not interchangeable w/o doing an assignment,
-// at least not with the current default column-major matrix ordering, not contiguous)
-//
-// also using Eigen VectorX to represent a set of scalars such as knots or parameters
-//
-// TODO: think about row/column ordering of Eigen, choose the most contiguous one
-// (current default column ordering of points is not friendly to extracting a single point)
-//
-// TODO: think about Eigen sparse matrices
-// (N and NtN matrices, used for solving for control points, are very sparse)
-//
 // There are two types of dimensionality:
 // 1. The dimensionality of the NURBS tensor product (p.size())
 // (1D = NURBS curve, 2D = surface, 3D = volume 4D = hypervolume, etc.)
@@ -48,8 +34,6 @@ namespace mfa
                                                  // for all input points (matrix rows) and control points (matrix cols)
         Tmesh<T>                  tmesh;         // t-mesh of knots, control points, weights
         T                         max_err;       // unnormalized absolute value of maximum error
-        //         DEPRECATED
-//         vector<KnotSpan<T>>       knot_spans;    // knot spans
 
         // constructor for creating an mfa from input points
         MFA_Data(
@@ -128,7 +112,6 @@ namespace mfa
                 for (auto i = 0; i < dom_dim; i++)
                     N[i] = MatrixX<T>::Zero(input.ndom_pts(i), tmesh.all_knots[i].size() - p(i) - 1);
             }
-            
 
             // initialize first tensor product
             vector<size_t> knot_mins(dom_dim);
@@ -1551,7 +1534,6 @@ namespace mfa
             }
         }
 
-        
         void uniform_knots_impl_unstructured(Tmesh<T>& tmesh)
         {
             cerr << "Warning: Unstable build, tmesh.all_knot_param_idxs remain uninitialized" << endl; 
@@ -1581,136 +1563,6 @@ namespace mfa
                 }
             }
         }
-
-        // TODO: change over to tmesh or deprecate, depending whether we will be splitting
-        // full-dimensional knot spans and whether an index into knot spans is still needed
-        // now that knots have be reorganized into vectors for each dimension and levels
-        //
-        // initialize knot span index
-//         void KnotSpanIndex()
-//         {
-//             // total number of knot spans = product of number of knot spans over all dims
-//             size_t int_nspans = 1;                  // number of internal (unique) spans
-//             size_t all_nspans = 1;                  // total number of spans, including repeating 0s and 1s
-//             for (auto i = 0; i < dom_dim; i++)
-//             {
-//                 int_nspans *= (nctrl_pts(i) - p(i));
-//                 all_nspans *= (nctrl_pts(i) + p(i));
-//             }
-// 
-//             knot_spans.resize(int_nspans);
-// 
-//             // for all knot spans, fill the KnotSpan fields
-//             VectorXi ijk   = VectorXi::Zero(dom_dim);       // i,j,k of start of span
-//             VectorXi p_ijk = VectorXi::Zero(dom_dim);       // i,j,k of parameter
-//             size_t span_idx = 0;                            // current index into knot_spans
-//             for (auto i = 0; i < all_nspans; i++)           // all knot spans (including repeated 0s and 1s)
-//             {
-//                 // skip repeating knot spans
-//                 bool skip = false;
-//                 for (auto k = 0; k < dom_dim; k++)          // dimensions
-//                     if ((ijk(k) < p[k]) || ijk(k) >= nctrl_pts[k])
-//                     {
-//                         skip = true;
-//                         break;
-//                     }
-// 
-//                 // save knot span
-//                 // TODO: may not be necessary to store all the knot span fields, but for now it is
-//                 // convenient; recheck later to see which are actually used
-//                 // unused ones can be computed locally below but not part of the knot span struct
-//                 if (!skip)
-//                 {
-//                     // knot ijk
-//                     knot_spans[span_idx].min_knot_ijk = ijk;
-//                     knot_spans[span_idx].max_knot_ijk = ijk.array() + 1;
-// 
-//                     // knot values
-//                     knot_spans[span_idx].min_knot.resize(dom_dim);
-//                     knot_spans[span_idx].max_knot.resize(dom_dim);
-//                     for (auto k = 0; k < dom_dim; k++)         // dimensions
-//                     {
-//                         knot_spans[span_idx].min_knot(k) = knots(ko[k] + knot_spans[span_idx].min_knot_ijk(k));
-//                         knot_spans[span_idx].max_knot(k) = knots(ko[k] + knot_spans[span_idx].max_knot_ijk(k));
-//                     }
-// 
-//                     // parameter ijk and parameter values
-//                     knot_spans[span_idx].min_param.resize(dom_dim);
-//                     knot_spans[span_idx].max_param.resize(dom_dim);
-//                     knot_spans[span_idx].min_param_ijk.resize(dom_dim);
-//                     knot_spans[span_idx].max_param_ijk.resize(dom_dim);
-//                     VectorXi po_ijk = p_ijk;                    // remember starting param ijk
-//                     for (auto k = 0; k < dom_dim; k++)         // dimensions in knot spans
-//                     {
-//                         // min param ijk and value
-//                         knot_spans[span_idx].min_param_ijk(k) = p_ijk(k);
-//                         knot_spans[span_idx].min_param(k)     = params(po[k] + p_ijk(k));
-// 
-//                         // max param ijk and value
-//                         // most spans are half open [..., ...)
-//                         while (params(po[k] + p_ijk(k)) < knot_spans[span_idx].max_knot(k))
-//                         {
-//                             knot_spans[span_idx].max_param_ijk(k) = p_ijk(k);
-//                             knot_spans[span_idx].max_param(k)     = params(po[k] + p_ijk(k));
-//                             p_ijk(k)++;
-//                         }
-//                         // the last span in each dimension is fully closed [..., ...]
-//                         if (p_ijk(k) == ndom_pts(k) - 1)
-//                         {
-//                             knot_spans[span_idx].max_param_ijk(k) = p_ijk(k);
-//                             knot_spans[span_idx].max_param(k)     = params(po[k] + p_ijk(k));
-//                         }
-//                     }
-// 
-//                     // increment param ijk
-//                     for (auto k = 0; k < dom_dim; k++)     // dimension in params
-//                     {
-//                         if (p_ijk(k) < ndom_pts[k] - 1)
-//                         {
-//                             po_ijk(k) = p_ijk(k);
-//                             break;
-//                         }
-//                         else
-//                         {
-//                             po_ijk(k) = 0;
-//                             if (k < dom_dim - 1)
-//                                 po_ijk(k + 1)++;
-//                         }
-//                     }
-//                     p_ijk = po_ijk;
-// 
-//                     knot_spans[span_idx].last_split_dim = -1;
-//                     knot_spans[span_idx].done           = false;
-// 
-//                     // debug
-//                     //             cerr <<
-//                     //                 "span_idx="          << span_idx                           <<
-//                     //                 "\nmin_knot_ijk:\n"  << knot_spans[span_idx].min_knot_ijk  <<
-//                     //                 "\nmax_knot_ijk:\n"  << knot_spans[span_idx].max_knot_ijk  <<
-//                     //                 "\nmin_knot:\n"      << knot_spans[span_idx].min_knot      <<
-//                     //                 "\nmax_knot:\n"      << knot_spans[span_idx].max_knot      <<
-//                     //                 "\nmin_param_ijk:\n" << knot_spans[span_idx].min_param_ijk <<
-//                     //                 "\nmax_param_ijk:\n" << knot_spans[span_idx].max_param_ijk <<
-//                     //                 "\nmin_param:\n"     << knot_spans[span_idx].min_param     <<
-//                     //                 "\nmax_param:\n"     << knot_spans[span_idx].max_param     <<
-//                     //                 "\n\n"               << endl;
-// 
-//                     span_idx++;
-//                 }                                               // !skip
-// 
-//                 // increment knot ijk
-//                 for (auto k = 0; k < dom_dim; k++)             // dimension in knot spans
-//                 {
-//                     if (ijk(k) < nctrl_pts[k] + p[k] - 1)
-//                     {
-//                         ijk(k)++;
-//                         break;
-//                     }
-//                     else
-//                         ijk(k) = 0;
-//                 }
-//             }
-//         }
 
     };
 }
