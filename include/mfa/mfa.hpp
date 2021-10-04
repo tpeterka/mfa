@@ -443,25 +443,25 @@ namespace mfa
             }
         }
 
+        // TODO: maybe make a subclass RayMFA to which this method belongs.
+        //       too many things about this method are arbitrary (rho/alpha order, etc)
+        //       and the use case is very specific for this to be a generic method.
         void IntegrateAxisRay(
             const MFA_Data<T>&  mfa_data,
-            T                   alpha, 
-            T                   rho, 
-            const VectorX<T>&   alpha_bounds,
-            const VectorX<T>&   rho_bounds,
+            T                   alpha_param, 
+            T                   rho_param, 
             T                   u0, 
             T                   u1, 
             VectorX<T>&         output)
         {
-    cerr << "MFA IntegrateAxisRay" << endl;
             const TensorProduct<T>& t = mfa_data.tmesh.tensor_prods[0];
 
             mfa::Decoder<T> decoder(mfa_data, verbose, false);
 
             VectorX<T> params = VectorX<T>::Zero(dom_dim);
             params(0) = 0; // ignored
-            params(1) = (rho - rho_bounds(0)) / (rho_bounds(1) - rho_bounds(0));
-            params(2) = (alpha - alpha_bounds(0)) / (alpha_bounds(1) - alpha_bounds(0));
+            params(1) = rho_param;
+            params(2) = alpha_param;
             decoder.AxisIntegral(t, 0, u0, u1, params, output);
         }
 

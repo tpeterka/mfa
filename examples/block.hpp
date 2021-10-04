@@ -1547,6 +1547,7 @@ struct Block : public BlockBase<T>
     {
         DomainArgs* a = &args;
 
+        bool fixed_length = false; 
         const double pi = 3.14159265358979;
         assert (dom_dim == 2); // TODO: extended to any dimensionality
 
@@ -1578,14 +1579,19 @@ struct Block : public BlockBase<T>
         this->box_mins = bounds_mins.head(dom_dim);
         this->box_maxs = bounds_maxs.head(dom_dim);
 
-        // TODO: in general, don't scale by 0.99, and zero pad the corner cases where segment does not register as intersected?
-        double r_lim = 0.99 * xh; // HACK this only works for square domains centered at origin, and for the "box intersection" setup
-        // double r_lim = 6*pi;     // min/max rho value
+        // TODO: make this generic
+        double r_lim = 0;
+        if (fixed_length)
+        {
+            double max_radius = max(max(xl,xh), max(yl,yh));
+            r_lim = max_radius * 1.1;
+        } 
+        else
+        {
+            r_lim = 0.99 * xh; // HACK this only works for square domains centered at origin, and for the "box intersection" setup
+        }
         double dr = r_lim * 2 / (n_rho-1);
         double da = pi / (n_alpha-1); // d_alpha; amount to rotate on each slice
-
-        cerr << "xl = " << xl << " xh = " << xh << endl;
-        cerr << "yl = " << yl << " yh = " << yh << endl;
 
         // fill ray data set
         double alpha    = 0;   // angle of rotation
@@ -1598,13 +1604,27 @@ struct Block : public BlockBase<T>
             {
                 rho = -r_lim + ir * dr;
 
-                T x0, y0, x1, y1;
-                get_box_intersections(alpha, rho, x0, y0, x1, y1, this->box_mins, this->box_maxs);
+                T x0, y0, x1, y1, span_x, span_y;
+                if (fixed_length)
+                {
+                    // "parallel-plate setup"
+                    // start/end coordinates of the ray (alpha, rho)
+                    // In this setup the length of every segment (x0,y0)--(x1,y1) is constant
+                    span_x = 2 * r_lim * sin(alpha);
+                    span_y = 2 * r_lim * cos(alpha);
+                    x0 = rho * cos(alpha) - r_lim * sin(alpha);
+                    x1 = rho * cos(alpha) + r_lim * sin(alpha);
+                    y0 = rho * sin(alpha) + r_lim * cos(alpha);
+                    y1 = rho * sin(alpha) - r_lim * cos(alpha);
+                }
+                else
+                {
+                    get_box_intersections(alpha, rho, x0, y0, x1, y1, this->box_mins, this->box_maxs);
+                    span_x = x1 - x0;
+                    span_y = y1 - y0;
+                }
+
                 
-                T delta_x = x1 - x0;
-                T delta_y = y1 - y0;
-
-
                 // "rotating chords" setup
                 // start/end coordinates of the chord formed by intersecting 
                 // the line with the circle of radius r_lim
@@ -1615,26 +1635,15 @@ struct Block : public BlockBase<T>
                 // T y0 = rho * sin(alpha) + delta_y/2;
                 // T y1 = rho * sin(alpha) - delta_y/2;
 
-                // "parallel-plate setup"
-                // start/end coordinates of the ray (alpha, rho)
-                // In this setup the length of every segment (x0,y0)--(x1,y1) is constant
-                // T delta_x = 2 * r_lim * sin(alpha);
-                // T delta_y = 2 * r_lim * cos(alpha);
-                // T x0 = rho * cos(alpha) - r_lim * sin(alpha);
-                // T x1 = rho * cos(alpha) + r_lim * sin(alpha);
-                // T y0 = rho * sin(alpha) + r_lim * cos(alpha);
-                // T y1 = rho * sin(alpha) - r_lim * cos(alpha);
-
-
-                T dx = delta_x / (n_samples-1);
-                T dy = delta_y / (n_samples-1);
+                T dx = span_x / (n_samples-1);
+                T dy = span_y / (n_samples-1);
 
                 // cerr << "x0: " << x0 << ", x1: " << x1 << endl;
                 // cerr << "y0: " << y0 << ", y1: " << y1 << endl;
                 // cerr << "dx: " << dx << endl;
                 // cerr << "dy: " << dy << endl;
-                // cerr << "delta_x: " << delta_x << endl;
-                // cerr << "delta_y: " << delta_y << endl;
+                // cerr << "span_x: " << span_x << endl;
+                // cerr << "span_y: " << span_y << endl;
 
                 for (int is = 0; is < n_samples; is++)
                 {
@@ -1654,7 +1663,6 @@ struct Block : public BlockBase<T>
                     {
                         cerr << "NOT IN DOMAIN" << endl;
                         cerr << "  " << x << "\t" << y << endl;
-                        // cerr << "  " << xl_int << " " << xh_int << " " << yl_int << " " << yh_int << endl;
                         ray_input->domain(idx,3) = 5;
                     }
                     else    // point is in domain, decode value from existing MFA
@@ -1671,7 +1679,6 @@ struct Block : public BlockBase<T>
                         this->mfa->Decode(param, outpt);
                         ray_input->domain.block(idx, new_dd, 1, pt_dim - dom_dim) = outpt.tail(pt_dim - dom_dim).transpose();
                     }
-                                       
                 }
             }
         }
@@ -1762,6 +1769,8 @@ struct Block : public BlockBase<T>
         this->max_errs.resize(this->mfa->nvars());
         this->sum_sq_errs.resize(this->mfa->nvars());
 
+        this->is_ray_model = true;
+
 
         // --------- Decode (for visualization) --------- //
         // this->decode_block(cp, 1, 0);
@@ -1774,6 +1783,7 @@ struct Block : public BlockBase<T>
         const VectorX<T>& b)
     {
         const double pi = 3.14159265358979;
+        const bool verbose = false;
 
         // TODO: This is for 2d only right now
         if (a.size() != 2 && b.size() != 2)
@@ -1782,65 +1792,79 @@ struct Block : public BlockBase<T>
             exit(1);
         }
 
-        T x0 = a(0);    // TODO rename these: these are segment endpoints, not the box intersections below
-        T y0 = a(1);
-        T x1 = b(0);
-        T y1 = b(1);
+        T a_x = a(0);
+        T a_y = a(1);
+        T b_x = b(0);
+        T b_y = b(1);
 
-cerr << a(0) << " " << a(1) << " " << b(0) << " " << b(1) << endl;
-cerr << y1 - y0 << "  " << x1-x0 << endl;
-        T m = (y1-y0)/(x1-x0);
+        // distance in x and y between the endpoints of the segment
+        T delta_x = b_x - a_x;
+        T delta_y = b_y - a_y;
+
+        T m = (b_y-a_y)/(b_x-a_x);
         T alpha = -1;
         T rho = 0;
 
-        if (x1 == x0)
+        if (a_x == b_x)
         {
-            alpha = pi/2;
-            rho = x0;
+            alpha = 0;
+            rho = a_x;
         }
         else
         {
-cerr << "m: " << m << ", atan(-m): " << atan(-m) << endl;
             alpha = pi/2 - atan(-m);          // acot(x) = pi/2 - atan(x)
-            rho = (y0 - m*x0)/(sqrt(1+m*m));     // cos(atan(x)) = 1/sqrt(1+m*m), sin(pi/2-x) = cos(x)
+            rho = (a_y - m*a_x)/(sqrt(1+m*m));     // cos(atan(x)) = 1/sqrt(1+m*m), sin(pi/2-x) = cos(x)
         }
-        
 
-cerr << "RAY: (" << a(0) << ", " << a(1) << ") ---- (" << b(0) << ", " << b(1) << ")" << endl;
-cerr << "|  alpha: " << alpha << ",   rho: " << rho << endl;
-
-        T a_x, a_y, b_x, b_y;   // box intersection points
-        get_box_intersections(alpha, rho, a_x, a_y, b_x, b_y, this->box_mins, this->box_maxs);
-
-        // distance in x and y between the endpoints of the segment
-        T delta_x = x1 - x0;
-        T delta_y = y1 - y0;
-        // T length = sqrt(delta_x*delta_x + delta_y*delta_y);
-
-        // distance in x and y between intersection points of the line with box
-        T x_sep = abs(b_x - a_x);
-        T y_sep = abs(b_y - a_y);
-        T length = sqrt(x_sep*x_sep + y_sep*y_sep);
-
-        // VectorX<T> p0(2);
-        // VectorX<T> p1(2);
-
-        // parameter values along ray for 'start' and 'end'
         T u0 = 0, u1 = 0;
-        if (delta_x == 0)
+        T length = 0;
+        bool fixed_length = false;
+        if (fixed_length)
         {
-            u0 = (y0 - a_y) / y_sep;
-            u1 = (y1 - a_y) / y_sep;
+            cerr << "NOT IMPLEMENTED!" << endl;
         }
-        else 
+        else
         {
-            u0 = (x0 - a_x) / x_sep;
-            u1 = (x1 - a_x) / x_sep;
+            T x0, x1, y0, y1;   // box intersection points
+            get_box_intersections(alpha, rho, x0, y0, x1, y1, this->box_mins, this->box_maxs);
+
+            // distance in x and y between intersection points of the line with box
+            T x_sep = abs(x1 - x0);
+            T y_sep = abs(y1 - y0);
+            length = sqrt(x_sep*x_sep + y_sep*y_sep);
+
+            // parameter values along ray for 'start' and 'end'
+            // compute in terms of Euclidean distance to avoid weird cases
+            //   when line is nearly horizontal or vertical
+            if (x_sep > y_sep)  // want to avoid dividing by near-epsilon numbers
+            {
+                u0 = abs(a_x - x0) / x_sep;
+                u1 = abs(b_x - x0) / x_sep;
+            }
+            else
+            {
+                u0 = abs(a_y - y0) / y_sep;
+                u1 = abs(b_y - y0) / y_sep;
+            }
         }
 
-cerr << "|  x_sep: " << x_sep << ",   y_sep:" << y_sep << endl;
-cerr << "|  u0: " << u0 << ",  u1: " << u1 << endl;
-cerr << "+---------------------------------------\n" << endl;
+        // Scalar valued path integrals do not have an orientation, so we always
+        // want the limits of integration to go from smaller to larger.
+        if (u0 > u1)
+        {
+            T temp  = u1;
+            u1 = u0;
+            u0 = temp;
+        }
+
+        if (verbose)
+        {
+            cerr << "RAY: (" << a(0) << ", " << a(1) << ") ---- (" << b(0) << ", " << b(1) << ")" << endl;
+            cerr << "|  m: " << ((a_x==b_x) ? "inf" : to_string(m).c_str()) << endl;
+            cerr << "|  alpha: " << alpha << ",   rho: " << rho << endl;
+            cerr << "|  u0: " << u0 << ",  u1: " << u1 << endl;
+            cerr << "+---------------------------------------\n" << endl;
+        }
 
         VectorX<T> output(1); // todo: this is hardcoded for the first (scalar) variable only
         this->integrate_axis_ray(cp, alpha, rho, u0, u1, length, output);

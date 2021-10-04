@@ -431,28 +431,52 @@ int main(int argc, char** argv)
         bool saved_basis = structured; // TODO: basis functions are currently only saved during encoding of structured data
         master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
                 { 
-                    b->range_error(cp, 1, true, saved_basis);
-                    b->print_block(cp, true);
+                    // b->range_error(cp, 1, true, saved_basis);
+                    // b->print_block(cp, true);
                     b->create_ray_model(cp, d_args);
 
+            real_t result = 0;
             VectorX<real_t> start_pt(2), end_pt(2);
 
-            // // = 0.0
-            // start_pt(0) = -3*M_PI; start_pt(1) = 0;
-            // end_pt(0) = 3*M_PI; end_pt(1) = 0;
+            // horizontal line where function is identically 0
+            // = 0.0
+            start_pt(0) = -3*M_PI; start_pt(1) = 0;
+            end_pt(0) = 3*M_PI; end_pt(1) = 0;
+            result = b->integrate_ray(cp, start_pt, end_pt);
+            cerr << "(-3pi, 0)---(3pi, 0):       " << result << endl;
+            cerr << "error:                      " << result << endl << endl;
+
+            // vertical line
+            // = 0.0
+            start_pt(0) = M_PI/2; start_pt(1) = -2*M_PI;
+            end_pt(0) = M_PI/2; end_pt(1) = 2*M_PI;
+            result = b->integrate_ray(cp, start_pt, end_pt);
+            cerr << "(pi/2, -2pi)---(pi/2, 2pi): " << result << endl;
+            cerr << "error:                      " << result << endl << endl;
             
-            // // = 5.75864344326
-            // start_pt(0) = 0, start_pt(1) = 0;
-            // end_pt(0) = 8, end_pt(1) = 8;   
+            // horizontal line
+            // = 2.0
+            start_pt(0) = 0; start_pt(1) = M_PI/2;
+            end_pt(0) = M_PI; end_pt(1) = M_PI/2;
+            result = b->integrate_ray(cp, start_pt, end_pt);
+            cerr << "(0, pi/2)---(pi, pi/2):     " << result << endl;
+            cerr << "relative error:             " << abs((result-2)/2) << endl << endl;
 
-            // // = 2.0
-            // start_pt(0) = 0; start_pt(1) = M_PI/2;
-            // end_pt(0) = M_PI; end_pt(1) = M_PI/2;
+            // line y=x
+            // = 5.75864344326
+            start_pt(0) = 0, start_pt(1) = 0;
+            end_pt(0) = 8, end_pt(1) = 8;
+            result = b->integrate_ray(cp, start_pt, end_pt);
+            cerr << "(0, 0)---(8, 8):            " << result << endl;
+            cerr << "relative error:             " << abs((result-5.75864344326)/5.75864344326) << endl << endl;
 
+            // "arbitrary" line
             // = 1.2198958397433
             start_pt(0) = -2; start_pt(1) = -4;
             end_pt(0) = 3; end_pt(1) = 11;
-            cerr << "Integral result: " << b->integrate_ray(cp, start_pt, end_pt) << endl;
+            result = b->integrate_ray(cp, start_pt, end_pt);
+            cerr << "(-2, -4)---(3, 11):         " << result << endl;
+            cerr << "relative error:             " << abs((result-1.2198958397433)/1.2198958397433) << endl << endl;
                      });
 #endif
         decode_time = MPI_Wtime() - decode_time;

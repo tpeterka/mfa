@@ -314,37 +314,33 @@ namespace mfa
                 {
                     N[i]       = MatrixX<T>::Zero(1, tensor.nctrl_pts(i));
 
-    cerr << "spans(" << i << ")" << endl;
                     spans(i) = mfa_data.FindSpan(i, params(i), tensor);
                     mfa_data.BasisFuns(i, params(i), spans[i], N[i], 0);
                 }
             }
-cerr << "span0. u0 = " << u0 << endl;
-            T span0 = mfa_data.FindSpan(dim, u0, tensor); 
-cerr << "span1. u1 = " << u1 << endl;
-            T span1 = mfa_data.FindSpan(dim, u1, tensor);
 
+            T span0 = mfa_data.FindSpan(dim, u0, tensor); 
+            T span1 = mfa_data.FindSpan(dim, u1, tensor);
             spans(dim) = span0;     // set this so we can pass 'spans' to the VolIterator below
 
             // Compute integrated basis functions in dimension 'dim'
             N[dim] = MatrixX<T>::Zero(1, tensor.nctrl_pts(dim));
             for (int s = span0 - mfa_data.p(dim); s <= span1; s++)
             {
-                int lower_span = s;
-                int upper_span = s + mfa_data.p(dim) + 1;
+                int lower_span = s;                         // knot index of lower bound of basis support
+                int upper_span = s + mfa_data.p(dim) + 1;   // knot index of upper bound of basis support
                 int ctrl_idx = s;
-// int ctrl_idx = ctrl_idxs(l);
-//                     int lower_span = ctrl_idx;                      // knot index of lower bound of basis support
-//                     int upper_span = ctrl_idx + mfa_data.p(l) + 1;  // knot index of upper bound of basis support
 
+                // The support of B_s is [k_start, k_end]
                 T k_start   = mfa_data.tmesh.all_knots[dim][lower_span];
                 T k_end     = mfa_data.tmesh.all_knots[dim][upper_span];
-                // T scaling   = (mfa_data.p(l)+1) / (k_end - k_start);
                 T scaling   = (k_end - k_start) / (mfa_data.p(dim)+1);
                 T suma      = 0;
                 T sumb      = 0;
 
-                if (span0 < lower_span)
+                // suma = int_0^u0 B_s, so if lower_span > span0, then the support of B_s is
+                // an interval always greater than u0. Thus the integral from 0 to u0 must be 0.
+                if (lower_span > span0)
                 {
                     suma = 0;
                 }
@@ -353,7 +349,11 @@ cerr << "span1. u1 = " << u1 << endl;
                     suma = mfa_data.IntBasisFunsHelper(mfa_data.p(dim)+1, dim, u0, ctrl_idx);
                 }
 
-                if (span1 >= upper_span)
+                // sumb = int_0^u1 B_s, so if upper_span <= span1, then the support of B_s is
+                // an interval always less than u1. Thus the integral from 0 to u0 must be 1, since
+                // IntBasisFunsHelper considers basis functions which are normalized s.t. the area
+                // under each basis function == 1.
+                if (upper_span <= span1)
                 {
                     sumb = 1;
                 }
@@ -369,9 +369,7 @@ cerr << "span1. u1 = " << u1 << endl;
             // evluate b-spline with integrated one dimension of integrated basis functions
             VectorXi subvolume = mfa_data.p + VectorXi::Ones(dom_dim);
             subvolume(dim) += span1 - span0;
-cerr << "spans: " << spans << endl;
-cerr << "subvolume: " << subvolume << endl;
-cerr << "nctrl: " << tensor.nctrl_pts << endl;
+
             VolIterator cp_it(subvolume, spans - mfa_data.p, tensor.nctrl_pts);
             while (!cp_it.done())
             {

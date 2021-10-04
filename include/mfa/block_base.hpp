@@ -81,6 +81,7 @@ struct BlockBase
     VectorX<T>          core_mins;              // local domain minimum corner w/o ghost
     VectorX<T>          core_maxs;              // local domain maximum corner w/o ghost
 
+    bool is_ray_model{false};
     VectorX<T>  box_mins;   // TODO remove this. This is solely for line integrals but should not be a permanent member
     VectorX<T>  box_maxs;   
 
@@ -346,18 +347,18 @@ struct BlockBase
         T                                   scale,
         VectorX<T>&                         output)
     {
+        // TODO: Create a subclass RayMFA from MFA which has methods like this in it?
+        if (!is_ray_model)
+        {
+            cerr << "ERROR: Attempting to call BlockBase::integrate_axis_ray but is_ray_model=false" << endl;
+            exit(1);
+        }
 
-        // this is a MESS; need to standardize order of dimensions
-        // need to turns alpha/rho_bounds into mins/maxs like everything else
-        // mfa->IntegrateAxisRay should take parameters only, normalization should be done here and not in MFA
-        VectorX<T> alpha_bounds(2);
-        VectorX<T> rho_bounds(2);
-        alpha_bounds(0) = bounds_mins(2);
-        alpha_bounds(1) = bounds_maxs(2);
-        rho_bounds(0) = bounds_mins(1);
-        rho_bounds(1) = bounds_maxs(1);
+        T alpha_param = (alpha - bounds_mins(2)) / (bounds_maxs(2) - bounds_mins(2));
+        T rho_param = (rho - bounds_mins(1)) / (bounds_maxs(1) - bounds_mins(1));
         
-        mfa->IntegrateAxisRay(mfa->var(0), alpha, rho, alpha_bounds, rho_bounds, u0, u1, output);
+        // TODO: this is first science variable only
+        mfa->IntegrateAxisRay(mfa->var(0), alpha_param, rho_param, u0, u1, output);
 
         output *= scale;
     }
