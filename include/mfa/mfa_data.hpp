@@ -29,7 +29,7 @@
 //
 // There are two types of dimensionality:
 // 1. The dimensionality of the NURBS tensor product (p.size())
-// (1D = NURBS curve, 2D = surface, 3D = volumem 4D = hypervolume, etc.)
+// (1D = NURBS curve, 2D = surface, 3D = volume 4D = hypervolume, etc.)
 // 2. The dimensionality of individual control points (ctrl_pts.cols())
 // p.size() < ctrl_pts.cols()
 //

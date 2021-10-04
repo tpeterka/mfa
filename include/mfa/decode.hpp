@@ -187,6 +187,7 @@ namespace mfa
             // ref: https://www.threadingbuildingblocks.org/tutorial-intel-tbb-thread-local-storage
             enumerable_thread_specific<DecodeInfo<T>> thread_decode_info(mfa_data, derivs);
 
+            static affinity_partitioner ap;
             parallel_for (blocked_range<size_t>(0, ps.npts), [&](blocked_range<size_t>& r)
             {
                 auto pt_it  = ps.iterator(r.begin());
@@ -229,7 +230,7 @@ namespace mfa
 
                     ps.domain.block(pt_it.idx(), min_dim, 1, max_dim - min_dim + 1) = cpt.transpose();
                 }
-            });
+            }, ap);
             if (verbose)
                 fprintf(stderr, "100 %% decoded\n");
 

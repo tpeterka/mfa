@@ -396,9 +396,9 @@ namespace mfa
 
                 VolIterator span_iter(sub_npts, sub_starts, all_npts);
 
-#if 0            // debug: turn off TBB
+// #if 0            // debug: turn off TBB
 
-// #ifdef MFA_TBB      // TBB version
+#ifdef MFA_TBB      // TBB version
 
                 // thread-local objects
                 // ref: https://www.threadingbuildingblocks.org/tutorial-intel-tbb-thread-local-storage
@@ -419,87 +419,90 @@ namespace mfa
                 enumerable_thread_specific<VectorXi>                thread_all_npts(mfa_data.dom_dim);      // for defining param_iter VolIterator
 
                 // iterate over spans
-                parallel_for (size_t(0), (size_t)span_iter.tot_iters(), [&] (size_t k)
+                static affinity_partitioner ap;
+                parallel_for (blocked_range<size_t>(0, span_iter.tot_iters()), [&] (blocked_range<size_t>& r)
                 {
-
-                    span_iter.idx_ijk(k, thread_span_ijk.local());
-
-                    // setup vol iterator over parameters inside of current knot span
-                    for (auto j = 0; j < dom_dim; j++)
+                    for (auto k = r.begin(); k < r.end(); k++)
                     {
-                        KnotIdx min_knot_idx    = t.knot_idxs[j][thread_span_ijk.local()(j)];       // knot idx at start of span
-                        KnotIdx max_knot_idx    = t.knot_idxs[j][thread_span_ijk.local()(j) + 1];   // knot idx at end of span
-                        ParamIdx min_param_idx  = all_knot_param_idxs[j][min_knot_idx];             // first parameter index of the knot span
-                        ParamIdx max_param_idx  = all_knot_param_idxs[j][max_knot_idx] - 1;         // last parameter index of the knot span
-                        if (max_param_idx == input.params->param_grid[j].size() - 1)                // include last parameter in last knot span
-                            max_param_idx++;
+                        span_iter.idx_ijk(k, thread_span_ijk.local());
 
-                        thread_sub_npts.local()(j)      = max_param_idx - min_param_idx;
-                        thread_all_npts.local()(j)      = max_param_idx;
-                        thread_sub_starts.local()(j)    = min_param_idx;
-                    }
-                    VolIterator param_iter(thread_sub_npts.local(), thread_sub_starts.local(), thread_all_npts.local());
-
-                    // iterate over input domain points
-                    while (!param_iter.done())
-                    {
-                        param_iter.idx_ijk(param_iter.cur_iter(), thread_param_ijk.local());    // ijk of current input point
-
-                        // parameters of current input point
+                        // setup vol iterator over parameters inside of current knot span
                         for (auto j = 0; j < dom_dim; j++)
-                            thread_param.local()(j) = input.params->param_grid[j][thread_param_ijk.local()(j)];
+                        {
+                            KnotIdx min_knot_idx    = t.knot_idxs[j][thread_span_ijk.local()(j)];       // knot idx at start of span
+                            KnotIdx max_knot_idx    = t.knot_idxs[j][thread_span_ijk.local()(j) + 1];   // knot idx at end of span
+                            ParamIdx min_param_idx  = all_knot_param_idxs[j][min_knot_idx];             // first parameter index of the knot span
+                            ParamIdx max_param_idx  = all_knot_param_idxs[j][max_knot_idx] - 1;         // last parameter index of the knot span
+                            if (max_param_idx == input.params->param_grid[j].size() - 1)                // include last parameter in last knot span
+                                max_param_idx++;
 
-                        // decode the point
+                            thread_sub_npts.local()(j)      = max_param_idx - min_param_idx;
+                            thread_all_npts.local()(j)      = max_param_idx;
+                            thread_sub_starts.local()(j)    = min_param_idx;
+                        }
+                        VolIterator param_iter(thread_sub_npts.local(), thread_sub_starts.local(), thread_all_npts.local());
+
+                        // iterate over input domain points
+                        while (!param_iter.done())
+                        {
+                            param_iter.idx_ijk(param_iter.cur_iter(), thread_param_ijk.local());    // ijk of current input point
+
+                            // parameters of current input point
+                            for (auto j = 0; j < dom_dim; j++)
+                                thread_param.local()(j) = input.params->param_grid[j][thread_param_ijk.local()(j)];
+
+                            // decode the point
 #ifdef MFA_TMESH
-                        decoder.VolPt_tmesh(thread_param.local(), thread_cpt.local());
+                            decoder.VolPt_tmesh(thread_param.local(), thread_cpt.local());
 #else
-                        if (saved_basis)
-                            decoder.VolPt_saved_basis(thread_param_ijk.local(), thread_param.local(), thread_cpt.local(), thread_decode_info.local(), t);
-                        else
-                            decoder.VolPt(thread_param.local(), thread_cpt.local(), thread_decode_info.local(), t);
+                            if (saved_basis)
+                                decoder.VolPt_saved_basis(thread_param_ijk.local(), thread_param.local(), thread_cpt.local(), thread_decode_info.local(), t);
+                            else
+                                decoder.VolPt(thread_param.local(), thread_cpt.local(), thread_decode_info.local(), t);
 #endif
 
-                        // error between decoded point and input point
-                        size_t dom_idx = dom_iter.ijk_idx(thread_param_ijk.local());
-                        T max_abs_err   = 0.0;                              // max over dims. of one point of absolute error
-                        T max_norm_err  = 0.0;                              // max over dims. of one point of normalized error
-                        for (auto j = 0; j < mfa_data.max_dim - mfa_data.min_dim + 1; j++)
-                        {
-                            T abs_err       = fabs(thread_cpt.local()(j) - input.domain(dom_idx, mfa_data.min_dim + j));
-                            T norm_err      = abs_err / extents(mfa_data.min_dim + j);
-                            max_abs_err     = std::max(abs_err, max_abs_err);
-                            max_norm_err    = std::max(norm_err, max_norm_err);
-                            thread_error_stats.local().max_abs_err      = std::max(max_abs_err, thread_error_stats.local().max_abs_err);
-                            thread_error_stats.local().max_norm_err     = std::max(max_norm_err, thread_error_stats.local().max_norm_err);
-                            thread_error_stats.local().sum_sq_abs_errs  += max_abs_err * max_abs_err;
-                            thread_error_stats.local().sum_sq_norm_errs += max_norm_err * max_norm_err;
-                        }
-
-                        if (max_norm_err > err_limit)                       // assumes err_limit is normalized
-                        {
-                            if (valid_split_span_local(thread_span_ijk.local(), t, thread_nnew_knots.local(), thread_new_knot_idx.local(), thread_new_knot_val.local()))    // splitting span will have input points
+                            // error between decoded point and input point
+                            size_t dom_idx = dom_iter.ijk_idx(thread_param_ijk.local());
+                            T max_abs_err   = 0.0;                              // max over dims. of one point of absolute error
+                            T max_norm_err  = 0.0;                              // max over dims. of one point of normalized error
+                            for (auto j = 0; j < mfa_data.max_dim - mfa_data.min_dim + 1; j++)
                             {
-                                // debug
-//                                 fmt::print(stderr, "inserting new knot in span  {}\n", k);
-
-                                // record new knot to be inserted
-                                for (auto j = 0; j < dom_dim; j++)
-                                {
-                                    thread_new_knot_idxs.local()[j].push_back(thread_new_knot_idx.local()[j]);
-                                    thread_new_knots.local()[j].push_back(thread_new_knot_val.local()[j]);
-                                    thread_nnew_knots.local()[j]++;
-                                }
-                                thread_parent_tensor_idxs.local().push_back(tidx);
-                                retval      = false;
-                                tensor_done = false;
+                                T abs_err       = fabs(thread_cpt.local()(j) - input.domain(dom_idx, mfa_data.min_dim + j));
+                                T norm_err      = abs_err / extents(mfa_data.min_dim + j);
+                                max_abs_err     = std::max(abs_err, max_abs_err);
+                                max_norm_err    = std::max(norm_err, max_norm_err);
+                                thread_error_stats.local().max_abs_err      = std::max(max_abs_err, thread_error_stats.local().max_abs_err);
+                                thread_error_stats.local().max_norm_err     = std::max(max_norm_err, thread_error_stats.local().max_norm_err);
+                                thread_error_stats.local().sum_sq_abs_errs  += max_abs_err * max_abs_err;
+                                thread_error_stats.local().sum_sq_norm_errs += max_norm_err * max_norm_err;
                             }
-                            break;
-                        }
 
-                        param_iter.incr_iter();
-                    }   // iterator over domain input points in a knot span
+                            if (max_norm_err > err_limit)                       // assumes err_limit is normalized
+                            {
+                                if (valid_split_span_local(thread_span_ijk.local(), t, thread_nnew_knots.local(), thread_new_knot_idx.local(), thread_new_knot_val.local()))    // splitting span will have input points
+                                {
+                                    // debug
+//                                     fmt::print(stderr, "inserting new knot in span  {}\n", k);
 
-                }, static_partitioner()); // parallel for all knot spans
+                                    // record new knot to be inserted
+                                    for (auto j = 0; j < dom_dim; j++)
+                                    {
+                                        thread_new_knot_idxs.local()[j].push_back(thread_new_knot_idx.local()[j]);
+                                        thread_new_knots.local()[j].push_back(thread_new_knot_val.local()[j]);
+                                        thread_nnew_knots.local()[j]++;
+                                    }
+                                    thread_parent_tensor_idxs.local().push_back(tidx);
+                                    retval      = false;
+                                    tensor_done = false;
+                                }
+                                break;
+                            }
+
+                            param_iter.incr_iter();
+                        }   // iterator over domain input points in a knot span
+                    }   // for k
+
+                }, ap); // parallel for all knot spans
 
                 // combine thread-safe error_stats
                 thread_error_stats.combine_each([&](const ErrorStats<T>& err)
