@@ -1656,20 +1656,26 @@ struct Block : public BlockBase<T>
                     // T y = y0 - is * dy;
                     T y = y0 + is * dy;
 
-                    // cerr << x << "\t" << y << endl;
-
-                    // If this point is not in domain, then set zero
+                    // If this point is not in the original domain
                     if (x < xl - 1e-8 || x > xh + 1e-8 || y < yl - 1e-8 || y > yh + 1e-8)
                     {
-                        cerr << "NOT IN DOMAIN" << endl;
-                        cerr << "  " << x << "\t" << y << endl;
-                        ray_input->domain(idx,3) = 5;
+                        if (fixed_length)  // do nothing in fixed_length setting
+                        {
+                            continue;
+                        }
+                        else                // else complain and zero-pad (this should not happen)
+                        {
+                            cerr << "NOT IN DOMAIN" << endl;
+                            cerr << "  " << x << "\t" << y << endl;
+                            ray_input->domain(idx,3) = 0;
+                        }
                     }
                     else    // point is in domain, decode value from existing MFA
                     {
                         param(0) = (x - xl) / (xh - xl);
                         param(1) = (y - yl) / (yh - yl);
 
+                        // Truncate to [0,1] in the presence of small round-off errors
                         param(0) = param(0) < 0 ? 0 : param(0);
                         param(1) = param(1) < 0 ? 0 : param(1);
                         param(0) = param(0) > 1 ? 1 : param(0);
@@ -1722,7 +1728,7 @@ struct Block : public BlockBase<T>
             ray_mfa->AddVariable(p, nctrl_pts, 1);
         }
 
-        // Encode ray model
+        // Encode ray model. TODO: regularized encode
         ray_mfa->FixedEncode(*ray_input, false);
 
 
@@ -1816,36 +1822,37 @@ struct Block : public BlockBase<T>
             rho = (a_y - m*a_x)/(sqrt(1+m*m));     // cos(atan(x)) = 1/sqrt(1+m*m), sin(pi/2-x) = cos(x)
         }
 
+        T x0, x1, y0, y1;   // end points of full line
         T u0 = 0, u1 = 0;
         T length = 0;
         bool fixed_length = false;
         if (fixed_length)
         {
-            cerr << "NOT IMPLEMENTED!" << endl;
+            T r_lim = bounds_maxs(1);   // WARNING TODO: make r_lim query-able in RayMFA class
+            x0 = rho * cos(alpha) - r_lim * sin(alpha);
+            x1 = rho * cos(alpha) + r_lim * sin(alpha);
+            y0 = rho * sin(alpha) + r_lim * cos(alpha);
+            y1 = rho * sin(alpha) - r_lim * cos(alpha);
         }
         else
         {
-            T x0, x1, y0, y1;   // box intersection points
             get_box_intersections(alpha, rho, x0, y0, x1, y1, this->box_mins, this->box_maxs);
+        }
 
-            // distance in x and y between intersection points of the line with box
-            T x_sep = abs(x1 - x0);
-            T y_sep = abs(y1 - y0);
-            length = sqrt(x_sep*x_sep + y_sep*y_sep);
-
-            // parameter values along ray for 'start' and 'end'
-            // compute in terms of Euclidean distance to avoid weird cases
-            //   when line is nearly horizontal or vertical
-            if (x_sep > y_sep)  // want to avoid dividing by near-epsilon numbers
-            {
-                u0 = abs(a_x - x0) / x_sep;
-                u1 = abs(b_x - x0) / x_sep;
-            }
-            else
-            {
-                u0 = abs(a_y - y0) / y_sep;
-                u1 = abs(b_y - y0) / y_sep;
-            }
+        // parameter values along ray for 'start' and 'end'
+        // compute in terms of Euclidean distance to avoid weird cases
+        //   when line is nearly horizontal or vertical
+        T x_sep = abs(x1 - x0);
+        T y_sep = abs(y1 - y0);
+        if (x_sep > y_sep)  // want to avoid dividing by near-epsilon numbers
+        {
+            u0 = abs(a_x - x0) / x_sep;
+            u1 = abs(b_x - x0) / x_sep;
+        }
+        else
+        {
+            u0 = abs(a_y - y0) / y_sep;
+            u1 = abs(b_y - y0) / y_sep;
         }
 
         // Scalar valued path integrals do not have an orientation, so we always
