@@ -589,6 +589,9 @@ namespace mfa
             Nfree = MatrixX<T>::Zero(ndom_pts.prod(), t.ctrl_pts.rows());
             int max_nnz_col = 0;                                                                // max num nonzeros in any column
 
+            // debug
+            fmt::print(stderr, "Nfree has {} rows and {} columns\n", Nfree.rows(), Nfree.cols());
+
             // local knot vector
             vector<vector<KnotIdx>> local_knot_idxs(mfa_data.dom_dim);                          // local knot indices
             vector<vector<T>> local_knots(mfa_data.dom_dim);                                    // local knot vector for current dim in parameter space
@@ -598,8 +601,72 @@ namespace mfa
                 local_knots[k].resize(mfa_data.p(k) + 2);
             }
 
-            // iterator over free control points
-            VolIterator free_iter(t.nctrl_pts);
+#ifdef MFA_TBB  // TBB
+
+            VolIterator dom_iter(ndom_pts, dom_starts, input.ndom_pts); // iterator over input points
+            VolIterator free_iter(t.nctrl_pts);                         // iterator over free control points
+
+            enumerable_thread_specific<vector<vector<KnotIdx>>> thread_local_knot_idxs(mfa_data.dom_dim);   // local knot idices
+            enumerable_thread_specific<vector<vector<T>>>       thread_local_knots(mfa_data.dom_dim);       // local knot idices
+            enumerable_thread_specific<VectorXi>                thread_dom_ijk(mfa_data.dom_dim);           // multidim index of domain point
+            enumerable_thread_specific<VectorXi>                thread_free_ijk(mfa_data.dom_dim);          // multidim index of control point
+            enumerable_thread_specific<vector<KnotIdx>>         thread_anchor(mfa_data.dom_dim);            // anchor of control point
+            enumerable_thread_specific<vector<int>>             thread_nnz_col(Nfree.cols(), 0);            // number of nonzeros in each column
+            static affinity_partitioner                         ap;
+            parallel_for (blocked_range2d<size_t>(0, dom_iter.tot_iters(), 0, free_iter.tot_iters()), [&] (blocked_range2d<size_t>& r)
+            {
+                for (auto i = r.cols().begin(); i < r.cols().end(); i++)                                // for control points
+                {
+                    if (i == r.cols().begin())
+                    {
+                        for (auto k = 0; k < mfa_data.dom_dim; k++)
+                        {
+                            thread_local_knot_idxs.local()[k].resize(mfa_data.p(k) + 2);
+                            thread_local_knots.local()[k].resize(mfa_data.p(k) + 2);
+                        }
+                    }
+
+                    free_iter.idx_ijk(i, thread_free_ijk.local());                                      // ijk of domain point
+                    mfa_data.tmesh.ctrl_pt_anchor(t, thread_free_ijk.local(), thread_anchor.local());   // anchor of control point
+
+                    // local knot vector
+                    mfa_data.tmesh.knot_intersections(thread_anchor.local(), t_idx, true, thread_local_knot_idxs.local());
+                    for (auto k = 0; k < mfa_data.dom_dim; k++)
+                    {
+                        for (auto n = 0; n < thread_local_knot_idxs.local()[k].size(); n++)
+                            thread_local_knots.local()[k][n] = mfa_data.tmesh.all_knots[k][thread_local_knot_idxs.local()[k][n]];
+                    }
+
+                    for (auto j = r.rows().begin(); j < r.rows().end(); j++)                            // for input domain points
+                    {
+                        dom_iter.idx_ijk(j, thread_dom_ijk.local());                                    // ijk of domain point
+                        for (auto k = 0; k < mfa_data.dom_dim; k++)
+                        {
+                            T u = input.params->param_grid[k][thread_dom_ijk.local()(k)];               // parameter of current input point
+                            T B = mfa_data.OneBasisFun(k, u, thread_local_knots.local()[k]);                           // basis function
+                            Nfree(j, i) = (k == 0 ? B : Nfree(j, i) * B);
+                        }
+                        if (Nfree(j, i) != 0.0)
+                            thread_nnz_col.local()[i]++;
+                    }       // for blocked range rows, ie, input domain points
+                }       // for blocked range cols, ie, control points
+            }, ap); // parallel for
+
+            // combine thread-safe nnz_col
+            vector<int> nnz_col(Nfree.cols(), 0);       // nonzeros in each column of Nfree, summed from threads
+            thread_nnz_col.combine_each([&](const vector<int>& nnzs)
+            {
+                for (auto i = 0; i < Nfree.cols(); i++)
+                {
+                    nnz_col[i]  += nnzs[i];
+                    if (nnz_col[i] > max_nnz_col)
+                        max_nnz_col = nnz_col[i];
+                }
+            });
+
+#else           // serial
+
+            VolIterator free_iter(t.nctrl_pts);                         // iterator over free control points
             while (!free_iter.done())
             {
                 VectorXi ijk(mfa_data.dom_dim);                                                 // ijk of current control point
@@ -616,45 +683,11 @@ namespace mfa
 
                 int nnz_col = 0;                                                                // num nonzeros in current column
 
-                // iterator over input points
-                VolIterator dom_iter(ndom_pts, dom_starts, input.ndom_pts);
-
-#ifdef MFA_TBB  // TBB
-
-                enumerable_thread_specific<VectorXi>    thread_dom_ijk(mfa_data.dom_dim);       // multidim index of domain point
-                enumerable_thread_specific<int>         thread_nnz_col(0);                      // number of nonzero columns
-                static affinity_partitioner             ap;
-                parallel_for (blocked_range<size_t>(0, dom_iter.tot_iters()), [&] (blocked_range<size_t>& r)
-                {
-                    for (auto j = r.begin(); j < r.end(); j++)
-                    {
-                        dom_iter.idx_ijk(j, thread_dom_ijk.local());                                // ijk of domain point
-                        for (auto k = 0; k < mfa_data.dom_dim; k++)
-                        {
-                            int p = mfa_data.p(k);                                                  // degree of current dim.
-                            T u = input.params->param_grid[k][thread_dom_ijk.local()(k)];           // parameter of current input point
-                            T B = mfa_data.OneBasisFun(k, u, local_knots[k]);                       // basis function
-                            Nfree(j, free_iter.cur_iter()) =
-                            (k == 0 ? B : Nfree(j, free_iter.cur_iter()) * B);
-                        }
-                        if (Nfree(j, free_iter.cur_iter()) != 0.0)
-                        thread_nnz_col.local()++;
-                    }
-                }, ap);
-
-                // combine thread-safe nnz_col
-                thread_nnz_col.combine_each([&](int n)
-                {
-                    nnz_col  += n;
-                });
-
-#else           // serial
-
+                VolIterator dom_iter(ndom_pts, dom_starts, input.ndom_pts);                     // iterator over input points
                 while (!dom_iter.done())
                 {
                     for (auto k = 0; k < mfa_data.dom_dim; k++)                                 // for all dims
                     {
-                        int p = mfa_data.p(k);                                                  // degree of current dim.
                         T u = input.params->param_grid[k][dom_iter.idx_dim(k)];                 // parameter of current input point
                         T B = mfa_data.OneBasisFun(k, u, local_knots[k]);                       // basis function
                         Nfree(dom_iter.cur_iter(), free_iter.cur_iter()) =
@@ -665,12 +698,13 @@ namespace mfa
                     dom_iter.incr_iter();
                 }       // domain point iterator
 
-#endif          // TBB or serial
-
                 if (nnz_col > max_nnz_col)
                     max_nnz_col = nnz_col;
                 free_iter.incr_iter();
             }       // free control point iterator
+
+#endif          // TBB or serial
+
             return max_nnz_col;
         }
 
@@ -747,6 +781,9 @@ namespace mfa
         {
             Ncons = MatrixX<T>::Constant(ndom_pts.prod(), Ncons.cols(), -1);         // basis functions, -1 means unassigned so far
 
+            // debug
+            fmt::print(stderr, "Ncons has {} rows and {} columns\n", Ncons.rows(), Ncons.cols());
+
             // local knot vector
             vector<vector<KnotIdx>> local_knot_idxs(mfa_data.dom_dim);                          // local knot indices
             vector<vector<T>> local_knots(mfa_data.dom_dim);                                    // local knot vector for current dim in parameter space
@@ -755,6 +792,53 @@ namespace mfa
                 local_knot_idxs[k].resize(mfa_data.p(k) + 2);
                 local_knots[k].resize(mfa_data.p(k) + 2);
             }
+
+#ifdef MFA_TBB  // TBB
+
+            VolIterator dom_iter(ndom_pts, dom_starts, input.ndom_pts);                         // iterator over input points
+
+            enumerable_thread_specific<vector<vector<KnotIdx>>> thread_local_knot_idxs(mfa_data.dom_dim);   // local knot idices
+            enumerable_thread_specific<vector<vector<T>>>       thread_local_knots(mfa_data.dom_dim);       // local knot idices
+            enumerable_thread_specific<VectorXi>                thread_dom_ijk(mfa_data.dom_dim);   // multidim index of domain point
+            static affinity_partitioner                         ap;
+            parallel_for (blocked_range2d<size_t>(0, Ncons.rows(), 0, Ncons.cols()), [&] (blocked_range2d<size_t>& r)
+            {
+                for (auto i = r.cols().begin(); i < r.cols().end(); i++)
+                {
+                    if (i == r.cols().begin())
+                    {
+                        for (auto k = 0; k < mfa_data.dom_dim; k++)
+                        {
+                            thread_local_knot_idxs.local()[k].resize(mfa_data.p(k) + 2);
+                            thread_local_knots.local()[k].resize(mfa_data.p(k) + 2);
+                        }
+                    }
+
+                    // local knot vector
+                    mfa_data.tmesh.knot_intersections(anchors[i], t_idx_anchors[i], true, thread_local_knot_idxs.local());
+                    for (auto k = 0; k < mfa_data.dom_dim; k++)
+                    {
+                        for (auto n = 0; n < thread_local_knot_idxs.local()[k].size(); n++)
+                            thread_local_knots.local()[k][n] = mfa_data.tmesh.all_knots[k][thread_local_knot_idxs.local()[k][n]];
+                    }
+
+                    for (auto j = r.rows().begin(); j < r.rows().end(); j++)
+                    {
+                        dom_iter.idx_ijk(j, thread_dom_ijk.local());                        // ijk of domain point
+                        for (auto k = 0; k < mfa_data.dom_dim; k++)
+                        {
+                            T u = input.params->param_grid[k][thread_dom_ijk.local()(k)];   // parameter of current input point
+                            T B = mfa_data.OneBasisFun(k, u, thread_local_knots.local()[k]);// basis function
+                            if (Ncons(j, i) == -1.0)                                        // unassigned so far
+                                Ncons(j, i) = B;
+                            else
+                                Ncons(j, i) *= B;
+                        }
+                    }       // for blocked range rows
+                }       // for blocked range cols
+            }, ap); // parallel for
+
+#else       // serial
 
             for (auto i = 0; i < Ncons.cols(); i++)                                             // for all constraint control points
             {
@@ -770,7 +854,6 @@ namespace mfa
                 {
                     for (auto k = 0; k < mfa_data.dom_dim; k++)                                 // for all dims
                     {
-                        int p = mfa_data.p(k);                                                  // degree of current dim.
                         T u = input.params->param_grid[k][dom_iter.idx_dim(k)];                             // parameter of current input point
                         T B = mfa_data.OneBasisFun(k, u, local_knots[k]);                       // basis function
                         if (Ncons(dom_iter.cur_iter(), i) == -1.0)                              // unassigned so far
@@ -780,7 +863,9 @@ namespace mfa
                     }           // for all dims
                     dom_iter.incr_iter();
                 }           // domain points iterator
-            }           // for all constraint control points
+            }       // for all constraint control points
+
+#endif      // TBB or serial
 
             // set any unassigned values in Ncons to 0
             for (auto i = 0; i < Ncons.rows(); i++)
