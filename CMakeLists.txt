@@ -16,10 +16,10 @@ if                          (NOT CMAKE_BUILD_TYPE)
 endif                       (NOT CMAKE_BUILD_TYPE)
 
 # MPI
- if                         (NOT wrapped_mpi)
-     find_package           (MPI REQUIRED)
-     set                    (libraries ${libraries} ${MPI_C_LIBRARIES} ${MPI_CXX_LIBRARIES})
- endif                      ()
+if                          (NOT wrapped_mpi)
+    find_package            (MPI REQUIRED)
+    set                     (libraries ${libraries} ${MPI_C_LIBRARIES} ${MPI_CXX_LIBRARIES})
+endif                       ()
 
 # MFA threading model
 if                          (mfa_thread MATCHES "tbb")
