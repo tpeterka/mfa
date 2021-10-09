@@ -55,7 +55,7 @@ int main(int argc, char** argv)
     string infile;                              // input file name
     int    structured   = 1;                    // input data format (bool 0/1)
     int    rand_seed    = -1;                   // seed to use for random data generation (-1 == no randomization)
-    float   regularization = 0;                   // smoothing parameter for models with non-uniform input density (0 == no smoothing)
+    float  regularization = 0;                   // smoothing parameter for models with non-uniform input density (0 == no smoothing)
     bool   help         = false;                // show help
 
 
@@ -122,6 +122,7 @@ int main(int argc, char** argv)
     cerr << "threading: serial" << endl;
 #endif
 #ifdef MFA_NO_WEIGHTS
+    weighted = 0;
     cerr << "weighted = 0" << endl;
 #else
     cerr << "weighted = " << weighted << endl;
