@@ -37,26 +37,36 @@
 
 namespace mfa
 {
-
     // n.b. We don't store this as a member of MFA_Data because we want multiple threads to 
     //      interact with the same MFA_Data simultaneously. In a threaded environment,
     //      BasisFunInfo should be thread-local
     template<typename T>
     struct BasisFunInfo
     {
-        // vector<T>   scratch;
         vector<T>   right;
         vector<T>   left;
-        int qmax;
+        int         qmax;
 
         BasisFunInfo(const vector<int>& q) :
             qmax(0)
         {
             for (int i = 0; i < q.size(); i++)
             {
-
                 if (q[i] > qmax)
                     qmax = q[i];
+            }
+
+            right.resize(qmax);
+            left.resize(qmax);
+        }
+
+        BasisFunInfo(const VectorXi& q) :
+            qmax(0)
+        {
+            for (int i = 0; i < q.size(); i++)
+            {
+                if (q(i) > qmax)
+                    qmax = q(i);
             }
 
             right.resize(qmax);

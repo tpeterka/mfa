@@ -1116,11 +1116,11 @@ namespace mfa
                 const TensorProduct<T>& tensor) const    // tensor product to use for decoding
         {
 #ifdef MFA_TMESH
-cerr << "ERROR: Cannot use BasicVolPt with TMesh" << endl;
+cerr << "ERROR: Cannot use FastVolPt with TMesh" << endl;
 exit(1);
 #endif
 #ifndef MFA_NO_WEIGHTS
-cerr << "ERROR: Must define MFA_NO_WEIGHTS to use BasicVolPt" << endl;
+cerr << "ERROR: Must define MFA_NO_WEIGHTS to use FastVolPt" << endl;
 exit(1);
 #endif
             // compute spans and basis functions for the given parameters
