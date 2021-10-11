@@ -260,7 +260,7 @@ struct BlockBase
                 dom_dim - 1);
         geometry.mfa_data->set_knots(*input);
         // TODO: consider not weighting the geometry (only science variables), depends on geometry complexity
-        mfa->AdaptiveEncode(*geometry.mfa_data, *input, err_limit, a->verbose, a->weighted, a->local, extents, max_rounds);
+        mfa->AdaptiveEncode(*geometry.mfa_data, *input, err_limit, a->verbose, a->weighted, extents, max_rounds);
 
         // encode science variables
         for (auto i = 0; i< vars.size(); i++)
@@ -279,7 +279,7 @@ struct BlockBase
                     dom_dim + i,        // assumes each variable is scalar
                     dom_dim + i);
             vars[i].mfa_data->set_knots(*input);
-            mfa->AdaptiveEncode(*(vars[i].mfa_data), *input, err_limit, a->verbose, a->weighted, a->local, extents, max_rounds);
+            mfa->AdaptiveEncode(*(vars[i].mfa_data), *input, err_limit, a->verbose, a->weighted, extents, max_rounds);
         }
     }
 

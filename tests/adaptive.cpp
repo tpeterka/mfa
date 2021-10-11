@@ -31,13 +31,13 @@ int main(int argc, char** argv)
     diy::create_logger("trace");
 
     // initialize MPI
-    diy::mpi::environment  env(argc, argv); // equivalent of MPI_Init(argc, argv)/MPI_Finalize()
-    diy::mpi::communicator world;           // equivalent of MPI_COMM_WORLD
+    diy::mpi::environment  env(argc, argv);           // equivalent of MPI_Init(argc, argv)/MPI_Finalize()
+    diy::mpi::communicator world;                     // equivalent of MPI_COMM_WORLD
 
-    int nblocks     = 1;                     // number of local blocks
+    int nblocks     = 1;                              // number of local blocks
     int tot_blocks  = nblocks * world.size();
-    int mem_blocks  = -1;                    // everything in core for now
-    int num_threads = 1;                     // needed in order to do timing
+    int mem_blocks  = -1;                             // everything in core for now
+    int num_threads = 1;                              // needed in order to do timing
 
     // default command line arguments
     real_t norm_err_limit = 1.0;                      // maximum normalized error limit

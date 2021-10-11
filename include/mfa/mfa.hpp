@@ -34,8 +34,8 @@
 #define MFA_TMESH
 
 // the following lines control the extent of merging small tensors into larger ones
-#define MFA_TMESH_MERGE_MAX
-// #define MFA_TMESH_MERGE_FEW
+// #define MFA_TMESH_MERGE_MAX
+#define MFA_TMESH_MERGE_FEW
 // #define MFA_TMESH_MERGE_NONE
 
 #include    <Eigen/Dense>
@@ -157,8 +157,6 @@ namespace mfa
                 T                   err_limit,              // maximum allowable normalized error
                 int                 verbose,                // debug level
                 bool                weighted,               // solve for and use weights (default = true)
-                // TOOD: always use local = true and deprecate the local argument
-                bool                local,                  // solve locally (with constraints) each round
                 const VectorX<T>&   extents,                // extents in each dimension, for normalizing error (size 0 means do not normalize)
                 int                 max_rounds) const       // optional maximum number of rounds
         {
@@ -167,7 +165,7 @@ namespace mfa
 #ifndef MFA_TMESH           // original adaptive encode for one tensor product
             encoder.OrigAdaptiveEncode(err_limit, weighted, extents, max_rounds);
 #else                       // adaptive encode for tmesh
-            encoder.AdaptiveEncode(err_limit, weighted, local, extents, max_rounds);
+            encoder.AdaptiveEncode(err_limit, weighted, extents, max_rounds);
 #endif
         }
 

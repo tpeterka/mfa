@@ -78,6 +78,7 @@ namespace mfa
         int                         min_dim_;           // starting coordinate of this model in full-dimensional data
         int                         max_dim_;           // ending coordinate of this model in full-dimensional data
         int                         cur_split_dim;      // current split dimension
+        int                         max_level;          // deepest level of refinement
 
         Tmesh(int               dom_dim,                // number of domain dimension
               const VectorXi&   p,                      // degree in each dimension
@@ -87,7 +88,9 @@ namespace mfa
                 dom_dim_(dom_dim),
                 p_(p),
                 min_dim_(min_dim),
-                max_dim_(max_dim)
+                max_dim_(max_dim),
+                cur_split_dim(0),
+                max_level(0)
         {
             all_knots.resize(dom_dim_);
             all_knot_levels.resize(dom_dim_);
@@ -95,8 +98,6 @@ namespace mfa
 
             if (ntensor_prods)
                 tensor_prods.resize(ntensor_prods);
-
-            cur_split_dim = 0;
         }
 
         // initialize knots
@@ -139,6 +140,8 @@ namespace mfa
             pos = FindSpan(dim, knot);
             if (knot > all_knots[dim][pos])
                 pos++;
+            if (level > max_level)
+                max_level = level;
             return insert_knot_at_pos(dim, pos, level, knot, params);
         }
 
