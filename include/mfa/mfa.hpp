@@ -34,8 +34,8 @@
 #define MFA_TMESH
 
 // the following lines control the extent of merging small tensors into larger ones
-// #define MFA_TMESH_MERGE_MAX
-#define MFA_TMESH_MERGE_FEW
+#define MFA_TMESH_MERGE_MAX
+// #define MFA_TMESH_MERGE_SOME
 // #define MFA_TMESH_MERGE_NONE
 
 #include    <Eigen/Dense>

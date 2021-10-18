@@ -1389,6 +1389,43 @@ namespace mfa
             }
         }
 
+        // constrain tensor knot_mins, knot_maxs to parent of tensor, if closer to parent than pad
+        void constrain_to_parent(
+                TensorProduct<T>&   t,          // tensor to constrain
+                int                 pad)        // constrain to parent if tensor is within pad of parent or greater
+        {
+            auto& parent = tensor_prods[t.parent];
+            for (auto j = 0; j < dom_dim_; j++)
+            {
+                int edge_pad = (p_(j) / 2) + 1;                                 // extra padding for tensor at the global edge
+                int ofst = (t.knot_mins[j] == 0) ? pad + edge_pad : pad;
+                if (t.knot_mins[j] < parent.knot_mins[j] ||
+                        knot_idx_dist(parent, parent.knot_mins[j], t.knot_mins[j], j, false) < ofst)
+                    t.knot_mins[j] = parent.knot_mins[j];
+                ofst = (t.knot_maxs[j] == all_knots[j].size() - 1) ? pad + edge_pad : pad;
+                if (t.knot_maxs[j] > parent.knot_maxs[j] ||
+                        knot_idx_dist(parent, t.knot_maxs[j], parent.knot_maxs[j], j, false) < ofst)
+                    t.knot_maxs[j] = parent.knot_maxs[j];
+            }
+        }
+
+        // merges two tensor product knot mins, maxs, optionally constrained by parent of resulting tensor
+        void merge_tensors(
+                TensorProduct<T>&   inout,      // one of the input tensors and the output of the merge
+                TensorProduct<T>&   in,         // other input tensor
+                int                 pad)        // constrain merge to parent of inout if merge is within pad of parent; -1: don't constrain to parent
+        {
+            vector<KnotIdx> merge_mins(dom_dim_);
+            vector<KnotIdx> merge_maxs(dom_dim_);
+            merge(inout.knot_mins, inout.knot_maxs, in.knot_mins, in.knot_maxs, merge_mins, merge_maxs);
+            inout.knot_mins = merge_mins;   // adjust t to the merged extents
+            inout.knot_maxs = merge_maxs;
+
+            // don't overshoot the parent or leave it with a small remainder
+            if (pad >= 0)
+                constrain_to_parent(inout, pad);
+        }
+
         // checks if a point in index space is in a tensor product
         // in all dimensions except skip_dim (-1 = default, don't skip any dimensions)
         // if ctrl_pt_anchor == true, for dimension i, if degree[i] is even, pt[i] + 0.5 is checked because pt coords are truncated to integers
@@ -2346,7 +2383,7 @@ namespace mfa
         // check number of knots belonging to this tensor against the number of control points (for debugging)
         bool check_num_knots_ctrl_pts(TensorIdx tidx)
         {
-            TensorProduct<T>& t = tensor_prods[tidx];
+            auto& t = tensor_prods[tidx];
             for (auto i = 0; i < dom_dim_; i++)
             {
                 int nctrl = t.knot_idxs[i].size() - 1;
@@ -2363,6 +2400,39 @@ namespace mfa
                             tidx, i);
                     print_tensor(t, true, false, false);
                     abort();
+                }
+            }
+            return true;
+        }
+
+        // check number of knots belonging to this tensor is at least degree + extra
+        // returns true if the check passes
+        bool check_num_knots_degree(TensorProduct<T>&   t,
+                                    int                 extra)
+        {
+            for (auto k = 0; k < dom_dim_; k++)
+            {
+                KnotIdx dist = knot_idx_dist(t, t.knot_mins[k], t.knot_maxs[k], k, false);
+                if (p_(k) % 2 == 0 && dist < p_(k) + extra || p_(k) % 2 == 1 && dist <  p_(k) + extra - 1)
+                    return false;
+            }
+            return true;
+        }
+
+        // check number of control points belonging to this tensor is at least degree + extra
+        // returns true if the check passes
+        bool check_num_ctrl_degree(TensorIdx            tidx,
+                                    int                 extra)
+        {
+            auto& t = tensor_prods[tidx];
+            for (auto j = 0; j < dom_dim_; j++)
+            {
+                if (t.nctrl_pts(j) < p_(j) + extra)
+                {
+                    fmt::print(stderr, "Error: one of the tensors has fewer than p + {} control points. This should not happen\n", extra);
+                    fmt::print(stderr, "Existing tensor tidx {} knot_mins [{}] knot_maxs[{}] level {}\n",
+                            fmt::join(t.knot_mins, ","), fmt::join(t.knot_maxs, ","), t.level);
+                    return false;
                 }
             }
             return true;

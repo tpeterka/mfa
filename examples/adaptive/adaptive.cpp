@@ -209,7 +209,7 @@ int main(int argc, char** argv)
     }
 
     // polysinc functions
-    if (input == "psinc1" || input == "psinc2")
+    if (input == "psinc1" || input == "psinc2" || input == "psinc3")
     {
         for (int i = 0; i < dom_dim; i++)
         {
