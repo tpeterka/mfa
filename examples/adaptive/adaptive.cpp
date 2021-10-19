@@ -31,13 +31,13 @@ int main(int argc, char** argv)
     diy::create_logger("trace");
 
     // initialize MPI
-    diy::mpi::environment  env(argc, argv); // equivalent of MPI_Init(argc, argv)/MPI_Finalize()
-    diy::mpi::communicator world;           // equivalent of MPI_COMM_WORLD
+    diy::mpi::environment  env(argc, argv);           // equivalent of MPI_Init(argc, argv)/MPI_Finalize()
+    diy::mpi::communicator world;                     // equivalent of MPI_COMM_WORLD
 
-    int nblocks     = 1;                     // number of local blocks
+    int nblocks     = 1;                              // number of local blocks
     int tot_blocks  = nblocks * world.size();
-    int mem_blocks  = -1;                    // everything in core for now
-    int num_threads = 1;                     // needed in order to do timing
+    int mem_blocks  = -1;                             // everything in core for now
+    int num_threads = 1;                              // needed in order to do timing
 
     // default command line arguments
     real_t norm_err_limit = 1.0;                      // maximum normalized error limit
@@ -52,7 +52,6 @@ int main(int argc, char** argv)
     string input          = "sinc";                   // input dataset
     int    max_rounds     = 0;                        // max. number of rounds (0 = no maximum)
     int    weighted       = 1;                        // solve for and use weights (bool 0 or 1)
-    int    local          = 1;                        // solve locally (with constraints) each round
     real_t rot            = 0.0;                      // rotation angle in degrees
     real_t twist          = 0.0;                      // twist (waviness) of domain (0.0-1.0)
     real_t noise          = 0.0;                      // fraction of noise
@@ -74,7 +73,6 @@ int main(int argc, char** argv)
     ops >> opts::Option('i', "input",       input,          " input dataset");
     ops >> opts::Option('u', "rounds",      max_rounds,     " maximum number of iterations");
     ops >> opts::Option('w', "weights",     weighted,       " solve for and use weights");
-    ops >> opts::Option('l', "local",       local,          " solve locally (with constraints) each round");
     ops >> opts::Option('r', "rotate",      rot,            " rotation angle of domain in degrees");
     ops >> opts::Option('t', "twist",       twist,          " twist (waviness) of domain (0.0-1.0)");
     ops >> opts::Option('s', "noise",       noise,          " fraction of noise (0.0 - 1.0)");
@@ -102,7 +100,7 @@ int main(int argc, char** argv)
         "\ngeom_degree = "      << geom_degree      << " vars_degree = "    << vars_degree  <<
         "\ngeom_ctrl pts = "    << geom_nctrl       << " vars_ctrl_pts = "  << vars_nctrl   << " test_points = "    << ntest        <<
         "\ninput pts = "        << ndomp            << " input = "          << input        << " max. rounds = "    << max_rounds   <<
-        "\ntest_points = "      << ntest            << " noise = "          << noise        << " local solve = "    << local        << endl;
+        "\ntest_points = "      << ntest            << " noise = "          << noise        << endl;
 #ifdef CURVE_PARAMS
     cerr << "parameterization method = curve" << endl;
 #else
@@ -157,7 +155,6 @@ int main(int argc, char** argv)
     // set default args for diy foreach callback functions
     DomainArgs d_args(dom_dim, pt_dim);
     d_args.weighted     = weighted;
-    d_args.local        = local;
     d_args.n            = noise;
     d_args.multiblock   = false;
     d_args.verbose      = 1;
@@ -212,7 +209,7 @@ int main(int argc, char** argv)
     }
 
     // polysinc functions
-    if (input == "psinc1" || input == "psinc2")
+    if (input == "psinc1" || input == "psinc2" || input == "psinc3")
     {
         for (int i = 0; i < dom_dim; i++)
         {
@@ -455,5 +452,5 @@ int main(int argc, char** argv)
     fprintf(stderr, "-------------------------------------\n\n");
 
     // save the results in diy format
-    diy::io::write_blocks("approx.out", world, master);
+    diy::io::write_blocks("approx.mfa", world, master);
 }

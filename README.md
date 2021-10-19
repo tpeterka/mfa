@@ -80,6 +80,8 @@ cmake .. \
 -Dmfa_thread=tbb \                                              # optional TBB threading, serial (no threading) is the default
 -DTBB_INCLUDE_DIR=/path/to/tbb/include \                        # optional, will try to find TBB automatically if mfa_thread=tbb
 -DTBB_LIBRARY=/path/to/tbb/library \                            # optional, will try to find TBB automatically if mfa_thread=tbb
+-Deigen_thread=true \                                           # optional, OpenMP threading used for some Eigen kernels (requires OpenMP to be available)
+-Dpython=true                                                   # optional, build Python bindings
 
 make
 make install

@@ -33,6 +33,11 @@
 // comment out the following line for original single tensor product version
 // #define MFA_TMESH
 
+// the following lines control the extent of merging small tensors into larger ones
+#define MFA_TMESH_MERGE_MAX
+// #define MFA_TMESH_MERGE_SOME
+// #define MFA_TMESH_MERGE_NONE
+
 #include    <Eigen/Dense>
 #include    <Eigen/Sparse>
 #include    <Eigen/OrderingMethods>
@@ -99,10 +104,25 @@ namespace mfa
 
         MFA(size_t dom_dim_) :
             dom_dim(dom_dim_)
-        { }
+        {
+
+#ifdef EIGEN_OPENMP
+
+            // set openMP threading for Eigen
+            Eigen::initParallel();          // strictly not necessary for Eigen 3.3, but a good safety measure
+            // Most modern CPUs have 2 hyperthreads per core, and openmp (hence Eigen) uses the number hyperthreads by default.
+            // We want an automatic way to set the number of threads to number of physical cores, to prevent oversubscription.
+            // So we set the number of Eigen threads to be half the default.
+            Eigen::setNbThreads(Eigen::nbThreads()  / 2);
+            fmt::print(stderr, "\nEigen is using {} openMP threads.\n\n", Eigen::nbThreads());
+
+#endif
+        }
 
         ~MFA()
-        { }
+
+
+       { }
 
         // fixed number of control points encode
         void FixedEncode(
@@ -137,8 +157,6 @@ namespace mfa
                 T                   err_limit,              // maximum allowable normalized error
                 int                 verbose,                // debug level
                 bool                weighted,               // solve for and use weights (default = true)
-                // TOOD: always use local = true and deprecate the local argument
-                bool                local,                  // solve locally (with constraints) each round
                 const VectorX<T>&   extents,                // extents in each dimension, for normalizing error (size 0 means do not normalize)
                 int                 max_rounds) const       // optional maximum number of rounds
         {
@@ -147,7 +165,7 @@ namespace mfa
 #ifndef MFA_TMESH           // original adaptive encode for one tensor product
             encoder.OrigAdaptiveEncode(err_limit, weighted, extents, max_rounds);
 #else                       // adaptive encode for tmesh
-            encoder.AdaptiveEncode(err_limit, weighted, local, extents, max_rounds);
+            encoder.AdaptiveEncode(err_limit, weighted, extents, max_rounds);
 #endif
         }
 

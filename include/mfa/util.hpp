@@ -18,9 +18,24 @@ namespace mfa
             T max_norm_err;         // max of normalized errors (absolute value)
             T sum_sq_abs_errs;      // sum of squared absolute errors
             T sum_sq_norm_errs;     // sum of squared normalized errors
+
+            ErrorStats()
+            {
+                max_abs_err         = 0.0;
+                max_norm_err        = 0.0;
+                sum_sq_abs_errs     = 0.0;
+                sum_sq_norm_errs    = 0.0;
+            }
+            ErrorStats(T max_abs_err_, T max_norm_err_, T sum_sq_abs_errs_, T sum_sq_norm_errs_) :
+                max_abs_err(max_abs_err_),
+                max_norm_err(max_norm_err_),
+                sum_sq_abs_errs(sum_sq_abs_errs_),
+                sum_sq_norm_errs(sum_sq_norm_errs_)
+            {}
         };
 
     // object for iterating in a flat loop over an n-dimensional volume
+    // a few member functions are thread-safe (marked); rest are not
     struct VolIterator
     {
         template<typename>
@@ -152,6 +167,7 @@ namespace mfa
 
 
         // return total number of iterations in the volume
+        // thread-safe
         size_t tot_iters() const        { return tot_iters_; }
 
         // return whether all iterations are done
@@ -179,6 +195,7 @@ namespace mfa
 
         // convert linear domain point index into (i,j,k,...) multidimensional index
         // in case of subvolume (slice), idx is w.r.t. subvolume but ijk is w.r.t entire volume
+        // thread-safe
         void idx_ijk(
                 size_t                  idx,            // linear cell index in subvolume
                 VectorXi&               ijk) const      // (output) i,j,k,... indices in all dimensions
@@ -201,6 +218,7 @@ namespace mfa
 
         // convert (i,j,k,...) multidimensional index into linear index into domain
         // in the case of subvolume (slice), both ijk and idx are w.r.t. entire volume
+        // thread-safe
         size_t ijk_idx(const VectorXi& ijk) const       // i,j,k,... indices to all dimensions
         {
             size_t idx          = 0;
@@ -226,6 +244,7 @@ namespace mfa
         }
 
         // convert subvolume index into full volume index
+        // thread-safe
         size_t sub_full_idx(size_t sub_idx) const
         {
             VectorXi ijk(dom_dim_);

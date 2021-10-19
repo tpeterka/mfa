@@ -160,41 +160,104 @@ struct Block : public BlockBase<T>
         return retval;
     }
 
-    // evaluate 2d poly-sinc function version 1
+    // evaluate n-d poly-sinc function version 1
     T polysinc1(VectorX<T>& domain_pt,
                 DomainArgs& args)
     {
-        // only for 2d
-        if (this->dom_dim != 2)
+        // a = (x + 1)^2 + (y - 1)^2 + (z + 1)^2 + ...
+        // b = (x - 1)^2 + (y + 1)^2 + (z - 1)^2 + ...
+        T a = 0.0;
+        T b = 0.0;
+        for (auto i = 0; i < this->dom_dim; i++)
         {
-            fprintf(stderr, "Polysinc 1 function only defined for 2d. Aborting.\n");
-            exit(0);
+            T s, r;
+            if (i % 2 == 0)
+            {
+                s = domain_pt(i) + 1.0;
+                r = domain_pt(i) - 1.0;
+            }
+            else
+            {
+                s = domain_pt(i) - 1.0;
+                r = domain_pt(i) + 1.0;
+            }
+            a += (s * s);
+            b += (r * r);
         }
-        T x = domain_pt(0);
-        T y = domain_pt(1);
-        T a = (x + 1) * (x + 1) + (y - 1) * (y - 1);
-        T b = (x - 1) * (x - 1) + (y + 1) * (y + 1);
+
+        // a1 = sinc(a); b1 = sinc(b)
         T a1 = (a == 0.0 ? 1.0 : sin(a) / a);
         T b1 = (b == 0.0 ? 1.0 : sin(b) / b);
+
         return args.s[0] * (a1 + b1);
     }
 
-    // evaluate 2d poly-sinc function version 2
+    // evaluate n-d poly-sinc function version 2
     T polysinc2(VectorX<T>& domain_pt,
                 DomainArgs& args)
     {
-        // only for 2d
-        if (this->dom_dim != 2)
+        // a = x^2 + y^2 + z^2 + ...
+        // b = 2(x - 2)^2 + (y + 2)^2 + (z - 2)^2 + ...
+        T a = 0.0;
+        T b = 0.0;
+        for (auto i = 0; i < this->dom_dim; i++)
         {
-            fprintf(stderr, "Polysinc 2 function only defined for 2d. Aborting.\n");
-            exit(0);
+            T s, r;
+            s = domain_pt(i);
+            if (i % 2 == 0)
+            {
+                r = domain_pt(i) - 2.0;
+            }
+            else
+            {
+                r = domain_pt(i) + 2.0;
+            }
+            a += (s * s);
+            if (i == 0)
+                b += (2.0 * r * r);
+            else
+                b += (r * r);
         }
-        T x = domain_pt(0);
-        T y = domain_pt(1);
-        T a = x * x + y * y;
-        T b = 2 * (x - 2) * (x - 2) + (y + 2) * (y + 2);
+
+        // a1 = sinc(a); b1 = sinc(b)
         T a1 = (a == 0.0 ? 1.0 : sin(a) / a);
         T b1 = (b == 0.0 ? 1.0 : sin(b) / b);
+
+        return args.s[0] * (a1 + b1);
+    }
+
+    // evaluate n-d poly-sinc function version 2
+    T polysinc3(VectorX<T>& domain_pt,
+                DomainArgs& args)
+    {
+        // a = sqrt(x^2 + y^2 + z^2 + ...)
+        // b = 2(x - 2)^2 + (y + 2)^2 + (z - 2)^2 + ...
+        T a = 0.0;
+        T b = 0.0;
+        for (auto i = 0; i < this->dom_dim; i++)
+        {
+            T s, r;
+            s = domain_pt(i);
+            if (i % 2 == 0)
+            {
+                r = domain_pt(i) - 2.0;
+            }
+            else
+            {
+                r = domain_pt(i) + 2.0;
+            }
+            a += (s * s);
+            if (i == 0)
+                b += (2.0 * r * r);
+            else
+                b += (r * r);
+        }
+        a = sqrt(a);
+
+        // a1 = sinc(a); b1 = sinc(b)
+        T a1 = (a == 0.0 ? 1.0 : sin(a) / a);
+        T b1 = (b == 0.0 ? 1.0 : sin(b) / b);
+
         return args.s[0] * (a1 + b1);
     }
 
@@ -297,7 +360,6 @@ struct Block : public BlockBase<T>
             generate_rectilinear_analytical_data(cp, fun, args);
         }
     }
-    
 
     // synthetic analytic (scalar) data, sampled on unstructured point cloud
     // when seed = 0, we choose a time-dependent seed for the random number generator
@@ -414,7 +476,7 @@ struct Block : public BlockBase<T>
                     if (u_dist(df_gen) <= keep_frac)
                         keep = true;
                 }
-            } while (!keep);    
+            } while (!keep);
 
             // Add point to Input
             for (size_t k = 0; k < geom_dim; k++)
@@ -582,6 +644,8 @@ struct Block : public BlockBase<T>
                     retval = polysinc1(dom_pt, args);
                 if (fun == "psinc2")
                     retval = polysinc2(dom_pt, args);
+                if (fun == "psinc3")
+                    retval = polysinc3(dom_pt, args);
                 if (fun == "ml")
                 {
                     if (this->dom_dim != 3)
