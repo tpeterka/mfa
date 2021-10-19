@@ -31,7 +31,7 @@
 // #define WEIGH_ALL_DIMS
 
 // comment out the following line for original single tensor product version
-#define MFA_TMESH
+// #define MFA_TMESH
 
 // the following lines control the extent of merging small tensors into larger ones
 #define MFA_TMESH_MERGE_MAX
