@@ -1365,6 +1365,8 @@ namespace mfa
 //             mfa_data.tmesh.print();
 //             fprintf(stderr, "--------------------------\n\n");
 
+            vector<TensorProduct<T>>    new_tensors;                            // newly refined tensors to be added
+
             // loop until all tensors are done
             int iter;
             for (iter = 0; ; iter++)
@@ -1374,15 +1376,15 @@ namespace mfa
 
                 if (verbose)
                 {
-                    fprintf(stderr, "\n--- Iteration %d ---\n", iter);
-                    fmt::print(stderr, "Refining level {}\n", parent_level);
+                    fmt::print(stderr, "\n--- Iteration {} ---\n", iter);
+                    fmt::print(stderr, "Refining level {} with {} new tensors so far\n", parent_level, new_tensors.size());
                 }
 
                 // debug
 //                 fmt::print(stderr, "\nTmesh before refinement\n\n");
 //                 mfa_data.tmesh.print(true, true, false, false);
 
-                bool done_parent_level = Refine(parent_level, iter + 1, err_limit, extents);
+                bool done_parent_level = Refine(parent_level, iter + 1, err_limit, extents, new_tensors);
 
                 if (done_parent_level)
                 {
@@ -1393,7 +1395,15 @@ namespace mfa
                         break;
                     }
                     else                                                        // one iteration only is done
+                    {
+                        fmt::print(stderr, "Level {} done, adding {} new tensors\n", parent_level, new_tensors.size());
+                        double add_tensors_time = MPI_Wtime();
+                        AddNewTensors(new_tensors);
+                        add_tensors_time = MPI_Wtime() - add_tensors_time;
+                        fmt::print(stderr, "Solving and adding new tensors time:   {} s.\n", add_tensors_time);
                         parent_level++;
+                        new_tensors.clear();
+                    }
                 }
             }   // iterations
 
@@ -1419,12 +1429,16 @@ namespace mfa
             bool all_done = true;
             for (auto i = 0; i < mfa_data.tmesh.tensor_prods.size(); i++)
             {
+                bool first = true;
                 auto& t = mfa_data.tmesh.tensor_prods[i];
                 if (!t.done)
                 {
-                    fmt::print(stderr, "Tensor {} is not marked done. This could be normal if the number of rounds is capped.", i);
-                    fmt::print(stderr, "Otherwise this should not happen.\n");
-                    all_done = false;
+                    if (first)
+                        fmt::print(stderr,"\n");
+                    fmt::print(stderr, "Tensor {} level {} is not marked done.\n", i, t.level);
+                    fmt::print(stderr, "This is normal if the number of rounds is capped; otherwise this should not happen.\n");
+                    all_done    = false;
+                    first       = false;
                 }
             }
             if (all_done)
@@ -2226,10 +2240,11 @@ namespace mfa
         // refines a T-mesh at a given parent level
         // returns true no change in knots; all tensors at the parent level are done
         bool Refine(
-                int                 parent_level,                               // level of parent tensors to refine
-                int                 child_level,                                // level of children to create
-                T                   err_limit,                                  // max allowable error
-                const VectorX<T>&   extents)                                    // extents in each dimension, for normalizing error (size 0 means do not normalize)
+                int                         parent_level,                       // level of parent tensors to refine
+                int                         child_level,                        // level of children to create
+                T                           err_limit,                          // max allowable error
+                const VectorX<T>&           extents,                            // extents in each dimension, for normalizing error (size 0 means do not normalize)
+                vector<TensorProduct<T>>&   new_tensors)                        // (output) new tensors scheduled to be added
         {
             // typing shortcuts
             Tmesh<T>&                   tmesh                   = mfa_data.tmesh;
@@ -2264,6 +2279,7 @@ namespace mfa
                     myextents,
                     err_limit,
                     false,
+                    new_tensors,
                     parent_tensor_idxs,
                     inserted_knot_idxs,
                     inserted_knots,
@@ -2271,8 +2287,6 @@ namespace mfa
 
             if (done)                                                           // nothing inserted
                 return true;
-
-            vector<TensorProduct<T>>    new_tensors;                            // newly refined tensors to be added
 
             int n_insertions = parent_tensor_idxs.size();                       // number of knots to insert
             for (auto j = 0; j < dom_dim; j++)
@@ -2285,6 +2299,9 @@ namespace mfa
             error_spans_time    = MPI_Wtime() - error_spans_time;
             double insert_time  = MPI_Wtime();
 
+            // debug
+//             fmt::print(stderr, "n_insertions {}\n", n_insertions);
+
             for (auto i = 0; i < n_insertions; i++)                             // for all knots to be inserted
             {
                 // debug: check that parent tensor level matches refinement level
@@ -2296,6 +2313,9 @@ namespace mfa
                             i, parent_tensor_idxs[i], tensor_prods[parent_tensor_idxs[i]].level, parent_level);
                     abort();
                 }
+
+                // debug
+//                 fmt::print(stderr, "inserted_knot_idxs[{}] = [{}, {}]\n", i, inserted_knot_idxs[0][i], inserted_knot_idxs[1][i]);
 
                 // insert the new knot into tmesh all_knots
                 // NB: insert_knot adjusts knot_mins, maxs of existing tensors, meaning
@@ -2478,7 +2498,7 @@ namespace mfa
 
             // DEPRECATE
             // This code should not be needed
-            // Only turn it back on if other consistency checks pass
+            // Only turn it back on if other consistency checks fail
             // Remove it once the code is stable
 
 //             // check/adjust tensors scheduled to be added against each other
@@ -2548,15 +2568,14 @@ namespace mfa
 //             }   // tidx
 
 
+// DEPRECATE
             // append the tensors
-            double add_tensors_time = MPI_Wtime();
-            AddNewTensors(new_tensors);
-            add_tensors_time = MPI_Wtime() - add_tensors_time;
+//             double add_tensors_time = MPI_Wtime();
+//             AddNewTensors(new_tensors);
+//             add_tensors_time = MPI_Wtime() - add_tensors_time;
 
             // timing
-            fmt::print(stderr, "\nRefine() timing:\n");
-            fmt::print(stderr, "error span time:        {} s.\n", error_spans_time);
-            fmt::print(stderr, "add new tensors time:   {} s.\n", add_tensors_time);
+            fmt::print(stderr, "error spans time:       {} s.\n", error_spans_time);
 
             return false;
         }
