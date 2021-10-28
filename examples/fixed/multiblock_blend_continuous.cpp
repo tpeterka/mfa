@@ -125,6 +125,7 @@ int main(int argc, char **argv) {
         cerr << "TBB: on" << endl;
 #endif
 #ifdef MFA_NO_WEIGHTS
+    weighted = 0;
     cerr << "weighted = 0" << endl;
 #else
         cerr << "weighted = " << weighted << endl;

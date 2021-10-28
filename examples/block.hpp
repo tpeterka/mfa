@@ -55,6 +55,11 @@ struct DomainArgs : public ModelInfo
         max.resize(dom_dim);
         s.resize(pt_dim);
         f.resize(pt_dim);
+        for (auto i = 0; i < pt_dim; i++)
+        {
+            s[i] = 1.0;
+            f[i] = 1.0;
+        }
         r = 0;
         t = 0;
         n = 0;
@@ -380,9 +385,9 @@ struct Block : public BlockBase<T>
         std::uniform_real_distribution<double> u_dist(0.0, 1.0);
 
         // Fill domain with randomly distributed points
-        size_t nvoids = 3;
-        double keep_frac = 1.0/5.0;
-        double radii_frac = 1.0/10.0;   // fraction of domain width to set as void radius
+        size_t nvoids = 4;
+        double keep_frac = 1.0/50.0;
+        double radii_frac = 1.0/8.0;   // fraction of domain width to set as void radius
         VectorX<T> radii(nvoids);
         MatrixX<T> centers(geom_dim, nvoids);
         for (size_t nv = 0; nv < nvoids; nv++) // Randomly generate the centers of each void
@@ -692,7 +697,7 @@ struct Block : public BlockBase<T>
     void read_1d_slice_3d_vector_data(
             const       diy::Master::ProxyWithLink& cp,
             DomainArgs& args)
-    {   
+    {
         DomainArgs* a = &args;
         int tot_ndom_pts = 1;
         int nvars = 1;
@@ -733,6 +738,7 @@ struct Block : public BlockBase<T>
             input->domain(i, 1) = sqrt(vel[3 * i    ] * vel[3 * i    ] +
                     vel[3 * i + 1] * vel[3 * i + 1] +
                     vel[3 * i + 2] * vel[3 * i + 2]);
+            input->domain(i, 1) *= a->s[0];
             // fprintf(stderr, "vel [%.3f %.3f %.3f] mag %.3f\n",
             //         vel[3 * i], vel[3 * i + 1], vel[3 * i + 2], range[i]);
         }
@@ -823,6 +829,7 @@ struct Block : public BlockBase<T>
             input->domain(i, 2) = sqrt(vel[3 * i    ] * vel[3 * i    ] +
                     vel[3 * i + 1] * vel[3 * i + 1] +
                     vel[3 * i + 2] * vel[3 * i + 2]);
+            input->domain(i, 2) *= a->s[0];
 //              fprintf(stderr, "vel [%.3f %.3f %.3f]\n",
 //                      vel[3 * i], vel[3 * i + 1], vel[3 * i + 2]);
         }
@@ -1030,6 +1037,7 @@ struct Block : public BlockBase<T>
             input->domain(i, 3) = sqrt(vel[3 * i    ] * vel[3 * i    ] +
                     vel[3 * i + 1] * vel[3 * i + 1] +
                     vel[3 * i + 2] * vel[3 * i + 2]);
+            input->domain(i, 3) *= a->s[0];
 //             if (i < 1000)
 //              fprintf(stderr, "vel [%.3f %.3f %.3f]\n",
 //                      vel[3 * i], vel[3 * i + 1], vel[3 * i + 2]);
@@ -1080,6 +1088,135 @@ struct Block : public BlockBase<T>
 
         // initialize MFA models (geometry, vars, etc)
         this->setup_models(cp, nvars, args);
+
+        // debug
+        cerr << "domain extent:\n min\n" << bounds_mins << "\nmax\n" << bounds_maxs << endl;
+    }
+
+    // read a floating point 3d vector time-varying dataset, ie, 4d
+    // f = (x, y, z, t, velocity magnitude)
+    void read_4d_vector_data(
+            const       diy::Master::ProxyWithLink& cp,
+            DomainArgs& args)
+    {
+        DomainArgs* a = &args;
+        size_t tot_ndom_pts = 1;
+        int nvars = 1;
+        this->max_errs.resize(nvars);
+        this->sum_sq_errs.resize(nvars);
+        VectorXi ndom_pts(dom_dim);
+        this->bounds_mins.resize(pt_dim);
+        this->bounds_maxs.resize(pt_dim);
+        for (int i = 0; i < dom_dim; i++)
+        {
+            ndom_pts(i)                     =  a->ndom_pts[i];
+            tot_ndom_pts                    *= ndom_pts(i);
+        }
+        int num_skip = a->r;
+
+        // construct point set to contain input
+        if (args.structured)
+            input = new mfa::PointSet<T>(dom_dim, pt_dim, tot_ndom_pts, ndom_pts);
+        else
+            input = new mfa::PointSet<T>(dom_dim, pt_dim, tot_ndom_pts);
+
+        size_t space_ndom_pts = tot_ndom_pts / ndom_pts(3);    // total number of domain points in one time step
+        vector<float> vel(3 * space_ndom_pts);
+
+        ifstream fd;
+        fd.open(a->infile);
+        if (!fd.is_open())
+        {
+            fmt::print(stderr, "Error: read_4d_vector_data(): Unable to open file {}\n", a->infile);
+            abort();
+        }
+
+        string line;
+
+        for (auto j = 0; j < ndom_pts(3); j++)           // for all files
+        {
+            getline(fd, line);
+
+            // debug
+            fmt::print(stderr, "read_4d_vector_data(): opening file {}\n", line);
+
+            ifstream cur_fd;
+            cur_fd.open(line);
+            if (!cur_fd.is_open())
+            {
+                fmt::print(stderr, "Error: read_4d_vector_data(): Unable to open file {}\n", line);
+                abort();
+            }
+
+            size_t ofst = j * space_ndom_pts;           // starting offset in input->domain for this time step
+
+            // read all three components of velocity and compute magnitude
+            cur_fd.read((char*)(&vel[0]), space_ndom_pts * 3 * sizeof(float));
+            if (!cur_fd)
+            {
+                fmt::print(stderr, "read_4d_vector_data(): unable to read file {} only {} bytes read\n", line, cur_fd.gcount());
+                abort();
+            }
+            for (size_t i = 0; i < space_ndom_pts; i++)
+            {
+                input->domain(ofst + i, 4) =
+                    sqrt(   vel[3 * i    ] * vel[3 * i    ] +
+                            vel[3 * i + 1] * vel[3 * i + 1] +
+                            vel[3 * i + 2] * vel[3 * i + 2] );
+                input->domain(i, 4) *= a->s[0];
+                // debug: print the first few velocities
+//                 if (i < 5)
+//                     fprintf(stderr, "vel [%.3f %.3f %.3f]\n", vel[3 * i], vel[3 * i + 1], vel[3 * i + 2]);
+            }
+
+            // rest is hard-coded for 4d
+
+            // find extent of range
+            for (size_t i = 0; i < (size_t)input->domain.rows(); i++)
+            {
+                if (i == 0 || input->domain(i, 4) < bounds_mins(4))
+                    bounds_mins(4) = input->domain(i, 4);
+                if (i == 0 || input->domain(i, 4) > bounds_maxs(4))
+                    bounds_maxs(4) = input->domain(i, 4);
+            }
+
+            // set domain values (just equal to i, j; ie, dx, dy = 1, 1)
+            size_t n = 0;
+            for (size_t l = 0; l < (size_t)(ndom_pts(3)); l++)
+                for (size_t k = 0; k < (size_t)(ndom_pts(2)); k++)
+                    for (size_t j = 0; j < (size_t)(ndom_pts(1)); j++)
+                        for (size_t i = 0; i < (size_t)(ndom_pts(0)); i++)
+                        {
+                            input->domain(n, 0) = i;
+                            input->domain(n, 1) = j;
+                            input->domain(n, 2) = k;
+                            input->domain(n, 3) = l;
+                            n++;
+                        }
+
+            cur_fd.close();
+        }   // for all files
+        fd.close();
+
+        // extents
+        bounds_mins(0) = 0.0;
+        bounds_mins(1) = 0.0;
+        bounds_mins(2) = 0.0;
+        bounds_mins(3) = 0.0;
+        bounds_maxs(0) = input->domain(tot_ndom_pts - 1, 0);
+        bounds_maxs(1) = input->domain(tot_ndom_pts - 1, 1);
+        bounds_maxs(2) = input->domain(tot_ndom_pts - 1, 2);
+        bounds_maxs(3) = input->domain(tot_ndom_pts - 1, 3);
+        core_mins.resize(dom_dim);
+        core_maxs.resize(dom_dim);
+        for (int i = 0; i < dom_dim; i++)
+        {
+            core_mins(i) = bounds_mins(i);
+            core_maxs(i) = bounds_maxs(i);
+        }
+
+        input->init_params();
+        this->mfa = new mfa::MFA<T>(dom_dim);
 
         // debug
         cerr << "domain extent:\n min\n" << bounds_mins << "\nmax\n" << bounds_maxs << endl;
@@ -1294,6 +1431,7 @@ struct Block : public BlockBase<T>
 
     // read a floating point 3d scalar dataset
     // f = (x, y, z, value)
+    template <typename P>                   // input file precision (e.g., float or double)
     void read_3d_scalar_data(
             const       diy::Master::ProxyWithLink& cp,
             DomainArgs& args)
@@ -1318,13 +1456,13 @@ struct Block : public BlockBase<T>
         else
             input = new mfa::PointSet<T>(dom_dim, pt_dim, tot_ndom_pts);
 
-        vector<float> val(tot_ndom_pts);
+        vector<P> val(tot_ndom_pts);
 
         FILE *fd = fopen(a->infile.c_str(), "r");
         assert(fd);
 
         // read data values
-        if (!fread(&val[0], sizeof(float), tot_ndom_pts, fd))
+        if (!fread(&val[0], sizeof(P), tot_ndom_pts, fd))
         {
             fprintf(stderr, "Error: unable to read file\n");
             exit(0);
@@ -1381,7 +1519,6 @@ struct Block : public BlockBase<T>
         // debug
         cerr << "domain extent:\n min\n" << bounds_mins << "\nmax\n" << bounds_maxs << endl;
     }
-    
 
     void get_box_intersections(
         T alpha,
@@ -1543,11 +1680,11 @@ struct Block : public BlockBase<T>
     // ONLY 2d AT THE MOMENT
     void create_ray_model(
         const       diy::Master::ProxyWithLink& cp,
-        DomainArgs& args)
+        DomainArgs& args,
+        bool fixed_length)
     {
         DomainArgs* a = &args;
 
-        bool fixed_length = false; 
         const double pi = 3.14159265358979;
         assert (dom_dim == 2); // TODO: extended to any dimensionality
 
@@ -1556,9 +1693,9 @@ struct Block : public BlockBase<T>
         int new_dd = dom_dim + 1;   // new dom_dim
         int new_pd = pt_dim + 1;    // new pt_dim
         
-        const int n_alpha = 120;    // Number of angle values to sample
-        const int n_rho = 120;      // Number of rho values to sample
-        const int n_samples = 80;  // Number of times to sample each ray
+        const int n_alpha = 70;    // Number of angle values to sample
+        const int n_rho = 70;      // Number of rho values to sample
+        const int n_samples = 40;  // Number of times to sample each ray
 
         VectorXi ndom_pts(new_dd);
         ndom_pts(0) = n_samples;
@@ -1583,7 +1720,7 @@ struct Block : public BlockBase<T>
         double r_lim = 0;
         if (fixed_length)
         {
-            double max_radius = max(max(xl,xh), max(yl,yh));
+            double max_radius = max(max(abs(xl),abs(xh)), max(abs(yl),abs(yh)));
             r_lim = max_radius * 1.1;
         } 
         else
@@ -1729,7 +1866,8 @@ struct Block : public BlockBase<T>
         }
 
         // Encode ray model. TODO: regularized encode
-        ray_mfa->FixedEncode(*ray_input, false);
+        bool force_unified = true;  // force a unified encoding to use the regularizer
+        ray_mfa->FixedEncode(*ray_input, a->regularization, false, force_unified);
 
 
         // ----------- Replace old block members with new ---------- //
@@ -1784,9 +1922,10 @@ struct Block : public BlockBase<T>
     }
 
     T integrate_ray(
-        const       diy::Master::ProxyWithLink& cp,
-        const VectorX<T>& a,
-        const VectorX<T>& b)
+        const   diy::Master::ProxyWithLink& cp,
+        const   VectorX<T>& a,
+        const   VectorX<T>& b,
+                bool fixed_length)
     {
         const double pi = 3.14159265358979;
         const bool verbose = false;
@@ -1825,10 +1964,9 @@ struct Block : public BlockBase<T>
         T x0, x1, y0, y1;   // end points of full line
         T u0 = 0, u1 = 0;
         T length = 0;
-        bool fixed_length = false;
+        T r_lim = bounds_maxs(1);   // WARNING TODO: make r_lim query-able in RayMFA class
         if (fixed_length)
         {
-            T r_lim = bounds_maxs(1);   // WARNING TODO: make r_lim query-able in RayMFA class
             x0 = rho * cos(alpha) - r_lim * sin(alpha);
             x1 = rho * cos(alpha) + r_lim * sin(alpha);
             y0 = rho * sin(alpha) + r_lim * cos(alpha);
@@ -1844,6 +1982,11 @@ struct Block : public BlockBase<T>
         //   when line is nearly horizontal or vertical
         T x_sep = abs(x1 - x0);
         T y_sep = abs(y1 - y0);
+        if (fixed_length)
+            length = r_lim;
+        else
+            length = sqrt(x_sep*x_sep + y_sep*y_sep);
+        
         if (x_sep > y_sep)  // want to avoid dividing by near-epsilon numbers
         {
             u0 = abs(a_x - x0) / x_sep;
@@ -1868,7 +2011,8 @@ struct Block : public BlockBase<T>
         {
             cerr << "RAY: (" << a(0) << ", " << a(1) << ") ---- (" << b(0) << ", " << b(1) << ")" << endl;
             cerr << "|  m: " << ((a_x==b_x) ? "inf" : to_string(m).c_str()) << endl;
-            cerr << "|  alpha: " << alpha << ",   rho: " << rho << endl;
+            cerr << "|  alpha:  " << alpha << ",   rho: " << rho << endl;
+            cerr << "|  length: " << length << endl;
             cerr << "|  u0: " << u0 << ",  u1: " << u1 << endl;
             cerr << "+---------------------------------------\n" << endl;
         }

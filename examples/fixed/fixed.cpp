@@ -55,6 +55,8 @@ int main(int argc, char** argv)
     string infile;                              // input file name
     int    structured   = 1;                    // input data format (bool 0/1)
     int    rand_seed    = -1;                   // seed to use for random data generation (-1 == no randomization)
+    float  regularization = 0;                   // smoothing parameter for models with non-uniform input density (0 == no smoothing)
+    int    fixed_ray    = 0;
     bool   help         = false;                // show help
 
 
@@ -78,6 +80,8 @@ int main(int argc, char** argv)
     ops >> opts::Option('h', "help",        help,       " show help");
     ops >> opts::Option('x', "structured",  structured, " input data format (default=structured=true)");
     ops >> opts::Option('y', "rand_seed",   rand_seed,  " seed for random point generation (-1 = no randomization, default)");
+    ops >> opts::Option('b', "regularization", regularization, "smoothing parameter for models with non-uniform input density");
+    ops >> opts::Option('u', "fixed_ray",   fixed_ray, "" );
 
     if (!ops.parse(argc, argv) || help)
     {
@@ -100,7 +104,8 @@ int main(int argc, char** argv)
         "\ninput pts = "    << ndomp        << " geom_ctrl pts = "  << geom_nctrl   <<
         "\nvars_ctrl_pts = "<< vars_nctrl   << " test_points = "    << ntest        <<
         "\ninput = "        << input        << " noise = "          << noise        << 
-        "\nstructured = "   << structured   << endl;
+        "\nstructured = "   << structured   <<
+        "\nfixed_ray = " << fixed_ray << endl;
 
 #ifdef CURVE_PARAMS
     cerr << "parameterization method = curve" << endl;
@@ -120,6 +125,7 @@ int main(int argc, char** argv)
     cerr << "threading: serial" << endl;
 #endif
 #ifdef MFA_NO_WEIGHTS
+    weighted = 0;
     cerr << "weighted = 0" << endl;
 #else
     cerr << "weighted = " << weighted << endl;
@@ -157,10 +163,12 @@ int main(int argc, char** argv)
     DomainArgs d_args(dom_dim, pt_dim);
     d_args.weighted     = weighted;
     d_args.n            = noise;
+    d_args.t            = twist;
     d_args.multiblock   = false;
     d_args.verbose      = 1;
     d_args.structured   = structured;
     d_args.rand_seed    = rand_seed;
+    d_args.regularization   = regularization;
     for (int i = 0; i < pt_dim - dom_dim; i++)
         d_args.f[i] = 1.0;
     for (int i = 0; i < dom_dim; i++)
@@ -325,7 +333,7 @@ int main(int argc, char** argv)
 
     // nek5000 dataset
     if (input == "nek")
-    {   
+    {
         d_args.ndom_pts.resize(3);
         for (int i = 0; i < 3; i++)
             d_args.ndom_pts[i]          = 200;
@@ -393,8 +401,8 @@ int main(int argc, char** argv)
         d_args.vars_nctrl_pts[0].resize(2);
         d_args.ndom_pts[0]          = 1800;
         d_args.ndom_pts[1]          = 3600;
-        d_args.vars_nctrl_pts[0][0] = 180;
-        d_args.vars_nctrl_pts[0][1] = 360;
+        d_args.vars_nctrl_pts[0][0] = 300;
+        d_args.vars_nctrl_pts[0][1] = 600;
         d_args.infile = infile;
 //      d_args.infile = "/Users/tpeterka/datasets/CESM-ATM-tylor/1800x3600/FLDSC_1_1800_3600.dat";
         if (dom_dim == 2)
@@ -407,11 +415,63 @@ int main(int argc, char** argv)
         }
     }
 
+    // miranda dataset
+    if (input == "miranda")
+    {
+        d_args.ndom_pts.resize(3);
+        d_args.vars_nctrl_pts[0].resize(3);
+        d_args.ndom_pts[0]          = 256;
+        d_args.ndom_pts[1]          = 384;
+        d_args.ndom_pts[2]          = 384;
+        d_args.vars_nctrl_pts[0][0] = 256;  // 192;
+        d_args.vars_nctrl_pts[0][1] = 384;  // 288;
+        d_args.vars_nctrl_pts[0][2] = 384;  // 288;
+        d_args.infile = infile;
+//      d_args.infile = "/Users/tpeterka/datasets/miranda/SDRBENCH-Miranda-256x384x384/density.d64";
+        if (dom_dim == 3)
+            master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
+                    { b->read_3d_scalar_data<double>(cp, d_args); });
+        else
+        {
+            fprintf(stderr, "miranda data only available in 3d domain\n");
+            exit(0);
+        }
+    }
+
+     // tornado dataset
+    if (input == "tornado")
+    {
+        d_args.ndom_pts.resize(3);
+        d_args.vars_nctrl_pts[0].resize(3);
+        d_args.ndom_pts[0]          = 128;
+        d_args.ndom_pts[1]          = 128;
+        d_args.ndom_pts[2]          = 128;
+        d_args.vars_nctrl_pts[0][0] = 100;
+        d_args.vars_nctrl_pts[0][1] = 100;
+        d_args.vars_nctrl_pts[0][2] = 100;
+        d_args.infile               = infile;
+//         d_args.infile               = "/Users/tpeterka/datasets/tornado/bov/1.vec.bov";
+
+        if (dom_dim == 1)
+            master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
+                    { b->read_1d_slice_3d_vector_data(cp, d_args); });
+        else if (dom_dim == 2)
+            master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
+                    { b->read_2d_slice_3d_vector_data(cp, d_args); });
+        else if (dom_dim == 3)
+            master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
+                    { b->read_3d_vector_data(cp, d_args); });
+        else
+        {
+            fprintf(stderr, "tornado data only available in 1, 2, or 3d domain\n");
+            exit(0);
+        }
+    }
+
     // write initial points
     diy::io::write_blocks("initial.out", world, master);
 
     // compute the MFA
-
     fprintf(stderr, "\nStarting fixed encoding...\n\n");
     double encode_time = MPI_Wtime();
     master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
@@ -431,52 +491,58 @@ int main(int argc, char** argv)
         bool saved_basis = structured; // TODO: basis functions are currently only saved during encoding of structured data
         master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
                 { 
+                    b->integrate_block(cp, 1);
+
+                    // vector<int> grid_size = {1000,1000};
+                    // vector<int> grid_size = {200};
+                    // b->decode_block_grid(cp, 1, grid_size);
+
                     // b->range_error(cp, 1, true, saved_basis);
-                    // b->print_block(cp, true);
-                    b->create_ray_model(cp, d_args);
+            //         b->print_block(cp, true);
+            //         b->create_ray_model(cp, d_args, fixed_ray);
 
-            real_t result = 0;
-            VectorX<real_t> start_pt(2), end_pt(2);
+            // real_t result = 0;
+            // VectorX<real_t> start_pt(2), end_pt(2);
 
-            // horizontal line where function is identically 0
-            // = 0.0
-            start_pt(0) = -3*M_PI; start_pt(1) = 0;
-            end_pt(0) = 3*M_PI; end_pt(1) = 0;
-            result = b->integrate_ray(cp, start_pt, end_pt);
-            cerr << "(-3pi, 0)---(3pi, 0):       " << result << endl;
-            cerr << "error:                      " << result << endl << endl;
+            // // horizontal line where function is identically 0
+            // // = 0.0
+            // start_pt(0) = -3*M_PI; start_pt(1) = 0;
+            // end_pt(0) = 3*M_PI; end_pt(1) = 0;
+            // result = b->integrate_ray(cp, start_pt, end_pt, fixed_ray);
+            // cerr << "(-3pi, 0)---(3pi, 0):       " << result << endl;
+            // cerr << "error:                      " << result << endl << endl;
 
-            // vertical line
-            // = 0.0
-            start_pt(0) = M_PI/2; start_pt(1) = -2*M_PI;
-            end_pt(0) = M_PI/2; end_pt(1) = 2*M_PI;
-            result = b->integrate_ray(cp, start_pt, end_pt);
-            cerr << "(pi/2, -2pi)---(pi/2, 2pi): " << result << endl;
-            cerr << "error:                      " << result << endl << endl;
+            // // vertical line
+            // // = 0.0
+            // start_pt(0) = M_PI/2; start_pt(1) = -2*M_PI;
+            // end_pt(0) = M_PI/2; end_pt(1) = 2*M_PI;
+            // result = b->integrate_ray(cp, start_pt, end_pt, fixed_ray);
+            // cerr << "(pi/2, -2pi)---(pi/2, 2pi): " << result << endl;
+            // cerr << "error:                      " << result << endl << endl;
             
-            // horizontal line
-            // = 2.0
-            start_pt(0) = 0; start_pt(1) = M_PI/2;
-            end_pt(0) = M_PI; end_pt(1) = M_PI/2;
-            result = b->integrate_ray(cp, start_pt, end_pt);
-            cerr << "(0, pi/2)---(pi, pi/2):     " << result << endl;
-            cerr << "relative error:             " << abs((result-2)/2) << endl << endl;
+            // // horizontal line
+            // // = 2.0
+            // start_pt(0) = 0; start_pt(1) = M_PI/2;
+            // end_pt(0) = M_PI; end_pt(1) = M_PI/2;
+            // result = b->integrate_ray(cp, start_pt, end_pt, fixed_ray);
+            // cerr << "(0, pi/2)---(pi, pi/2):     " << result << endl;
+            // cerr << "relative error:             " << abs((result-2)/2) << endl << endl;
 
-            // line y=x
-            // = 5.75864344326
-            start_pt(0) = 0, start_pt(1) = 0;
-            end_pt(0) = 8, end_pt(1) = 8;
-            result = b->integrate_ray(cp, start_pt, end_pt);
-            cerr << "(0, 0)---(8, 8):            " << result << endl;
-            cerr << "relative error:             " << abs((result-5.75864344326)/5.75864344326) << endl << endl;
+            // // line y=x
+            // // = 5.75864344326
+            // start_pt(0) = 0, start_pt(1) = 0;
+            // end_pt(0) = 8, end_pt(1) = 8;
+            // result = b->integrate_ray(cp, start_pt, end_pt, fixed_ray);
+            // cerr << "(0, 0)---(8, 8):            " << result << endl;
+            // cerr << "relative error:             " << abs((result-5.75864344326)/5.75864344326) << endl << endl;
 
-            // "arbitrary" line
-            // = 1.2198958397433
-            start_pt(0) = -2; start_pt(1) = -4;
-            end_pt(0) = 3; end_pt(1) = 11;
-            result = b->integrate_ray(cp, start_pt, end_pt);
-            cerr << "(-2, -4)---(3, 11):         " << result << endl;
-            cerr << "relative error:             " << abs((result-1.2198958397433)/1.2198958397433) << endl << endl;
+            // // "arbitrary" line
+            // // = 1.2198958397433
+            // start_pt(0) = -2; start_pt(1) = -4;
+            // end_pt(0) = 3; end_pt(1) = 11;
+            // result = b->integrate_ray(cp, start_pt, end_pt, fixed_ray);
+            // cerr << "(-2, -4)---(3, 11):         " << result << endl;
+            // cerr << "relative error:             " << abs((result-1.2198958397433)/1.2198958397433) << endl << endl;
                      });
 #endif
         decode_time = MPI_Wtime() - decode_time;

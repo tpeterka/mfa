@@ -1,6 +1,5 @@
 //--------------------------------------------------------------
-// example of encoding / decoding higher dimensional data w/ fixed number of control points and a
-// single block in a split model w/ one model containing geometry and other model science variables
+// example of encoding / decoding time-varying data with a fixed number of control points
 //
 // Tom Peterka
 // Argonne National Laboratory
@@ -42,20 +41,19 @@ int main(int argc, char** argv)
     int    dom_dim      = 2;                    // dimension of domain (<= pt_dim)
     int    geom_degree  = 1;                    // degree for geometry (same for all dims)
     int    vars_degree  = 4;                    // degree for science variables (same for all dims)
-    int    ndomp        = 100;                  // input number of domain points (same for all dims)
     int    geom_nctrl   = -1;                   // input number of control points for geometry (same for all dims)
     int    vars_nctrl   = 11;                   // input number of control points for all science variables (same for all dims)
-    string input        = "sine";               // input dataset
+    string input        = "tornado";            // input dataset
     int    weighted     = 1;                    // solve for and use weights (bool 0/1)
     real_t rot          = 0.0;                  // rotation angle in degrees
     real_t twist        = 0.0;                  // twist (waviness) of domain (0.0-1.0)
+    real_t noise        = 0.0;                  // fraction of noise
     int    error        = 1;                    // decode all input points and check error (bool 0/1)
     string infile;                              // input file name
     int    structured   = 1;                    // input data format (bool 0/1)
     int    rand_seed    = -1;                   // seed to use for random data generation (-1 == no randomization)
-    int    resolutionGrid = 0;
     bool   help         = false;                // show help
-  
+
 
     // get command line arguments
     opts::Options ops;
@@ -63,17 +61,16 @@ int main(int argc, char** argv)
     ops >> opts::Option('m', "dom_dim",     dom_dim,    " dimension of domain");
     ops >> opts::Option('p', "geom_degree", geom_degree," degree in each dimension of geometry");
     ops >> opts::Option('q', "vars_degree", vars_degree," degree in each dimension of science variables");
-    ops >> opts::Option('n', "ndomp",       ndomp,      " number of input points in each dimension of domain");
     ops >> opts::Option('g', "geom_nctrl",  geom_nctrl, " number of control points in each dimension of geometry");
     ops >> opts::Option('v', "vars_nctrl",  vars_nctrl, " number of control points in each dimension of all science variables");
     ops >> opts::Option('i', "input",       input,      " input dataset");
     ops >> opts::Option('w', "weights",     weighted,   " solve for and use weights");
     ops >> opts::Option('r', "rotate",      rot,        " rotation angle of domain in degrees");
     ops >> opts::Option('t', "twist",       twist,      " twist (waviness) of domain (0.0-1.0)");
+    ops >> opts::Option('s', "noise",       noise,      " fraction of noise (0.0 - 1.0)");
     ops >> opts::Option('c', "error",       error,      " decode entire error field (default=true)");
     ops >> opts::Option('f', "infile",      infile,     " input file name");
     ops >> opts::Option('h', "help",        help,       " show help");
-    ops >> opts::Option('u', "resolution",  resolutionGrid,    " resolution for grid test ");
     ops >> opts::Option('x', "structured",  structured, " input data format (default=structured=true)");
     ops >> opts::Option('y', "rand_seed",   rand_seed,  " seed for random point generation (-1 = no randomization, default)");
 
@@ -87,14 +84,17 @@ int main(int argc, char** argv)
     // minimal number of geometry control points if not specified
     if (geom_nctrl == -1)
         geom_nctrl = geom_degree + 1;
+    if (vars_nctrl == -1)
+        vars_nctrl = vars_degree + 1;
 
     // echo args
     fprintf(stderr, "\n--------- Input arguments ----------\n");
     cerr <<
         "pt_dim = "         << pt_dim       << " dom_dim = "        << dom_dim      <<
         "\ngeom_degree = "  << geom_degree  << " vars_degree = "    << vars_degree  <<
-        "\ninput pts = "    << ndomp        << " geom_ctrl pts = "  << geom_nctrl   <<
-        "\nvars_ctrl_pts = "<< vars_nctrl   << " input = "          << input        << 
+        "\ngeom_ctrl pts = "<< geom_nctrl   <<
+        "\nvars_ctrl_pts = "<< vars_nctrl   <<
+        "\ninput = "        << input        << " noise = "          << noise        << 
         "\nstructured = "   << structured   << endl;
 
 #ifdef CURVE_PARAMS
@@ -104,6 +104,12 @@ int main(int argc, char** argv)
 #endif
 #ifdef MFA_TBB
     cerr << "threading: TBB" << endl;
+#endif
+#ifdef MFA_KOKKOS
+    cerr << "threading: Kokkos" << endl;
+#endif
+#ifdef MFA_SYCL
+    cerr << "threading: SYCL" << endl;
 #endif
 #ifdef MFA_SERIAL
     cerr << "threading: serial" << endl;
@@ -146,6 +152,7 @@ int main(int argc, char** argv)
     // set default args for diy foreach callback functions
     DomainArgs d_args(dom_dim, pt_dim);
     d_args.weighted     = weighted;
+    d_args.n            = noise;
     d_args.multiblock   = false;
     d_args.verbose      = 1;
     d_args.structured   = structured;
@@ -156,94 +163,38 @@ int main(int argc, char** argv)
     {
         d_args.geom_p[i]            = geom_degree;
         d_args.vars_p[0][i]         = vars_degree;      // assuming one science variable, vars_p[0]
-        d_args.ndom_pts[i]          = ndomp;
         d_args.geom_nctrl_pts[i]    = geom_nctrl;
         d_args.vars_nctrl_pts[0][i] = vars_nctrl;       // assuming one science variable, vars_nctrl_pts[0]
     }
 
     // initialize input data
 
-    // sine function f(x) = sin(x), f(x,y) = sin(x)sin(y), ...
-    if (input == "sine")
+    // tornado dataset (the only time-varying example available for now)
+    if (input == "tornado")
     {
-        for (int i = 0; i < dom_dim; i++)
-        {
-            d_args.min[i]               = -4.0 * M_PI;
-            d_args.max[i]               = 4.0  * M_PI;
-        }
-        for (int i = 0; i < pt_dim - dom_dim; i++)      // for all science variables
-            d_args.s[i] = i + 1;                        // scaling factor on range
-        master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-                { b->generate_analytical_data(cp, input, d_args); });
-    }
+        d_args.ndom_pts.resize(4);
+        d_args.vars_nctrl_pts[0].resize(4);
 
-    // sinc function f(x) = sin(x)/x, f(x,y) = sinc(x)sinc(y), ...
-    if (input == "sinc")
-    {
-        for (int i = 0; i < dom_dim; i++)
-        {
-            d_args.min[i]               = -4.0 * M_PI;
-            d_args.max[i]               = 4.0  * M_PI;
-        }
-        for (int i = 0; i < pt_dim - dom_dim; i++)      // for all science variables
-            d_args.s[i] = 10.0 * (i + 1);                 // scaling factor on range
-        d_args.r = rot * M_PI / 180.0;   // domain rotation angle in rads
-        d_args.t = twist;                // twist (waviness) of domain
-        master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-                { b->generate_analytical_data(cp, input, d_args); });
-    }
+        // size of spatial domain
+        d_args.ndom_pts[0]          = 128;
+        d_args.ndom_pts[1]          = 128;
+        d_args.ndom_pts[2]          = 128;
 
-    // S3D dataset
-    if (input == "s3d")
-    {
-        d_args.ndom_pts.resize(3);
-        d_args.vars_nctrl_pts[0].resize(3);
-        d_args.ndom_pts[0]          = 704;
-        d_args.ndom_pts[1]          = 540;
-        d_args.ndom_pts[2]          = 550;
-        d_args.vars_nctrl_pts[0][0] = 140;
-        d_args.vars_nctrl_pts[0][1] = 108;
-        d_args.vars_nctrl_pts[0][2] = 110;
+        // number of time steps
+        d_args.ndom_pts[3]          = 49;
+
+        // number of control points in space dimensions
+        d_args.vars_nctrl_pts[0][0] = 100;
+        d_args.vars_nctrl_pts[0][1] = 100;
+        d_args.vars_nctrl_pts[0][2] = 100;
+
+        // number of control points in time dimension
+        d_args.vars_nctrl_pts[0][3] = 35;
+
         d_args.infile               = infile;
-//         d_args.infile               = "/Users/tpeterka/datasets/flame/6_small.xyz";
-        if (dom_dim == 1)
-            master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-                    { b->read_1d_slice_3d_vector_data(cp, d_args); });
-        else if (dom_dim == 2)
-            master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-                    { b->read_2d_slice_3d_vector_data(cp, d_args); });
-        else if (dom_dim == 3)
-            master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-                    { b->read_3d_vector_data(cp, d_args); });
-        else
-        {
-            fprintf(stderr, "S3D data only available in 2 or 3d domain\n");
-            exit(0);
-        }
-    }
 
-    // nek5000 dataset
-    if (input == "nek")
-    {
-        d_args.ndom_pts.resize(3);
-        for (int i = 0; i < 3; i++)
-            d_args.ndom_pts[i]          = 200;
-        for (int i = 0; i < dom_dim; i++)
-            d_args.vars_nctrl_pts[0][i] = vars_nctrl;
-
-        d_args.infile = infile;
-//         d_args.infile = "/Users/tpeterka/datasets/nek5000/200x200x200/0.xyz";
-        if (dom_dim == 2)
-            master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-                    { b->read_2d_slice_3d_vector_data(cp, d_args); });
-        else if (dom_dim == 3)
-            master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-                    { b->read_3d_vector_data(cp, d_args); });
-        else
-        {
-            fprintf(stderr, "nek5000 data only available in 2 or 3d domain\n");
-            exit(0);
-        }
+        master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
+                { b->read_4d_vector_data(cp, d_args); });
     }
 
     // compute the MFA
@@ -259,16 +210,16 @@ int main(int argc, char** argv)
     double decode_time = MPI_Wtime();
     if (error)
     {
-    fprintf(stderr, "\nFinal decoding and computing max. error...\n");
+        fprintf(stderr, "\nFinal decoding and computing max. error...\n");
 #ifdef CURVE_PARAMS     // normal distance
-    master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-            { b->error(cp, 1, true); });
+        master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
+                { b->error(cp, 1, true); });
 #else                   // range coordinate difference
-    bool saved_basis = structured; // TODO: basis functions are currently only saved during encoding of structured data
-    master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-            { b->range_error(cp, 1, true, saved_basis); });
+        bool saved_basis = structured; // TODO: basis functions are currently only saved during encoding of structured data
+        master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
+                { b->range_error(cp, 1, true, saved_basis); });
 #endif
-    decode_time = MPI_Wtime() - decode_time;
+        decode_time = MPI_Wtime() - decode_time;
     }
 
     // print results
@@ -282,69 +233,4 @@ int main(int argc, char** argv)
 
     // save the results in diy format
     diy::io::write_blocks("approx.out", world, master);
-
-    // check the results of the last (only) science variable
-    Block<real_t>* b    = static_cast<Block<real_t>*>(master.block(0));
-    real_t range_extent = b->input->domain.col(dom_dim).maxCoeff() - b->input->domain.col(dom_dim).minCoeff();
-    real_t err_factor   = 1.0e-3;
-    real_t expect_err   = -0.0;
-    // for ./fixed-test -i sinc -d 3 -m 2 -p 1 -q 5 -v 20 -w 0
-    if (input == "sinc" && dom_dim == 2 && rand_seed == -1)
-        expect_err   = 4.304489e-4;
-    // for ./fixed-test -i sinc -d 3 -m 2 -p 1 -q 5 -v 20 -w 0 -x 0 -y 4444
-    if (input == "s3d" && dom_dim == 1 && rand_seed == 4444)
-        expect_err   = 4.282089e-04;
-    // for ./fixed-test -i s3d -d 2 -m 1 -p 1 -q 3 -w 0
-    if (input == "s3d" && dom_dim == 1 && rand_seed == -1)
-        expect_err   = 6.819451e-2;
-    // for ./fixed-test -i s3d -d 3 -m 2 -p 1 -q 3 -w 0
-    if (input == "s3d" && dom_dim == 2)
-        expect_err   = 2.778071e-1;
-    real_t our_err      = b->max_errs[0] / range_extent;    // normalized max_err
-    if (fabs(expect_err - our_err) / expect_err > err_factor)
-    {
-        fprintf(stderr, "our error (%e) and expected error (%e) differ by more than a factor of %e\n", our_err, expect_err, err_factor);
-        abort();
-    }
-
-    if (resolutionGrid > 0 && input == "sinc" && dom_dim == 2) {
-        // do an extra test for decode grid
-        VectorXi ndom_pts;
-        std::vector<int> counts;
-        ndom_pts.resize(2);
-        ndom_pts[0] = resolutionGrid;
-        ndom_pts[1] = resolutionGrid;
-        counts.push_back(resolutionGrid); counts.push_back(resolutionGrid);
-        master.foreach( [&](Block<real_t> *b, const diy::Master::ProxyWithLink &cp) {
-                    b->decode_core_ures(cp, counts); });
-        // now look at some values of the blend matrix
-
-        // b still points to the first block !! Block<real_t>* b    = static_cast<Block<real_t>*>(master.block(0));
-        MatrixX<real_t> result = b->blend;
-
-        // evaluate at 0,0 using decodeatpoint
-        VectorX<real_t> param(2); // dom dim is 2, initialize with 0
-        VectorX<real_t> var_cpt(1);
-        // loop over all points in the resulted grid, and compare with the DecodePt
-        // we have 2 dimensions, each direction has resolutionGrid points
-
-        mfa::VolIterator vol_it(ndom_pts);
-        while (!vol_it.done()) {
-            int jj = (int) vol_it.cur_iter();
-            for (auto ii = 0; ii < 2; ii++) {
-                int ix = vol_it.idx_dim(ii); // index along direction ii in grid
-                param[ii] = ix / (resolutionGrid - 1.);
-            }
-            b->mfa->DecodeVar(0, param, var_cpt);
-            // compare with our blend result
-            if (fabs(var_cpt(0) - result(jj, 2)) > 1.e-10) {
-                fprintf(stderr, " %e != %e , params: %f %f, ix: %d %d \n",
-                        var_cpt(0), result(jj, 2), param[0], param[1],
-                        vol_it.idx_dim(0), vol_it.idx_dim(1));
-                abort();
-            }
-            vol_it.incr_iter();
-        }
-
-    }
 }

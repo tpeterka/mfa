@@ -53,6 +53,8 @@ struct ModelInfo
         vars_nctrl_pts.resize(pt_dim - dom_dim);
         for (auto i = 0; i < vars_nctrl_pts.size(); i++)
             vars_nctrl_pts[i].resize(dom_dim);
+
+        regularization = 0;
     }
     virtual ~ModelInfo()                        {}
 
@@ -65,6 +67,7 @@ struct ModelInfo
     vector<vector<int>> vars_nctrl_pts;         // number of input pts in each dim of each science variable vars_nctrl_pts[var][dim]
     bool                weighted;               // solve for and use weights (default = true)
     bool                local;                  // solve locally (with constraints) each round (default = false)
+    float               regularization;         // smoothing parameter for unstructured data with nonuniform point density (value of 0 does nothing)
     int                 verbose;                // debug level (default = 1)
 };
 
@@ -180,35 +183,33 @@ struct BlockBase
             cerr << "ERROR: Attempted to set up MFA models before MFA was constructed" << endl;
             exit(1);
         }
-
-        ModelInfo*  a = &info;
-        VectorXi    nctrl_pts(dom_dim);
-        VectorXi    p(dom_dim);
-
-        for (auto j = 0; j < dom_dim; j++)
-        {
-            nctrl_pts(j)    = a->geom_nctrl_pts[j];
-            p(j)            = a->geom_p[j];
-        }
-        mfa->AddGeometry(p, nctrl_pts, dom_dim);
-
-        if (a->vars_p.size() != num_vars)
+        if (info.vars_p.size() != num_vars)
         {
             cerr << "ERROR: vars_p and num_vars invalid in BlockBase::setup_models()" << endl;
             exit(1);
         }
-        if (a->vars_nctrl_pts.size() != num_vars)
+        if (info.vars_nctrl_pts.size() != num_vars)
         {
             cerr << "ERROR: vars_nctrl_pts and num_vars invalid in BlockBase::setup_models()" << endl;
             exit(1);
         }
 
+        VectorXi    nctrl_pts(dom_dim);
+        VectorXi    p(dom_dim);
+
+        for (auto j = 0; j < dom_dim; j++)
+        {
+            nctrl_pts(j)    = info.geom_nctrl_pts[j];
+            p(j)            = info.geom_p[j];
+        }
+        mfa->AddGeometry(p, nctrl_pts, dom_dim);
+
         for (auto i = 0; i < num_vars; i++)
         {
             for (auto j = 0; j < dom_dim; j++)
             {
-                p(j)            = a->vars_p[i][j];
-                nctrl_pts(j)    = a->vars_nctrl_pts[i][j];
+                p(j)            = info.vars_p[i][j];
+                nctrl_pts(j)    = info.vars_nctrl_pts[i][j];
             }
             mfa->AddVariable(p, nctrl_pts, 1);   // assumes variable is scalar (1d)
         }
@@ -220,7 +221,7 @@ struct BlockBase
             const       diy::Master::ProxyWithLink& cp,
             ModelInfo&  info)
     {
-        mfa->FixedEncode(*input, info.weighted);
+        mfa->FixedEncode(*input, info.regularization, info.weighted);
     }
 
     // adaptively encode block to desired error limit
@@ -456,6 +457,10 @@ struct BlockBase
         }
         errs = new mfa::PointSet<T>(input->params, input->pt_dim);
 
+        // saved_basis only applies when not using tmesh
+#ifdef MFA_TMESH
+        saved_basis = false;
+#endif
         // Decode entire block and then compare to input
         if (decode_block_)
         {
@@ -490,7 +495,7 @@ struct BlockBase
             max_errs_reduce[2 * i] = max_errs[i];
             max_errs_reduce[2 * i + 1] = cp.gid(); // use converter from type T to integer
         }
-     } 
+     }
 
     void print_block(const diy::Master::ProxyWithLink& cp,
             bool                              error)       // error was computed
@@ -627,21 +632,43 @@ struct BlockBase
     // compute compression ratio
     float compute_compression()
     {
-        // TODO: hard-coded for one tensor product
         float in_coords = (input->npts) * (input->pt_dim);
-        float out_coords = mfa->geom().tmesh.tensor_prods[0].ctrl_pts.rows() *
-            mfa->geom().tmesh.tensor_prods[0].ctrl_pts.cols();
+        float out_coords = 0.0;
+        for (auto j = 0; j < mfa->geom().tmesh.tensor_prods.size(); j++)
+            out_coords += mfa->geom().tmesh.tensor_prods[j].ctrl_pts.rows() *
+                mfa->geom().tmesh.tensor_prods[j].ctrl_pts.cols();
         for (auto j = 0; j < mfa->geom().tmesh.all_knots.size(); j++)
             out_coords += mfa->geom().tmesh.all_knots[j].size();
         for (auto i = 0; i < mfa->nvars(); i++)
         {
-            out_coords += (mfa->var(i).tmesh.tensor_prods[0].ctrl_pts.rows() *
-                    mfa->var(i).tmesh.tensor_prods[0].ctrl_pts.cols());
+            for (auto j = 0; j < mfa->var(i).tmesh.tensor_prods.size(); j++)
+                out_coords += mfa->var(i).tmesh.tensor_prods[j].ctrl_pts.rows() *
+                    mfa->var(i).tmesh.tensor_prods[j].ctrl_pts.cols();
             for (auto j = 0; j < mfa->var(i).tmesh.all_knots.size(); j++)
                 out_coords += mfa->var(i).tmesh.all_knots[j].size();
         }
         return(in_coords / out_coords);
     }
+
+    //     DEPRECATE
+//     // compute compression ratio
+//     float compute_compression()
+//     {
+//         // TODO: hard-coded for one tensor product
+//         float in_coords = (input->npts) * (input->pt_dim);
+//         float out_coords = geometry.mfa_data->tmesh.tensor_prods[0].ctrl_pts.rows() *
+//             geometry.mfa_data->tmesh.tensor_prods[0].ctrl_pts.cols();
+//         for (auto j = 0; j < geometry.mfa_data->tmesh.all_knots.size(); j++)
+//             out_coords += geometry.mfa_data->tmesh.all_knots[j].size();
+//         for (auto i = 0; i < vars.size(); i++)
+//         {
+//             out_coords += (vars[i].mfa_data->tmesh.tensor_prods[0].ctrl_pts.rows() *
+//                     vars[i].mfa_data->tmesh.tensor_prods[0].ctrl_pts.cols());
+//             for (auto j = 0; j < vars[i].mfa_data->tmesh.all_knots.size(); j++)
+//                 out_coords += vars[i].mfa_data->tmesh.all_knots[j].size();
+//         }
+//         return(in_coords / out_coords);
+//     }
 
     //  debug: print control points and weights in all tensor products of a tmesh
     void print_ctrl_weights(mfa::Tmesh<T>& tmesh)

@@ -119,6 +119,7 @@ int main(int argc, char** argv)
     cerr << "threading: serial" << endl;
 #endif
 #ifdef MFA_NO_WEIGHTS
+    weighted = 0;
     cerr << "weighted = 0" << endl;
 #else
     cerr << "weighted = " << weighted << endl;
@@ -379,14 +380,24 @@ int main(int argc, char** argv)
     if (input == "sinc")
     {
         // for ./adaptive-test -i sinc -d 4 -m 3 -p 1 -q 5 -e 1e-2 -w 0
-        expect_err   = 1.894724e-2;
+#ifdef MFA_LOW_D
+        expect_err      = 1.894724e-2;
         expect_nctrl    = 169;
+#else
+        expect_err      = 7.930808e-3;
+        expect_nctrl    = 225;
+#endif
     }
     if (input == "s3d")
     {
         // for ./adaptive-test -i s3d -d 2 -m 1 -p 1 -q 3 -e 1e-2 -w 0
-        expect_err   = 8.884982e-3;
+#ifdef MFA_LOW_D
+        expect_err      = 8.884982e-3;
         expect_nctrl    = 91;
+#else
+        expect_err      = 8.884982e-3;
+        expect_nctrl    = 91;
+#endif
     }
 
     int our_nctrl       = b->mfa->var(0).tmesh.tensor_prods[0].ctrl_pts.rows();

@@ -18,9 +18,13 @@
 // domain parameterization is the default method if no method is specified
 // #define CURVE_PARAMS
 
-// comment out the following line for low-d knot insertion
-// low-d is the default if no method is specified
-// #define HIGH_D
+// low-d knot insertion
+// high-d is the default if no method is specified
+#define MFA_LOW_D
+
+// check all curves for low-d knot insertion
+// default is to sample fewer curves
+// #define MFA_CHECK_ALL_CURVES
 
 // comment out the following line for applying weights to only the range dimension
 // weighing the range coordinate only is the default if no method is specified
@@ -280,7 +284,9 @@ namespace mfa
         void FixedEncodeImpl(
                 MFA_Data<T>&        mfa_data,               // mfa data model
                 const PointSet<T>&  input,                  // input points
-                bool                weighted)         // solve for and use weights (default = true)
+                T                   regularization,
+                bool                weighted,
+                bool                force_unified = false) const         // solve for and use weights (default = true)
         {
             mfa_data.set_knots(input);
 
@@ -290,10 +296,10 @@ namespace mfa
             t.weights = VectorX<T>::Ones(t.nctrl_pts.prod());
             Encoder<T> encoder(*this, mfa_data, input, verbose);
 
-            if (input.structured)
+            if (input.structured && !force_unified)
                 encoder.Encode(t.nctrl_pts, t.ctrl_pts, t.weights, weighted);
             else
-                encoder.EncodeUnified(0, weighted);  // Assumes only one tensor product
+                encoder.EncodeUnified(0, regularization, weighted);  // Assumes only one tensor product
         }
 
         // adaptive encode
@@ -618,17 +624,18 @@ namespace mfa
 
         // Fixed encode geometry model only
         // Useful if input arguments vary between models, or different models are encoded by different threads
-        void FixedEncodeGeom(const PointSet<T>& input, bool weighted)
+        void FixedEncodeGeom(const PointSet<T>& input, bool weighted, bool force_unified = false)
         {
             if (verbose)
                 cout << "MFA: Encoding geometry model (fixed)" << endl;
 
-            FixedEncodeImpl(*geometry, input, weighted);
+            T regularization = 0;
+            FixedEncodeImpl(*geometry, input, regularization, weighted, force_unified);
         }
 
         // Fixed encode single variable model only
         // Useful if input arguments vary between models, or different models are encoded by different threads 
-        void FixedEncodeVar(int i, const PointSet<T>& input, bool weighted)
+        void FixedEncodeVar(int i, const PointSet<T>& input, T regularization, bool weighted, bool force_unified = false)
         {
             if (i < 0 || i >= nvars())
             {
@@ -639,17 +646,17 @@ namespace mfa
             if (verbose)
                 cout << "MFA: Encoding variable model " << i << " (fixed)" << endl;
 
-            FixedEncodeImpl(*(vars[i]), input, weighted);
+            FixedEncodeImpl(*(vars[i]), input, regularization, weighted, force_unified);
         }
 
         // Fixed encode all models simultaneously
-        void FixedEncode(const PointSet<T>& input, bool weighted)
+        void FixedEncode(const PointSet<T>& input, T regularization, bool weighted, bool force_unified = false)
         {
-            FixedEncodeGeom(input, weighted);
+            FixedEncodeGeom(input, weighted, force_unified);
 
-            for (int i = 0; i < vars.size(); i++)
+            for (int i = 0; i < nvars(); i++)
             {
-                FixedEncodeVar(i, input, weighted);
+                FixedEncodeVar(i, input, regularization, weighted, force_unified);
             }
         }
 
@@ -700,7 +707,7 @@ namespace mfa
         {
             AdaptiveEncodeGeom(input, err_limit, weighted, local, extents, max_rounds);
 
-            for (int i = 0; i < vars.size(); i++)
+            for (int i = 0; i < nvars(); i++)
             {
                 AdaptiveEncodeVar(i, input, err_limit, weighted, local, extents, max_rounds);
             }
