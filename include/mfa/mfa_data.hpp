@@ -381,65 +381,121 @@ namespace mfa
 //             cerr << N << endl;
         }
 
-        // sum of all degree-basis functions at or past b_idx, evaluated at u
+        // sum of all <degree>-basis functions at or past b_idx, evaluated at u
+        // NOTE: 'degree' can be greater than the degree of the MFA, which means that the support of some
+        //       of these basis functions might extend past our (finite) knot vector
+        //       Whenever this is the case, we assume we have an infinite number of pinned knots at 0 and 1.
+        //       Thus, any knot "before" the first knot is also at 0; any knot "after" the last knot is also at 1.
         T IntBasisFunsHelper(
                 int         degree,
                 int         cur_dim,
                 T           u,
-                int         basis_idx) const  // index of basis function to integrate
+                int         span,
+                int         basis_idx,      // index of basis function to integrate
+                BasisFunInfo<T>& bfi) const
         {
-            vector<T> loc_knots(degree + 2);
-            VectorX<T> bfs = VectorX<T>::Zero(tmesh.tensor_prods[0].nctrl_pts(cur_dim) + degree - p(cur_dim));
+            // special cases when limit of integration is at edge of parameter space
+            // if (u == 0) return 0;
+            // if (u == 1) return 1;
 
-            int span = FindSpan(cur_dim, u);
             int first_idx = span - degree; // idx of the first basis function which is nonzero at u
 
-            // for each basis function which has support in span
-            // N will contain all of the degree-basis functions evaluated at u
-            for (int j = 0; j < degree + 1; j++)
-            {
-                int idx = first_idx + j;
-                // compute degree-basis funs
-                // first, get extended local knot vector
-                for (int i = 0; i < degree + 2; i++)
-                {
-                    if (idx + i < 0)
-                    {
-                        // cerr << "using ghost knot=0.0" << endl;
-                        loc_knots[i] = 0.0;
-                    }
-                    else if (idx + i >= (int)tmesh.all_knots[cur_dim].size())
-                    {
-                        // cerr << "using ghost knot=1.0" << endl;
-                        loc_knots[i] = 1.0;
-                    }
-                    else
-                        loc_knots[i] = tmesh.all_knots[cur_dim][idx + i];
-                }
+            VectorX<T> N = VectorX<T>::Zero(degree+1);
+            FastBasisFunsK(cur_dim, u, span, N, bfi, degree);
 
-
-                if (idx >= 0)
-                {
-                    bfs(idx) = OneBasisFunK(degree, cur_dim, u, loc_knots);
-                    // cerr << "bf: " << bfs(idx) << endl;
-                }
-                else
-                {
-                    // cerr << "bf: ----" << endl;
-                }
-            }
-
-// cerr << "BFs: " << bfs << endl;
-
-            // now sum all basis functions from basis_idx forward, evaluated at u
             T sum = 0;
-            int sumstart = max(basis_idx, first_idx); // can skip anything before basis_idx or before the first nonzero basis fxn
-            for (int j = sumstart; j < first_idx + degree + 1; j++)
+            int skip = basis_idx - first_idx;   // start summation at basis_idx, not first_idx
+            for (int j = skip; j < degree + 1; j++)
             {
-                sum += bfs(j);
+                sum += N(j);
             }
 
             return sum;
+        }
+
+        // Computes the integral of the basis function with index 'basis_idx'
+        T IntBasisFun(
+            int cur_dim,
+            int basis_idx,
+            T   a,
+            T   b,
+            int spana,
+            int spanb,
+            BasisFunInfo<T>& bfi) const
+        {
+            int deg         = this->p(cur_dim);
+            int lower_span  = basis_idx;             // knot index of lower bound of basis support
+            int upper_span  = basis_idx + deg + 1;  // knot index of upper bound of basis support
+
+            T k_start   = tmesh.all_knots[cur_dim][lower_span];
+            T k_end     = tmesh.all_knots[cur_dim][upper_span];
+            T scaling   = (k_end - k_start) / (deg+1);
+
+            T suma      = 0;
+            T sumb      = 0;
+
+            if (spana < lower_span)     // u is contained in a span to the left of support of basis fxn
+            {
+                suma = 0;
+            }
+            else
+            {
+                suma = IntBasisFunsHelper(deg+1, cur_dim, a, spana, basis_idx, bfi);
+            }
+
+            if (spanb >= upper_span)    // u is contained in a span to the right of support of basis fxn
+            {
+                sumb = 1;
+            }
+            else
+            {
+                sumb =  IntBasisFunsHelper(deg+1, cur_dim, b, spanb, basis_idx, bfi);
+            }
+            
+            return scaling * (sumb-suma);  
+        }
+
+        // Same as FastBasisFuns but 'degree' can be different from the degree of the MFA_Data
+        // (useful for computing integrals of basis functions)
+        // This requires a check if the knot index is past the extents of our knot vector, 
+        // which requires IF statements not present in FastBasisFuns. FastBasisFuns is so performance
+        // critical that we make a separate function with the if-logic.
+        void FastBasisFunsK( int                cur_dim,
+                            T                   u,
+                            int                 span,
+                            VectorX<T>&         N,
+                            BasisFunInfo<T>&    bfi,
+                            int                 degree) const
+        {
+            assert(N.size() == degree + 1);
+            assert(bfi.qmax >= degree + 1);
+
+            const T tid_max = tmesh.all_knots[cur_dim].size() - 1;  // index of last knot
+            T tl = 0, tr = 0;                       //leftmost and rightmost knots in a given iteration
+
+            // nb. we do not need to zero out the entirety of N, since the existing entries of N 
+            //     are never accessed (they are always overwritten first)
+            N[0] = 1;   
+
+            for (int j = 1; j <= degree; j++)
+            {
+                tl = (span + 1 - j < 0) ? 0 : tmesh.all_knots[cur_dim][span + 1 - j];
+                tr = (span + j > tid_max) ? 1 : tmesh.all_knots[cur_dim][span + j];
+
+                // left[j] is u - the jth knot in the correct level to the left of span
+                // right[j] is the jth knot in the correct level to the right of span - u
+                bfi.left[j]  = u - tl;
+                bfi.right[j] = tr - u;
+
+                T saved = 0.0;
+                for (int r = 0; r < j; r++)
+                {
+                    T temp = N[r] / (bfi.right[r + 1] + bfi.left[j - r]);
+                    N[r] = saved + bfi.right[r + 1] * temp;
+                    saved = bfi.left[j - r] * temp;
+                }
+                N[j] = saved;
+            }
         }
 
         void BasisFunsK(
@@ -543,6 +599,7 @@ namespace mfa
             }
             return N[0];
         }
+
         // same as OrigBasisFuns but allocate left/right scratch space ahead of time,
         // and compute N vector in place.
         // NOTE: In a threaded environment, a thread-local BasisFunInfo should be passed

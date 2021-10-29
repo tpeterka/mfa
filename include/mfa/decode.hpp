@@ -461,6 +461,9 @@ namespace mfa
             VectorXi spanb(dom_dim);
             output = VectorX<T>::Zero(local_pt_dim);     // reset output to zero
 
+            // order is p+1, so order of integrated basis fxns is p+2
+            BasisFunInfo<T>     bfi(mfa_data.p + VectorXi::Constant(dom_dim, 2));
+
             for (int i = 0; i < dom_dim; i++)
             {
                 spana(i) = mfa_data.FindSpan(i, a(i), tensor);
@@ -475,36 +478,38 @@ namespace mfa
 
                 for (int l = 0; l < dom_dim; l++)
                 {
-                    int ctrl_idx = ctrl_idxs(l);
-                    int lower_span = ctrl_idx;                      // knot index of lower bound of basis support
-                    int upper_span = ctrl_idx + mfa_data.p(l) + 1;  // knot index of upper bound of basis support
-
-                    T k_start   = mfa_data.tmesh.all_knots[l][lower_span];
-                    T k_end     = mfa_data.tmesh.all_knots[l][upper_span];
-                    // T scaling   = (mfa_data.p(l)+1) / (k_end - k_start);
-                    T scaling   = (k_end - k_start) / (mfa_data.p(l)+1);
-                    T suma      = 0;
-                    T sumb      = 0;
-
-                    if (spana(l) < lower_span)
-                    {
-                        suma = 0;
-                    }
-                    else
-                    {
-                        suma = mfa_data.IntBasisFunsHelper(mfa_data.p(l)+1, l, a(l), ctrl_idx);
-                    }
-
-                    if (spanb(l) >= upper_span)
-                    {
-                        sumb = 1;
-                    }
-                    else
-                    {
-                        sumb = mfa_data.IntBasisFunsHelper(mfa_data.p(l)+1, l, b(l), ctrl_idx);
-                    }
+                    coeff *= mfa_data.IntBasisFun(l, ctrl_idxs(l), a, b, spana(l), spanb(l), bfi);
                     
-                    coeff *= scaling * (sumb-suma);                        
+
+                    // int ctrl_idx = ctrl_idxs(l);
+                    // int lower_span = ctrl_idx;                      // knot index of lower bound of basis support
+                    // int upper_span = ctrl_idx + mfa_data.p(l) + 1;  // knot index of upper bound of basis support
+
+                    // T k_start   = mfa_data.tmesh.all_knots[l][lower_span];
+                    // T k_end     = mfa_data.tmesh.all_knots[l][upper_span];
+                    // T scaling   = (k_end - k_start) / (mfa_data.p(l)+1);
+                    // T suma      = 0;
+                    // T sumb      = 0;
+
+                    // if (spana(l) < lower_span)
+                    // {
+                    //     suma = 0;
+                    // }
+                    // else
+                    // {
+                    //     suma = mfa_data.IntBasisFunsHelper(mfa_data.p(l)+1, l, a(l), ctrl_idx);
+                    // }
+
+                    // if (spanb(l) >= upper_span)
+                    // {
+                    //     sumb = 1;
+                    // }
+                    // else
+                    // {
+                    //     sumb = mfa_data.IntBasisFunsHelper(mfa_data.p(l)+1, l, b(l), ctrl_idx);
+                    // }
+                    
+                    // coeff *= scaling * (sumb-suma);                        
                 }
 
                 output += coeff * tensor.ctrl_pts.row(cp_it.cur_iter_full());
@@ -521,10 +526,11 @@ namespace mfa
             assert(ps.dom_dim == dom_dim);
             assert(max_dim - min_dim + 1 == tensor.ctrl_pts.cols());
 
-            int dom_dim = ps.dom_dim;
-
             VectorX<T>          param(dom_dim);
             VectorXi            span(dom_dim);    // span in each dim.
+
+            // order is p+1, so order of integrated basis fxns is p+2
+            BasisFunInfo<T>     bfi(mfa_data.p + VectorXi::Constant(dom_dim, 2));
 
             T a = 0, b = 0; // limits of integration
 
@@ -542,39 +548,42 @@ namespace mfa
                 while (!cp_it.done()) // loop through ctrl points/basis functions
                 {
                     VectorXi cp_idxs = cp_it.idx_dim();
-                    T temp = 1; // will hold product of integrated basis functions (Attempt 1) (Attempt multidim)
+                    T temp = 1; // will hold product of integrated basis functions
 
                     for (int l = 0; l < dom_dim; l++)
                     {
                         int cp_idx = cp_idxs(l); // control point index within this dimension (full idx, not subvolume)
-
-                        T k_start, k_end;   // boundaries of support of basis function cp_idx (indices)
-                        k_start = mfa_data.tmesh.all_knots[l][cp_idx];
-                        if (cp_idx + mfa_data.p(l)+1 >= mfa_data.tmesh.all_knots[l].size())
-                        {
-                            cerr << "------------>past last knot while computing scaling" << endl;
-                            k_end = mfa_data.tmesh.all_knots[l].back(); // last knot
-                        }
-                        else
-                            k_end = mfa_data.tmesh.all_knots[l][cp_idx + mfa_data.p(l)+1];
-
                         a = 0;
                         b = param(l);
-                        T scaling = (mfa_data.p(l)+1) / (k_end - k_start);
-                        T diff = 0;
 
-                        if (cp_idx < span(l) - mfa_data.p(l))
-                        {
-                            diff = 1;
-                        }
-                        else
-                        {
-                            T suma = mfa_data.IntBasisFunsHelper(mfa_data.p(l)+1, l, a, cp_idx);
-                            T sumb = mfa_data.IntBasisFunsHelper(mfa_data.p(l)+1, l, b, cp_idx);
-                            diff = sumb - suma;
-                        }
+                        temp *= mfa_data.IntBasisFun(l, cp_idx, a, b, mfa_data.p(l), span(l), bfi);
+
+                        // T k_start, k_end;   // boundaries of support of basis function cp_idx (indices)
+                        // k_start = mfa_data.tmesh.all_knots[l][cp_idx];
+                        // if (cp_idx + mfa_data.p(l)+1 >= mfa_data.tmesh.all_knots[l].size())
+                        // {
+                        //     cerr << "------------>past last knot while computing scaling" << endl;
+                        //     k_end = mfa_data.tmesh.all_knots[l].back(); // last knot
+                        // }
+                        // else
+                        //     k_end = mfa_data.tmesh.all_knots[l][cp_idx + mfa_data.p(l)+1];
+
+
+                        // T scaling = (mfa_data.p(l)+1) / (k_end - k_start);
+                        // T diff = 0;
+
+                        // if (cp_idx < span(l) - mfa_data.p(l))
+                        // {
+                        //     diff = 1;
+                        // }
+                        // else
+                        // {
+                        //     T suma = mfa_data.IntBasisFunsHelper(mfa_data.p(l)+1, l, a, cp_idx, bfi);
+                        //     T sumb = mfa_data.IntBasisFunsHelper(mfa_data.p(l)+1, l, b, cp_idx, bfi);
+                        //     diff = sumb - suma;
+                        // }
                         
-                        temp *= 1/scaling * diff;                        
+                        // temp *= 1/scaling * diff;                        
                     }
 
                     cpt += temp * tensor.ctrl_pts.row(cp_it.cur_iter_full());
