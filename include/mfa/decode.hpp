@@ -241,8 +241,6 @@ namespace mfa
             if (saved_basis && !ps.structured)
                 cerr << "Warning: Saved basis decoding not implemented with unstructured input. Proceeding with standard decoding" << endl;
 
-            int last = mfa_data.tmesh.tensor_prods[0].ctrl_pts.cols() - 1;       // last coordinate of control point
-
 #ifdef MFA_TBB                                          // TBB version, faster (~3X) than serial
             // thread-local DecodeInfo
             // ref: https://www.threadingbuildingblocks.org/tutorial-intel-tbb-thread-local-storage
@@ -254,9 +252,9 @@ namespace mfa
                 auto pt_end = ps.iterator(r.end());
                 for (; pt_it != pt_end; ++pt_it)
                 {
-                    VectorX<T>  cpt(last + 1);              // evaluated point
-                    VectorX<T>  param(mfa_data.dom_dim);    // vector of param values
-                    VectorXi    ijk(mfa_data.dom_dim);      // vector of param indices (structured grid only)
+                    VectorX<T>  cpt(mfa_data.dim());              // evaluated point
+                    VectorX<T>  param(dom_dim);    // vector of param values
+                    VectorXi    ijk(dom_dim);      // vector of param indices (structured grid only)
                     pt_it.params(param);
                     // compute approximated point for this parameter vector
 
@@ -288,7 +286,7 @@ namespace mfa
 
 #endif
 
-                    ps.domain.block(pt_it.idx(), min_dim, 1, max_dim - min_dim + 1) = cpt.transpose();
+                    ps.domain.block(pt_it.idx(), min_dim, 1, mfa_data.dim()) = cpt.transpose();
                 }
             });
             if (verbose)
@@ -299,9 +297,9 @@ namespace mfa
 #ifdef MFA_SERIAL   // serial version
             DecodeInfo<T> decode_info(mfa_data, derivs);    // reusable decode point info for calling VolPt repeatedly
 
-            VectorX<T> cpt(last + 1);                       // evaluated point
-            VectorX<T> param(mfa_data.dom_dim);            // parameters for one point
-            VectorXi   ijk(mfa_data.dom_dim);      // vector of param indices (structured grid only)
+            VectorX<T> cpt(mfa_data.dim());                       // evaluated point
+            VectorX<T> param(dom_dim);            // parameters for one point
+            VectorXi   ijk(dom_dim);      // vector of param indices (structured grid only)
 
             auto pt_it  = ps.begin();
             auto pt_end = ps.end();
@@ -340,7 +338,7 @@ namespace mfa
 
 #endif          // end serial version
 
-                ps.domain.block(pt_it.idx(), min_dim, 1, max_dim - min_dim + 1) = cpt.transpose();
+                ps.domain.block(pt_it.idx(), min_dim, 1, mfa_data.dim()) = cpt.transpose();
 
                 // print progress
                 if (verbose)
@@ -356,17 +354,17 @@ namespace mfa
                             T                       u0,
                             T                       u1,
                             const VectorX<T>&       params, // params at which axis line is fixed (we ignore params(dim))
-                            VectorX<T>&             output)
+                                  VectorX<T>&       output)
         {
             assert(params.size() == dom_dim);
-            assert(output.size() == max_dim - min_dim + 1);
+            assert(output.size() == mfa_data.dim());
             assert(dim > 0 && dim < dom_dim);
 
             output = VectorX<T>::Zero(mfa_data.dim());     // reset output to zero
 
             int dom_dim = mfa_data.dom_dim;
             VectorXi            spans(dom_dim);
-            vector<MatrixX<T>>  N(mfa_data.p.size());                           // basis functions in each dim.
+            vector<MatrixX<T>>  N(dom_dim);                           // basis functions in each dim.
 
             for (int i = 0; i < dom_dim; i++)
             {
@@ -454,12 +452,11 @@ namespace mfa
                                 const VectorX<T>&       b,          // end limit of integration (parameter)
                                 VectorX<T>&             output)
         {
-            assert(max_dim - min_dim + 1 == tensor.ctrl_pts.cols());
-            assert(a.size() == b.size() && a.size() == mfa_data.dom_dim);
-            assert(output.size() == max_dim - min_dim + 1);
+            assert(tensor.ctrl_pts.cols() == mfa_data.dim());
+            assert(a.size() == b.size() && a.size() == dom_dim);
+            assert(output.size() == mfa_data.dim());
 
-            int      dom_dim = mfa_data.dom_dim;
-            int      local_pt_dim = tensor.ctrl_pts.cols();
+            int      local_pt_dim = mfa_data.dim();
             VectorXi spana(dom_dim);
             VectorXi spanb(dom_dim);
             output = VectorX<T>::Zero(local_pt_dim);     // reset output to zero
@@ -521,7 +518,7 @@ namespace mfa
                                 int                     min_dim,
                                 int                     max_dim)
         {
-            assert(ps.dom_dim == mfa_data.dom_dim);
+            assert(ps.dom_dim == dom_dim);
             assert(max_dim - min_dim + 1 == tensor.ctrl_pts.cols());
 
             int dom_dim = ps.dom_dim;
