@@ -360,6 +360,7 @@ namespace mfa
             assert(output.size() == mfa_data.dim());
             assert(dim > 0 && dim < dom_dim);
 
+            BasisFunInfo<T> bfi(mfa_data.p + VectorXi::Constant(dom_dim, 2));
             output = VectorX<T>::Zero(mfa_data.dim());     // reset output to zero
 
             int dom_dim = mfa_data.dom_dim;
@@ -386,42 +387,44 @@ namespace mfa
             N[dim] = MatrixX<T>::Zero(1, tensor.nctrl_pts(dim));
             for (int s = span0 - mfa_data.p(dim); s <= span1; s++)
             {
-                int lower_span = s;                         // knot index of lower bound of basis support
-                int upper_span = s + mfa_data.p(dim) + 1;   // knot index of upper bound of basis support
                 int ctrl_idx = s;
+                // int lower_span = s;                         // knot index of lower bound of basis support
+                // int upper_span = s + mfa_data.p(dim) + 1;   // knot index of upper bound of basis support
 
-                // The support of B_s is [k_start, k_end]
-                T k_start   = mfa_data.tmesh.all_knots[dim][lower_span];
-                T k_end     = mfa_data.tmesh.all_knots[dim][upper_span];
-                T scaling   = (k_end - k_start) / (mfa_data.p(dim)+1);
-                T suma      = 0;
-                T sumb      = 0;
+                // // The support of B_s is [k_start, k_end]
+                // T k_start   = mfa_data.tmesh.all_knots[dim][lower_span];
+                // T k_end     = mfa_data.tmesh.all_knots[dim][upper_span];
+                // T scaling   = (k_end - k_start) / (mfa_data.p(dim)+1);
+                // T suma      = 0;
+                // T sumb      = 0;
 
-                // suma = int_0^u0 B_s, so if lower_span > span0, then the support of B_s is
-                // an interval always greater than u0. Thus the integral from 0 to u0 must be 0.
-                if (lower_span > span0)
-                {
-                    suma = 0;
-                }
-                else
-                {
-                    suma = mfa_data.IntBasisFunsHelper(mfa_data.p(dim)+1, dim, u0, ctrl_idx);
-                }
+                // // suma = int_0^u0 B_s, so if lower_span > span0, then the support of B_s is
+                // // an interval always greater than u0. Thus the integral from 0 to u0 must be 0.
+                // if (lower_span > span0)
+                // {
+                //     suma = 0;
+                // }
+                // else
+                // {
+                //     suma = mfa_data.IntBasisFunsHelper(mfa_data.p(dim)+1, dim, u0, ctrl_idx);
+                // }
 
-                // sumb = int_0^u1 B_s, so if upper_span <= span1, then the support of B_s is
-                // an interval always less than u1. Thus the integral from 0 to u0 must be 1, since
-                // IntBasisFunsHelper considers basis functions which are normalized s.t. the area
-                // under each basis function == 1.
-                if (upper_span <= span1)
-                {
-                    sumb = 1;
-                }
-                else
-                {
-                    sumb = mfa_data.IntBasisFunsHelper(mfa_data.p(dim)+1, dim, u1, ctrl_idx);
-                }
+                // // sumb = int_0^u1 B_s, so if upper_span <= span1, then the support of B_s is
+                // // an interval always less than u1. Thus the integral from 0 to u0 must be 1, since
+                // // IntBasisFunsHelper considers basis functions which are normalized s.t. the area
+                // // under each basis function == 1.
+                // if (upper_span <= span1)
+                // {
+                //     sumb = 1;
+                // }
+                // else
+                // {
+                //     sumb = mfa_data.IntBasisFunsHelper(mfa_data.p(dim)+1, dim, u1, ctrl_idx);
+                // }
 
-                N[dim](0, ctrl_idx) = scaling * (sumb - suma);
+                // N[dim](0, ctrl_idx) = scaling * (sumb - suma);
+
+                N[dim](0, ctrl_idx) = mfa_data.IntBasisFun(dim, ctrl_idx, u0, u1, span0, span1, bfi);
             }
 
 
