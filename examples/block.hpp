@@ -1694,8 +1694,8 @@ struct Block : public BlockBase<T>
         int new_pd = pt_dim + 1;    // new pt_dim
         
         const int n_alpha = 70;    // Number of angle values to sample
-        const int n_rho = 70;      // Number of rho values to sample
-        const int n_samples = 40;  // Number of times to sample each ray
+        const int n_rho = 100;      // Number of rho values to sample
+        const int n_samples = 100;  // Number of times to sample each ray
 
         VectorXi ndom_pts(new_dd);
         ndom_pts(0) = n_samples;
@@ -1866,7 +1866,7 @@ struct Block : public BlockBase<T>
         }
 
         // Encode ray model. TODO: regularized encode
-        bool force_unified = true;  // force a unified encoding to use the regularizer
+        bool force_unified = fixed_length;  // force a unified encoding to use the regularizer
         ray_mfa->FixedEncode(*ray_input, a->regularization, false, force_unified);
 
 
@@ -1928,7 +1928,7 @@ struct Block : public BlockBase<T>
                 bool fixed_length)
     {
         const double pi = 3.14159265358979;
-        const bool verbose = false;
+        const bool verbose = true;
 
         // TODO: This is for 2d only right now
         if (a.size() != 2 && b.size() != 2)
