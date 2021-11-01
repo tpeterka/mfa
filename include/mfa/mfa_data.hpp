@@ -45,6 +45,7 @@ namespace mfa
     {
         vector<T>   right;
         vector<T>   left;
+        vector<T>   N;
         int         qmax;
 
         BasisFunInfo(const vector<int>& q) :
@@ -58,6 +59,7 @@ namespace mfa
 
             right.resize(qmax);
             left.resize(qmax);
+            N.resize(qmax);
         }
 
         BasisFunInfo(const VectorXi& q) :
@@ -71,6 +73,7 @@ namespace mfa
 
             right.resize(qmax);
             left.resize(qmax);
+            N.resize(qmax);
         }
 
         void reset(int dim)
@@ -381,7 +384,8 @@ namespace mfa
 //             cerr << N << endl;
         }
 
-        // sum of all <degree>-basis functions at or past b_idx, evaluated at u
+        // Helper function for computing integrals of basis functions
+        // Computes sum of all <degree>-basis functions at or past b_idx, evaluated at u
         // NOTE: 'degree' can be greater than the degree of the MFA, which means that the support of some
         //       of these basis functions might extend past our (finite) knot vector
         //       Whenever this is the case, we assume we have an infinite number of pinned knots at 0 and 1.
@@ -395,63 +399,54 @@ namespace mfa
                 BasisFunInfo<T>& bfi) const
         {
             // special cases when limit of integration is at edge of parameter space
-            // if (u == 0) return 0;
-            // if (u == 1) return 1;
+            if (u == 0) return 0;
+            if (u == 1) return 1;
+            
+            // special cases when u is "far" from the basis fxn being integrated
+            int lower_span  = basis_idx;                        // knot index of lower bound of basis support
+            int upper_span  = basis_idx + this->p(cur_dim) + 1; // knot index of upper bound of basis support
+            if (span < lower_span) return 0;
+            if (span >= upper_span) return 1;
 
-            int first_idx = span - degree; // idx of the first basis function which is nonzero at u
+            FastBasisFunsK(cur_dim, u, span, bfi, degree);
 
-            VectorX<T> N = VectorX<T>::Zero(degree+1);
-            FastBasisFunsK(cur_dim, u, span, N, bfi, degree);
-
-            T sum = 0;
-            int skip = basis_idx - first_idx;   // start summation at basis_idx, not first_idx
+            T   sum         = 0;
+            int first_idx   = span - degree;            // idx of the first basis function which is nonzero at u
+            int skip        = basis_idx - first_idx;    // start summation at basis_idx, not first_idx
             for (int j = skip; j < degree + 1; j++)
             {
-                sum += N(j);
+                sum += bfi.N[j];
             }
 
             return sum;
         }
 
-        // Computes the integral of the basis function with index 'basis_idx'
+        // Computes the definite integral on [a,b] of the basis function with index 'basis_idx'
+        // Reference: "On Calculating with B-Splines. II: Integration," by de Boor, Lyche, and Schumaker (1976)
+        //            Lemma 2.1
         T IntBasisFun(
-            int cur_dim,
-            int basis_idx,
-            T   a,
-            T   b,
-            int spana,
-            int spanb,
-            BasisFunInfo<T>& bfi) const
+                int cur_dim,            // dimension in parameter space
+                int basis_idx,          // basis function to integrate
+                T   a,                  // lower limit of integration
+                T   b,                  // upper limit of integration
+                int spana,              // span containing a
+                int spanb,              // span containing b
+                BasisFunInfo<T>& bfi) const
         {
             int deg         = this->p(cur_dim);
-            int lower_span  = basis_idx;             // knot index of lower bound of basis support
+            int lower_span  = basis_idx;            // knot index of lower bound of basis support
             int upper_span  = basis_idx + deg + 1;  // knot index of upper bound of basis support
+            T   suma        = 0;
+            T   sumb        = 0;
 
             T k_start   = tmesh.all_knots[cur_dim][lower_span];
             T k_end     = tmesh.all_knots[cur_dim][upper_span];
             T scaling   = (k_end - k_start) / (deg+1);
 
-            T suma      = 0;
-            T sumb      = 0;
+            // Compute the sum of all (p+1)-degree basis functions, with index >= basis_idx
+            suma = IntBasisFunsHelper(deg+1, cur_dim, a, spana, basis_idx, bfi);
+            sumb = IntBasisFunsHelper(deg+1, cur_dim, b, spanb, basis_idx, bfi);
 
-            if (spana < lower_span)     // u is contained in a span to the left of support of basis fxn
-            {
-                suma = 0;
-            }
-            else
-            {
-                suma = IntBasisFunsHelper(deg+1, cur_dim, a, spana, basis_idx, bfi);
-            }
-
-            if (spanb >= upper_span)    // u is contained in a span to the right of support of basis fxn
-            {
-                sumb = 1;
-            }
-            else
-            {
-                sumb =  IntBasisFunsHelper(deg+1, cur_dim, b, spanb, basis_idx, bfi);
-            }
-            
             return scaling * (sumb-suma);  
         }
 
@@ -463,11 +458,10 @@ namespace mfa
         void FastBasisFunsK( int                cur_dim,
                             T                   u,
                             int                 span,
-                            VectorX<T>&         N,
                             BasisFunInfo<T>&    bfi,
                             int                 degree) const
         {
-            assert(N.size() == degree + 1);
+            assert(bfi.N.size() == degree + 1);
             assert(bfi.qmax >= degree + 1);
 
             const T tid_max = tmesh.all_knots[cur_dim].size() - 1;  // index of last knot
@@ -475,7 +469,7 @@ namespace mfa
 
             // nb. we do not need to zero out the entirety of N, since the existing entries of N 
             //     are never accessed (they are always overwritten first)
-            N[0] = 1;   
+            bfi.N[0] = 1;   
 
             for (int j = 1; j <= degree; j++)
             {
@@ -490,11 +484,11 @@ namespace mfa
                 T saved = 0.0;
                 for (int r = 0; r < j; r++)
                 {
-                    T temp = N[r] / (bfi.right[r + 1] + bfi.left[j - r]);
-                    N[r] = saved + bfi.right[r + 1] * temp;
+                    T temp = bfi.N[r] / (bfi.right[r + 1] + bfi.left[j - r]);
+                    bfi.N[r] = saved + bfi.right[r + 1] * temp;
                     saved = bfi.left[j - r] * temp;
                 }
-                N[j] = saved;
+                bfi.N[j] = saved;
             }
         }
 

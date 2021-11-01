@@ -478,38 +478,7 @@ namespace mfa
 
                 for (int l = 0; l < dom_dim; l++)
                 {
-                    coeff *= mfa_data.IntBasisFun(l, ctrl_idxs(l), a, b, spana(l), spanb(l), bfi);
-                    
-
-                    // int ctrl_idx = ctrl_idxs(l);
-                    // int lower_span = ctrl_idx;                      // knot index of lower bound of basis support
-                    // int upper_span = ctrl_idx + mfa_data.p(l) + 1;  // knot index of upper bound of basis support
-
-                    // T k_start   = mfa_data.tmesh.all_knots[l][lower_span];
-                    // T k_end     = mfa_data.tmesh.all_knots[l][upper_span];
-                    // T scaling   = (k_end - k_start) / (mfa_data.p(l)+1);
-                    // T suma      = 0;
-                    // T sumb      = 0;
-
-                    // if (spana(l) < lower_span)
-                    // {
-                    //     suma = 0;
-                    // }
-                    // else
-                    // {
-                    //     suma = mfa_data.IntBasisFunsHelper(mfa_data.p(l)+1, l, a(l), ctrl_idx);
-                    // }
-
-                    // if (spanb(l) >= upper_span)
-                    // {
-                    //     sumb = 1;
-                    // }
-                    // else
-                    // {
-                    //     sumb = mfa_data.IntBasisFunsHelper(mfa_data.p(l)+1, l, b(l), ctrl_idx);
-                    // }
-                    
-                    // coeff *= scaling * (sumb-suma);                        
+                    coeff *= mfa_data.IntBasisFun(l, ctrl_idxs(l), a, b, spana(l), spanb(l), bfi);                    
                 }
 
                 output += coeff * tensor.ctrl_pts.row(cp_it.cur_iter_full());
@@ -518,7 +487,11 @@ namespace mfa
             }
         }
 
+        // Creates the shape of an antiderivative of the MFA_Data
+        // Antiderivative is taken in one dimension only: 'int_dim'
+        // At each point, compute the integral from parameter (0,0,0...) to that point
         void IntegratePointSet( PointSet<T>&            ps,
+                                int                     int_dim, // dimension to integrate
                                 const TensorProduct<T>& tensor,
                                 int                     min_dim,
                                 int                     max_dim)
@@ -526,67 +499,47 @@ namespace mfa
             assert(ps.dom_dim == dom_dim);
             assert(max_dim - min_dim + 1 == tensor.ctrl_pts.cols());
 
-            VectorX<T>          param(dom_dim);
-            VectorXi            span(dom_dim);    // span in each dim.
-
             // order is p+1, so order of integrated basis fxns is p+2
             BasisFunInfo<T>     bfi(mfa_data.p + VectorXi::Constant(dom_dim, 2));
+            DecodeInfo<T>       di(mfa_data, VectorXi());
+            VectorX<T>          cpt(mfa_data.dim());    // holds integral value for each point
+            VectorX<T>          param(dom_dim);
+            VectorXi            span(dom_dim);
+            T const             a = 0;                  // lower limit of integration
+            T                   b = 0;                  // upper limit of integration
 
-            T a = 0, b = 0; // limits of integration
-
+            // Compute the definite integral at each point
             for (auto pt_it = ps.begin(), pt_end = ps.end(); pt_it != pt_end; ++pt_it)
             {
-                VectorX<T> cpt = VectorX<T>::Zero(max_dim-min_dim+1);
+                cpt.setZero();
                 pt_it.params(param);
 
                 for (int i = 0; i < dom_dim; i++)
                 {                        
                     span(i) = mfa_data.FindSpan(i, param(i), tensor);
+
+                    if (i != int_dim)
+                        mfa_data.OrigBasisFuns(i, param(i), span(i), di.N[i], 0);
                 }
 
-                VolIterator   cp_it(span + VectorXi::Ones(dom_dim), VectorXi::Zero(dom_dim), tensor.nctrl_pts);     // iterator over control points in the current tensor
-                while (!cp_it.done()) // loop through ctrl points/basis functions
+                // iterator over all control points touching the box {ZERO} --- {param}
+                VolIterator   cp_it(span + VectorXi::Ones(dom_dim), VectorXi::Zero(dom_dim), tensor.nctrl_pts);     
+                while (!cp_it.done())
                 {
-                    VectorXi cp_idxs = cp_it.idx_dim();
-                    T temp = 1; // will hold product of integrated basis functions
+                    T bf_prod = 1; // will hold product of integrated basis functions
 
                     for (int l = 0; l < dom_dim; l++)
                     {
-                        int cp_idx = cp_idxs(l); // control point index within this dimension (full idx, not subvolume)
-                        a = 0;
+                        int cp_idx = cp_it.idx_dim(l); // control point index within this dimension (full idx, not subvolume)
                         b = param(l);
 
-                        temp *= mfa_data.IntBasisFun(l, cp_idx, a, b, mfa_data.p(l), span(l), bfi);
-
-                        // T k_start, k_end;   // boundaries of support of basis function cp_idx (indices)
-                        // k_start = mfa_data.tmesh.all_knots[l][cp_idx];
-                        // if (cp_idx + mfa_data.p(l)+1 >= mfa_data.tmesh.all_knots[l].size())
-                        // {
-                        //     cerr << "------------>past last knot while computing scaling" << endl;
-                        //     k_end = mfa_data.tmesh.all_knots[l].back(); // last knot
-                        // }
-                        // else
-                        //     k_end = mfa_data.tmesh.all_knots[l][cp_idx + mfa_data.p(l)+1];
-
-
-                        // T scaling = (mfa_data.p(l)+1) / (k_end - k_start);
-                        // T diff = 0;
-
-                        // if (cp_idx < span(l) - mfa_data.p(l))
-                        // {
-                        //     diff = 1;
-                        // }
-                        // else
-                        // {
-                        //     T suma = mfa_data.IntBasisFunsHelper(mfa_data.p(l)+1, l, a, cp_idx, bfi);
-                        //     T sumb = mfa_data.IntBasisFunsHelper(mfa_data.p(l)+1, l, b, cp_idx, bfi);
-                        //     diff = sumb - suma;
-                        // }
-                        
-                        // temp *= 1/scaling * diff;                        
+                        if (l == int_dim)
+                            bf_prod *= mfa_data.IntBasisFun(l, cp_idx, a, b, mfa_data.p(l), span(l), bfi);    
+                        else
+                            bf_prod *= di.N[l](0, cp_idx);
                     }
 
-                    cpt += temp * tensor.ctrl_pts.row(cp_it.cur_iter_full());
+                    cpt += bf_prod * tensor.ctrl_pts.row(cp_it.cur_iter_full());
 
                     cp_it.incr_iter();
                 }

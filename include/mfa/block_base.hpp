@@ -366,6 +366,7 @@ struct BlockBase
 
     void integrate_block(
             const diy::Master::ProxyWithLink&   cp,
+            int                                 int_dim,
             int                                 verbose)
     {
         if (approx)
@@ -379,13 +380,13 @@ struct BlockBase
 
         for (auto k = 0; k < mfa->nvars(); k++)
         {
-            mfa->IntegratePointSet(mfa->var(k), *approx, verbose, dom_dim + k, dom_dim + k);
+            mfa->IntegratePointSet(mfa->var(k), *approx, int_dim, verbose, dom_dim + k, dom_dim + k);
         }
         
-        // scale the integral 
+        // scale the integral
         // MFA computes integral with respect to parameter space
         // This scaling factor returns the integral wrt physical space (assuming domain parameterization)
-        T scale = (core_maxs - core_mins).prod();
+        T scale = core_maxs(int_dim) - core_mins(int_dim);
         approx->domain.rightCols(mfa->pt_dim - mfa->geom_dim) *= scale;
     }
 

@@ -195,7 +195,7 @@ int main(int argc, char** argv)
     double decode_time = MPI_Wtime();
     fprintf(stderr, "\nComputing integral...\n");
     master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-            { b->integrate_block(cp, 1); });
+            { b->integrate_block(cp, 0, 1); });
 
     decode_time = MPI_Wtime() - decode_time;
 

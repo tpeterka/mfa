@@ -489,6 +489,7 @@ namespace mfa
         void IntegratePointSet(
                 const MFA_Data<T>&  mfa_data,
                 PointSet<T>&        output,
+                int                 int_dim,
                 int                 verbose,
                 int                 min_dim,
                 int                 max_dim)
@@ -496,7 +497,7 @@ namespace mfa
             const TensorProduct<T>&t = mfa_data.tmesh.tensor_prods[0];
 
             mfa::Decoder<T> decoder(mfa_data, verbose, false);
-            decoder.IntegratePointSet(output, t, min_dim, max_dim);
+            decoder.IntegratePointSet(output, int_dim, t, min_dim, max_dim);
         }
 
 
