@@ -1703,7 +1703,12 @@ struct Block : public BlockBase<T>
         ndom_pts(2) = n_alpha;
         int npts = n_samples * n_alpha * n_rho;
 
-        mfa::PointSet<T>* ray_input = new mfa::PointSet<T>(new_dd, new_pd, npts, ndom_pts);
+        mfa::PointSet<T>* ray_input = nullptr;
+        if (fixed_length)
+            ray_input = new mfa::PointSet<T>(new_dd, new_pd, npts);
+        else
+            ray_input = new mfa::PointSet<T>(new_dd, new_pd, npts, ndom_pts);
+       
 
         // extents of domain in physical space
         VectorX<T> param(dom_dim);
@@ -1721,7 +1726,7 @@ struct Block : public BlockBase<T>
         if (fixed_length)
         {
             double max_radius = max(max(abs(xl),abs(xh)), max(abs(yl),abs(yh)));
-            r_lim = max_radius * 1.1;
+            r_lim = max_radius * 1.5;
         } 
         else
         {
@@ -1790,8 +1795,12 @@ struct Block : public BlockBase<T>
                     ray_input->domain(idx, 2) = alpha;
 
                     T x = x0 + is * dx;
-                    // T y = y0 - is * dy;
-                    T y = y0 + is * dy;
+                    T y = 0;
+
+                    if (fixed_length)
+                        y = y0 - is * dy;
+                    else
+                        y = y0 + is * dy;
 
                     // If this point is not in the original domain
                     if (x < xl - 1e-8 || x > xh + 1e-8 || y < yl - 1e-8 || y > yh + 1e-8)
@@ -1827,6 +1836,19 @@ struct Block : public BlockBase<T>
         }
         
         // Set parameters for new input
+        VectorX<T> input_mins(new_dd), input_maxs(new_dd);
+        if (fixed_length)
+        {
+            input_mins(0) = 0; input_maxs(0) = 1;
+            input_mins(1) = -r_lim; input_maxs(1) = r_lim;
+            input_mins(2) = 0; input_maxs(2) = pi;
+        }
+        cerr << "input_mins: " << input_mins << endl;
+        cerr << "input_maxs: " << input_maxs << endl;
+
+        if (fixed_length)
+            ray_input->set_bounds(input_mins, input_maxs);
+
         ray_input->init_params();
 
         // ------------ Creation of new MFA ------------- //
@@ -1928,7 +1950,7 @@ struct Block : public BlockBase<T>
                 bool fixed_length)
     {
         const double pi = 3.14159265358979;
-        const bool verbose = true;
+        const bool verbose = false;
 
         // TODO: This is for 2d only right now
         if (a.size() != 2 && b.size() != 2)
@@ -1983,7 +2005,7 @@ struct Block : public BlockBase<T>
         T x_sep = abs(x1 - x0);
         T y_sep = abs(y1 - y0);
         if (fixed_length)
-            length = r_lim;
+            length = 2 * r_lim;
         else
             length = sqrt(x_sep*x_sep + y_sep*y_sep);
         

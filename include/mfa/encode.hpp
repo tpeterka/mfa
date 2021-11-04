@@ -725,15 +725,6 @@ namespace mfa
             const int pt_dim = mfa_data.max_dim - mfa_data.min_dim + 1;                           // control point dimensonality
             TensorProduct<T>& t = mfa_data.tmesh.tensor_prods[t_idx];
 
-            // REQUIRED for Tmesh
-            // Compute total number of points in tensor product
-            int tot_dom_pts = 1;
-            vector<size_t> start_idxs(mfa_data.dom_dim);
-            vector<size_t> end_idxs(mfa_data.dom_dim);
-            mfa_data.tmesh.domain_pts(t_idx, input.params->param_grid, start_idxs, end_idxs);
-            for (int k=0; k < mfa_data.dom_dim; k++)
-                tot_dom_pts *= end_idxs[k] - start_idxs[k] + 1;
-
             // Assemble collocation matrix
             SparseMatrixX<T> N(input.npts, t.nctrl_pts.prod());
             SparseMatrixX<T> Nt(t.nctrl_pts.prod(), input.npts);
