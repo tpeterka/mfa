@@ -203,10 +203,10 @@ namespace mfa
             return mid;
         }
 
-        // binary search to find the span in the knots vector containing a given parameter value
+        // binary search to find the span in the global all_knots vector containing a given parameter value
         // returns span index i s.t. u is in [ knots[i], knots[i + 1] )
         // NB closed interval at left and open interval at right
-        // tmesh version
+        // tmesh version for searching only one tensor
         //
         // i will be in the range [p, n], where n = number of control points - 1 because there are
         // p + 1 repeated knots at start and end of knot vector
@@ -225,39 +225,39 @@ namespace mfa
                 return -1;
             }
 
-            if (u == tmesh.all_knots[cur_dim][tensor.nctrl_pts(cur_dim)])
-            {
-                if (tmesh.all_knot_levels[cur_dim][tensor.nctrl_pts(cur_dim)] != tensor.level)
-                {
-                    fprintf(stderr, "FindSpan(): level mismatch at nctrl_pts. This should not happen.\n");
-                    return -1;
-                }
-                return tensor.nctrl_pts(cur_dim) - 1;
-            }
+            if (u == tmesh.all_knots[cur_dim][tensor.knot_mins[cur_dim]])
+                return tensor.knot_mins[cur_dim];
+            if (u == tmesh.all_knots[cur_dim][tensor.knot_maxs[cur_dim]])
+                return tensor.knot_maxs[cur_dim];
 
             // binary search
-            int low = p(cur_dim);
-            int high = tensor.nctrl_pts(cur_dim);
+            int low = 0;
+            int high = tensor.nctrl_pts(cur_dim) - 1;
             int mid = (low + high) / 2;
-            while (u < tmesh.all_knots[cur_dim][mid] || u >= tmesh.all_knots[cur_dim][mid + 1])
+            while (u < tmesh.all_knots[cur_dim][tensor.knot_idxs[cur_dim][mid]] ||
+                    u >= tmesh.all_knots[cur_dim][tensor.knot_idxs[cur_dim][mid + 1]])
             {
-                if (u < tmesh.all_knots[cur_dim][mid])
+                if (u < tmesh.all_knots[cur_dim][tensor.knot_idxs[cur_dim][mid]])
                     high = mid;
                 else
                     low = mid;
                 mid = (low + high) / 2;
             }
 
-            while (tmesh.all_knot_levels[cur_dim][mid] > tensor.level && mid > 0)
-                mid--;
-
-            if (tmesh.all_knot_levels[cur_dim][mid] != tensor.level)
+            // sanity checks
+            if (tmesh.all_knot_levels[cur_dim][tensor.knot_idxs[cur_dim][mid]] != tensor.level)
             {
                 fprintf(stderr, "FindSpan(): level mismatch at mid. This should not happen.\n");
                 return -1;
             }
+            if (u < tmesh.all_knots[cur_dim][tensor.knot_idxs[cur_dim][mid]] ||
+                    u >= tmesh.all_knots[cur_dim][tensor.knot_idxs[cur_dim][mid + 1]])
+            {
+                fprintf(stderr, "FindSpan(): parameter not in [mid, mid + 1). This should not happen.\n");
+                return -1;
+            }
 
-            return mid;
+            return tensor.knot_idxs[cur_dim][mid];
         }
 
         // original version of basis functions from algorithm 2.2 of P&T, p. 70

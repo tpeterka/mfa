@@ -576,6 +576,104 @@ namespace mfa
 
 #ifdef MFA_TMESH
 
+        // curve of free control points basis functions in one dimension
+        // helper function for EncodeTensorLocalSeparable
+        void  FreeCtrlPtCurve(
+                int                 dim,                // current dimension
+                TensorIdx           t_idx,              // index of tensor of control points
+                const VectorXi&     start_ijk,          // multidim index of first input point for the curve
+                const VectorXi&     ndom_pts,           // number of input points in each dim for this tensor
+                const VectorXi&     dom_starts,         // multidim index of start of input points for this tensor
+                MatrixX<T>&         Nfree)              // (output) matrix of free control points basis functions
+        {
+            TensorProduct<T>&   t = mfa_data.tmesh.tensor_prods[t_idx];
+            vector<KnotIdx>     anchor(mfa_data.dom_dim);                                       // control point anchor
+            Nfree = MatrixX<T>::Zero(ndom_pts.prod(), t.ctrl_pts.rows());
+
+            // local knot vector
+            vector<vector<KnotIdx>> local_knot_idxs(mfa_data.dom_dim);                          // local knot indices in all dims
+            vector<T> local_knots(mfa_data.p(dim) + 2);                                         // local knot vector for current dim
+            for (auto k = 0; k < mfa_data.dom_dim; k++)
+                local_knot_idxs[k].resize(mfa_data.p(k) + 2);
+
+#if 0
+
+            // TODO: decide whether there is enough parallelism, if so, update TBB for serial version below
+
+// #ifdef MFA_TBB  // TBB
+
+            VolIterator dom_iter(ndom_pts, dom_starts, input.ndom_pts); // iterator over input points
+            VolIterator free_iter(t.nctrl_pts);                         // iterator over free control points
+
+            enumerable_thread_specific<vector<vector<KnotIdx>>> thread_local_knot_idxs(mfa_data.dom_dim);   // local knot idices
+            enumerable_thread_specific<vector<vector<T>>>       thread_local_knots(mfa_data.dom_dim);       // local knot idices
+            enumerable_thread_specific<VectorXi>                thread_dom_ijk(mfa_data.dom_dim);           // multidim index of domain point
+            enumerable_thread_specific<VectorXi>                thread_free_ijk(mfa_data.dom_dim);          // multidim index of control point
+            enumerable_thread_specific<vector<KnotIdx>>         thread_anchor(mfa_data.dom_dim);            // anchor of control point
+            static affinity_partitioner                         ap;
+            parallel_for (blocked_range2d<size_t>(0, dom_iter.tot_iters(), 0, free_iter.tot_iters()), [&] (blocked_range2d<size_t>& r)
+            {
+                for (auto i = r.cols().begin(); i < r.cols().end(); i++)                                // for control points
+                {
+                    if (i == r.cols().begin())
+                    {
+                        for (auto k = 0; k < mfa_data.dom_dim; k++)
+                        {
+                            thread_local_knot_idxs.local()[k].resize(mfa_data.p(k) + 2);
+                            thread_local_knots.local()[k].resize(mfa_data.p(k) + 2);
+                        }
+                    }
+
+                    free_iter.idx_ijk(i, thread_free_ijk.local());                                      // ijk of domain point
+                    mfa_data.tmesh.ctrl_pt_anchor(t, thread_free_ijk.local(), thread_anchor.local());   // anchor of control point
+
+                    // local knot vector
+                    mfa_data.tmesh.knot_intersections(thread_anchor.local(), t_idx, true, thread_local_knot_idxs.local());
+                    for (auto k = 0; k < mfa_data.dom_dim; k++)
+                    {
+                        for (auto n = 0; n < thread_local_knot_idxs.local()[k].size(); n++)
+                            thread_local_knots.local()[k][n] = mfa_data.tmesh.all_knots[k][thread_local_knot_idxs.local()[k][n]];
+                    }
+
+                    for (auto j = r.rows().begin(); j < r.rows().end(); j++)                            // for input domain points
+                    {
+                        dom_iter.idx_ijk(j, thread_dom_ijk.local());                                    // ijk of domain point
+                        for (auto k = 0; k < mfa_data.dom_dim; k++)
+                        {
+                            T u = input.params->param_grid[k][thread_dom_ijk.local()(k)];               // parameter of current input point
+                            T B = mfa_data.OneBasisFun(k, u, thread_local_knots.local()[k]);                           // basis function
+                            Nfree(j, i) = (k == 0 ? B : Nfree(j, i) * B);
+                        }
+                    }       // for blocked range rows, ie, input domain points
+                }       // for blocked range cols, ie, control points
+            }, ap); // parallel for
+
+#else           // serial
+
+            for (auto i = 0; i < mfa_data.dom_dim; i++)
+                anchor[i] = mfa_data.FindSpan(i, input.params->param_grid[i][dom_starts(i) + i], t);
+
+            for (auto i = 0; i < t.nctrl_pts(dim); i++)                                                 // for all control points in current dim
+            {
+                // anchor of control point in current dim
+                anchor[dim] = mfa_data.tmesh.ctrl_pt_anchor_dim(dim, t, i);
+
+                // local knot vector in currrent dimension
+                mfa_data.tmesh.knot_intersections(anchor, t_idx, true, local_knot_idxs);                // local knot indices in all dimensions
+                for (auto n = 0; n < local_knot_idxs[dim].size(); n++)                                    // local knots in only current dim
+                    local_knots[n] = mfa_data.tmesh.all_knots[dim][local_knot_idxs[dim][n]];
+
+                for (auto j = 0; j < ndom_pts(dim); j++)                                                // for all input points (for this tensor) in current dim
+                {
+                    T u = input.params->param_grid[dim][dom_starts(dim) + j];                           // parameter of current input point
+                    Nfree(j, i) = mfa_data.OneBasisFun(dim, u, local_knots);                            // basis function
+                }
+            }       // control points
+
+#endif          // TBB or serial
+
+        }
+
         // free control points matrix of basis functions
         // helper function for EncodeTensorLocalLinear
         // returns max number of nonzeros in any column
@@ -1143,7 +1241,236 @@ namespace mfa
             cerr << "EncodeTensorLocalLinar(): The relative error is " << relative_error << endl;
         }
 
+        // encodes the control points for one tensor product of a tmesh
+        // takes a subset of input points from the global domain, covered by basis functions of this tensor product
+        // solves dimensions separably
+        // does not encode weights for now
+        // linear constrained formulation as proposed by David Lenz (see wiki/notes/linear-constrained-fit.pdf)
+        void EncodeTensorLocalSeparable(
+                TensorIdx                 t_idx,                  // index of tensor product being encoded
+                bool                      weighted = true)        // solve for and use weights
+        {
+            // debug
+            fmt::print(stderr, "EncodeTensorLocalSeparable tidx = {}\n", t_idx);
+
+            // typing shortcuts
+            auto& dom_dim       = mfa_data.dom_dim;
+            auto& tmesh         = mfa_data.tmesh;
+            auto& tensor_prods  = tmesh.tensor_prods;
+
+            // timing
+            double q_time       = MPI_Wtime();
+            fmt::print(stderr, "\nSetting up...\n");
+
+            auto& t = tensor_prods[t_idx];                                                          // current tensor product
+            int pt_dim = mfa_data.max_dim - mfa_data.min_dim + 1;                                   // control point dimensionality
+
+            // get input domain points covered by the tensor
+            vector<size_t> start_idxs(dom_dim);
+            vector<size_t> end_idxs(dom_dim);
+            mfa_data.tmesh.domain_pts(t_idx, input.params->param_grid, start_idxs, end_idxs);
+
+            // Q matrix of relevant input domain points
+            VectorXi ndom_pts(dom_dim);
+            VectorXi dom_starts(dom_dim);
+            for (auto k = 0; k < dom_dim; k++)
+            {
+                ndom_pts(k)     = end_idxs[k] - start_idxs[k] + 1;
+                dom_starts(k)   = start_idxs[k];                                                    // need Eigen vector from STL vector
+            }
+            MatrixX<T> Q(ndom_pts.prod(), pt_dim);
+            VolIterator dom_iter(ndom_pts, dom_starts, input.ndom_pts);
+            while (!dom_iter.done())
+            {
+                Q.block(dom_iter.cur_iter(), 0, 1, pt_dim) =
+                    input.domain.block(dom_iter.sub_full_idx(dom_iter.cur_iter()), mfa_data.min_dim, 1, pt_dim);
+                dom_iter.incr_iter();
+            }
+
+            // resize control points and weights in case number of control points changed
+            t.ctrl_pts.resize(t.nctrl_pts.prod(), pt_dim);
+            t.weights.resize(t.ctrl_pts.rows());
+            t.weights = VectorX<T>::Ones(t.weights.size());                                         // linear solve does not solve for weights; set to 1
+
+            // second matrix of input points (double buffering output control points to input points)
+            VectorXi npts = ndom_pts;                                                               // number of output points in current dim = input pts for next dim
+            npts(0) = t.nctrl_pts(0);
+            MatrixX<T> Q1(npts.prod(), pt_dim);
+
+            // input and output number of points
+            VectorXi nin_pts    = ndom_pts;
+            VectorXi nout_pts   = npts;
+
+            // timing
+            q_time              = MPI_Wtime() - q_time;
+            double free_time    = 0.0;
+            double cons_time    = 0.0;
+            double norm_time    = 0.0;
+            double setup_time   = 0.0;
+            double solve_time   = 0.0;
+
+            for (auto dim = 0; dim < dom_dim; dim++)                                                // for all domain dimensions
+            {
+                MatrixX<T> R(nin_pts(dim), pt_dim);                                                 // RHS for solving N * P = R
+
+                double t1 = MPI_Wtime();
+                VolIterator     in_iter(nin_pts);                                                   // volume of current input points
+                VolIterator     out_iter(nout_pts);                                                 // volume of current output points
+                SliceIterator   in_slice_iter(in_iter, dim);                                        // slice of the input points volume missing current dim
+                SliceIterator   out_slice_iter(out_iter, dim);                                      // slice of the output points volume missing current dim
+
+                // for all curves in the current dimension
+                while (!in_slice_iter.done())                                                       // for all curves
+                {
+
+                    CurveIterator   in_curve_iter(in_slice_iter);                                   // one curve of the input points in the current dim
+                    VectorXi start_ijk = in_curve_iter.cur_ijk();                                   // input point multidim index at start of curve
+
+                    // copy one curve of input points to right hand side
+                    while (!in_curve_iter.done())
+                    {
+                        if (dim % 2 == 0)
+                            R.row(in_curve_iter.cur_iter()) = Q.row(in_curve_iter.ijk_idx(in_curve_iter.cur_ijk()));
+                        else
+                            R.row(in_curve_iter.cur_iter()) = Q1.row(in_curve_iter.ijk_idx(in_curve_iter.cur_ijk()));
+                        in_curve_iter.incr_iter();
+                    }
+
+                    // find matrix of free control point basis functions
+                    double t0 = MPI_Wtime();
+                    MatrixX<T> Nfree(1, t.nctrl_pts(dim));
+                    FreeCtrlPtCurve(dim, t_idx, start_ijk, ndom_pts, dom_starts, Nfree);
+
+                    // timing
+                    free_time   += (MPI_Wtime() - t0);
+                    t0          = MPI_Wtime();
+
+                    // find constraint control points and their anchors
+                    MatrixX<T>                  Pcons;                                                  // constraint control points
+                    // TODO
+//                     vector<vector<KnotIdx>>     anchors;                                                 // corresponding anchors
+//                     vector<TensorIdx>           t_idx_anchors;                                           // tensors containing corresponding anchors
+//                     LocalSolveAllConstraints(t, Pcons, anchors, t_idx_anchors);
+
+                    // find matrix of basis functions corresponding to constraint control points
+                    // TODO
+                    MatrixX<T> Ncons = MatrixX<T>::Constant(Q.rows(), Pcons.rows(), -1);                // basis functions, -1 means unassigned so far
+//                     if (Pcons.rows())
+//                         ConsCtrlPtMat(ndom_pts, dom_starts, anchors, t_idx_anchors, Ncons);
+
+                    // timing
+                    cons_time   += (MPI_Wtime() - t0);
+
+                    // normalize Nfree and Ncons such that the row sum of Nfree + Ncons = 1.0
+                    t0          = MPI_Wtime();              // timing
+
+#ifdef MFA_TBB
+
+                    static affinity_partitioner ap;
+                    parallel_for (blocked_range<size_t>(0, Nfree.rows()), [&] (blocked_range<size_t>& r)
+                    {
+                        for (auto i = r.begin(); i < r.end(); i++)
+
+#else
+
+                        for (auto i = 0; i < Nfree.rows(); i++)
+
 #endif
+
+                        {
+                            bool error = false;
+                            T sum = Nfree.row(i).sum();
+                            if (Pcons.rows())
+                            sum += Ncons.row(i).sum();
+
+                            if (sum > 0.0)
+                            {
+                                Nfree.row(i) /= sum;
+                                if (Pcons.rows())
+                                Ncons.row(i) /= sum;
+                            }
+                            else
+                            {
+                                if (Pcons.rows())
+                                    fmt::print(stderr, "Warning: EncodeTensorLocalLinear(): row {} Nfree row sum = {} Ncons row sum = {}, Nfree + Ncons row sum = {}. This should not happen.\n",
+                                        i, Nfree.row(i).sum(), Ncons.row(i).sum(), sum);
+                                else
+                                    fmt::print(stderr, "Warning: EncodeTensorLocalLinear(): row {} Nfree row sum = {}. This should not happen.\n",
+                                        i, sum);
+                                error = true;
+                            }
+                            if (error)
+                            {
+                                VectorXi ijk(mfa_data.dom_dim);
+                                dom_iter.idx_ijk(i, ijk);
+                                cerr << "ijk = " << ijk.transpose() << endl;
+                                fmt::print(stderr, "params = [ ");
+                                for (auto k = 0; k < mfa_data.dom_dim; k++)
+                                    fmt::print(stderr, "{} ", input.params->param_grid[k][ijk(k)]);
+                                fmt::print(stderr, "]\n");
+                            }
+                        }
+
+#ifdef MFA_TBB
+
+                    }, ap);
+
+#endif
+
+                    norm_time += (MPI_Wtime() - t0);                    // timing
+
+                    // R is the right hand side needed for solving N * P = R
+                    // TODO
+                    if (Pcons.rows())
+                        R -= Ncons * Pcons;
+
+                    setup_time  += (MPI_Wtime() - t1);                  // timing
+
+                    // solve
+                    t0 = MPI_Wtime();
+                    MatrixX<T> P(t.nctrl_pts(dim), pt_dim);
+                    P = (Nfree.transpose() * Nfree).ldlt().solve(Nfree.transpose() * R);
+                    solve_time += (MPI_Wtime() - t0);
+
+                    // copy solution to one curve of output points
+                    CurveIterator   out_curve_iter(out_slice_iter);                                     // one curve of the output points in the current dim
+                    while (!out_curve_iter.done())
+                    {
+                        if (dim % 2 == 0)
+                            Q1.row(out_curve_iter.ijk_idx(out_curve_iter.cur_ijk())) = P.row(out_curve_iter.cur_iter());
+                        else
+                            Q.row(out_curve_iter.ijk_idx(out_curve_iter.cur_ijk())) = P.row(out_curve_iter.cur_iter());
+                        out_curve_iter.incr_iter();
+                    }
+
+                    in_slice_iter.incr_iter();
+                }       // for all curves
+
+                nin_pts(dim) = t.nctrl_pts(dim);
+                if (dim < dom_dim - 1)
+                    nout_pts(dim + 1) = t.nctrl_pts(dim + 1);
+            }       // for all domain dimensions
+
+            // copy final result back to tensor product
+            if (dom_dim % 2 == 0)
+                t.ctrl_pts = Q1.block(0, 0, t.nctrl_pts.prod(), pt_dim);
+            else
+                t.ctrl_pts = Q.block(0, 0, t.nctrl_pts.prod(), pt_dim);
+
+            // timing
+            fmt::print(stderr, "EncodeTensorLocalLinear() timing:\n");
+            fmt::print(stderr, "setup time: {} s.\n", setup_time);
+//             fmt::print(stderr, "    = free time {} + cons time {} + mult time {} s.\n",
+//                     free_time, cons_time, mult_time);
+//             fmt::print(stderr, "    = q time {} + free time {} + cons time {} + norm time {} + mult time {} r time {} s.\n",
+//                     q_time, free_time, cons_time, norm_time, mult_time, r_time);
+//             fmt::print(stderr, "free_time {} = free_iter_time {} + dom_iter_time {} s.\n",
+//                     free_time, free_iter_time, dom_iter_time);
+
+            fmt::print(stderr, "solve time: {} s.\n", solve_time);
+        }
+
+#endif  // MFA_TMESH
 
 #ifdef MFA_LOW_D
 
@@ -1655,11 +1982,11 @@ namespace mfa
                 const VectorX<T>&   weights,  // precomputed weights for n + 1 control points on this curve
                 int                 co)       // index of starting domain pt in current curve
         {
-            int last   = R.cols() - 1;                                  // column of range value TODO: weighing only the last column does not make much sense in the split model
-            MatrixX<T> Rk(N.rows(), mfa_data.max_dim - mfa_data.min_dim + 1);     // one row for each input point
-            VectorX<T> denom(N.rows());                                 // rational denomoninator for param of each input point
+            int last   = R.cols() - 1;                                          // column of range value TODO: weighing only the last column does not make much sense in the split model
+            MatrixX<T> Rk(N.rows(), mfa_data.max_dim - mfa_data.min_dim + 1);   // one row for each input point
+            VectorX<T> denom(N.rows());                                         // rational denomoninator for param of each input point
 
-            for (int k = 0; k < N.rows(); k++)                          // for all input points
+            for (int k = 0; k < N.rows(); k++)                                  // for all input points
             {
                 denom(k) = (N.row(k).cwiseProduct(weights.transpose())).sum();
 #ifdef UNCLAMPED_KNOTS
@@ -1669,16 +1996,16 @@ namespace mfa
                 Rk.row(k) = input.domain.block(co + k * input.g.ds[cur_dim], mfa_data.min_dim, 1, mfa_data.max_dim - mfa_data.min_dim + 1);
             }
 
-#ifdef WEIGH_ALL_DIMS                               // weigh all dimensions
+#ifdef WEIGH_ALL_DIMS                                                           // weigh all dimensions
             // compute the matrix R (one row for each control point)
             for (int i = 0; i < N.cols(); i++)
                 for (int j = 0; j < R.cols(); j++)
                     // using array() for element-wise multiplication, which is what we want (not matrix mult.)
                     R(i, j) =
-                        (N.col(i).array() *                 // ith basis functions for input pts
-                         weights(i) / denom.array() *       // rationalized
-                         Rk.col(j).array()).sum();          // input points
-#else                                               // don't weigh domain coordinate (only range)
+                        (N.col(i).array() *                                     // ith basis functions for input pts
+                         weights(i) / denom.array() *                           // rationalized
+                         Rk.col(j).array()).sum();                              // input points
+#else                                                                           // don't weigh domain coordinate (only range)
             // debug
 //             cerr << "N in RHS:\n" << N << endl;
 //             cerr << "weights in RHS:\n" << weights << endl;
@@ -1690,12 +2017,12 @@ namespace mfa
                 // using array() for element-wise multiplication, which is what we want (not matrix mult.)
                 for (int j = 0; j < R.cols() - 1; j++)
                     R(i, j) =
-                        (N.col(i).array() *                 // ith basis functions for input pts
-                         Rk.col(j).array()).sum();          // input points
+                        (N.col(i).array() *                                     // ith basis functions for input pts
+                         Rk.col(j).array()).sum();                              // input points
                 R(i, last) =
-                    (N.col(i).array() *                     // ith basis functions for input pts
-                     weights(i) / denom.array() *           // rationalized
-                     Rk.col(last).array()).sum();           // input points
+                    (N.col(i).array() *                                         // ith basis functions for input pts
+                     weights(i) / denom.array() *                               // rationalized
+                     Rk.col(last).array()).sum();                               // input points
             }
 #endif
 
@@ -1718,9 +2045,9 @@ namespace mfa
                 int                 co,       // index of starting input pt in current curve
                 int                 cs)       // stride of input pts in current curve
         {
-            int last   = R.cols() - 1;                                  // column of range value TODO: weighing only the last column does not make much sense in the split model
-            MatrixX<T> Rk(N.rows(), mfa_data.max_dim - mfa_data.min_dim + 1);     // one row for each input point
-            VectorX<T> denom(N.rows());                                 // rational denomoninator for param of each input point
+            int last   = R.cols() - 1;                                          // column of range value TODO: weighing only the last column does not make much sense in the split model
+            MatrixX<T> Rk(N.rows(), mfa_data.max_dim - mfa_data.min_dim + 1);   // one row for each input point
+            VectorX<T> denom(N.rows());                                         // rational denomoninator for param of each input point
 
             for (int k = 0; k < N.rows(); k++)
             {
@@ -1728,28 +2055,28 @@ namespace mfa
                 Rk.row(k) = in_pts.row(co + k * cs);
             }
 
-#ifdef WEIGH_ALL_DIMS                               // weigh all dimensions
+#ifdef WEIGH_ALL_DIMS                                                           // weigh all dimensions
             // compute the matrix R (one row for each control point)
             for (int i = 0; i < N.cols(); i++)
                 for (int j = 0; j < R.cols(); j++)
                     // using array() for element-wise multiplication, which is what we want (not matrix mult.)
                     R(i, j) =
-                        (N.col(i).array() *                 // ith basis functions for input pts
-                         weights(i) / denom.array() *       // rationalized
-                         Rk.col(j).array()).sum();          // input points
-#else                                               // don't weigh domain coordinate (only range)
+                        (N.col(i).array() *                                     // ith basis functions for input pts
+                         weights(i) / denom.array() *                           // rationalized
+                         Rk.col(j).array()).sum();                              // input points
+#else                                                                           // don't weigh domain coordinate (only range)
             // compute the matrix R (one row for each control point)
             for (int i = 0; i < N.cols(); i++)
             {
                 // using array() for element-wise multiplication, which is what we want (not matrix mult.)
                 for (int j = 0; j < R.cols() - 1; j++)
                     R(i, j) =
-                        (N.col(i).array() *                 // ith basis functions for input pts
-                         Rk.col(j).array()).sum();          // input points
+                        (N.col(i).array() *                                     // ith basis functions for input pts
+                         Rk.col(j).array()).sum();                              // input points
                 R(i, last) =
-                    (N.col(i).array() *                     // ith basis functions for input pts
-                     weights(i) / denom.array() *           // rationalized
-                     Rk.col(last).array()).sum();           // input points
+                    (N.col(i).array() *                                         // ith basis functions for input pts
+                     weights(i) / denom.array() *                               // rationalized
+                     Rk.col(last).array()).sum();                               // input points
             }
 #endif
 
@@ -1958,92 +2285,93 @@ namespace mfa
             }
         }
 
-        // solves for one curve of control points
-        void CtrlCurve(
-                const MatrixX<T>&   N,                  // basis functions for current dimension
-                const MatrixX<T>&   NtN,                // Nt * N
-                MatrixX<T>&         R,                  // residual matrix for current dimension and curve
-                MatrixX<T>&         P,                  // solved points for current dimension and curve
-                size_t              k,                  // current dimension
-                size_t              co,                 // starting ofst for reading domain pts
-                size_t              cs,                 // stride for reading domain points
-                size_t              to,                 // starting ofst for writing control pts
-                MatrixX<T>&         temp_ctrl0,         // first temporary control points buffer
-                MatrixX<T>&         temp_ctrl1,         // second temporary control points buffer
-                int                 curve_id,           // debugging
-                TensorProduct<T>&   tensor,             // (output) tensor product containing result
-                bool                weighted = true)    // solve for and use weights
-        {
-            // solve for weights
-            // TODO: avoid copying into Q by passing temp_ctrl0, temp_ctrl1, co, cs to Weights()
-            // TODO: check that this is right, using co and cs for copying control points and domain points
-            MatrixX<T> Q;
-            Q.resize(input.ndom_pts(k), tensor.ctrl_pts.cols());
-            if (k == 0)
-            {
-                for (auto i = 0; i < input.ndom_pts(k); i++)
-                    Q.row(i) = input.domain.block(co + i * cs, mfa_data.min_dim, 1, mfa_data.max_dim - mfa_data.min_dim + 1);
-            }
-            else if (k % 2)
-            {
-                for (auto i = 0; i < input.ndom_pts(k); i++)
-                    Q.row(i) = temp_ctrl0.row(co + i * cs);
-            }
-            else
-            {
-                for (auto i = 0; i < input.ndom_pts(k); i++)
-                    Q.row(i) = temp_ctrl1.row(co + i * cs);
-            }
-
-            VectorX<T> weights = VectorX<T>::Ones(N.cols());
-
-#ifndef MFA_NO_WEIGHTS
-
-            if (weighted)
-                if (k == mfa_data.dom_dim - 1)                      // only during last dimension of separable iteration over dimensions
-                    Weights(k, Q, N, NtN, curve_id, weights);   // solve for weights
-
-#endif
-
-            // compute R
-            // first dimension reads from domain
-            // subsequent dims alternate reading temp_ctrl0 and temp_ctrl1
-            // even dim reads temp_ctrl1, odd dim reads temp_ctrl0; opposite of writing order
-            // because what was written in the previous dimension is read in the current one
-            if (k == 0)
-                RHS(k, N, R, weights, co);                 // input points = default domain
-            else if (k % 2)
-                RHS(k, temp_ctrl0, N, R, weights, co, cs); // input points = temp_ctrl0
-            else
-                RHS(k, temp_ctrl1, N, R, weights, co, cs); // input points = temp_ctrl1
-
-            // rationalize NtN, ie, weigh the basis function coefficients
-            MatrixX<T> NtN_rat = NtN;
-            mfa_data.Rationalize(k, weights, N, NtN_rat);
-
-            // solve for P
-#ifdef WEIGH_ALL_DIMS                                   // weigh all dimensions
-            P = NtN_rat.ldlt().solve(R);
-#else                                                   // don't weigh domain coordinate (only range)
-            // TODO: avoid 2 solves?
-            MatrixX<T> P2(P.rows(), P.cols());
-            P = NtN.ldlt().solve(R);                            // nonrational domain coordinates
-            P2 = NtN_rat.ldlt().solve(R);                       // rational range coordinate
-            for (auto i = 0; i < P.rows(); i++)
-                P(i, P.cols() - 1) = P2(i, P.cols() - 1);
-#endif
-
-            // append points from P to control points that will become inputs for next dimension
-            // TODO: any way to avoid this?
-            CopyCtrl(P, k, co, cs, to, tensor, temp_ctrl0, temp_ctrl1);
-
-            // copy weights of final dimension to mfa
-            if (k == mfa_data.dom_dim - 1)
-            {
-                for (auto i = 0; i < weights.size(); i++)
-                    tensor.weights(to + i * cs) = weights(i);
-            }
-        }
+        //         DEPRECATE
+//         // solves for one curve of control points
+//         void CtrlCurve(
+//                 const MatrixX<T>&   N,                  // basis functions for current dimension
+//                 const MatrixX<T>&   NtN,                // Nt * N
+//                 MatrixX<T>&         R,                  // residual matrix for current dimension and curve
+//                 MatrixX<T>&         P,                  // solved points for current dimension and curve
+//                 size_t              k,                  // current dimension
+//                 size_t              co,                 // starting ofst for reading domain pts
+//                 size_t              cs,                 // stride for reading domain points
+//                 size_t              to,                 // starting ofst for writing control pts
+//                 MatrixX<T>&         temp_ctrl0,         // first temporary control points buffer
+//                 MatrixX<T>&         temp_ctrl1,         // second temporary control points buffer
+//                 int                 curve_id,           // debugging
+//                 TensorProduct<T>&   tensor,             // (output) tensor product containing result
+//                 bool                weighted = true)    // solve for and use weights
+//         {
+//             // solve for weights
+//             // TODO: avoid copying into Q by passing temp_ctrl0, temp_ctrl1, co, cs to Weights()
+//             // TODO: check that this is right, using co and cs for copying control points and domain points
+//             MatrixX<T> Q;
+//             Q.resize(input.ndom_pts(k), tensor.ctrl_pts.cols());
+//             if (k == 0)
+//             {
+//                 for (auto i = 0; i < input.ndom_pts(k); i++)
+//                     Q.row(i) = input.domain.block(co + i * cs, mfa_data.min_dim, 1, mfa_data.max_dim - mfa_data.min_dim + 1);
+//             }
+//             else if (k % 2)
+//             {
+//                 for (auto i = 0; i < input.ndom_pts(k); i++)
+//                     Q.row(i) = temp_ctrl0.row(co + i * cs);
+//             }
+//             else
+//             {
+//                 for (auto i = 0; i < input.ndom_pts(k); i++)
+//                     Q.row(i) = temp_ctrl1.row(co + i * cs);
+//             }
+// 
+//             VectorX<T> weights = VectorX<T>::Ones(N.cols());
+// 
+// #ifndef MFA_NO_WEIGHTS
+// 
+//             if (weighted)
+//                 if (k == mfa_data.dom_dim - 1)                      // only during last dimension of separable iteration over dimensions
+//                     Weights(k, Q, N, NtN, curve_id, weights);   // solve for weights
+// 
+// #endif
+// 
+//             // compute R
+//             // first dimension reads from domain
+//             // subsequent dims alternate reading temp_ctrl0 and temp_ctrl1
+//             // even dim reads temp_ctrl1, odd dim reads temp_ctrl0; opposite of writing order
+//             // because what was written in the previous dimension is read in the current one
+//             if (k == 0)
+//                 RHS(k, N, R, weights, co);                 // input points = default domain
+//             else if (k % 2)
+//                 RHS(k, temp_ctrl0, N, R, weights, co, cs); // input points = temp_ctrl0
+//             else
+//                 RHS(k, temp_ctrl1, N, R, weights, co, cs); // input points = temp_ctrl1
+// 
+//             // rationalize NtN, ie, weigh the basis function coefficients
+//             MatrixX<T> NtN_rat = NtN;
+//             mfa_data.Rationalize(k, weights, N, NtN_rat);
+// 
+//             // solve for P
+// #ifdef WEIGH_ALL_DIMS                                   // weigh all dimensions
+//             P = NtN_rat.ldlt().solve(R);
+// #else                                                   // don't weigh domain coordinate (only range)
+//             // TODO: avoid 2 solves?
+//             MatrixX<T> P2(P.rows(), P.cols());
+//             P = NtN.ldlt().solve(R);                            // nonrational domain coordinates
+//             P2 = NtN_rat.ldlt().solve(R);                       // rational range coordinate
+//             for (auto i = 0; i < P.rows(); i++)
+//                 P(i, P.cols() - 1) = P2(i, P.cols() - 1);
+// #endif
+// 
+//             // append points from P to control points that will become inputs for next dimension
+//             // TODO: any way to avoid this?
+//             CopyCtrl(P, k, co, cs, to, tensor, temp_ctrl0, temp_ctrl1);
+// 
+//             // copy weights of final dimension to mfa
+//             if (k == mfa_data.dom_dim - 1)
+//             {
+//                 for (auto i = 0; i < weights.size(); i++)
+//                     tensor.weights(to + i * cs) = weights(i);
+//             }
+//         }
 
         // append solved control points from P to become inputs for next dimension
         // TODO: any way to avoid this copy?
@@ -2632,7 +2960,8 @@ namespace mfa
                 }
 
                 // solve for new control points
-                EncodeTensorLocalLinear(tensor_idx);
+//                 EncodeTensorLocalLinear(tensor_idx);
+                EncodeTensorLocalSeparable(tensor_idx);
             }
         }
 
