@@ -2086,6 +2086,7 @@ namespace mfa
         // coverage extends to edge of basis functions corresponding to control points in the tensor product
         void domain_pts(TensorIdx               t_idx,              // index of current tensor product
                         vector<vector<T>>&      params,             // params of input points
+                        bool                    extend,             // extend input points to cover neighbors (eg., constraints)
                         vector<size_t>&         start_idxs,         // (output) starting idxs of input points
                         vector<size_t>&         end_idxs) const     // (output) ending idxs of input points
         {
@@ -2103,14 +2104,23 @@ namespace mfa
             const TensorProduct<T>& tc = tensor_prods[t_idx];
 
             // left edge
-            for (auto k = 0; k < dom_dim_; k++)
-                min_anchor[k] = tc.knot_mins[k];
-            knot_intersections(min_anchor, t_idx, true, local_knot_idxs);
             vector<KnotIdx> start_knot_idxs(dom_dim_);
             for (auto k = 0; k < dom_dim_; k++)
-                start_knot_idxs[k] = local_knot_idxs[k][1];                             // one knot away from the front
+                min_anchor[k] = tc.knot_mins[k];
+            if (extend)
+            {
+                knot_intersections(min_anchor, t_idx, true, local_knot_idxs);
+                for (auto k = 0; k < dom_dim_; k++)
+                    start_knot_idxs[k] = local_knot_idxs[k][1];                             // one knot away from the front
+            }
+            else
+            {
+                for (auto k = 0; k < dom_dim_; k++)
+                    start_knot_idxs[k] = min_anchor[k];
+            }
 
             // right edge
+            vector<KnotIdx> end_knot_idxs(dom_dim_);
             local_knot_idxs.clear();
             for (auto k = 0; k < dom_dim_; k++)
             {
@@ -2119,10 +2129,17 @@ namespace mfa
                 else
                     max_anchor[k] = tc.knot_maxs[k];
             }
+            if (extend)
+            {
             knot_intersections(max_anchor, t_idx, true, local_knot_idxs);
-            vector<KnotIdx> end_knot_idxs(dom_dim_);
             for (auto k = 0; k < dom_dim_; k++)
                 end_knot_idxs[k] = local_knot_idxs[k][local_knot_idxs[k].size() - 2];   // one knot away from the back
+            }
+            else
+            {
+                for (auto k = 0; k < dom_dim_; k++)
+                    end_knot_idxs[k] = max_anchor[k];
+            }
 
             // input points corresponding to start and end knot values
             for (auto k = 0; k < dom_dim_; k++)

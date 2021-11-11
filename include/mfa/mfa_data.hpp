@@ -221,8 +221,11 @@ namespace mfa
             if (u < tmesh.all_knots[cur_dim][tensor.knot_mins[cur_dim]] ||
                     u > tmesh.all_knots[cur_dim][tensor.knot_maxs[cur_dim]])
             {
-                fprintf(stderr, "FindSpan(): Asking for parameter value outside of the knot min/max of the current tensor. This should not happen.\n");
-                return -1;
+                fmt::print(stderr, "FindSpan(): Asking for parameter value outside of the knot min/max of the current tensor. This should not happen.\n");
+                fmt::print(stderr, "u {} cur_dim {} knot_mins [{}] knot_maxs [{}]\n",
+                        u, cur_dim, fmt::join(tensor.knot_mins, ","), fmt::join(tensor.knot_maxs, ","));
+                tmesh.print_tensor(tensor, true);
+                abort();
             }
 
             if (u == tmesh.all_knots[cur_dim][tensor.knot_mins[cur_dim]])
@@ -245,16 +248,20 @@ namespace mfa
             }
 
             // sanity checks
-            if (tmesh.all_knot_levels[cur_dim][tensor.knot_idxs[cur_dim][mid]] != tensor.level)
+            if (tmesh.all_knot_levels[cur_dim][tensor.knot_idxs[cur_dim][mid]] > tensor.level)
             {
-                fprintf(stderr, "FindSpan(): level mismatch at mid. This should not happen.\n");
-                return -1;
+                fmt::print(stderr, "FindSpan(): level mismatch at mid. This should not happen.\n");
+//                 fmt::print(stderr, "u {} dim {} knot idx {} knot value {} knot level {} tensor level {}\n",
+//                         u, cur_dim, tensor.knot_idxs[cur_dim][mid], tmesh.all_knots[cur_dim][tensor.knot_idxs[cur_dim][mid]],
+//                         tmesh.all_knot_levels[cur_dim][tensor.knot_idxs[cur_dim][mid]], tensor.level);
+//                 tmesh.print_tensor(tensor, true);
+                abort();
             }
             if (u < tmesh.all_knots[cur_dim][tensor.knot_idxs[cur_dim][mid]] ||
                     u >= tmesh.all_knots[cur_dim][tensor.knot_idxs[cur_dim][mid + 1]])
             {
-                fprintf(stderr, "FindSpan(): parameter not in [mid, mid + 1). This should not happen.\n");
-                return -1;
+                fmt::print(stderr, "FindSpan(): parameter not in [mid, mid + 1). This should not happen.\n");
+                abort();
             }
 
             return tensor.knot_idxs[cur_dim][mid];

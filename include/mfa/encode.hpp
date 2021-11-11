@@ -582,13 +582,12 @@ namespace mfa
                 int                 dim,                // current dimension
                 TensorIdx           t_idx,              // index of tensor of control points
                 const VectorXi&     start_ijk,          // multidim index of first input point for the curve
-                const VectorXi&     ndom_pts,           // number of input points in each dim for this tensor
-                const VectorXi&     dom_starts,         // multidim index of start of input points for this tensor
+                size_t              npts,               // number of input points in current dim
                 MatrixX<T>&         Nfree)              // (output) matrix of free control points basis functions
         {
             TensorProduct<T>&   t = mfa_data.tmesh.tensor_prods[t_idx];
             vector<KnotIdx>     anchor(mfa_data.dom_dim);                                       // control point anchor
-            Nfree = MatrixX<T>::Zero(ndom_pts.prod(), t.ctrl_pts.rows());
+            Nfree = MatrixX<T>::Zero(npts, t.nctrl_pts(dim));
 
             // local knot vector
             vector<vector<KnotIdx>> local_knot_idxs(mfa_data.dom_dim);                          // local knot indices in all dims
@@ -650,8 +649,10 @@ namespace mfa
 
 #else           // serial
 
+            // anchor corresponding to first input point of the curve, in all dims
+            // in the curve dimension, the anchor coordinate will be replaced below by the control point anchor
             for (auto i = 0; i < mfa_data.dom_dim; i++)
-                anchor[i] = mfa_data.FindSpan(i, input.params->param_grid[i][dom_starts(i) + i], t);
+                anchor[i] = mfa_data.FindSpan(i, input.params->param_grid[i][start_ijk(i)], t);
 
             for (auto i = 0; i < t.nctrl_pts(dim); i++)                                                 // for all control points in current dim
             {
@@ -660,12 +661,12 @@ namespace mfa
 
                 // local knot vector in currrent dimension
                 mfa_data.tmesh.knot_intersections(anchor, t_idx, true, local_knot_idxs);                // local knot indices in all dimensions
-                for (auto n = 0; n < local_knot_idxs[dim].size(); n++)                                    // local knots in only current dim
+                for (auto n = 0; n < local_knot_idxs[dim].size(); n++)                                  // local knots in only current dim
                     local_knots[n] = mfa_data.tmesh.all_knots[dim][local_knot_idxs[dim][n]];
 
-                for (auto j = 0; j < ndom_pts(dim); j++)                                                // for all input points (for this tensor) in current dim
+                for (auto j = 0; j < npts; j++)                                                // for all input points (for this tensor) in current dim
                 {
-                    T u = input.params->param_grid[dim][dom_starts(dim) + j];                           // parameter of current input point
+                    T u = input.params->param_grid[dim][start_ijk(dim) + j];                            // parameter of current input point
                     Nfree(j, i) = mfa_data.OneBasisFun(dim, u, local_knots);                            // basis function
                 }
             }       // control points
@@ -1266,25 +1267,45 @@ namespace mfa
             int pt_dim = mfa_data.max_dim - mfa_data.min_dim + 1;                                   // control point dimensionality
 
             // get input domain points covered by the tensor
-            vector<size_t> start_idxs(dom_dim);
-            vector<size_t> end_idxs(dom_dim);
-            mfa_data.tmesh.domain_pts(t_idx, input.params->param_grid, start_idxs, end_idxs);
+            vector<size_t> start_idxs_cons(dom_dim);                // start of input points including constraints
+            vector<size_t> end_idxs_cons(dom_dim);                  // end of input points including constraints
+            vector<size_t> start_idxs_free(dom_dim);                // start of input points including only the tensor
+            vector<size_t> end_idxs_free(dom_dim);                  // end of input points including ony the tensor
+            mfa_data.tmesh.domain_pts(t_idx, input.params->param_grid, true, start_idxs_cons, end_idxs_cons);
+            mfa_data.tmesh.domain_pts(t_idx, input.params->param_grid, false, start_idxs_free, end_idxs_free);
 
-            // Q matrix of relevant input domain points
-            VectorXi ndom_pts(dom_dim);
-            VectorXi dom_starts(dom_dim);
+            // Q matrix of relevant input domain points covering constraints
+            VectorXi ndom_pts_cons(dom_dim);
+            VectorXi dom_starts_cons(dom_dim);
             for (auto k = 0; k < dom_dim; k++)
             {
-                ndom_pts(k)     = end_idxs[k] - start_idxs[k] + 1;
-                dom_starts(k)   = start_idxs[k];                                                    // need Eigen vector from STL vector
+                ndom_pts_cons(k)     = end_idxs_cons[k] - start_idxs_cons[k] + 1;
+                dom_starts_cons(k)   = start_idxs_cons[k];                                              // need Eigen vector from STL vector
             }
-            MatrixX<T> Q(ndom_pts.prod(), pt_dim);
-            VolIterator dom_iter(ndom_pts, dom_starts, input.ndom_pts);
-            while (!dom_iter.done())
+            MatrixX<T> Q_cons(ndom_pts_cons.prod(), pt_dim);
+            VolIterator dom_iter_cons(ndom_pts_cons, dom_starts_cons, input.ndom_pts);
+            while (!dom_iter_cons.done())
             {
-                Q.block(dom_iter.cur_iter(), 0, 1, pt_dim) =
-                    input.domain.block(dom_iter.sub_full_idx(dom_iter.cur_iter()), mfa_data.min_dim, 1, pt_dim);
-                dom_iter.incr_iter();
+                Q_cons.block(dom_iter_cons.cur_iter(), 0, 1, pt_dim) =
+                    input.domain.block(dom_iter_cons.sub_full_idx(dom_iter_cons.cur_iter()), mfa_data.min_dim, 1, pt_dim);
+                dom_iter_cons.incr_iter();
+            }
+
+            // Q matrix of relevant input domain points covering only the free control points
+            VectorXi ndom_pts_free(dom_dim);
+            VectorXi dom_starts_free(dom_dim);
+            for (auto k = 0; k < dom_dim; k++)
+            {
+                ndom_pts_free(k)     = end_idxs_free[k] - start_idxs_free[k] + 1;
+                dom_starts_free(k)   = start_idxs_free[k];                                              // need Eigen vector from STL vector
+            }
+            MatrixX<T> Q_free(ndom_pts_free.prod(), pt_dim);
+            VolIterator dom_iter_free(ndom_pts_free, dom_starts_free, input.ndom_pts);
+            while (!dom_iter_free.done())
+            {
+                Q_free.block(dom_iter_free.cur_iter(), 0, 1, pt_dim) =
+                    input.domain.block(dom_iter_free.sub_full_idx(dom_iter_free.cur_iter()), mfa_data.min_dim, 1, pt_dim);
+                dom_iter_free.incr_iter();
             }
 
             // resize control points and weights in case number of control points changed
@@ -1293,12 +1314,16 @@ namespace mfa
             t.weights = VectorX<T>::Ones(t.weights.size());                                         // linear solve does not solve for weights; set to 1
 
             // second matrix of input points (double buffering output control points to input points)
-            VectorXi npts = ndom_pts;                                                               // number of output points in current dim = input pts for next dim
+            VectorXi npts = ndom_pts_free;                                                          // number of output points in current dim = input pts for next dim
             npts(0) = t.nctrl_pts(0);
-            MatrixX<T> Q1(npts.prod(), pt_dim);
+            MatrixX<T> Q1_free(npts.prod(), pt_dim);
+
+            // debug
+            fmt::print(stderr, "dom_starts_free = [{}] param_start[0] = {}\n",
+                    dom_starts_free.transpose(), input.params->param_grid[0][dom_starts_free(0)]);
 
             // input and output number of points
-            VectorXi nin_pts    = ndom_pts;
+            VectorXi nin_pts    = ndom_pts_free;
             VectorXi nout_pts   = npts;
 
             // timing
@@ -1314,7 +1339,7 @@ namespace mfa
                 MatrixX<T> R(nin_pts(dim), pt_dim);                                                 // RHS for solving N * P = R
 
                 double t1 = MPI_Wtime();
-                VolIterator     in_iter(nin_pts);                                                   // volume of current input points
+                VolIterator     in_iter(nin_pts, dom_starts_free, input.ndom_pts);                  // volume of current input points
                 VolIterator     out_iter(nout_pts);                                                 // volume of current output points
                 SliceIterator   in_slice_iter(in_iter, dim);                                        // slice of the input points volume missing current dim
                 SliceIterator   out_slice_iter(out_iter, dim);                                      // slice of the output points volume missing current dim
@@ -1326,20 +1351,24 @@ namespace mfa
                     CurveIterator   in_curve_iter(in_slice_iter);                                   // one curve of the input points in the current dim
                     VectorXi start_ijk = in_curve_iter.cur_ijk();                                   // input point multidim index at start of curve
 
+                    // debug
+                    if (t_idx == 2)
+                        fmt::print(stderr, "start_ijk [{}]\n", in_curve_iter.cur_ijk().transpose());
+
                     // copy one curve of input points to right hand side
                     while (!in_curve_iter.done())
                     {
                         if (dim % 2 == 0)
-                            R.row(in_curve_iter.cur_iter()) = Q.row(in_curve_iter.ijk_idx(in_curve_iter.cur_ijk()));
+                            R.row(in_curve_iter.cur_iter()) = Q_free.row(in_curve_iter.ijk_idx(in_curve_iter.cur_ijk()));
                         else
-                            R.row(in_curve_iter.cur_iter()) = Q1.row(in_curve_iter.ijk_idx(in_curve_iter.cur_ijk()));
+                            R.row(in_curve_iter.cur_iter()) = Q1_free.row(in_curve_iter.ijk_idx(in_curve_iter.cur_ijk()));
                         in_curve_iter.incr_iter();
                     }
 
                     // find matrix of free control point basis functions
                     double t0 = MPI_Wtime();
-                    MatrixX<T> Nfree(1, t.nctrl_pts(dim));
-                    FreeCtrlPtCurve(dim, t_idx, start_ijk, ndom_pts, dom_starts, Nfree);
+                    MatrixX<T> Nfree(nin_pts(dim), t.nctrl_pts(dim));
+                    FreeCtrlPtCurve(dim, t_idx, start_ijk, nin_pts(dim), Nfree);
 
                     // timing
                     free_time   += (MPI_Wtime() - t0);
@@ -1354,7 +1383,7 @@ namespace mfa
 
                     // find matrix of basis functions corresponding to constraint control points
                     // TODO
-                    MatrixX<T> Ncons = MatrixX<T>::Constant(Q.rows(), Pcons.rows(), -1);                // basis functions, -1 means unassigned so far
+                    MatrixX<T> Ncons = MatrixX<T>::Constant(Q_cons.rows(), Pcons.rows(), -1);                // basis functions, -1 means unassigned so far
 //                     if (Pcons.rows())
 //                         ConsCtrlPtMat(ndom_pts, dom_starts, anchors, t_idx_anchors, Ncons);
 
@@ -1363,6 +1392,9 @@ namespace mfa
 
                     // normalize Nfree and Ncons such that the row sum of Nfree + Ncons = 1.0
                     t0          = MPI_Wtime();              // timing
+
+                    // debug
+                    fmt::print(stderr, "Nfree has {} rows\n", Nfree.rows());
 
 #ifdef MFA_TBB
 
@@ -1392,22 +1424,21 @@ namespace mfa
                             else
                             {
                                 if (Pcons.rows())
-                                    fmt::print(stderr, "Warning: EncodeTensorLocalLinear(): row {} Nfree row sum = {} Ncons row sum = {}, Nfree + Ncons row sum = {}. This should not happen.\n",
+                                    fmt::print(stderr, "Warning: EncodeTensorLocalSeparable(): row {} Nfree row sum = {} Ncons row sum = {}, Nfree + Ncons row sum = {}. This should not happen.\n",
                                         i, Nfree.row(i).sum(), Ncons.row(i).sum(), sum);
                                 else
-                                    fmt::print(stderr, "Warning: EncodeTensorLocalLinear(): row {} Nfree row sum = {}. This should not happen.\n",
+                                    fmt::print(stderr, "Warning: EncodeTensorLocalSeparable(): row {} Nfree row sum = {}. This should not happen.\n",
                                         i, sum);
                                 error = true;
                             }
                             if (error)
                             {
-                                VectorXi ijk(mfa_data.dom_dim);
-                                dom_iter.idx_ijk(i, ijk);
-                                cerr << "ijk = " << ijk.transpose() << endl;
+                                fmt::print(stderr, "curve {} in dim {} ", in_slice_iter.cur_iter(), dim);
                                 fmt::print(stderr, "params = [ ");
                                 for (auto k = 0; k < mfa_data.dom_dim; k++)
-                                    fmt::print(stderr, "{} ", input.params->param_grid[k][ijk(k)]);
+                                    fmt::print(stderr, "{} ", input.params->param_grid[k][(in_slice_iter.cur_ijk())(k)]);
                                 fmt::print(stderr, "]\n");
+                                abort();
                             }
                         }
 
@@ -1437,9 +1468,9 @@ namespace mfa
                     while (!out_curve_iter.done())
                     {
                         if (dim % 2 == 0)
-                            Q1.row(out_curve_iter.ijk_idx(out_curve_iter.cur_ijk())) = P.row(out_curve_iter.cur_iter());
+                            Q1_free.row(out_curve_iter.ijk_idx(out_curve_iter.cur_ijk())) = P.row(out_curve_iter.cur_iter());
                         else
-                            Q.row(out_curve_iter.ijk_idx(out_curve_iter.cur_ijk())) = P.row(out_curve_iter.cur_iter());
+                            Q_free.row(out_curve_iter.ijk_idx(out_curve_iter.cur_ijk())) = P.row(out_curve_iter.cur_iter());
                         out_curve_iter.incr_iter();
                     }
 
@@ -1453,12 +1484,12 @@ namespace mfa
 
             // copy final result back to tensor product
             if (dom_dim % 2 == 0)
-                t.ctrl_pts = Q1.block(0, 0, t.nctrl_pts.prod(), pt_dim);
+                t.ctrl_pts = Q1_free.block(0, 0, t.nctrl_pts.prod(), pt_dim);
             else
-                t.ctrl_pts = Q.block(0, 0, t.nctrl_pts.prod(), pt_dim);
+                t.ctrl_pts = Q_free.block(0, 0, t.nctrl_pts.prod(), pt_dim);
 
             // timing
-            fmt::print(stderr, "EncodeTensorLocalLinear() timing:\n");
+            fmt::print(stderr, "EncodeTensorLocalSeparable() timing:\n");
             fmt::print(stderr, "setup time: {} s.\n", setup_time);
 //             fmt::print(stderr, "    = free time {} + cons time {} + mult time {} s.\n",
 //                     free_time, cons_time, mult_time);
