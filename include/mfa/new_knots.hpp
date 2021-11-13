@@ -744,23 +744,23 @@ namespace mfa
 
             // debug: print sorted set of inserted knots
             // also for debugging: copy sorted set back into output vectors
-            fmt::print(stderr, "sorted set of knots to insert:\n");
-            int n = 0;
-            for (auto it = inserted_knots.begin(); it != inserted_knots.end(); it++)
-            {
-                fmt::print(stderr, "span_idx {} parent_idx {} knot_idx [{}] knot_val [{}]\n",
-                        it->span_idx, it->parent_idx, fmt::join(it->knot_idx, ","), fmt::join(it->knot_val, ","));
-
-                // debug: rewrite output vectors in same order as serial, sorted by knot span idx
-                parent_tensor_idxs[n] = it->parent_idx;
-                for (auto j = 0; j < dom_dim; j++)
-                {
-                    new_knot_idxs[j][n] = it->knot_idx[j];
-                    new_knots[j][n]     = it->knot_val[j];
-                }
-                n++;
-            }
-            fmt::print(stderr, "\n");
+//             fmt::print(stderr, "sorted set of knots to insert:\n");
+//             int n = 0;
+//             for (auto it = inserted_knots.begin(); it != inserted_knots.end(); it++)
+//             {
+//                 fmt::print(stderr, "span_idx {} parent_idx {} knot_idx [{}] knot_val [{}]\n",
+//                         it->span_idx, it->parent_idx, fmt::join(it->knot_idx, ","), fmt::join(it->knot_val, ","));
+// 
+//                 // debug: rewrite output vectors in same order as serial, sorted by knot span idx
+//                 parent_tensor_idxs[n] = it->parent_idx;
+//                 for (auto j = 0; j < dom_dim; j++)
+//                 {
+//                     new_knot_idxs[j][n] = it->knot_idx[j];
+//                     new_knots[j][n]     = it->knot_val[j];
+//                 }
+//                 n++;
+//             }
+//             fmt::print(stderr, "\n");
 
             return retval;
         }

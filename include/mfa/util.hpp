@@ -397,6 +397,12 @@ namespace mfa
             return idx_dim_;
         }
 
+        // return one dimension of ijk of current iterator location w.r.t. full volume
+        int cur_ijk(int dim) const
+        {
+            return idx_dim_(dim);
+        }
+
         // return current total iteration count
         size_t cur_iter() const       { return cur_iter_; }
 
@@ -473,6 +479,12 @@ namespace mfa
         VectorXi cur_ijk() const
         {
             return slice_iter_->idx_dim_ + idx_dim_;
+        }
+
+        // return one dimension of ijk of current iterator location w.r.t. full volume
+        int cur_ijk(int dim) const
+        {
+            return slice_iter_->idx_dim_(dim) + idx_dim_(dim);
         }
 
         // convert (i,j,k,...) multidimensional index into linear index into domain

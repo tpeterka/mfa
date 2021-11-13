@@ -2090,11 +2090,6 @@ namespace mfa
                         vector<size_t>&         start_idxs,         // (output) starting idxs of input points
                         vector<size_t>&         end_idxs) const     // (output) ending idxs of input points
         {
-            // debug
-            bool debug = false;
-//             if (t_idx == 1)
-//                 debug = true;
-
             start_idxs.resize(dom_dim_);
             end_idxs.resize(dom_dim_);
             vector<KnotIdx> min_anchor(dom_dim_);                   // anchor for the min. edge basis functions of the new tensor
@@ -2111,7 +2106,10 @@ namespace mfa
             {
                 knot_intersections(min_anchor, t_idx, true, local_knot_idxs);
                 for (auto k = 0; k < dom_dim_; k++)
+                    // TODO: not sure if one knot should be skipped; I don't think so, but can cause an error sometimes
+                    // debug this
                     start_knot_idxs[k] = local_knot_idxs[k][1];                             // one knot away from the front
+//                     start_knot_idxs[k] = local_knot_idxs[k][0];
             }
             else
             {
@@ -2131,14 +2129,22 @@ namespace mfa
             }
             if (extend)
             {
-            knot_intersections(max_anchor, t_idx, true, local_knot_idxs);
-            for (auto k = 0; k < dom_dim_; k++)
-                end_knot_idxs[k] = local_knot_idxs[k][local_knot_idxs[k].size() - 2];   // one knot away from the back
+                knot_intersections(max_anchor, t_idx, true, local_knot_idxs);
+                for (auto k = 0; k < dom_dim_; k++)
+                    // TODO: not sure if one knot should be skipped; I don't think so, but can cause an error sometimes
+                    // debug this
+                    end_knot_idxs[k] = local_knot_idxs[k][local_knot_idxs[k].size() - 2];   // one knot away from the back
+//                     end_knot_idxs[k] = local_knot_idxs[k][local_knot_idxs[k].size() - 1];   // one knot away from the back
             }
             else
             {
                 for (auto k = 0; k < dom_dim_; k++)
-                    end_knot_idxs[k] = max_anchor[k];
+                {
+                    if (tc.knot_maxs[k] == all_knots[k].size() - 1)
+                        end_knot_idxs[k] = all_knots[k].size() - 1 - p_(k);
+                    else
+                        end_knot_idxs[k] = max_anchor[k];
+                }
             }
 
             // input points corresponding to start and end knot values
@@ -2148,16 +2154,80 @@ namespace mfa
                 start_idxs[k]   = all_knot_param_idxs[k][start_knot_idxs[k]];
 
                 // end points go up to but do not include all_knot_param_ixs[end_knot_idxs + 1]
-                if (end_knot_idxs[k] < all_knots[k].size() - 1)
-                    end_idxs[k] = all_knot_param_idxs[k][end_knot_idxs[k] + 1] - 1;
-                else
+                if (all_knots[k].size() - 1 - end_knot_idxs[k] <= p_(k))
                     end_idxs[k] = all_knot_param_idxs[k][end_knot_idxs[k]];
+                else
+                {
+                    // TODO: following fixes a particular case but not sure if generally correct
+                    if (p_(k) % 2 && !extend)
+                        end_idxs[k] = all_knot_param_idxs[k][end_knot_idxs[k]] - 1;
+                    else
+                        end_idxs[k] = all_knot_param_idxs[k][end_knot_idxs[k] + 1] - 1;
+                }
             }
 
-            // debug
-//             if (debug)
-//                 fmt::print(stderr, "start_knot_idxs [{}] end_knot_idxs [{}] start_pt_idxs [{}] end_pt_idxs [{}]\n",
-//                         fmt::join(start_knot_idxs, ","), fmt::join(end_knot_idxs, ","), fmt::join(start_idxs, ","), fmt::join(end_idxs, ","));
+//             fmt::print(stderr, "start_knot_idxs [{}] end_knot_idxs [{}] start_pt_idxs [{}] end_pt_idxs [{}]\n",
+//                     fmt::join(start_knot_idxs, ","), fmt::join(end_knot_idxs, ","), fmt::join(start_idxs, ","), fmt::join(end_idxs, ","));
+
+            // TODO: sanity check that can be removed after the code is stable
+            check_domain_pts(t_idx, params, extend, start_idxs, end_idxs);
+        }
+
+        // check if domain_pts covering tensor product are correct (for debugging)
+        void check_domain_pts(
+                        TensorIdx               t_idx,              // index of current tensor product
+                        vector<vector<T>>&      params,             // params of input points
+                        bool                    extend,             // extend input points to cover neighbors (eg., constraints)
+                        vector<size_t>&         start_idxs,         // starting idxs of input points
+                        vector<size_t>&         end_idxs) const     // ending idxs of input points
+        {
+            const TensorProduct<T>& tc = tensor_prods[t_idx];
+
+            if (extend)
+            {
+                for (auto k = 0; k < dom_dim_; k++)
+                {
+                    KnotIdx knot_min, knot_max;                     // extend min, max knot idx
+                    if (tc.knot_mins[k] < (p_(k) + 1) / 2)
+                        knot_min = tc.knot_mins[k];
+                    else
+                        knot_min = tc.knot_mins[k] - (p_(k) + 1) / 2;
+                    if (tc.knot_maxs[k] > all_knots[k].size() - 1 - (p_(k) + 1) / 2)
+                        knot_max = tc.knot_maxs[k];
+                    else
+                        knot_max = tc.knot_maxs[k] + (p_(k) + 1) / 2;
+                    if (params[k][start_idxs[k]] < all_knots[k][knot_min])
+                    {
+                        fmt::print(stderr, "Error: domain_pts(): minimum domain point in dim. {} has param {} < extended knot_mins param which is {}\n",
+                            k, params[k][start_idxs[k]], all_knots[k][knot_min]);
+                        abort();
+                    }
+                    if (params[k][start_idxs[k]] > all_knots[k][knot_max])
+                    {
+                        fmt::print(stderr, "Error: domain_pts(): maximum domain point in dim. {} has param {} > extended knot_maxs param which is {}\n",
+                            k, params[k][end_idxs[k]], all_knots[k][knot_max]);
+                        abort();
+                    }
+                }
+            }   // extended
+            else                                                    // not extended
+            {
+                for (auto k = 0; k < dom_dim_; k++)
+                {
+                    if (params[k][start_idxs[k]] < all_knots[k][tc.knot_mins[k]])
+                    {
+                        fmt::print(stderr, "Error: domain_pts(): minimum domain point in dim. {} has param {} < knot_mins param which is {}\n",
+                            k, params[k][start_idxs[k]], all_knots[k][tc.knot_mins[k]]);
+                        abort();
+                    }
+                    if (params[k][start_idxs[k]] > all_knots[k][tc.knot_maxs[k]])
+                    {
+                        fmt::print(stderr, "Error: domain_pts(): maximum domain point in dim. {} has param {} > knot_maxs param which is {}\n",
+                            k, params[k][end_idxs[k]], all_knots[k][tc.knot_maxs[k]]);
+                        abort();
+                    }
+                }
+            }   // not extended
         }
 
         // for a given tensor, get anchor of control point, given control point multidim index

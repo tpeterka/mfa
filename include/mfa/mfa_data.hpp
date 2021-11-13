@@ -212,7 +212,7 @@ namespace mfa
         // p + 1 repeated knots at start and end of knot vector
         // algorithm 2.1, P&T, p. 68
         //
-        // prints an error and returns -1 if u is not in the min,max range of knots in tensor or if levels of u and the span do not match
+        // prints an error and aborts if u is not in the min,max range of knots in tensor or if levels of u and the span do not match
         int FindSpan(
                 int                     cur_dim,            // current dimension
                 T                       u,                  // parameter value
@@ -228,15 +228,22 @@ namespace mfa
                 abort();
             }
 
-            if (u == tmesh.all_knots[cur_dim][tensor.knot_mins[cur_dim]])
-                return tensor.knot_mins[cur_dim];
-            if (u == tmesh.all_knots[cur_dim][tensor.knot_maxs[cur_dim]])
-                return tensor.knot_maxs[cur_dim];
+            int low, high, mid;
+
+            if (tensor.knot_mins[cur_dim] == 0)
+                low = p(cur_dim);
+            else
+                low = 0;
+            if (tensor.knot_maxs[cur_dim] == tmesh.all_knots[cur_dim].size() - 1)
+                high = tensor.knot_idxs[cur_dim].size() - p(cur_dim) - 1;
+            else
+                high = tensor.knot_idxs[cur_dim].size() - 2;
+            mid = (low + high) / 2;
+
+            if (u >= tmesh.all_knots[cur_dim][tensor.knot_idxs[cur_dim][high]])
+                return tensor.knot_idxs[cur_dim][high];
 
             // binary search
-            int low = 0;
-            int high = tensor.nctrl_pts(cur_dim) - 1;
-            int mid = (low + high) / 2;
             while (u < tmesh.all_knots[cur_dim][tensor.knot_idxs[cur_dim][mid]] ||
                     u >= tmesh.all_knots[cur_dim][tensor.knot_idxs[cur_dim][mid + 1]])
             {
