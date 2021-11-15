@@ -474,7 +474,7 @@ namespace mfa
             int tot_dom_pts = 1;
             vector<size_t> start_idxs(mfa_data.dom_dim);
             vector<size_t> end_idxs(mfa_data.dom_dim);
-            mfa_data.tmesh.domain_pts(t_idx, input.params->param_grid, start_idxs, end_idxs);
+            mfa_data.tmesh.domain_pts(t_idx, input.params->param_grid, true, start_idxs, end_idxs);
             for (int k=0; k < mfa_data.dom_dim; k++)
                 tot_dom_pts *= end_idxs[k] - start_idxs[k] + 1;
 
