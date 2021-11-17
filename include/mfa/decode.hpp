@@ -91,44 +91,135 @@ namespace mfa
         }
     };
 
-    // Custom DecodeInfo to be used with FastVolPt
+    // Custom DecodeInfo to be used with FastVolPt, FastGrad
     template <typename T>
     struct FastDecodeInfo
     {
-        const Decoder<T>&   decoder;        // reference to decoder which uses this FastDecodeInfo
-        int                 dom_dim;        // domain dimension of model
-        vector<VectorX<T>>  N;              // vectors to hold basis functions
-        vector<vector<T>>   t;              // vector of temps
-        vector<int>         span;           // vector to hold spans which contain the given parameter
-        int                 ctrl_idx;       // index of the current control point
-        BasisFunInfo<T>     bfi;            // struct with pre-allocated scratch space for basis function computation
+        const Decoder<T>&   decoder;            // reference to decoder which uses this FastDecodeInfo
+        BasisFunInfo<T>     bfi;                // struct with pre-allocated scratch space for basis function computation
+        const int           dom_dim;            // domain dimension of model
+
+        vector<vector<T>>           N;          // stores basis functions
+        vector<vector<vector<T>>>   D;          // stores derivatives of basis functions
+        T***                        M;          // aliases D for faster iteration in FastGrad
+        vector<vector<T>>           t;          // stores intermediate sums from k-mode vector products
+        vector<vector<vector<T>>>   td;         // stores intermediate sums from k-mode vector products (FastGrad version)
+
+        int                         nders;      // number of derivatives currently supported by D & M
+        vector<int>                 span;       // vector to hold spans which contain the given parameter
+        int                         ctrl_idx;   // index of the current control point
 
         FastDecodeInfo(const Decoder<T>& decoder_) :
             decoder(decoder_),
             dom_dim(decoder.dom_dim),
+            nders(0),
+            M(nullptr),
             bfi(decoder.q)
         {
             N.resize(dom_dim);
             span.resize(dom_dim);
-            t.resize(dom_dim);
 
             for (size_t i = 0; i < dom_dim; i++)
             {
-                N[i]        = VectorX<T>::Zero(decoder.q[i]); // note this is different size than DecodeInfo
+                N[i].resize(decoder.q[i], 0);
             }
 
+            // t and td are multi-dim arrays containing intermediate sums formed by k-mode vector products
+            t.resize(dom_dim);
+            td.resize(dom_dim+1);            
             for (int i = 0; i < dom_dim - 1; i++)
             {
                 t[i].resize(decoder.tot_iters / decoder.ds[i+1]);
+
             }
             t[dom_dim-1].resize(1);
+
+            for (int d = 0; d < dom_dim + 1; d++)
+            {
+                td[d].resize(dom_dim);
+                for (int i = 0; i < dom_dim - 1; i++)
+                {
+                    td[d][i].resize(decoder.tot_iters / decoder.ds[i+1]);
+                }
+                td[d][dom_dim-1].resize(1);
+            }
         }
 
-        // reset basic decode info
-        // Basic version: recomputing basis functions, no weights, no derivs, no TMesh
+        ~FastDecodeInfo()
+        {
+            DeleteM();
+        }
+
+        void DeleteM()
+        {
+            if (M == nullptr)
+                return;
+            else
+            {
+                for (int d = 0; d < dom_dim + 1; d++)
+                {
+                    //Note: We do NOT want to delete M[d][k], since this points to some vector which is managed elsewhere
+                    delete[] M[d];
+                    M[d] = nullptr;
+                }
+                delete[] M;
+                M = nullptr;
+            }
+        }
+
+        // D is a 3d array holding the derivatives of each basis function in each dimension.
+        // For D[k][d][i],
+        //      k = dimension in parameter space
+        //      d = derivative order (0 = value)
+        //      i = index of basis function, i = 0,...,p
+        //     D.size() = dom_dim;  and D[d].size() = nders+1 for each d
+        //
+        // M is a 3d array with DIFFERENT semantic meaning of indices.
+        // M[d] contains the values to multiply in order to compute the derivative of a tensor-product basis function in the dth direction
+        //      M[d][d] is an array of the (nder)^th derivatives of basis functions in direction d
+        //      M[d][k] is an array of the basis functions in direction k (when d != k)
+        // The idea is that 
+        //      M[d][0][i] * M[d][1][i] * ... * M[d][dom_dim-1][i]
+        // will always be the value of the derivative of a tensor-product basis function in the d^th direction.
+        // Thus no "if" logic is needed to switch between multiplying by values or by derivatives in FastGrad, etc
+        // 
+        // M is a collection of pointers which aliases D; we do not want to move any actual basis function values into M
+        void ResizeDers(int nders)
+        {
+            D.resize(dom_dim);
+            for (int k = 0; k < dom_dim; k++)
+            {
+                D[k].resize(nders + 1);
+                for (int d = 0; d < nders + 1; d++)
+                {
+                    D[k][d].resize(decoder.q[k], 0);
+                }
+            }
+
+            // Reset alias matrix M
+            DeleteM();
+            M = new T**[dom_dim+1];
+            for (int d = 0; d < dom_dim + 1; d++)
+            {
+                M[d] = new T*[dom_dim];
+                for (int k = 0; k < dom_dim; k++)
+                {
+                    if (k == d)
+                    {
+                        M[d][k] = &(D[k][nders][0]);    // point to start of D[k][nders]
+                    }
+                    else
+                    {
+                        M[d][k] = &(D[k][0][0]);        // point to start of D[k][0]
+                    }
+                }
+            }
+        }
+
+        // reset fast decode info
         void Reset()
         {
-            // FastVolPt does not require FastDecodeInfo to be reset as written
+            // FastVolPt, FastGrad do not require FastDecodeInfo to be reset as written
         }
     };
 
@@ -1104,6 +1195,143 @@ namespace mfa
 #endif
         }
 
+
+        void FastGrad(
+            const VectorX<T>&           param,
+            FastDecodeInfo<T>&          di,
+            const TensorProduct<T>&     tensor,
+            VectorX<T>&                 out_grad,
+            T*                          out_val = nullptr)
+        {
+#ifdef MFA_TMESH
+cerr << "ERROR: Cannot use FastGrad with TMesh" << endl;
+exit(1);
+#endif
+#ifndef MFA_NO_WEIGHTS
+cerr << "ERROR: Must define MFA_NO_WEIGHTS to use FastGrad" << endl;
+exit(1);
+#endif      
+
+            assert(di.D[0].size() == 2);   // ensures D has been resized to hold 1st derivs
+            assert(di.M != nullptr);
+
+            // Compute the point value of the B-spline if out_val is not NULL
+            int end_d = -1;
+            if (out_val == nullptr)
+                end_d = dom_dim;
+            else
+                end_d = dom_dim + 1;
+
+            // Compute spans, basis functions, and derivatives of basis functions for the given parameters
+            // This small loop accounts for ~40% of the total time for this method (measured 11/16/21 for 3d, p=4, ctrlpts=30)
+            for (int i = 0; i < dom_dim; i++)
+            {
+                di.span[i] = mfa_data.FindSpan(i, param(i));
+                mfa_data.FastBasisFunsDers(i, param(i), di.span[i], 1, di.D[i], di.bfi);
+            }
+
+            // The remainder of this method computes the usual sum for decoding points:
+            //
+            // sum_i sum_j ... sum_l N_i()*N_j()*...*N_l() * P_ij...l 
+            //
+            // except, for each directional derivative we multiply by the derivative of 
+            // the corresponding basis function instead.
+            //
+            // This is best computed as a series of "n-mode tensor-vector products":
+            // sum_i N_i * (sum_j N_j * (.... * (sum_l N_l*P_ij...l)))
+            // (see "Tensor Decompositions and Applications", Kolda and Bader, chap 2.5)
+            // 
+            // that is, we compute the inner sum (with the control points) first, 
+            // and then multiply that with the next most-inner sum, working our way out.
+            // This requires less computational complexity than a VolIterator-style sum.
+
+            // Description of the M[][][] notation:
+            //     As we loop through the different domain dimensions, sometimes we need 
+            //     to multiply by basis functions and sometimes we need to multiply by 
+            //     products of basis functions. In particular, if we are computing the 
+            //     deriv in the i^th directions, then we must replace basis functions
+            //     in the i^th direction with derivs in the i^th direction.
+            //
+            //     We don't want any if-else logic buried deep in a nested loop, so we 
+            //     create a structure, M,which aliases the vectors of basis functions 
+            //     and derivatives of basis functions.
+            // 
+            //     In particular, M[d][k] points to the vector of basis functions in the
+            //     k^th direction, EXCEPT when d=k. When d=k, M[d][k] points to the 
+            //     vector of derivatives of basis functions in the k^th direction. This 
+            //     allows us to write a loop over all derivative directions that doesn't
+            //     need to switch  based on the special case when d=k.
+            //     
+            //     M is initialized by a call to FastDecodeInfo::ResizeDers(), which MUST
+            //     be called ahead of time. This method allocates/frees memory and 
+            //     should not be called repeatedly. In practice, it should  only be 
+            //     necessary to call ResizeDers() once, probably right after construction
+            //     of the FastDecodeInfo object.
+            //
+            //     The pointers in M alias the matrices di.D[0], di.D[1], .... Therefore,
+            //     it is only necessary to fill these D matrices and the data can then 
+            //     be accessed via M.
+
+            // compute linear index of first control point
+            int start_ctrl_idx = 0;
+            for (int j = 0; j < dom_dim; j++)
+                start_ctrl_idx += (di.span[j] - mfa_data.p(j)) * cs[j];
+
+            // Compute the 0-mode vector product
+            // This is the only time we need to access the control points
+            for (int m = 0, id = 0; m < tot_iters; m += q0, id++)
+            {
+                di.ctrl_idx = start_ctrl_idx + jumps(m);
+
+                // Separate 1st iteration to avoid zero-initialization
+                di.td[0][0][id] = di.M[0][0][0] * tensor.ctrl_pts(di.ctrl_idx);
+                di.t[0][id] = di.M[1][0][0] * tensor.ctrl_pts(di.ctrl_idx);
+                for (int a = 1; a < q0; a++)
+                {
+                    // For this first loop, there are only two cases: multiply control 
+                    // points by the basis functions, or multiply control points by 
+                    // derivative of basis functions. We save time by only computing 
+                    // each case once, and then copying the result as needed, below.
+                    di.td[0][0][id] += di.M[0][0][a] * tensor.ctrl_pts(di.ctrl_idx + a);    // der basis fun * ctl pts
+                    di.t[0][id] += di.M[1][0][a] * tensor.ctrl_pts(di.ctrl_idx + a);        // basis fun * ctl pts
+                }
+            }
+            for (int d = 1; d < end_d; d++) // In this special case, the values for d >= 1 are the same 
+            {
+                for (int id = 0; id < di.td[d][0].size(); id++)
+                {
+                    di.td[d][0][id] = di.t[0][id];
+                }
+            }
+
+            // For each derivative, d, compute the remaining k-mode vector products.
+            int qcur = 0, tsz = 0;
+            for (int d = 0; d < end_d; d++) // for each derivative
+            {
+                for (int k = 1; k < dom_dim; k++)   // for each direction to perform a k-mode tensor-vector product
+                {
+                    qcur = q[k];
+                    tsz = di.td[d][k-1].size();
+
+                    // Perform the k-mode vector product
+                    for (int m = 0, id = 0; m < tsz; m += qcur, id++)
+                    {
+                        di.td[d][k][id] = di.M[d][k][0] * di.td[d][k-1][m];
+                        for (int l = 1; l < qcur; l++)
+                        {
+                            di.td[d][k][id] += di.M[d][k][l] * di.td[d][k-1][m + l];
+                        }
+                    }
+                }
+            } 
+
+            for (int d = 0; d < dom_dim; d++)
+                out_grad(d) = di.td[d][dom_dim - 1][0];
+
+            if (out_val != nullptr)
+                *out_val = di.td[dom_dim][dom_dim - 1][0];
+        }
+
         // Fast implementation of VolPt for simple MFA models
         // Requirements:
         //   * Model does not use weights (must define MFA_NO_WEIGHTS)
@@ -1117,11 +1345,11 @@ namespace mfa
                 const TensorProduct<T>& tensor) const    // tensor product to use for decoding
         {
 #ifdef MFA_TMESH
-cerr << "ERROR: Cannot use BasicVolPt with TMesh" << endl;
+cerr << "ERROR: Cannot use FastVolPt with TMesh" << endl;
 exit(1);
 #endif
 #ifndef MFA_NO_WEIGHTS
-cerr << "ERROR: Must define MFA_NO_WEIGHTS to use BasicVolPt" << endl;
+cerr << "ERROR: Must define MFA_NO_WEIGHTS to use FastVolPt" << endl;
 exit(1);
 #endif
             // compute spans and basis functions for the given parameters
@@ -1150,12 +1378,12 @@ exit(1);
             // First domain dimension, we multiply basis functions with control points
             for (int m = 0, id = 0; m < tot_iters; m += q0, id++)
             {
-                di.t[0][id] = 0;
                 di.ctrl_idx = start_ctrl_idx + jumps(m);
 
-                for (int a = 0; a < q0; a++)
+                di.t[0][id] = di.N[0][0] * tensor.ctrl_pts(di.ctrl_idx);
+                for (int a = 1; a < q0; a++)
                 {
-                    di.t[0][id] += di.N[0](a) * tensor.ctrl_pts(di.ctrl_idx + a);
+                    di.t[0][id] += di.N[0][a] * tensor.ctrl_pts(di.ctrl_idx + a);
                 }
             }
 
@@ -1167,10 +1395,10 @@ exit(1);
                 tsz = di.t[k-1].size();
                 for (int m = 0, id = 0; m < tsz; m += qcur, id++)
                 {
-                    di.t[k][id] = 0;
-                    for (int l = 0; l < qcur; l++)
+                    di.t[k][id] = di.N[k][0] * di.t[k-1][m];
+                    for (int l = 1; l < qcur; l++)
                     {
-                        di.t[k][id] += di.N[k](l) * di.t[k-1][m + l];
+                        di.t[k][id] += di.N[k][l] * di.t[k-1][m + l];
                     }
                 }
             }

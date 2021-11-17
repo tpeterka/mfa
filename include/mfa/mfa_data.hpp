@@ -26,10 +26,11 @@ namespace mfa
     template<typename T>
     struct BasisFunInfo
     {
-        // vector<T>   scratch;
-        vector<T>   right;
-        vector<T>   left;
-        int qmax;
+        vector<T>           right;  // right parameter differences (t_k - u)
+        vector<T>           left;   // left parameter differences (u - t_l)
+        vector<vector<T>>   ndu;    // storage for derivative calculation
+        array<vector<T>, 2> a;      // coefficients for high-order derivs
+        int                 qmax;   // Largest spline order (p+1) among all dimensions
 
         BasisFunInfo(const vector<int>& q) :
             qmax(0)
@@ -43,6 +44,15 @@ namespace mfa
 
             right.resize(qmax);
             left.resize(qmax);
+
+            ndu.resize(qmax);
+            for (int i = 0; i < ndu.size(); i++)
+            {
+                ndu[i].resize(qmax);
+            }
+
+            a[0].resize(qmax);
+            a[1].resize(qmax);
         }
 
         void reset(int dim)
@@ -353,11 +363,11 @@ namespace mfa
         // NOTE: In this version, N is assumed to be size p+1, and we compute in place instead
         //       of using a "scratch" vector
         void FastBasisFuns(
-            int                 cur_dim,
-            T                   u,
-            int                 span,
-            VectorX<T>&         N,
-            BasisFunInfo<T>&    bfi) const
+            int                 cur_dim,        // current dimension
+            T                   u,              // parameter value
+            int                 span,           // index of span in the knots vector containing u
+            vector<T>&          N,              // vector of (output) basis function values 
+            BasisFunInfo<T>&    bfi) const      // scratch space
         {
             // nb. we do not need to zero out the entirety of N, since the existing entries of N 
             //     are never accessed (they are always overwritten first)
@@ -378,6 +388,176 @@ namespace mfa
                     saved = bfi.left[j - r] * temp;
                 }
                 N[j] = saved;
+            }
+        }
+
+        // Faster version of DerBasisFuns.
+        // * Utilizes BasisFunInfo to avoid allocating matrices on the fly.
+        // * Stores reciprocal of knot differences to minimize divisions
+        // * Matrix of derivs is size (nders+1)x(p+1), instead of (nders+1)x(nctrlpts)
+        void FastBasisFunsDers(
+            int                 cur_dim,        // current dimension
+            T                   u,              // parameter value
+            int                 span,           // index of span in the knots vector containing u
+            int                 nders,          // number of derivatives
+            vector<vector<T>>&  D,              // matrix of (output) basis function values/derivs
+            BasisFunInfo<T>&    bfi) const      // scratch space
+        {
+            if (nders == 1)
+                return FastBasisFunsDer1(cur_dim, u, span, D, bfi);
+
+            assert(D.size() == nders+1); // PRECONDITION: D has been resized to fit all necessary derivs
+            
+            const int deg = p(cur_dim);
+
+            // matrix from p. 70 of P&T
+            // upper triangle is basis functions
+            // lower triangle is reciprocal of knot differences
+            bfi.ndu[0][0] = 1.0;
+
+            // fill ndu / compute 0th derivatives
+            for (int j = 1; j <= deg; j++)
+            {
+                bfi.left[j]  = u - tmesh.all_knots[cur_dim][span + 1 - j];
+                bfi.right[j] = tmesh.all_knots[cur_dim][span + j] - u;
+
+                T saved = 0.0;
+                for (int r = 0; r < j; r++)
+                {
+                    // lower triangle
+                    bfi.ndu[j][r] = 1 / (bfi.right[r + 1] + bfi.left[j - r]);
+                    T temp = bfi.ndu[r][j - 1] * bfi.ndu[j][r];
+                    // upper triangle
+                    bfi.ndu[r][j] = saved + bfi.right[r + 1] * temp;
+                    saved = bfi.left[j - r] * temp;
+                }
+                bfi.ndu[j][j] = saved;
+            }
+
+            // Copy 0th derivatives
+            for (int j = 0; j <= deg; j++)
+                D[0][j] = bfi.ndu[j][deg];            // TODO: compute these basis functions in-place in N above?
+
+            // compute derivatives according to eq. 2.10
+            // 1st row = first derivative, 2nd row = 2nd derivative, ...
+            for (int r = 0; r <= deg; r++)
+            {
+                int s1, s2;                             // alternate rows in array a
+                s1      = 0;
+                s2      = 1;
+                bfi.a[0][0] = 1.0;
+
+                for (int k = 1; k <= nders; k++)        // over all the derivatives up to the d_th one
+                {
+                    T d    = 0.0;
+                    int rk = r - k;
+                    int pk = deg - k;
+
+                    if (r >= k)
+                    {
+                        bfi.a[s2][0] = bfi.a[s1][0] * bfi.ndu[pk + 1][rk];
+                        d            = bfi.a[s2][0] * bfi.ndu[rk][pk];
+                    }
+
+                    int j1, j2;
+                    if (rk >= -1)
+                        j1 = 1;
+                    else
+                        j1 = -rk;
+                    if (r - 1 <= pk)
+                        j2 = k - 1;
+                    else
+                        j2 = deg - r;
+
+                    for (int j = j1; j <= j2; j++)
+                    {
+                        bfi.a[s2][j] = (bfi.a[s1][j] - bfi.a[s1][j - 1]) * bfi.ndu[pk + 1][rk + j];
+                        d += bfi.a[s2][j] * bfi.ndu[rk + j][pk];
+                    }
+
+                    if (r <= pk)
+                    {
+                        bfi.a[s2][k] = -bfi.a[s1][k - 1] * bfi.ndu[pk + 1][r];
+                        d += bfi.a[s2][k] * bfi.ndu[r][pk];
+                    }
+
+                    D[k][r] = d;
+                    swap(s1, s2);
+                }                                       // for k
+            }                                           // for r
+
+            // multiply through by the correct factors in eq. 2.10
+            int r = deg;
+            for (int k = 1; k <= nders; k++)
+            {
+                for (int i = 0; i <= deg; i++)
+                {
+                    D[k][i] *= r;
+                }
+                r *= deg - k;
+            }
+        }
+
+        // Specialization of FastBasisFunsDers for 1st derivatives, which is much
+        // simpler than the general case.  This method is called from 
+        // FastBasisFunsDers when nders=1, so it should not need to be called by
+        // the user.
+        void FastBasisFunsDer1(
+            int                 cur_dim,        // current dimension
+            T                   u,              // parameter value
+            int                 span,           // index of span in the knots vector containing u
+            vector<vector<T>>&  D,              // matrix of (output) basis function values/derivs 
+            BasisFunInfo<T>&    bfi) const      // scratch space
+        {
+            assert(D.size() == 2); // PRECONDITION: D has been resized to fit all necessary derivs
+            
+            const int deg = p(cur_dim);
+            const int pk  = deg - 1;
+
+            // matrix from p. 70 of P&T
+            // upper triangle is basis functions
+            // lower triangle is reciprocal of knot differences
+            bfi.ndu[0][0] = 1.0;
+
+            // fill ndu / compute 0th derivatives
+            for (int j = 1; j <= deg; j++)
+            {
+                bfi.left[j]  = u - tmesh.all_knots[cur_dim][span + 1 - j];
+                bfi.right[j] = tmesh.all_knots[cur_dim][span + j] - u;
+
+                T saved = 0.0;
+                for (int r = 0; r < j; r++)
+                {
+                    // lower triangle
+                    bfi.ndu[j][r] = 1 / (bfi.right[r + 1] + bfi.left[j - r]);
+                    T temp = bfi.ndu[r][j - 1] * bfi.ndu[j][r];
+                    // upper triangle
+                    bfi.ndu[r][j] = saved + bfi.right[r + 1] * temp;
+                    saved = bfi.left[j - r] * temp;
+                }
+                bfi.ndu[j][j] = saved;
+            }
+
+            // Copy 0th derivatives
+            for (int j = 0; j <= deg; j++)
+                D[0][j] = bfi.ndu[j][deg];
+                
+            // Compute 1st derivatives
+            T d = 0.0;
+            D[1][0]     = -bfi.ndu[0][pk] * bfi.ndu[deg][0];
+            D[1][deg]   = bfi.ndu[deg-1][pk] * bfi.ndu[deg][deg-1];
+            for (int r = 1; r < deg; r++)
+            {
+                d = bfi.ndu[r-1][pk] * bfi.ndu[deg][r-1];
+                d += -bfi.ndu[r][pk] * bfi.ndu[deg][r];
+
+                D[1][r] = d;
+            }
+
+            // multiply through by the correct factors in eq. 2.10
+            for (int i = 0; i <= deg; i++)
+            {
+                D[1][i] *= deg;
             }
         }
 
