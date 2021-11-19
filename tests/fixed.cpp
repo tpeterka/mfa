@@ -55,7 +55,7 @@ int main(int argc, char** argv)
     int    rand_seed    = -1;                   // seed to use for random data generation (-1 == no randomization)
     int    resolutionGrid = 0;
     bool   help         = false;                // show help
-  
+
 
     // get command line arguments
     opts::Options ops;

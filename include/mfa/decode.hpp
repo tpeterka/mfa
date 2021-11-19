@@ -823,7 +823,11 @@ namespace mfa
                 di.temp[0] += (mfa_data.N[0])(ijk(0), vol_iter.idx_dim(0) + di.span[0] - mfa_data.p(0)) * di.ctrl_pt * w;
 #else                                                                           // weigh only range dimension
                 for (auto j = 0; j < last; j++)
+                {
+                    fmt::print(stderr, "rows {} cols {} row {} col {} vol_iter.idx_dim(0) {} di.span[0] {} p(0) {}\n", mfa_data.N[0].rows(), mfa_data.N[0].cols(),
+                            ijk(0), vol_iter.idx_dim(0) + di.span[0] - mfa_data.p(0), vol_iter.idx_dim(0), di.span[0], mfa_data.p(0));
                     (di.temp[0])(j) += (mfa_data.N[0])(ijk(0), vol_iter.idx_dim(0) + di.span[0] - mfa_data.p(0)) * di.ctrl_pt(j);
+                }
                 (di.temp[0])(last) += (mfa_data.N[0])(ijk(0), vol_iter.idx_dim(0) + di.span[0] - mfa_data.p(0)) * di.ctrl_pt(last) * w;
 #endif
 
