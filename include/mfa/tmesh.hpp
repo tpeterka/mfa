@@ -2085,7 +2085,6 @@ namespace mfa
         // determine starting and ending indices of domain input points covered by one tensor product
         // coverage extends to edge of basis functions corresponding to control points in the tensor product
         void domain_pts(TensorIdx               t_idx,              // index of current tensor product
-                        vector<vector<T>>&      params,             // params of input points
                         bool                    extend,             // extend input points to cover neighbors (eg., constraints)
                         vector<size_t>&         start_idxs,         // (output) starting idxs of input points
                         vector<size_t>&         end_idxs) const     // (output) ending idxs of input points
@@ -2168,9 +2167,6 @@ namespace mfa
 
 //             fmt::print(stderr, "start_knot_idxs [{}] end_knot_idxs [{}] start_pt_idxs [{}] end_pt_idxs [{}]\n",
 //                     fmt::join(start_knot_idxs, ","), fmt::join(end_knot_idxs, ","), fmt::join(start_idxs, ","), fmt::join(end_idxs, ","));
-
-            // TODO: sanity check that can be removed after the code is stable
-            check_domain_pts(t_idx, params, extend, start_idxs, end_idxs);
         }
 
         // check if domain_pts covering tensor product are correct (for debugging)

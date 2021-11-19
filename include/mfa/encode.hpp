@@ -474,7 +474,7 @@ namespace mfa
             int tot_dom_pts = 1;
             vector<size_t> start_idxs(mfa_data.dom_dim);
             vector<size_t> end_idxs(mfa_data.dom_dim);
-            mfa_data.tmesh.domain_pts(t_idx, input.params->param_grid, true, start_idxs, end_idxs);
+            mfa_data.tmesh.domain_pts(t_idx, true, start_idxs, end_idxs);
             for (int k=0; k < mfa_data.dom_dim; k++)
                 tot_dom_pts *= end_idxs[k] - start_idxs[k] + 1;
 
@@ -1003,7 +1003,10 @@ namespace mfa
             // get input domain points covered by the tensor
             vector<size_t> start_idxs(mfa_data.dom_dim);
             vector<size_t> end_idxs(mfa_data.dom_dim);
-            mfa_data.tmesh.domain_pts(t_idx, input.params->param_grid, true, start_idxs, end_idxs);
+            mfa_data.tmesh.domain_pts(t_idx, true, start_idxs, end_idxs);
+
+            // TODO: sanity check that can be removed once code is debugged
+            mfa_data.tmesh.check_domain_pts(t_idx, true, start_idxs, end_idxs);
 
             // Q matrix of relevant input domain points
             VectorXi ndom_pts(mfa_data.dom_dim);
@@ -1308,8 +1311,14 @@ namespace mfa
             vector<size_t> end_idxs_cons(dom_dim);                                                  // end of input points including constraints
             vector<size_t> start_idxs_free(dom_dim);                                                // start of input points including only the tensor
             vector<size_t> end_idxs_free(dom_dim);                                                  // end of input points including ony the tensor
-            mfa_data.tmesh.domain_pts(t_idx, input.params->param_grid, true, start_idxs_cons, end_idxs_cons);
-            mfa_data.tmesh.domain_pts(t_idx, input.params->param_grid, false, start_idxs_free, end_idxs_free);
+
+            mfa_data.tmesh.domain_pts(t_idx, true, start_idxs_cons, end_idxs_cons);
+            // TODO: sanity check that can be removed once code is debugged
+            mfa_data.tmesh.check_domain_pts(t_idx, input.params->param_grid, true, start_idxs, end_idxs);
+
+            mfa_data.tmesh.domain_pts(t_idx, false, start_idxs_free, end_idxs_free);
+            // TODO: sanity check that can be removed once code is debugged
+            mfa_data.tmesh.check_domain_pts(t_idx, input.params->param_grid, false, start_idxs, end_idxs);
 
             // relevant input domain points covering constraints
             VectorXi ndom_pts_cons(dom_dim);
