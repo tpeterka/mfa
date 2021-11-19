@@ -1441,6 +1441,8 @@ namespace mfa
                 diy::load(bb, t.level);
             diy::load(bb, b->geometry.mfa_data->tmesh.all_knots);
             diy::load(bb, b->geometry.mfa_data->tmesh.all_knot_levels);
+            for (TensorProduct<T>& t: b->geometry.mfa_data->tmesh.tensor_prods)
+                b->geometry.mfa_data->tmesh.tensor_knot_idxs(t);
 
             // science variables
             size_t nvars;
@@ -1465,6 +1467,8 @@ namespace mfa
                     diy::load(bb, t.level);
                 diy::load(bb, b->vars[i].mfa_data->tmesh.all_knots);
                 diy::load(bb, b->vars[i].mfa_data->tmesh.all_knot_levels);
+                for (TensorProduct<T>& t: b->vars[i].mfa_data->tmesh.tensor_prods)
+                    b->vars[i].mfa_data->tmesh.tensor_knot_idxs(t);
             }
 
             // output for blending

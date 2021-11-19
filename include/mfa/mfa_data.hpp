@@ -241,7 +241,7 @@ namespace mfa
             mid = (low + high) / 2;
 
             if (u >= tmesh.all_knots[cur_dim][tensor.knot_idxs[cur_dim][high]])
-                return tensor.knot_idxs[cur_dim][high];
+                return tensor.knot_idxs[cur_dim][high - 1];
 
             // binary search
             while (u < tmesh.all_knots[cur_dim][tensor.knot_idxs[cur_dim][mid]] ||
