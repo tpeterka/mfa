@@ -1889,7 +1889,7 @@ struct Block : public BlockBase<T>
 
         // Encode ray model. TODO: regularized encode
         bool force_unified = fixed_length;  // force a unified encoding to use the regularizer
-        ray_mfa->FixedEncode(*ray_input, a->regularization, false, force_unified);
+        ray_mfa->FixedEncode(*ray_input, a->regularization, args.reg1and2, false, force_unified);
 
 
         // ----------- Replace old block members with new ---------- //
