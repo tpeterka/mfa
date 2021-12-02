@@ -285,6 +285,7 @@ namespace mfa
                 MFA_Data<T>&        mfa_data,               // mfa data model
                 const PointSet<T>&  input,                  // input points
                 T                   regularization,
+                bool                reg1and2,
                 bool                weighted,
                 bool                force_unified = false) const         // solve for and use weights (default = true)
         {
@@ -299,7 +300,7 @@ namespace mfa
             if (input.structured && !force_unified)
                 encoder.Encode(t.nctrl_pts, t.ctrl_pts, t.weights, weighted);
             else
-                encoder.EncodeUnified(0, regularization, weighted);  // Assumes only one tensor product
+                encoder.EncodeUnified(0, regularization, reg1and2, weighted);  // Assumes only one tensor product
         }
 
         // adaptive encode

@@ -481,7 +481,7 @@ namespace mfa
 
                 for (int l = 0; l < dom_dim; l++)
                 {
-                    coeff *= mfa_data.IntBasisFun(l, ctrl_idxs(l), a, b, spana(l), spanb(l), bfi);                    
+                    coeff *= mfa_data.IntBasisFun(l, ctrl_idxs(l), a(l), b(l), spana(l), spanb(l), bfi);                    
                 }
 
                 output += coeff * tensor.ctrl_pts.row(cp_it.cur_iter_full());

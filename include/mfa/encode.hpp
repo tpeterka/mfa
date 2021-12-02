@@ -405,7 +405,11 @@ namespace mfa
                 int nc = t.nctrl_pts(i);    // current total ctrl pts for this dimension
 
                 anchor_pts[i].resize(t.nctrl_pts(i));
-                for (int j = 0; j < t.nctrl_pts(i); j++)
+                anchor_pts[i][0] = 0;
+                anchor_pts[i][t.nctrl_pts(i)-1] = 1.0;
+                // anchor_pts[i][0] = 0.99 * mfa_data.tmesh.all_knots[i][0] + 0.01 * mfa_data.tmesh.all_knots[i][pc+1];                   // special anchor for first control point
+                // anchor_pts[i][t.nctrl_pts(i)-1] = 0.01 * mfa_data.tmesh.all_knots[i][t.nctrl_pts(i)-1] + 0.99 * mfa_data.tmesh.all_knots[i][t.nctrl_pts(i)+pc];    // special anchor for last control point
+                for (int j = 1; j < t.nctrl_pts(i) - 1; j++)
                 {
                     anchor_pts[i][j] = (mfa_data.tmesh.all_knots[i][j] + mfa_data.tmesh.all_knots[i][j+pc+1]) / 2;
                 }
@@ -445,8 +449,16 @@ namespace mfa
                         {
                             int idx = ctrl_vol_iter.idx_dim(k);
 
+                            // amplify strength of contraints on edges
+                            T edge_factor = 1;
+                            if (idx == 0 || idx == t.nctrl_pts(k) - 1)
+                                edge_factor = mfa_data.p(k);
+
+                            T mult = B[k]((k==dk) ? deriv : 0, idx);
                             // multiply by the derivative if k==dk, otherwise normal basis func
-                            current_deriv *= B[k]((k==dk) ? deriv : 0, idx);  // new for regularizer
+                            // current_deriv *= edge_factor * B[k]((k==dk) ? deriv : 0, idx);  // new for regularizer
+
+                            current_deriv *= edge_factor * mult;
                         }
 
                         total_deriv += current_deriv;    // one contribution per derivative
@@ -708,6 +720,7 @@ namespace mfa
         // corresponding to input do not lie on structured grid
         void EncodeUnified( TensorIdx   t_idx,                      // tensor product being encoded
                             T           regularization=0,           // parameter to set smoothing of artifacts from non-uniform data
+                            bool        reg1and2=false,
                             bool        weighted=true)                   // solve for and use weights 
         {
             if (verbose)
@@ -746,8 +759,15 @@ namespace mfa
 
                 ConsMatrix(t_idx, 1, regularization, N, Ct1);
                 ConsMatrix(t_idx, 2, regularization, N, Ct2);
-                Ct = Ct1 + Ct2;         // C1 and C2 regularization
-                // Ct = Ct2;            // only C2 regularization
+                
+                if (reg1and2)
+                {
+                    Ct = Ct1 + Ct2;         // C1 and C2 regularization
+                }
+                else
+                {
+                    Ct = Ct2;            // only C2 regularization
+                }
 
                 // Concatenate Ct to the right end of Nt
                 Nt.conservativeResize(Nt.rows(), Nt.cols()+num_reg_conds);

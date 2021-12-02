@@ -14,6 +14,7 @@
 #include    <vector>
 #include    <list>
 #include    <iostream>
+#include    <iomanip>
 
 #ifdef MFA_TBB
 #include    <tbb/tbb.h>
@@ -368,6 +369,46 @@ namespace mfa
             {
                 param_list.col(k) = (domain.col(k).array() - mins(k)) * (1/diff(k));
             }
+
+            // truncate floating-point roundoffs to [0,1]
+            for (int i = 0; i < param_list.rows(); i++)
+            {
+                for (int j = 0; j < param_list.cols(); j++)
+                {
+                    if (param_list(i,j) > 1.0)
+                    {
+                        if (param_list(i,j) - 1.0 < 1e-12)
+                        {
+                            param_list(i,j) = 1.0;
+                            // cerr << "Debug: truncated a parameter value" << endl;
+                        }
+                        else
+                        {
+                            cerr << "ERROR: Construction of Param object contains out-of-bounds entries" << endl;
+                            cerr << "       Bad Value: " << setprecision(9) << scientific << param_list(i,j) << endl;
+                            cerr << "       Out of Tolerance: " << scientific << param_list(i,j) - 1.0 << endl;
+                            cerr << i << " " << j << endl;
+                            cerr << domain(i,j) << endl;
+                            exit(1);
+                        }
+                    }
+                    if (param_list(i,j) < 0.0)
+                    {
+                        if (0.0 - param_list(i,j) < 1e-12)
+                        {
+                            param_list(i,j) = 0.0;
+                            // cerr << "Debug: truncated a parameter value" << endl;
+                        }
+                        else
+                        {
+                            cerr << "ERROR: Construction of Param object contains out-of-bounds entries" << endl;
+                            cerr << "       Bad Value: " << setprecision(9) << scientific << param_list(i,j) << endl;
+                            cerr << "       Out of Tolerance: " << scientific << 0.0 - param_list(i,j) << endl;
+                            exit(1);
+                        }
+                    }
+                }
+            }
         
             check_param_bounds();
         }
@@ -378,6 +419,7 @@ namespace mfa
         {
             bool valid = true;
             T minp = 0, maxp = 0;
+            T badval = 42;
 
             if (structured)
             {
@@ -388,6 +430,7 @@ namespace mfa
                         if (param_grid[k][j] < 0.0 || param_grid[k][j] > 1.0)
                         {
                             valid = false;
+                            badval = param_grid[k][j];
                             break;
                         }
                     }
@@ -404,6 +447,7 @@ namespace mfa
                     if (minp < 0.0)
                     {
                         valid = false;
+                        badval = minp;
                         break;
                     }
 
@@ -411,6 +455,7 @@ namespace mfa
                     if (maxp > 1.0)
                     {
                         valid = false;
+                        badval = maxp;
                         break;
                     }
                 }
@@ -419,6 +464,11 @@ namespace mfa
             if (valid == false)
             {
                 cerr << "ERROR: Construction of Param object contains out-of-bounds entries" << endl;
+                cerr << "       Bad Value: " << setprecision(9) << scientific << badval << endl;
+                if (badval > 1.0)
+                    cerr << "       Out of Tolerance: " << scientific << badval - 1.0 << endl;
+                else if (badval < 0.0)
+                    cerr << "       Out of Tolerance: " << scientific << 0.0 - badval << endl;
                 exit(1);
             }
 

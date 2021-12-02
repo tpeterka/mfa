@@ -68,6 +68,7 @@ struct ModelInfo
     bool                weighted;               // solve for and use weights (default = true)
     bool                local;                  // solve locally (with constraints) each round (default = false)
     float               regularization;         // smoothing parameter for unstructured data with nonuniform point density (value of 0 does nothing)
+    bool                reg1and2;               // regularize with 1st and 2nd derivatives (false --> 2nd derivs only)
     int                 verbose;                // debug level (default = 1)
 };
 
@@ -221,7 +222,7 @@ struct BlockBase
             const       diy::Master::ProxyWithLink& cp,
             ModelInfo&  info)
     {
-        mfa->FixedEncode(*input, info.regularization, info.weighted);
+        mfa->FixedEncode(*input, info.regularization, info.reg1and2, info.weighted, false);
     }
 
     // adaptively encode block to desired error limit

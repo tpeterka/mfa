@@ -57,6 +57,7 @@ int main(int argc, char** argv)
     int    rand_seed    = -1;                   // seed to use for random data generation (-1 == no randomization)
     float  regularization = 0;                   // smoothing parameter for models with non-uniform input density (0 == no smoothing)
     int    fixed_ray    = 0;
+    int     reg1and2 = 0;
     bool   help         = false;                // show help
 
 
@@ -169,8 +170,7 @@ int main(int argc, char** argv)
     d_args.structured   = structured;
     d_args.rand_seed    = rand_seed;
     d_args.regularization   = regularization;
-    for (int i = 0; i < pt_dim - dom_dim; i++)
-        d_args.f[i] = 1.0;
+    d_args.reg1and2     = reg1and2;
     for (int i = 0; i < dom_dim; i++)
     {
         d_args.geom_p[i]            = geom_degree;
