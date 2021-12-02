@@ -83,6 +83,7 @@ int main(int argc, char** argv)
     ops >> opts::Option('y', "rand_seed",   rand_seed,  " seed for random point generation (-1 = no randomization, default)");
     ops >> opts::Option('b', "regularization", regularization, "smoothing parameter for models with non-uniform input density");
     ops >> opts::Option('u', "fixed_ray",   fixed_ray, "" );
+    ops >> opts::Option('k', "reg1and2", reg1and2, "");
 
     if (!ops.parse(argc, argv) || help)
     {
