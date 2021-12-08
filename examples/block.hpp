@@ -1693,7 +1693,7 @@ struct Block : public BlockBase<T>
         int new_dd = dom_dim + 1;   // new dom_dim
         int new_pd = pt_dim + 1;    // new pt_dim
         
-        const int n_alpha = 70;    // Number of angle values to sample
+        const int n_alpha = 150;    // Number of angle values to sample
         const int n_rho = 100;      // Number of rho values to sample
         const int n_samples = 100;  // Number of times to sample each ray
 
@@ -1880,9 +1880,13 @@ struct Block : public BlockBase<T>
             // its possible that max_nctrl_pts is too many if one dimension is much smaller than the others.
             for (auto j = 0; j < new_dd; j++)
             {
-                p(j)            = min_p;
-                nctrl_pts(j)    = max_nctrl_pts;
+                p(j)  = 2;
+                // p(j)            = min_p;
+                nctrl_pts(j)    = max_nctrl_pts * floor(sqrt(2));
             }
+
+            nctrl_pts(2) = 140;
+            p(2) = 2;
 
             ray_mfa->AddVariable(p, nctrl_pts, 1);
         }
@@ -1940,7 +1944,102 @@ struct Block : public BlockBase<T>
 
         // --------- Decode (for visualization) --------- //
         // this->decode_block(cp, 1, 0);
-        this->range_error(cp, 1, true, true);
+        // this->range_error(cp, 1, true, true);
+
+        vector<int> grid_size = {100, 100, 100};
+        VectorXi gridpoints(3);
+        gridpoints(0) = grid_size[0];
+        gridpoints(1) = grid_size[1];
+        gridpoints(2) = grid_size[2];
+        this->decode_block_grid(cp, 1, grid_size);
+        
+
+cerr << "\n===========" << endl;
+cerr << "f(x) = sin(x) hardcoded in create_ray_model()" << endl;
+cerr << "===========\n" << endl;
+        delete this->errs;
+        this->errs = new mfa::PointSet<T>(dom_dim, pt_dim, gridpoints.prod(), gridpoints);
+        outpt = VectorX<T>::Zero(1);
+        for (int k = 0; k < grid_size[2]; k++)
+        {
+            for (int j = 0; j < grid_size[1]; j++)
+            {
+                T rh_param = (T) j / (grid_size[1]-1);
+                T al_param = (T) k / (grid_size[2]-1);
+                T rh = input->dom_mins(1) + (input->dom_maxs(1) - input->dom_mins(1)) * rh_param;
+                T al = input->dom_mins(2) + (input->dom_maxs(2) - input->dom_mins(2)) * al_param;
+
+                T x0, y0, x1, y1, span_x, span_y;
+
+                // "parallel-plate setup"
+                // start/end coordinates of the ray (alpha, rho)
+                // In this setup the length of every segment (x0,y0)--(x1,y1) is constant
+                span_x = 2 * r_lim * sin(al);
+                span_y = 2 * r_lim * cos(al);
+                x0 = rh * cos(al) - r_lim * sin(al);
+                x1 = rh * cos(al) + r_lim * sin(al);
+                y0 = rh * sin(al) + r_lim * cos(al);
+                y1 = rh * sin(al) - r_lim * cos(al);
+
+                T dx = span_x / (grid_size[0]-1);
+                T dy = span_y / (grid_size[0]-1);
+
+                for (int i = 0; i < grid_size[0]; i++)
+                {
+                    T t_param = (T)i / (grid_size[0]-1);
+                    int idx = k*grid_size[0]*grid_size[1] + j*grid_size[0] + i;
+                    T a = input->dom_mins(0) + (input->dom_maxs(0) - input->dom_mins(0)) / (grid_size[0]-1) * i;
+                    
+                    T x = x0 + i * dx;
+                    T y = 0;
+
+                    if (fixed_length)
+                        y = y0 - i * dy;
+                    else
+                        y = y0 + i * dy;
+                    
+                    param(0) = t_param;
+                    param(1) = rh_param;
+                    param(2) = al_param;
+
+                    // Truncate to [0,1] in the presence of small round-off errors
+                    param(0) = param(0) < 0 ? 0 : param(0);
+                    param(1) = param(1) < 0 ? 0 : param(1);
+                    param(2) = param(2) < 0 ? 0 : param(2);
+                    param(0) = param(0) > 1 ? 1 : param(0);
+                    param(1) = param(1) > 1 ? 1 : param(1);
+                    param(2) = param(2) > 1 ? 1 : param(2);
+
+                    this->mfa->DecodeVar(0, param, outpt);
+
+                    T trueval = sin(x) * sin(y);
+
+                    this->errs->domain(idx, 0) = t_param;
+                    this->errs->domain(idx, 1) = rh;
+                    this->errs->domain(idx, 2) = al;
+                    this->errs->domain(idx, 3) = abs(trueval - outpt(0));
+
+                    // ignore "errors" when querying outside the domain
+                    if (x < xl || x > xh || y < yl || y > yh)
+                        this->errs->domain(idx, 3) = 0;
+                }
+            }
+        }
+
+        // Compute error metrics
+        MatrixX<T>& errpts = this->errs->domain;
+
+        for (auto j = dom_dim; j < this->errs->pt_dim; j++)
+            this->sum_sq_errs[j - dom_dim] = 0.0;
+        for (auto i = 0; i < this->errs->npts; i++)
+        {
+            for (auto j = dom_dim; j < this->errs->pt_dim; j++)
+            {
+                this->sum_sq_errs[j - dom_dim] += (errpts(i, j) * errpts(i, j));
+                if ((i == 0 && j == dom_dim) || errpts(i, j) > this->max_errs[j - dom_dim])
+                    this->max_errs[j - dom_dim] = errpts(i, j);
+            }
+        }
     }
 
     T integrate_ray(
@@ -1950,7 +2049,7 @@ struct Block : public BlockBase<T>
                 bool fixed_length)
     {
         const double pi = 3.14159265358979;
-        const bool verbose = false;
+        const bool verbose = true;
 
         // TODO: This is for 2d only right now
         if (a.size() != 2 && b.size() != 2)
