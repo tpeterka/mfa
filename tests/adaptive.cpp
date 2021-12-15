@@ -33,7 +33,9 @@ int main(int argc, char** argv)
     // initialize MPI
     diy::mpi::environment  env(argc, argv);           // equivalent of MPI_Init(argc, argv)/MPI_Finalize()
     diy::mpi::communicator world;                     // equivalent of MPI_COMM_WORLD
-
+#ifdef MFA_KOKKOS
+    Kokkos::initialize( argc, argv );
+#endif
     int nblocks     = 1;                              // number of local blocks
     int tot_blocks  = nblocks * world.size();
     int mem_blocks  = -1;                             // everything in core for now
@@ -410,4 +412,7 @@ int main(int argc, char** argv)
         fprintf(stderr, "our number of control points (%d) and expected number of control points (%d) differ\n", our_nctrl, expect_nctrl);
         abort();
     }
+#ifdef MFA_KOKKOS
+    Kokkos::finalize();
+#endif
 }

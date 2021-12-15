@@ -16,6 +16,11 @@
 
 typedef Eigen::MatrixXi MatrixXi;
 
+#ifdef MFA_KOKKOS
+    using ExecutionSpace = Kokkos::DefaultExecutionSpace;
+    using MemorySpace = ExecutionSpace::memory_space;
+#endif
+//#define  PRINT_DEBUG2
 namespace mfa
 {
     template <typename T>                                   // float or double
@@ -486,7 +491,7 @@ namespace mfa
             VectorXi    derivs;                             // do not use derivatives yet, pass size 0
             VolIterator vol_it(ndom_pts);
 
-#ifdef MFA_SERIAL   // serial version
+#if defined( MFA_SERIAL) || defined (MFA_KOKKOS)   // serial version or Kokkos version right now
 
             DecodeInfo<T>   decode_info(mfa_data, derivs);  // reusable decode point info for calling VolPt repeatedly
             VectorX<T>      cpt(mfa_data.tmesh.tensor_prods[0].ctrl_pts.cols());                      // evaluated point
@@ -513,10 +518,105 @@ namespace mfa
 #endif              // tmesh version
 
                 vol_it.incr_iter();
+                //counter_grid++;
                 result.block(j, min_dim, 1, max_dim - min_dim + 1) = cpt.transpose();
             }
 
 #endif              // serial version
+
+#if defined(MFA_KOKKOS)    // kokkos version
+
+            // prepare control points view, fill host and copy to device
+            int nct = mfa_data.tmesh.tensor_prods[0].ctrl_pts.rows(), nvar=mfa_data.tmesh.tensor_prods[0].ctrl_pts.cols();
+            Kokkos::View<double*> ctrl_pts_k("ctrlpts", nct );
+            auto h_ctrl_pts_k = Kokkos::create_mirror_view(ctrl_pts_k);
+            typedef Kokkos::RangePolicy<>  range_policy;
+            typedef Kokkos::OpenMP   HostExecSpace;
+            typedef Kokkos::RangePolicy<HostExecSpace>    host_range_policy;
+            // we could say explicitly: Kokkos::RangePolicy<Kokkos::OpenMP> (0, nct) ! this will happen over host
+            Kokkos::parallel_for( "copy_ctrl", host_range_policy(0, nct),
+                KOKKOS_LAMBDA ( const int j ) {
+                  h_ctrl_pts_k(j) = mfa_data.tmesh.tensor_prods[0].ctrl_pts(j,0);
+                }
+              );
+            // and then copy to device
+            Kokkos::deep_copy(ctrl_pts_k, h_ctrl_pts_k);
+            Kokkos::View<int*> strides_patch("strides_patch", mfa_data.dom_dim );
+            Kokkos::View<int*>::HostMirror h_strides_patch = Kokkos::create_mirror_view(strides_patch);
+            // for each point we know where that span starts, and how big the support is
+            // degree + 1
+            h_strides_patch(0) = 1;
+            for (int k=1; k<kdom_dim; k++)
+            {
+                h_strides_patch(k) = (mfa_data.p[k-1] + 1) * h_strides_patch( k-1 );
+            }
+
+            int nb_internal_iter = h_strides_patch(kdom_dim-1) * (mfa_data.p[kdom_dim-1] + 1) ;
+            Kokkos::deep_copy(strides_patch, h_strides_patch);
+
+            int ntot = result.rows();
+
+            Kokkos::View<double*> res_dev("result", ntot );
+            auto res_h = Kokkos::create_mirror_view(res_dev);
+
+
+            // KOKKOS_LAMBDA expands to [=] __device__ __host__
+            // all local variables are passed by value, which is fine for Kokkos Views and
+            // simple types double, int, but not for structures !
+            // this is why using kdom_dim inside is fine, while mfa_data.dom_dim is not
+            Kokkos::parallel_for( "decode_mult", ntot,
+                KOKKOS_LAMBDA ( const int i ) {
+
+                    int leftover=i;
+                    int ctrl_idx = 0;
+                    double value = 0; // this will accumulate (one variable now)
+                    int ij_grid[7]; // could be just smaller; 7 is max dim for Kokkos anyway
+                    int span_st[7];
+                    int ij_patch[7];
+
+                    for (int k=kdom_dim-1; k>=0; k--)
+                    {
+                        ij_grid[k] = (int)(leftover/strides(k));
+                        leftover -= strides(k)*ij_grid[k] ;
+                    }
+
+                    for (int k=0; k<kdom_dim; k++)
+                    {
+                        span_st[k] = span_starts(k, ij_grid[k]);
+                        ctrl_idx += (span_st[k]+kct(0,k))*kcs(k);
+                    }
+
+                    // now we need more loops, in all direction, for local patch, size
+                    // ksupp is p+1 in each direction
+
+                    for (int j=0; j<nb_internal_iter; j++)
+                    {
+                        int leftj = j;
+                        for (int k=kdom_dim-1; k>=0; k--)
+                        {
+                            ij_patch[k] = (int)(leftj/strides_patch(k));
+                            leftj -= strides_patch(k)*ij_patch[k] ;
+                        }
+                        // vijk will be (0,0), (1,0), ..., (4,0), (0,1),..
+                        // role of coordinates in the patch
+                        int ctrl_idx_it = ctrl_idx;
+                        for (int k=0; k<kdom_dim; k++)
+                            ctrl_idx_it += kct(j,k) * kcs(k);
+                        double ctrl = ctrl_pts_k(ctrl_idx_it);
+
+                        for (int k=0; k<kdom_dim; k++)
+                            ctrl *= newNN(k, ij_grid[k] , span_st[k] + ij_patch[k] );
+
+                        value += ctrl;
+                    }
+                    res_dev(i) = value;
+                }
+            );
+            Kokkos::deep_copy(res_h, res_dev);
+            for (int j=0; j<ntot; j++)
+                result(j, mfa_data.dom_dim) = res_h(j);
+
+#endif              // kokkos version
 
 #ifdef MFA_TBB      // TBB version
 
@@ -1039,13 +1139,36 @@ namespace mfa
                 di.ctrl_idx += (di.span[j] - mfa_data.p(j) + ct(0, j)) * cs[j];
             }
             size_t start_ctrl_idx = di.ctrl_idx;
-
+#ifdef PRINT_DEBUG2
+            printf(" (%d, %d), %d \n", di.span[0], di.span[1], di.ctrl_idx);
+#endif
+#ifdef PRINT_DEBUG
+                //if ( ijk[0] < 5 && ijk[1] < 5 )
+                {
+                    if (mfa_data.dom_dim > 1)
+                        fprintf(stderr, "        span_0->%d  span_1->%d di.ctrl_idx start: %zu \n", di.span[0], di.span[1], start_ctrl_idx );
+                    else
+                        fprintf(stderr, "        span_0->%d  di.ctrl_idx start: %zu \n", di.span[0], start_ctrl_idx );
+                }
+#endif
+            //int counter_patch = 0; // these to understand how we advance in serial
             while (!vol_iter.done())
             {
                 // always compute the point in the first dimension
                 di.ctrl_pt  = tensor.ctrl_pts.row(di.ctrl_idx);
                 T w         = tensor.weights(di.ctrl_idx);
-
+#ifdef PRINT_DEBUG
+                //if ( ijk[0] < 5 && ijk[1] < 5 )
+                {
+                    if (mfa_data.dom_dim > 1)
+                        fprintf(stderr, "          di.ctrl_index=%d  vol_it:%zu i0->%d  i1->%d ctrl_pt: %f \n",  di.ctrl_idx,
+                            vol_iter.cur_iter(), vol_iter.idx_dim(0), vol_iter.idx_dim(1) ,di.ctrl_pt(last));
+                    else
+                        fprintf(stderr, "          di.ctrl_index=%d  vol_it:%zu i0->%d  ctrl_pt: %f NN=%f\n",  di.ctrl_idx,
+                                                    vol_iter.cur_iter(), vol_iter.idx_dim(0) ,di.ctrl_pt(last),
+                                                    NN[0]( ijk(0) , vol_iter.idx_dim(0) + di.span[0] - mfa_data.p(0) )  );
+                }
+#endif
 #ifdef WEIGH_ALL_DIMS                                                           // weigh all dimensions
                 di.temp[0] += (NN[0])(ijk(0), vol_iter.idx_dim(0) + di.span[0] - mfa_data.p(0)) * di.ctrl_pt * w;
 #else                                                                           // weigh only range dimension
@@ -1055,25 +1178,34 @@ namespace mfa
 #endif
 
                 di.temp_denom(0) += w * NN[0](ijk(0), vol_iter.idx_dim(0) + di.span[0] - mfa_data.p(0));
-
+#ifdef PRINT_DEBUG2
+                printf( "    %d %d N: %d %d %d \n", vol_iter.cur_iter(), di.ctrl_idx, 0, ijk(0), vol_iter.idx_dim(0) + di.span[0] - mfa_data.p(0) );
+#endif
                 vol_iter.incr_iter();                                           // must call near bottom of loop, but before checking for done span below
 
                 // for all dimensions except last, check if span is finished
                 di.ctrl_idx = start_ctrl_idx;
+
                 for (size_t k = 0; k < mfa_data.dom_dim; k++)
                 {
                     if (vol_iter.cur_iter() < vol_iter.tot_iters())
+                    {
                         di.ctrl_idx += ct(vol_iter.cur_iter(), k) * cs[k];      // ctrl_idx for the next iteration
+                    }
                     if (k < mfa_data.dom_dim - 1 && vol_iter.done(k))
                     {
                         // compute point in next higher dimension and reset computation for current dim
                         // use prev_idx_dim because iterator was already incremented above
                         di.temp[k + 1]        += (NN[k + 1])(ijk(k + 1), vol_iter.prev_idx_dim(k + 1) + di.span[k + 1] - mfa_data.p(k + 1)) * di.temp[k];
+#ifdef PRINT_DEBUG2
+                        printf( "     %d next ctrl %d N: %d %d %d \n", vol_iter.cur_iter(), di.ctrl_idx, k + 1, ijk(k + 1), vol_iter.prev_idx_dim(k + 1) + di.span[k + 1] - mfa_data.p(k + 1) );
+#endif
                         di.temp_denom(k + 1)  += di.temp_denom(k) * NN[k + 1](ijk(k + 1), vol_iter.prev_idx_dim(k + 1) + di.span[k + 1] - mfa_data.p(k + 1));
                         di.temp_denom(k)       = 0.0;
                         di.temp[k].setZero();
                     }
                 }
+                //counter_patch++;
             }
 
             T denom = di.temp_denom(mfa_data.dom_dim - 1);                      // rational denominator
@@ -1085,7 +1217,7 @@ namespace mfa
             out_pt(last) /= denom;
 #endif
         }
-
+#undef PRINT_DEBUG
         // compute a point from a NURBS n-d volume at a given parameter value
         // faster version for multiple points, reuses decode info, but recomputes basis functions
         // algorithm 4.3, Piegl & Tiller (P&T) p.134

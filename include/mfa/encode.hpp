@@ -226,7 +226,7 @@ namespace mfa
 
 #endif              // end TBB version
 
-#ifdef MFA_SERIAL   // serial version
+#if defined(MFA_SERIAL) || defined(MFA_KOKKOS)
                 // R is the right hand side needed for solving NtN * P = R
                 MatrixX<T> R(mfa_data.N[k].cols(), pt_dim);
 

@@ -31,7 +31,9 @@ int main(int argc, char** argv)
     // initialize MPI
     diy::mpi::environment  env(argc, argv);     // equivalent of MPI_Init(argc, argv)/MPI_Finalize()
     diy::mpi::communicator world;               // equivalent of MPI_COMM_WORLD
-
+#ifdef MFA_KOKKOS
+    Kokkos::initialize( argc, argv );
+#endif
     int nblocks     = 1;                        // number of local blocks
     int tot_blocks  = nblocks * world.size();   // number of global blocks
     int mem_blocks  = -1;                       // everything in core for now
@@ -346,4 +348,7 @@ int main(int argc, char** argv)
         }
 
     }
+#ifdef MFA_KOKKOS
+    Kokkos::finalize();
+#endif
 }

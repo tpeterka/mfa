@@ -43,11 +43,14 @@ elseif                      (mfa_thread MATCHES "kokkos")
     message                 ("Using Kokkos threading")
     add_definitions         (-DMFA_KOKKOS)
     # TODO: for cuda only; how to check for compiler==nvcc_wrapper?
-    set                     (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Xcudafe --diag_suppress=esa_on_defaulted_function_ignored")
-    set                     (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} --expt-relaxed-constexpr")
-    set                     (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} --expt-extended-lambda")
-    include_directories     (${KOKKOS_INCLUDE_DIRS})
-    set                     (libraries ${libraries} ${KOKKOS_LIBRARY} ${CMAKE_DL_LIBS})
+   # set                     (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Xcudafe --diag_suppress=esa_on_defaulted_function_ignored")
+   # set                     (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} --expt-relaxed-constexpr")
+   # set                     (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} --expt-extended-lambda")
+   # include_directories     (${KOKKOS_INCLUDE_DIRS})
+   # set                     (libraries ${libraries} ${KOKKOS_LIBRARY} ${CMAKE_DL_LIBS})
+    find_package ( Kokkos REQUIRED )
+    message                 ( " found KOKKOS in "  ${Kokkos_DIR} )
+    set                     ( KK_LIB  "Kokkos::kokkos" ) 
 elseif                      (mfa_thread MATCHES "sycl")
     message                 ("Using SYCL threading")
     add_definitions         (-DMFA_SYCL)
@@ -116,7 +119,9 @@ set                         (libraries
                              ${libraries}
                              ${CLP_LIB}
                              ${COIN_UTILS_LIB}
-                             ${CMAKE_THREAD_LIBS_INIT})
+                             ${CMAKE_THREAD_LIBS_INIT}
+			                 ${KK_LIB} )
+
 
 # Testing
 # NB testing must be enabled before adding tests subdirectory, otherwise no tests will be found

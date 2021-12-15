@@ -45,9 +45,10 @@ int main(int argc, char **argv) {
     int ndomp = 100;        // input number of domain points (same for all dims)
     std::vector<int> resolutions;            // output points resolution
     resolutions.push_back(120);
-    resolutions.push_back(120);
     int geom_nctrl = -1; // input number of control points for geometry (same for all dims)
-    int vars_nctrl = 11; // input number of control points for all science variables (same for all dims)
+    std::vector<int> vars_nctrl_v;
+    vars_nctrl_v.push_back(11);
+    //int vars_nctrl = 11; // input number of control points for all science variables (same for all dims)
     string input = "sine";               // input dataset
     int weighted = 0;                 // solve for and use weights (bool 0 or 1)
     int strong_sc = 0;         // strong scaling (bool 0 or 1, 0 = weak scaling)
@@ -77,7 +78,7 @@ int main(int argc, char **argv) {
             >> opts::Option('g', "geom_nctrl", geom_nctrl,
                     " number of control points in each dimension of geometry");
     ops
-            >> opts::Option('v', "vars_nctrl", vars_nctrl,
+            >> opts::Option('v', "vars_nctrl", vars_nctrl_v,
                     " number of control points in each dimension of all science variables");
     ops >> opts::Option('i', "input", input, " input dataset");
     ops >> opts::Option('w', "weights", weighted, " solve for and use weights");
@@ -111,7 +112,7 @@ int main(int argc, char **argv) {
                 << "\ngeom_degree = " << geom_degree << " vars_degree = "
                 << vars_degree << "\ninput pts = " << ndomp
                 << " geom_ctrl pts = " << geom_nctrl << "\nvars_ctrl_pts = "
-                << vars_nctrl << " input = " << input << " tot_blocks = "
+                << vars_nctrl_v[0] << " input = " << input << " tot_blocks = "
                 << tot_blocks << " strong scaling = " << strong_sc
                 << " ghost overlap = " << ghost << endl;
 #ifdef CURVE_PARAMS
@@ -119,18 +120,29 @@ int main(int argc, char **argv) {
 #else
         cerr << "parameterization method = domain" << endl;
 #endif
-#ifdef MFA_NO_TBB
-    cerr << "TBB: off" << endl;
-#else
-        cerr << "TBB: on" << endl;
+#ifdef MFA_TBB
+    cerr << "threading: TBB" << endl;
+#endif
+#ifdef MFA_KOKKOS
+    cerr << "threading: Kokkos" << endl;
+#endif
+#ifdef MFA_SYCL
+    cerr << "threading: SYCL" << endl;
+#endif
+#ifdef MFA_SERIAL
+    cerr << "threading: serial" << endl;
 #endif
 #ifdef MFA_NO_WEIGHTS
     cerr << "weighted = 0" << endl;
 #else
-        cerr << "weighted = " << weighted << endl;
+    cerr << "weighted = " << weighted << endl;
 #endif
         fprintf(stderr, "-------------------------------------\n\n");
     }
+    // initialize Kokkos if needed
+#ifdef MFA_KOKKOS
+    Kokkos::initialize( argc, argv );
+#endif
 
     // initialize DIY
     diy::FileStorage storage("./DIY.XXXXXX"); // used for blocks to be moved out of core
@@ -171,6 +183,22 @@ int main(int argc, char **argv) {
     d_args.r = 0.0;
     d_args.t = 0.0;
     d_args.structured   = true; // multiblock not tested for unstructured data yet
+    // fill with the last value for nb ctrl points
+    if (dom_dim > vars_nctrl_v.size())
+    {
+        int  sz = vars_nctrl_v.size();
+        int fill=vars_nctrl_v[sz-1];
+        for (int i=sz; i<dom_dim; i++)
+            vars_nctrl_v.push_back(fill);
+    }
+    // fill with the last value for nb resolution points
+    if (dom_dim > resolutions.size())
+    {
+        int  sz = resolutions.size();
+        int fill=resolutions[sz-1];
+        for (int i=sz; i<dom_dim; i++)
+            resolutions.push_back(fill);
+    }
     for (int i = 0; i < dom_dim; i++) {
         d_args.geom_p[i] = geom_degree;
         d_args.vars_p[0][i] = vars_degree;
@@ -180,12 +208,12 @@ int main(int argc, char **argv) {
             d_args.geom_nctrl_pts[i] =
                     geom_nctrl / divs[i] > geom_degree ?
                             geom_nctrl / divs[i] : geom_degree + 1;
-            d_args.vars_nctrl_pts[0][i] = vars_nctrl / divs[i];
+            d_args.vars_nctrl_pts[0][i] = vars_nctrl_v[0] / divs[i];
         } else                  // weak scaling, same number of points per block
         {
             d_args.ndom_pts[i] = ndomp;
             d_args.geom_nctrl_pts[i] = geom_nctrl;
-            d_args.vars_nctrl_pts[0][i] = vars_nctrl;
+            d_args.vars_nctrl_pts[0][i] = vars_nctrl_v[i]; // should have enough per direction ! otherwise will crash
         }
     }
     for (int i = 0; i < pt_dim - dom_dim; i++)
@@ -325,6 +353,8 @@ int main(int argc, char **argv) {
                     write_time - final_blend_end);
         fprintf(stderr, "-------------------------------------\n\n");
     }
-
+#ifdef MFA_KOKKOS
+    Kokkos::finalize();
+#endif
 }
 
