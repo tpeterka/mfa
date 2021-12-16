@@ -393,7 +393,7 @@ namespace mfa
 
 #endif              // end TBB version
 
-#ifdef MFA_SERIAL   // serial version
+#if defined( MFA_SERIAL) || defined (MFA_KOKKOS)
             DecodeInfo<T> decode_info(mfa_data, derivs);    // reusable decode point info for calling VolPt repeatedly
 
             VectorX<T> cpt(last + 1);                       // evaluated point
