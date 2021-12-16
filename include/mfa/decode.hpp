@@ -466,19 +466,68 @@ namespace mfa
             //       instead of simply using a naked Param object  
             auto& params = full_params.param_grid;
 
+#ifdef MFA_KOKKOS
+            std::cout << "KOKKOS execution space: " << ExecutionSpace::name() << "\n";
+            // how many control points per direction is not fixed; we will use just one Kokkos View for NN
+            int kdom_dim = mfa_data.dom_dim;
+            int max_index=-1;
+            // what is the maximum number of control points per direction?
+            size_t max_ctrl_size = nctrl_pts.maxCoeff(&max_index);
+            size_t max_ndom_size = ndom_pts.maxCoeff(&max_index);
+            // it is hard to do a vector of Kokkos::Views() actually, it is not advisable
+            // still need to think about this
+            Kokkos::View<double***> newNN("kNN", kdom_dim, max_ndom_size, max_ctrl_size );
+            Kokkos::View<double***>::HostMirror h_newNN = Kokkos::create_mirror_view(newNN); // this will be on host, and accessible from CPU
+            // also, make a copy of the cs and ct arrays, used for iterations in control points space
+            // these need to be on device too: as kcs and kct
+            //
+            Kokkos::View<int*> kcs("cs", mfa_data.p.size()); // which should be the same as mfa_data.dom_dim
+            Kokkos::View<int*>::HostMirror h_kcs = Kokkos::create_mirror_view(kcs);
+            Kokkos::View<int**> kct("ct", tot_iters, mfa_data.p.size()); // tot_iters = prod(mfa.p)
+            Kokkos::View<int**>::HostMirror h_kct = Kokkos::create_mirror_view(kct);
+            for (size_t k=0; k<mfa_data.p.size(); k++)
+            {
+                h_kcs(k) = cs[k];
+                for (size_t i = 0; i<tot_iters; i++)
+                    h_kct(i, k) = ct(i, k);
+            }
+            Kokkos::deep_copy(kct, h_kct);
+            Kokkos::deep_copy(kcs, h_kcs);
 
+            Kokkos::View<int*> strides("strides", kdom_dim);
+            Kokkos::View<int*>::HostMirror h_strides = Kokkos::create_mirror_view(strides);
+            h_strides[0]=1;
+            for (int i=1; i<kdom_dim; i++)
+                h_strides[i] = ndom_pts[i-1] * h_strides[i-1]; // for
+            Kokkos::deep_copy(strides, h_strides); // this is used to iterate ijk from ntot dom points
+
+
+#else
             // compute basis functions for points to be decoded
             vector<MatrixX<T>>  NN(mfa_data.dom_dim);
             for (int k = 0; k < mfa_data.dom_dim; k++)
-            {
                 NN[k] = MatrixX<T>::Zero(ndom_pts(k), nctrl_pts(k));
+#endif
 
-                for (int i = 0; i < NN[k].rows(); i++)
+#ifdef MFA_KOKKOS
+            // we should use it in serial too
+            // compute basis functions for points to be decoded
+            Kokkos::View<int** > span_starts("spans", kdom_dim, max_ndom_size );
+            Kokkos::View<int ** >::HostMirror h_span_starts = Kokkos::create_mirror_view(span_starts);
+#endif
+
+            for (int k = 0; k < mfa_data.dom_dim; k++) {
+                for (int i = 0; i < ndom_pts(k); i++)
                 {
                     int span = mfa_data.FindSpan(k, params[k][i], nctrl_pts(k));
 #ifndef MFA_TMESH   // original version for one tensor product
 
+#ifdef MFA_KOKKOS
+                    h_span_starts(k,i) = span - mfa_data.p(k); // it is fixed, and maybe we should change serial version too
+                    mfa_data.OrigBasisFunsKokkos(k, params[k][i], span, h_newNN, i);
+#else
                     mfa_data.OrigBasisFuns(k, params[k][i], span, NN[k], i);
+#endif
 
 #else               // tmesh version
 
@@ -487,11 +536,50 @@ namespace mfa
 #endif              // tmesh version
                 }
             }
+#ifdef MFA_KOKKOS
+
+#ifdef  PRINT_DEBUG
+            if (1 == mfa_data.dom_dim) // and nvar == 1
+            {
+                for (int i=0; i<ndom_pts(0); i++)
+                {
+                    for (int j=0; j<nctrl_pts(0); j++)
+                        printf(" %2.5f", h_newNN(0,i,j));
+                    printf("\n");
+                }
+                printf("Control Points:\n");
+                for (int j=0; j<nctrl_pts(0); j++)
+                {
+                    printf(" %10.7f  \n",mfa_data.tmesh.tensor_prods[0].ctrl_pts(j) );
+                }
+
+            }
+#endif
+            Kokkos::deep_copy(newNN, h_newNN);
+            Kokkos::deep_copy(span_starts, h_span_starts);
+#endif
 
             VectorXi    derivs;                             // do not use derivatives yet, pass size 0
             VolIterator vol_it(ndom_pts);
 
-#if defined( MFA_SERIAL) || defined (MFA_KOKKOS)   // serial version or Kokkos version right now
+#if defined( MFA_SERIAL)    // serial version only
+#ifdef  PRINT_DEBUG
+            if (1 == mfa_data.dom_dim)
+            {
+                for (int i=0; i<ndom_pts(0); i++)
+                {
+                    for (int j=0; j<nctrl_pts(0); j++)
+                        printf(" %2.5f", NN[0](i,j));
+                    printf("\n");
+                }
+                printf("Control Points:\n");
+                for (int j=0; j<nctrl_pts(0); j++)
+                {
+                    printf(" %10.7f \n",mfa_data.tmesh.tensor_prods[0].ctrl_pts(j) );
+                }
+
+            }
+#endif
 
             DecodeInfo<T>   decode_info(mfa_data, derivs);  // reusable decode point info for calling VolPt repeatedly
             VectorX<T>      cpt(mfa_data.tmesh.tensor_prods[0].ctrl_pts.cols());                      // evaluated point
@@ -506,6 +594,9 @@ namespace mfa
                     ijk[i] = vol_it.idx_dim(i);             // index along direction i in grid
                     param(i) = params[i][ijk[i]];
                 }
+#ifdef PRINT_DEBUG2
+                printf(" %d (%d, %d) ", j, ijk[0], ijk[1]);
+#endif
 
 #ifndef MFA_TMESH   // original version for one tensor product
 
