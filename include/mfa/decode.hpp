@@ -506,7 +506,7 @@ namespace mfa
 
                     // intersect tmesh lines to get local knot indices in all directions
                     vector<vector<KnotIdx>> local_knot_idxs(mfa_data.dom_dim);          // local knot vectors in index space
-                    mfa_data.tmesh.knot_intersections(anchor, k, true, local_knot_idxs);
+                    mfa_data.tmesh.knot_intersections(anchor, k, local_knot_idxs);
 
                     // debug
 //                     if (debug)

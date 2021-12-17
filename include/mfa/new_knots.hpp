@@ -462,7 +462,7 @@ namespace mfa
                         for (auto i = 0; i < new_tensors.size(); i++)
                         {
                             auto& t1 = new_tensors[i];
-                            if (tmesh.in(knot, t1, false))
+                            if (tmesh.in(knot, t1))
                             {
                                 skip_span = true;
                                 break;
@@ -638,7 +638,7 @@ namespace mfa
                     for (auto i = 0; i < new_tensors.size(); i++)
                     {
                         auto& t1 = new_tensors[i];
-                        if (tmesh.in(knot, t1, false))
+                        if (tmesh.in(knot, t1))
                         {
                             skip_span = true;
                             break;

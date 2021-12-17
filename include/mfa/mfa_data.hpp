@@ -229,6 +229,7 @@ namespace mfa
             }
 
             int low, high, mid;
+            int found = -1;
 
             if (tensor.knot_mins[cur_dim] == 0)
                 low = p(cur_dim);
@@ -237,41 +238,55 @@ namespace mfa
             if (tensor.knot_maxs[cur_dim] == tmesh.all_knots[cur_dim].size() - 1)
                 high = tensor.knot_idxs[cur_dim].size() - p(cur_dim) - 1;
             else
-                high = tensor.knot_idxs[cur_dim].size() - 2;
+                high = tensor.knot_idxs[cur_dim].size() - 1;
             mid = (low + high) / 2;
 
             if (u >= tmesh.all_knots[cur_dim][tensor.knot_idxs[cur_dim][high]])
-                return tensor.knot_idxs[cur_dim][high - 1];
+                found = high - 1;
 
-            // binary search
-            while (u < tmesh.all_knots[cur_dim][tensor.knot_idxs[cur_dim][mid]] ||
-                    u >= tmesh.all_knots[cur_dim][tensor.knot_idxs[cur_dim][mid + 1]])
+            if (found < 0)
             {
-                if (u < tmesh.all_knots[cur_dim][tensor.knot_idxs[cur_dim][mid]])
-                    high = mid;
-                else
-                    low = mid;
-                mid = (low + high) / 2;
+                // binary search
+                while (u < tmesh.all_knots[cur_dim][tensor.knot_idxs[cur_dim][mid]] ||
+                        u >= tmesh.all_knots[cur_dim][tensor.knot_idxs[cur_dim][mid + 1]])
+                {
+                    if (u < tmesh.all_knots[cur_dim][tensor.knot_idxs[cur_dim][mid]])
+                        high = mid;
+                    else
+                        low = mid;
+                    mid = (low + high) / 2;
+                }
+                found = mid;
             }
 
             // sanity checks
-            if (tmesh.all_knot_levels[cur_dim][tensor.knot_idxs[cur_dim][mid]] > tensor.level)
+            if (tmesh.all_knot_levels[cur_dim][tensor.knot_idxs[cur_dim][found]] > tensor.level)
             {
-                fmt::print(stderr, "FindSpan(): level mismatch at mid. This should not happen.\n");
-//                 fmt::print(stderr, "u {} dim {} knot idx {} knot value {} knot level {} tensor level {}\n",
-//                         u, cur_dim, tensor.knot_idxs[cur_dim][mid], tmesh.all_knots[cur_dim][tensor.knot_idxs[cur_dim][mid]],
-//                         tmesh.all_knot_levels[cur_dim][tensor.knot_idxs[cur_dim][mid]], tensor.level);
+                fmt::print(stderr, "FindSpan(): level mismatch at found span. This should not happen.\n");
+                fmt::print(stderr, "u {} dim {} knot idx {} knot value {} knot level {} tensor level {}\n",
+                        u, cur_dim, tensor.knot_idxs[cur_dim][found], tmesh.all_knots[cur_dim][tensor.knot_idxs[cur_dim][found]],
+                        tmesh.all_knot_levels[cur_dim][tensor.knot_idxs[cur_dim][found]], tensor.level);
 //                 tmesh.print_tensor(tensor, true);
                 abort();
             }
-            if (u < tmesh.all_knots[cur_dim][tensor.knot_idxs[cur_dim][mid]] ||
-                    u >= tmesh.all_knots[cur_dim][tensor.knot_idxs[cur_dim][mid + 1]])
+            bool error = false;
+            if (u < tmesh.all_knots[cur_dim][tensor.knot_idxs[cur_dim][found]])
+                error = true;
+            if (tensor.knot_maxs[cur_dim] == tmesh.all_knots[cur_dim].size() - 1 &&
+                    u > tmesh.all_knots[cur_dim][tensor.knot_idxs[cur_dim][found + 1]])
+                error = true;
+            if (tensor.knot_maxs[cur_dim] < tmesh.all_knots[cur_dim].size() - 1 &&
+                    u >= tmesh.all_knots[cur_dim][tensor.knot_idxs[cur_dim][found + 1]])
+                error = true;
+            if (error)
             {
-                fmt::print(stderr, "FindSpan(): parameter not in [mid, mid + 1). This should not happen.\n");
+                fmt::print(stderr, "FindSpan(): parameter {} not in span [{}, {}) = knots [{}, {}). This should not happen.\n",
+                        u, found, found + 1, tmesh.all_knots[cur_dim][tensor.knot_idxs[cur_dim][found]],
+                        tmesh.all_knots[cur_dim][tensor.knot_idxs[cur_dim][found + 1]]);
                 abort();
             }
 
-            return tensor.knot_idxs[cur_dim][mid];
+            return tensor.knot_idxs[cur_dim][found];
         }
 
         // original version of basis functions from algorithm 2.2 of P&T, p. 70
