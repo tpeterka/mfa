@@ -730,7 +730,7 @@ namespace mfa
 //             cerr << "ctrl_pts before insertion:\n" << tensor.ctrl_pts << endl;
 //             cerr << "weights before insertion:\n" << tensor.weights << endl;
 
-            VolKnotIns(tmesh.all_knots,
+            NewVolKnotIns(tmesh.all_knots,
                        tmesh.all_knot_levels,
                        tensor.ctrl_pts,
                        tensor.weights,
@@ -819,21 +819,21 @@ namespace mfa
                               VectorX<T>&              new_weights) const      // (output) new local weights for this tensor
         {
             // debug
-            fprintf(stderr, "all_knots before insertion: ");
-            for (int i = 0; i < dom_dim; i++)
-            {
-                fprintf(stderr, "all_knots[dim %d] ", i);
-                for (auto j = 0; j < tmesh.all_knots[i].size(); j++)
-                    fprintf(stderr, "%.2lf (l%d) ", tmesh.all_knots[i][j], tmesh.all_knot_levels[i][j]);
-                fprintf(stderr, "\n");
-            }
-            fprintf(stderr, "\n");
-            cerr << "ctrl_pts before insertion:\n" << tensor.ctrl_pts << endl;
-            cerr << "weights before insertion:\n" << tensor.weights << endl;
+//             fprintf(stderr, "all_knots before insertion: ");
+//             for (int i = 0; i < dom_dim; i++)
+//             {
+//                 fprintf(stderr, "all_knots[dim %d] ", i);
+//                 for (auto j = 0; j < tmesh.all_knots[i].size(); j++)
+//                     fprintf(stderr, "%.2lf (l%d) ", tmesh.all_knots[i][j], tmesh.all_knot_levels[i][j]);
+//                 fprintf(stderr, "\n");
+//             }
+//             fprintf(stderr, "\n");
+//             cerr << "ctrl_pts before insertion:\n" << tensor.ctrl_pts << endl;
+//             cerr << "weights before insertion:\n" << tensor.weights << endl;
 
             new_nctrl_pts = tensor.nctrl_pts;
 
-            VolKnotIns(tmesh.all_knots,
+            NewVolKnotIns(tmesh.all_knots,
                     tmesh.all_knot_levels,
                     tensor.ctrl_pts,
                     tensor.weights,
@@ -846,17 +846,17 @@ namespace mfa
                     new_nctrl_pts);
 
             // debug
-            fprintf(stderr, "new_all_knots after insertion: ");
-            for (int i = 0; i < dom_dim; i++)
-            {
-                fprintf(stderr, "new_all_knots[dim %d] ", i);
-                for (auto j = 0; j < new_all_knots[i].size(); j++)
-                    fprintf(stderr, "%.2lf (l%d) ", new_all_knots[i][j], new_all_knot_levels[i][j]);
-                fprintf(stderr, "\n");
-            }
-            fprintf(stderr, "\n");
-            cerr << "ctrl_pts after insertion:\n" << new_ctrl_pts << endl;
-            cerr << "weights after insertion:\n" << new_weights << endl;
+//             fprintf(stderr, "new_all_knots after insertion: ");
+//             for (int i = 0; i < dom_dim; i++)
+//             {
+//                 fprintf(stderr, "new_all_knots[dim %d] ", i);
+//                 for (auto j = 0; j < new_all_knots[i].size(); j++)
+//                     fprintf(stderr, "%.2lf (l%d) ", new_all_knots[i][j], new_all_knot_levels[i][j]);
+//                 fprintf(stderr, "\n");
+//             }
+//             fprintf(stderr, "\n");
+//             cerr << "ctrl_pts after insertion:\n" << new_ctrl_pts << endl;
+//             cerr << "weights after insertion:\n" << new_weights << endl;
         }
 
         // knot insertion into tensor product
@@ -1110,7 +1110,7 @@ namespace mfa
 
                 new_nctrl_pts(k)++;
 
-                // number of curves in this dimension before after knot insertion
+                // number of curves in this dimension after knot insertion
                 // current dimension contributes no curves, hence the division by number of control points in cur. dim.
                 size_t new_ncurves = new_nctrl_pts.array().prod() / new_nctrl_pts(k);
                 vector<size_t> new_co(new_ncurves);                             // new starting curve points in current dim.
@@ -1152,7 +1152,7 @@ namespace mfa
 
 
                         // insert a knot in one curve of control points
-                        CurveKnotIns(k, old_knots[k], old_knot_levels[k], old_curve_ctrl_pts.local(), old_curve_weights.local(),
+                        NewCurveKnotIns(k, old_knots[k], old_knot_levels[k], old_curve_ctrl_pts.local(), old_curve_weights.local(),
                                 param(k), level, new_knots[k], new_knot_levels[k], new_curve_ctrl_pts.local(), new_curve_weights.local());
 
                         // copy new curve control points and weights
@@ -1182,7 +1182,7 @@ namespace mfa
                                 old_curve_weights, nctrl_pts, k, old_co[j], old_cs);
 
                     // insert a knot in one curve of control points
-                    CurveKnotIns(k, old_knots[k], old_knot_levels[k], old_curve_ctrl_pts, old_curve_weights,
+                    NewCurveKnotIns(k, old_knots[k], old_knot_levels[k], old_curve_ctrl_pts, old_curve_weights,
                             param(k), level, new_knots[k], new_knot_levels[k], new_curve_ctrl_pts, new_curve_weights);
 
                     // copy new curve control points and weights
