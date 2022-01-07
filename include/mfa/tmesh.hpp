@@ -50,10 +50,11 @@ struct TensorProduct
         prev.resize(dom_dim);
         knot_idxs.resize(dom_dim);
     }
-    TensorProduct(vector<KnotIdx>& knot_mins_, vector<KnotIdx>& knot_maxs_) :
+    TensorProduct(vector<KnotIdx>& knot_mins_, vector<KnotIdx>& knot_maxs_, int level_) :
         done(false),
         knot_mins(knot_mins_),
-        knot_maxs(knot_maxs_)
+        knot_maxs(knot_maxs_),
+        level(level_)
     {
         int dom_dim = knot_mins.size();
         nctrl_pts.resize(dom_dim);
@@ -801,6 +802,15 @@ namespace mfa
                 if (all_knot_levels[cur_dim][i] <= cur_level)
                     local_knot_idx++;
 
+            // debug TODO: remove this test once stable
+            if (t.knot_idxs[cur_dim].size() && knot_idx != t.knot_idxs[cur_dim][local_knot_idx])
+            {
+                fmt::print("Error: global2local_knot_idx(): knot_idx and local_knot_idx index different knots. This should not happen.\n");
+                fmt::print(stderr, "cur_dim {} knot_idx {} local_knot_idx {} t.knot_idxs[local_knot_idx] {} (should equal knot_idx {})\n",
+                        cur_dim, knot_idx, local_knot_idx, t.knot_idxs[cur_dim][local_knot_idx], knot_idx);
+                abort();
+            }
+
             return local_knot_idx;
         }
 
@@ -1262,7 +1272,7 @@ namespace mfa
         // if the point is on a boundary between tensors, finds the first match
         TensorIdx find_tensor(const vector<KnotIdx>&    pt,             // multidim point in index space
                               TensorIdx                 parent_idx,     // parent tensor, search starts here
-                              bool&                     found)          // (output) success
+                              bool&                     found) const    // (output) success
         {
             auto& parent = tensor_prods[parent_idx];
 
@@ -1302,7 +1312,7 @@ namespace mfa
         // if the point is on a boundary between tensors, finds the first match
         TensorIdx find_tensor(const VectorX<T>&     param,          // multidim parameter point
                               TensorIdx             parent_idx,     // parent tensor, search starts here
-                              bool&                 found)          // (output) success
+                              bool&                 found) const    // (output) success
         {
             auto& parent = tensor_prods[parent_idx];
 
@@ -2401,13 +2411,7 @@ namespace mfa
                 const TensorProduct<T>& t,                          // tensor product
                 vector<KnotIdx>&        anchor) const               // anchor
         {
-            VectorXi ijk(dom_dim_);                                 // multidim local index of anchor
-            for (auto i = 0; i < dom_dim_; i++)
-            {
-                ijk(i) = global2local_knot_idx(anchor[i], t, i);
-                if (t.knot_mins[i] == 0)
-                    ijk(i) -= (p_(i) + 1) / 2;
-            }
+            VectorXi ijk = anchor_ctrl_pt_ijk(t, anchor);           // multidim local index of anchor
             VolIterator vol_iter(t.nctrl_pts);
             return vol_iter.ijk_idx(ijk);
         }
@@ -2468,21 +2472,36 @@ namespace mfa
             return anchor;
         }
 
-        // for a given tensor, checks whether a control point exists at the desired anchor
-        bool exists_ctrl_pt_anchor(
-                const TensorProduct<T>& t,                          // tensor product
-                vector<KnotIdx>&        anchor) const               // anchor
+        // checks whether anchor matches parameter
+        bool anchor_matches_param(
+                const vector<KnotIdx>&  anchor,
+                const VectorX<T>&       param) const
         {
-            VectorXi ijk = anchor_ctrl_pt_ijk(t, anchor);
-            vector<KnotIdx> found_anchor(dom_dim_);
-            ctrl_pt_anchor(t, ijk, found_anchor);
-
-            // debug
-            if (anchor != found_anchor)
-                fmt::print(stderr, "control point at anchor {} does not exist\n", fmt::join(anchor, ","));
-
-            return (anchor == found_anchor);
+            T eps = 1.0e-8;
+            for (auto i = 0; i < dom_dim_; i++)
+            {
+                if (fabs(all_knots[i][anchor[i]] - param(i)) > eps)
+                    return false;
+            }
+            return true;
         }
+
+        //         DEPRECATE
+//         // for a given tensor, checks whether a control point exists at the desired anchor
+//         bool exists_ctrl_pt_anchor(
+//                 const TensorProduct<T>& t,                          // tensor product
+//                 vector<KnotIdx>&        anchor) const               // anchor
+//         {
+//             VectorXi ijk = anchor_ctrl_pt_ijk(t, anchor);
+//             vector<KnotIdx> found_anchor(dom_dim_);
+//             ctrl_pt_anchor(t, ijk, found_anchor);
+// 
+//             // debug
+//             if (anchor != found_anchor)
+//                 fmt::print(stderr, "control point at anchor {} does not exist\n", fmt::join(anchor, ","));
+// 
+//             return (anchor == found_anchor);
+//         }
 
         // offsets a knot index by some amount within a tensor, skipping over any knots at a deeper level
         // returns whether the full offset was achieved (true) or whether ran out of tensor bounds (false)

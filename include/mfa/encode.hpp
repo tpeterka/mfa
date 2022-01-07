@@ -981,6 +981,8 @@ namespace mfa
             auto& t             = tensor_prods[t_idx];
 
             vector<KnotIdx>     anchor(dom_dim);                                       // control point anchor
+            vector<KnotIdx>     inserted_anchor(dom_dim);                              // inserted control point anchor
+            vector<int>         inserted_dims(dom_dim);                                // which dims actually added a knot and ctrl pt
 
             // local knot vector
             vector<vector<KnotIdx>> local_knot_idxs(dom_dim);                          // local knot indices in all dims
@@ -1013,15 +1015,10 @@ namespace mfa
                 abort();
             }
 
-            // for the start of the curve, for the current dim. and higher, find anchor
-            // these dims are in the input point space
+            // for the start of the curve, find anchor in the found tensor
             // in the current dim, the anchor coordinate will be replaced below by the control point anchor
-            for (auto i = dim; i < dom_dim; i++)
+            for (auto i = 0; i < dom_dim; i++)
                 anchor[i] = mfa_data.FindSpan(i, param(i), found_tensor);
-
-            // debug
-            fmt::print(stderr, "PrevConsCtrlPtCurve: dim {} start of curve: param [{}] anchor [{}] found_idx {}\n",
-                    dim, fmt::join(param, ","), fmt::join(anchor, ","), found_idx);
 
             for (auto i = 0; i < p(dim); i++)                                                  // for all constraint control points in current dim
             {
@@ -1031,15 +1028,13 @@ namespace mfa
                         found_tensor,
                         found_tensor.nctrl_pts(dim) - p(dim) + i);
 
+                // reset parameter in current dim to anchor of control point
+                param(dim) = tmesh.all_knots[dim][anchor[dim]];
+
                 // local knot vector in currrent dimension
                 tmesh.knot_intersections(anchor, found_idx, local_knot_idxs);                           // local knot indices in all dimensions
                 for (auto n = 0; n < local_knot_idxs[dim].size(); n++)                                  // local knots in only current dim
                     local_knots[n] = tmesh.all_knots[dim][local_knot_idxs[dim][n]];
-
-                // debug
-//                 if (i == 0 && dim == 1)
-//                     fmt::print(stderr, "anchor [{}] local_knots [{}]\n",
-//                             fmt::join(anchor, ","), fmt::join(local_knots, ","));
 
                 // write Ncons
                 for (auto j = 0; j < npts; j++)                                                         // for all input points (for this tensor) in current dim
@@ -1049,25 +1044,36 @@ namespace mfa
                 }
 
                 // find constraint control point aligned with curve
-                if (tmesh.exists_ctrl_pt_anchor(found_tensor, anchor))                                  // control point exists already
+                if (tmesh.anchor_matches_param(anchor, param))                                          // control point exists already
                     Pcons.row(i) = found_tensor.ctrl_pts.row(tmesh.anchor_ctrl_pt_idx(found_tensor, anchor));
                 else                                                                                    // control point needs to be inserted
                 {
-                    TensorProduct<T>        new_tensor(found_tensor.knot_mins, found_tensor.knot_maxs); // temporary tensor to hold new control points
+                    TensorProduct<T>        new_tensor(found_tensor.knot_mins, found_tensor.knot_maxs, found_tensor.level); // temporary tensor to hold new control points
                     vector<vector<T>>       new_knots;                                                  // temporary new knots after insertion
                     vector<vector<int>>     new_knot_levels;                                            // temporary new knot levels after insertion
-                    for (auto j = 0; j < dom_dim; j++)
-                        param(j) = tmesh.all_knots[j][anchor[j]];
-
                     mfa_data.NewKnotInsertion(
                             param,
-                            found_tensor,
+                            found_idx,
                             new_tensor.nctrl_pts,
                             new_knots,
                             new_knot_levels,
                             new_tensor.ctrl_pts,
-                            new_tensor.weights);
-                    Pcons.row(i) = new_tensor.ctrl_pts.row(tmesh.anchor_ctrl_pt_idx(new_tensor, anchor));
+                            new_tensor.weights,
+                            inserted_dims);
+
+                    // adjust anchor by inserted dims
+                    for (auto j = 0; j < dom_dim; j++)
+                        inserted_anchor[j] = anchor[j] + inserted_dims[j];
+
+                    // copy inserted control point into Pcons
+                    Pcons.row(i) = new_tensor.ctrl_pts.row(tmesh.anchor_ctrl_pt_idx(new_tensor, inserted_anchor));
+
+                    // debug
+//                     VectorXi ijk = tmesh.anchor_ctrl_pt_ijk(new_tensor, anchor);
+//                     fmt::print(stderr, "PrevConsCtrlPtCurve: tensor_idx {} old_nctrl_pts [{}] new_nctrl_pts [{}] new_ijk [{}] inserted_anchor [{}] param [{}]\n",
+//                             found_idx, found_tensor.nctrl_pts.transpose(), new_tensor.nctrl_pts.transpose(),
+//                             ijk.transpose(), fmt::join(inserted_anchor, ","), param.transpose());
+//                     fmt::print(stderr, "PrevConsCtrlPtCurve: Pcons.row({}) = [{}]\n", i, Pcons.row(i));
                 }
             }       // control points
         }
@@ -1097,6 +1103,8 @@ namespace mfa
             auto& t             = tensor_prods[t_idx];
 
             vector<KnotIdx>     anchor(dom_dim);                                       // control point anchor
+            vector<KnotIdx>     inserted_anchor(dom_dim);                              // inserted control point anchor
+            vector<int>         inserted_dims(dom_dim);                                // which dims actually added a knot and ctrl pt
 
             // local knot vector
             vector<vector<KnotIdx>> local_knot_idxs(dom_dim);                          // local knot indices in all dims
@@ -1133,30 +1141,23 @@ namespace mfa
                 abort();
             }
 
-            // for the start of the curve, for the current dim. and higher, find anchor
-            // these dims are in the input point space
+            // for the start of the curve, find anchor in the found tensor
             // in the current dim, the anchor coordinate will be replaced below by the control point anchor
-            for (auto i = dim; i < dom_dim; i++)
+            for (auto i = 0; i < dom_dim; i++)
                 anchor[i] = mfa_data.FindSpan(i, param(i), found_tensor);
-
-            // debug
-//             fmt::print(stderr, "NextConsCtrlPtCurve: dim {} start of curve: param [{}] anchor [{}] found_idx {}\n",
-//                     dim, fmt::join(param, ","), fmt::join(anchor, ","), found_idx);
 
             for (auto i = 0; i < p(dim); i++)                                                           // for all constraint control points in current dim
             {
                 // anchor of control point in current dim
                 anchor[dim] = tmesh.ctrl_pt_anchor_dim(dim, found_tensor, i);
 
+                // reset parameter in current dim to anchor of control point
+                param(dim) = tmesh.all_knots[dim][anchor[dim]];
+
                 // local knot vector in currrent dimension
                 tmesh.knot_intersections(anchor, found_idx, local_knot_idxs);                           // local knot indices in all dimensions
                 for (auto n = 0; n < local_knot_idxs[dim].size(); n++)                                  // local knots in only current dim
                     local_knots[n] = tmesh.all_knots[dim][local_knot_idxs[dim][n]];
-
-                // debug
-//                 if (i == 0 && dim == 1)
-//                     fmt::print(stderr, "anchor [{}] local_knots [{}]\n",
-//                             fmt::join(anchor, ","), fmt::join(local_knots, ","));
 
                 // write Ncons
                 for (auto j = 0; j < npts; j++)                                                         // for all input points (for this tensor) in current dim
@@ -1166,26 +1167,36 @@ namespace mfa
                 }
 
                 // find constraint control point aligned with curve
-                if (tmesh.exists_ctrl_pt_anchor(found_tensor, anchor))                                  // control point exists already
+                if (tmesh.anchor_matches_param(anchor, param))                                          // control point exists already
                     Pcons.row(ofst + i) = found_tensor.ctrl_pts.row(tmesh.anchor_ctrl_pt_idx(found_tensor, anchor));
                 else                                                                                    // control point needs to be inserted
                 {
-                    TensorProduct<T>        new_tensor(found_tensor.knot_mins, found_tensor.knot_maxs);     // temporary tensor to hold new control points
-                    vector<vector<T>>       new_knots;                                                      // temporary new knots after insertion
-                    vector<vector<int>>     new_knot_levels;                                                // temporary new knot levels after insertion
-                    for (auto j = 0; j < dom_dim; j++)
-                        param(j) = tmesh.all_knots[j][anchor[j]];
-
+                    TensorProduct<T>        new_tensor(found_tensor.knot_mins, found_tensor.knot_maxs, found_tensor.level);     // temporary tensor to hold new control points
+                    vector<vector<T>>       new_knots;                                                  // temporary new knots after insertion
+                    vector<vector<int>>     new_knot_levels;                                            // temporary new knot levels after insertion
                     mfa_data.NewKnotInsertion(
                             param,
-                            found_tensor,
+                            found_idx,
                             new_tensor.nctrl_pts,
                             new_knots,
                             new_knot_levels,
                             new_tensor.ctrl_pts,
-                            new_tensor.weights);
+                            new_tensor.weights,
+                            inserted_dims);
 
-                    Pcons.row(ofst + i) = new_tensor.ctrl_pts.row(tmesh.anchor_ctrl_pt_idx(new_tensor, anchor));
+                    // adjust anchor by inserted dims
+                    for (auto j = 0; j < dom_dim; j++)
+                        inserted_anchor[j] = anchor[j] + inserted_dims[j];
+
+                    // copy inserted control point into Pcons
+                    Pcons.row(ofst + i) = new_tensor.ctrl_pts.row(tmesh.anchor_ctrl_pt_idx(new_tensor, inserted_anchor));
+
+                    // debug
+//                     VectorXi ijk = tmesh.anchor_ctrl_pt_ijk(new_tensor, anchor);
+//                     fmt::print(stderr, "NextConsCtrlPtCurve: tensor_idx {} old_nctrl_pts [{}] new_nctrl_pts [{}] new_ijk [{}] inserted_anchor [{}] param [{}]\n",
+//                             found_idx, found_tensor.nctrl_pts.transpose(), new_tensor.nctrl_pts.transpose(),
+//                             ijk.transpose(), fmt::join(inserted_anchor, ","), param.transpose());
+//                     fmt::print(stderr, "NextConsCtrlPtCurve: Pcons.row({}) = [{}]\n", ofst + i, Pcons.row(ofst + i));
                 }
             }       // control points
         }
@@ -1610,7 +1621,7 @@ namespace mfa
         {
             // debug
             fmt::print(stderr, "EncodeTensorLocalSeparable tidx = {}\n", t_idx);
-            mfa_data.tmesh.print(true, true);
+//             mfa_data.tmesh.print(true, true);
 
             // typing shortcuts
             auto& dom_dim       = mfa_data.dom_dim;
@@ -1655,11 +1666,11 @@ namespace mfa
             MatrixX<T> Q1(npts.prod(), pt_dim);                                                     // second matrix already smaller, size of ctrl pts in first dim
 
             // debug
-            fmt::print(stderr, "input domain points covered by tensor and constraints:\n");
-            for (auto k = 0; k < dom_dim; k++)
-                fmt::print(stderr, "param_start[{}] = {} param_end[{}] = {} ", k, input.params->param_grid[k][dom_starts(k)],
-                        k, input.params->param_grid[k][dom_starts(k) + ndom_pts(k) - 1]);
-            fmt::print(stderr, "\n");
+//             fmt::print(stderr, "input domain points covered by tensor and constraints:\n");
+//             for (auto k = 0; k < dom_dim; k++)
+//                 fmt::print(stderr, "param_start[{}] = {} param_end[{}] = {} ", k, input.params->param_grid[k][dom_starts(k)],
+//                         k, input.params->param_grid[k][dom_starts(k) + ndom_pts(k) - 1]);
+//             fmt::print(stderr, "\n");
 
             // input and output number of points
             VectorXi nin_pts    = ndom_pts;
@@ -1687,10 +1698,10 @@ namespace mfa
                 SliceIterator   out_slice_iter(out_iter, dim);                                      // slice of the output points volume missing current dim
 
                 // debug
-                fmt::print(stderr, "FreeCtrlCurve dim {} nin_pts [{}] in_starts [{}] in_all_pts [{}] nout_pts [{}]\n",
-                        dim, nin_pts.transpose(), in_starts.transpose(), in_all_pts.transpose(), nout_pts.transpose());
-                fmt::print(stderr, "FreeCtrlCurve dim {} Nfree is {} rows x {} cols = {}\n",
-                        dim, nin_pts(dim), t.nctrl_pts(dim), nin_pts(dim) * t.nctrl_pts(dim));
+//                 fmt::print(stderr, "FreeCtrlCurve dim {} nin_pts [{}] in_starts [{}] in_all_pts [{}] nout_pts [{}]\n",
+//                         dim, nin_pts.transpose(), in_starts.transpose(), in_all_pts.transpose(), nout_pts.transpose());
+//                 fmt::print(stderr, "FreeCtrlCurve dim {} Nfree is {} rows x {} cols = {}\n",
+//                         dim, nin_pts(dim), t.nctrl_pts(dim), nin_pts(dim) * t.nctrl_pts(dim));
 
                 // allocate matrices of constraint control points and constraint basis functions
                 ConsType    cons_type;                                                              // none, left, right, both
