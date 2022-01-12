@@ -309,12 +309,28 @@ namespace mfa
             bool error = false;
             if (u < tmesh.all_knots[cur_dim][tensor.knot_idxs[cur_dim][found]])
                 error = true;
-            if (tensor.knot_maxs[cur_dim] == tmesh.all_knots[cur_dim].size() - 1 &&
-                    u > tmesh.all_knots[cur_dim][tensor.knot_idxs[cur_dim][found + 1]])
-                error = true;
-            if (tensor.knot_maxs[cur_dim] < tmesh.all_knots[cur_dim].size() - 1 &&
-                    u >= tmesh.all_knots[cur_dim][tensor.knot_idxs[cur_dim][found + 1]])
-                error = true;
+            if (tensor.knot_maxs[cur_dim] == tmesh.all_knots[cur_dim].size() - 1)               // tensor is at global max end
+            {
+                if (u > tmesh.all_knots[cur_dim][tensor.knot_idxs[cur_dim][found + 1]])
+                    error = true;
+            }
+            else                                                                                // tensor is not at global max end
+            {
+                if (p(cur_dim) % 2 == 0)                                                        // even degree
+                {
+                    if (u >= tmesh.all_knots[cur_dim][tensor.knot_idxs[cur_dim][found + 1]])
+                        error = true;
+                }
+                else                                                                            // odd degree
+                {
+                    if (tensor.knot_maxs[cur_dim] > found + 1 &&                                // right edge of found span is inside the max of the tensor
+                            u >= tmesh.all_knots[cur_dim][tensor.knot_idxs[cur_dim][found + 1]])
+                        error = true;
+                    if (tensor.knot_maxs[cur_dim] == found + 1 &&                               // right edge of found span is at max of the tensor
+                            u > tmesh.all_knots[cur_dim][tensor.knot_idxs[cur_dim][found + 1]])
+                        error = true;
+                }
+            }
             if (error)
             {
                 fmt::print(stderr, "FindSpan(): parameter {} not in span [{}, {}) = knots [{}, {}). This should not happen.\n",
@@ -790,7 +806,7 @@ namespace mfa
                 VectorX<T>&             new_weights) const  // (output) new control point weights of curve
         {
             auto&   tensor  = tmesh.tensor_prods[tensor_idx];
-            T       u       = param(cur_dim);
+            T       u       = param(cur_dim);               // parameter in current dim.
 
             new_knots.resize(old_knots.size() + 1);
             new_knot_levels.resize(old_knot_levels.size() + 1);
@@ -799,7 +815,12 @@ namespace mfa
             MatrixX<T> temp_ctrl_pts(p(cur_dim) + 1, old_ctrl_pts.cols());
             VectorX<T> temp_weights(p(cur_dim) + 1);
 
-            int global_span    = FindSpan(cur_dim, u, tensor);          // global knot span
+            // anchor corresponding to param in all dims
+            vector<KnotIdx> anchor(dom_dim);
+            for (auto i = 0; i < dom_dim; i++)
+                anchor[i] = FindSpan(i, param(i), tensor);
+
+            int global_span    = anchor[cur_dim];                       // global knot span of param in current dim.
             T eps       = 1.0e-8;
             if (fabs(old_knots[global_span] - u) < eps)                 // not for multiple knots
             {
@@ -829,14 +850,16 @@ namespace mfa
             int local_span = tmesh.global2local_knot_idx(global_span, tensor, cur_dim);
             int shift = tensor.knot_mins[cur_dim] == 0 ? 0 : (p(cur_dim) + 1) / 2;      // shift ctrl pt indices for interior tensors w/o clamped end
 
-            // if too close to min. edge of interior tensor, only compute the newly inserted control point
+            // if too close to edge of interior tensor, only compute the newly inserted control point
             // w/o recomputing the others in the changed range of p(cur_dim)
             // this is ok because we only keep the newly inserted control point eventually for our separable local constraints
             // to do a proper knot insertion, would need to go to side neighbor and get more control points from there
             // but the control points there likely won't align, setting up a recursion of knot insertions
             // we don't do this
-            if (local_span - p(cur_dim) + shift < 0)
+            if (tmesh.knot_idx_dist(tensor, tensor.knot_mins[cur_dim], global_span, cur_dim, false) < p(cur_dim) - 1 ||
+                    tmesh.knot_idx_dist(tensor, global_span, tensor.knot_maxs[cur_dim], cur_dim, false) < p(cur_dim))
             {
+
                 // copy control points before local span
                 for (auto i = 0; i <= local_span; i++)
                 {
@@ -866,30 +889,20 @@ namespace mfa
                     temp_weights(i)         = old_weights(local_span - p(cur_dim) + i + shift);
                 }
 
+                // get knots for interpolation
+                // TODO: write a 1-d knot intersection routine; this uses full-d, which is overkill
+                vector<vector<KnotIdx>> loc_knots(dom_dim);
+                tmesh.knot_intersections(anchor, tensor_idx, loc_knots);
+
+                // pick out the two knots to interpolate from the local knot vector
+                KnotIdx left_idx    = loc_knots[cur_dim][1];
+                KnotIdx right_idx   = loc_knots[cur_dim].back();
+
                 // interpolate only the one newly inserted control point
-
-                int i = p(cur_dim) / 2;
-                bool ofst_success;
-
-                KnotIdx ofst1;               // ofst1 = global_span + 1 + i - p(cur_dim)
-                ofst_success = tmesh.knot_idx_ofst(tensor, global_span, i + 1 - p(cur_dim), cur_dim, false, ofst1);
-                if (!ofst_success)
-                {
-                    fmt::print(stderr, "Error: NewCurveKnotInsertion(): unable to offset global_span by 1 + i - p(cur_dim)\n");
-                    abort();
-                }
-
-                KnotIdx ofst2;               // ofst2 = global_span + 1 + i
-                ofst_success = tmesh.knot_idx_ofst(tensor, global_span, i + 1, cur_dim, false, ofst2);
-                if (!ofst_success)
-                {
-                    fmt::print(stderr, "Error: NewCurveKnotInsertion(): unable to offset global span by 1 + i\n");
-                    abort();
-                }
-
-                T alpha                 = (u - old_knots[ofst1]) / (old_knots[ofst2] - old_knots[ofst1]);
-                new_ctrl_pts.row(local_span + 1)     = alpha * temp_ctrl_pts.row(i + 1) + (1.0 - alpha) * temp_ctrl_pts.row(i);
-                new_weights(local_span + 1)          = alpha * temp_weights(i + 1) + (1.0 - alpha) * temp_weights(i);
+                int i                               = p(cur_dim) / 2;
+                T alpha                             = (u - old_knots[left_idx]) / (old_knots[right_idx] - old_knots[left_idx]);
+                new_ctrl_pts.row(local_span + 1)    = alpha * temp_ctrl_pts.row(i + 1) + (1.0 - alpha) * temp_ctrl_pts.row(i);
+                new_weights(local_span + 1)         = alpha * temp_weights(i + 1) + (1.0 - alpha) * temp_weights(i);
 
 //                 fmt::print(stderr, "NewCurveKnotInsertion() 2: inserting new control point at idx {} value [{}]\n", local_span + 1, new_ctrl_pts.row(local_span + 1));
 
@@ -943,6 +956,7 @@ namespace mfa
                     fmt::print(stderr, "Error: NewCurveKnotInsertion(): unable to offset global span by 1 + i\n");
                     abort();
                 }
+
                 T alpha                 = (u - old_knots[ofst1]) / (old_knots[ofst2] - old_knots[ofst1]);
                 temp_ctrl_pts.row(i)    = alpha * temp_ctrl_pts.row(i + 1) + (1.0 - alpha) * temp_ctrl_pts.row(i);
                 temp_weights(i)         = alpha * temp_weights(i + 1) + (1.0 - alpha) * temp_weights(i);

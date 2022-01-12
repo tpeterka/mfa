@@ -1020,13 +1020,16 @@ namespace mfa
             for (auto i = 0; i < dom_dim; i++)
                 anchor[i] = mfa_data.FindSpan(i, param(i), found_tensor);
 
-            for (auto i = 0; i < p(dim); i++)                                                  // for all constraint control points in current dim
+            for (auto i = 0; i < p(dim); i++)                                                           // for all constraint control points in current dim
             {
-                // anchor of control point in current dim
-                anchor[dim] = tmesh.ctrl_pt_anchor_dim(
-                        dim,
-                        found_tensor,
-                        found_tensor.nctrl_pts(dim) - p(dim) + i);
+                // reset anchor in current dim to anchor of control point
+                if (p(dim) % 2 == 0)                                                                    // even degree
+                    anchor[dim] = tmesh.ctrl_pt_anchor_dim(dim, found_tensor,
+                            found_tensor.nctrl_pts(dim) - p(dim) + i);
+
+                else                                                                                    // odd degree
+                    anchor[dim] = tmesh.ctrl_pt_anchor_dim(dim, found_tensor,
+                            found_tensor.nctrl_pts(dim) - p(dim) - 1 + i);
 
                 // reset parameter in current dim to anchor of control point
                 param(dim) = tmesh.all_knots[dim][anchor[dim]];
@@ -1148,8 +1151,11 @@ namespace mfa
 
             for (auto i = 0; i < p(dim); i++)                                                           // for all constraint control points in current dim
             {
-                // anchor of control point in current dim
-                anchor[dim] = tmesh.ctrl_pt_anchor_dim(dim, found_tensor, i);
+                // reset anchor in current dim to anchor of control point
+                if (p(dim) % 2 == 0)                                                                    // even degree
+                    anchor[dim] = tmesh.ctrl_pt_anchor_dim(dim, found_tensor, i);
+                else                                                                                    // odd degree
+                    anchor[dim] = tmesh.ctrl_pt_anchor_dim(dim, found_tensor, i + 1);
 
                 // reset parameter in current dim to anchor of control point
                 param(dim) = tmesh.all_knots[dim][anchor[dim]];
