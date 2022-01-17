@@ -191,7 +191,7 @@ namespace mfa
 
                 for (int i = 0; i < mfa_data.N[k].rows(); i++)
                 {
-                    int span = mfa_data.FindSpan(k, input.params->param_grid[k][i], nctrl_pts(k));
+                    int span = mfa_data.tmesh.FindSpan(k, input.params->param_grid[k][i], nctrl_pts(k));
 
 #ifndef MFA_TMESH   // original version for one tensor product
 
@@ -325,7 +325,7 @@ namespace mfa
                     int p   = mfa_data.p(k);
                     T   u   = param(k);
 
-                    spans[k] = mfa_data.FindSpan(k, u);
+                    spans[k] = mfa_data.tmesh.FindSpan(k, u);
 
                     ctrl_starts(k) = spans[k] - p - t.knot_mins[k];
 
@@ -691,7 +691,7 @@ namespace mfa
             // these dims are in the input point space
             // in the current dim, the anchor coordinate will be replaced below by the control point anchor
             for (auto i = dim; i < mfa_data.dom_dim; i++)
-                anchor[i] = mfa_data.FindSpan(i, param(i), found_tensor);
+                anchor[i] = mfa_data.tmesh.FindSpan(i, param(i), found_tensor);
 
             // debug
 //             fmt::print(stderr, "FreeCtrlPtCurve: dim {} start of curve: param [{}] anchor [{}] found_idx {}\n",
@@ -832,7 +832,7 @@ namespace mfa
                 mfa_data.tmesh.ctrl_pt_anchor(t, ijk, anchor);
 
                 // local knot vector
-                mfa_data.tmesh.knot_intersections(anchor, t_idx, true, local_knot_idxs);
+                mfa_data.tmesh.knot_intersections(anchor, t_idx, local_knot_idxs);
                 for (auto k = 0; k < mfa_data.dom_dim; k++)
                     for (auto n = 0; n < local_knot_idxs[k].size(); n++)
                         local_knots[k][n] = mfa_data.tmesh.all_knots[k][local_knot_idxs[k][n]];
@@ -1018,7 +1018,7 @@ namespace mfa
             // for the start of the curve, find anchor in the found tensor
             // in the current dim, the anchor coordinate will be replaced below by the control point anchor
             for (auto i = 0; i < dom_dim; i++)
-                anchor[i] = mfa_data.FindSpan(i, param(i), found_tensor);
+                anchor[i] = mfa_data.tmesh.FindSpan(i, param(i), found_tensor);
 
             for (auto i = 0; i < p(dim); i++)                                                           // for all constraint control points in current dim
             {
@@ -1147,7 +1147,7 @@ namespace mfa
             // for the start of the curve, find anchor in the found tensor
             // in the current dim, the anchor coordinate will be replaced below by the control point anchor
             for (auto i = 0; i < dom_dim; i++)
-                anchor[i] = mfa_data.FindSpan(i, param(i), found_tensor);
+                anchor[i] = mfa_data.tmesh.FindSpan(i, param(i), found_tensor);
 
             for (auto i = 0; i < p(dim); i++)                                                           // for all constraint control points in current dim
             {
@@ -1280,7 +1280,7 @@ namespace mfa
             for (auto i = 0; i < Ncons.cols(); i++)                                             // for all constraint control points
             {
                 // local knot vector
-                mfa_data.tmesh.knot_intersections(anchors[i], t_idx_anchors[i], true, local_knot_idxs);
+                mfa_data.tmesh.knot_intersections(anchors[i], t_idx_anchors[i], local_knot_idxs);
                 for (auto k = 0; k < mfa_data.dom_dim; k++)
                     for (auto n = 0; n < local_knot_idxs[k].size(); n++)
                         local_knots[k][n] = mfa_data.tmesh.all_knots[k][local_knot_idxs[k][n]];
@@ -1323,12 +1323,10 @@ namespace mfa
                 bool                      weighted = true)        // solve for and use weights
         {
             // debug
-//             fmt::print(stderr, "EncodeTensorLocalLinear tidx = {}\n", t_idx);
+            fmt::print(stderr, "EncodeTensorLocalLinear tidx = {}\n", t_idx);
 
             // debug
             bool debug = false;
-            if (t_idx == 1)
-                debug = true;
 
             // timing
             double setup_time   = MPI_Wtime();
@@ -1342,9 +1340,6 @@ namespace mfa
             vector<size_t> start_idxs(mfa_data.dom_dim);
             vector<size_t> end_idxs(mfa_data.dom_dim);
             mfa_data.tmesh.domain_pts(t_idx, input.params->param_grid, true, start_idxs, end_idxs);
-
-            // TODO: sanity check that can be removed once code is debugged
-            mfa_data.tmesh.check_domain_pts(t_idx, input.params->param_grid, true, start_idxs, end_idxs);
 
             // Q matrix of relevant input domain points
             VectorXi ndom_pts(mfa_data.dom_dim);
@@ -1645,9 +1640,6 @@ namespace mfa
             vector<size_t> start_idxs(dom_dim);                                                     // start of input points including constraints
             vector<size_t> end_idxs(dom_dim);                                                       // end of input points including constraints
             mfa_data.tmesh.domain_pts(t_idx, input.params->param_grid, true, start_idxs, end_idxs); // true: extend to cover constraints
-
-            // TODO: sanity check that can be removed once code is debugged
-            mfa_data.tmesh.check_domain_pts(t_idx, input.params->param_grid, true, start_idxs, end_idxs);
 
             // relevant input domain points covering constraints
             VectorXi ndom_pts(dom_dim);
@@ -3132,7 +3124,7 @@ namespace mfa
                     for (k = 0; k < new_tensors.size(); k++)                            // check all candidate tensors
                     {
                         auto& c = new_tensors[k];
-                        if (tmesh.in(knot, c, false))
+                        if (tmesh.in(knot, c.knot_mins, c.knot_maxs))
                             break;
                     }
                     if (k == new_tensors.size())                                        // no candidates contain the knot
@@ -3860,7 +3852,7 @@ namespace mfa
                     for (int i = 0; i < N.rows(); i++)                      // the rows of N
                     {
                         // TODO: hard-coded for single tensor
-                        int span = mfa_data.FindSpan(k, input.params->param_grid[k][i], mfa_data.tmesh.tensor_prods[0]);
+                        int span = mfa_data.tmesh.FindSpan(k, input.params->param_grid[k][i], mfa_data.tmesh.tensor_prods[0]);
 #ifndef MFA_TMESH       // original version for one tensor product
                         mfa_data.OrigBasisFuns(k, input.params->param_grid[k][i], span, N, i);
 #else                   // tmesh version

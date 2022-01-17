@@ -318,7 +318,7 @@ namespace mfa
 
                 for (int i = 0; i < NN[k].rows(); i++)
                 {
-                    int span = mfa_data.FindSpan(k, params[k][i], nctrl_pts(k));
+                    int span = mfa_data.tmesh.FindSpan(k, params[k][i], nctrl_pts(k));
 #ifndef MFA_TMESH   // original version for one tensor product
 
                     mfa_data.OrigBasisFuns(k, params[k][i], span, NN[k], i);
@@ -619,7 +619,7 @@ namespace mfa
             for (size_t i = 0; i < mfa_data.dom_dim; i++)                       // for all dims
             {
                 temp[i]    = VectorX<T>::Zero(last + 1);
-                span[i]    = mfa_data.FindSpan(i, param(i), tensor);
+                span[i]    = mfa_data.tmesh.FindSpan(i, param(i), tensor);
                 N[i]       = MatrixX<T>::Zero(1, tensor.nctrl_pts(i));
                 if (derivs.size() && derivs(i))
                 {
@@ -726,7 +726,7 @@ namespace mfa
             for (size_t i = 0; i < mfa_data.dom_dim; i++)   // for all dims
             {
                 temp[i]    = VectorX<T>::Zero(last + 1);
-                span[i]    = mfa_data.FindSpan(i, param(i), nctrl_pts(i));
+                span[i]    = mfa_data.tmesh.FindSpan(i, param(i), nctrl_pts(i));
                 N[i]       = MatrixX<T>::Zero(1, nctrl_pts(i));
 
                 mfa_data.OrigBasisFuns(i, param(i), span[i], N[i], 0);
@@ -808,7 +808,7 @@ namespace mfa
             di.ctrl_idx = 0;
             for (int j = 0; j < mfa_data.dom_dim; j++)
             {
-                di.span[j]    = mfa_data.FindSpan(j, param(j), tensor);
+                di.span[j]    = mfa_data.tmesh.FindSpan(j, param(j), tensor);
                 di.ctrl_idx += (di.span[j] - mfa_data.p(j) + ct(0, j)) * cs[j];
             }
             size_t start_ctrl_idx = di.ctrl_idx;
@@ -883,7 +883,7 @@ namespace mfa
             di.ctrl_idx = 0;
             for (int j = 0; j < mfa_data.dom_dim; j++)
             {
-                di.span[j]    = mfa_data.FindSpan(j, param(j), tensor);
+                di.span[j]    = mfa_data.tmesh.FindSpan(j, param(j), tensor);
                 di.ctrl_idx += (di.span[j] - mfa_data.p(j) + ct(0, j)) * cs[j];
             }
             size_t start_ctrl_idx = di.ctrl_idx;
@@ -968,7 +968,7 @@ namespace mfa
             // basis funs
             for (size_t i = 0; i < mfa_data.dom_dim; i++)                       // for all dims
             {
-                di.span[i]    = mfa_data.FindSpan(i, param(i), tensor);
+                di.span[i]    = mfa_data.tmesh.FindSpan(i, param(i), tensor);
 
                 if (derivs.size() && derivs(i))
                 {
@@ -1055,7 +1055,7 @@ namespace mfa
                 const TensorProduct<T>&         tensor,         // current tensor product
                 VectorX<T>&                     out_pt)         // (output) point
         {
-            int span   = mfa_data.FindSpan(cur_dim, param, tensor);
+            int span   = mfa_data.tmesh.FindSpan(cur_dim, param, tensor);
             MatrixX<T> N = MatrixX<T>::Zero(1, temp_ctrl.rows());// basis coefficients
 
 #ifndef MFA_TMESH                                               // original version for one tensor product

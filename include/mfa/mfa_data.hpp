@@ -168,41 +168,7 @@ namespace mfa
 //             return mid;
 //         }
 
-        // binary search to find the span in the knots vector containing a given parameter value
-        // returns span index i s.t. u is in [ knots[i], knots[i + 1] )
-        // NB closed interval at left and open interval at right
-        //
-        // i will be in the range [p, n], where n = number of control points - 1 because there are
-        // p + 1 repeated knots at start and end of knot vector
-        // algorithm 2.1, P&T, p. 68
-        //
-        // CAUTION: can find a span not in the tensor, looks at all knots irrespective of level
-        // use only for a t-mesh with one tensor product, where all knots are used in the tensor
-        int FindSpan(
-                int                     cur_dim,            // current dimension
-                T                       u,                  // parameter value
-                int                     nctrl_pts) const    // number of control points in current dim
-        {
-            if (u == tmesh.all_knots[cur_dim][nctrl_pts])
-                return nctrl_pts - 1;
-
-            // binary search
-            int low = p(cur_dim);
-            int high = nctrl_pts;
-            int mid = (low + high) / 2;
-            while (u < tmesh.all_knots[cur_dim][mid] || u >= tmesh.all_knots[cur_dim][mid + 1])
-            {
-                if (u < tmesh.all_knots[cur_dim][mid])
-                    high = mid;
-                else
-                    low = mid;
-                mid = (low + high) / 2;
-            }
-
-            return mid;
-        }
-
-        //         DEPRECATE: dangerous, can find a span not in the tensor, looks at all knots irrespective of level
+//         DEPRECATE, moved to Tmesh
 //         // binary search to find the span in the knots vector containing a given parameter value
 //         // returns span index i s.t. u is in [ knots[i], knots[i + 1] )
 //         // NB closed interval at left and open interval at right
@@ -211,13 +177,13 @@ namespace mfa
 //         // p + 1 repeated knots at start and end of knot vector
 //         // algorithm 2.1, P&T, p. 68
 //         //
-//         // number of control points computed from number of knots
+//         // CAUTION: can find a span not in the tensor, looks at all knots irrespective of level
+//         // use only for a t-mesh with one tensor product, where all knots are used in the tensor
 //         int FindSpan(
 //                 int                     cur_dim,            // current dimension
-//                 T                       u) const            // parameter value
+//                 T                       u,                  // parameter value
+//                 int                     nctrl_pts) const    // number of control points in current dim
 //         {
-//             int nctrl_pts = tmesh.all_knots[cur_dim].size() - p(cur_dim) - 1;
-// 
 //             if (u == tmesh.all_knots[cur_dim][nctrl_pts])
 //                 return nctrl_pts - 1;
 // 
@@ -234,113 +200,111 @@ namespace mfa
 //                 mid = (low + high) / 2;
 //             }
 // 
-//             // debug
-// //             cerr << "u = " << u << " span = " << mid << endl;
-// 
 //             return mid;
 //         }
 
-        // binary search to find the span in the global all_knots vector containing a given parameter value
-        // returns span index i s.t. u is in [ knots[i], knots[i + 1] )
-        // NB closed interval at left and open interval at right
-        // tmesh version for searching only one tensor
-        //
-        // i will be in the range [p, n], where n = number of control points - 1 because there are
-        // p + 1 repeated knots at start and end of knot vector
-        // algorithm 2.1, P&T, p. 68
-        //
-        // prints an error and aborts if u is not in the min,max range of knots in tensor or if levels of u and the span do not match
-        int FindSpan(
-                int                     cur_dim,            // current dimension
-                T                       u,                  // parameter value
-                const TensorProduct<T>& tensor) const       // tensor product in tmesh
-        {
-            if (u < tmesh.all_knots[cur_dim][tensor.knot_mins[cur_dim]] ||
-                    u > tmesh.all_knots[cur_dim][tensor.knot_maxs[cur_dim]])
-            {
-                fmt::print(stderr, "FindSpan(): Asking for parameter value outside of the knot min/max of the current tensor. This should not happen.\n");
-                fmt::print(stderr, "u {} cur_dim {} knot_mins [{}] knot_maxs [{}]\n",
-                        u, cur_dim, fmt::join(tensor.knot_mins, ","), fmt::join(tensor.knot_maxs, ","));
-                tmesh.print_tensor(tensor, true);
-                abort();
-            }
-
-            int low, high, mid;
-            int found = -1;
-
-            if (tensor.knot_mins[cur_dim] == 0)
-                low = p(cur_dim);
-            else
-                low = 0;
-            if (tensor.knot_maxs[cur_dim] == tmesh.all_knots[cur_dim].size() - 1)
-                high = tensor.knot_idxs[cur_dim].size() - p(cur_dim) - 1;
-            else
-                high = tensor.knot_idxs[cur_dim].size() - 1;
-            mid = (low + high) / 2;
-
-            if (u >= tmesh.all_knots[cur_dim][tensor.knot_idxs[cur_dim][high]])
-                found = high - 1;
-
-            if (found < 0)
-            {
-                // binary search
-                while (u < tmesh.all_knots[cur_dim][tensor.knot_idxs[cur_dim][mid]] ||
-                        u >= tmesh.all_knots[cur_dim][tensor.knot_idxs[cur_dim][mid + 1]])
-                {
-                    if (u < tmesh.all_knots[cur_dim][tensor.knot_idxs[cur_dim][mid]])
-                        high = mid;
-                    else
-                        low = mid;
-                    mid = (low + high) / 2;
-                }
-                found = mid;
-            }
-
-            // sanity checks
-            if (tmesh.all_knot_levels[cur_dim][tensor.knot_idxs[cur_dim][found]] > tensor.level)
-            {
-                fmt::print(stderr, "FindSpan(): level mismatch at found span. This should not happen.\n");
-                fmt::print(stderr, "u {} dim {} knot idx {} knot value {} knot level {} tensor level {}\n",
-                        u, cur_dim, tensor.knot_idxs[cur_dim][found], tmesh.all_knots[cur_dim][tensor.knot_idxs[cur_dim][found]],
-                        tmesh.all_knot_levels[cur_dim][tensor.knot_idxs[cur_dim][found]], tensor.level);
+//         DEPRECATE, moved to Tmesh
+//         // binary search to find the span in the global all_knots vector containing a given parameter value
+//         // returns span index i s.t. u is in [ knots[i], knots[i + 1] )
+//         // NB closed interval at left and open interval at right
+//         // tmesh version for searching only one tensor
+//         //
+//         // i will be in the range [p, n], where n = number of control points - 1 because there are
+//         // p + 1 repeated knots at start and end of knot vector
+//         // algorithm 2.1, P&T, p. 68
+//         //
+//         // prints an error and aborts if u is not in the min,max range of knots in tensor or if levels of u and the span do not match
+//         int FindSpan(
+//                 int                     cur_dim,            // current dimension
+//                 T                       u,                  // parameter value
+//                 const TensorProduct<T>& tensor) const       // tensor product in tmesh
+//         {
+//             if (u < tmesh.all_knots[cur_dim][tensor.knot_mins[cur_dim]] ||
+//                     u > tmesh.all_knots[cur_dim][tensor.knot_maxs[cur_dim]])
+//             {
+//                 fmt::print(stderr, "FindSpan(): Asking for parameter value outside of the knot min/max of the current tensor. This should not happen.\n");
+//                 fmt::print(stderr, "u {} cur_dim {} knot_mins [{}] knot_maxs [{}]\n",
+//                         u, cur_dim, fmt::join(tensor.knot_mins, ","), fmt::join(tensor.knot_maxs, ","));
 //                 tmesh.print_tensor(tensor, true);
-                abort();
-            }
-            bool error = false;
-            if (u < tmesh.all_knots[cur_dim][tensor.knot_idxs[cur_dim][found]])
-                error = true;
-            if (tensor.knot_maxs[cur_dim] == tmesh.all_knots[cur_dim].size() - 1)               // tensor is at global max end
-            {
-                if (u > tmesh.all_knots[cur_dim][tensor.knot_idxs[cur_dim][found + 1]])
-                    error = true;
-            }
-            else                                                                                // tensor is not at global max end
-            {
-                if (p(cur_dim) % 2 == 0)                                                        // even degree
-                {
-                    if (u >= tmesh.all_knots[cur_dim][tensor.knot_idxs[cur_dim][found + 1]])
-                        error = true;
-                }
-                else                                                                            // odd degree
-                {
-                    if (tensor.knot_maxs[cur_dim] > found + 1 &&                                // right edge of found span is inside the max of the tensor
-                            u >= tmesh.all_knots[cur_dim][tensor.knot_idxs[cur_dim][found + 1]])
-                        error = true;
-                    if (tensor.knot_maxs[cur_dim] == found + 1 &&                               // right edge of found span is at max of the tensor
-                            u > tmesh.all_knots[cur_dim][tensor.knot_idxs[cur_dim][found + 1]])
-                        error = true;
-                }
-            }
-            if (error)
-            {
-                fmt::print(stderr, "FindSpan(): parameter {} not in span [{}, {}) = knots [{}, {}). This should not happen.\n",
-                        u, found, found + 1, tmesh.all_knots[cur_dim][tensor.knot_idxs[cur_dim][found]],
-                        tmesh.all_knots[cur_dim][tensor.knot_idxs[cur_dim][found + 1]]);
-                abort();
-            }
-
-            return tensor.knot_idxs[cur_dim][found];
-        }
+//                 abort();
+//             }
+// 
+//             int low, high, mid;
+//             int found = -1;
+// 
+//             if (tensor.knot_mins[cur_dim] == 0)
+//                 low = p(cur_dim);
+//             else
+//                 low = 0;
+//             if (tensor.knot_maxs[cur_dim] == tmesh.all_knots[cur_dim].size() - 1)
+//                 high = tensor.knot_idxs[cur_dim].size() - p(cur_dim) - 1;
+//             else
+//                 high = tensor.knot_idxs[cur_dim].size() - 1;
+//             mid = (low + high) / 2;
+// 
+//             if (u >= tmesh.all_knots[cur_dim][tensor.knot_idxs[cur_dim][high]])
+//                 found = high - 1;
+// 
+//             if (found < 0)
+//             {
+//                 // binary search
+//                 while (u < tmesh.all_knots[cur_dim][tensor.knot_idxs[cur_dim][mid]] ||
+//                         u >= tmesh.all_knots[cur_dim][tensor.knot_idxs[cur_dim][mid + 1]])
+//                 {
+//                     if (u < tmesh.all_knots[cur_dim][tensor.knot_idxs[cur_dim][mid]])
+//                         high = mid;
+//                     else
+//                         low = mid;
+//                     mid = (low + high) / 2;
+//                 }
+//                 found = mid;
+//             }
+// 
+//             // sanity checks
+//             if (tmesh.all_knot_levels[cur_dim][tensor.knot_idxs[cur_dim][found]] > tensor.level)
+//             {
+//                 fmt::print(stderr, "FindSpan(): level mismatch at found span. This should not happen.\n");
+//                 fmt::print(stderr, "u {} dim {} knot idx {} knot value {} knot level {} tensor level {}\n",
+//                         u, cur_dim, tensor.knot_idxs[cur_dim][found], tmesh.all_knots[cur_dim][tensor.knot_idxs[cur_dim][found]],
+//                         tmesh.all_knot_levels[cur_dim][tensor.knot_idxs[cur_dim][found]], tensor.level);
+//                 tmesh.print_tensor(tensor, true);
+//                 abort();
+//             }
+//             bool error = false;
+//             if (u < tmesh.all_knots[cur_dim][tensor.knot_idxs[cur_dim][found]])
+//                 error = true;
+//             if (tensor.knot_maxs[cur_dim] == tmesh.all_knots[cur_dim].size() - 1)               // tensor is at global max end
+//             {
+//                 if (u > tmesh.all_knots[cur_dim][tensor.knot_idxs[cur_dim][found + 1]])
+//                     error = true;
+//             }
+//             else                                                                                // tensor is not at global max end
+//             {
+//                 if (p(cur_dim) % 2 == 0)                                                        // even degree
+//                 {
+//                     if (u >= tmesh.all_knots[cur_dim][tensor.knot_idxs[cur_dim][found + 1]])
+//                         error = true;
+//                 }
+//                 else                                                                            // odd degree
+//                 {
+//                     if (tensor.knot_maxs[cur_dim] > found + 1 &&                                // right edge of found span is inside the max of the tensor
+//                             u >= tmesh.all_knots[cur_dim][tensor.knot_idxs[cur_dim][found + 1]])
+//                         error = true;
+//                     if (tensor.knot_maxs[cur_dim] == found + 1 &&                               // right edge of found span is at max of the tensor
+//                             u > tmesh.all_knots[cur_dim][tensor.knot_idxs[cur_dim][found + 1]])
+//                         error = true;
+//                 }
+//             }
+//             if (error)
+//             {
+//                 fmt::print(stderr, "FindSpan(): parameter {} not in span [{}, {}) = knots [{}, {}). This should not happen.\n",
+//                         u, found, found + 1, tmesh.all_knots[cur_dim][tensor.knot_idxs[cur_dim][found]],
+//                         tmesh.all_knots[cur_dim][tensor.knot_idxs[cur_dim][found + 1]]);
+//                 abort();
+//             }
+// 
+//             return tensor.knot_idxs[cur_dim][found];
+//         }
 
         // original version of basis functions from algorithm 2.2 of P&T, p. 70
         // computes one row of basis function values for a given parameter value
@@ -818,7 +782,7 @@ namespace mfa
             // anchor corresponding to param in all dims
             vector<KnotIdx> anchor(dom_dim);
             for (auto i = 0; i < dom_dim; i++)
-                anchor[i] = FindSpan(i, param(i), tensor);
+                anchor[i] = tmesh.FindSpan(i, param(i), tensor);
 
             int global_span    = anchor[cur_dim];                       // global knot span of param in current dim.
             T eps       = 1.0e-8;
@@ -1012,7 +976,7 @@ namespace mfa
             for (auto k = 0; k < dom_dim; k++)
             {
                 // check if the knot exists in this dimension already
-                int span    = FindSpan(k, param(k), tensor);
+                int span    = tmesh.FindSpan(k, param(k), tensor);
                 T eps       = 1.0e-8;
                 if (fabs(old_knots[k][span] - param(k)) > eps)            // knot is new in this dim.
                     new_nctrl_pts(k)++;
