@@ -2302,7 +2302,7 @@ namespace mfa
                 TensorIdx               t_idx,                      // tensor product
                 const vector<KnotIdx>&  anchor) const               // anchor
         {
-            anchor_ctrl_pt_idx(tensor_prods[t_idx], anchor);
+            return anchor_ctrl_pt_idx(tensor_prods[t_idx], anchor);
         }
 
         // for a given tensor, return linear index of control point corresponding to given anchor
