@@ -702,6 +702,9 @@ namespace mfa
                 // anchor of control point in current dim
                 anchor[dim] = mfa_data.tmesh.ctrl_pt_anchor_dim(dim, t, i);
 
+                // debug
+                fmt::print(stderr, "dim {} i {} anchor [{}] found_idx {}\n", dim, i, fmt::join(anchor, ","), found_idx);
+
                 // local knot vector in currrent dimension
                 found_idx = mfa_data.tmesh.find_tensor(anchor, found_idx, found);
                 if (!found)

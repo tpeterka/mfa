@@ -811,6 +811,7 @@ namespace mfa
                 fmt::print("Error: global2local_knot_idx(): knot_idx and local_knot_idx index different knots. This should not happen.\n");
                 fmt::print(stderr, "cur_dim {} knot_idx {} local_knot_idx {} t.knot_idxs[local_knot_idx] {} (should equal knot_idx {})\n",
                         cur_dim, knot_idx, local_knot_idx, t.knot_idxs[cur_dim][local_knot_idx], knot_idx);
+                fmt::print(stderr, "tensor knot mins [{}] knot maxs [{}]\n", fmt::join(t.knot_mins, ","), fmt::join(t.knot_maxs, ","));
                 print(true, true, false, false);
                 abort();
             }
@@ -1356,6 +1357,20 @@ namespace mfa
                 const TensorProduct<T>& tensor,
                 int                     skip_dim = -1) const
         {
+            // check knot_mins, knot_maxs first
+            for (auto i = 0; i < dom_dim_; i++)
+            {
+                if (i == skip_dim)
+                    continue;
+
+                if (param(i) < all_knots[i][tensor.knot_mins[i]] || param(i) > all_knots[i][tensor.knot_maxs[i]])
+                    return false;
+
+                // for even degree, pt at max edge of tensor that is interior, belongs to the next tensor
+                if (param(i) == all_knots[i][tensor.knot_maxs[i]] && tensor.knot_maxs[i] < all_knots[i].size() - 1 && p_(i) % 2 == 0)
+                    return false;
+            }
+
             // find spans for param and call the matching function
             vector<KnotIdx> pt_(dom_dim_);
             for (auto i = 0; i < dom_dim_; i++)
@@ -1393,30 +1408,30 @@ namespace mfa
 
                 if (pt[i] < tensor.knot_mins[i] || pt[i] > tensor.knot_maxs[i])
                     return false;
+
+                // for even degree, pt at max edge of tensor that is interior, belongs to the next tensor
+                if (pt[i] == tensor.knot_maxs[i] && tensor.knot_maxs[i] < all_knots[i].size() - 1 && p_(i) % 2 == 0)
+                    return false;
             }
 
-            // pt matching max side of tensor requires extra care for interior tensors
+            // pt matching max side of tensor requires extra care for interior tensors with odd degree
 
             size_t ctrl_idx = anchor_ctrl_pt_idx(tensor, pt);
 
             for (auto i = 0; i < dom_dim_; i++)
             {
-                if (pt[i] == tensor.knot_maxs[i] && tensor.knot_maxs[i] < all_knots[i].size() - 1)
+                if (pt[i] == tensor.knot_maxs[i] && tensor.knot_maxs[i] < all_knots[i].size() - 1 && p_(i) % 2 == 1)
                 {
-                    if (p_(i) % 2 == 0)                           // even degree: param belongs to next tensor
-                        return false;
-                    if (p_(i) % 2 == 1)                           // odd degree: check for MFA_NAW control point at max edge in this dim
+                    // debug TODO: remove once code is stable
+                    if (tensor.weights.size()  && (ctrl_idx < 0 || ctrl_idx >= tensor.weights.size()))
                     {
-                        // debug TODO: remove once code is stable
-                        if (tensor.weights.size()  && (ctrl_idx < 0 || ctrl_idx >= tensor.weights.size()))
-                        {
-                            fmt::print(stderr, "Error: in(): ctrl_idx out of range\n");
-                            abort();
-                        }
-
-                        if (tensor.weights.size() && tensor.weights(ctrl_idx) == MFA_NAW)
-                            return false;
+                        fmt::print(stderr, "Error: in(): ctrl_idx out of range\n");
+                        abort();
                     }
+
+                    // check for MFA_NAW control point at max edge in this dim
+                    if (tensor.weights.size() && tensor.weights(ctrl_idx) == MFA_NAW)
+                        return false;
                 }
             }
 
@@ -2326,8 +2341,8 @@ namespace mfa
                 // debug TODO: remove once code is stable
                 if (ijk(i) < 0 || ijk(i) >= t.nctrl_pts(i))
                 {
-                    fmt::print(stderr, "Error: anchor_ctrl_pt_ijk(): anchor [{}] ijk [{}]\n",
-                            fmt::join(anchor, ","), ijk.transpose());
+                    fmt::print(stderr, "Error: anchor_ctrl_pt_ijk(): dim {} anchor [{}] ijk [{}] t.nctrl_pts [{}]\n",
+                            i, fmt::join(anchor, ","), ijk.transpose(), t.nctrl_pts.transpose());
                     abort();
                 }
             }
@@ -2342,15 +2357,26 @@ namespace mfa
         {
             for (auto j = 0; j < dom_dim_; j++)
             {
-                anchor[j] = ijk(j) + t.knot_mins[j];                // add knot_mins to get from local (in this tensor) to global (in the t-mesh) anchor
+                //                 DEPRECATE
+//                 anchor[j] = ijk(j) + t.knot_mins[j];                // add knot_mins to get from local (in this tensor) to global (in the t-mesh) anchor
+                bool retval = knot_idx_ofst(t, t.knot_mins[j], ijk(j), j, false, anchor[j]);
+
+                if (!retval)
+                {
+                    fmt::print(stderr, "ctrl_pt_anchor(): invalid offset result\n");
+                    abort();
+                }
+
                 if (t.knot_mins[j] == 0)
                     anchor[j] += (p_(j) + 1) / 2;                   // first control point has anchor floor((p + 1) / 2)
+
+                // DEPRECATE
                 // check for any knots at a higher level of refinement that would add to the anchor index (anchor is global over all knots)
-                for (auto i = t.knot_mins[j]; i <= t.knot_maxs[j]; i++)
-                {
-                    if (all_knot_levels[j][i] > t.level && anchor[j] >= i)
-                        anchor[j]++;
-                }
+//                 for (auto i = t.knot_mins[j]; i <= t.knot_maxs[j]; i++)
+//                 {
+//                     if (all_knot_levels[j][i] > t.level && anchor[j] >= i)
+//                         anchor[j]++;
+//                 }
             }
         }
 
@@ -2362,15 +2388,32 @@ namespace mfa
                 int                     idx)                        // index of control point in current dim
         {
             KnotIdx anchor;
-            anchor = idx + t.knot_mins[dim];                        // add knot_mins to get from local (in this tensor) to global (in the t-mesh) anchor
+                //                 DEPRECATE
+//             anchor = idx + t.knot_mins[dim];                        // add knot_mins to get from local (in this tensor) to global (in the t-mesh) anchor
+            bool retval = knot_idx_ofst(t, t.knot_mins[dim], idx, dim, false, anchor);
+            if (!retval)
+            {
+                fmt::print(stderr, "ctrl_pt_anchor_dim(): invalid offset result\n");
+                abort();
+            }
+
+            // debug
+            fmt::print(stderr, "ctrl_pt_anchor_dim() 1: dim {} anchor {}\n", dim, anchor);
+
             if (t.knot_mins[dim] == 0)
                 anchor += (p_(dim) + 1) / 2;                        // first control point has anchor floor((p + 1) / 2)
+
+            // DEPRECATE
             // check for any knots at a higher level of refinement that would add to the anchor (anchor is global over all knots)
-            for (auto i = t.knot_mins[dim]; i <= t.knot_maxs[dim]; i++)
-            {
-                if (all_knot_levels[dim][i] > t.level && anchor >= i)
-                    anchor++;
-            }
+//             for (auto i = t.knot_mins[dim]; i <= t.knot_maxs[dim]; i++)
+//             {
+//                 if (all_knot_levels[dim][i] > t.level && anchor >= i)
+//                     anchor++;
+//             }
+
+            // debug
+            fmt::print(stderr, "ctrl_pt_anchor_dim() 2: dim {} anchor {}\n", dim, anchor);
+
             return anchor;
         }
 
@@ -2422,7 +2465,7 @@ namespace mfa
             int pad     = edge_check ? p - 1 : 0;
 
             // t is completely to the right of orig_idx and we're offsetting left
-            // the offsetted point cannpt be inside of t
+            // the offsetted point cannot be inside of t
             if (sgn == -1 && t.knot_mins[cur_dim] >= orig_idx)
             {
                 ofst_idx = pad;
@@ -2437,13 +2480,27 @@ namespace mfa
                 return false;
             }
 
+            // debug
+            bool debug = false;
+
             // the offsetted point can be inside of t
             for (auto i = 0; i < abs(ofst); i++)
             {
+                // debug
+//                 if (debug)
+//                     fmt::print(stderr, "knot_idx_ofst 1: orig_idx {} ofst {} cur_dim {} i {} ofst_idx {} sgn {}\n",
+//                         orig_idx, ofst, cur_dim, i, ofst_idx, sgn);
+
                 while ((long)ofst_idx + sgn >= t.knot_mins[cur_dim]   &&
                         (long)ofst_idx + sgn <= t.knot_maxs[cur_dim]  &&
                         all_knot_levels[cur_dim][ofst_idx + sgn] > t.level)
                     ofst_idx += sgn;
+
+                // debug
+                if (debug)
+                    fmt::print(stderr, "knot_idx_ofst 2: orig_idx {} ofst {} cur_dim {} i {} ofst_idx {} sgn {}\n",
+                        orig_idx, ofst, cur_dim, i, ofst_idx, sgn);
+
                 if (t.knot_mins[cur_dim] == 0 &&
                         (long)ofst_idx + sgn < pad)                           // missing control points at global min edge
                 {
@@ -2467,7 +2524,18 @@ namespace mfa
                     return false;
                 }
                 ofst_idx += sgn;
+
+                // debug
+//                 if (debug)
+//                     fmt::print(stderr, "knot_idx_ofst 3: orig_idx {} ofst {} cur_dim {} i {} ofst_idx {} sgn {}\n",
+//                         orig_idx, ofst, cur_dim, i, ofst_idx, sgn);
+
             }
+
+            // debug
+//             if (debug)
+//                 fmt::print(stderr, "knot_idx_ofst 4: returning ofst_idx {}\n", ofst_idx);
+
             return true;
         }
 
