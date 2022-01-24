@@ -694,32 +694,36 @@ namespace mfa
                 anchor[i] = mfa_data.tmesh.FindSpan(i, param(i), found_tensor);
 
             // debug
-//             fmt::print(stderr, "FreeCtrlPtCurve: dim {} start of curve: param [{}] anchor [{}] found_idx {}\n",
-//                     dim, fmt::join(param, ","), fmt::join(anchor, ","), found_idx);
+            fmt::print(stderr, "FreeCtrlPtCurve: dim {} start of curve: param [{}] anchor [{}] found_idx {}\n",
+                    dim, fmt::join(param, ","), fmt::join(anchor, ","), found_idx);
 
             for (auto i = 0; i < t.nctrl_pts(dim); i++)                                                 // for all control points in current dim
             {
+                // debug
+                fmt::print(stderr, "FreeCtrlPtCurve 0: calling ctrl_pt_anchor with dim {} i {} t.knot_mins [{}] t.knot_maxs [{}]\n",
+                        dim, i, fmt::join(t.knot_mins, ","), fmt::join(t.knot_maxs, ","));
+
                 // anchor of control point in current dim
                 anchor[dim] = mfa_data.tmesh.ctrl_pt_anchor_dim(dim, t, i);
 
                 // debug
-                fmt::print(stderr, "dim {} i {} anchor [{}] found_idx {}\n", dim, i, fmt::join(anchor, ","), found_idx);
+                fmt::print(stderr, "FreeCtrlPtCurve 1: dim {} i {} anchor [{}] found_idx {}\n", dim, i, fmt::join(anchor, ","), found_idx);
 
-                // local knot vector in currrent dimension
+                // find correct tensor in case it needs to be adjusted
                 found_idx = mfa_data.tmesh.find_tensor(anchor, found_idx, found);
                 if (!found)
                 {
                     fmt::print(stderr, "FreeCtrlPtCurve: tensor containing parameter not found. This should not happen\n");
                     abort();
                 }
+
+                // debug
+                fmt::print(stderr, "FreeCtrlPtCurve 2: dim {} i {} anchor [{}] found_idx {}\n", dim, i, fmt::join(anchor, ","), found_idx);
+
+                // local knot vector in currrent dimension
                 mfa_data.tmesh.knot_intersections(anchor, found_idx, local_knot_idxs);                // local knot indices in all dimensions
                 for (auto n = 0; n < local_knot_idxs[dim].size(); n++)                                  // local knots in only current dim
                     local_knots[n] = mfa_data.tmesh.all_knots[dim][local_knot_idxs[dim][n]];
-
-                // debug
-//                 if (i == 0 && dim == 1)
-//                     fmt::print(stderr, "anchor [{}] local_knots [{}]\n",
-//                             fmt::join(anchor, ","), fmt::join(local_knots, ","));
 
                 for (auto j = 0; j < npts; j++)                                                         // for all input points (for this tensor) in current dim
                 {
@@ -1625,7 +1629,7 @@ namespace mfa
         {
             // debug
             fmt::print(stderr, "EncodeTensorLocalSeparable tidx = {}\n", t_idx);
-//             mfa_data.tmesh.print(true, true);
+            mfa_data.tmesh.print(true, true);
 
             // typing shortcuts
             auto& dom_dim       = mfa_data.dom_dim;

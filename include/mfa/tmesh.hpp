@@ -1275,7 +1275,9 @@ namespace mfa
         // finds the tensor containing a point in index space
         // starts with the parent tensor, then its neighbors, then all tensors
         // if the point is on a boundary between tensors, finds the first match
-        TensorIdx find_tensor(const vector<KnotIdx>&    pt,             // multidim point in index space
+        // if pt is in the knot_mins, knot_maxs of a tensor but is at a deeper level
+        // than the tensor, adjusts pt to the tensor level
+        TensorIdx find_tensor(vector<KnotIdx>&          pt,             // multidim point in index space (input/output, may be adjusted by this routine)
                               TensorIdx                 parent_idx,     // parent tensor, search starts here
                               bool&                     found) const    // (output) success
         {
@@ -1379,8 +1381,10 @@ namespace mfa
         }
 
         // checks if a point in index space is in a tensor product
+        // if pt is in the knot_mins, knot_maxs of the tensor but is at a deeper level
+        // than the tensor, adjusts pt to the tensor level
         // point is given in Eigen vector format
-        bool in(const VectorXi&         pt,
+        bool in(VectorXi&               pt,             // input and output, may be ajusted by this routine
                 const TensorProduct<T>& tensor,
                 int                     skip_dim = -1) const
         {
@@ -1392,8 +1396,10 @@ namespace mfa
         }
 
         // checks if a point in index space is in a tensor product
+        // if pt is in the knot_mins, knot_maxs of the tensor but is at a deeper level
+        // than the tensor, adjusts pt to the tensor level
         // point is given in std::vector format
-        bool in(const vector<KnotIdx>&  pt,
+        bool in(vector<KnotIdx>&        pt,             // input and output, mayb be adjusted by this routine
                 const TensorProduct<T>& tensor,
                 int                     skip_dim = -1) const
         {
@@ -1412,6 +1418,10 @@ namespace mfa
                 // for even degree, pt at max edge of tensor that is interior, belongs to the next tensor
                 if (pt[i] == tensor.knot_maxs[i] && tensor.knot_maxs[i] < all_knots[i].size() - 1 && p_(i) % 2 == 0)
                     return false;
+
+                // adjust pt to same level as tensor
+                while (pt[i] && all_knot_levels[i][pt[i]] > tensor.level)
+                    pt[i]--;
             }
 
             // pt matching max side of tensor requires extra care for interior tensors with odd degree
@@ -2121,8 +2131,10 @@ namespace mfa
         // check tensor and next pointers of tensor looking for a tensor containing the point
         // only checks the direct next neighbors, not multiple hops
         // returns index of tensor containing the point, or size of tensors (end) if not found
+        // if pt is in the knot_mins, knot_maxs of a tensor but is at a deeper level
+        // than the tensor, adjusts pt to the tensor level
         TensorIdx in_and_next(
-                        const vector<KnotIdx>&  pt,                     // target point in index space
+                        vector<KnotIdx>&        pt,                     // target point in index space (input/output, may be adjusted by this routine)
                         int                     tensor_idx,             // index of starting tensor for the walk
                         int                     cur_dim) const          // dimension in which to walk
         {
@@ -2357,8 +2369,6 @@ namespace mfa
         {
             for (auto j = 0; j < dom_dim_; j++)
             {
-                //                 DEPRECATE
-//                 anchor[j] = ijk(j) + t.knot_mins[j];                // add knot_mins to get from local (in this tensor) to global (in the t-mesh) anchor
                 bool retval = knot_idx_ofst(t, t.knot_mins[j], ijk(j), j, false, anchor[j]);
 
                 if (!retval)
@@ -2368,15 +2378,14 @@ namespace mfa
                 }
 
                 if (t.knot_mins[j] == 0)
-                    anchor[j] += (p_(j) + 1) / 2;                   // first control point has anchor floor((p + 1) / 2)
-
-                // DEPRECATE
-                // check for any knots at a higher level of refinement that would add to the anchor index (anchor is global over all knots)
-//                 for (auto i = t.knot_mins[j]; i <= t.knot_maxs[j]; i++)
-//                 {
-//                     if (all_knot_levels[j][i] > t.level && anchor[j] >= i)
-//                         anchor[j]++;
-//                 }
+                {
+                    retval = knot_idx_ofst(t, anchor[j], (p_(j) + 1) / 2, j, false, anchor[j]);
+                    if (!retval)
+                    {
+                        fmt::print(stderr, "ctrl_pt_anchor(): invalid offset result\n");
+                        abort();
+                    }
+                }
             }
         }
 
@@ -2388,8 +2397,7 @@ namespace mfa
                 int                     idx)                        // index of control point in current dim
         {
             KnotIdx anchor;
-                //                 DEPRECATE
-//             anchor = idx + t.knot_mins[dim];                        // add knot_mins to get from local (in this tensor) to global (in the t-mesh) anchor
+
             bool retval = knot_idx_ofst(t, t.knot_mins[dim], idx, dim, false, anchor);
             if (!retval)
             {
@@ -2397,22 +2405,15 @@ namespace mfa
                 abort();
             }
 
-            // debug
-            fmt::print(stderr, "ctrl_pt_anchor_dim() 1: dim {} anchor {}\n", dim, anchor);
-
             if (t.knot_mins[dim] == 0)
-                anchor += (p_(dim) + 1) / 2;                        // first control point has anchor floor((p + 1) / 2)
-
-            // DEPRECATE
-            // check for any knots at a higher level of refinement that would add to the anchor (anchor is global over all knots)
-//             for (auto i = t.knot_mins[dim]; i <= t.knot_maxs[dim]; i++)
-//             {
-//                 if (all_knot_levels[dim][i] > t.level && anchor >= i)
-//                     anchor++;
-//             }
-
-            // debug
-            fmt::print(stderr, "ctrl_pt_anchor_dim() 2: dim {} anchor {}\n", dim, anchor);
+            {
+                retval = knot_idx_ofst(t, anchor, (p_(dim) + 1) / 2, dim, false, anchor);
+                if (!retval)
+                {
+                    fmt::print(stderr, "ctrl_pt_anchor_dim(): invalid offset result\n");
+                    abort();
+                }
+            }
 
             return anchor;
         }
@@ -2430,23 +2431,6 @@ namespace mfa
             }
             return true;
         }
-
-        //         DEPRECATE
-//         // for a given tensor, checks whether a control point exists at the desired anchor
-//         bool exists_ctrl_pt_anchor(
-//                 const TensorProduct<T>& t,                          // tensor product
-//                 vector<KnotIdx>&        anchor) const               // anchor
-//         {
-//             VectorXi ijk = anchor_ctrl_pt_ijk(t, anchor);
-//             vector<KnotIdx> found_anchor(dom_dim_);
-//             ctrl_pt_anchor(t, ijk, found_anchor);
-// 
-//             // debug
-//             if (anchor != found_anchor)
-//                 fmt::print(stderr, "control point at anchor {} does not exist\n", fmt::join(anchor, ","));
-// 
-//             return (anchor == found_anchor);
-//         }
 
         // offsets a knot index by some amount within a tensor, skipping over any knots at a deeper level
         // returns whether the full offset was achieved (true) or whether ran out of tensor bounds (false)
@@ -2480,29 +2464,16 @@ namespace mfa
                 return false;
             }
 
-            // debug
-            bool debug = false;
-
             // the offsetted point can be inside of t
             for (auto i = 0; i < abs(ofst); i++)
             {
-                // debug
-//                 if (debug)
-//                     fmt::print(stderr, "knot_idx_ofst 1: orig_idx {} ofst {} cur_dim {} i {} ofst_idx {} sgn {}\n",
-//                         orig_idx, ofst, cur_dim, i, ofst_idx, sgn);
-
                 while ((long)ofst_idx + sgn >= t.knot_mins[cur_dim]   &&
                         (long)ofst_idx + sgn <= t.knot_maxs[cur_dim]  &&
                         all_knot_levels[cur_dim][ofst_idx + sgn] > t.level)
                     ofst_idx += sgn;
 
-                // debug
-                if (debug)
-                    fmt::print(stderr, "knot_idx_ofst 2: orig_idx {} ofst {} cur_dim {} i {} ofst_idx {} sgn {}\n",
-                        orig_idx, ofst, cur_dim, i, ofst_idx, sgn);
-
                 if (t.knot_mins[cur_dim] == 0 &&
-                        (long)ofst_idx + sgn < pad)                           // missing control points at global min edge
+                        (long)ofst_idx + sgn < pad)                                     // missing control points at global min edge
                 {
                     ofst_idx = pad;
                     return false;
@@ -2524,17 +2495,7 @@ namespace mfa
                     return false;
                 }
                 ofst_idx += sgn;
-
-                // debug
-//                 if (debug)
-//                     fmt::print(stderr, "knot_idx_ofst 3: orig_idx {} ofst {} cur_dim {} i {} ofst_idx {} sgn {}\n",
-//                         orig_idx, ofst, cur_dim, i, ofst_idx, sgn);
-
             }
-
-            // debug
-//             if (debug)
-//                 fmt::print(stderr, "knot_idx_ofst 4: returning ofst_idx {}\n", ofst_idx);
 
             return true;
         }
