@@ -833,9 +833,9 @@ struct BlockBase
         // compute the par min and par max from bounds and core (core is embedded in bounds)
 
         for (int i = 0; i < dom_dim; i++) {
-            T diff = bounds_maxs[i] - bounds_mins[i];
-            p_min[i] = (min_block[i] - bounds_mins[i]) / diff;
-            p_max[i] = (max_block[i] - bounds_mins[i]) / diff;
+            T diff = max_bd[i] - min_bd[i];
+            p_min[i] = (min_block[i] - min_bd[i]) / diff;
+            p_max[i] = (max_block[i] - min_bd[i]) / diff;
         }
 #endif
         // geometry first
