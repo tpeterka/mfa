@@ -424,15 +424,24 @@ int main(int argc, char **argv) {
                     << max_red_err << "\n";
             abort();
         }
-        if (world.size() == 0) {
+        //
+        if (world.size() == 1 && 0 == transpose ) {
             Block<real_t> *bmax = static_cast<Block<real_t>*>(master.block(
                     blockMax));
             MatrixX<real_t> &bl = bmax->blend;
             //std::cout<<bl(0,2) << "\n";
-            if (fabs(bl(0, 2) - 31.079045650447384) > 1.e-7) {
-                std::cout << "expected blend(0,2) = 31.079045650447384  got "
-                        << bl(0, 2) << "\n";
+            if  ( (fabs(bl(0, 2) - 31.079045650447384) > 1.e-7 ) ||
+                  (fabs(bl(1, 2) - 31.175520176541) > 1.e-7 ) )
+            {
+                std::cout << std::setprecision(14)
+                          <<  "expected blend(0,2) = 31.07904565044  got "  << bl(0, 2) << "\n";
+                std::cout <<  "expected blend(1,2) = 31.175520176541  got "  << bl(1, 2) << "\n";
                 abort();
+            }
+            else
+            {
+                std::cout << std::setprecision(14) <<  "passed test blend(0, 2) == "
+                        << bl(0, 2) << "  blend(1, 2) == " << bl(1, 2)<< "\n";
             }
         }
         //std::cout << bmax->blend << "\n";
