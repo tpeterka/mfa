@@ -594,8 +594,9 @@ namespace mfa
         void FreeCtrlPtCurve(
                 int                 dim,                // current dimension
                 TensorIdx           t_idx,              // index of tensor of control points
+                size_t              start,              // index of first input point for the curve, excluding constraints, in current dim
                 const VectorXi&     start_ijk,          // multidim index of first input point for the curve, including constraints
-                size_t              npts,               // number of input points in current dim, including constraints
+                size_t              npts,               // number of input points in current dim, excluding constraints
                 MatrixX<T>&         Nfree)              // (output) matrix of free control points basis functions
         {
             auto&               t = mfa_data.tmesh.tensor_prods[t_idx];
@@ -691,23 +692,29 @@ namespace mfa
             // these dims are in the input point space
             // in the current dim, the anchor coordinate will be replaced below by the control point anchor
             for (auto i = dim; i < mfa_data.dom_dim; i++)
-                anchor[i] = mfa_data.tmesh.FindSpan(i, param(i), found_tensor);
+            {
+                // if param == 0, FindSpan finds the last 0-value knot span, but we want the first control point anchor, which is an earlier span
+                if (param(i) == 0.0)
+                    anchor[i] = (mfa_data.p(i) + 1) / 2;
+                else
+                    anchor[i] = mfa_data.tmesh.FindSpan(i, param(i), found_tensor);
+            }
 
             // debug
-            fmt::print(stderr, "FreeCtrlPtCurve: dim {} start of curve: param [{}] anchor [{}] found_idx {}\n",
-                    dim, fmt::join(param, ","), fmt::join(anchor, ","), found_idx);
+//             fmt::print(stderr, "FreeCtrlPtCurve: dim {} start of curve: param [{}] anchor [{}] found_idx {}\n",
+//                     dim, fmt::join(param, ","), fmt::join(anchor, ","), found_idx);
 
             for (auto i = 0; i < t.nctrl_pts(dim); i++)                                                 // for all control points in current dim
             {
                 // debug
-                fmt::print(stderr, "FreeCtrlPtCurve 0: calling ctrl_pt_anchor with dim {} i {} t.knot_mins [{}] t.knot_maxs [{}]\n",
-                        dim, i, fmt::join(t.knot_mins, ","), fmt::join(t.knot_maxs, ","));
+//                 fmt::print(stderr, "FreeCtrlPtCurve 0: calling ctrl_pt_anchor with dim {} i {} t.knot_mins [{}] t.knot_maxs [{}]\n",
+//                         dim, i, fmt::join(t.knot_mins, ","), fmt::join(t.knot_maxs, ","));
 
                 // anchor of control point in current dim
                 anchor[dim] = mfa_data.tmesh.ctrl_pt_anchor_dim(dim, t, i);
 
                 // debug
-                fmt::print(stderr, "FreeCtrlPtCurve 1: dim {} i {} anchor [{}] found_idx {}\n", dim, i, fmt::join(anchor, ","), found_idx);
+//                 fmt::print(stderr, "FreeCtrlPtCurve 1: dim {} i {} anchor [{}] found_idx {}\n", dim, i, fmt::join(anchor, ","), found_idx);
 
                 // find correct tensor in case it needs to be adjusted
                 found_idx = mfa_data.tmesh.find_tensor(anchor, found_idx, found);
@@ -718,17 +725,23 @@ namespace mfa
                 }
 
                 // debug
-                fmt::print(stderr, "FreeCtrlPtCurve 2: dim {} i {} anchor [{}] found_idx {}\n", dim, i, fmt::join(anchor, ","), found_idx);
+//                 fmt::print(stderr, "FreeCtrlPtCurve 2: dim {} i {} anchor [{}] found_idx {}\n", dim, i, fmt::join(anchor, ","), found_idx);
 
                 // local knot vector in currrent dimension
-                mfa_data.tmesh.knot_intersections(anchor, found_idx, local_knot_idxs);                // local knot indices in all dimensions
+                mfa_data.tmesh.knot_intersections(anchor, found_idx, local_knot_idxs);                  // local knot indices in all dimensions
                 for (auto n = 0; n < local_knot_idxs[dim].size(); n++)                                  // local knots in only current dim
                     local_knots[n] = mfa_data.tmesh.all_knots[dim][local_knot_idxs[dim][n]];
 
                 for (auto j = 0; j < npts; j++)                                                         // for all input points (for this tensor) in current dim
                 {
-                    T u = input.params->param_grid[dim][start_ijk(dim) + j];                            // parameter of current input point
+                    T u = input.params->param_grid[dim][start + j];                                     // parameter of current input point
                     Nfree(j, i) = mfa_data.OneBasisFun(dim, u, local_knots);                            // basis function
+
+                    // debug
+//                     if (j == 0)
+//                         fmt::print(stderr, "FreeCtrlPtCurve 3: first u {}\n", u);
+//                     else if (j == npts - 1)
+//                         fmt::print(stderr, "FreeCtrlPtCurve 4: last u {}\n", u);
                 }
             }       // control points
 
@@ -1654,8 +1667,13 @@ namespace mfa
             for (auto k = 0; k < dom_dim; k++)
             {
                 ndom_pts(k)     = end_idxs[k] - start_idxs[k] + 1;
-                dom_starts(k)   = start_idxs[k];                                          // need Eigen vector from STL vector
+                dom_starts(k)   = start_idxs[k];                                                    // need Eigen vector from STL vector
             }
+
+            // get input domain points covered by the tensor, excluding constraints
+            vector<size_t> start_idxs_free(dom_dim);                                                // start of input points including constraints
+            vector<size_t> end_idxs_free(dom_dim);                                                  // end of input points including constraints
+            mfa_data.tmesh.domain_pts(t_idx, input.params->param_grid, false, start_idxs_free, end_idxs_free); // false: do not extend to cover constraints
 
             // resize control points and weights in case number of control points changed
             t.ctrl_pts.resize(t.nctrl_pts.prod(), pt_dim);
@@ -1694,6 +1712,10 @@ namespace mfa
 
             for (auto dim = 0; dim < dom_dim; dim++)                                                // for all domain dimensions
             {
+                // starting input point and number of input points in current dim
+                size_t start_dim    = start_idxs_free[dim];
+                size_t npts_dim     = end_idxs_free[dim] - start_idxs_free[dim] + 1;
+
                 MatrixX<T> R(nin_pts(dim), pt_dim);                                                 // RHS for solving N * P = R
 
                 double t1 = MPI_Wtime();
@@ -1703,15 +1725,21 @@ namespace mfa
                 SliceIterator   out_slice_iter(out_iter, dim);                                      // slice of the output points volume missing current dim
 
                 // debug
-//                 fmt::print(stderr, "FreeCtrlCurve dim {} nin_pts [{}] in_starts [{}] in_all_pts [{}] nout_pts [{}]\n",
+//                 fmt::print(stderr, "EncodeTensorLocalSeparable dim {} nin_pts [{}] in_starts [{}] in_all_pts [{}] nout_pts [{}]\n",
 //                         dim, nin_pts.transpose(), in_starts.transpose(), in_all_pts.transpose(), nout_pts.transpose());
-//                 fmt::print(stderr, "FreeCtrlCurve dim {} Nfree is {} rows x {} cols = {}\n",
+//                 fmt::print(stderr, "EncodeTensorLocalSeparable dim {} Nfree is {} rows x {} cols = {}\n",
 //                         dim, nin_pts(dim), t.nctrl_pts(dim), nin_pts(dim) * t.nctrl_pts(dim));
 
                 // allocate matrices of constraint control points and constraint basis functions
                 ConsType    cons_type;                                                              // none, left, right, both
                 MatrixX<T>  Ncons;
                 MatrixX<T>  Pcons;
+
+                // debug: turn off constraints
+#if 1
+                cons_type = ConsType::MFA_NO_CONSTRAINT;
+#else
+
                 if (t.knot_mins[dim] == 0 && t.knot_maxs[dim] == tmesh.all_knots[dim].size() - 1)
                 {
                     cons_type = ConsType::MFA_NO_CONSTRAINT;
@@ -1734,7 +1762,7 @@ namespace mfa
                     Ncons       = MatrixX<T>::Zero(nin_pts(dim),  2 * mfa_data.p(dim));
                     Pcons       = MatrixX<T>::Zero(2 * mfa_data.p(dim), t.ctrl_pts.cols());
                 }
-
+#endif
                 // for all curves in the current dimension
                 while (!in_slice_iter.done())                                                       // for all curves
                 {
@@ -1762,14 +1790,10 @@ namespace mfa
                         in_curve_iter.incr_iter();
                     }
 
-                    // debug
-//                     if (dim == 1)
-//                         fmt::print(stderr, "dim {} curve {} starts [{}]\n", dim, in_slice_iter.cur_iter(), start_ijk.transpose());
-
                     // find matrix of free control point basis functions
                     double t0 = MPI_Wtime();
                     MatrixX<T> Nfree(nin_pts(dim), t.nctrl_pts(dim));
-                    FreeCtrlPtCurve(dim, t_idx, start_ijk, nin_pts(dim), Nfree);
+                    FreeCtrlPtCurve(dim, t_idx, start_dim, start_ijk, npts_dim, Nfree);
 
                     // timing
                     free_time   += (MPI_Wtime() - t0);
@@ -1808,6 +1832,7 @@ namespace mfa
                             T sum = Nfree.row(i).sum();
                             if (Ncons.rows())
                                 sum += Ncons.row(i).sum();
+
                             if (sum > 0.0)
                             {
                                 Nfree.row(i) /= sum;
