@@ -1736,7 +1736,7 @@ namespace mfa
                 MatrixX<T>  Pcons;
 
                 // debug: turn off constraints
-#if 1
+#if 0
                 cons_type = ConsType::MFA_NO_CONSTRAINT;
 #else
 
@@ -1897,24 +1897,37 @@ namespace mfa
                     solve_time += (MPI_Wtime() - t0);
 
                     // debug
-//                     fmt::print(stderr, "dim {} in curve {} P[{}]\n", dim, in_slice_iter.cur_iter(), P.transpose());
+//                     if (P.maxCoeff() > 12)
+//                         fmt::print(stderr, "dim {} in curve {} P[{}]\n", dim, in_slice_iter.cur_iter(), P.transpose());
 
                     // copy solution to one curve of output points
                     CurveIterator   out_curve_iter(out_slice_iter);                                     // one curve of the output points in the current dim
                     while (!out_curve_iter.done())
                     {
                         if (dim % 2 == 0)
+                        {
                             Q1.row(out_curve_iter.ijk_idx(out_curve_iter.cur_ijk())) = P.row(out_curve_iter.cur_iter());
+
+                            // debug
+//                             if (P.maxCoeff() > 12)
+//                                 fmt::print(stderr, "P row {} P value {} Q1 ijk {} Q1 idx {} Q1 value {}\n",
+//                                         out_curve_iter.cur_iter(), P.row(out_curve_iter.cur_iter()),
+//                                         out_curve_iter.cur_ijk().transpose(), out_curve_iter.ijk_idx(out_curve_iter.cur_ijk()),
+//                                         Q1.row(out_curve_iter.ijk_idx(out_curve_iter.cur_ijk())));
+                        }
                         else
+                        {
                             Q.row(out_curve_iter.ijk_idx(out_curve_iter.cur_ijk())) = P.row(out_curve_iter.cur_iter());
+
+                            // debug
+//                             if (P.maxCoeff() > 12)
+//                                 fmt::print(stderr, "P row {} P value {} Q ijk {} Q idx {} Q value {}\n",
+//                                         out_curve_iter.cur_iter(), P.row(out_curve_iter.cur_iter()),
+//                                         out_curve_iter.cur_ijk().transpose(), out_curve_iter.ijk_idx(out_curve_iter.cur_ijk()),
+//                                         Q.row(out_curve_iter.ijk_idx(out_curve_iter.cur_ijk())));
+                        }
                         out_curve_iter.incr_iter();
                     }
-
-                    // debug
-//                     if (dim % 2 == 0)
-//                         fmt::print(stderr, "dim {} out curve {} Q1[{}]\n", dim, out_slice_iter.cur_iter(), Q1.transpose());
-//                     else
-//                         fmt::print(stderr, "dim {} out curve {} Q[{}]\n", dim, out_slice_iter.cur_iter(), Q.transpose());
 
                     out_slice_iter.incr_iter();
                     in_slice_iter.incr_iter();
@@ -1930,9 +1943,9 @@ namespace mfa
 
             // copy final result back to tensor product
             if (dom_dim % 2 == 0)
-                t.ctrl_pts = Q1.block(0, 0, t.nctrl_pts.prod(), pt_dim);
-            else
                 t.ctrl_pts = Q.block(0, 0, t.nctrl_pts.prod(), pt_dim);
+            else
+                t.ctrl_pts = Q1.block(0, 0, t.nctrl_pts.prod(), pt_dim);
 
             // timing
             fmt::print(stderr, "EncodeTensorLocalSeparable() timing:\n");
