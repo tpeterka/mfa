@@ -10,6 +10,11 @@
 
 namespace mfa
 {
+    struct MFAError: public std::runtime_error
+    {
+        using std::runtime_error::runtime_error;
+    };
+
     // error statistics
     template <typename T>
         struct ErrorStats

@@ -1654,12 +1654,11 @@ namespace mfa
         void knot_intersections(const vector<KnotIdx>&      anchor,                 // knot indices of anchor for odd degree or
                                                                                     // knot indices of start of rectangle containing anchor for even degree
                                 TensorIdx                   t_idx,                  // index of tensor product containing anchor
-                                vector<vector<KnotIdx>>&    loc_knots) const        // (output) local knot vector in index space
+                                vector<vector<KnotIdx>>&    loc_knots,              // (output) local knot vector in index space
+                                int                         extra_p = 0) const      // extra degree in each dim, producing larger local knot vector
         {
-            // debug
-//             bool debug = false;
-//             if (t_idx == 4)
-//                 debug = true;
+            // degree to use
+            VectorXi p = p_.array() + extra_p;
 
             // sanity check that anchor is in the current tensor
             const TensorProduct<T>& t = tensor_prods[t_idx];
@@ -1685,15 +1684,15 @@ namespace mfa
 
             for (auto i = 0; i < dom_dim_; i++)                             // for all dims
             {
-                loc_knots[i].resize(p_(i) + 2);                             // support of basis func. is p+2 knots (p+1 spans) by definition
+                loc_knots[i].resize(p(i) + 2);                             // support of basis func. is p+2 knots (p+1 spans) by definition
 
                 KnotIdx start, min, max;
-                if (p_(i) % 2)                                              // odd degree
-                    start = min = max = (p_(i) + 1) / 2;
+                if (p(i) % 2)                                              // odd degree
+                    start = min = max = (p(i) + 1) / 2;
                 else                                                        // even degree
                 {
-                    start = min = p_(i) / 2;
-                    max         = p_(i) / 2 + 1;
+                    start = min = p(i) / 2;
+                    max         = p(i) / 2 + 1;
                 }
                 loc_knots[i][start]             = anchor[i];                // start at the anchor
                 KnotIdx         cur_knot_idx    = loc_knots[i][start];
@@ -2248,7 +2247,7 @@ namespace mfa
                 min_anchor[k] = tc.knot_mins[k];
             if (extend)
             {
-                knot_intersections(min_anchor, t_idx, local_knot_idxs);
+                knot_intersections(min_anchor, t_idx, local_knot_idxs, 2);
                 for (auto k = 0; k < dom_dim_; k++)
                         start_knot_idxs[k] = local_knot_idxs[k][0]; // both even and odd degree: front knot of local knot vector
             }
@@ -2270,9 +2269,17 @@ namespace mfa
             }
             if (extend)
             {
-                knot_intersections(max_anchor, t_idx, local_knot_idxs);
+                knot_intersections(max_anchor, t_idx, local_knot_idxs, 2);
                 for (auto k = 0; k < dom_dim_; k++)
-                    end_knot_idxs[k] = local_knot_idxs[k][local_knot_idxs[k].size() - 2];   // both even and odd degree: one knot from back of local knot vector
+                {
+                    // both even and odd degree
+                    // if end of local knots has value 1, include the end of the local knot vector (final knot span is closed on the right)
+                    // if not, one knot back from end of local knot vector (knot span is open on the right)
+//                     if (all_knots[k][local_knot_idxs[k].back()] == 1.0)
+//                         end_knot_idxs[k] = local_knot_idxs[k][local_knot_idxs[k].size() - 1];
+//                     else
+                        end_knot_idxs[k] = local_knot_idxs[k][local_knot_idxs[k].size() - 2];
+                }
             }
             else
             {
@@ -2291,6 +2298,11 @@ namespace mfa
                 // start points begin at all_knot_param_idxs[start_knot_idxs]
                 start_idxs[k]   = all_knot_param_idxs[k][start_knot_idxs[k]];
 
+                // corner case: if extending and start point = param(start_knot_idx), increment start point
+                // because we used a larger local knot vector (p + 2), we don't want a point at its edge, which would be too far
+                if (extend && params[k][start_idxs[k]] == all_knots[k][start_knot_idxs[k]])
+                    start_idxs[k]++;
+
                 // end points go up to but do not include all_knot_param_ixs[end_knot_idxs + 1]
                 if (all_knots[k].size() - 1 - end_knot_idxs[k] <= p_(k))
                     end_idxs[k] = all_knot_param_idxs[k][end_knot_idxs[k]];
@@ -2304,8 +2316,8 @@ namespace mfa
                 }
             }
 
-//             fmt::print(stderr, "start_knot_idxs [{}] end_knot_idxs [{}] start_pt_idxs [{}] end_pt_idxs [{}]\n",
-//                     fmt::join(start_knot_idxs, ","), fmt::join(end_knot_idxs, ","), fmt::join(start_idxs, ","), fmt::join(end_idxs, ","));
+            fmt::print(stderr, "start_knot_idxs [{}] end_knot_idxs [{}] start_pt_idxs [{}] end_pt_idxs [{}]\n",
+                    fmt::join(start_knot_idxs, ","), fmt::join(end_knot_idxs, ","), fmt::join(start_idxs, ","), fmt::join(end_idxs, ","));
         }
 
         // for a given tensor, return linear index of control point corresponding to given anchor
@@ -2362,39 +2374,41 @@ namespace mfa
         }
 
         // for a given tensor, get anchor of control point, given control point multidim index
-        // anchor is in global knot index space (includes knots at higher refinement levels than the tensor)
+        // anchor is in global knot index space at the correct level of the tensor
         void ctrl_pt_anchor(const TensorProduct<T>& t,              // tensor product
                             const VectorXi&         ijk,            // multidim index of control point
                             vector<KnotIdx>&        anchor) const   // (output) anchor
         {
             for (auto j = 0; j < dom_dim_; j++)
             {
-                bool retval = knot_idx_ofst(t, t.knot_mins[j], ijk(j), j, false, anchor[j]);
-
-                if (!retval)
-                {
-                    fmt::print(stderr, "ctrl_pt_anchor(): invalid offset result\n");
-                    abort();
-                }
-
-                if (t.knot_mins[j] == 0)
-                {
-                    retval = knot_idx_ofst(t, anchor[j], (p_(j) + 1) / 2, j, false, anchor[j]);
-                    if (!retval)
-                    {
-                        fmt::print(stderr, "ctrl_pt_anchor(): invalid offset result\n");
-                        abort();
-                    }
-                }
+                //                 DEPRECATE and replace with call to ctrl_pt_anchor_dim below
+//                 bool retval = knot_idx_ofst(t, t.knot_mins[j], ijk(j), j, false, anchor[j]);
+// 
+//                 if (!retval)
+//                 {
+//                     fmt::print(stderr, "ctrl_pt_anchor(): invalid offset result\n");
+//                     abort();
+//                 }
+// 
+//                 if (t.knot_mins[j] == 0)
+//                 {
+//                     retval = knot_idx_ofst(t, anchor[j], (p_(j) + 1) / 2, j, false, anchor[j]);
+//                     if (!retval)
+//                     {
+//                         fmt::print(stderr, "ctrl_pt_anchor(): invalid offset result\n");
+//                         abort();
+//                     }
+//                 }
+                anchor[j] = ctrl_pt_anchor_dim(j, t, ijk(j));
             }
         }
 
         // for a given tensor, return anchor of control point in one dimension, given control point index in one dim
-        // anchor is in global knot index space (includes knots at higher refinement levels than the tensor)
+        // anchor is in global knot index space at the correct level of the tensor
         KnotIdx ctrl_pt_anchor_dim(
                 int                     dim,                        // dimension
                 const TensorProduct<T>& t,                          // tensor product
-                int                     idx)                        // index of control point in current dim
+                int                     idx) const                  // index of control point in current dim
         {
             KnotIdx anchor;
 
@@ -2414,6 +2428,10 @@ namespace mfa
                     abort();
                 }
             }
+
+            // ensure anchor isn't at a deeper level, if so, back up to earlier anchor in this tensor
+            while (all_knot_levels[dim][anchor] > t.level && anchor > t.knot_mins[dim])
+                anchor--;
 
             return anchor;
         }
@@ -2644,6 +2662,7 @@ namespace mfa
             }
 
             // sanity checks
+            // TODO: comment out once code is stable
             if (all_knot_levels[cur_dim][tensor.knot_idxs[cur_dim][found]] > tensor.level)
             {
                 fmt::print(stderr, "FindSpan(): level mismatch at found span. This should not happen.\n");
@@ -2656,9 +2675,11 @@ namespace mfa
             bool error = false;
             if (u < all_knots[cur_dim][tensor.knot_idxs[cur_dim][found]])
                 error = true;
-            if (tensor.knot_maxs[cur_dim] == all_knots[cur_dim].size() - 1)               // tensor is at global max end
+            if (tensor.knot_maxs[cur_dim] == all_knots[cur_dim].size() - 1)                     // tensor is at global max end
             {
-                if (u > all_knots[cur_dim][tensor.knot_idxs[cur_dim][found + 1]])
+                if (u == 1.0 && u > all_knots[cur_dim][tensor.knot_idxs[cur_dim][found + 1]])
+                    error = true;
+                else if (u < 1.0 && u >= all_knots[cur_dim][tensor.knot_idxs[cur_dim][found + 1]])
                     error = true;
             }
             else                                                                                // tensor is not at global max end
