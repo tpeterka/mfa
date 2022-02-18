@@ -33,7 +33,7 @@
 // comment out the following line for original single tensor product version
 #define MFA_TMESH
 
-// comment out the following line to encode local linear with unified dims
+// comment out the following line to encode local with unified dims
 #define MFA_ENCODE_LOCAL_SEPARABLE
 
 // the following lines control the extent of merging small tensors into larger ones

@@ -2247,6 +2247,7 @@ namespace mfa
                 min_anchor[k] = tc.knot_mins[k];
             if (extend)
             {
+                // extend by p/2 + 2 knots from the min corner in all dimensions and then take the min corner of that extension
                 knot_intersections(min_anchor, t_idx, local_knot_idxs, 2);
                 for (auto k = 0; k < dom_dim_; k++)
                         start_knot_idxs[k] = local_knot_idxs[k][0]; // both even and odd degree: front knot of local knot vector
@@ -2269,17 +2270,10 @@ namespace mfa
             }
             if (extend)
             {
+                // extend by p/2 + 2 knots from the max corner in all dimensions and then take the max corner of that extension
                 knot_intersections(max_anchor, t_idx, local_knot_idxs, 2);
                 for (auto k = 0; k < dom_dim_; k++)
-                {
-                    // both even and odd degree
-                    // if end of local knots has value 1, include the end of the local knot vector (final knot span is closed on the right)
-                    // if not, one knot back from end of local knot vector (knot span is open on the right)
-//                     if (all_knots[k][local_knot_idxs[k].back()] == 1.0)
-//                         end_knot_idxs[k] = local_knot_idxs[k][local_knot_idxs[k].size() - 1];
-//                     else
-                        end_knot_idxs[k] = local_knot_idxs[k][local_knot_idxs[k].size() - 2];
-                }
+                        end_knot_idxs[k] = local_knot_idxs[k][local_knot_idxs[k].size() - 2]; // both even and odd degree: 1 before back of local knot vector
             }
             else
             {

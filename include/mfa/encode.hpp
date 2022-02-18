@@ -587,6 +587,156 @@ namespace mfa
 
 #ifdef MFA_TMESH
 
+        // whether a curve of input points intersects a tensor product
+        bool CurveIntersectsTensor(
+                CurveIterator&      in_curve_iter,
+                TensorIdx           t_idx)
+        {
+            // TODO
+            return true;
+        }
+
+        // computes curve of free control points in one dimension
+        void ComputeCtrlPtCurve(
+                CurveIterator&          in_curve_iter,                  // current curve
+                TensorIdx               t_idx,                          // index of current tensor
+                int                     dim,                            // current curve dimension
+                MatrixX<T>&             R,                              // right hand side, allocated by caller
+                MatrixX<T>&             Q,                              // first matrix of input points, allocated by caller
+                MatrixX<T>&             Q1,                             // second matrix of input points, allocated by caller
+                MatrixX<T>&             Nfree,                          // free basis functions, allocated by caller
+                MatrixX<T>&             Ncons,                          // constraint basis functions, allocated by caller
+                MatrixX<T>&             Pcons,                          // constraint control points, allocated by caller
+                MatrixX<T>&             P,                              // (output) solution control points, allocated by caller
+                ConsType                cons_type,                      // constraint type
+                const VectorXi&         nin_pts,                        // number of input points
+                const VectorXi&         start_ijk,                      // i,j,k of start of input points
+                double                  free_time,                      // time to find free basis functions
+                double                  cons_time,                      // time to find constraints
+                double                  norm_time,                      // time to normalize basis functions
+                double                  solve_time)                     // time to solve the matrix
+        {
+            auto& t = mfa_data.tmesh.tensor_prods[t_idx];
+
+            // copy one curve of input points to right hand side
+            while (!in_curve_iter.done())
+            {
+                if (dim == 0)
+                    R.row(in_curve_iter.cur_iter()) =
+                        input.domain.block(in_curve_iter.ijk_idx(in_curve_iter.cur_ijk()), mfa_data.min_dim, 1, mfa_data.max_dim - mfa_data.min_dim + 1);
+                else if (dim % 2 == 0)
+                    R.row(in_curve_iter.cur_iter()) = Q.row(in_curve_iter.ijk_idx(in_curve_iter.cur_ijk()));
+                else
+                    R.row(in_curve_iter.cur_iter()) = Q1.row(in_curve_iter.ijk_idx(in_curve_iter.cur_ijk()));
+                in_curve_iter.incr_iter();
+            }
+
+            // find matrix of free control point basis functions
+            double t0 = MPI_Wtime();
+            FreeCtrlPtCurve(dim, t_idx, start_ijk, nin_pts(dim), Nfree);
+
+            // timing
+            free_time   += (MPI_Wtime() - t0);
+            t0          = MPI_Wtime();
+
+            if (cons_type != ConsType::MFA_NO_CONSTRAINT)
+                ConsCtrlPtCurve(dim, t_idx, start_ijk, nin_pts, cons_type, Ncons, Pcons);
+
+            // timing
+            cons_time   += (MPI_Wtime() - t0);
+
+            // normalize Nfree and Ncons such that the row sum of Nfree + Ncons = 1.0
+            t0          = MPI_Wtime();              // timing
+
+#ifdef MFA_TBB
+
+            static affinity_partitioner ap;
+            parallel_for (blocked_range<size_t>(0, Nfree.rows()), [&] (blocked_range<size_t>& r)
+            {
+                for (auto i = r.begin(); i < r.end(); i++)
+
+#else
+
+                for (auto i = 0; i < Nfree.rows(); i++)
+
+#endif
+
+            // TODO: understand why the second version of normalization gives a worse answer than the first
+            // and why not normalizing at all also gives a good answer, very close to the first version
+            // then pick one of these versions and remove the other
+
+#if 1
+
+                {
+                    bool error = false;
+                    T sum = Nfree.row(i).sum();
+                    if (Ncons.rows())
+                        sum += Ncons.row(i).sum();
+                    if (sum > 0.0)
+                    {
+                        Nfree.row(i) /= sum;
+                        if (Ncons.rows())
+                            Ncons.row(i) /= sum;
+                    }
+//                     else
+//                         throw MFAError(fmt::format("EncodeTensorLocalSeparable(): row {} has 0.0 row sum for free and constraint basis functions in dim {}",
+//                                 i, dim));
+                }
+
+#else
+
+                {
+                    T Nfree_sum, Nprev_cons_sum, Nnext_cons_sum;
+                    T Nfree_sum = Nfree.row(i).sum();
+                    if (Pcons.rows())
+                        Ncons_sum = Ncons.row(i).sum();
+                    if (Nfree_sum + Ncons_sum == 0.0)
+                        throw MFAError(fmt::format("EncodeTensorLocalSeparable(): row {} has 0.0 row sum for free and constraint basis functions in dim {}",
+                                    i, dim));
+                    if (Nfree_sum > 0.0)
+                        Nfree.row(i) /= Nfree_sum;
+                    if (Ncons_sum > 0.0)
+                        Ncons.row(i) /= Ncons_sum;
+                }
+
+#endif
+
+#ifdef MFA_TBB
+
+            }, ap);
+
+#endif
+
+            norm_time += (MPI_Wtime() - t0);                    // timing
+
+            // R is the right hand side needed for solving N * P = R
+            if (Pcons.rows())
+                R -= Ncons * Pcons;
+
+            // solve
+            t0 = MPI_Wtime();
+
+            // debug: check matrix product sizes
+            // TODO: remove once stable
+            if (Nfree.rows() != R.rows() || P.rows() != Nfree.cols())
+            {
+                fmt::print(stderr, "Error EncodeTensorLocalSeparable(): Nfree.rows() {} should equal R.rows {} and P.rows() {} should equal Nfree.cols() {}\n",
+                        Nfree.rows(), R.rows(), P.rows(), Nfree.cols());
+                abort();
+            }
+
+            P = (Nfree.transpose() * Nfree).ldlt().solve(Nfree.transpose() * R);
+            solve_time += (MPI_Wtime() - t0);
+        }
+
+        // interpolates curve of free control points in one dimension using Boehm knot insertion
+        void InterpCtrlPtCurve(
+                CurveIterator&      in_curve_iter,
+                TensorIdx           t_idx)
+        {
+            // TODO
+        }
+
         // computes curve of free control points basis functions in one dimension
         // matrix Nfree of basis functions is m rows x n columns, where
         //  m is number of input points covered by constraints and free control points
@@ -743,7 +893,7 @@ namespace mfa
         // matrix Nfree of basis functions is m rows x n columns, where
         // m is number of input points covered by constraints and free control points
         // n is number of free control points
-        // helper function for EncodeTensorLocalLinear
+        // helper function for EncodeTensorLocalUnified
         // returns max number of nonzeros in any column
         int  FreeCtrlPtMat(TensorIdx            t_idx,              // index of tensor of control points
                            VectorXi&            ndom_pts,           // number of relevant input points in each dim, covering constraints
@@ -875,7 +1025,7 @@ namespace mfa
         }
 
         // free control points matrix of basis functions
-        // helper function for EncodeTensorLocalLinear
+        // helper function for EncodeTensorLocalUnified
         // sparse matrix version; not used for now, but might be in the future
         void FreeCtrlPtMatSparse(TensorIdx          t_idx,              // index of tensor of control points
                                  VectorXi&          ndom_pts,           // number of relevant input points in each dim
@@ -1281,7 +1431,7 @@ namespace mfa
         }
 
         // constraint control points matrix of basis functions
-        // helper function for EncodeTensorLocalLinear
+        // helper function for EncodeTensorLocalUnified
         // Ncons needs to be sized correctly by caller
         void ConsCtrlPtMat(VectorXi&                ndom_pts,           // number of relevant input points in each dim
                            VectorXi&                dom_starts,         // starting offsets of relevant input points in each dim
@@ -1391,12 +1541,12 @@ namespace mfa
         // solves all dimensions together (not separably)
         // does not encode weights for now
         // latest linear constrained formulation as proposed by David Lenz (see wiki/notes/linear-constrained-fit.pdf)
-        void EncodeTensorLocalLinear(
+        void EncodeTensorLocalUnified(
                 TensorIdx                 t_idx,                  // index of tensor product being encoded
                 bool                      weighted = true)        // solve for and use weights
         {
             // debug
-            fmt::print(stderr, "EncodeTensorLocalLinear tidx = {}\n", t_idx);
+            fmt::print(stderr, "EncodeTensorLocalUnified tidx = {}\n", t_idx);
 
             // debug
             bool debug = false;
@@ -1508,10 +1658,10 @@ namespace mfa
                 else
                 {
                     if (Pcons.rows())
-                        fmt::print(stderr, "Warning: EncodeTensorLocalLinear(): row {} Nfree row sum = {} Ncons row sum = {}, Nfree + Ncons row sum = {}. This should not happen.\n",
+                        fmt::print(stderr, "Warning: EncodeTensorLocalUnified(): row {} Nfree row sum = {} Ncons row sum = {}, Nfree + Ncons row sum = {}. This should not happen.\n",
                             i, Nfree.row(i).sum(), Ncons.row(i).sum(), sum);
                     else
-                        fmt::print(stderr, "Warning: EncodeTensorLocalLinear(): row {} Nfree row sum = {}. This should not happen.\n",
+                        fmt::print(stderr, "Warning: EncodeTensorLocalUnified(): row {} Nfree row sum = {}. This should not happen.\n",
                             i, sum);
                     error = true;
                 }
@@ -1615,7 +1765,7 @@ namespace mfa
 
             // debug: collect some metrics about N
 //             size_t nonzeros = (Nfree.array() > 0).count();
-//             fmt::print(stderr, "EncodeTensorLocalLinear Nfree matrix: {} rows x {} cols = {} entries of which {} are nonzero ({})\n",
+//             fmt::print(stderr, "EncodeTensorLocalUnified Nfree matrix: {} rows x {} cols = {} entries of which {} are nonzero ({})\n",
 //                     Nfree.rows(), Nfree.cols(), Nfree.rows() * Nfree.cols(), nonzeros, float(nonzeros) / (float)(Nfree.rows() * Nfree.cols()));
 
             fmt::print(stderr, "Solving...\n");
@@ -1648,14 +1798,14 @@ namespace mfa
 
             if (solver.info() != Eigen::Success)
             {
-                cerr << "EncodeTensorLocalLinear(): Error: Matrix decomposition failed" << endl;
+                cerr << "EncodeTensorLocalUnified(): Error: Matrix decomposition failed" << endl;
                 abort();
             }
 
             t.ctrl_pts = solver.solve(Nfree.transpose() * R);
             if (solver.info() != Eigen::Success)
             {
-                cerr << "EncodeTensorLocalLinear(): Error: Least-squares solve failed" << endl;
+                cerr << "EncodeTensorLocalUnified(): Error: Least-squares solve failed" << endl;
                 abort();
             }
 
@@ -1664,7 +1814,7 @@ namespace mfa
 #endif
 
             // timing
-            fmt::print(stderr, "EncodeTensorLocalLinear() timing:\n");
+            fmt::print(stderr, "EncodeTensorLocalUnified() timing:\n");
             fmt::print(stderr, "setup time: {} s.\n", setup_time);
             fmt::print(stderr, "    = free time {} + cons time {} + mult time {} s.\n",
                     free_time, cons_time, mult_time);
@@ -1698,14 +1848,12 @@ namespace mfa
             fmt::print(stderr, "\n Current T-mesh:\n");
             mfa_data.tmesh.print(true, true);
 
+            double t0 = MPI_Wtime();
+
             // typing shortcuts
             auto& dom_dim       = mfa_data.dom_dim;
             auto& tmesh         = mfa_data.tmesh;
             auto& tensor_prods  = tmesh.tensor_prods;
-
-            // timing
-            double q_time       = MPI_Wtime();
-            fmt::print(stderr, "\nSetting up...\n");
 
             auto& t = tensor_prods[t_idx];                                                          // current tensor product
             int pt_dim = mfa_data.max_dim - mfa_data.min_dim + 1;                                   // control point dimensionality
@@ -1752,30 +1900,29 @@ namespace mfa
             VectorXi start_ijk  = in_starts;
 
             // timing
-            q_time              = MPI_Wtime() - q_time;
             double free_time    = 0.0;
             double cons_time    = 0.0;
             double norm_time    = 0.0;
-            double setup_time   = 0.0;
             double solve_time   = 0.0;
 
             for (auto dim = 0; dim < dom_dim; dim++)                                                // for all domain dimensions
             {
                 MatrixX<T> R(nin_pts(dim), pt_dim);                                                 // RHS for solving N * P = R
 
-                double t1 = MPI_Wtime();
                 VolIterator     in_iter(nin_pts, in_starts, in_all_pts);                            // volume of current input points
                 VolIterator     out_iter(nout_pts);                                                 // volume of current output points
                 SliceIterator   in_slice_iter(in_iter, dim);                                        // slice of the input points volume missing current dim
                 SliceIterator   out_slice_iter(out_iter, dim);                                      // slice of the output points volume missing current dim
 
-                // allocate matrices of constraint control points and constraint basis functions
+                // allocate matrices of free and constraint control points and constraint basis functions
+                MatrixX<T>  Nfree(nin_pts(dim), t.nctrl_pts(dim));
                 ConsType    cons_type;                                                              // none, left, right, both
                 MatrixX<T>  Ncons;
                 MatrixX<T>  Pcons;
+                MatrixX<T>  P(t.nctrl_pts(dim), pt_dim);
 
                 // debug: turn off constraints
-#if 0
+#if 1
                 cons_type = ConsType::MFA_NO_CONSTRAINT;
 #else
 
@@ -1814,120 +1961,11 @@ namespace mfa
                             start_ijk(j) += dom_starts(j);
                     }
 
-                    // copy one curve of input points to right hand side
-                    while (!in_curve_iter.done())
-                    {
-                        if (dim == 0)
-                            R.row(in_curve_iter.cur_iter()) =
-                                input.domain.block(in_curve_iter.ijk_idx(in_curve_iter.cur_ijk()), mfa_data.min_dim, 1, mfa_data.max_dim - mfa_data.min_dim + 1);
-                        else if (dim % 2 == 0)
-                            R.row(in_curve_iter.cur_iter()) = Q.row(in_curve_iter.ijk_idx(in_curve_iter.cur_ijk()));
-                        else
-                            R.row(in_curve_iter.cur_iter()) = Q1.row(in_curve_iter.ijk_idx(in_curve_iter.cur_ijk()));
-                        in_curve_iter.incr_iter();
-                    }
-
-                    // find matrix of free control point basis functions
-                    double t0 = MPI_Wtime();
-                    MatrixX<T> Nfree(nin_pts(dim), t.nctrl_pts(dim));
-                    FreeCtrlPtCurve(dim, t_idx, start_ijk, nin_pts(dim), Nfree);
-
-                    // timing
-                    free_time   += (MPI_Wtime() - t0);
-                    t0          = MPI_Wtime();
-
-                    if (Pcons.rows())
-                        ConsCtrlPtCurve(dim, t_idx, start_ijk, nin_pts, cons_type, Ncons, Pcons);
-
-                    // timing
-                    cons_time   += (MPI_Wtime() - t0);
-
-                    // normalize Nfree and Ncons such that the row sum of Nfree + Ncons = 1.0
-                    t0          = MPI_Wtime();              // timing
-
-#ifdef MFA_TBB
-
-                    static affinity_partitioner ap;
-                    parallel_for (blocked_range<size_t>(0, Nfree.rows()), [&] (blocked_range<size_t>& r)
-                    {
-                        for (auto i = r.begin(); i < r.end(); i++)
-
-#else
-
-                        for (auto i = 0; i < Nfree.rows(); i++)
-
-#endif
-
-            // TODO: understand why the second version of normalization gives a worse answer than the first
-            // and why not normalizing at all also gives a good answer, very close to the first version
-            // then pick one of these versions and remove the other
-
-#if 1
-
-                        {
-                            bool error = false;
-                            T sum = Nfree.row(i).sum();
-                            if (Ncons.rows())
-                                sum += Ncons.row(i).sum();
-
-                            if (sum > 0.0)
-                            {
-                                Nfree.row(i) /= sum;
-                                if (Ncons.rows())
-                                    Ncons.row(i) /= sum;
-                            }
-                            else
-                                throw MFAError(fmt::format("EncodeTensorLocalSeparable(): row {} has 0.0 row sum for free and constraint basis functions. curve {} dim {}",
-                                        i, in_slice_iter.cur_iter(), dim));
-                        }
-
-#else
-
-                        {
-                            T Nfree_sum, Nprev_cons_sum, Nnext_cons_sum;
-                            T Nfree_sum = Nfree.row(i).sum();
-                            if (Pcons.rows())
-                                Ncons_sum = Ncons.row(i).sum();
-                            if (Nfree_sum + Ncons_sum == 0.0)
-                                throw MFAError(fmt::format("EncodeTensorLocalSeparable(): row {} has 0.0 row sum for free and constraint basis functions. curve {} dim {}",
-                                        i, in_slice_iter.cur_iter(), dim));
-                            if (Nfree_sum > 0.0)
-                                Nfree.row(i) /= Nfree_sum;
-                            if (Ncons_sum > 0.0)
-                                Ncons.row(i) /= Ncons_sum;
-                        }
-
-#endif
-
-#ifdef MFA_TBB
-
-                    }, ap);
-
-#endif
-
-                    norm_time += (MPI_Wtime() - t0);                    // timing
-
-                    // R is the right hand side needed for solving N * P = R
-                    if (Pcons.rows())
-                        R -= Ncons * Pcons;
-
-                    setup_time  += (MPI_Wtime() - t1);                  // timing
-
-                    // solve
-                    t0 = MPI_Wtime();
-                    MatrixX<T> P(t.nctrl_pts(dim), pt_dim);
-
-                    // debug: check matrix product sizes
-                    // TODO: remove once stable
-                    if (Nfree.rows() != R.rows() || P.rows() != Nfree.cols())
-                    {
-                        fmt::print(stderr, "Error EncodeTensorLocalSeparable(): Nfree.rows() {} should equal R.rows {} and P.rows() {} should equal Nfree.cols() {}\n",
-                                Nfree.rows(), R.rows(), P.rows(), Nfree.cols());
-                        abort();
-                    }
-
-                    P = (Nfree.transpose() * Nfree).ldlt().solve(Nfree.transpose() * R);
-                    solve_time += (MPI_Wtime() - t0);
+                    if (CurveIntersectsTensor(in_curve_iter, t_idx))
+                        ComputeCtrlPtCurve(in_curve_iter, t_idx, dim, R, Q, Q1, Nfree, Ncons, Pcons, P,
+                                cons_type, nin_pts, start_ijk, free_time, cons_time, norm_time, solve_time);
+                    else
+                        InterpCtrlPtCurve(in_curve_iter, t_idx);
 
                     // copy solution to one curve of output points
                     CurveIterator   out_curve_iter(out_slice_iter);                                     // one curve of the output points in the current dim
@@ -1960,16 +1998,7 @@ namespace mfa
                 t.ctrl_pts = Q1.block(0, 0, t.nctrl_pts.prod(), pt_dim);
 
             // timing
-            fmt::print(stderr, "EncodeTensorLocalSeparable() timing:\n");
-            fmt::print(stderr, "setup time: {} s.\n", setup_time);
-//             fmt::print(stderr, "    = free time {} + cons time {} + mult time {} s.\n",
-//                     free_time, cons_time, mult_time);
-//             fmt::print(stderr, "    = q time {} + free time {} + cons time {} + norm time {} + mult time {} r time {} s.\n",
-//                     q_time, free_time, cons_time, norm_time, mult_time, r_time);
-//             fmt::print(stderr, "free_time {} = free_iter_time {} + dom_iter_time {} s.\n",
-//                     free_time, free_iter_time, dom_iter_time);
-
-            fmt::print(stderr, "solve time: {} s.\n", solve_time);
+            fmt::print(stderr, "EncodeTensorLocalSeparable() time {} s.\n", MPI_Wtime() - t0);
         }
 
 #endif  // MFA_TMESH
@@ -3465,7 +3494,7 @@ namespace mfa
 #ifdef MFA_ENCODE_LOCAL_SEPARABLE
                 EncodeTensorLocalSeparable(tensor_idx);
 #else
-                EncodeTensorLocalLinear(tensor_idx);
+                EncodeTensorLocalUnified(tensor_idx);
 #endif
             }
         }
