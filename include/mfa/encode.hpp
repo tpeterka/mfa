@@ -588,11 +588,36 @@ namespace mfa
 #ifdef MFA_TMESH
 
         // whether a curve of input points intersects a tensor product
+        // only checks dimensions above the current dim
+        // higher dims are for input point space, lower dims are in control point space
+        // lower dims are guranteed to intersect already
+        // NB: not general purpose because does not check all dims
         bool CurveIntersectsTensor(
-                CurveIterator&      in_curve_iter,
-                TensorIdx           t_idx)
+                TensorIdx               t_idx,                          // index of current tensor
+                int                     dim,                            // current dimension of curve
+                const VectorXi&         nin_pts,                        // number of input points
+                const VectorXi&         start_ijk)                      // i,j,k of start of input points
         {
-            // TODO
+            auto& t = mfa_data.tmesh.tensor_prods[t_idx];
+
+            // ijk and param of point in the middle of the curve
+            VectorXi mid_ijk = start_ijk;
+            mid_ijk(dim) += nin_pts(dim) / 2;
+            VectorX<T> mid_param(mfa_data.dom_dim);
+
+            for (auto i = dim + 1; i < mfa_data.dom_dim; i++)           // only checks dimensions after current dim; earlier dims guranteed to intersect
+            {
+                mid_param(i) = input.params->param_grid[i][mid_ijk(i)];
+                if (mid_param(i) < mfa_data.tmesh.all_knots[i][t.knot_mins[i]] || mid_param(i) > mfa_data.tmesh.all_knots[i][t.knot_maxs[i]])
+                {
+                    // debug
+//                     fmt::print(stderr, "CurveIntersectsTensor(): does not intersect t_idx {} dim {} start_ijk [{}] mid_param({}) = {}\n",
+//                             t_idx, dim, start_ijk.transpose(), i, mid_param(i));
+
+                    return false;
+                }
+            }
+
             return true;
         }
 
@@ -835,10 +860,7 @@ namespace mfa
             TensorIdx found_idx = mfa_data.tmesh.find_tensor(param, t_idx, found);
             auto& found_tensor  = mfa_data.tmesh.tensor_prods[found_idx];
             if (!found)
-            {
-                fmt::print(stderr, "FreeCtrlPtCurve: tensor containing parameter not found. This should not happen\n");
-                abort();
-            }
+                throw MFAError(fmt::format("FreeCtrlPtCurve: tensor containing parameter not found. This should not happen\n"));
 
             // for the start of the curve, for the current dim. and higher, find anchor
             // these dims are in the input point space
@@ -854,18 +876,31 @@ namespace mfa
                     anchor[i] = mfa_data.tmesh.FindSpan(i, param(i), found_tensor);
             }
 
+            // debug
+            fmt::print(stderr, "FreeCtrlPtCurve: dim {} t_idx {} start point anchor [{}]\n", dim, t_idx, fmt::join(anchor, ","));
+
             for (auto i = 0; i < t.nctrl_pts(dim); i++)                                                 // for all control points in current dim
             {
                 // anchor of control point in current dim
                 anchor[dim] = mfa_data.tmesh.ctrl_pt_anchor_dim(dim, t, i);
 
-                // find correct tensor in case it needs to be adjusted
-                found_idx = mfa_data.tmesh.find_tensor(anchor, found_idx, found);
+                // debug: confirm that the anchor is in the tensor
+                // TODO: remove once stable
+                found_idx = mfa_data.tmesh.find_tensor(anchor, t_idx, found);
                 if (!found)
-                {
-                    fmt::print(stderr, "FreeCtrlPtCurve: tensor containing parameter not found. This should not happen\n");
-                    abort();
-                }
+                    throw MFAError(fmt::format("FreeCtrlPtCurve: anchor [{}] was not found in any tensor\n", fmt::join(anchor, ",")));
+                if (found_idx != t_idx)
+                    throw MFAError(fmt::format("FreeCtrlPtCurve: anchor [{}] is not inside tensor {} and was found in tensor{} instead\n",
+                                fmt::join(anchor, ","), t_idx, found_idx));
+
+                // DEPRECATE; control point must be inside the current tensor, otherwise we would have called InterpCtrlPtCurve
+//                 // find correct tensor in case it needs to be adjusted
+//                 found_idx = mfa_data.tmesh.find_tensor(anchor, found_idx, found);
+//                 if (!found)
+//                 {
+//                     fmt::print(stderr, "FreeCtrlPtCurve: tensor containing parameter not found. This should not happen\n");
+//                     abort();
+//                 }
 
                 // local knot vector in currrent dimension
                 mfa_data.tmesh.knot_intersections(anchor, found_idx, local_knot_idxs);                  // local knot indices in all dimensions
@@ -876,12 +911,6 @@ namespace mfa
                 {
                     T u = input.params->param_grid[dim][start_ijk(dim) + j];                            // parameter of current input point
                     Nfree(j, i) = mfa_data.OneBasisFun(dim, u, local_knots);                            // basis function
-
-                    // debug
-//                     if (j == 0)
-//                         fmt::print(stderr, "FreeCtrlPtCurve 3: first u {}\n", u);
-//                     else if (j == npts - 1)
-//                         fmt::print(stderr, "FreeCtrlPtCurve 4: last u {}\n", u);
                 }
             }       // control points
 
@@ -1961,7 +1990,7 @@ namespace mfa
                             start_ijk(j) += dom_starts(j);
                     }
 
-                    if (CurveIntersectsTensor(in_curve_iter, t_idx))
+                    if (CurveIntersectsTensor(t_idx, dim, nin_pts, start_ijk))
                         ComputeCtrlPtCurve(in_curve_iter, t_idx, dim, R, Q, Q1, Nfree, Ncons, Pcons, P,
                                 cons_type, nin_pts, start_ijk, free_time, cons_time, norm_time, solve_time);
                     else
@@ -3459,15 +3488,16 @@ namespace mfa
                 if (t.level < 0)                        // tensor was removed from the schedule
                     continue;
 
+                // debug
+                fmt::print(stderr, "AddNewTensors(): appending tensor knot_mins [{}] knot_maxs [{}] level {}\n",
+                        fmt::join(t.knot_mins, ","), fmt::join(t.knot_maxs, ","), t.level);
+
                 int tensor_idx = tmesh.append_tensor(t.knot_mins, t.knot_maxs, t.level);
 
                 // debug: check all spans before solving
                 // TODO: comment out once the code is debugged
                 if (!nk.CheckAllSpans())
-                {
-                    fmt::print(stderr, "Refine(): Error: failed checking all spans for input points\n");
-                    abort();
-                }
+                    throw MFAError(fmt::format("AddNewTensors(): Error: failed checking all spans for input points\n"));
 
                 // debug: check all knot vs control point quantities
                 // TODO: comment out once the code is debugged
@@ -3481,10 +3511,10 @@ namespace mfa
                     if (!tmesh.check_num_ctrl_degree(i, 0))
                     {
                         auto& t = tensor_prods[k];
-                        fmt::print(stderr, "Error: After appending tensor k {} one of the tensors has fewer than p control points. This should not happen\n", k);
+                        fmt::print(stderr, "Error: AddNewTensors(): After appending tensor k {} one of the tensors has fewer than p control points. This should not happen\n", k);
                         fmt::print(stderr, "New tensor knot_mins [{}] knot_maxs[{}] level {} parent tensor {}\n",
                                 fmt::join(t.knot_mins, ","), fmt::join(t.knot_maxs, ","), t.level, t.parent);
-                        fmt::print(stderr, "\nRefine(): T-mesh after appending tensor k {}\n", k);
+                        fmt::print(stderr, "\nAddNewTensors(): T-mesh after appending tensor k {}\n", k);
                         tmesh.print(true, true, false, false);
                         abort();
                     }

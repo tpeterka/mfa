@@ -317,12 +317,12 @@ namespace mfa
                 vec_grew = false;           // tensor_prods grew and iterator is invalid
                 bool knots_match;           // intersect resulted in a tensor with same knot mins, maxs as tensor to be added
 
-                for (auto j = 0; j < tensor_prods.size(); j++)      // for all tensor products
+                for (auto j = 0; j < tensor_prods.size(); )             // for all tensor products, loop index j controlled manually inside loop
                 {
-                    // check if new tensor completely covers existing tensor, if so, delete existing
+                    // check if new tensor completely covers existing tensor j, if so, delete existing tensor j
                     if (subset(tensor_prods[j].knot_mins, tensor_prods[j].knot_maxs, new_tensor.knot_mins, new_tensor.knot_maxs))
                     {
-                        // delete neighbors' prev/next pointers to this tensor
+                        // delete neighbors' prev/next pointers to this tensor j
                         for (auto i = 0; i < dom_dim_; i++)
                         {
                             auto& prev = tensor_prods[j].prev[i];
@@ -333,21 +333,35 @@ namespace mfa
                                 delete_pointer(next[k], j);
                         }
 
-                        // delete the tensor by swapping the last tensor in its place
-                        // TODO: deep copy can be avoided by marking tensor as dirty and reclaiming on next append
-                        tensor_prods[j] = tensor_prods.back();
-                        tensor_prods.resize(tensor_prods.size() - 1);
-
-                        // renumber the pointers of the moved tensor's neighbors
-                        for (auto i = 0; i < dom_dim_; i++)
+                        // TODO: I added this if-then check on 2/21/22, and seems to cause an inconsistency in the state
+                        // check when we hit this case, and if this is even possible or signals some larger problem
+                        if (j < tensor_prods.size() - 1)            // tensor to be deleted is not the last one
                         {
-                            auto& prev = tensor_prods[j].prev[i];
-                            for (auto k = 0; k < prev.size(); k++)
-                                change_pointer(prev[k], tensor_prods.size(), j);
-                            auto& next = tensor_prods[j].next[i];
-                            for (auto k = 0; k < next.size(); k++)
-                                change_pointer(next[k], tensor_prods.size(), j);
+                            // delete the tensor by swapping the last tensor in its place
+                            // TODO: deep copy can be avoided by marking tensor as dirty and reclaiming on next append
+                            tensor_prods[j] = tensor_prods.back();
+                            tensor_prods.resize(tensor_prods.size() - 1);
+
+                            // the tensor that used to be at the back is now j
+                            // renumber the pointers of the moved tensor's neighbors
+                            for (auto i = 0; i < dom_dim_; i++)
+                            {
+                                auto& prev = tensor_prods[j].prev[i];
+                                for (auto k = 0; k < prev.size(); k++)
+                                    change_pointer(prev[k], tensor_prods.size(), j);
+                                auto& next = tensor_prods[j].next[i];
+                                for (auto k = 0; k < next.size(); k++)
+                                    change_pointer(next[k], tensor_prods.size(), j);
+                            }
+                            // NB: don't increment loop index j in this case, recheck the tensor at the same index (swapped from back) next time
                         }
+                        else                                        // tensor to be deleted is the last one
+                        {
+                            tensor_prods.resize(tensor_prods.size() - 1);
+                            j++;
+                        }
+
+                        continue;
                     }
 
                     if (nonempty_intersection(new_tensor, tensor_prods[j], split_side))
@@ -359,6 +373,8 @@ namespace mfa
                             break;  // adding a tensor invalidates iterator, start iteration over
                         }
                     }
+
+                    j++;            // manually incremented loop index
                 }   // for all tensor products
             } while (vec_grew);   // keep checking until no more tensors are added
 
@@ -1377,6 +1393,7 @@ namespace mfa
             vector<KnotIdx> pt_(dom_dim_);
             for (auto i = 0; i < dom_dim_; i++)
                 pt_[i] = FindSpan(i, param(i), tensor);
+
             return in(pt_, tensor, skip_dim);
         }
 
@@ -1466,38 +1483,6 @@ namespace mfa
 
             return true;
         }
-
-        //         DEPRECATE
-        //         this is not right, can't check NAW weight without having all dims for pt
-        //
-//         // checks if a point in index space is in a tensor product in one dimension
-//         // for dimension i, if degree[i] is even, pt[i] + 0.5 is checked because pt coords are truncated to integers
-//         // if ctrl_pt_anchor == true, if degree[cur_dim] is even, pt + 0.5 is checked because pt coords are truncated to integers
-//         bool in_dim(KnotIdx                 pt,
-//                     const TensorProduct<T>& tensor,
-//                     int                     cur_dim) const
-//         {
-//             VolIterator vol_iter(tensor.nctrl_pts);
-//             VectorXi    ijk = VectorXi::Zero(dom_dim_);
-// 
-//             if (pt < tensor.knot_mins[cur_dim] || pt > tensor.knot_maxs[cur_dim])
-//                 return false;
-// 
-//             // pt matching max side of tensor requires extra care for interior tensors
-//             if (pt == tensor.knot_maxs[cur_dim] && tensor.knot_maxs[cur_dim] < all_knots[cur_dim].size() - 1)
-//             {
-//                 if (p_(cur_dim) % 2 == 0)                           // even degree: param belongs to next tensor
-//                     return false;
-//                 if (p_(cur_dim) % 2 == 1)                           // odd degree: check for MFA_NAW control point at max edge in this dim
-//                 {
-//                     ijk(cur_dim) = tensor.nctrl_pts(cur_dim) - 1;
-//                     if (tensor.weights(vol_iter.ijk_idx(ijk)) == MFA_NAW)
-//                         return false;
-//                 }
-//             }
-// 
-//             return true;
-//         }
 
         // checks if a point in index space is in the neighbors of a tensor product, for one dimension
         void in_neighbors(const vector<KnotIdx>&    pt,                     // anchor point in index space
@@ -2685,21 +2670,18 @@ namespace mfa
                 }
                 else                                                                            // odd degree
                 {
-                    if (tensor.knot_maxs[cur_dim] > found + 1 &&                                // right edge of found span is inside the max of the tensor
+                    if (tensor.knot_maxs[cur_dim] > tensor.knot_idxs[cur_dim][found + 1] &&     // right edge of found span is inside the max of the tensor
                             u >= all_knots[cur_dim][tensor.knot_idxs[cur_dim][found + 1]])
                         error = true;
-                    if (tensor.knot_maxs[cur_dim] == found + 1 &&                               // right edge of found span is at max of the tensor
+                    if (tensor.knot_maxs[cur_dim] == tensor.knot_idxs[cur_dim][found + 1] &&    // right edge of found span is at max of the tensor
                             u > all_knots[cur_dim][tensor.knot_idxs[cur_dim][found + 1]])
                         error = true;
                 }
             }
             if (error)
-            {
-                fmt::print(stderr, "FindSpan(): parameter {} not in span [{}, {}) = knots [{}, {}). This should not happen.\n",
-                        u, found, found + 1, all_knots[cur_dim][tensor.knot_idxs[cur_dim][found]],
-                        all_knots[cur_dim][tensor.knot_idxs[cur_dim][found + 1]]);
-                abort();
-            }
+                throw MFAError(fmt::format("FindSpan(): parameter {} in dim not in local span [{}, {}) global span [{}, {}) = knots [{}, {})\n",
+                            u, cur_dim, found, found + 1, tensor.knot_idxs[cur_dim][found], tensor.knot_idxs[cur_dim][found + 1],
+                            all_knots[cur_dim][tensor.knot_idxs[cur_dim][found]], all_knots[cur_dim][tensor.knot_idxs[cur_dim][found + 1]]));
 
             return tensor.knot_idxs[cur_dim][found];
         }
