@@ -1291,38 +1291,61 @@ namespace mfa
         // finds the tensor containing a point in index space
         // starts with the parent tensor, then its neighbors, then all tensors
         // if the point is on a boundary between tensors, finds the first match
-        // if pt is in the knot_mins, knot_maxs of a tensor but is at a deeper level
-        // than the tensor, adjusts pt to the tensor level
+        // if adjust_pt is true and pt is in the knot_mins, knot_maxs of a tensor but is at a deeper level
+        // than the tensor, adjusts pt to the tensor level (potentially dangerous side effect)
         TensorIdx find_tensor(vector<KnotIdx>&          pt,             // multidim point in index space (input/output, may be adjusted by this routine)
                               TensorIdx                 parent_idx,     // parent tensor, search starts here
+                              bool                      adjust_pt,      // whether to adjust pt for level of found tensor (potentially dangerous side effect)
                               bool&                     found) const    // (output) success
         {
             auto& parent = tensor_prods[parent_idx];
+            vector<KnotIdx> temp_pt = pt;
 
             // parent tensor
-            if (in(pt, tensor_prods[parent_idx]))
+            if (in(pt, tensor_prods[parent_idx], true))
             {
                 found = true;
+                if (!adjust_pt)
+                    pt = temp_pt;
                 return parent_idx;
             }
+
             // neighbors of parent tensor
             for (auto i = 0; i < dom_dim_; i++)
             {
                 for (auto j = 0; j < parent.prev[i].size(); j++)
                 {
-                    if (in(pt, tensor_prods[parent.prev[i][j]]))
+                    pt = temp_pt;
+                    if (in(pt, tensor_prods[parent.prev[i][j]], true))
                     {
                         found = true;
+                        if (!adjust_pt)
+                            pt = temp_pt;
                         return parent.prev[i][j];
                     }
                 }
+                for (auto j = 0; j < parent.next[i].size(); j++)
+                {
+                    pt = temp_pt;
+                    if (in(pt, tensor_prods[parent.next[i][j]], true))
+                    {
+                        found = true;
+                        if (!adjust_pt)
+                            pt = temp_pt;
+                        return parent.next[i][j];
+                    }
+                }
             }
+
             // all tensors
             for (auto i = 0; i < tensor_prods.size(); i++)
             {
-                if (in(pt, tensor_prods[i]))
+                pt = temp_pt;
+                if (in(pt, tensor_prods[i], true))
                 {
                     found = true;
+                    if (!adjust_pt)
+                        pt = temp_pt;
                     return i;
                 }
             }
@@ -1356,6 +1379,14 @@ namespace mfa
                         return parent.prev[i][j];
                     }
                 }
+                for (auto j = 0; j < parent.next[i].size(); j++)
+                {
+                    if (in(param, tensor_prods[parent.next[i][j]]))
+                    {
+                        found = true;
+                        return parent.next[i][j];
+                    }
+                }
             }
             // all tensors
             for (auto i = 0; i < tensor_prods.size(); i++)
@@ -1372,15 +1403,11 @@ namespace mfa
 
         // checks if a point in parameter space is in a tensor product
         bool in(const VectorX<T>&       param,
-                const TensorProduct<T>& tensor,
-                int                     skip_dim = -1) const
+                const TensorProduct<T>& tensor) const
         {
             // check knot_mins, knot_maxs first
             for (auto i = 0; i < dom_dim_; i++)
             {
-                if (i == skip_dim)
-                    continue;
-
                 if (param(i) < all_knots[i][tensor.knot_mins[i]] || param(i) > all_knots[i][tensor.knot_maxs[i]])
                     return false;
 
@@ -1394,41 +1421,47 @@ namespace mfa
             for (auto i = 0; i < dom_dim_; i++)
                 pt_[i] = FindSpan(i, param(i), tensor);
 
-            return in(pt_, tensor, skip_dim);
+            return in(pt_, tensor, false);
         }
 
         // checks if a point in index space is in a tensor product
-        // if pt is in the knot_mins, knot_maxs of the tensor but is at a deeper level
-        // than the tensor, adjusts pt to the tensor level
+        // if adjust_pt is true and pt is in the knot_mins, knot_maxs of the tensor but is at a deeper level
+        // than the tensor, adjusts pt to the tensor level (potentially dangerous side effect)
         // point is given in Eigen vector format
-        bool in(VectorXi&               pt,             // input and output, may be ajusted by this routine
+        bool in(
+                VectorXi&               pt,                         // input and output, may be ajusted by this routine
                 const TensorProduct<T>& tensor,
-                int                     skip_dim = -1) const
+                bool                    adjust_pt) const            // adjust point to be at level of tensor
         {
             // convert pt to std::vector and call the matching function
             vector<KnotIdx> pt_(dom_dim_);
             for (auto i = 0; i < dom_dim_; i++)
                 pt_[i] = pt(i);
-            return in(pt_, tensor, skip_dim);
+            bool retval = in(pt_, tensor, adjust_pt);
+
+            // copy back to Eigen vector in case point is adjusted
+            if (adjust_pt)
+            {
+                for (auto i = 0; i < dom_dim_; i++)
+                    pt(i) = pt_[i];
+            }
+
+            return retval;
         }
 
         // checks if a point in index space is in a tensor product
-        // if pt is in the knot_mins, knot_maxs of the tensor but is at a deeper level
-        // than the tensor, adjusts pt to the tensor level
+        // if adjust_pt is true and pt is in the knot_mins, knot_maxs of the tensor but is at a deeper level
+        // than the tensor, adjusts pt to the tensor level (potentially dangerous side effect)
         // point is given in std::vector format
-        bool in(vector<KnotIdx>&        pt,             // input and output, mayb be adjusted by this routine
-                const TensorProduct<T>& tensor,
-                int                     skip_dim = -1) const
+        bool in(
+                vector<KnotIdx>&        pt,                         // input and output, mayb be adjusted by this routine
+                const TensorProduct<T>& tensor,                     // tensor product
+                bool                    adjust_pt) const            // adjust point to be at level of tensor
+                                                                    // caution: potentially dangerous side effect
         {
-            // debug
-            bool debug = false;
-
             // check knot_mins, knot_maxs first
             for (auto i = 0; i < dom_dim_; i++)
             {
-                if (i == skip_dim)
-                    continue;
-
                 if (pt[i] < tensor.knot_mins[i] || pt[i] > tensor.knot_maxs[i])
                     return false;
 
@@ -1437,8 +1470,11 @@ namespace mfa
                     return false;
 
                 // adjust pt to same level as tensor
-                while (pt[i] && all_knot_levels[i][pt[i]] > tensor.level)
-                    pt[i]--;
+                if (adjust_pt)
+                {
+                    while (pt[i] && all_knot_levels[i][pt[i]] > tensor.level)
+                        pt[i]--;
+                }
             }
 
             // pt matching max side of tensor requires extra care for interior tensors with odd degree
@@ -1469,14 +1505,10 @@ namespace mfa
         // point is given in std::vector format
         bool in(const vector<KnotIdx>&  pt,
                 const vector<KnotIdx>&  knot_mins,
-                const vector<KnotIdx>&  knot_maxs,
-                int                     skip_dim = -1) const
+                const vector<KnotIdx>&  knot_maxs) const
         {
             for (auto i = 0; i < dom_dim_; i++)
             {
-                if (i == skip_dim)
-                        continue;
-
                 if (pt[i] < knot_mins[i] || pt[i] > knot_maxs[i])
                     return false;
             }
@@ -1527,7 +1559,7 @@ namespace mfa
             {
                 if (anchor[j] < t.knot_mins[j] || anchor[j] > t.knot_maxs[j])
                 {
-                    fmt::print(stderr, "Error: knot_intersections(): anchor [{}] is outside of tensor {} knot mins [{}] maxs [{}]. This should not happen.\n",
+                    fmt::print(stderr, "Error: prev_knot_intersections(): anchor [{}] is outside of tensor {} knot mins [{}] maxs [{}]. This should not happen.\n",
                             fmt::join(anchor, ","), t_idx, fmt::join(t.knot_mins, ","), fmt::join(t.knot_maxs, ","));
                     abort();
                 }
@@ -1590,7 +1622,7 @@ namespace mfa
             {
                 if (anchor[j] < t.knot_mins[j] || anchor[j] > t.knot_maxs[j])
                 {
-                    fmt::print(stderr, "Error: knot_intersections(): anchor [{}] is outside of tensor {} knot mins [{}] maxs [{}]. This should not happen.\n",
+                    fmt::print(stderr, "Error: next_knot_intersections(): anchor [{}] is outside of tensor {} knot mins [{}] maxs [{}]. This should not happen.\n",
                             fmt::join(anchor, ","), t_idx, fmt::join(t.knot_mins, ","), fmt::join(t.knot_maxs, ","));
                     abort();
                 }
@@ -1650,11 +1682,8 @@ namespace mfa
             for (auto j = 0; j < dom_dim_; j++)
             {
                 if (anchor[j] < t.knot_mins[j] || anchor[j] > t.knot_maxs[j])
-                {
-                    fmt::print(stderr, "Error: knot_intersections(): anchor [{}] is outside of tensor {} knot mins [{}] maxs [{}]. This should not happen.\n",
-                            fmt::join(anchor, ","), t_idx, fmt::join(t.knot_mins, ","), fmt::join(t.knot_maxs, ","));
-                    abort();
-                }
+                    throw MFAError(fmt::format("knot_intersections(): anchor [{}] is outside of tensor {} knot mins [{}] maxs [{}]\n",
+                            fmt::join(anchor, ","), t_idx, fmt::join(t.knot_mins, ","), fmt::join(t.knot_maxs, ",")));
             }
 
             loc_knots.resize(dom_dim_);
@@ -1694,11 +1723,8 @@ namespace mfa
                     while (cur[i] > 0 && !next_inter(tensor_prods[cur_tensor].prev[i], i, -1, cur, cur_tensor, cur_level) && count < max_count)
                         count++;
                     if (count >= max_count)
-                    {
-                        fmt::print(stderr, "Error: knot_intersections(): max attempts at constructing local knot vector in min. direction exceeded\n");
-                        fmt::print(stderr, "dim {} anchor {} t_idx {}\n", i, fmt::join(anchor, ","), t_idx);
-                        abort();
-                    }
+                        throw MFAError(fmt::format("knot_intersections(): too many attempts at constructing local knot vector in min. direction; dim {} anchor {} t_idx {}\n",
+                                    i, fmt::join(anchor, ","), t_idx));
 
                     if (cur[i] > 0)                                         // more knots in the tmesh
                     {
@@ -1729,11 +1755,8 @@ namespace mfa
                             !next_inter(tensor_prods[cur_tensor].next[i], i, 1, cur, cur_tensor, cur_level) && count < max_count)
                         count++;
                     if (count >= max_count)
-                    {
-                        fmt::print(stderr, "Error: knot_intersections(): max attempts at constructing local knot vector in max. direction exceeded\n");
-                        fmt::print(stderr, "dim {} anchor {} t_idx {}\n", i, fmt::join(anchor, ","), t_idx);
-                        abort();
-                    }
+                        throw MFAError(fmt::format("knot_intersections(): too many attempts at constructing local knot vector in max. direction; dim {} anchor {} t_idx {}\n",
+                                    i, fmt::join(anchor, ","), t_idx));
 
                     if (cur[i] < all_knots[i].size() - 1)
                     {
@@ -1874,7 +1897,6 @@ namespace mfa
             for (auto j = 0; j < tensor_prods.size(); j++)
             {
                 if (in(target, tensor_prods[j].knot_mins, tensor_prods[j].knot_maxs))
-//                 if (in(target, tensor_prods[j]))
                 {
                     found = true;
                     if (tensor_prods[j].level > max_level)
@@ -2001,7 +2023,7 @@ namespace mfa
                         {
                             TensorIdx           neigh_idx       = neighbor_idxs[k];
                             TensorProduct<T>&   neigh_tensor    = tensor_prods[neigh_idx];
-                            if (anchor_max_level <= neigh_tensor.level && in(anchor, neigh_tensor))
+                            if (anchor_max_level <= neigh_tensor.level && in(anchor, neigh_tensor, false))
                             {
                                 tensor_tot_nctrl_pts[neigh_idx]++;
                                 tensor_idxs[vol_iter.cur_iter()].push_back(neigh_idx);
@@ -2131,7 +2153,7 @@ namespace mfa
             // check nearest neighbor next tensors
             for (auto i = 0; i < tensor.next[cur_dim].size(); ++i)
             {
-                if (in(pt, tensor_prods[tensor.next[cur_dim][i]]))
+                if (in(pt, tensor_prods[tensor.next[cur_dim][i]], false))
                     return tensor.next[cur_dim][i];
             }
             return tensor_prods.size();
@@ -2148,20 +2170,20 @@ namespace mfa
             const TensorProduct<T>& tensor = tensor_prods[tensor_idx];
 
             // check current tensor
-            if (in(pt, tensor))
+            if (in(pt, tensor, false))
                 return tensor_idx;
 
             // check nearest neighbor prev tensors
             for (auto i = 0; i < tensor.prev[cur_dim].size(); ++i)
             {
-                if (in(pt, tensor_prods[tensor.prev[cur_dim][i]]))
+                if (in(pt, tensor_prods[tensor.prev[cur_dim][i]], false))
                     return tensor.prev[cur_dim][i];
             }
 
             // check nearest neighbor next tensors
             for (auto i = 0; i < tensor.next[cur_dim].size(); ++i)
             {
-                if (in(pt, tensor_prods[tensor.next[cur_dim][i]]))
+                if (in(pt, tensor_prods[tensor.next[cur_dim][i]], false))
                     return tensor.next[cur_dim][i];
             }
 
@@ -2295,8 +2317,8 @@ namespace mfa
                 }
             }
 
-            fmt::print(stderr, "start_knot_idxs [{}] end_knot_idxs [{}] start_pt_idxs [{}] end_pt_idxs [{}]\n",
-                    fmt::join(start_knot_idxs, ","), fmt::join(end_knot_idxs, ","), fmt::join(start_idxs, ","), fmt::join(end_idxs, ","));
+//             fmt::print(stderr, "start_knot_idxs [{}] end_knot_idxs [{}] start_pt_idxs [{}] end_pt_idxs [{}]\n",
+//                     fmt::join(start_knot_idxs, ","), fmt::join(end_knot_idxs, ","), fmt::join(start_idxs, ","), fmt::join(end_idxs, ","));
         }
 
         // for a given tensor, return linear index of control point corresponding to given anchor
