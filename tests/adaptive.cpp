@@ -113,6 +113,7 @@ int main(int argc, char** argv)
 #endif
 #ifdef MFA_KOKKOS
     cerr << "threading: Kokkos" << endl;
+    std::cout << "KOKKOS execution space: " << Kokkos::DefaultExecutionSpace::name() << "\n";
 #endif
 #ifdef MFA_SYCL
     cerr << "threading: SYCL" << endl;

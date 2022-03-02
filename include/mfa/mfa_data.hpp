@@ -1439,7 +1439,7 @@ namespace mfa
 
 #endif              // end TBB version
 
-#if defined( MFA_SERIAL) || defined(MFA_KOKKOS)   // serial vesion
+#if defined( MFA_SERIAL) || defined(MFA_KOKKOS)   // serial version
 
                 MatrixX<T> old_curve_ctrl_pts, new_curve_ctrl_pts;              // old and new control points for one curve
                 VectorX<T> old_curve_weights, new_curve_weights;                // old and new weights for one curve
@@ -1604,7 +1604,7 @@ namespace mfa
 
 #endif              // end TBB version
 
-#if defined(MFA_SERIAL)  || defined(MFA_KOKKOS)    // serial vesion or kokkos
+#if defined(MFA_SERIAL)  || defined(MFA_KOKKOS)    // serial version or kokkos
 
                 MatrixX<T> old_curve_ctrl_pts, new_curve_ctrl_pts;              // old and new control points for one curve
                 VectorX<T> old_curve_weights, new_curve_weights;                // old and new weights for one curve

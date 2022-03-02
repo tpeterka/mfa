@@ -110,6 +110,11 @@ int main(int argc, char** argv)
 #ifdef MFA_SERIAL
     cerr << "threading: serial" << endl;
 #endif
+
+#ifdef MFA_KOKKOS
+    cerr << "threading: kokkos" << endl;
+#endif
+
 #ifdef MFA_NO_WEIGHTS
     cerr << "weighted = 0" << endl;
 #else
