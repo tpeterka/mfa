@@ -402,6 +402,7 @@ namespace mfa
         // TODO: serial implementation, no threading
         // TODO: no derivatives as yet
         // TODO: weighs all dims, whereas other versions of VolPt have a choice of all dims or only last dim
+        // TODO: need a tensor product locating structure to quickly locate the tensor product containing param
         void VolPt_tmesh(const VectorX<T>&      param,      // parameters of point to decode
                          VectorX<T>&            out_pt)     // (output) point, allocated by caller
         {
@@ -419,11 +420,10 @@ namespace mfa
             T w_sum = 0.0;                                                          // sum of control point weights
 
             // compute range of anchors covering decoded point
+            // TODO: need a tensor product locating structure to quickly locate the tensor product containing param
+            // current passing tensor 0 as a seed for the search
             vector<vector<KnotIdx>> anchors(mfa_data.dom_dim);
-
-            //             DEPRECATE using the 'expand' argument in anchors()
-//             mfa_data.tmesh.anchors(param, true, anchors);
-            mfa_data.tmesh.anchors(param, anchors);
+            mfa_data.tmesh.anchors(param, 0, anchors);                              // 0 is the seed for searching for the correct tensor TODO
 
             for (auto k = 0; k < mfa_data.tmesh.tensor_prods.size(); k++)           // for all tensor products
             {
@@ -477,7 +477,7 @@ namespace mfa
                     }
 
                     // debug
-//                     bool skip = false;
+                    bool skip = false;
 
                     // skip control points too far away from the decoded point
                     if (!mfa_data.tmesh.in_anchors(anchor, anchors))
@@ -490,11 +490,7 @@ namespace mfa
 //                         }
 
                         // debug
-//                         if (debug)
-//                             skip = true;
-
-                        // debug
-//                         skip = true;
+                        skip = true;
 
                         vol_iterator.incr_iter();
                         continue;
@@ -532,12 +528,13 @@ namespace mfa
                     out_pt += B * t.ctrl_pts.row(vol_iterator.cur_iter()) * t.weights(vol_iterator.cur_iter());
 
                     // debug
-//                     if (skip && B != 0.0)
-//                     {
-//                         cerr << "\nVolPt_tmesh(): Error: incorrect skip. decoding point with param: " << param.transpose() << endl;
-//                         cerr << "tensor " << k << " skipping ctrl pt [" << ijk.transpose() << "] " << endl;
-//                         fmt::print(stderr, "anchor [{}]\n", fmt::join(anchor, ","));
-//                     }
+                    if (skip && B != 0.0)
+                    {
+                        fmt::print(stderr, "\nVolPt_tmesh(): Error: incorrect skip. decoding point with param [{}]\n", param.transpose());
+                        fmt::print(stderr, "tensor {} skipping ctrl pt [{}]\n", k, ijk.transpose());
+                        fmt::print(stderr, "anchor [{}] B {}\n", fmt::join(anchor, ","), B);
+//                         abort();
+                    }
 
                     B_sum += B * t.weights(vol_iterator.cur_iter());
 

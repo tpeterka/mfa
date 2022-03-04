@@ -1868,69 +1868,21 @@ namespace mfa
         // in Bazilevs 2010, knot indices start at 1, but mine start at 0
         // returns index of tensor containing the parameters of the point to decode
         TensorIdx anchors(const VectorX<T>&          param,             // parameter value in each dim. of desired point
+                          TensorIdx                  start_idx,         // start the search for the tensor here
                           vector<vector<KnotIdx>>&   anchors) const     // (output) anchor points in index space
         {
-            // debug
-//             bool debug = false;
-
             anchors.resize(dom_dim_);
 
-            // convert param to target (center of p + 1 anchors) in index space
-            // the target is being computed on the global knot vector, without regarding the level of
-            // refinement of the tensor where the decoded point is, and adjusted afterwards.
-            vector<KnotIdx> target(dom_dim_);                       // center anchor in each dim.
-            for (auto i = 0; i < dom_dim_; i++)
-            {
-                if (param(i) < 1.0)
-                {
-                    auto it     = upper_bound(all_knots[i].begin() + p_(i), all_knots[i].end() - p_(i) - 1, param(i));
-                    target[i]   = it - all_knots[i].begin() - 1;
-                }
-                else
-                    target[i] = all_knots[i].size() - (p_(i) + 2);
-            }
-
-            // find most refined tensor product containing target
-            bool found = false;
-            TensorIdx t_idx = 0;
-            int max_level   = -1;
-            for (auto j = 0; j < tensor_prods.size(); j++)
-            {
-                if (in(target, tensor_prods[j].knot_mins, tensor_prods[j].knot_maxs))
-                {
-                    found = true;
-                    if (tensor_prods[j].level > max_level)
-                    {
-                        t_idx       = j;
-                        max_level   = tensor_prods[j].level;
-                    }
-                }
-            }
+            // find tensor containing param
+            bool found      = false;
+            TensorIdx t_idx = find_tensor(param, start_idx, found);
             if (!found)
-            {
-                fmt::print(stderr, "Error: anchors(): target [{}] not found in any tensors\n", fmt::join(target, ","));
-                abort();
-            }
+                throw MFAError(fmt::format("anchors(): tensor containing param [{}] not found\n", param.transpose()));
 
-            // adjust target to skip over any knots at a higher refinement level than the target
+            // convert param to span
+            vector<KnotIdx> target(dom_dim_);
             for (auto i = 0; i < dom_dim_; i++)
-            {
-                while (target[i] > tensor_prods[t_idx].knot_mins[i] && all_knot_levels[i][target[i]] > max_level)
-                        target[i]--;
-            }
-
-            // sanity check: target should be inside tensor
-            const TensorProduct<T>& t = tensor_prods[t_idx];
-            for (auto i = 0; i < dom_dim_; i++)
-            {
-                if (target[i] < t.knot_mins[i] || target[i] > t.knot_maxs[i])
-                {
-                    fmt::print(stderr, "Error: anchors(): in dim {}, target [{}] is not inside tensor {} knot_mins [{}] knot_maxs [{}].\n",
-                            i, fmt::join(target, ","), t_idx, t.knot_mins[i], t.knot_maxs[i]);
-                    cerr << "param: " << param.transpose() << endl;
-                    abort();
-                }
-            }
+                target[i] = FindSpan(i, param(i), tensor_prods[t_idx]);
 
             // find local knot vector (p + 2) knot intersections
             vector<vector<KnotIdx>> loc_knots(dom_dim_);
@@ -1942,9 +1894,9 @@ namespace mfa
                 anchors[i].resize(p_(i) + 1);
                 for (auto j = 0; j < p_(i) + 1; j++)
                 {
-                    if (p_(i) % 2 == 0)                             // even degree
+                    if (p_(i) % 2 == 0)                             // even degree: first p + 1 anchors, skip last one
                         anchors[i][j] = loc_knots[i][j];
-                    else                                            // odd degree
+                    else                                            // odd degree: last p + 1 anchors, skip first one
                         anchors[i][j] = loc_knots[i][j + 1];
                 }
             }
