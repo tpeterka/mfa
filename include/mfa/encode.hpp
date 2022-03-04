@@ -695,28 +695,31 @@ namespace mfa
                 {
                     bool error = false;
                     T sum = Nfree.row(i).sum();
-                    if (Ncons.rows())
+                    if (cons_type != ConsType::MFA_NO_CONSTRAINT)
                         sum += Ncons.row(i).sum();
                     if (sum > 0.0)
                     {
                         Nfree.row(i) /= sum;
-                        if (Ncons.rows())
+                        if (cons_type != ConsType::MFA_NO_CONSTRAINT)
                             Ncons.row(i) /= sum;
                     }
 //                     else
-//                         throw MFAError(fmt::format("EncodeTensorLocalSeparable(): row {} has 0.0 row sum for free and constraint basis functions in dim {}",
+//                         throw MFAError(fmt::format("ComputeCtrlPtCurve(): row {} has 0.0 row sum for free and constraint basis functions in dim {}",
 //                                 i, dim));
+//                         fmt::print(stderr, "ComputeCtrlPtCurve(): row {} has 0.0 row sum for free and constraint basis functions in dim {}\n",
+//                                 i, dim);
                 }
 
 #else
 
                 {
-                    T Nfree_sum, Nprev_cons_sum, Nnext_cons_sum;
+                    T Nfree_sum, Ncons_sum;
+                    Ncons_sum = 0.0;
                     T Nfree_sum = Nfree.row(i).sum();
-                    if (Pcons.rows())
+                    if (cons_type != ConsType::MFA_NO_CONSTRAINT)
                         Ncons_sum = Ncons.row(i).sum();
                     if (Nfree_sum + Ncons_sum == 0.0)
-                        throw MFAError(fmt::format("EncodeTensorLocalSeparable(): row {} has 0.0 row sum for free and constraint basis functions in dim {}",
+                        throw MFAError(fmt::format("ComputeCtrlPtCurve(): row {} has 0.0 row sum for free and constraint basis functions in dim {}",
                                     i, dim));
                     if (Nfree_sum > 0.0)
                         Nfree.row(i) /= Nfree_sum;
@@ -744,14 +747,21 @@ namespace mfa
             // debug: check matrix product sizes
             // TODO: remove once stable
             if (Nfree.rows() != R.rows() || P.rows() != Nfree.cols())
-            {
-                fmt::print(stderr, "Error EncodeTensorLocalSeparable(): Nfree.rows() {} should equal R.rows {} and P.rows() {} should equal Nfree.cols() {}\n",
-                        Nfree.rows(), R.rows(), P.rows(), Nfree.cols());
-                abort();
-            }
+                throw MFAError(fmt::format("ComputeCtrlPtCurve(): Nfree.rows() {} should equal R.rows {} and P.rows() {} should equal Nfree.cols() {}\n",
+                        Nfree.rows(), R.rows(), P.rows(), Nfree.cols()));
 
             P = (Nfree.transpose() * Nfree).ldlt().solve(Nfree.transpose() * R);
             solve_time += (MPI_Wtime() - t0);
+
+            // debug
+            MatrixXd::Index max_row, max_col;
+            if (P.maxCoeff(&max_row, &max_col) > 300)
+            {
+                fmt::print(stderr, "ComputeCtrlPtCurve(): very large control points\n");
+                fmt::print(stderr, "N row {}:\n {}\n", max_row, Nfree.row(max_row));
+                fmt::print(stderr, "NtN row {}:\n {}\n", max_row, (Nfree.transpose() * Nfree).row(max_row));
+                fmt::print(stderr, "P row{}:\n {}\n", max_row, P.row(max_row));
+            }
         }
 
         // interpolates curve of free control points in one dimension using Boehm knot insertion
@@ -1959,8 +1969,8 @@ namespace mfa
         {
             // debug
             fmt::print(stderr, "EncodeTensorLocalSeparable tidx = {}\n", t_idx);
-            fmt::print(stderr, "\n Current T-mesh:\n");
-            mfa_data.tmesh.print(true, true);
+//             fmt::print(stderr, "\n Current T-mesh:\n");
+//             mfa_data.tmesh.print(true, true);
 
             double t0 = MPI_Wtime();
 
@@ -2087,7 +2097,6 @@ namespace mfa
                     {
                         if (dim % 2 == 0)
                             Q1.row(out_curve_iter.ijk_idx(out_curve_iter.cur_ijk())) = P.row(out_curve_iter.cur_iter());
-
                         else
                             Q.row(out_curve_iter.ijk_idx(out_curve_iter.cur_ijk())) = P.row(out_curve_iter.cur_iter());
                         out_curve_iter.incr_iter();
