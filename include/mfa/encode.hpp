@@ -1955,7 +1955,7 @@ namespace mfa
 
             // debug: check relative error of solution
             double relative_error = (Nfree * t.ctrl_pts - R).norm() / R.norm(); // norm() is L2 norm
-            cerr << "EncodeTensorLocalLinar(): The relative error is " << relative_error << endl;
+            cerr << "EncodeTensorLocalUnified(): The relative error is " << relative_error << endl;
         }
 
         // encodes the control points for one tensor product of a tmesh
@@ -3585,8 +3585,14 @@ namespace mfa
                 // debug
                 fmt::print(stderr, "AddNewTensors(): appending tensor knot_mins [{}] knot_maxs [{}] level {}\n",
                         fmt::join(t.knot_mins, ","), fmt::join(t.knot_maxs, ","), t.level);
+//                 fmt::print(stderr, "\nT-mesh before append\n\n");
+//                 mfa_data.tmesh.print(true, true);
 
                 int tensor_idx = tmesh.append_tensor(t.knot_mins, t.knot_maxs, t.level);
+
+                // debug
+//                 fmt::print(stderr, "\nT-mesh after append\n\n");
+//                 mfa_data.tmesh.print(true, true);
 
                 // debug: check all spans before solving
                 // TODO: comment out once the code is debugged
@@ -3596,7 +3602,8 @@ namespace mfa
                 // debug: check all knot vs control point quantities
                 // TODO: comment out once the code is debugged
                 for (auto j = 0; j < tensor_prods.size(); j++)
-                    tmesh.check_num_knots_ctrl_pts(j);
+                    if (!tmesh.check_num_knots_ctrl_pts(j))
+                        throw MFAError(fmt::format("AddNewTensors(): number of knots and control points do not agree\n"));
 
                 // debug: confirm that all tensors will have at least p control points
                 // TODO: comment out once the code is debugged
