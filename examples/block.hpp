@@ -592,17 +592,18 @@ struct Block : public BlockBase<T>
             nghost_pts = floor((this->core_mins(i) - this->bounds_mins(i)) / d(i));
             ndom_pts(i) += nghost_pts;
             p0(i) = this->core_mins(i) - nghost_pts * d(i);
+            // decide overlap in each direction; they should be symmetric for neighbors
+            // so if block a overlaps block b, block b overlaps a the same area
+            this->overlaps(i) = nghost_pts * d(i);
             // max direction
             nghost_pts = floor((this->bounds_maxs(i) - this->core_maxs(i)) / d(i));
             ndom_pts(i) += nghost_pts;
             // tot_ndom_pts *= ndom_pts(i);
-
-            // decide overlap in each direction; they should be symmetric for neighbors
-            // so if block a overlaps block b, block b overlaps a the same area
-            this->overlaps(i) = fabs(this->core_mins(i) - this->bounds_mins(i));
-            T m2 = fabs(this->bounds_maxs(i) - this->core_maxs(i));
+            T m2 = nghost_pts * d(i);
             if (m2 > this->overlaps(i))
                 this->overlaps(i) = m2;
+            std::cout <<" dir: i " << i << " core:" << this->core_mins(i)  << " " <<
+                     this->core_maxs(i) << " d(i) =" << d(i) << " overlap: "<< this->overlaps(i) << "\n";
         }
 
         if (args.structured)

@@ -923,16 +923,20 @@ struct BlockBase
                 neigh_overlaps.min[di] = core_mins[di];
                 // start with full bounds, then restrict to neigh core, based on direction
                 overNeigh.max[di] = bounds_maxs[di];
+                if (bounds_maxs[di] > core_maxs[di])
+                    overNeigh.max[di] = core_maxs[di] + overlaps[di];
                 overNeigh.min[di] = bounds_mins[di];
+                if (bounds_mins[di] < core_mins[di])
+                    overNeigh.min[di] = core_mins[di] - overlaps[di];
                 if (dirc[gdir] < 0) {
                     // it is reciprocity; if my bounds extended, neighbor bounds extended too in opposite direction
-                    neigh_overlaps.max[di] = core_mins[di]
-                            + (core_mins[di] - bounds_mins[di]);
+                    neigh_overlaps.max[di] = core_mins[di] + overlaps[di];
+                           // + (core_mins[di] - bounds_mins[di]);
                     overNeigh.max[di] = core_mins[di];
                 }
                 else if (dirc[gdir] > 0) {
-                    neigh_overlaps.min[di] = core_maxs[di]
-                            - (bounds_maxs[di] - core_maxs[di]);
+                    neigh_overlaps.min[di] = core_maxs[di] - overlaps[di];
+                          //  - (bounds_maxs[di] - core_maxs[di]);
                     overNeigh.min[di] = core_maxs[di];
                 }
                 else // if (dirc[gdir] == 0 )
@@ -942,13 +946,17 @@ struct BlockBase
 
                 }
 #ifdef BLEND_VERBOSE
-          cerr << "overlaps block:" << cp.gid() << " nb:" << bid.gid << " di:" << di << " min:" <<
-              neigh_overlaps.min[di] << " max:"<< neigh_overlaps.max[di] <<"\n";
+                  cerr << "neighOverlaps " << cp.gid() << " nb: " << bid.gid  <<
+                      " min:" << neigh_overlaps.min[di] << " max:"<< neigh_overlaps.max[di] <<"\n";
+                  cerr << "overNeighCore " << cp.gid() << " nb: " << bid.gid  <<
+                      " min:" <<  overNeigh.min[di] << " max:"<< overNeigh.max[di] <<"\n";
 
 #endif
+
             }
             neighOverlaps.push_back(neigh_overlaps);
             overNeighCore.push_back(overNeigh);
+
         }
 
     }
