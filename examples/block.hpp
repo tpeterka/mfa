@@ -602,8 +602,10 @@ struct Block : public BlockBase<T>
             T m2 = nghost_pts * d(i);
             if (m2 > this->overlaps(i))
                 this->overlaps(i) = m2;
+#ifdef BLEND_VERBOSE
             std::cout <<" dir: i " << i << " core:" << this->core_mins(i)  << " " <<
                      this->core_maxs(i) << " d(i) =" << d(i) << " overlap: "<< this->overlaps(i) << "\n";
+#endif
         }
 
         if (args.structured)

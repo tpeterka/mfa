@@ -38,7 +38,11 @@ add_test                    (NAME multi-bc-test1
                             
 add_test                    (NAME multi-bc-test2
                              COMMAND multi-bc-test -i sinc -d 3 -m 2 -b 2 -o 0.11
-                            )                            
+                            )       
+                            
+add_test                    (NAME multi-bc-test3
+                             COMMAND multi-bc-test -i sinc -d 3 -m 2 -b 6 
+                            )                     
 
 add_test                    (NAME fixed-sinc-2d-test-grid
                              COMMAND fixed-test -i sinc -d 3 -m 2 -p 1 -q 5 -v 20 -w 0 -u 20 -u 20
