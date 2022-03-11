@@ -1123,9 +1123,10 @@ namespace mfa
         // returns -1: existing_tensor is adjacent on min side of new_tensor in current dim.
         //          0: not adjacent
         //          1: existing_tensor is adjacent on max side of new_tensor in current dim.
-        int adjacent(TensorProduct<T>&      new_tensor,       // new tensor product to be added
-                     TensorProduct<T>&      existing_tensor,  // existing tensor product
-                     int                    cur_dim)          // current dimension
+        int adjacent(const TensorProduct<T>&    new_tensor,             // new tensor product to be added
+                     const TensorProduct<T>&    existing_tensor,        // existing tensor product
+                     int                        cur_dim,                // current dimension
+                     bool                       corner = false) const   // count touching at a corner as adjacent
         {
             int retval = 0;
 
@@ -1135,14 +1136,7 @@ namespace mfa
             else if (new_tensor.knot_maxs[cur_dim] == existing_tensor.knot_mins[cur_dim])
                 retval = 1;
             else
-            {
-                // debug
-//                 fprintf(stderr, "adj 1: cur_dim=%d retval=0 new_tensor=[%lu %lu : %lu %lu] existing_tensor=[%lu %lu : %lu %lu]\n",
-//                         cur_dim, new_tensor.knot_mins[0], new_tensor.knot_mins[1], new_tensor.knot_maxs[0], new_tensor.knot_maxs[1],
-//                         existing_tensor.knot_mins[0], existing_tensor.knot_mins[1], existing_tensor.knot_maxs[0], existing_tensor.knot_maxs[1]);
-
                 return 0;
-            }
 
             // confirm that intersection in at least one other dimension exists
             for (int j = 0; j < dom_dim_; j++)
@@ -1151,24 +1145,22 @@ namespace mfa
                     continue;
 
                 // the area touching is zero in some dimension
-                // two cases are checked because role of new and existing tensor can be interchanged for adjacency; both need to fail to be nonadjacent
-                if ( (new_tensor.knot_mins[j]      < existing_tensor.knot_mins[j] || new_tensor.knot_mins[j]      >= existing_tensor.knot_maxs[j]) &&
-                     (existing_tensor.knot_mins[j] < new_tensor.knot_mins[j]      || existing_tensor.knot_mins[j] >= new_tensor.knot_maxs[j]))
+                if (!corner)        // exclude touching in just one corner
                 {
+                    // two cases are checked because role of new and existing tensor can be interchanged for adjacency; both need to fail to be nonadjacent
+                    if ( (new_tensor.knot_mins[j]      < existing_tensor.knot_mins[j] || new_tensor.knot_mins[j]      >= existing_tensor.knot_maxs[j]) &&
+                         (existing_tensor.knot_mins[j] < new_tensor.knot_mins[j]      || existing_tensor.knot_mins[j] >= new_tensor.knot_maxs[j]))
+                        return 0;
+                }
 
-                    // debug
-//                     fprintf(stderr, "adj 2: cur_dim=%d retval=0 new_tensor=[%lu %lu : %lu %lu] existing_tensor=[%lu %lu : %lu %lu]\n",
-//                             cur_dim, new_tensor.knot_mins[0], new_tensor.knot_mins[1], new_tensor.knot_maxs[0], new_tensor.knot_maxs[1],
-//                             existing_tensor.knot_mins[0], existing_tensor.knot_mins[1], existing_tensor.knot_maxs[0], existing_tensor.knot_maxs[1]);
-
-                    return 0;
+                if (corner)         // allow touching in just one corner
+                {
+                    // two cases are checked because role of new and existing tensor can be interchanged for adjacency; both need to fail to be nonadjacent
+                    if ( (new_tensor.knot_mins[j]      < existing_tensor.knot_mins[j] || new_tensor.knot_mins[j]      > existing_tensor.knot_maxs[j]) &&
+                         (existing_tensor.knot_mins[j] < new_tensor.knot_mins[j]      || existing_tensor.knot_mins[j] > new_tensor.knot_maxs[j]))
+                        return 0;
                 }
             }
-
-            // debug
-//             fprintf(stderr, "adj: cur_dim=%d retval=%d new_tensor=[%lu %lu : %lu %lu] existing_tensor=[%lu %lu : %lu %lu]\n",
-//                     cur_dim, retval, new_tensor.knot_mins[0], new_tensor.knot_mins[1], new_tensor.knot_maxs[0], new_tensor.knot_maxs[1],
-//                     existing_tensor.knot_mins[0], existing_tensor.knot_mins[1], existing_tensor.knot_maxs[0], existing_tensor.knot_maxs[1]);
 
             return retval;
         }
@@ -1594,8 +1586,9 @@ namespace mfa
 
                 if (cur[dim] > 0)                                       // more knots in the tmesh
                 {
+                    // DEPRECATE
                     // check if next knot borders a higher level; if so, switch to higher level tensor
-                    border_higher_level(cur, cur_tensor, cur_level);
+//                     border_higher_level(cur, cur_tensor, cur_level);
 
                     // record the knot
                     loc_knots[anchor_pos - j - 1] = cur[dim];
@@ -1657,8 +1650,9 @@ namespace mfa
 
                 if (cur[dim] < all_knots[dim].size() - 1)
                 {
+                    // DEPRECATE
                     // if next knot borders a higher level; switch to higher level tensor
-                    border_higher_level(cur, cur_tensor, cur_level);
+//                     border_higher_level(cur, cur_tensor, cur_level);
 
                     // record the knot
                     loc_knots[start_pos + j + 1] = cur[dim];
@@ -1730,8 +1724,9 @@ namespace mfa
 
                     if (cur[i] > 0)                                         // more knots in the tmesh
                     {
-                        // check if next knot borders a higher level; if so, switch to higher level tensor
-                        border_higher_level(cur, cur_tensor, cur_level);
+                        // DEPRECATE
+//                         // check if next knot borders a higher level; if so, switch to higher level tensor
+//                         border_higher_level(cur, cur_tensor, cur_level);
 
                         // record the knot
                         loc_knots[i][start - j - 1] = cur[i];
@@ -1762,8 +1757,9 @@ namespace mfa
 
                     if (cur[i] < all_knots[i].size() - 1)
                     {
-                        // if next knot borders a higher level; switch to higher level tensor
-                        border_higher_level(cur, cur_tensor, cur_level);
+                        // DEPRECATE
+//                         // if next knot borders a higher level; switch to higher level tensor
+//                         border_higher_level(cur, cur_tensor, cur_level);
 
                         // record the knot
                         loc_knots[i][start + j + 1] = cur[i];
@@ -1794,16 +1790,10 @@ namespace mfa
             bool            first_time  = true;
             int             ofst;
 
-            // debug
-            bool debug = false;
-
             if (dir == 1 || dir == -1)
                 ofst = dir;
             else
-            {
-                fmt::print(stderr, "Error: next_inter(): dir must be +/- 1\n");
-                abort();
-            }
+                throw MFAError(fmt::format("next_inter(): dir must be +/- 1\n"));
 
             // check if the target plus offset is in the current tensor
             if (knot_idx_ofst(tensor_prods[cur_tensor], target[cur_dim], ofst, cur_dim, false, temp_target))
@@ -1848,21 +1838,22 @@ namespace mfa
             return true;
         }
 
-        // check if target knot index borders a higher level; if so, switch to higher level tensor
-        void border_higher_level(const vector<KnotIdx>& target,             // target knot indices
-                                 TensorIdx&             cur_tensor,         // (input / output) highest level neighbor tensor containing the target
-                                 int&                   cur_level) const    // (input / output) level of current tensor
-        {
-            for (auto k = 0; k < tensor_prods.size(); k++)
-            {
-                if (in(target, tensor_prods[k].knot_mins, tensor_prods[k].knot_maxs) &&
-                        tensor_prods[k].level > cur_level)
-                {
-                    cur_tensor  = k;
-                    cur_level   = tensor_prods[k].level;
-                }
-            }
-        }
+        //         DEPRECATE
+//         // check if target knot index borders a higher level in the given dimension; if so, switch to higher level tensor
+//         void border_higher_level(const vector<KnotIdx>& target,             // target knot indices
+//                                  TensorIdx&             cur_tensor,         // (input / output) highest level neighbor tensor containing the target
+//                                  int&                   cur_level) const    // (input / output) level of current tensor
+//         {
+//             for (auto k = 0; k < tensor_prods.size(); k++)
+//             {
+//                 if (in(target, tensor_prods[k].knot_mins, tensor_prods[k].knot_maxs) &&
+//                         tensor_prods[k].level > cur_level)
+//                 {
+//                     cur_tensor  = k;
+//                     cur_level   = tensor_prods[k].level;
+//                 }
+//             }
+//         }
 
         // given a point in parameter space to decode, compute p + 1 anchor points in all dims in knot index space
         // anchors correspond to those basis functions that cover the decoding point
@@ -2275,6 +2266,16 @@ namespace mfa
 //                     fmt::join(start_knot_idxs, ","), fmt::join(end_knot_idxs, ","), fmt::join(start_idxs, ","), fmt::join(end_idxs, ","));
         }
 
+        // for a given tensor, compute anchor of a parameter point
+        void param_anchor(
+                const VectorX<T>&       param,                      // multidim parameter
+                TensorIdx               t_idx,                      // tensor product
+                vector<KnotIdx>&        anchor) const               // (output) anchor
+        {
+            for (auto i = 0; i < dom_dim_; i++)
+                anchor[i] = FindSpan(i, param(i), tensor_prods[t_idx]);
+        }
+
         // for a given tensor, return linear index of control point corresponding to given anchor
         // anchor is in global knot index space (includes knots at higher refinement levels than the tensor)
         size_t anchor_ctrl_pt_idx(
@@ -2656,6 +2657,69 @@ namespace mfa
                         t.knot_idxs[k].push_back(i);
                 }
             }
+        }
+
+        // expands anchors originating at a point in some tensor adjusted for all neighboring tensors
+        // result is the extents (first and last) of the original anchors possibly expanded in all directions to cover neigboring tensors
+        // returns whether any changes were made
+        bool expand_anchors(
+                const vector<vector<KnotIdx>>&  orig_anchors,               // original original anchors in all dims
+                TensorIdx                       t_idx,                      // original tensor product
+                vector<vector<KnotIdx>>&        anchor_extents) const       // (output) possibly expanded first and last anchors in all dims
+        {
+            bool changed = false;
+            auto& t = tensor_prods[t_idx];
+
+            vector<vector<KnotIdx>> temp_anchors(dom_dim_);                 // copy of orig_anchors that can be modified
+            anchor_extents.resize(dom_dim_);                                // output extents (front and back) possibly expanded
+
+            for (auto i = 0; i < dom_dim_; i++)
+            {
+                temp_anchors[i] = orig_anchors[i];
+                anchor_extents[i].resize(2);
+                anchor_extents[i][0] = orig_anchors[i].front();
+                anchor_extents[i][1] = orig_anchors[i].back();
+            }
+
+            for (auto k = 0; k < tensor_prods.size(); k++)
+            {
+                auto& t_k = tensor_prods[k];
+                bool adj_tensor = false;                                     // tensor t_k is adjacent to tensor t
+                for (auto i = 0; i < dom_dim_; i++)
+                {
+                    if (adjacent(t_k, t, i, true) != 0)
+                    {
+                        adj_tensor = true;
+                        break;
+                    }
+                }
+
+                if (!adj_tensor)
+                    continue;
+
+                for (auto i = 0; i < dom_dim_; i++)
+                {
+                    for (auto j = 0; j < orig_anchors[i].size(); j++)
+                    {
+                        if (orig_anchors[i][j] >= t_k.knot_mins[i] && orig_anchors[i][j] < t_k.knot_maxs[i])
+                        {
+                            KnotIdx ofst_idx;
+                            while(all_knot_levels[i][temp_anchors[i][j]] > t_k.level && temp_anchors[i][j] >= t_k.knot_mins[i])
+                            {
+                                temp_anchors[i][j]--;
+                                // NB, it's not an error if we try to offset more than the tensor boundary, in which case
+                                // knot_idx_ofst clamps the offset to the knot_mins, maxs, which is what we want
+                                knot_idx_ofst(t_k, anchor_extents[i][0], -1, i, false, ofst_idx);
+                                anchor_extents[i][0] = ofst_idx;
+                                knot_idx_ofst(t_k, anchor_extents[i][1], 1, i, false, ofst_idx);
+                                anchor_extents[i][1] = ofst_idx;
+                                changed = true;
+                            }
+                        }
+                    }
+                }
+            }
+            return changed;
         }
 
         // check number of knots belonging to this tensor against the number of control points (for debugging)

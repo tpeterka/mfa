@@ -417,26 +417,28 @@ namespace mfa
             vector<vector<KnotIdx>> anchors(mfa_data.dom_dim);
             TensorIdx found_idx = mfa_data.tmesh.anchors(param, 0, anchors);        // 0 is the seed for searching for the correct tensor TODO
 
+            // extents of original anchors expanded for adjacent tensors
+            vector<vector<KnotIdx>> anchor_extents(mfa_data.dom_dim);
+            bool changed = mfa_data.tmesh.expand_anchors(anchors, found_idx, anchor_extents);
+
             for (auto k = 0; k < mfa_data.tmesh.tensor_prods.size(); k++)           // for all tensor products
             {
                 const TensorProduct<T>& t = mfa_data.tmesh.tensor_prods[k];
-
-                // TODO: adjust anchors for current tensor in order to correctly compute skip
 
                 // skip entire tensor if knot mins, maxs are too far away from decoded point
                 bool skip = false;
                 for (auto j = 0; j < mfa_data.dom_dim; j++)
                 {
-                    if (t.knot_maxs[j] < anchors[j].front() || t.knot_mins[j] > anchors[j].back())
+                    if (t.knot_maxs[j] < anchor_extents[j].front() || t.knot_mins[j] > anchor_extents[j].back())
                     {
                         skip = true;
                         break;
                     }
                 }
-                // TODO: turn the skip back on once it is fixed
-//                 if (skip)
-//                     continue;
+                if (skip)
+                    continue;
 
+                // iterate over the control points in the tensor
                 VolIterator         vol_iterator(t.nctrl_pts);                      // iterator over control points in the current tensor
                 vector<KnotIdx>     ctrl_anchor(mfa_data.dom_dim);                  // anchor of control point in (global, ie, over all tensors) index space
                 VectorXi            ijk(mfa_data.dom_dim);                          // multidim index of current control point
@@ -455,17 +457,16 @@ namespace mfa
                     }
 
                     // debug
-                    bool skip = false;
+                    bool skip1 = false;
 
                     // skip control points too far away from the decoded point
-                    if (!mfa_data.tmesh.in_anchors(ctrl_anchor, anchors))
+                    if (!mfa_data.tmesh.in_anchors(ctrl_anchor, anchor_extents))
                     {
                         // debug
-                        skip = true;
+                        skip1 = true;
 
-                        // TODO: turn the skip back on once it is fixed
-//                         vol_iterator.incr_iter();
-//                         continue;
+                        vol_iterator.incr_iter();
+                        continue;
                     }
 
                     // intersect tmesh lines to get local knot indices in all directions
@@ -481,10 +482,6 @@ namespace mfa
                             local_knots[n] = mfa_data.tmesh.all_knots[i][local_knot_idxs[i][n]];
 
                         B *= mfa_data.OneBasisFun(i, param(i), local_knots);
-
-                        // debug
-//                         if (skip && ctrl_anchor[0] == 7 && ctrl_anchor[1] == 6)
-//                             fmt::print(stderr, "dim {} B {} local_knot_idxs [{}]\n", i, B, fmt::join(local_knot_idxs[i], ","));
                     }
 
                     // compute the point
@@ -492,13 +489,23 @@ namespace mfa
 
                     // debug
 //                     T eps = 1e-8;
-//                     if (skip && B > eps)
+//                     if ((skip || skip1) && B > eps)
 //                     {
-//                         fmt::print(stderr, "\nVolPt_tmesh(): Error: incorrect skip. decoding point with param [{}]\n", param.transpose());
-//                         fmt::print(stderr, "tensor {} skipping ctrl pt [{}] at ctrl_anchor [{}]\n", k, ijk.transpose(), fmt::join(ctrl_anchor, ","));
+//                         vector<KnotIdx> param_anchor(mfa_data.dom_dim);
+//                         mfa_data.tmesh.param_anchor(param, found_idx, param_anchor);
+//                         fmt::print(stderr, "\nVolPt_tmesh(): Error: incorrect skip. decoding point with param [{}] anchor [{}] found in tensor {}\n",
+//                                 param.transpose(), fmt::join(param_anchor, ","), found_idx);
+// 
+//                         vector<vector<KnotIdx>> loc_knots(mfa_data.dom_dim);
+//                         mfa_data.tmesh.knot_intersections(param_anchor, found_idx, loc_knots);
+//                         for (auto i = 0; i < mfa_data.dom_dim; i++)
+//                             fmt::print(stderr, "loc_knots[dim {}] = [{}]\n", i, fmt::join(loc_knots[i], ","));
+// 
+//                         fmt::print(stderr, "tensor {} skipping ctrl pt at ctrl_anchor [{}]\n", k, fmt::join(ctrl_anchor, ","));
 //                         fmt::print(stderr, "B {}\n", B);
 //                         for (auto i = 0; i < mfa_data.dom_dim; i++)
-//                             fmt::print(stderr, "anchors[dim {}] [{}]\n", i, fmt::join(anchors[i], ","));
+//                             fmt::print(stderr, "anchors[dim {}] =  [{}] adj_anchors[dim {}] = [{}]\n",
+//                                     i, fmt::join(anchors[i], ","), i, fmt::join(anchor_extents[i], ","));
 //                         fmt::print(stderr, "\n Current T-mesh:\n");
 //                         mfa_data.tmesh.print(true, true);
 //                         abort();
