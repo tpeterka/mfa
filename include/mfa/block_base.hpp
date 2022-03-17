@@ -931,12 +931,10 @@ struct BlockBase
                 if (dirc[gdir] < 0) {
                     // it is reciprocity; if my bounds extended, neighbor bounds extended too in opposite direction
                     neigh_overlaps.max[di] = core_mins[di] + overlaps[di];
-                           // + (core_mins[di] - bounds_mins[di]);
                     overNeigh.max[di] = core_mins[di];
                 }
                 else if (dirc[gdir] > 0) {
                     neigh_overlaps.min[di] = core_maxs[di] - overlaps[di];
-                          //  - (bounds_maxs[di] - core_maxs[di]);
                     overNeigh.min[di] = core_maxs[di];
                 }
                 else // if (dirc[gdir] == 0 )
