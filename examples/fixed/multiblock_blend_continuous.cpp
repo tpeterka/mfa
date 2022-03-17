@@ -353,6 +353,61 @@ int main(int argc, char **argv) {
                     write_time - final_blend_end);
         fprintf(stderr, "-------------------------------------\n\n");
     }
+    // add simple tests for multi_bc test cases
+    // test 1: -b 2 -d 2 -m 1 -i sinc -o 0.11
+    // tot_blocks == 2, dom_dim == 1
+    if (world.size() == 1 && tot_blocks == 2 && dom_dim == 1 && fabs(0.11 - ghost) <1.e-10 ) {
+            Block<real_t> *b = static_cast<Block<real_t>*>(master.block(0));
+            int blockMax = (int) b->max_errs_reduce[1];
+            real_t max_red_err = b->max_errs_reduce[0];
+            if (blockMax != 1 || fabs(max_red_err - 0.00564167 ) > 1.e-8) {
+                std::cout << "expected blockMax == 1 got " << blockMax
+                        << " expected max_red_err == 0.00564167 got : "
+                        << max_red_err << "\n";
+                abort();
+            }
+    }
+    // test 2:  -i sinc -d 3 -m 2 -b 2 -o 0.11
+    if (world.size() == 1 && tot_blocks == 2 && dom_dim == 2 && fabs(0.11 - ghost) <1.e-10 ) {
+            Block<real_t> *b = static_cast<Block<real_t>*>(master.block(0));
+            int blockMax = (int) b->max_errs_reduce[1];
+            real_t max_red_err = b->max_errs_reduce[0];
+            if ( fabs(max_red_err - 0.163644 ) > 1.e-6) {
+                std::cout << "expected blockMax == 1 got " << blockMax
+                        << " expected max_red_err == 0.163644 got : "
+                        << max_red_err << "\n";
+                abort();
+            }
+    }
+    // test3: -i sinc -d 3 -m 2 -b 6
+    if (world.size() == 1 && tot_blocks == 6 && dom_dim == 2 && fabs(0.1 - ghost) <1.e-10 ) {
+            Block<real_t> *b = static_cast<Block<real_t>*>(master.block(0));
+            int blockMax = (int) b->max_errs_reduce[1];
+            real_t max_red_err = b->max_errs_reduce[0];
+            if (blockMax != 1 || fabs(max_red_err - 0.00547303  ) > 1.e-8) {
+                std::cout << "expected blockMax == 1 got " << blockMax
+                        << " expected max_red_err == 0.00564167 got : "
+                        << max_red_err << "\n";
+                abort();
+            }
+            Block<real_t> *bmax = static_cast<Block<real_t>*>(master.block(
+                                blockMax));
+            MatrixX<real_t> &bl = bmax->blend;
+            //std::cout<<bl(0,2) << "\n";
+            if  ( (fabs(bl(0, 2) - 0.031224744068286) > 1.e-10 ) ||
+                  (fabs(bl(1, 2) - 0.022554418713158) > 1.e-10 ) )
+            {
+                std::cout << std::setprecision(14)
+                          <<  "expected blend(0,2) = 0.031224744068286  got "  << bl(0, 2) << "\n";
+                std::cout <<  "expected blend(1,2) = 0.022554418713158  got "  << bl(1, 2) << "\n";
+                abort();
+            }
+            else
+            {
+                std::cout << std::setprecision(14) <<  "passed test blend(0, 2) == "
+                        << bl(0, 2) << "  blend(1, 2) == " << bl(1, 2)<< "\n";
+            }
+    }
 #ifdef MFA_KOKKOS
     Kokkos::finalize();
 #endif
