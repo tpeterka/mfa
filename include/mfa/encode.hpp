@@ -1706,12 +1706,12 @@ namespace mfa
             }
 
             // debug
-            fmt::print(stderr, "EncodeTensorLocalUnified(): input domain points covered by tensor and constraints:\n");
-            fmt::print(stderr, "start_idxs [{}] end_idxs [{}]\n", fmt::join(start_idxs, ","), fmt::join(end_idxs, ","));
-            for (auto k = 0; k < mfa_data.dom_dim; k++)
-                fmt::print(stderr, "param_start[{}] = {} param_end[{}] = {} ", k, input.params->param_grid[k][dom_starts(k)],
-                        k, input.params->param_grid[k][dom_starts(k) + ndom_pts(k) - 1]);
-            fmt::print(stderr, "\n");
+//             fmt::print(stderr, "EncodeTensorLocalUnified(): input domain points covered by tensor and constraints:\n");
+//             fmt::print(stderr, "start_idxs [{}] end_idxs [{}]\n", fmt::join(start_idxs, ","), fmt::join(end_idxs, ","));
+//             for (auto k = 0; k < mfa_data.dom_dim; k++)
+//                 fmt::print(stderr, "param_start[{}] = {} param_end[{}] = {} ", k, input.params->param_grid[k][dom_starts(k)],
+//                         k, input.params->param_grid[k][dom_starts(k) + ndom_pts(k) - 1]);
+//             fmt::print(stderr, "\n");
 
             // resize control points and weights in case number of control points changed
             t.ctrl_pts.resize(t.nctrl_pts.prod(), pt_dim);
@@ -2334,30 +2334,22 @@ namespace mfa
 
         // adaptive encoding for T-mesh
         void AdaptiveEncode(
-                T                   err_limit,                  // maximum allowable normalized error
-                bool                weighted,                   // solve for and use weights
-                const VectorX<T>&   extents,                    // extents in each dimension, for normalizing error (size 0 means do not normalize)
-                int                 max_rounds = 0)             // optional maximum number of rounds
+                T                   err_limit,                          // maximum allowable normalized error
+                bool                weighted,                           // solve for and use weights
+                const VectorX<T>&   extents,                            // extents in each dimension, for normalizing error (size 0 means do not normalize)
+                int                 max_rounds = 0)                     // optional maximum number of rounds
         {
-            int parent_level = 0;                               // parent level currently being refined
+            int parent_level = 0;                                       // parent level currently being refined
 
-            // temporary control points and weights for global encode or first round of local encode
-            VectorXi nctrl_pts(mfa_data.dom_dim);
-            for (auto k = 0; k < mfa_data.dom_dim; k++)
-                nctrl_pts(k) = mfa_data.tmesh.all_knots[k].size() - mfa_data.p(k) - 1;
-            MatrixX<T> ctrl_pts(nctrl_pts.prod(), mfa_data.max_dim - mfa_data.min_dim + 1);
-            VectorX<T> weights(ctrl_pts.rows());
-
-            // Initial global encode and scattering of control points to tensors
-            Encode(nctrl_pts, ctrl_pts, weights);
-            mfa_data.tmesh.scatter_ctrl_pts(nctrl_pts, ctrl_pts, weights);
+            TensorProduct<T>&t = mfa_data.tmesh.tensor_prods[0];        // fixed encode assumes the tmesh has only one tensor product
+            Encode(t.nctrl_pts, t.ctrl_pts, t.weights, weighted);
 
             // debug: print tmesh
 //             fprintf(stderr, "\n----- initial T-mesh -----\n\n");
 //             mfa_data.tmesh.print();
 //             fprintf(stderr, "--------------------------\n\n");
 
-            vector<TensorProduct<T>>    new_tensors;                            // newly refined tensors to be added
+            vector<TensorProduct<T>>    new_tensors;                    // newly refined tensors to be added
 
             // loop until all tensors are done
             int iter;
@@ -2386,7 +2378,7 @@ namespace mfa
                             fprintf(stderr, "\nKnot insertion done after %d iterations; no new knots added.\n\n", iter + 1);
                         break;
                     }
-                    else                                                        // one iteration only is done
+                    else                                                // one iteration only is done
                     {
                         fmt::print(stderr, "Level {} done, adding {} new tensors\n", parent_level, new_tensors.size());
                         double add_tensors_time = MPI_Wtime();
