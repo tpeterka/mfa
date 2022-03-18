@@ -1705,6 +1705,14 @@ namespace mfa
                 dom_iter.incr_iter();
             }
 
+            // debug
+            fmt::print(stderr, "EncodeTensorLocalUnified(): input domain points covered by tensor and constraints:\n");
+            fmt::print(stderr, "start_idxs [{}] end_idxs [{}]\n", fmt::join(start_idxs, ","), fmt::join(end_idxs, ","));
+            for (auto k = 0; k < mfa_data.dom_dim; k++)
+                fmt::print(stderr, "param_start[{}] = {} param_end[{}] = {} ", k, input.params->param_grid[k][dom_starts(k)],
+                        k, input.params->param_grid[k][dom_starts(k) + ndom_pts(k) - 1]);
+            fmt::print(stderr, "\n");
+
             // resize control points and weights in case number of control points changed
             t.ctrl_pts.resize(t.nctrl_pts.prod(), pt_dim);
             t.weights.resize(t.ctrl_pts.rows());
@@ -1763,7 +1771,7 @@ namespace mfa
 
             // TODO: understand why the second version of normalization gives a worse answer than the first
             // and why not normalizing at all also gives a good answer, very close to the first version
-            // then pick one of these versions and remove the other
+            // then pick one of these versions and remove the other, or don't normalize at all
 
 #if 1
 
@@ -1801,7 +1809,9 @@ namespace mfa
                 }
             }
 
-#else
+#endif
+
+#if 0
 
             {
                 bool error = false;
@@ -2010,11 +2020,12 @@ namespace mfa
             MatrixX<T> Q1(npts.prod(), pt_dim);                                                     // second matrix already smaller, size of ctrl pts in first dim
 
             // debug
-//             fmt::print(stderr, "input domain points covered by tensor and constraints:\n");
-//             for (auto k = 0; k < dom_dim; k++)
-//                 fmt::print(stderr, "param_start[{}] = {} param_end[{}] = {} ", k, input.params->param_grid[k][dom_starts(k)],
-//                         k, input.params->param_grid[k][dom_starts(k) + ndom_pts(k) - 1]);
-//             fmt::print(stderr, "\n");
+            fmt::print(stderr, "EncodeTensorLocalSeparable(): input domain points covered by tensor and constraints:\n");
+            fmt::print(stderr, "start_idxs [{}] end_idxs [{}]\n", fmt::join(start_idxs, ","), fmt::join(end_idxs, ","));
+            for (auto k = 0; k < dom_dim; k++)
+                fmt::print(stderr, "param_start[{}] = {} param_end[{}] = {} ", k, input.params->param_grid[k][dom_starts(k)],
+                        k, input.params->param_grid[k][dom_starts(k) + ndom_pts(k) - 1]);
+            fmt::print(stderr, "\n");
 
             // input and output number of points
             VectorXi nin_pts    = ndom_pts;
@@ -2392,9 +2403,9 @@ namespace mfa
             fmt::print(stderr, "{} tensor products.\n", mfa_data.tmesh.tensor_prods.size());
 
             // debug: print tmesh
-//             fprintf(stderr, "\n----- final T-mesh -----\n\n");
-//             mfa_data.tmesh.print(true, true, false, false);
-//             fprintf(stderr, "--------------------------\n\n");
+            fprintf(stderr, "\n----- final T-mesh -----\n\n");
+            mfa_data.tmesh.print(true, true, false, false);
+            fprintf(stderr, "--------------------------\n\n");
 
             // debug: check all spans
             // TODO: comment out after code is debugged
@@ -3477,84 +3488,6 @@ namespace mfa
                     new_tensors.push_back(c);
 
             }   // for all knots to be inserted
-
-            // DEPRECATE
-            // This code should not be needed
-            // Only turn it back on if other consistency checks fail
-            // Remove it once the code is stable
-
-//             // check/adjust tensors scheduled to be added against each other
-//             // use level = -1 to indicate removing the tensor from the schedule
-//             int pad         = p(0) % 2 == 0 ? p(0) + 1 : p(0);                      // padding for all tensors
-//             for (auto tidx = 0; tidx < new_tensors.size(); tidx++)          // for all tensors scheduled to be added so far
-//             {
-//                 auto& t = new_tensors[tidx];
-// 
-//                 if (t.level < 0)
-//                     continue;
-// 
-//                 for (auto tidx1 = 0; tidx1 < new_tensors.size(); tidx1++)   // for all tensors scheduled to be added so far
-//                 {
-//                     auto& t1 = new_tensors[tidx1];
-// 
-//                     if (tidx == tidx1 || t1.level < 0)
-//                         continue;
-// 
-//                     // t is a subset of t1
-//                     if (tmesh.subset(t.knot_mins, t.knot_maxs, t1.knot_mins, t1.knot_maxs))
-//                     {
-//                         fmt::print(stderr, "Warning: tensor to be added is a subset of another tensor to be added. This should not happen\n");
-//                         t.level = -1;                   // remove t from the schedule
-//                     }
-// 
-//                     // t is a superset of t1
-//                     else if (tmesh.subset(t1.knot_mins, t1.knot_maxs, t.knot_mins, t.knot_maxs))
-//                     {
-//                         fmt::print(stderr, "Warning: tensor to be added is a superset of another tensor to be added. This should not happen\n");
-//                         t1.level = -1;                  // remove t1 from the schedule
-//                     }
-// 
-// #ifndef MFA_TMESH_MERGE_NONE
-// 
-//                     // candidate intersects an already scheduled tensor, to within some proximity
-//                     // the #defines adjust whether we merge tensors that intersect or only those that are close
-// #ifdef MFA_TMESH_MERGE_SOME
-//                     else if (tmesh.intersect(t1, t, pad) && !tmesh.intersect(t1, t, 0))
-// #endif
-// #ifdef MFA_TMESH_MERGE_MAX
-//                     else if (tmesh.intersect(t1, t, pad))
-// #endif
-//                     {
-//                         if (t.parent == t1.parent)       // only merge tensors refined from the same parent
-//                         {
-//                             fmt::print(stderr, "Warning: tensor to be added is being merged with another tensor to be added. This should not happen\n");
-//                             tmesh.merge_tensors(t, t1, pad);
-//                             t1.level = -1;              // remove t1 from the schedule
-//                         }
-//                     }
-// 
-// #endif
-// 
-//                 }   // tidx1
-// 
-//                 // debug: confirm that tensor to be added will have at least p + 1 control points
-//                 // TODO: remove this check once the code is stable
-//                 if (t.level >= 0 && !tmesh.check_num_knots_degree(t, 1))     // level >= 0: tensor wasn't marked for removal from the schedule
-//                 {
-//                     fmt::print(stderr, "Error: Tensor being added is too small. This should not happen\n");
-//                     fmt::print(stderr, "Tensor tidx {} knot_mins [{}] knot_maxs[{}] level {} parent {}\n",
-//                             tidx, fmt::join(t.knot_mins, ","), fmt::join(t.knot_maxs, ","), t.level, t.parent);
-//                     abort();
-//                 }
-// 
-//             }   // tidx
-
-
-// DEPRECATE
-            // append the tensors
-//             double add_tensors_time = MPI_Wtime();
-//             AddNewTensors(new_tensors);
-//             add_tensors_time = MPI_Wtime() - add_tensors_time;
 
             // timing
             fmt::print(stderr, "error spans time:       {} s.\n", error_spans_time);

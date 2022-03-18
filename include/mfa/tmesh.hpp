@@ -425,6 +425,20 @@ namespace mfa
             if (!tensor_inserted)
                 tensor_prods.push_back(new_tensor);
 
+            // debug: check all knot vs control point quantities
+            // TODO: comment out once the code is debugged
+//             fmt::print(stderr, "append_tensor() 1: checking knot and control point quantities after appending tensor {}\n",
+//                     new_tensor_idx);
+//             for (auto k = 0; k < tensor_prods.size(); k++)
+//             {
+//                 if (!check_num_knots_ctrl_pts(k))
+//                     abort();
+//             }
+//             fmt::print(stderr, "append_tensor() 1: knot and control point quantities checked\n\n");
+//             fmt::print(stderr, "\n----- T-mesh after append -----\n\n");
+//             print(true, true, false, false);
+//             fmt::print(stderr, "--------------------------\n\n");
+
             return new_tensor_idx;
         }
 
@@ -619,6 +633,9 @@ namespace mfa
                       bool&                 knots_match,            // (output) interection resulted in a tensor whose knot mins, max match new tensor's
                       bool                  debug = false)          // print debug output
         {
+            // debug
+//             debug = true;
+
             TensorProduct<T>& exist_tensor  = tensor_prods[exist_tensor_idx];
 
             CtrlIdx ctrl_idx = anchor_ctrl_pt_dim(exist_tensor, cur_dim, knot_idx, false);      // ctrl pt index of split point in existing tensor
@@ -656,6 +673,11 @@ namespace mfa
             // new side tensor will be added
             if (!subset(side_tensor.knot_mins, side_tensor.knot_maxs, new_tensor.knot_mins, new_tensor.knot_maxs))
             {
+                // debug
+//                 if (debug)
+//                     fmt::print(stderr, "new_side() 2: new side tensor will be added by splitting control points between existing tensor {} and side tensor {}\n\n",
+//                             exist_tensor_idx, side_tensor_idx);
+
                 // adjust prev and nex pointers
                 adjust_prev_next(exist_tensor_idx, side_tensor, side_tensor_idx, new_tensor, split_side, cur_dim);
 
@@ -683,12 +705,36 @@ namespace mfa
                      (et.knot_mins == new_tensor.knot_mins && et.knot_maxs == new_tensor.knot_maxs) )
                     knots_match = true;
 
+                // debug
+//                 if (debug)
+//                 {
+//                     fmt::print(stderr, "new_side() 4: exist_tensor_idx {} exist_tensor:\n", exist_tensor_idx);
+//                     print_tensor(tensor_prods[exist_tensor_idx], true, false, false);
+//                     fmt::print(stderr, "new_side() 4: cur_dim {} side_tensor:\n", cur_dim);
+//                     print_tensor(side_tensor, true, false, false);
+//                 }
+
+                // debug: check all knot vs control point quantities
+                // TODO: comment out once the code is debugged
+//                 fmt::print(stderr, "new_side() 5: checking knot and control point quantities debug {} exist_tensor_idx {} cur_dim {} knot_idx {} split_side {}\n",
+//                         debug, exist_tensor_idx, cur_dim, knot_idx, split_side);
+//                 for (auto k = 0; k < tensor_prods.size(); k++)
+//                 {
+//                     if (!check_num_knots_ctrl_pts(k))
+//                         abort();
+//                 }
+//                 fmt::print(stderr, "new_side() 5: knot and control point quantities checked\n\n");
+
                 return true;
             }
 
             // new side tensor will not be added
             else
             {
+                // debug
+//                 if (debug)
+//                     fmt::print(stderr, "new_side() 3: new side tensor will not be added\n");
+
                 if (split_side == -1 || split_side == 2)
                     split_ctrl_pts(exist_tensor_idx, new_tensor, cur_dim, knot_idx, split_side, true, true, ctrl_idx, debug);
                 else
@@ -699,14 +745,14 @@ namespace mfa
 
                 // debug: check all knot vs control point quantities
                 // TODO: comment out once the code is debugged
-//                 fmt::print(stderr, "new_side() 3: checking knot and control point quantities debug {} exist_tensor_idx {} cur_dim {} knot_idx {} split_side {}\n",
+//                 fmt::print(stderr, "new_side() 6: checking knot and control point quantities debug {} exist_tensor_idx {} cur_dim {} knot_idx {} split_side {}\n",
 //                         debug, exist_tensor_idx, cur_dim, knot_idx, split_side);
 //                 for (auto k = 0; k < tensor_prods.size(); k++)
 //                 {
 //                     if (!check_num_knots_ctrl_pts(k))
 //                         abort();
 //                 }
-//                 fmt::print(stderr, "new_side() 3: knot and control point quantities checked\n");
+//                 fmt::print(stderr, "new_side() 6: knot and control point quantities checked\n\n");
 
                 // delete next and prev pointers of existing tensor that are no longer valid as a result of adding new max side
                 delete_old_pointers(exist_tensor_idx);
@@ -1910,6 +1956,9 @@ namespace mfa
             return true;
         }
 
+        // TODO: DEPRECATE and change Encoder::AdaptiveEncode to write first iteration directly to tensor_prods[0]
+        // rather than to temporary control points and then scattering them all into tensor_prods[0]
+        //
         // scatter global set of control points into their proper tensor products in the tmesh
         void scatter_ctrl_pts(const VectorXi&           nctrl_pts,          // number of control points in each dim.
                               const MatrixX<T>&         ctrl_pts,           // control points
@@ -2202,7 +2251,9 @@ namespace mfa
                 // extend by p/2 + 2 knots from the min corner in all dimensions and then take the min corner of that extension
                 knot_intersections(min_anchor, t_idx, local_knot_idxs, 2);
                 for (auto k = 0; k < dom_dim_; k++)
-                        start_knot_idxs[k] = local_knot_idxs[k][0]; // both even and odd degree: front knot of local knot vector
+                    // DEPRECATE
+//                         start_knot_idxs[k] = local_knot_idxs[k][0]; // both even and odd degree: front knot of local knot vector
+                        start_knot_idxs[k] = local_knot_idxs[k][1]; // both even and odd degree: 1 after front of local knot vector
             }
             else
             {
@@ -2225,7 +2276,9 @@ namespace mfa
                 // extend by p/2 + 2 knots from the max corner in all dimensions and then take the max corner of that extension
                 knot_intersections(max_anchor, t_idx, local_knot_idxs, 2);
                 for (auto k = 0; k < dom_dim_; k++)
-                        end_knot_idxs[k] = local_knot_idxs[k][local_knot_idxs[k].size() - 2]; // both even and odd degree: 1 before back of local knot vector
+                    // DEPRECATE
+//                         end_knot_idxs[k] = local_knot_idxs[k][local_knot_idxs[k].size() - 2]; // both even and odd degree: 1 before back of local knot vector
+                        end_knot_idxs[k] = local_knot_idxs[k][local_knot_idxs[k].size() - 3]; // both even and odd degree: 2 before back of local knot vector
             }
             else
             {
@@ -2244,10 +2297,11 @@ namespace mfa
                 // start points begin at all_knot_param_idxs[start_knot_idxs]
                 start_idxs[k]   = all_knot_param_idxs[k][start_knot_idxs[k]];
 
+                // DEPRECATE
                 // corner case: if extending and start point = param(start_knot_idx), increment start point
                 // because we used a larger local knot vector (p + 2), we don't want a point at its edge, which would be too far
-                if (extend && params[k][start_idxs[k]] == all_knots[k][start_knot_idxs[k]])
-                    start_idxs[k]++;
+//                 if (extend && params[k][start_idxs[k]] == all_knots[k][start_knot_idxs[k]])
+//                     start_idxs[k]++;
 
                 // end points go up to but do not include all_knot_param_ixs[end_knot_idxs + 1]
                 if (all_knots[k].size() - 1 - end_knot_idxs[k] <= p_(k))
@@ -2262,8 +2316,8 @@ namespace mfa
                 }
             }
 
-//             fmt::print(stderr, "start_knot_idxs [{}] end_knot_idxs [{}] start_pt_idxs [{}] end_pt_idxs [{}]\n",
-//                     fmt::join(start_knot_idxs, ","), fmt::join(end_knot_idxs, ","), fmt::join(start_idxs, ","), fmt::join(end_idxs, ","));
+            fmt::print(stderr, "domain_pts(): start_knot_idxs [{}] end_knot_idxs [{}] start_pt_idxs [{}] end_pt_idxs [{}]\n",
+                    fmt::join(start_knot_idxs, ","), fmt::join(end_knot_idxs, ","), fmt::join(start_idxs, ","), fmt::join(end_idxs, ","));
         }
 
         // for a given tensor, compute anchor of a parameter point
