@@ -598,6 +598,10 @@ namespace mfa
                 const VectorXi&         nin_pts,                        // number of input points
                 const VectorXi&         start_ijk)                      // i,j,k of start of input points
         {
+//             bool debug = false;
+//             if (t_idx == 5 && dim == 0)
+//                 debug = true;
+
             auto& t = mfa_data.tmesh.tensor_prods[t_idx];
 
             // ijk and param of point in the middle of the curve
@@ -611,12 +615,17 @@ namespace mfa
                 if (mid_param(i) < mfa_data.tmesh.all_knots[i][t.knot_mins[i]] || mid_param(i) > mfa_data.tmesh.all_knots[i][t.knot_maxs[i]])
                 {
                     // debug
-//                     fmt::print(stderr, "CurveIntersectsTensor(): does not intersect t_idx {} dim {} start_ijk [{}] mid_param({}) = {}\n",
-//                             t_idx, dim, start_ijk.transpose(), i, mid_param(i));
+//                     if (debug)
+//                         fmt::print(stderr, "CurveIntersectsTensor(): does not intersect t_idx {} dim {} start_ijk [{}] mid_param({}) = {}\n",
+//                                 t_idx, dim, start_ijk.transpose(), i, mid_param(i));
 
                     return false;
                 }
             }
+
+//             if (debug)
+//                 fmt::print(stderr, "CurveIntersectsTensor(): intersects t_idx {} dim {} start_ijk [{}]\n",
+//                         t_idx, dim, start_ijk.transpose());
 
             return true;
         }
@@ -901,6 +910,11 @@ namespace mfa
                 size_t              npts,               // number of input points in current dim, inclusing constraints
                 MatrixX<T>&         Nfree)              // (output) matrix of free control points basis functions
         {
+            // debug
+//             bool debug = false;
+//             if (dim == 0 && t_idx == 5)
+//                 debug = true;
+
             auto&               t = mfa_data.tmesh.tensor_prods[t_idx];
             vector<KnotIdx>     anchor(mfa_data.dom_dim);                                       // control point anchor
             Nfree = MatrixX<T>::Zero(npts, t.nctrl_pts(dim));
@@ -980,17 +994,10 @@ namespace mfa
             for (auto i = dim; i < mfa_data.dom_dim; i++)
                 param(i) = input.params->param_grid[i][start_ijk(i)];
 
-            // find tensor product containing the parameters of the start of the curve (may be outside of original tensor)
-            bool found          = false;
-            TensorIdx found_idx = mfa_data.tmesh.find_tensor(param, t_idx, found);
-            auto& found_tensor  = mfa_data.tmesh.tensor_prods[found_idx];
-            if (!found)
-                throw MFAError(fmt::format("FreeCtrlPtCurve: tensor containing parameter not found. This should not happen\n"));
-
-            // for the start of the curve, for the current dim. and higher, find anchor
+            // for the start of the curve, for higher than the current dim, find anchor
             // these dims are in the input point space
             // in the current dim, the anchor coordinate will be replaced below by the control point anchor
-            for (auto i = dim; i < mfa_data.dom_dim; i++)
+            for (auto i = dim + 1; i < mfa_data.dom_dim; i++)
             {
                 // if param == 0, FindSpan finds the last 0-value knot span, but we want the first control point anchor, which is an earlier span
                 if (param(i) == 0.0)
@@ -998,11 +1005,13 @@ namespace mfa
                 else if (param(i) == 1.0)
                     anchor[i] = mfa_data.tmesh.all_knots[i].size() - 2 - (mfa_data.p(i) + 1) / 2;
                 else
-                    anchor[i] = mfa_data.tmesh.FindSpan(i, param(i), found_tensor);
+                    anchor[i] = mfa_data.tmesh.FindSpan(i, param(i), t);
             }
 
             // debug
-//             fmt::print(stderr, "FreeCtrlPtCurve: dim {} t_idx {} start point anchor [{}]\n", dim, t_idx, fmt::join(anchor, ","));
+//             if (debug)
+//                 fmt::print(stderr, "FreeCtrlPtCurve: dim {} t_idx {} param [{}] start point anchor [{}]\n",
+//                         dim, t_idx, param.transpose(), fmt::join(anchor, ","));
 
             for (auto i = 0; i < t.nctrl_pts(dim); i++)                                                 // for all control points in current dim
             {
@@ -1979,8 +1988,8 @@ namespace mfa
         {
             // debug
             fmt::print(stderr, "EncodeTensorLocalSeparable tidx = {}\n", t_idx);
-//             fmt::print(stderr, "\n Current T-mesh:\n");
-//             mfa_data.tmesh.print(true, true);
+            fmt::print(stderr, "\n Current T-mesh:\n");
+            mfa_data.tmesh.print(true, true);
 
             double t0 = MPI_Wtime();
 
@@ -2020,12 +2029,12 @@ namespace mfa
             MatrixX<T> Q1(npts.prod(), pt_dim);                                                     // second matrix already smaller, size of ctrl pts in first dim
 
             // debug
-            fmt::print(stderr, "EncodeTensorLocalSeparable(): input domain points covered by tensor and constraints:\n");
-            fmt::print(stderr, "start_idxs [{}] end_idxs [{}]\n", fmt::join(start_idxs, ","), fmt::join(end_idxs, ","));
-            for (auto k = 0; k < dom_dim; k++)
-                fmt::print(stderr, "param_start[{}] = {} param_end[{}] = {} ", k, input.params->param_grid[k][dom_starts(k)],
-                        k, input.params->param_grid[k][dom_starts(k) + ndom_pts(k) - 1]);
-            fmt::print(stderr, "\n");
+//             fmt::print(stderr, "EncodeTensorLocalSeparable(): input domain points covered by tensor and constraints:\n");
+//             fmt::print(stderr, "start_idxs [{}] end_idxs [{}]\n", fmt::join(start_idxs, ","), fmt::join(end_idxs, ","));
+//             for (auto k = 0; k < dom_dim; k++)
+//                 fmt::print(stderr, "param_start[{}] = {} param_end[{}] = {} ", k, input.params->param_grid[k][dom_starts(k)],
+//                         k, input.params->param_grid[k][dom_starts(k) + ndom_pts(k) - 1]);
+//             fmt::print(stderr, "\n");
 
             // input and output number of points
             VectorXi nin_pts    = ndom_pts;

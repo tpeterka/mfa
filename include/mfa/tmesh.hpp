@@ -2191,8 +2191,8 @@ namespace mfa
                 }
             }
 
-            fmt::print(stderr, "domain_pts(): start_knot_idxs [{}] end_knot_idxs [{}] start_pt_idxs [{}] end_pt_idxs [{}]\n",
-                    fmt::join(start_knot_idxs, ","), fmt::join(end_knot_idxs, ","), fmt::join(start_idxs, ","), fmt::join(end_idxs, ","));
+//             fmt::print(stderr, "domain_pts(): start_knot_idxs [{}] end_knot_idxs [{}] start_pt_idxs [{}] end_pt_idxs [{}]\n",
+//                     fmt::join(start_knot_idxs, ","), fmt::join(end_knot_idxs, ","), fmt::join(start_idxs, ","), fmt::join(end_idxs, ","));
         }
 
         // for a given tensor, compute anchor of a parameter point
