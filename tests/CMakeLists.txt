@@ -10,9 +10,6 @@ target_link_libraries       (decode-grid-test                       ${libraries}
 add_executable              (fixed-multiblock-test                  fixed_multiblock.cpp)
 target_link_libraries       (fixed-multiblock-test                  ${libraries})
 
-add_executable              (multi-bc-test                          multi_bc.cpp)
-target_link_libraries       (multi-bc-test                          ${libraries})
-
 add_executable              (fixed-s3d-blend                        s3d_blend_test.cpp)
 target_link_libraries       (fixed-s3d-blend                        ${libraries})
 
@@ -33,15 +30,15 @@ add_test                    (NAME fixed-sinc-2d-test
                             )
                             
 add_test                    (NAME multi-bc-test1
-                             COMMAND multi-bc-test -b 2 -d 2 -m 1 -i sinc -o 0.11
+                             COMMAND multiblock_blend_continuous -b 2 -d 2 -m 1 -i sinc -o 0.11
                             )
                             
 add_test                    (NAME multi-bc-test2
-                             COMMAND multi-bc-test -i sinc -d 3 -m 2 -b 2 -o 0.11
+                             COMMAND multiblock_blend_continuous -i sinc -d 3 -m 2 -b 2 -o 0.11
                             )       
                             
 add_test                    (NAME multi-bc-test3
-                             COMMAND multi-bc-test -i sinc -d 3 -m 2 -b 6 
+                             COMMAND multiblock_blend_continuous -i sinc -d 3 -m 2 -b 6
                             )                     
 
 add_test                    (NAME fixed-sinc-2d-test-grid
