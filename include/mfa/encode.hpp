@@ -1305,12 +1305,16 @@ namespace mfa
             {
                 tmesh.knot_idx_ofst(t, t.knot_mins[i], start_ijk(i), i, true, anchor[i]);                     // computes anchor as offset from start of tensor
                 param(i)        = tmesh.all_knots[i][anchor[i]];
-                param_eps(i)    = anchor[i] == t.knot_mins[i] ? param(i) + eps : param(i);
+                param_eps(i)    = anchor[i] == t.knot_maxs[i] ? param(i) - eps : param(i);
             }
 
-            // for the start of the curve, for current dim. and higher, find param
+            // for the start of the curve, for current dim., make the param just before the min of the tensor
+            param(dim)      = tmesh.all_knots[dim][t.knot_mins[dim]] - eps;
+            param_eps(dim)  = param(dim);
+
+            // for the start of the curve, for dims after current, find param
             // these dims are in the input point index space
-            for (auto i = dim; i < dom_dim; i++)
+            for (auto i = dim + 1; i < dom_dim; i++)
             {
                 param(i)        = input.params->param_grid[i][start_ijk(i)];
                 param_eps(i)    = param(i);
@@ -1351,6 +1355,8 @@ namespace mfa
 //             fmt::print(stderr, "PrevConsCtrlPtCurve(): 1: dim {} found_idx {} param [{}] anchor [{}]\n",
 //                     dim, found_idx, param.transpose(), fmt::join(anchor, ","));
 
+            // compute the p constraints
+            // these are in descending index order
             for (auto i = 0; i < p(dim); i++)                                                           // for all constraint control points in current dim
             {
                 // reset parameter in current dim to anchor of control point
@@ -1401,8 +1407,14 @@ namespace mfa
                 // offset anchor for next constraint
                 if (i < p(dim) - 1)
                 {
-                    if (!tmesh.knot_idx_ofst(found_tensor, anchor[dim], 1, dim, true, anchor[dim]))
-                        throw MFAError(fmt::format("PrevConsCtrlPtCurve(): cannot offset anchor for next constraint\n"));
+                    if (!tmesh.knot_idx_ofst(found_tensor, anchor[dim], -1, dim, true, anchor[dim]))
+                    {
+                        // ran out of constraints; truncate matrices to current size and end
+                        Ncons.resize(Ncons.rows(), i + 1);
+                        Pcons.resize(i + 1, Pcons.cols());
+                        break;
+//                        throw MFAError(fmt::format("PrevConsCtrlPtCurve(): cannot offset anchor for next constraint\n"));
+                    }
                 }
             }       // control points
         }
@@ -1507,6 +1519,8 @@ namespace mfa
 //             fmt::print(stderr, "NextConsCtrlPtCurve(): 1: dim {} found_idx {} param [{}] anchor [{}]\n",
 //                     dim, found_idx, param.transpose(), fmt::join(anchor, ","));
 
+            // compute the p constraints
+            // these are in ascending index order
             for (auto i = 0; i < p(dim); i++)                                                           // for all constraint control points in current dim
             {
                 // reset parameter in current dim to anchor of control point
@@ -1558,7 +1572,13 @@ namespace mfa
                 if (i < p(dim) - 1)
                 {
                     if (!tmesh.knot_idx_ofst(found_tensor, anchor[dim], 1, dim, true, anchor[dim]))
-                        throw MFAError(fmt::format("NextConsCtrlPtCurve(): cannot offset anchor for next constraint\n"));
+                    {
+                        // ran out of constraints; truncate matrices to current size and end
+                        Ncons.resize(Ncons.rows(), ofst + i + 1);
+                        Pcons.resize(ofst + i + 1, Pcons.cols());
+                        break;
+//                         throw MFAError(fmt::format("NextConsCtrlPtCurve(): cannot offset anchor for next constraint\n"));
+                    }
                 }
             }       // control points
         }
