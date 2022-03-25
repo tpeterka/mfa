@@ -598,6 +598,11 @@ namespace mfa
                 MatrixX<T>&             new_ctrl_pts,       // (output) new control points of curve
                 VectorX<T>&             new_weights) const  // (output) new control point weights of curve
         {
+            // debug
+            bool debug = false;
+            if (fabs(param(0) - 0.3333) < 1e-3 && fabs(param(1) - 0.0606) < 1e-3 && tensor_idx == 2)
+                debug = true;
+
             auto&   tensor  = tmesh.tensor_prods[tensor_idx];
             T       u       = param(cur_dim);               // parameter in current dim.
 
@@ -677,11 +682,26 @@ namespace mfa
                 for (auto i = p(cur_dim) / 2; i <= p(cur_dim) / 2 + 1; i++)
                 {
                     // debug TODO: remove once stable
-                    if (i >= temp_ctrl_pts.rows() || ctrl_pt + i < 0 || ctrl_pt + i >= old_ctrl_pts.rows())
+                    if (i >= temp_ctrl_pts.rows() || ctrl_pt + i < 0)
                         throw MFAError(fmt::format( "NewCurveKnotInsertion(): index out of range\n"));
 
-                    temp_ctrl_pts.row(i)    = old_ctrl_pts.row(ctrl_pt + i);
-                    temp_weights(i)         = old_weights(ctrl_pt + i);
+                    if (ctrl_pt + i < old_ctrl_pts.rows())
+                    {
+
+                        temp_ctrl_pts.row(i)    = old_ctrl_pts.row(ctrl_pt + i);
+                        temp_weights(i)         = old_weights(ctrl_pt + i);
+                    }
+                    // we don't have a second control point in this tensor
+                    // punt and copy the previous control point
+                    // TODO: FIXME
+                    else if (i > p(cur_dim) / 2)
+                    {
+
+                        temp_ctrl_pts.row(i)    = old_ctrl_pts.row(ctrl_pt + i - 1);
+                        temp_weights(i)         = old_weights(ctrl_pt + i - 1);
+                    }
+                    else
+                        throw MFAError(fmt::format( "NewCurveKnotInsertion(): index out of range\n"));
                 }
 
                 // get knots for interpolation

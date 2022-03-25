@@ -36,6 +36,9 @@
 // comment out the following line to encode local with unified dims
 #define MFA_ENCODE_LOCAL_SEPARABLE
 
+// for debugging, can turn off constraints in local solve
+// #define MFA_NO_CONSTRAINTS
+
 // the following lines control the extent of merging small tensors into larger ones
 #define MFA_TMESH_MERGE_MAX
 // #define MFA_TMESH_MERGE_SOME

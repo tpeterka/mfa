@@ -862,8 +862,8 @@ namespace mfa
                 auto& ft = tmesh.tensor_prods[found_idx];
 
                 // debug
-//                 fmt::print(stderr, "InterpCtrlPtCurve(): dim {} i {} found_idx {} param [{}] \t\tanchor [{}] start_ijk [{}]\n",
-//                         dim, i, found_idx, param.transpose(), fmt::join(anchor, ","), start_ijk.transpose());
+                fmt::print(stderr, "InterpCtrlPtCurve(): dim {} i {} found_idx {} param [{}] \t\tanchor [{}] start_ijk [{}]\n",
+                        dim, i, found_idx, param.transpose(), fmt::join(anchor, ","), start_ijk.transpose());
 
                 // find control point aligned with curve
                 if (tmesh.anchor_matches_param(anchor, param))                                          // control point exists already
@@ -1297,22 +1297,25 @@ namespace mfa
 
             VectorX<T> param(dom_dim);
             VectorX<T> param_eps(dom_dim);                                              // param + small epsilon
-            T eps = 1.0e-6;
+            T eps = 1.0e-3;
 
-            // for start of the curve, for dims prior to current dim, find anchor and param
+            // find param for start of curve
+
+            // for dims prior to current dim, find anchor and param
             // those dims are in control point index space for the current tensor
             for (auto i = 0; i < dim; i++)
             {
                 tmesh.knot_idx_ofst(t, t.knot_mins[i], start_ijk(i), i, true, anchor[i]);                     // computes anchor as offset from start of tensor
                 param(i)        = tmesh.all_knots[i][anchor[i]];
-                param_eps(i)    = anchor[i] == t.knot_maxs[i] ? param(i) - eps : param(i);
+                // move a little off of the min. corner toward the center of the tensor
+                param_eps(i)    = anchor[i] == t.knot_mins[i] ? param(i) + eps : param(i);
             }
 
-            // for the start of the curve, for current dim., make the param just before the min of the tensor
+            // for current dim, make the param just before the min of the tensor
             param(dim)      = tmesh.all_knots[dim][t.knot_mins[dim]] - eps;
             param_eps(dim)  = param(dim);
 
-            // for the start of the curve, for dims after current, find param
+            // for dims after current, find param
             // these dims are in the input point index space
             for (auto i = dim + 1; i < dom_dim; i++)
             {
@@ -1457,20 +1460,23 @@ namespace mfa
             VectorX<T> param_eps(dom_dim);                                              // param + small epsilon
             T eps = 1.0e-6;
 
-            // for start of the curve, for dims prior to current dim, find anchor and param
+            // find param for start of curve
+
+            // for dims prior to current dim, find anchor and param
             // those dims are in control point index space for the current tensor
             for (auto i = 0; i < dim; i++)
             {
                 tmesh.knot_idx_ofst(t, t.knot_mins[i], start_ijk(i), i, true, anchor[i]);                   // computes anchor as offset from start of tensor
                 param(i)        = tmesh.all_knots[i][anchor[i]];
+                // move a little off of the min. corner toward the center of the tensor
                 param_eps(i)    = anchor[i] == t.knot_mins[i] ? param(i) + eps : param(i);
             }
 
-            // for the start of the curve, for current dim., make the param just past the max of the tensor
+            // for current dim, make the param just past the max of the tensor
             param(dim)      = tmesh.all_knots[dim][t.knot_maxs[dim]] + eps;
             param_eps(dim)  = param(dim);
 
-            // for the start of the curve, for dims after current, find param
+            // for dims after current, find param
             // these dims are in the input point index space
             for (auto i = dim + 1; i < dom_dim; i++)
             {
@@ -1770,7 +1776,12 @@ namespace mfa
             MatrixX<T>                  Pcons;                                                      // constraint control points
             vector<vector<KnotIdx>>     anchors;                                                    // corresponding anchors
             vector<TensorIdx>           t_idx_anchors;                                              // tensors containing corresponding anchors
+
+#ifndef MFA_NO_CONSTRAINTS      // for debugging can disable constraints; normally not used
+
             LocalSolveAllConstraints(t, Pcons, anchors, t_idx_anchors);
+
+#endif
 
             // debug
 //             fmt::print(stderr, "Pcons.rows = {} t_idx_anchors.size() = {}\n", Pcons.rows(), t_idx_anchors.size());
@@ -2086,7 +2097,9 @@ namespace mfa
                 MatrixX<T>  P(t.nctrl_pts(dim), pt_dim);
 
                 // debug: turn off constraints
-#if 1
+
+#if MFA_NO_CONSTRAINTS
+
                 cons_type = ConsType::MFA_NO_CONSTRAINT;
 #else
 
