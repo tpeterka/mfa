@@ -399,7 +399,7 @@ namespace mfa
             if (ps.structured)
             {
                 auto pt_min = ps.begin();
-                auto pt_max = ps.end();
+                auto pt_max = ps.last();
                 VectorX<T>   min_params, max_params;
                 pt_min.params(min_params);
                 pt_max.params(max_params);

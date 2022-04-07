@@ -350,6 +350,10 @@ namespace mfa
         {
             return PtIterator(*this, npts);
         }
+        PtIterator last() const
+        {
+            return PtIterator(*this, npts - 1);
+        }
 
         void pt_coords(size_t idx, VectorX<T>& coord_vec) const
         {
