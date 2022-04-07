@@ -396,7 +396,7 @@ namespace mfa
 #if defined( MFA_SERIAL) || defined (MFA_KOKKOS)
 
             // use DecodeGrid for structured case that already has KOKKOS
-            if (ps.structured)
+            if (ps.structured && 0 == derivs.size() )
             {
                 auto pt_min = ps.begin();
                 auto pt_max = ps.last();
