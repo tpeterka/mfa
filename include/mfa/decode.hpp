@@ -394,58 +394,54 @@ namespace mfa
 #endif              // end TBB version
 
 #if defined( MFA_SERIAL) || defined (MFA_KOKKOS)
-            DecodeInfo<T> decode_info(mfa_data, derivs);    // reusable decode point info for calling VolPt repeatedly
 
-            VectorX<T> cpt(last + 1);                       // evaluated point
-            VectorX<T> param(mfa_data.dom_dim);            // parameters for one point
-            VectorXi   ijk(mfa_data.dom_dim);      // vector of param indices (structured grid only)
-
-            auto pt_it  = ps.begin();
-            auto pt_end = ps.end();
-            for (; pt_it != pt_end; ++pt_it)
+            // use DecodeGrid for structured case that already has KOKKOS
+            if (ps.structured)
             {
-                // Get parameter values and indices at current point
-                pt_it.params(param);
+                auto pt_min = ps.begin();
+                auto pt_max = ps.end();
+                VectorX<T>   min_params, max_params;
+                pt_min.params(min_params);
+                pt_max.params(max_params);
+                DecodeGrid(ps.domain, min_dim, max_dim, min_params, max_params, ps.g.ndom_pts );
+            }
+            else
+            {
+                DecodeInfo<T> decode_info(mfa_data, derivs);    // reusable decode point info for calling VolPt repeatedly
+                VectorX<T> cpt(last + 1);                       // evaluated point
+                VectorX<T> param(mfa_data.dom_dim);            // parameters for one point
+                VectorXi   ijk(mfa_data.dom_dim);      // vector of param indices (structured grid only)
 
-                // compute approximated point for this parameter vector
+                auto pt_it  = ps.begin();
+                auto pt_end = ps.end();
+                for (; pt_it != pt_end; ++pt_it)
+                {
+                    // Get parameter values and indices at current point
+                    pt_it.params(param);
+
+                    // compute approximated point for this parameter vector
 
 #ifndef MFA_TMESH   // original version for one tensor product
-
-                if (saved_basis && ps.structured)
-                {
-                    pt_it.ijk(ijk);
-                    VolPt_saved_basis(ijk, param, cpt, decode_info, mfa_data.tmesh.tensor_prods[0]);
-
-                    // debug
-                    if (pt_it.idx() == 0)
-                        fprintf(stderr, "Using VolPt_saved_basis\n");
-                }
-                else
-                {
                     // debug
                     if (pt_it.idx() == 0)
                         fprintf(stderr, "Using VolPt\n");
-
                     VolPt(param, cpt, decode_info, mfa_data.tmesh.tensor_prods[0], derivs);
-                }
-
 #else           // tmesh version
-
-                if (pt_it.idx() == 0)
-                    fprintf(stderr, "Using VolPt_tmesh\n");
-                VolPt_tmesh(param, cpt);
-
+                    if (pt_it.idx() == 0)
+                        fprintf(stderr, "Using VolPt_tmesh\n");
+                    VolPt_tmesh(param, cpt);
 #endif          // end serial version
 
-                ps.domain.block(pt_it.idx(), min_dim, 1, max_dim - min_dim + 1) = cpt.transpose();
+                    ps.domain.block(pt_it.idx(), min_dim, 1, max_dim - min_dim + 1) = cpt.transpose();
 
-                // print progress
-                if (verbose)
-                    if (pt_it.idx() > 0 && ps.npts >= 100 && pt_it.idx() % (ps.npts / 100) == 0)
-                        fprintf(stderr, "\r%.0f %% decoded", (T)pt_it.idx() / (T)(ps.npts) * 100);
-            }
+                    // print progress
+                    if (verbose)
+                        if (pt_it.idx() > 0 && ps.npts >= 100 && pt_it.idx() % (ps.npts / 100) == 0)
+                            fprintf(stderr, "\r%.0f %% decoded", (T)pt_it.idx() / (T)(ps.npts) * 100);
+               }
 
 #endif
+            }
         }
 
         // decode at a regular grid using saved basis that is computed once by this function
