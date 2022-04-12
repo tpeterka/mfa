@@ -379,8 +379,12 @@ namespace mfa
                             int                     deriv,
                             T                       c_target,
                             const SparseMatrixX<T>& N,
+                            const VectorX<T>& dom_mins,
+                            const VectorX<T>& dom_maxs,
                             SparseMatrixX<T>&       Ct)
         {
+            VectorX<T> extents = dom_maxs - dom_mins;
+
             clock_t fill_time = clock();
             if (verbose)
                 cerr << "Adjusting matrix for regularization..." << endl;
@@ -397,28 +401,52 @@ namespace mfa
             int n_entries = (mfa_data.p.array() + 1).prod();
             Ct.reserve(VectorXi::Constant(Ct.cols(), n_entries));
 
-            // Construct set of parameters corresponding to each control point anchor
+            // Compute parameters for each derivative constraint
+            // Compute basis functions and derivatives at each parameter
             vector<vector<T>> anchor_pts(mfa_data.dom_dim);
             for (int i = 0; i < mfa_data.dom_dim; i++) 
             {
+                MatrixX<T> temp_ders(3, t.nctrl_pts(i)); // 3 rows stores up to 2nd deriv
+
                 int pc = mfa_data.p(i);     // current p for this dimension
-                int nc = t.nctrl_pts(i);    // current total ctrl pts for this dimension
 
                 anchor_pts[i].resize(t.nctrl_pts(i));
                 anchor_pts[i][0] = 0;
                 anchor_pts[i][t.nctrl_pts(i)-1] = 1.0;
-                // anchor_pts[i][0] = 0.99 * mfa_data.tmesh.all_knots[i][0] + 0.01 * mfa_data.tmesh.all_knots[i][pc+1];                   // special anchor for first control point
-                // anchor_pts[i][t.nctrl_pts(i)-1] = 0.01 * mfa_data.tmesh.all_knots[i][t.nctrl_pts(i)-1] + 0.99 * mfa_data.tmesh.all_knots[i][t.nctrl_pts(i)+pc];    // special anchor for last control point
                 for (int j = 1; j < t.nctrl_pts(i) - 1; j++)
-                {
-                    anchor_pts[i][j] = (mfa_data.tmesh.all_knots[i][j] + mfa_data.tmesh.all_knots[i][j+pc+1]) / 2;
+                {              
+                    T low = mfa_data.tmesh.all_knots[i][j];
+                    T high = mfa_data.tmesh.all_knots[i][j+pc+1];
+                    T mid = (low + high) / 2;
+                    int temp_span = 0;
+
+                    // Find parameter for max value of basis function with binary search
+                    temp_ders.setZero();
+                    temp_span = mfa_data.FindSpan(i, mid);
+                    mfa_data.DerBasisFuns(i, mid, temp_span, 1, temp_ders);
+
+                    // TODO speed up by using Newton's method instead.
+                    //      Warning: Need to ensure convergence to the right vanishing derivative when using Newton's method (there are three per basis fxn)
+                    while (temp_ders(1,j) < -0.01 || temp_ders(1,j) > 0.01)
+                    {
+                        if (temp_ders(1,j) > 0.01)    // if function is increasing, we are left of max value
+                            high = mid;
+                        else
+                            low = mid;
+                        mid = (low + high) / 2;
+
+                        temp_span = mfa_data.FindSpan(i, mid);
+                        mfa_data.DerBasisFuns(i, mid, temp_span, 1, temp_ders);
+                    }
+
+                    anchor_pts[i][j] = mid;
                 }
             }
 
             VectorXi ctrl_starts(mfa_data.dom_dim);                                 // subvolume ctrl pt indices in each dimension
             VectorXi nctrl_patch = mfa_data.p + VectorXi::Ones(mfa_data.dom_dim);   // number of nonzero basis functions at a given parameter, in each dimension
 
-            // Loop through the control points (anchors)
+            // Loop through each parameter corresponding to derivative constraint
             VolIterator pt_it(t.nctrl_pts);
             while (!pt_it.done())
             {
@@ -433,47 +461,41 @@ namespace mfa
                     B[k].setZero();
                     mfa_data.DerBasisFuns(k, u, spans[k], deriv, B[k]);
                 }
-                
-                // Compute derivative constraints for each direction
-                VolIterator ctrl_vol_iter(nctrl_patch, ctrl_starts, t.nctrl_pts);
-                while (!ctrl_vol_iter.done())
-                {
-                    int ctrl_idx_full = ctrl_vol_iter.cur_iter_full();
-                    T current_deriv = 1;        // holds one derivative at a time
-                    T total_deriv = 0;          // sum of derivatives in each direction
 
-                    for (int dk = 0; dk < mfa_data.dom_dim; dk++)   // for each direction derivative
+                // Compute derivative constraints for each direction
+                for (int dk = 0; dk < mfa_data.dom_dim; dk++)   // for each direction derivative
+                {
+
+                    VolIterator ctrl_vol_iter(nctrl_patch, ctrl_starts, t.nctrl_pts);
+                    while (!ctrl_vol_iter.done())
                     {
-                        current_deriv = 1;
+                        int ctrl_idx_full = ctrl_vol_iter.cur_iter_full();
+                        T current_deriv = 1;        // holds one derivative at a time
+
                         for (auto k = 0; k < mfa_data.dom_dim; k++)
                         {
                             int idx = ctrl_vol_iter.idx_dim(k);
 
-                            // amplify strength of contraints on edges
-                            T edge_factor = 1;
-                            if (idx == 0 || idx == t.nctrl_pts(k) - 1)
-                                edge_factor = mfa_data.p(k);
-
                             T mult = B[k]((k==dk) ? deriv : 0, idx);
+
+                            if (k == dk)    // if this is a derivative, scale properly
+                                mult *= pow(extents(k), deriv);
                             // multiply by the derivative if k==dk, otherwise normal basis func
                             // current_deriv *= edge_factor * B[k]((k==dk) ? deriv : 0, idx);  // new for regularizer
-
-                            current_deriv *= edge_factor * mult;
+                            current_deriv *= mult;
                         }
 
-                        total_deriv += current_deriv;    // one contribution per derivative
+                        Ct.insertBackUncompressed(ctrl_idx_full, pt_it.cur_iter() * mfa_data.dom_dim + dk) = current_deriv;
+
+                        ctrl_vol_iter.incr_iter();
                     }
-                    Ct.insertBackUncompressed(ctrl_idx_full, pt_it.cur_iter()) = total_deriv;  
-
-                    ctrl_vol_iter.incr_iter();
                 }
-
                 pt_it.incr_iter();
             }
 
             SparseMatrixX<T> C(Ct.transpose());                             // col-major transpose for fast column sums
-            Eigen::DiagonalMatrix<T, Eigen::Dynamic> lambda(Ct.cols());     // regularization strength
-            for (int i = 0; i < Ct.cols(); i++)
+            Eigen::DiagonalMatrix<T, Eigen::Dynamic> lambda(C.cols());     // regularization strength
+            for (int i = 0; i < C.cols(); i++)
             {
                 T c_sum = N.col(i).sum();
                 T c_add = (c_sum < c_target) ? c_target - c_sum : 0;
@@ -481,8 +503,13 @@ namespace mfa
                 lambda.diagonal()(i) = c_add / C.col(i).cwiseAbs().sum();
             }
 
-            Ct = Ct * lambda;
+            // // debug
+            // for (int i = 0; i < lambda.rows(); i++)
+            // {
+            //     cerr << lambda.diagonal()(i) << endl;
+            // }
 
+            Ct = lambda * Ct; // We want to scale rows of Ct (cols of C)
             fill_time = clock() - fill_time;
             if (verbose)
                 cerr << "Regularization Total Time: " << setprecision(3) << ((double)fill_time)/CLOCKS_PER_SEC << "s." << endl;
@@ -753,25 +780,31 @@ namespace mfa
                     cerr << "Applying model regularization with strength r=" << regularization << endl;
 
                 int num_reg_conds = t.nctrl_pts.prod();
-                SparseMatrixX<T> Ct(num_reg_conds, num_reg_conds);
-                SparseMatrixX<T> Ct1(num_reg_conds, num_reg_conds);
-                SparseMatrixX<T> Ct2(num_reg_conds, num_reg_conds);
+                SparseMatrixX<T> Ct(Nt.rows(), num_reg_conds * mfa_data.dom_dim);
+                SparseMatrixX<T> Ct1(Nt.rows(), num_reg_conds * mfa_data.dom_dim);
+                SparseMatrixX<T> Ct2(Nt.rows(), num_reg_conds * mfa_data.dom_dim);
 
-                ConsMatrix(t_idx, 1, regularization, N, Ct1);
-                ConsMatrix(t_idx, 2, regularization, N, Ct2);
+
                 
-                if (reg1and2)
+                if (reg1and2)   // constrain 1st and 2nd derivs
                 {
-                    Ct = Ct1 + Ct2;         // C1 and C2 regularization
+                    ConsMatrix(t_idx, 1, regularization, N, input.dom_mins, input.dom_maxs, Ct1);
+                    ConsMatrix(t_idx, 2, regularization, N, input.dom_mins, input.dom_maxs, Ct2);
+
+                    Ct.conservativeResize(Ct1.rows(), Ct1.cols() + Ct2.cols());
+                    Ct.leftCols(Ct1.cols()) = Ct1;
+                    Ct.rightCols(Ct2.cols()) = Ct2;
+                    Ct.makeCompressed();
                 }
-                else
+                else            // constrain only 2nd derivs
                 {
+                    ConsMatrix(t_idx, 2, regularization, N, input.dom_mins, input.dom_maxs, Ct2);
                     Ct = Ct2;            // only C2 regularization
                 }
 
                 // Concatenate Ct to the right end of Nt
-                Nt.conservativeResize(Nt.rows(), Nt.cols()+num_reg_conds);
-                Nt.rightCols(num_reg_conds) = Ct;
+                Nt.conservativeResize(Nt.rows(), Nt.cols() + Ct.cols());
+                Nt.rightCols(Ct.cols()) = Ct;
                 Nt.makeCompressed();
             }
 
@@ -1918,7 +1951,7 @@ namespace mfa
             //     dom_starts(k)   = start_idxs[k];
             // }
 
-            if (R.cols() != mfa_data.max_dim - mfa_data.min_dim + 1)
+            if (R.cols() != mfa_data.dim())
                 cerr << "Error: Incorrect matrix dimensions in RHSUnified (cols)" << endl;
             if (R.rows() != input.npts)
                 cerr << "Error: Incorrect matrix dimensions in RHSUnified (rows)" << endl;
