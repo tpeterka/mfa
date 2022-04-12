@@ -1526,6 +1526,93 @@ struct Block : public BlockBase<T>
         cerr << "domain extent:\n min\n" << bounds_mins << "\nmax\n" << bounds_maxs << endl;
     }
 
+
+    void read_3d_unstructured_data(
+            const       diy::Master::ProxyWithLink& cp,
+            DomainArgs& args,
+            int         varid,
+            int         all_vars,           // total # scalar variables contained in infile
+            int         geom_dim)       
+    {
+        int nvars = 1;
+        this->max_errs.resize(nvars);
+        this->sum_sq_errs.resize(nvars);
+        core_mins.resize(dom_dim);
+        core_maxs.resize(dom_dim);
+        bounds_mins.resize(pt_dim);
+        bounds_maxs.resize(pt_dim);
+
+        input = new mfa::PointSet<T>(dom_dim, pt_dim, args.tot_ndom_pts);
+
+        // vector<float> vel(pt_dim * args.tot_ndom_pts);
+
+        FILE *fd = fopen(args.infile.c_str(), "r");
+        assert(fd);
+
+        // // read file into buffer
+        // if (!fread(&vel[0], sizeof(float), args.tot_ndom_pts * pt_dim, fd))
+        // {
+        //     fprintf(stderr, "Error: unable to read file\n");
+        //     exit(0);
+        // }
+
+
+        // build PointSet
+        float val = 0;
+        for (int i = 0; i < input->npts; i++)
+        {
+            for (int k = 0; k < geom_dim; k++)
+            {
+                fscanf(fd, "%f", &val);
+                if (k < dom_dim)
+                {
+                    input->domain(i, k) = val;
+                }
+            }
+            for (int k = 0; k < all_vars; k++)  // read all vars but only store varid
+            {
+                fscanf(fd, "%f", &val);
+                if (k == varid)
+                {
+                    input->domain(i, dom_dim) = val;
+                }
+            }
+
+            // for (int k = 0; k < pt_dim; k++)
+            // {
+            //     fscanf(fd, "%f", &val);
+            //     input->domain(i, k) = val;
+            //     // input->domain(i, k) = vel[i * pt_dim + k];
+            // }
+        }
+
+        // compute bounds in each dimension
+        for (int i = 0; i < pt_dim; i++)
+        {
+            bounds_mins = input->domain.colwise().minCoeff();
+            bounds_maxs = input->domain.colwise().maxCoeff();
+        }
+        core_mins = bounds_mins.head(dom_dim);
+        core_maxs = bounds_maxs.head(dom_dim);
+
+        VectorX<T> dom_mins(dom_dim), dom_maxs(dom_dim);
+        for (int i = 0; i < dom_dim; i++)
+        {
+            dom_mins(i) = args.min[i];
+            dom_maxs(i) = args.max[i];
+        }
+        input->init_params(dom_mins, dom_maxs);
+
+        int verbose = args.verbose && cp.master()->communicator().rank() == 0; 
+        this->mfa = new mfa::MFA<T>(dom_dim, verbose);
+
+        // initialize MFA models (geometry, vars, etc)
+        this->setup_models(cp, nvars, args);
+
+        // debug
+        cerr << "domain extent:\n min\n" << bounds_mins << "\nmax\n" << bounds_maxs << endl;
+    }
+
     void get_box_intersections(
         T alpha,
         T rho,

@@ -55,9 +55,9 @@ int main(int argc, char** argv)
     string infile;                              // input file name
     int    structured   = 1;                    // input data format (bool 0/1)
     int    rand_seed    = -1;                   // seed to use for random data generation (-1 == no randomization)
-    float  regularization = 0;                   // smoothing parameter for models with non-uniform input density (0 == no smoothing)
+    float  regularization = 0;                  // smoothing parameter for models with non-uniform input density (0 == no smoothing)
     int    fixed_ray    = 0;
-    int     reg1and2 = 0;
+    int     reg1and2 = 0;                       // flag for regularizer: 0 --> regularize only 2nd derivs. 1 --> regularize 1st and 2nd
     bool   help         = false;                // show help
 
 
@@ -82,8 +82,9 @@ int main(int argc, char** argv)
     ops >> opts::Option('x', "structured",  structured, " input data format (default=structured=true)");
     ops >> opts::Option('y', "rand_seed",   rand_seed,  " seed for random point generation (-1 = no randomization, default)");
     ops >> opts::Option('b', "regularization", regularization, "smoothing parameter for models with non-uniform input density");
+    ops >> opts::Option('k', "reg1and2",    reg1and2,   " regularize both 1st and 2nd derivatives (if =1) or just 2nd (if =0)");
     ops >> opts::Option('u', "fixed_ray",   fixed_ray, "" );
-    ops >> opts::Option('k', "reg1and2", reg1and2, "");
+
 
     if (!ops.parse(argc, argv) || help)
     {
@@ -469,6 +470,65 @@ int main(int argc, char** argv)
         }
     }
 
+    if (input == "edelta")
+    {
+        int varid = 0;              // scalar quantity to read from file
+        int all_vars = 4;
+        int geom_dim = 3;
+        d_args.vars_p[0][0] = 2;
+        d_args.vars_p[0][1] = 2;
+        // d_args.vars_nctrl_pts[0][0] = 57;
+        // d_args.vars_nctrl_pts[0][1] = 40;
+        d_args.vars_nctrl_pts[0][0] = 130;
+        d_args.vars_nctrl_pts[0][1] = 92;
+        d_args.tot_ndom_pts = 108822;
+        d_args.min[0] = -1.10315;
+        d_args.max[0] = 4.97625;
+        d_args.min[1] = -2.19155;
+        d_args.max[1] = 2.27595;
+        d_args.infile = infile;
+        master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
+                    { b->read_3d_unstructured_data(cp, d_args, varid, all_vars, geom_dim); });
+    }
+
+    if (input == "climate")
+    {
+        int varid = 0;
+        int all_vars = 1;
+        int geom_dim = 3;
+        d_args.tot_ndom_pts = 585765;
+        d_args.min[0] = -2.55;
+        d_args.max[0] = -1.449;
+        d_args.min[1] = -2.55;
+        d_args.max[1] = -1.449;
+        d_args.infile = infile;
+        master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
+                    { b->read_3d_unstructured_data(cp, d_args, varid, all_vars, geom_dim); });
+    }
+
+    if (input == "nuclear")
+    {
+        if (dom_dim != 3)
+        {
+            cerr << "dom_dim must be 3 to run nuclear example" << endl;
+            exit(1);
+        }
+        int varid = 1;
+        int all_vars = 7;
+        int geom_dim = 3;
+        d_args.tot_ndom_pts = 63048;
+        d_args.min[0] = 1.5662432;
+        d_args.max[0] = 30.433756;
+        d_args.min[1] = -7.5980764;
+        d_args.max[1] = 22.4019242;
+        d_args.min[2] = 10;
+        d_args.max[2] = 35;
+        d_args.vars_nctrl_pts[0][2] = 15; // reduce number of control points in z-direction
+        d_args.infile = infile;
+        master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
+                    { b->read_3d_unstructured_data(cp, d_args, varid, all_vars, geom_dim); });
+    }
+
     // write initial points
     diy::io::write_blocks("initial.out", world, master);
 
@@ -492,58 +552,79 @@ int main(int argc, char** argv)
         bool saved_basis = structured; // TODO: basis functions are currently only saved during encoding of structured data
         master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
                 { 
-                    b->integrate_block(cp, 0, 1);
+                    // b->integrate_block(cp, 0, 1);
 
-                    // vector<int> grid_size = {1000,1000};
+                    // vector<real_t> subset_mins = {-8, -11.5};
+                    // vector<real_t> subset_maxs = {0, -1.5};
+
+                    // real_t L1, L2, Linf;
+                    // d_args.ndom_pts[0] = 1000;
+                    // d_args.ndom_pts[1] = 1000;
+                    // b->analytical_error_field(input, L1, L2, Linf, d_args, true, subset_mins, subset_maxs);
+                    // // b->analytical_error_field(input, L1, L2, Linf, d_args, true);
+                    // b->max_errs[0] = Linf;
+                    // b->sum_sq_errs[0] = L2*L2;
+
+                    vector<int> grid_size(dom_dim);
+                    for (int i = 0; i < dom_dim; i++)
+                    {
+                        grid_size[i] = 1000;
+                        // grid_size[i] = 400;
+                        // grid_size[i] = 200;
+                        // grid_size[i] = 100;
+                        // grid_size[i] = 60;
+                    }
+                    // vector<int> grid_size = {400,400};
                     // vector<int> grid_size = {200};
-                    // b->decode_block_grid(cp, 1, grid_size);
+                    b->decode_block_grid(cp, 1, grid_size);
+                    
 
-                    b->range_error(cp, 1, true, saved_basis);
-                    b->print_block(cp, true);
-                    b->create_ray_model(cp, d_args, fixed_ray);
+                    // b->range_error(cp, 1, true, saved_basis);
+            //         b->print_block(cp, true);
+            //         b->create_ray_model(cp, d_args, fixed_ray);
 
-            real_t result = 0;
-            VectorX<real_t> start_pt(2), end_pt(2);
+            // real_t result = 0;
+            // VectorX<real_t> start_pt(2), end_pt(2);
 
-            // horizontal line where function is identically 0
-            // = 0.0
-            start_pt(0) = -3*M_PI; start_pt(1) = 0;
-            end_pt(0) = 3*M_PI; end_pt(1) = 0;
-            result = b->integrate_ray(cp, start_pt, end_pt, fixed_ray);
-            cerr << "(-3pi, 0)---(3pi, 0):       " << result << endl;
-            cerr << "error:                      " << result << endl << endl;
+            // // horizontal line where function is identically 0
+            // // = 0.0
+            // start_pt(0) = -3*M_PI; start_pt(1) = 0;
+            // end_pt(0) = 3*M_PI; end_pt(1) = 0;
+            // result = b->integrate_ray(cp, start_pt, end_pt, fixed_ray);
+            // cerr << "(-3pi, 0)---(3pi, 0):       " << result << endl;
+            // cerr << "error:                      " << result << endl << endl;
 
-            // vertical line
-            // = 0.0
-            start_pt(0) = M_PI/2; start_pt(1) = -2*M_PI;
-            end_pt(0) = M_PI/2; end_pt(1) = 2*M_PI;
-            result = b->integrate_ray(cp, start_pt, end_pt, fixed_ray);
-            cerr << "(pi/2, -2pi)---(pi/2, 2pi): " << result << endl;
-            cerr << "error:                      " << result << endl << endl;
+            // // vertical line
+            // // = 0.0
+            // start_pt(0) = M_PI/2; start_pt(1) = -2*M_PI;
+            // end_pt(0) = M_PI/2; end_pt(1) = 2*M_PI;
+            // result = b->integrate_ray(cp, start_pt, end_pt, fixed_ray);
+            // cerr << "(pi/2, -2pi)---(pi/2, 2pi): " << result << endl;
+            // cerr << "error:                      " << result << endl << endl;
             
-            // horizontal line
-            // = 2.0
-            start_pt(0) = 0; start_pt(1) = M_PI/2;
-            end_pt(0) = M_PI; end_pt(1) = M_PI/2;
-            result = b->integrate_ray(cp, start_pt, end_pt, fixed_ray);
-            cerr << "(0, pi/2)---(pi, pi/2):     " << result << endl;
-            cerr << "relative error:             " << abs((result-2)/2) << endl << endl;
+            // // horizontal line
+            // // = 2.0
+            // start_pt(0) = 0; start_pt(1) = M_PI/2;
+            // end_pt(0) = M_PI; end_pt(1) = M_PI/2;
+            // result = b->integrate_ray(cp, start_pt, end_pt, fixed_ray);
+            // cerr << "(0, pi/2)---(pi, pi/2):     " << result << endl;
+            // cerr << "relative error:             " << abs((result-2)/2) << endl << endl;
 
-            // line y=x
-            // = 5.75864344326
-            start_pt(0) = 0, start_pt(1) = 0;
-            end_pt(0) = 8, end_pt(1) = 8;
-            result = b->integrate_ray(cp, start_pt, end_pt, fixed_ray);
-            cerr << "(0, 0)---(8, 8):            " << result << endl;
-            cerr << "relative error:             " << abs((result-5.75864344326)/5.75864344326) << endl << endl;
+            // // line y=x
+            // // = 5.75864344326
+            // start_pt(0) = 0, start_pt(1) = 0;
+            // end_pt(0) = 8, end_pt(1) = 8;
+            // result = b->integrate_ray(cp, start_pt, end_pt, fixed_ray);
+            // cerr << "(0, 0)---(8, 8):            " << result << endl;
+            // cerr << "relative error:             " << abs((result-5.75864344326)/5.75864344326) << endl << endl;
 
-            // "arbitrary" line
-            // = 1.2198958397433
-            start_pt(0) = -2; start_pt(1) = -4;
-            end_pt(0) = 3; end_pt(1) = 11;
-            result = b->integrate_ray(cp, start_pt, end_pt, fixed_ray);
-            cerr << "(-2, -4)---(3, 11):         " << result << endl;
-            cerr << "relative error:             " << abs((result-1.2198958397433)/1.2198958397433) << endl << endl;
+            // // "arbitrary" line
+            // // = 1.2198958397433
+            // start_pt(0) = -2; start_pt(1) = -4;
+            // end_pt(0) = 3; end_pt(1) = 11;
+            // result = b->integrate_ray(cp, start_pt, end_pt, fixed_ray);
+            // cerr << "(-2, -4)---(3, 11):         " << result << endl;
+            // cerr << "relative error:             " << abs((result-1.2198958397433)/1.2198958397433) << endl << endl;
                      });
 #endif
         decode_time = MPI_Wtime() - decode_time;
