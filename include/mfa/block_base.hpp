@@ -187,6 +187,7 @@ struct BlockBase
         if (info.vars_p.size() != num_vars)
         {
             cerr << "ERROR: vars_p and num_vars invalid in BlockBase::setup_models()" << endl;
+            cerr << "       vars_p.size()=" << info.vars_p.size() << ", num_vars=" << num_vars << endl;
             exit(1);
         }
         if (info.vars_nctrl_pts.size() != num_vars)

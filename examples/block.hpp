@@ -385,8 +385,14 @@ struct Block : public BlockBase<T>
         std::uniform_real_distribution<double> u_dist(0.0, 1.0);
 
         // Fill domain with randomly distributed points
+        cerr << "Void Sparsity: " << (1 - a->t)*100 << "%" << endl;
+        double keep_frac = 1 - a->t;
+        if (keep_frac < 0 || keep_frac > 1)
+        {
+            cerr << "Invalid value of void density" << endl;
+            exit(1);
+        }
         size_t nvoids = 4;
-        double keep_frac = 1.0/50.0;
         double radii_frac = 1.0/8.0;   // fraction of domain width to set as void radius
         VectorX<T> radii(nvoids);
         MatrixX<T> centers(geom_dim, nvoids);
@@ -2203,9 +2209,41 @@ cerr << "===========\n" << endl;
         T&                                  L2,                 // (output) L-2 norm
         T&                                  Linf,               // (output) L-infinity norm
         DomainArgs&                         args,               // input args
-        bool                                keep_approx)        // keep the regular grid approximation we create
+        bool                                keep_approx,        // keep the regular grid approximation we create
+        vector<T>                           subset_mins = vector<T>(),
+        vector<T>                           subset_maxs = vector<T>() ) // (optional) subset of the domain to consider for errors
     {
         DomainArgs* a   = &args;
+
+        // Check if we accumulated errors over subset of domain only and report
+        bool do_subset = false;
+        bool in_box = true;
+        if (subset_mins.size() != 0)
+        {
+            do_subset = true;
+            cerr << "Accumulating errors over subset of domain" << endl;
+            if (subset_mins.size() != subset_maxs.size())
+            {
+                cerr << "ERROR: Dimensions of subset_mins and subset_maxs do not match" << endl;
+                exit(1);
+            }
+            if (subset_mins.size() != dom_dim)
+            {
+                cerr << "ERROR: subset dimension does not match dom_dim" << endl;
+                exit(1);
+            }
+            cout << "subset mins: ";
+            for (int i = 0; i < dom_dim; i++)
+            {
+                cout << subset_mins[i] << " ";
+            }
+            cout << '\n';
+            cout << "subset maxs: ";
+            for (int i = 0; i < dom_dim; i++)
+            {
+                cout << subset_maxs[i] << " ";
+            }
+        }
         
         // Size of grid on which to test error
         VectorXi test_pts(dom_dim);
@@ -2241,6 +2279,10 @@ cerr << "===========\n" << endl;
             // evaluate function at dom_pt_real
             if (fun == "sinc")
                 true_val = sinc(dom_pt, args, 0);       // hard-coded for one science variable
+            if (fun == "psinc1")
+                true_val = polysinc1(dom_pt, args);
+            if (fun == "psinc2")
+                true_val = polysinc2(dom_pt, args);
             if (fun == "sine")
                 true_val = sine(dom_pt, args, 0);       // hard-coded for one science variable
             if (fun == "cosine")
@@ -2258,12 +2300,25 @@ cerr << "===========\n" << endl;
 
             // compute and accrue error
             T err = fabs(true_val - test_val);
-            sum_errs += err;                                // L1
-            sum_sq_errs += err * err;                       // L2
-            if (err > max_err)                              // Linf
-                max_err = err;
-
             this->errs->domain(pt_it.idx(), dom_dim) = err;
+
+            // accrue only in subset
+
+            in_box = true;
+            if (do_subset) 
+            {
+                for (int i = 0; i < dom_dim; i++)
+                    in_box = in_box && (dom_pt(i) >= subset_mins[i]) && (dom_pt(i) <= subset_maxs[i]);
+            }
+
+            if (in_box)
+            {
+                // cerr << dom_pt << '\n' << endl;
+                sum_errs += err;                                // L1
+                sum_sq_errs += err * err;                       // L2
+                if (err > max_err)                              // Linf
+                    max_err = err;
+            }
         }
 
         L1    = sum_errs;
