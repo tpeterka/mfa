@@ -510,6 +510,47 @@ namespace mfa
             // compute basis functions for points to be decoded
             Kokkos::View<int** > span_starts("spans", kdom_dim, max_ndom_size );
             Kokkos::View<int ** >::HostMirror h_span_starts = Kokkos::create_mirror_view(span_starts);
+            for (int k = 0; k < mfa_data.dom_dim; k++) {
+            	auto subk = subview (newNN, k, Kokkos::ALL(), Kokkos::ALL());
+            	int npk = ndom_pts(k);
+            	int nctk = nctrl_pts(k);
+            	int pk = mfa_data.p(k); // degree in direction k
+            	Kokkos::View<double* > paramk("paramk", npk );
+            	Kokkos::View<double * >::HostMirror h_paramk = Kokkos::create_mirror_view(paramk);
+            	for (int i = 0; i < npk; i++)
+            		h_paramk(i) = params[k][i];
+            	Kokkos::deep_copy(paramk, h_paramk);
+            	// copy also all knots from tmesh.all_knots[k]
+            	Kokkos::View<double* > lknots("lknots", nctk+1 );
+            	Kokkos::View<double * >::HostMirror h_lknots = Kokkos::create_mirror_view(lknots);
+            	for (int i = 0; i < nctk+1; i++)
+            		h_lknots(i) =  mfa_data.tmesh.all_knots[k][i];
+            	Kokkos::deep_copy(lknots, h_lknots);
+            	Kokkos::parallel_for( "decode_mult", npk,
+            	                KOKKOS_LAMBDA ( const int i ) {
+            	    // find span first, and store it for later
+            		// binary search
+					int low = pk;
+					int high = nctk;
+					int mid = (low + high) / 2;
+					double u = paramk(i);
+					if ( lknots(nctk) == u )
+						mid = nctk - 1;
+					else
+					{
+						while (u < lknots(mid) || u >= lknots(mid + 1) )
+						{
+							if (u < lknots(mid) )
+								high = mid;
+							else
+								low = mid;
+							mid = (low + high) / 2;
+						}
+					}
+					// mid is now the span
+					span_starts(k,i) = mid - pk;
+            	});
+            }
 #endif
 
             for (int k = 0; k < mfa_data.dom_dim; k++) {
@@ -519,7 +560,7 @@ namespace mfa
 #ifndef MFA_TMESH   // original version for one tensor product
 
 #ifdef MFA_KOKKOS
-                    h_span_starts(k,i) = span - mfa_data.p(k); // it is fixed, and maybe we should change serial version too
+                    //h_span_starts(k,i) = span - mfa_data.p(k); // it is fixed, and maybe we should change serial version too
                     mfa_data.OrigBasisFunsKokkos(k, params[k][i], span, h_newNN, i);
 #else
                     mfa_data.OrigBasisFuns(k, params[k][i], span, NN[k], i);
@@ -552,7 +593,7 @@ namespace mfa
             }
 #endif
             Kokkos::deep_copy(newNN, h_newNN);
-            Kokkos::deep_copy(span_starts, h_span_starts);
+            //Kokkos::deep_copy(span_starts, h_span_starts);
 #endif
 
             VectorXi    derivs;                             // do not use derivatives yet, pass size 0
