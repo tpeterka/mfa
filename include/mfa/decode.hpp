@@ -19,6 +19,7 @@ typedef Eigen::MatrixXi MatrixXi;
 #ifdef MFA_KOKKOS
     using ExecutionSpace = Kokkos::DefaultExecutionSpace;
     using MemorySpace = ExecutionSpace::memory_space;
+#define MAXP1 15
 #endif
 //#define  PRINT_DEBUG2
 namespace mfa
@@ -473,7 +474,7 @@ namespace mfa
             // it is hard to do a vector of Kokkos::Views() actually, it is not advisable
             // still need to think about this
             Kokkos::View<double***> newNN("kNN", kdom_dim, max_ndom_size, max_ctrl_size );
-            Kokkos::View<double***>::HostMirror h_newNN = Kokkos::create_mirror_view(newNN); // this will be on host, and accessible from CPU
+            //Kokkos::View<double***>::HostMirror h_newNN = Kokkos::create_mirror_view(newNN); // this will be on host, and accessible from CPU
             // also, make a copy of the cs and ct arrays, used for iterations in control points space
             // these need to be on device too: as kcs and kct
             //
@@ -509,9 +510,9 @@ namespace mfa
             // we should use it in serial too
             // compute basis functions for points to be decoded
             Kokkos::View<int** > span_starts("spans", kdom_dim, max_ndom_size );
-            Kokkos::View<int ** >::HostMirror h_span_starts = Kokkos::create_mirror_view(span_starts);
+            //Kokkos::View<int ** >::HostMirror h_span_starts = Kokkos::create_mirror_view(span_starts);
             for (int k = 0; k < mfa_data.dom_dim; k++) {
-            	auto subk = subview (newNN, k, Kokkos::ALL(), Kokkos::ALL());
+            	//auto subk = subview (newNN, k, Kokkos::ALL(), Kokkos::ALL());
             	int npk = ndom_pts(k);
             	int nctk = nctrl_pts(k);
             	int pk = mfa_data.p(k); // degree in direction k
@@ -521,9 +522,9 @@ namespace mfa
             		h_paramk(i) = params[k][i];
             	Kokkos::deep_copy(paramk, h_paramk);
             	// copy also all knots from tmesh.all_knots[k]
-            	Kokkos::View<double* > lknots("lknots", nctk+1 );
+            	Kokkos::View<double* > lknots("lknots", nctk+pk+1 );
             	Kokkos::View<double * >::HostMirror h_lknots = Kokkos::create_mirror_view(lknots);
-            	for (int i = 0; i < nctk+1; i++)
+            	for (int i = 0; i < nctk+pk+1; i++)
             		h_lknots(i) =  mfa_data.tmesh.all_knots[k][i];
             	Kokkos::deep_copy(lknots, h_lknots);
             	Kokkos::parallel_for( "decode_mult", npk,
@@ -549,9 +550,48 @@ namespace mfa
 					}
 					// mid is now the span
 					span_starts(k,i) = mid - pk;
+					// we will fill now the whole row corresponding to i
+					// subk(i,j), j=mid, mid+pk+1
+					// copy
+		            // initialize row for cur_dim to 0 (not needed)
+		            /*for (int i=0; i<N.extent(2); i++)
+		                N(cur_dim,row,i) = 0;*/
+
+		            // init
+		            T scratch[MAXP1];                  // scratchpad, same as N in P&T p. 70
+		            scratch[0] = 1.0;
+
+		            // temporary recurrence results
+		            // left(j)  = u - knots(span + 1 - j)
+		            // right(j) = knots(span + j) - u
+		            T left[MAXP1];
+		            T right[MAXP1];
+
+		            // fill N
+		            for (int j = 1; j <= pk; j++)
+		            {
+		                // left[j] is u = the jth knot in the correct level to the left of span
+		                left[j]  = u - lknots(mid + 1 - j);
+		                // right[j] = the jth knot in the correct level to the right of span - u
+		                right[j] = lknots(mid + j) - u;
+
+		                T saved = 0.0;
+		                for (int r = 0; r < j; r++)
+		                {
+		                    T temp = scratch[r] / (right[r + 1] + left[j - r]);
+		                    scratch[r] = saved + right[r + 1] * temp;
+		                    saved = left[j - r] * temp;
+		                }
+		                scratch[j] = saved;
+		            }
+
+		            // copy scratch to N
+		            for (int j = 0; j < pk + 1; j++)
+		            	newNN (k, i, mid - pk + j) = scratch[j];
+					// end copy
             	});
             }
-#endif
+#else
 
             for (int k = 0; k < mfa_data.dom_dim; k++) {
                 for (int i = 0; i < ndom_pts(k); i++)
@@ -559,12 +599,12 @@ namespace mfa
                     int span = mfa_data.FindSpan(k, params[k][i], nctrl_pts(k));
 #ifndef MFA_TMESH   // original version for one tensor product
 
-#ifdef MFA_KOKKOS
+//#ifdef MFA_KOKKOS
                     //h_span_starts(k,i) = span - mfa_data.p(k); // it is fixed, and maybe we should change serial version too
-                    mfa_data.OrigBasisFunsKokkos(k, params[k][i], span, h_newNN, i);
-#else
+                    //mfa_data.OrigBasisFunsKokkos(k, params[k][i], span, h_newNN, i);
+//#else
                     mfa_data.OrigBasisFuns(k, params[k][i], span, NN[k], i);
-#endif
+//#endif
 
 #else               // tmesh version
 
@@ -573,6 +613,8 @@ namespace mfa
 #endif              // tmesh version
                 }
             }
+#endif
+
 #ifdef MFA_KOKKOS
 
 #ifdef  PRINT_DEBUG
@@ -592,7 +634,7 @@ namespace mfa
 
             }
 #endif
-            Kokkos::deep_copy(newNN, h_newNN);
+            //Kokkos::deep_copy(newNN, h_newNN);
             //Kokkos::deep_copy(span_starts, h_span_starts);
 #endif
 
