@@ -497,16 +497,6 @@ namespace mfa
             for (int i=1; i<kdom_dim; i++)
                 h_strides[i] = ndom_pts[i-1] * h_strides[i-1]; // for
             Kokkos::deep_copy(strides, h_strides); // this is used to iterate ijk from ntot dom points
-
-
-#else
-            // compute basis functions for points to be decoded
-            vector<MatrixX<T>>  NN(mfa_data.dom_dim);
-            for (int k = 0; k < mfa_data.dom_dim; k++)
-                NN[k] = MatrixX<T>::Zero(ndom_pts(k), nctrl_pts(k));
-#endif
-
-#ifdef MFA_KOKKOS
             // we should use it in serial too
             // compute basis functions for points to be decoded
             Kokkos::View<int** > span_starts("spans", kdom_dim, max_ndom_size );
@@ -591,110 +581,8 @@ namespace mfa
 					// end copy
             	});
             }
-#else
 
-            for (int k = 0; k < mfa_data.dom_dim; k++) {
-                for (int i = 0; i < ndom_pts(k); i++)
-                {
-                    int span = mfa_data.FindSpan(k, params[k][i], nctrl_pts(k));
-#ifndef MFA_TMESH   // original version for one tensor product
-
-//#ifdef MFA_KOKKOS
-                    //h_span_starts(k,i) = span - mfa_data.p(k); // it is fixed, and maybe we should change serial version too
-                    //mfa_data.OrigBasisFunsKokkos(k, params[k][i], span, h_newNN, i);
-//#else
-                    mfa_data.OrigBasisFuns(k, params[k][i], span, NN[k], i);
-//#endif
-
-#else               // tmesh version
-
-                    // TODO: TBD
-
-#endif              // tmesh version
-                }
-            }
-#endif
-
-#ifdef MFA_KOKKOS
-
-#ifdef  PRINT_DEBUG
-            if (1 == mfa_data.dom_dim) // and nvar == 1
-            {
-                for (int i=0; i<ndom_pts(0); i++)
-                {
-                    for (int j=0; j<nctrl_pts(0); j++)
-                        printf(" %2.5f", h_newNN(0,i,j));
-                    printf("\n");
-                }
-                printf("Control Points:\n");
-                for (int j=0; j<nctrl_pts(0); j++)
-                {
-                    printf(" %10.7f  \n",mfa_data.tmesh.tensor_prods[0].ctrl_pts(j) );
-                }
-
-            }
-#endif
-            //Kokkos::deep_copy(newNN, h_newNN);
-            //Kokkos::deep_copy(span_starts, h_span_starts);
-#endif
-
-            VectorXi    derivs;                             // do not use derivatives yet, pass size 0
-            VolIterator vol_it(ndom_pts);
-
-#if defined( MFA_SERIAL)    // serial version only
-#ifdef  PRINT_DEBUG
-            if (1 == mfa_data.dom_dim)
-            {
-                for (int i=0; i<ndom_pts(0); i++)
-                {
-                    for (int j=0; j<nctrl_pts(0); j++)
-                        printf(" %2.5f", NN[0](i,j));
-                    printf("\n");
-                }
-                printf("Control Points:\n");
-                for (int j=0; j<nctrl_pts(0); j++)
-                {
-                    printf(" %10.7f \n",mfa_data.tmesh.tensor_prods[0].ctrl_pts(j) );
-                }
-
-            }
-#endif
-
-            DecodeInfo<T>   decode_info(mfa_data, derivs);  // reusable decode point info for calling VolPt repeatedly
-            VectorX<T>      cpt(mfa_data.tmesh.tensor_prods[0].ctrl_pts.cols());                      // evaluated point
-            VectorX<T>      param(mfa_data.dom_dim);       // parameters for one point
-            VectorXi        ijk(mfa_data.dom_dim);          // multidim index in grid
-
-            while (!vol_it.done())
-            {
-                int j = (int) vol_it.cur_iter();
-                for (auto i = 0; i < mfa_data.dom_dim; i++)
-                {
-                    ijk[i] = vol_it.idx_dim(i);             // index along direction i in grid
-                    param(i) = params[i][ijk[i]];
-                }
-#ifdef PRINT_DEBUG2
-                printf(" %d (%d, %d) ", j, ijk[0], ijk[1]);
-#endif
-
-#ifndef MFA_TMESH   // original version for one tensor product
-
-                VolPt_saved_basis_grid(ijk, param, cpt, decode_info, mfa_data.tmesh.tensor_prods[0], NN);
-
-#else               // tmesh version
-
-                    // TODO: TBD
-
-#endif              // tmesh version
-
-                vol_it.incr_iter();
-                //counter_grid++;
-                result.block(j, min_dim, 1, max_dim - min_dim + 1) = cpt.transpose();
-            }
-
-#endif              // serial version
-
-#if defined(MFA_KOKKOS)    // kokkos version
+            // up to here we computed the shape functions, now use them
 
             // prepare control points view, fill host and copy to device
             int nct = mfa_data.tmesh.tensor_prods[0].ctrl_pts.rows(), nvar=mfa_data.tmesh.tensor_prods[0].ctrl_pts.cols();
@@ -734,7 +622,7 @@ namespace mfa
             // all local variables are passed by value, which is fine for Kokkos Views and
             // simple types double, int, but not for structures !
             // this is why using kdom_dim inside is fine, while mfa_data.dom_dim is not
-            Kokkos::parallel_for( "decode_mult", ntot,
+            Kokkos::parallel_for( "shape_func", ntot,
                 KOKKOS_LAMBDA ( const int i ) {
 
                     int leftover=i;
@@ -786,7 +674,84 @@ namespace mfa
             for (int j=0; j<ntot; j++)
                 result(j, mfa_data.dom_dim) = res_h(j);
 
-#endif              // kokkos version
+
+#else
+
+            // compute basis functions for points to be decoded
+            vector<MatrixX<T>>  NN(mfa_data.dom_dim);
+            for (int k = 0; k < mfa_data.dom_dim; k++)
+                NN[k] = MatrixX<T>::Zero(ndom_pts(k), nctrl_pts(k));
+
+            for (int k = 0; k < mfa_data.dom_dim; k++) {
+                for (int i = 0; i < ndom_pts(k); i++)
+                {
+                    int span = mfa_data.FindSpan(k, params[k][i], nctrl_pts(k));
+#ifndef MFA_TMESH   // original version for one tensor product
+                    mfa_data.OrigBasisFuns(k, params[k][i], span, NN[k], i);
+#else               // tmesh version
+
+                    // TODO: TBD
+
+#endif              // tmesh version
+                }
+            }
+#endif
+
+            VectorXi    derivs;                             // do not use derivatives yet, pass size 0
+            VolIterator vol_it(ndom_pts);
+
+#ifdef  PRINT_DEBUG
+            if (1 == mfa_data.dom_dim)
+            {
+                for (int i=0; i<ndom_pts(0); i++)
+                {
+                    for (int j=0; j<nctrl_pts(0); j++)
+                        printf(" %2.5f", NN[0](i,j));
+                    printf("\n");
+                }
+                printf("Control Points:\n");
+                for (int j=0; j<nctrl_pts(0); j++)
+                {
+                    printf(" %10.7f \n",mfa_data.tmesh.tensor_prods[0].ctrl_pts(j) );
+                }
+
+            }
+#endif
+
+#ifdef MFA_SERIAL
+            DecodeInfo<T>   decode_info(mfa_data, derivs);  // reusable decode point info for calling VolPt repeatedly
+            VectorX<T>      cpt(mfa_data.tmesh.tensor_prods[0].ctrl_pts.cols());                      // evaluated point
+            VectorX<T>      param(mfa_data.dom_dim);       // parameters for one point
+            VectorXi        ijk(mfa_data.dom_dim);          // multidim index in grid
+
+            while (!vol_it.done())
+            {
+                int j = (int) vol_it.cur_iter();
+                for (auto i = 0; i < mfa_data.dom_dim; i++)
+                {
+                    ijk[i] = vol_it.idx_dim(i);             // index along direction i in grid
+                    param(i) = params[i][ijk[i]];
+                }
+#ifdef PRINT_DEBUG2
+                printf(" %d (%d, %d) ", j, ijk[0], ijk[1]);
+#endif
+
+#ifndef MFA_TMESH   // original version for one tensor product
+
+                VolPt_saved_basis_grid(ijk, param, cpt, decode_info, mfa_data.tmesh.tensor_prods[0], NN);
+
+#else               // tmesh version
+
+                    // TODO: TBD
+
+#endif              // tmesh version
+
+                vol_it.incr_iter();
+                //counter_grid++;
+                result.block(j, min_dim, 1, max_dim - min_dim + 1) = cpt.transpose();
+            }
+            // end serial
+#endif
 
 #ifdef MFA_TBB      // TBB version
 
