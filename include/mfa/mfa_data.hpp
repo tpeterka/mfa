@@ -497,58 +497,6 @@ namespace mfa
                 r *= deg - k;
             }
         }
-#ifdef MFA_KOKKOS
-        // kokkos version of basis functions from algorithm 2.2 of P&T, p. 70
-        // computes one row of basis function values for a given parameter value
-        // writes results in a row of N
-        // only difference from OrigBasisFuns is the return value
-        void OrigBasisFunsKokkos(
-                int                     cur_dim,    // current dimension
-                T                       u,          // parameter value
-                int                     span,       // index of span in the knots vector containing u
-                Kokkos::View< double  *** >::HostMirror  N,          // matrix of (output) basis function values
-                int                     row) const   // row in N of result
-        {
-            // initialize row for cur_dim to 0
-            for (int i=0; i<N.extent(2); i++)
-                N(cur_dim,row,i) = 0;
-
-            // init
-            vector<T> scratch(p(cur_dim) + 1);                  // scratchpad, same as N in P&T p. 70
-            scratch[0] = 1.0;
-
-            // temporary recurrence results
-            // left(j)  = u - knots(span + 1 - j)
-            // right(j) = knots(span + j) - u
-            vector<T> left(p(cur_dim) + 1);
-            vector<T> right(p(cur_dim) + 1);
-
-            // fill N
-            for (int j = 1; j <= p(cur_dim); j++)
-            {
-                // left[j] is u = the jth knot in the correct level to the left of span
-                left[j]  = u - tmesh.all_knots[cur_dim][span + 1 - j];
-                // right[j] = the jth knot in the correct level to the right of span - u
-                right[j] = tmesh.all_knots[cur_dim][span + j] - u;
-
-                T saved = 0.0;
-                for (int r = 0; r < j; r++)
-                {
-                    T temp = scratch[r] / (right[r + 1] + left[j - r]);
-                    scratch[r] = saved + right[r + 1] * temp;
-                    saved = left[j - r] * temp;
-                }
-                scratch[j] = saved;
-            }
-
-            // copy scratch to N
-            for (int j = 0; j < p(cur_dim) + 1; j++)
-                N(cur_dim, row, span - p(cur_dim) + j) = scratch[j];
-
-            // debug
-//             cerr << N << endl;
-        }
-#endif
 
         // Specialization of FastBasisFunsDers for 1st derivatives, which is much
         // simpler than the general case.  This method is called from 
