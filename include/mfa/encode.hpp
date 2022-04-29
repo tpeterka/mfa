@@ -862,8 +862,8 @@ namespace mfa
                 auto& ft = tmesh.tensor_prods[found_idx];
 
                 // debug
-                fmt::print(stderr, "InterpCtrlPtCurve(): dim {} i {} found_idx {} param [{}] \t\tanchor [{}] start_ijk [{}]\n",
-                        dim, i, found_idx, param.transpose(), fmt::join(anchor, ","), start_ijk.transpose());
+//                 fmt::print(stderr, "InterpCtrlPtCurve(): dim {} i {} found_idx {} param [{}] \t\tanchor [{}] start_ijk [{}]\n",
+//                         dim, i, found_idx, param.transpose(), fmt::join(anchor, ","), start_ijk.transpose());
 
                 // find control point aligned with curve
                 if (tmesh.anchor_matches_param(anchor, param))                                          // control point exists already
@@ -1366,8 +1366,8 @@ namespace mfa
                 param(dim) = tmesh.all_knots[dim][anchor[dim]];
 
                 // debug
-                fmt::print(stderr, "PrevConsCtrlPtCurve(): dim {} found_idx {} param [{}] \t\tanchor [{}] start_ijk [{}]\n",
-                        dim, found_idx, param.transpose(), fmt::join(anchor, ","), start_ijk.transpose());
+//                 fmt::print(stderr, "PrevConsCtrlPtCurve(): dim {} found_idx {} param [{}] \t\tanchor [{}] start_ijk [{}]\n",
+//                         dim, found_idx, param.transpose(), fmt::join(anchor, ","), start_ijk.transpose());
 
                 // local knot vector in currrent dimension
                 tmesh.knot_intersections(anchor, found_idx, local_knot_idxs);                           // local knot indices in all dimensions
@@ -1413,10 +1413,9 @@ namespace mfa
                     if (!tmesh.knot_idx_ofst(found_tensor, anchor[dim], -1, dim, true, anchor[dim]))
                     {
                         // ran out of constraints; truncate matrices to current size and end
-                        Ncons.resize(Ncons.rows(), i + 1);
-                        Pcons.resize(i + 1, Pcons.cols());
+                        Ncons.conservativeResize(Eigen::NoChange, i + 1);
+                        Pcons.conservativeResize(i + 1, Eigen::NoChange);
                         break;
-//                        throw MFAError(fmt::format("PrevConsCtrlPtCurve(): cannot offset anchor for next constraint\n"));
                     }
                 }
             }       // control points
@@ -1533,8 +1532,8 @@ namespace mfa
                 param(dim) = tmesh.all_knots[dim][anchor[dim]];
 
                 // debug
-                fmt::print(stderr, "NextConsCtrlPtCurve(): dim {} found_idx {} param [{}] \t\tanchor [{}] start_ijk [{}]\n",
-                        dim, found_idx, param.transpose(), fmt::join(anchor, ","), start_ijk.transpose());
+//                 fmt::print(stderr, "NextConsCtrlPtCurve(): dim {} found_idx {} param [{}] \t\tanchor [{}] start_ijk [{}]\n",
+//                         dim, found_idx, param.transpose(), fmt::join(anchor, ","), start_ijk.transpose());
 
                 // local knot vector in currrent dimension
                 tmesh.knot_intersections(anchor, found_idx, local_knot_idxs);                           // local knot indices in all dimensions
@@ -1580,10 +1579,9 @@ namespace mfa
                     if (!tmesh.knot_idx_ofst(found_tensor, anchor[dim], 1, dim, true, anchor[dim]))
                     {
                         // ran out of constraints; truncate matrices to current size and end
-                        Ncons.resize(Ncons.rows(), ofst + i + 1);
-                        Pcons.resize(ofst + i + 1, Pcons.cols());
+                        Ncons.conservativeResize(Eigen::NoChange, ofst + i + 1);
+                        Pcons.conservativeResize(ofst + i + 1, Eigen::NoChange);
                         break;
-//                         throw MFAError(fmt::format("NextConsCtrlPtCurve(): cannot offset anchor for next constraint\n"));
                     }
                 }
             }       // control points
@@ -2019,8 +2017,8 @@ namespace mfa
         {
             // debug
             fmt::print(stderr, "EncodeTensorLocalSeparable tidx = {}\n", t_idx);
-            fmt::print(stderr, "\n Current T-mesh:\n");
-            mfa_data.tmesh.print(true, true);
+//             fmt::print(stderr, "\n Current T-mesh:\n");
+//             mfa_data.tmesh.print(true, true);
 
             double t0 = MPI_Wtime();
 
