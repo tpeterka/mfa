@@ -129,6 +129,36 @@ struct Block : public BlockBase<T>
     // Otherwise, the compiler can't be sure that the member exists. [Myers Effective C++, item 43]
     // This is annoying but unavoidable.
 
+    // REMOVE:
+    // Computes the analytical line integral from p1 to p2 of sin(x)sin(y). Use for testing
+    T sintest(  VectorX<T>& p1,
+                VectorX<T>& p2)
+    {
+        T x1 = p1(0);
+        T y1 = p1(1);
+        T x2 = p2(0);
+        T y2 = p2(1);
+
+        T mx = x2 - x1;
+        T my = y2 - y1;
+        T fctr = sqrt(mx*mx + my*my);
+
+        // a1 = mx, b1 = x1, a2 = my, b2 = y1
+        T int0 = 0, int1 = -7;
+        if (mx != my)
+        {
+            int0 = 0.5*(sin(x1-y1+(mx-my)*0)/(mx-my) - sin(x1+y1+(mx+my)*0)/(mx+my));
+            int1 = 0.5*(sin(x1-y1+(mx-my)*1)/(mx-my) - sin(x1+y1+(mx+my)*1)/(mx+my));
+        }
+        else
+        {
+            int0 = 0.5 * (0*cos(x1-y1) + sin(x1+y1+(mx+my)*0)/(mx+my));
+            int1 = 0.5 * (1*cos(x1-y1) + sin(x1+y1+(mx+my)*1)/(mx+my));
+        }
+        
+        return (int1 - int0) * fctr;
+    }
+
     // evaluate sine function
     T sine(VectorX<T>&  domain_pt,
            DomainArgs&  args,
@@ -1764,9 +1794,13 @@ struct Block : public BlockBase<T>
         }
         else
         {
-            cerr << "ERROR: invalid state 5" << endl;
+            x0 = 0;
+            y0 = 0;
+            x1 = 0;
+            y1 = 0;
+            // cerr << "ERROR: invalid state 5" << endl;
             // cerr << "ia = " << ia << ", ir = " << ir << endl;
-            exit(1);
+            // exit(1);
         }
     }
 
@@ -1774,27 +1808,35 @@ struct Block : public BlockBase<T>
     void create_ray_model(
         const       diy::Master::ProxyWithLink& cp,
         DomainArgs& args,
-        bool fixed_length)
+        bool fixed_length,
+        int n_samples,
+        int n_rho,
+        int n_alpha,
+        int v_samples,
+        int v_rho,
+        int v_alpha)
     {
+        // precondition: Block already contains a fully encoded MFA
         DomainArgs* a = &args;
 
         const double pi = 3.14159265358979;
         assert (dom_dim == 2); // TODO: extended to any dimensionality
-
-        // precondition: Block already contains a fully encoded MFA
+        if (n_samples == 0 || n_rho == 0 || n_alpha == 0)
+        {
+            cerr << "ERROR: Did not set n_samples, n_rho, or n_alpha before creating a ray model. See command line help" << endl;
+            exit(1);
+        }
+        if (v_samples == 0 || v_rho == 0 || v_alpha == 0)
+        {
+            cerr << "ERROR: Did not set v_samples, v_rho, or v_alpha before creating a ray model. See command line help" << endl;
+            exit(1);
+        }
 
         int new_dd = dom_dim + 1;   // new dom_dim
         int new_pd = pt_dim + 1;    // new pt_dim
-        
-        const int n_alpha = 150;    // Number of angle values to sample
-        const int n_rho = 100;      // Number of rho values to sample
-        const int n_samples = 100;  // Number of times to sample each ray
 
-        VectorXi ndom_pts(new_dd);
-        ndom_pts(0) = n_samples;
-        ndom_pts(1) = n_rho;
-        ndom_pts(2) = n_alpha;
-        int npts = n_samples * n_alpha * n_rho;
+        VectorXi ndom_pts{{n_samples, n_rho, n_alpha}};
+        int npts = ndom_pts.prod();
 
         mfa::PointSet<T>* ray_input = nullptr;
         if (fixed_length)
@@ -1973,13 +2015,15 @@ struct Block : public BlockBase<T>
             // its possible that max_nctrl_pts is too many if one dimension is much smaller than the others.
             for (auto j = 0; j < new_dd; j++)
             {
-                p(j)  = 2;
-                // p(j)            = min_p;
-                nctrl_pts(j)    = max_nctrl_pts * floor(sqrt(2));
+                // p(j)  = 3;
+                p(j)            = min_p;
+                // nctrl_pts(j)    = max_nctrl_pts * floor(sqrt(2));
             }
 
-            nctrl_pts(2) = 140;
-            p(2) = 2;
+            nctrl_pts(0) = v_samples;
+            nctrl_pts(1) = v_rho;
+            nctrl_pts(2) = v_alpha;
+            // p(2) = 2;
 
             ray_mfa->AddVariable(p, nctrl_pts, 1);
         }
@@ -2135,32 +2179,20 @@ cerr << "===========\n" << endl;
         }
     }
 
-    T integrate_ray(
-        const   diy::Master::ProxyWithLink& cp,
-        const   VectorX<T>& a,
-        const   VectorX<T>& b,
-                bool fixed_length)
+    pair<T,T> dualCoords(const VectorX<T>& a, const VectorX<T>& b)
     {
         const double pi = 3.14159265358979;
-        const bool verbose = true;
-
-        // TODO: This is for 2d only right now
-        if (a.size() != 2 && b.size() != 2)
-        {
-            cerr << "Incorrect dimension in integrate ray" << endl;
-            exit(1);
-        }
 
         T a_x = a(0);
         T a_y = a(1);
         T b_x = b(0);
         T b_y = b(1);
 
-        // distance in x and y between the endpoints of the segment
+         // distance in x and y between the endpoints of the segment
         T delta_x = b_x - a_x;
         T delta_y = b_y - a_y;
 
-        T m = (b_y-a_y)/(b_x-a_x);
+
         T alpha = -1;
         T rho = 0;
 
@@ -2171,9 +2203,57 @@ cerr << "===========\n" << endl;
         }
         else
         {
-            alpha = pi/2 - atan(-m);          // acot(x) = pi/2 - atan(x)
-            rho = (a_y - m*a_x)/(sqrt(1+m*m));     // cos(atan(x)) = 1/sqrt(1+m*m), sin(pi/2-x) = cos(x)
+            T m = (b_y-a_y)/(b_x-a_x);
+            alpha = pi/2 - atan(-m);            // acot(x) = pi/2 - atan(x)
+            rho = (a_y - m*a_x)/(sqrt(1+m*m));  // cos(atan(x)) = 1/sqrt(1+m*m), sin(pi/2-x) = cos(x)
         }
+
+        return make_pair(alpha, rho);
+    }
+
+    T integrate_ray(
+        const   diy::Master::ProxyWithLink& cp,
+        const   VectorX<T>& a,
+        const   VectorX<T>& b,
+                bool fixed_length)
+    {
+        const double pi = 3.14159265358979;
+        const bool verbose = false;
+
+        // TODO: This is for 2d only right now
+        if (a.size() != 2 && b.size() != 2)
+        {
+            cerr << "Incorrect dimension in integrate ray" << endl;
+            exit(1);
+        }
+
+        auto ar_coords = dualCoords(a, b);
+        T alpha = ar_coords.first;
+        T rho   = ar_coords.second;
+
+        T a_x = a(0);
+        T a_y = a(1);
+        T b_x = b(0);
+        T b_y = b(1);
+
+        // // distance in x and y between the endpoints of the segment
+        // T delta_x = b_x - a_x;
+        // T delta_y = b_y - a_y;
+
+        // T m = (b_y-a_y)/(b_x-a_x);
+        // T alpha = -1;
+        // T rho = 0;
+
+        // if (a_x == b_x)
+        // {
+        //     alpha = 0;
+        //     rho = a_x;
+        // }
+        // else
+        // {
+        //     alpha = pi/2 - atan(-m);          // acot(x) = pi/2 - atan(x)
+        //     rho = (a_y - m*a_x)/(sqrt(1+m*m));     // cos(atan(x)) = 1/sqrt(1+m*m), sin(pi/2-x) = cos(x)
+        // }
 
         T x0, x1, y0, y1;   // end points of full line
         T u0 = 0, u1 = 0;
@@ -2224,7 +2304,7 @@ cerr << "===========\n" << endl;
         if (verbose)
         {
             cerr << "RAY: (" << a(0) << ", " << a(1) << ") ---- (" << b(0) << ", " << b(1) << ")" << endl;
-            cerr << "|  m: " << ((a_x==b_x) ? "inf" : to_string(m).c_str()) << endl;
+            cerr << "|  m: " << ((a_x==b_x) ? "inf" : to_string((b_y-a_y)/(b_x-a_x)).c_str()) << endl;
             cerr << "|  alpha:  " << alpha << ",   rho: " << rho << endl;
             cerr << "|  length: " << length << endl;
             cerr << "|  u0: " << u0 << ",  u1: " << u1 << endl;

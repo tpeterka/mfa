@@ -430,9 +430,9 @@ namespace mfa
                     while (temp_ders(1,j) < -0.01 || temp_ders(1,j) > 0.01)
                     {
                         if (temp_ders(1,j) > 0.01)    // if function is increasing, we are left of max value
-                            high = mid;
-                        else
                             low = mid;
+                        else
+                            high = mid;
                         mid = (low + high) / 2;
 
                         temp_span = mfa_data.FindSpan(i, mid);
@@ -478,8 +478,11 @@ namespace mfa
 
                             T mult = B[k]((k==dk) ? deriv : 0, idx);
 
-                            if (k == dk)    // if this is a derivative, scale properly
-                                mult *= pow(extents(k), deriv);
+// TEST: Not sure if we should scale here or not
+                            // if (k == dk)    // if this is a derivative, scale properly
+                            //     mult *= pow(extents(k), deriv);
+
+
                             // multiply by the derivative if k==dk, otherwise normal basis func
                             // current_deriv *= edge_factor * B[k]((k==dk) ? deriv : 0, idx);  // new for regularizer
                             current_deriv *= mult;
@@ -500,8 +503,45 @@ namespace mfa
                 T c_sum = N.col(i).sum();
                 T c_add = (c_sum < c_target) ? c_target - c_sum : 0;
 
-                lambda.diagonal()(i) = c_add / C.col(i).cwiseAbs().sum();
+                if (i==4)// DEBUG
+                {
+                    lambda.diagonal()(i) = c_add / C.col(i).cwiseAbs().sum();
+                    cerr << "\n" << C.col(i).cwiseAbs().sum() << endl;
+                    cerr << lambda.diagonal()(i) << endl;
+                    cerr << C.col(i).coeffs().size() << endl;
+                    cerr << C.col(i).coeffs().matrix().maxCoeff() << "\t" << C.col(i).coeffs().matrix().minCoeff() << endl;
+                }
+                
             }
+
+            // DEBUG: Export the regularization strength and position for each term
+            vector<vector<T>> st_params(pt_it.tot_iters(), vector<T>(mfa_data.dom_dim));
+            vector<T> strs(pt_it.tot_iters());
+            int lidx = 0, id = 0;
+            pt_it.init();   // reset control point iterator
+            while (!pt_it.done())
+            {
+                lidx = pt_it.cur_iter();
+                strs[lidx] = lambda.diagonal()(lidx);
+                for (int i = 0; i < mfa_data.dom_dim; i++)
+                {
+                    id = pt_it.idx_dim(i);
+                    st_params[lidx][i] = anchor_pts[i][id];
+                }
+
+                pt_it.incr_iter();
+            }
+            ofstream reg_st_out;
+            reg_st_out.open("reg-strength.txt");
+            for (int i = 0; i < pt_it.tot_iters(); i++)
+            {
+                for (int j = 0; j < mfa_data.dom_dim; j++)
+                {
+                    reg_st_out << st_params[i][j] << " ";
+                }
+                reg_st_out << strs[i] << endl;
+            }
+            reg_st_out.close();
 
             // // debug
             // for (int i = 0; i < lambda.rows(); i++)

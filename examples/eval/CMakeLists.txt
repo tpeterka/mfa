@@ -12,6 +12,9 @@ target_link_libraries       (integrate                  ${libraries})
 add_executable              (decode_speed               decode_speed.cpp)
 target_link_libraries       (decode_speed               ${libraries})
 
+add_executable              (line_integral              line_integral.cpp)
+target_link_libraries       (line_integral              ${libraries})
+
 set_property                (TARGET  differentiate_block eval integrate decode_speed PROPERTY INSTALL_RPATH_USE_LINK_PATH TRUE)
 install                     (TARGETS differentiate_block eval integrate decode_speed
                             DESTINATION ${CMAKE_INSTALL_PREFIX}/examples/eval/

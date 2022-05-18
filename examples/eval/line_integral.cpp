@@ -1,10 +1,9 @@
 //--------------------------------------------------------------
-// example of encoding / decoding higher dimensional data w/ fixed number of control points and a
-// single block in a split model w/ one model containing geometry and other model science variables
+// example of computing line integrals from an encoded MFA
 //
-// Tom Peterka
+// David Lenz
 // Argonne National Laboratory
-// tpeterka@mcs.anl.gov
+// dlenz@anl.gov
 //--------------------------------------------------------------
 
 #include <mfa/mfa.hpp>
@@ -21,7 +20,6 @@
 #include <diy/io/block.hpp>
 
 #include "opts.h"
-
 #include "block.hpp"
 
 using namespace std;
@@ -43,21 +41,15 @@ int main(int argc, char** argv)
     int    geom_degree  = 1;                    // degree for geometry (same for all dims)
     int    vars_degree  = 4;                    // degree for science variables (same for all dims)
     int    ndomp        = 100;                  // input number of domain points (same for all dims)
-    int    ntest        = 0;                    // number of input test points in each dim for analytical error tests
     int    geom_nctrl   = -1;                   // input number of control points for geometry (same for all dims)
     int    vars_nctrl   = 11;                   // input number of control points for all science variables (same for all dims)
     string input        = "sinc";               // input dataset
-    int    weighted     = 1;                    // solve for and use weights (bool 0/1)
-    real_t rot          = 0.0;                  // rotation angle in degrees
-    real_t twist        = 0.0;                  // twist (waviness) of domain (0.0-1.0)
-    real_t noise        = 0.0;                  // fraction of noise
-    int    error        = 1;                    // decode all input points and check error (bool 0/1)
+    int    weighted     = 0;                    // solve for and use weights (bool 0/1)
     string infile;                              // input file name
     int    structured   = 1;                    // input data format (bool 0/1)
     int    rand_seed    = -1;                   // seed to use for random data generation (-1 == no randomization)
     float  regularization = 0;                  // smoothing parameter for models with non-uniform input density (0 == no smoothing)
-    int    fixed_ray    = 0;
-    int     reg1and2 = 0;                       // flag for regularizer: 0 --> regularize only 2nd derivs. 1 --> regularize 1st and 2nd
+    int    reg1and2     = 0;                       // flag for regularizer: 0 --> regularize only 2nd derivs. 1 --> regularize 1st and 2nd
     bool   help         = false;                // show help
 
 
@@ -65,25 +57,33 @@ int main(int argc, char** argv)
     opts::Options ops;
     ops >> opts::Option('d', "pt_dim",      pt_dim,     " dimension of points");
     ops >> opts::Option('m', "dom_dim",     dom_dim,    " dimension of domain");
-    ops >> opts::Option('p', "geom_degree", geom_degree," degree in each dimension of geometry");
     ops >> opts::Option('q', "vars_degree", vars_degree," degree in each dimension of science variables");
     ops >> opts::Option('n', "ndomp",       ndomp,      " number of input points in each dimension of domain");
-    ops >> opts::Option('a', "ntest",       ntest,      " number of test points in each dimension of domain (for analytical error calculation)");
     ops >> opts::Option('g', "geom_nctrl",  geom_nctrl, " number of control points in each dimension of geometry");
     ops >> opts::Option('v', "vars_nctrl",  vars_nctrl, " number of control points in each dimension of all science variables");
     ops >> opts::Option('i', "input",       input,      " input dataset");
     ops >> opts::Option('w', "weights",     weighted,   " solve for and use weights");
-    ops >> opts::Option('r', "rotate",      rot,        " rotation angle of domain in degrees");
-    ops >> opts::Option('t', "twist",       twist,      " twist (waviness) of domain (0.0-1.0)");
-    ops >> opts::Option('s', "noise",       noise,      " fraction of noise (0.0 - 1.0)");
-    ops >> opts::Option('c', "error",       error,      " decode entire error field (default=true)");
     ops >> opts::Option('f', "infile",      infile,     " input file name");
     ops >> opts::Option('h', "help",        help,       " show help");
     ops >> opts::Option('x', "structured",  structured, " input data format (default=structured=true)");
     ops >> opts::Option('y', "rand_seed",   rand_seed,  " seed for random point generation (-1 = no randomization, default)");
     ops >> opts::Option('b', "regularization", regularization, "smoothing parameter for models with non-uniform input density");
     ops >> opts::Option('k', "reg1and2",    reg1and2,   " regularize both 1st and 2nd derivatives (if =1) or just 2nd (if =0)");
-    ops >> opts::Option('u', "fixed_ray",   fixed_ray, "" );
+
+    int n_alpha = 0;
+    int n_rho = 0;
+    int n_samples = 0;
+    int v_alpha = 0;
+    int v_rho = 0;
+    int v_samples = 0;
+    int num_ints = 0;
+    ops >> opts::Option('z', "n_alpha", n_alpha, " number of rotational samples for line integration");
+    ops >> opts::Option('z', "n_rho", n_rho, " number of samples in offset direction for line integration");
+    ops >> opts::Option('z', "n_samples", n_samples, " number of samples along ray for line integration");
+    ops >> opts::Option('z', "v_alpha", v_alpha, " number of rotational control points for line integration");
+    ops >> opts::Option('z', "v_rho", v_rho, " number of control points in offset direction for line integration");
+    ops >> opts::Option('z', "v_samples", v_samples, " number of control points along ray for line integration");
+    ops >> opts::Option('z', "num_ints", num_ints, " number of random line integrals to compute");
 
 
     if (!ops.parse(argc, argv) || help)
@@ -105,15 +105,13 @@ int main(int argc, char** argv)
         "pt_dim = "         << pt_dim       << " dom_dim = "        << dom_dim      <<
         "\ngeom_degree = "  << geom_degree  << " vars_degree = "    << vars_degree  <<
         "\ninput pts = "    << ndomp        << " geom_ctrl pts = "  << geom_nctrl   <<
-        "\nvars_ctrl_pts = "<< vars_nctrl   << " test_points = "    << ntest        <<
-        "\ninput = "        << input        << " noise = "          << noise        << 
-        "\nstructured = "   << structured   <<
-        "\nfixed_ray = " << fixed_ray << endl;
+        "\nvars_ctrl_pts = "<< vars_nctrl   << 
+        "\ninput = "        << input        << 
+        "\nstructured = "   << structured   << endl;
 
 #ifdef CURVE_PARAMS
-    cerr << "parameterization method = curve" << endl;
-#else
-    cerr << "parameterization method = domain" << endl;
+    cerr << "Curve parametrization not supported. Exiting." << endl;
+    exit(0);
 #endif
 #ifdef MFA_TBB
     cerr << "threading: TBB" << endl;
@@ -165,8 +163,8 @@ int main(int argc, char** argv)
     // set default args for diy foreach callback functions
     DomainArgs d_args(dom_dim, pt_dim);
     d_args.weighted     = weighted;
-    d_args.n            = noise;
-    d_args.t            = twist;
+    d_args.n            = 0;
+    d_args.t            = 0;
     d_args.multiblock   = false;
     d_args.verbose      = 1;
     d_args.structured   = structured;
@@ -198,24 +196,8 @@ int main(int argc, char** argv)
                 { b->generate_analytical_data(cp, input, d_args); });
     }
 
-    // sinc function f(x) = sin(x)/x, f(x,y) = sinc(x)sinc(y), ...
-    if (input == "sinc")
-    {
-        for (int i = 0; i < dom_dim; i++)
-        {
-            d_args.min[i]               = -4.0 * M_PI;
-            d_args.max[i]               = 4.0  * M_PI;
-        }
-        for (int i = 0; i < pt_dim - dom_dim; i++)      // for all science variables
-            d_args.s[i] = 10.0 * (i + 1);                 // scaling factor on range
-        d_args.r = rot * M_PI / 180.0;   // domain rotation angle in rads
-        d_args.t = twist;                // twist (waviness) of domain
-        master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-                { b->generate_analytical_data(cp, input, d_args); });
-    }
-
-    // polysinc functions
-    if (input == "psinc1" || input == "psinc2")
+    // sinc and polysinc functions
+    if (input == "sinc" || input == "psinc1" || input == "psinc2")
     {
         for (int i = 0; i < dom_dim; i++)
         {
@@ -300,7 +282,6 @@ int main(int argc, char** argv)
         d_args.vars_nctrl_pts[0][1] = 108;
         d_args.vars_nctrl_pts[0][2] = 110;
         d_args.infile               = infile;
-//         d_args.infile               = "/Users/tpeterka/datasets/flame/6_small.xyz";
         if (dom_dim == 1)
             master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
                     { b->read_1d_slice_3d_vector_data(cp, d_args); });
@@ -315,22 +296,6 @@ int main(int argc, char** argv)
             fprintf(stderr, "S3D data only available in 2 or 3d domain\n");
             exit(0);
         }
-
-        // for testing, hard-code a subset of a 3d domain, 1/2 the size in each dim and centered
-        // in this case, actual size is just under 1/2 size in each dim to satisfy DIY's (MPI's)
-        // limitation on the size of a file write
-        // (MPI uses int for the size, and DIY as yet does not chunk writes into smaller sizes)
-//         d_args.starts[0]            = 125;
-//         d_args.starts[1]            = 50;
-//         d_args.starts[2]            = 125;
-//         d_args.ndom_pts[0]          = 350;
-//         d_args.ndom_pts[1]          = 250;
-//         d_args.ndom_pts[2]          = 250;
-//         d_args.full_dom_pts[0]      = 704;
-//         d_args.full_dom_pts[1]      = 540;
-//         d_args.full_dom_pts[2]      = 550;
-//         master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-//                 { b->read_3d_subset_3d_vector_data(cp, d_args); });
     }
 
     // nek5000 dataset
@@ -343,7 +308,6 @@ int main(int argc, char** argv)
             d_args.vars_nctrl_pts[0][i] = 100;
 
         d_args.infile = infile;
-//         d_args.infile = "/Users/tpeterka/datasets/nek5000/200x200x200/0.xyz";
         if (dom_dim == 2)
             master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
                     { b->read_2d_slice_3d_vector_data(cp, d_args); });
@@ -369,7 +333,6 @@ int main(int argc, char** argv)
         d_args.vars_nctrl_pts[0][1] = 128;
         d_args.vars_nctrl_pts[0][2] = 128;
         d_args.infile = infile;
-//         d_args.infile = "/Users/tpeterka/datasets/rti/dd07g_xxsmall_le.xyz";
         if (dom_dim == 2)
             master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
                     { b->read_2d_slice_3d_vector_data(cp, d_args); });
@@ -381,19 +344,6 @@ int main(int argc, char** argv)
             fprintf(stderr, "rti data only available in 2 or 3d domain\n");
             exit(0);
         }
-
-//         // for testing, hard-code a subset of a 3d domain, 1/2 the size in each dim and centered
-//         d_args.starts[0]        = 72;
-//         d_args.starts[1]        = 128;
-//         d_args.starts[2]        = 128;
-//         d_args.ndom_pts[0]      = 144;
-//         d_args.ndom_pts[1]      = 256;
-//         d_args.ndom_pts[2]      = 256;
-//         d_args.full_dom_pts[0]  = 288;
-//         d_args.full_dom_pts[1]  = 512;
-//         d_args.full_dom_pts[2]  = 512;
-//         master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-//                 { b->read_3d_subset_3d_vector_data(cp, d_args); });
     }
 
     // cesm dataset
@@ -406,7 +356,6 @@ int main(int argc, char** argv)
         d_args.vars_nctrl_pts[0][0] = 300;
         d_args.vars_nctrl_pts[0][1] = 600;
         d_args.infile = infile;
-//      d_args.infile = "/Users/tpeterka/datasets/CESM-ATM-tylor/1800x3600/FLDSC_1_1800_3600.dat";
         if (dom_dim == 2)
             master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
                     { b->read_2d_scalar_data(cp, d_args); });
@@ -529,9 +478,6 @@ int main(int argc, char** argv)
                     { b->read_3d_unstructured_data(cp, d_args, varid, all_vars, geom_dim); });
     }
 
-    // write initial points
-    diy::io::write_blocks("initial.out", world, master);
-
     // compute the MFA
     fprintf(stderr, "\nStarting fixed encoding...\n\n");
     double encode_time = MPI_Wtime();
@@ -542,58 +488,184 @@ int main(int argc, char** argv)
 
     // debug: compute error field for visualization and max error to verify that it is below the threshold
     double decode_time = MPI_Wtime();
-    if (error)
-    {
-        fprintf(stderr, "\nFinal decoding and computing max. error...\n");
-#ifdef CURVE_PARAMS     // normal distance
-        master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-                { b->error(cp, 1, true); });
-#else                   // range coordinate difference
-        bool saved_basis = structured; // TODO: basis functions are currently only saved during encoding of structured data
-        master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-                { 
-                    b->range_error(cp, 1, true, saved_basis);
-                     });
-#endif
-        decode_time = MPI_Wtime() - decode_time;
-    }
+    fprintf(stderr, "\nFinal decoding and computing max. error...\n");
+    bool saved_basis = structured; // TODO: basis functions are currently only saved during encoding of structured data
+    master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
+            { 
+                b->range_error(cp, 1, true, saved_basis);
+                b->print_block(cp, true);
 
-    // debug: write original and approximated data for reading into z-checker
-    // only for one block (one file name used, ie, last block will overwrite earlier ones)
-//     master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-//             { b->write_raw(cp); });
+                // Assumes one scalar science variable. Used for relative error metric
+                real_t extent = b->input->domain.col(dom_dim).maxCoeff() - b->input->domain.col(dom_dim).minCoeff();
 
-    // debug: save knot span domains for comparing error with location in knot span
-//     master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-//             { b->knot_span_domains(cp); });
+                b->create_ray_model(cp, d_args, 1, n_samples, n_rho, n_alpha, v_samples, v_rho, v_alpha);
 
-    // compute the norms of analytical errors synthetic function w/o noise at different domain points than the input
-    if (ntest > 0)
-    {
-        real_t L1, L2, Linf;                                // L-1, 2, infinity norms
+        real_t result = 0;
+        VectorX<real_t> start_pt(2), end_pt(2);
 
-        for (int i = 0; i < dom_dim; i++)
-            d_args.ndom_pts[i] = ntest;
+        // horizontal line where function is identically 0
+        // = 0.0
+        start_pt(0) = -3*M_PI; start_pt(1) = 0;
+        end_pt(0) = 3*M_PI; end_pt(1) = 0;
+        result = b->integrate_ray(cp, start_pt, end_pt, 1);
+        cerr << "(-3pi, 0)---(3pi, 0):       " << result << endl;
+        cerr << "actual:                     " << b->sintest(start_pt, end_pt) << endl;
+        cerr << "error:                      " << result << endl << endl;
 
-        vector<vec3d> unused;
-        master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-                { b->analytical_error(cp, input, L1, L2, Linf, d_args, false, unused, NULL, unused, NULL); });
+        // vertical line
+        // = 0.0
+        start_pt(0) = M_PI/2; start_pt(1) = -2*M_PI;
+        end_pt(0) = M_PI/2; end_pt(1) = 2*M_PI;
+        result = b->integrate_ray(cp, start_pt, end_pt, 1);
+        cerr << "(pi/2, -2pi)---(pi/2, 2pi): " << result << endl;
+        cerr << "actual:                     " << b->sintest(start_pt, end_pt) << endl;
+        cerr << "error:                      " << result << endl << endl;
+        
+        // horizontal line
+        // = 2.0
+        start_pt(0) = 0; start_pt(1) = M_PI/2;
+        end_pt(0) = M_PI; end_pt(1) = M_PI/2;
+        result = b->integrate_ray(cp, start_pt, end_pt, 1);
+        cerr << "(0, pi/2)---(pi, pi/2):     " << result << endl;
+        cerr << "actual:                     " << b->sintest(start_pt, end_pt) << endl;
+        cerr << "relative error:             " << abs((result-2)/2) << endl << endl;
 
-        // print analytical errors
-        fprintf(stderr, "\n------ Analytical error norms -------\n");
-        fprintf(stderr, "L-1        norm = %e\n", L1);
-        fprintf(stderr, "L-2        norm = %e\n", L2);
-        fprintf(stderr, "L-infinity norm = %e\n", Linf);
-        fprintf(stderr, "-------------------------------------\n\n");
-    }
+        // line y=x
+        // = 5.75864344326
+        start_pt(0) = 0, start_pt(1) = 0;
+        end_pt(0) = 8, end_pt(1) = 8;
+        result = b->integrate_ray(cp, start_pt, end_pt, 1);
+        cerr << "(0, 0)---(8, 8):            " << result << endl;
+        cerr << "actual:                     " << b->sintest(start_pt, end_pt) << endl;
+        cerr << "relative error:             " << abs((result-5.75864344326)/5.75864344326) << endl << endl;
+
+        // "arbitrary" line
+        // = 1.2198958397433
+        start_pt(0) = -2; start_pt(1) = -4;
+        end_pt(0) = 3; end_pt(1) = 11;
+        result = b->integrate_ray(cp, start_pt, end_pt, 1);
+        cerr << "(-2, -4)---(3, 11):         " << result << endl;
+        cerr << "actual:                     " << b->sintest(start_pt, end_pt) << endl;
+        cerr << "relative error:             " << abs((result-1.2198958397433)/1.2198958397433) << endl << endl;
+
+        std::vector<real_t> ierrs_abs;
+        std::vector<real_t> ierrs_rel;
+        std::random_device dev;
+        std::mt19937 rng(dev());
+        real_t x0, x1, y0, y1;
+        real_t ierror_abs=0, ierror_rel=0, actual=0, rms_abs=0, rms_rel=0, avg_abs=0, avg_rel=0, len=0;
+        std::uniform_real_distribution<double> dist(0,1); 
+        for (int i = 0; i < num_ints; i++)
+        {
+            x0 = dist(rng)* 8*M_PI - 4*M_PI;
+            y0 = dist(rng)* 8*M_PI - 4*M_PI;
+            x1 = dist(rng)* 8*M_PI - 4*M_PI;
+            y1 = dist(rng)* 8*M_PI - 4*M_PI;
+            start_pt(0) = x0;
+            start_pt(1) = y0;
+            end_pt(0) = x1;
+            end_pt(1) = y1;
+            len = sqrt((x1-x0)*(x1-x0) + (y1-y0)*(y1-y0));
+            result = b->integrate_ray(cp, start_pt, end_pt, 1) / len;   // normalize by segment length
+            actual = b->sintest(start_pt, end_pt) / len;                        // normalize by segment length
+            ierror_abs = abs(result - actual);
+            ierror_rel = ierror_abs/extent;
+            ierrs_abs.push_back(ierror_abs);
+            ierrs_rel.push_back(ierror_rel);
+            // cerr << "(" << x0 << ", " << y0 << ")---(" << x1 << ", " << y1 << "):  " << endl;
+            // cerr << "  Result: " << setprecision(6) << result << endl;
+            // cerr << "  Actual: " << setprecision(6) << actual << endl;
+            // cerr << "  Length:    " << setprecision(3) << len << endl;
+            // cerr << "  Error (abs):  " << setprecision(6) << ierror_abs << endl;
+            // cerr << "  Error (rel):  " << setprecision(6) << ierror_rel << endl;
+        }
+
+        cerr << "\nComputed " << num_ints << " random line integrals." << endl;
+        cerr << "  Max error (abs): " << setprecision(6) << *max_element(ierrs_abs.begin(), ierrs_abs.end()) << 
+                    "\t" << "Max error (rel): " << *max_element(ierrs_rel.begin(), ierrs_rel.end()) << endl;
+        cerr << "  Min error (abs): " << setprecision(6) << *min_element(ierrs_abs.begin(), ierrs_abs.end()) << 
+                    "\t" << "Min error (rel): " << *min_element(ierrs_rel.begin(), ierrs_rel.end()) << endl;
+        for (int j = 0; j < ierrs_abs.size(); j++)
+        {
+            rms_abs += ierrs_abs[j] * ierrs_abs[j];
+            rms_rel += ierrs_rel[j] * ierrs_rel[j];
+            avg_abs += ierrs_abs[j];
+            avg_rel += ierrs_rel[j];
+        }
+        rms_abs = rms_abs/ierrs_abs.size();
+        rms_abs = sqrt(rms_abs);
+        rms_rel = rms_rel/ierrs_rel.size();
+        rms_rel = sqrt(rms_rel);
+        avg_abs = avg_abs/ierrs_abs.size();
+        avg_rel = avg_rel/ierrs_rel.size();
+        cerr << "  Avg error (abs): " << setprecision(6) << avg_abs << "\t" << "Avg error (rel): " << avg_rel << endl;
+        cerr << "  RMS error (abs): " << setprecision(6) << rms_abs << "\t" << "RMS error (rel): " << rms_rel << endl;
+
+        ofstream errfile_abs, errfile_rel;
+        errfile_abs.open("li_errors_abs.txt");
+        errfile_rel.open("li_errors_rel.txt");
+        for (int i = 0; i < ierrs_abs.size(); i++)
+        {
+            errfile_abs << ierrs_abs[i] << endl;
+            errfile_rel << ierrs_rel[i] << endl;
+        }
+        errfile_abs.close();
+        errfile_rel.close();
+
+        ofstream segmenterrfile;
+        segmenterrfile.open("seg_errors.txt");
+        int test_n_alpha = 150;
+        int test_n_rho = 150;
+        real_t r_lim = b->bounds_maxs(1);   // WARNING TODO: make r_lim query-able in RayMFA class
+        for (int i = 0; i < test_n_alpha; i++)
+        {
+            for (int j = 0; j < test_n_rho; j++)
+            {
+                real_t alpha = 3.14159265 / (test_n_alpha-1) * i;
+                real_t rho = r_lim*2 / (test_n_rho-1) * j - r_lim;
+                real_t x0, x1, y0, y1;   // end points of full line
+
+                cerr << alpha << " " << rho << endl;
+
+                b->get_box_intersections(alpha, rho, x0, y0, x1, y1, b->box_mins, b->box_maxs);
+                if (x0==0 && y0==0 && x1==0 && y1==0)
+                {
+                    segmenterrfile << alpha << " " << rho << " " << 0 << endl;
+                }
+                else
+                {
+                    // x0 = rho * cos(alpha) - r_lim * sin(alpha); if (x0 < -4*M_PI) x0 = -4*M_PI; if (x0 > 4*M_PI) x0 = 4*M_PI;
+                    // x1 = rho * cos(alpha) + r_lim * sin(alpha); if (x1 < -4*M_PI) x1 = -4*M_PI; if (x1 > 4*M_PI) x1 = 4*M_PI;
+                    // y0 = rho * sin(alpha) + r_lim * cos(alpha); if (y0 < -4*M_PI) y0 = -4*M_PI; if (y0 > 4*M_PI) y0 = 4*M_PI;
+                    // y1 = rho * sin(alpha) - r_lim * cos(alpha); if (y1 < -4*M_PI) y1 = -4*M_PI; if (y1 > 4*M_PI) y1 = 4*M_PI;
+                    real_t length = sqrt((x1-x0)*(x1-x0) + (y1-y0)*(y1-y0));
+
+                    start_pt(0) = x0; 
+                    start_pt(1) = y0;
+                    end_pt(0) = x1;
+                    end_pt(1) = y1;
+
+                    real_t test_result = b->integrate_ray(cp, start_pt, end_pt, 1) / length;   // normalize by segment length
+                    real_t test_actual = b->sintest(start_pt, end_pt) / length;
+
+                    real_t e_abs = abs(test_result - test_actual);
+                    real_t e_rel = e_abs/extent;
+
+                    segmenterrfile << alpha << " " << rho << " " << e_rel << endl;
+                }
+                
+            }
+        }
+        segmenterrfile.close();
+                    });
+    decode_time = MPI_Wtime() - decode_time;
 
     // print results
     fprintf(stderr, "\n------- Final block results --------\n");
     master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-            { b->print_block(cp, error); });
+            { b->print_block(cp, true); });
     fprintf(stderr, "encoding time         = %.3lf s.\n", encode_time);
-    if (error)
-        fprintf(stderr, "decoding time         = %.3lf s.\n", decode_time);
+    fprintf(stderr, "decoding time         = %.3lf s.\n", decode_time);
     fprintf(stderr, "-------------------------------------\n\n");
 
     // save the results in diy format

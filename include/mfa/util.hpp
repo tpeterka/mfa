@@ -26,8 +26,7 @@ namespace mfa
         template<typename>
         friend class PtIterator;
 
-        private:
-
+        // TODO these variables should be const
         size_t          dom_dim_;                   // number of domain dimensions
         VectorXi        npts_dim_;                  // size of volume or subvolume in each dimension
         VectorXi        starts_dim_;                // offset to start of subvolume in each dimension
@@ -35,19 +34,20 @@ namespace mfa
         VectorXi        ds_;                        // stride for domain points in each dim.
         size_t          tot_iters_;                 // total number of flattened iterations
 
+        // These variables are non-const
         VectorXi        idx_dim_;                   // current iteration number in each dimension
         VectorXi        prev_idx_dim_;              // previous iteration number in each dim., before incrementing
         size_t          cur_iter_;                  // current flattened iteration number
         vector<bool>    done_dim_;                  // whether row, col, etc. in each dimension is done
 
+    public:
+
         void init(size_t idx = 0)
         {
-            dom_dim_    = npts_dim_.size();
-
             // sanity checks
-            if (starts_dim_.size() != dom_dim_ || all_npts_dim_.size() != dom_dim_)
+            if (npts_dim_.size() != dom_dim_ || starts_dim_.size() != dom_dim_ || all_npts_dim_.size() != dom_dim_)
             {
-                fprintf(stderr, "Error: VolIterator sizes of sub_npts sub_starts, all_npts are not equal.\n");
+                fprintf(stderr, "Error: VolIterator sizes of sub_npts, sub_starts, all_npts are not equal.\n");
                 abort();
             }
             for (auto i = 0; i < dom_dim_; i++)
@@ -68,11 +68,10 @@ namespace mfa
             for (size_t i = 1; i < dom_dim_; i++)
                 ds_(i) = ds_(i - 1) * npts_dim_(i - 1);
 
-            // tot_iters_  = npts_dim_.prod();
-            idx_dim_.resize(dom_dim_);
-            prev_idx_dim_.resize(dom_dim_);
             cur_iter_   = idx;
-            done_dim_.resize(dom_dim_);
+            std::fill(idx_dim_.begin(), idx_dim_.end(), 0);
+            std::fill(prev_idx_dim_.begin(), prev_idx_dim_.end(), 0);
+            std::fill(done_dim_.begin(), done_dim_.end(), false);
             if (idx > 0)
             {
                 idx_ijk(idx, idx_dim_);
@@ -92,8 +91,6 @@ namespace mfa
             }
         }
 
-        public:
-
         // subvolume (slice) version
         VolIterator(const   VectorXi& sub_npts,             // size of subvolume in each dimension
                     const   VectorXi& sub_starts,           // offset to start of subvolume in each dimension
@@ -103,7 +100,11 @@ namespace mfa
                     npts_dim_(sub_npts),
                     starts_dim_(sub_starts),
                     all_npts_dim_(all_npts),
-                    tot_iters_(npts_dim_.prod())                 { init(idx); }
+                    tot_iters_(npts_dim_.prod()),
+                    idx_dim_(sub_npts.size()),
+                    prev_idx_dim_(sub_npts.size()),
+                    cur_iter_(idx),
+                    done_dim_(sub_npts.size())                 { init(idx); }
 
         VolIterator(const   VectorXi& npts,                 // size of volume in each dimension
                             size_t idx = 0) :               // linear iteration count within volume
@@ -111,7 +112,11 @@ namespace mfa
                     npts_dim_(npts),
                     starts_dim_(VectorXi::Zero(npts.size())),
                     all_npts_dim_(npts),
-                    tot_iters_(npts_dim_.prod())               { init(idx); }
+                    tot_iters_(npts_dim_.prod()),
+                    idx_dim_(npts.size()),
+                    prev_idx_dim_(npts.size()),
+                    cur_iter_(idx),
+                    done_dim_(npts.size())                 { init(idx); }
 
         // null iterator
         VolIterator() :

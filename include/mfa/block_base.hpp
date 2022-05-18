@@ -541,7 +541,7 @@ struct BlockBase
 
         // science variables
         cerr << "\n----- science variable models -----" << endl;
-        for (auto i = 0; i < mfa->nvars(); i++)
+        for (auto i = 0; i < mfa->nvars(); i++)    // TODO: this assumes scalar science variables
         {
             T range_extent = input->domain.col(dom_dim + i).maxCoeff() - input->domain.col(dom_dim + i).minCoeff();
             cerr << "\n---------- var " << i << " ----------" << endl;
