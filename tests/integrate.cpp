@@ -212,19 +212,30 @@ int main(int argc, char** argv)
     diy::io::write_blocks("approx.out", world, master);
 
     // check the results of the last (only) science variable
+    diy::Master::ProxyWithLink cp0 = master.proxy(0);
     Block<real_t>* b    = static_cast<Block<real_t>*>(master.block(0));
     real_t range_extent = b->input->domain.col(dom_dim).maxCoeff() - b->input->domain.col(dom_dim).minCoeff();
     real_t err_factor   = 1.0e-3;
     real_t expect_err   = -0.0;
     real_t l1_error = 0, l2_error = 0, linf_error = 0;
-    b->analytical_error_pointset(b->approx, "ncosp1", l1_error, l2_error, linf_error, d_args);
+    b->analytical_error_pointset(cp0, b->approx, "", l1_error, l2_error, linf_error, d_args,
+                                [&](const VectorX<real_t>& domain_pt, DomainArgs& args, int k)
+                                {
+                                    real_t retval = 1;
+                                    for (int i = 0; i < domain_pt.size(); i++)
+                                    {
+                                        if (i==0) retval *= 1 - cos(domain_pt(i));
+                                        else     retval *= sin(domain_pt(i));
+                                    }
+                                    return retval;
+                                });
 
     if (input == "sine" && dom_dim == 1)        // for ./integrate-test -i sine -d 2 -m 1 -p 1 -q 4 -v 20 -n 100 -w 0
         expect_err = 0.000861878;
     else if (input == "sine" && dom_dim == 2)   // for ./integrate-test -i sine -d 3 -m 2 -p 1 -q 4 -v 20 -n 100 -w 0
-        expect_err = 0.00276654;
+        expect_err = 0.00503626;
     else if (input == "sine" && dom_dim == 3)    // for ./integrate-test -i sine -d 4 -m 3 -p 1 -q 4 -v 20 -n 50 -w 0
-        expect_err = 0.00716293;
+        expect_err = 0.00823552;
     else
     {
         cerr << "ERROR: Unexpected test arguments." << endl;

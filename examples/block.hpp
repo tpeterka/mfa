@@ -2321,12 +2321,14 @@ cerr << "===========\n" << endl;
     // evaluated at the points in the pointset
     // N.B. assumes only one science variable
     void analytical_error_pointset(
-        mfa::PointSet<T>*       ps,
-        string                  fun,
-        T&                      L1, 
-        T&                      L2,
-        T&                      Linf,
-        DomainArgs&             args) const
+        const diy::Master::ProxyWithLink&   cp,
+        mfa::PointSet<T>*                   ps,
+        string                              fun,
+        T&                                  L1, 
+        T&                                  L2,
+        T&                                  Linf,
+        DomainArgs&                         args,
+        const std::function<T(const VectorX<T>&, DomainArgs&, int)>& f = {}) const
     {
         // Compute the analytical error at each point
         T sum_errs      = 0.0;                                  // sum of absolute values of errors (L-1 norm)
@@ -2340,20 +2342,27 @@ cerr << "===========\n" << endl;
             pt_it.coords(dom_pt, 0, dom_dim-1); // extract the first dom_dim coords (i.e. geometric coords)
             
             // evaluate function at dom_pt_real
-            if (fun == "sinc")
-                true_val = sinc(dom_pt, args, 0);       // hard-coded for one science variable
-            if (fun == "sine")
-                true_val = sine(dom_pt, args, 0);       // hard-coded for one science variable
-            if (fun == "cosine")
-                true_val = cosine(dom_pt, args, 0);     // hard-coded for one science variable
-            if (fun == "ncosp1")
-                true_val = ncosp1(dom_pt, args, 0);      // hard-coded for one science variable
-            if (fun == "f16")
-                true_val = f16(dom_pt);
-            if (fun == "f17")
-                true_val = f17(dom_pt);
-            if (fun == "f18")
-                true_val = f18(dom_pt);
+            if (f)  // if f is nonempty, ignore 'fun'
+            {
+                true_val = f(dom_pt, args, 0);
+            }
+            else
+            {
+                if (fun == "sinc")
+                    true_val = sinc(dom_pt, args, 0);       // hard-coded for one science variable
+                if (fun == "sine")
+                    true_val = sine(dom_pt, args, 0);       // hard-coded for one science variable
+                if (fun == "cosine")
+                    true_val = cosine(dom_pt, args, 0);     // hard-coded for one science variable
+                if (fun == "ncosp1")
+                    true_val = ncosp1(dom_pt, args, 0);      // hard-coded for one science variable
+                if (fun == "f16")
+                    true_val = f16(dom_pt);
+                if (fun == "f17")
+                    true_val = f17(dom_pt);
+                if (fun == "f18")
+                    true_val = f18(dom_pt);
+            }
 
             test_val = ps->domain(pt_it.idx(), dom_dim);    // hard-coded for first science variable only
 
@@ -2370,7 +2379,12 @@ cerr << "===========\n" << endl;
         Linf  = max_err;
     }
 
+    // Compute error field on a regularly spaced grid of points. The size of the grid
+    // is given by args.ndom_pts. The error field is stored in the 'error' pointset, 
+    // and the error metrics are saved in L1, L2, Linf. If keep_approx==true, then the 
+    // resampling of the MFA on the regular grid is stored in the 'approx' pointset.
     void analytical_error_field(
+        const diy::Master::ProxyWithLink&   cp,
         string                              fun,                // function to evaluate
         T&                                  L1,                 // (output) L-1 norm
         T&                                  L2,                 // (output) L-2 norm
@@ -2493,7 +2507,10 @@ cerr << "===========\n" << endl;
         Linf  = max_err;
 
         if (keep_approx)
+        {
+            delete this->approx;
             this->approx = grid_approx;
+        }
         else
             delete grid_approx;
     }
