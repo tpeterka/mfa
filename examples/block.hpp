@@ -129,195 +129,6 @@ struct Block : public BlockBase<T>
     // Otherwise, the compiler can't be sure that the member exists. [Myers Effective C++, item 43]
     // This is annoying but unavoidable.
 
-    // REMOVE:
-    // Computes the analytical line integral from p1 to p2 of sin(x)sin(y). Use for testing
-    T sintest(  VectorX<T>& p1,
-                VectorX<T>& p2)
-    {
-        T x1 = p1(0);
-        T y1 = p1(1);
-        T x2 = p2(0);
-        T y2 = p2(1);
-
-        T mx = x2 - x1;
-        T my = y2 - y1;
-        T fctr = sqrt(mx*mx + my*my);
-
-        // a1 = mx, b1 = x1, a2 = my, b2 = y1
-        T int0 = 0, int1 = -7;
-        if (mx != my)
-        {
-            int0 = 0.5*(sin(x1-y1+(mx-my)*0)/(mx-my) - sin(x1+y1+(mx+my)*0)/(mx+my));
-            int1 = 0.5*(sin(x1-y1+(mx-my)*1)/(mx-my) - sin(x1+y1+(mx+my)*1)/(mx+my));
-        }
-        else
-        {
-            int0 = 0.5 * (0*cos(x1-y1) + sin(x1+y1+(mx+my)*0)/(mx+my));
-            int1 = 0.5 * (1*cos(x1-y1) + sin(x1+y1+(mx+my)*1)/(mx+my));
-        }
-        
-        return (int1 - int0) * fctr;
-    }
-
-    // evaluate sine function
-    T sine(VectorX<T>&  domain_pt,
-           DomainArgs&  args,
-           int          k) const             // current science variable
-    {
-        DomainArgs* a = &args;
-        T retval = 1.0;
-        for (auto i = 0; i < this->dom_dim; i++)
-            retval *= sin(domain_pt(i) * a->f[k]);
-        retval *= a->s[k];
-
-        return retval;
-    }
-
-    T cosine(VectorX<T>& domain_pt,
-             DomainArgs& args,
-             int         k) const
-    {
-        DomainArgs* a = &args;
-        T retval = 1.0;
-        for (auto i = 0; i < this->dom_dim; i++)
-            retval *= cos(domain_pt(i) * a->f[k]);
-        retval *= a->s[k];
-
-        return retval;        
-    }
-
-    // evaluate the "negative cosine plus one" (f(x) = -cos(x)+1) function
-    // used primarily to test integration of sine
-    T ncosp1(VectorX<T>& domain_pt,
-            DomainArgs& args,
-            int         k) const
-    {
-        DomainArgs* a = &args;
-        T retval = 1.0;
-        for (auto i = 0; i < this->dom_dim; i++)
-            retval *= 1 - cos(domain_pt(i) * a->f[k]);
-        retval *= a->s[k];
-
-        return retval;        
-    }
-
-    // evaluate sinc function
-    T sinc(VectorX<T>&  domain_pt,
-           DomainArgs&  args,
-           int          k) const            // current science variable
-    {
-        DomainArgs* a = &args;
-        T retval = 1.0;
-        for (auto i = 0; i < this->dom_dim; i++)
-        {
-            if (domain_pt(i) != 0.0)
-                retval *= (sin(domain_pt(i) * a->f[k] ) / domain_pt(i));
-        }
-        retval *= a->s[k];
-
-        return retval;
-    }
-
-    // evaluate 2d poly-sinc function version 1
-    T polysinc1(VectorX<T>& domain_pt,
-                DomainArgs& args) const
-    {
-        // only for 2d
-        if (this->dom_dim != 2)
-        {
-            fprintf(stderr, "Polysinc 1 function only defined for 2d. Aborting.\n");
-            exit(0);
-        }
-        T x = domain_pt(0);
-        T y = domain_pt(1);
-        T a = (x + 1) * (x + 1) + (y - 1) * (y - 1);
-        T b = (x - 1) * (x - 1) + (y + 1) * (y + 1);
-        T a1 = (a == 0.0 ? 1.0 : sin(a) / a);
-        T b1 = (b == 0.0 ? 1.0 : sin(b) / b);
-        return args.s[0] * (a1 + b1);
-    }
-
-    // evaluate 2d poly-sinc function version 2
-    T polysinc2(VectorX<T>& domain_pt,
-                DomainArgs& args) const
-    {
-        // only for 2d
-        if (this->dom_dim != 2)
-        {
-            fprintf(stderr, "Polysinc 2 function only defined for 2d. Aborting.\n");
-            exit(0);
-        }
-        T x = domain_pt(0);
-        T y = domain_pt(1);
-        T a = x * x + y * y;
-        T b = 2 * (x - 2) * (x - 2) + (y + 2) * (y + 2);
-        T a1 = (a == 0.0 ? 1.0 : sin(a) / a);
-        T b1 = (b == 0.0 ? 1.0 : sin(b) / b);
-        return args.s[0] * (a1 + b1);
-    }
-
-    // evaluate Marschner-Lobb function [Marschner and Lobb, IEEE VIS, 1994]
-    // only for a 3d domain
-    // using args f[0] and s[0] for f_M and alpha, respectively, in the paper
-    T ml(VectorX<T>&  domain_pt,
-           DomainArgs&  args) const
-    {
-        DomainArgs* a   = &args;
-        T& fm           = a->f[0];
-        T& alpha        = a->s[0];
-//         T fm = 6.0;
-//         T alpha = 0.25;
-        T& x            = domain_pt(0);
-        T& y            = domain_pt(1);
-        T& z            = domain_pt(2);
-
-        T rad       = sqrt(x * x + y * y + z * z);
-        T rho       = cos(2 * M_PI * fm * cos(M_PI * rad / 2.0));
-        T retval    = (1.0 - sin(M_PI * z / 2.0) + alpha * (1.0 + rho * sqrt(x * x + y * y))) / (2 * (1.0 + alpha));
-
-        return retval;
-    }
-
-    // evaluate f16 function
-    T f16(VectorX<T>&   domain_pt) const
-    {
-        T retval =
-            (pow(domain_pt(0), 4)                        +
-             pow(domain_pt(1), 4)                        +
-             pow(domain_pt(0), 2) * pow(domain_pt(1), 2) +
-             domain_pt(0) * domain_pt(1)                 ) /
-            (pow(domain_pt(0), 3)                        +
-             pow(domain_pt(1), 3)                        +
-             4                                           );
-
-        return retval;
-    }
-
-    // evaluate f17 function
-    T f17(VectorX<T>&   domain_pt) const
-    {
-        T E         = domain_pt(0);
-        T G         = domain_pt(1);
-        T M         = domain_pt(2);
-        T gamma     = sqrt(M * M * (M * M + G * G));
-        T kprop     = (2.0 * sqrt(2.0) * M * G * gamma ) / (M_PI * sqrt(M * M + gamma));
-        T retval    = kprop / ((E * E - M * M) * (E * E - M * M) + M * M * G * G);
-
-        return retval;
-    }
-
-    // evaluate f18 function
-    T f18(VectorX<T>&   domain_pt) const
-    {
-        T x1        = domain_pt(0);
-        T x2        = domain_pt(1);
-        T x3        = domain_pt(2);
-        T x4        = domain_pt(3);
-        T retval    = (atanh(x1) + atanh(x2) + atanh(x3) + atanh(x4)) / ((pow(x1, 2) - 1) * pow(x2, -1));
-
-        return retval;
-    }
-
     void generate_analytical_data(
             const diy::Master::ProxyWithLink&   cp,
             string&                             fun,
@@ -479,29 +290,8 @@ struct Block : public BlockBase<T>
             T retval;
             for (size_t n = 0; n < nvars; n++)        // for all science variables
             {
-                if (fun == "sine")
-                    retval = sine(dom_pt, args, n);
-                if (fun == "sinc")
-                    retval = sinc(dom_pt, args, n);
-                if (fun == "psinc1")
-                    retval = polysinc1(dom_pt, args);
-                if (fun == "psinc2")
-                    retval = polysinc2(dom_pt, args);
-                if (fun == "ml")
-                {
-                    if (this->dom_dim != 3)
-                    {
-                        fprintf(stderr, "Error: Marschner-Lobb function is only defined for a 3d domain.\n");
-                        exit(0);
-                    }
-                    retval = ml(dom_pt, args);
-                }
-                if (fun == "f16")
-                    retval = f16(dom_pt);
-                if (fun == "f17")
-                    retval = f17(dom_pt);
-                if (fun == "f18")
-                    retval = f18(dom_pt);
+                retval = evaluate_function(fun, dom_pt, args, n);
+                
                 input->domain(j, geom_dim + n) = retval;
 
                 if (j == 0 || input->domain(j, geom_dim + n) > bounds_maxs(geom_dim + n))
@@ -627,29 +417,7 @@ struct Block : public BlockBase<T>
             T retval;
             for (auto k = 0; k < nvars; k++)        // for all science variables
             {
-                if (fun == "sine")
-                    retval = sine(dom_pt, args, k);
-                if (fun == "sinc")
-                    retval = sinc(dom_pt, args, k);
-                if (fun == "psinc1")
-                    retval = polysinc1(dom_pt, args);
-                if (fun == "psinc2")
-                    retval = polysinc2(dom_pt, args);
-                if (fun == "ml")
-                {
-                    if (this->dom_dim != 3)
-                    {
-                        fprintf(stderr, "Error: Marschner-Lobb function is only defined for a 3d domain.\n");
-                        exit(0);
-                    }
-                    retval = ml(dom_pt, args);
-                }
-                if (fun == "f16")
-                    retval = f16(dom_pt);
-                if (fun == "f17")
-                    retval = f17(dom_pt);
-                if (fun == "f18")
-                    retval = f18(dom_pt);
+                retval = evaluate_function(fun, dom_pt, args, k);
                 input->domain(j, this->dom_dim + k) = retval;
             }
 
@@ -2348,20 +2116,7 @@ cerr << "===========\n" << endl;
             }
             else
             {
-                if (fun == "sinc")
-                    true_val = sinc(dom_pt, args, 0);       // hard-coded for one science variable
-                if (fun == "sine")
-                    true_val = sine(dom_pt, args, 0);       // hard-coded for one science variable
-                if (fun == "cosine")
-                    true_val = cosine(dom_pt, args, 0);     // hard-coded for one science variable
-                if (fun == "ncosp1")
-                    true_val = ncosp1(dom_pt, args, 0);      // hard-coded for one science variable
-                if (fun == "f16")
-                    true_val = f16(dom_pt);
-                if (fun == "f17")
-                    true_val = f17(dom_pt);
-                if (fun == "f18")
-                    true_val = f18(dom_pt);
+                true_val = evaluate_function(fun, dom_pt, args, 0);
             }
 
             test_val = ps->domain(pt_it.idx(), dom_dim);    // hard-coded for first science variable only
@@ -2458,25 +2213,7 @@ cerr << "===========\n" << endl;
             pt_it.coords(dom_pt, 0, dom_dim-1); // extract the first dom_dim coords (i.e. geometric coords)
             
             // evaluate function at dom_pt_real
-            if (fun == "sinc")
-                true_val = sinc(dom_pt, args, 0);       // hard-coded for one science variable
-            if (fun == "psinc1")
-                true_val = polysinc1(dom_pt, args);
-            if (fun == "psinc2")
-                true_val = polysinc2(dom_pt, args);
-            if (fun == "sine")
-                true_val = sine(dom_pt, args, 0);       // hard-coded for one science variable
-            if (fun == "cosine")
-                true_val = cosine(dom_pt, args, 0);     // hard-coded for one science variable
-            if (fun == "ncosp1")
-                true_val = ncosp1(dom_pt, args, 0);      // hard-coded for one science variable
-            if (fun == "f16")
-                true_val = f16(dom_pt);
-            if (fun == "f17")
-                true_val = f17(dom_pt);
-            if (fun == "f18")
-                true_val = f18(dom_pt);
-
+            true_val = evaluate_function(fun, dom_pt, args, 0);
             test_val = grid_approx->domain(pt_it.idx(), dom_dim);    // hard-coded for first science variable only
 
             // compute and accrue error
@@ -2573,21 +2310,7 @@ cerr << "===========\n" << endl;
             }
 
             // evaluate function at dom_pt_real
-            T true_val;
-            if (fun == "sinc")
-                true_val = sinc(dom_pt_real, args, 0);      // hard-coded for one science variable
-            if (fun == "sine")
-                true_val = sine(dom_pt_real, args, 0);      // hard-coded for one science variable
-            if (fun == "cosine")
-                true_val = cosine(dom_pt_real, args, 0);    // hard-coded for one science variable
-            if (fun == "ncosp1")
-                true_val = ncosp1(dom_pt_real, args, 0);     // hard-coded for one science variable
-            if (fun == "f16")
-                true_val = f16(dom_pt_real);
-            if (fun == "f17")
-                true_val = f17(dom_pt_real);
-            if (fun == "f18")
-                true_val = f18(dom_pt_real);
+            T true_val = evaluate_function(fun, dom_pt_real, args, 0);
 
             // evaluate MFA at dom_pt_param
             VectorX<T> cpt(1);                              // hard-coded for one science variable
@@ -2903,4 +2626,237 @@ void max_err_cb(Block<real_t> *b,                  // local block
         } //else
         //fmt::print(stderr, "[{}:{}] Skipping sending to self\n", rp.gid(), round);
     }
+}
+
+
+// REMOVE:
+// Computes the analytical line integral from p1 to p2 of sin(x)sin(y). Use for testing
+template<typename T>
+T sintest( const VectorX<T>& p1,
+           const VectorX<T>& p2)
+{
+    T x1 = p1(0);
+    T y1 = p1(1);
+    T x2 = p2(0);
+    T y2 = p2(1);
+
+    T mx = x2 - x1;
+    T my = y2 - y1;
+    T fctr = sqrt(mx*mx + my*my);
+
+    // a1 = mx, b1 = x1, a2 = my, b2 = y1
+    T int0 = 0, int1 = -7;
+    if (mx != my)
+    {
+        int0 = 0.5*(sin(x1-y1+(mx-my)*0)/(mx-my) - sin(x1+y1+(mx+my)*0)/(mx+my));
+        int1 = 0.5*(sin(x1-y1+(mx-my)*1)/(mx-my) - sin(x1+y1+(mx+my)*1)/(mx+my));
+    }
+    else
+    {
+        int0 = 0.5 * (0*cos(x1-y1) + sin(x1+y1+(mx+my)*0)/(mx+my));
+        int1 = 0.5 * (1*cos(x1-y1) + sin(x1+y1+(mx+my)*1)/(mx+my));
+    }
+    
+    return (int1 - int0) * fctr;
+}
+
+// evaluate sine function
+template<typename T>
+T sine(const VectorX<T>& domain_pt, DomainArgs&  args, int k)
+{
+    DomainArgs* a = &args;
+    T retval = 1.0;
+    for (auto i = 0; i < domain_pt.size(); i++)
+        retval *= sin(domain_pt(i) * a->f[k]);
+    retval *= a->s[k];
+
+    return retval;
+}
+
+template<typename T>
+T cosine(const VectorX<T>& domain_pt, DomainArgs&  args, int k)
+{
+    DomainArgs* a = &args;
+    T retval = 1.0;
+    for (auto i = 0; i < domain_pt.size(); i++)
+        retval *= cos(domain_pt(i) * a->f[k]);
+    retval *= a->s[k];
+
+    return retval;        
+}
+
+// evaluate the "negative cosine plus one" (f(x) = -cos(x)+1) function
+// used primarily to test integration of sine
+template<typename T>
+T ncosp1(const VectorX<T>& domain_pt, DomainArgs&  args, int k)
+{
+    DomainArgs* a = &args;
+    T retval = 1.0;
+    for (auto i = 0; i < domain_pt.size(); i++)
+        retval *= 1 - cos(domain_pt(i) * a->f[k]);
+    retval *= a->s[k];
+
+    return retval;        
+}
+
+// evaluate sinc function
+template<typename T>
+T sinc(const VectorX<T>& domain_pt, DomainArgs&  args, int k)
+{
+    DomainArgs* a = &args;
+    T retval = 1.0;
+    for (auto i = 0; i < domain_pt.size(); i++)
+    {
+        if (domain_pt(i) != 0.0)
+            retval *= (sin(domain_pt(i) * a->f[k] ) / domain_pt(i));
+    }
+    retval *= a->s[k];
+
+    return retval;
+}
+
+// evaluate 2d poly-sinc function version 1
+template<typename T>
+T polysinc1(const VectorX<T>& domain_pt, DomainArgs&  args, int k)
+{
+    // only for 2d
+    if (domain_pt.size() != 2)
+    {
+        fprintf(stderr, "Polysinc 1 function only defined for 2d. Aborting.\n");
+        exit(0);
+    }
+    T x = domain_pt(0);
+    T y = domain_pt(1);
+    T a = (x + 1) * (x + 1) + (y - 1) * (y - 1);
+    T b = (x - 1) * (x - 1) + (y + 1) * (y + 1);
+    T a1 = (a == 0.0 ? 1.0 : sin(a) / a);
+    T b1 = (b == 0.0 ? 1.0 : sin(b) / b);
+    return args.s[0] * (a1 + b1);
+}
+
+// evaluate 2d poly-sinc function version 2
+template<typename T>
+T polysinc2(const VectorX<T>& domain_pt, DomainArgs&  args, int k)
+{
+    // only for 2d
+    if (domain_pt.size() != 2)
+    {
+        fprintf(stderr, "Polysinc 2 function only defined for 2d. Aborting.\n");
+        exit(0);
+    }
+    T x = domain_pt(0);
+    T y = domain_pt(1);
+    T a = x * x + y * y;
+    T b = 2 * (x - 2) * (x - 2) + (y + 2) * (y + 2);
+    T a1 = (a == 0.0 ? 1.0 : sin(a) / a);
+    T b1 = (b == 0.0 ? 1.0 : sin(b) / b);
+    return args.s[0] * (a1 + b1);
+}
+
+// evaluate Marschner-Lobb function [Marschner and Lobb, IEEE VIS, 1994]
+// only for a 3d domain
+// using args f[0] and s[0] for f_M and alpha, respectively, in the paper
+template<typename T>
+T ml(const VectorX<T>& domain_pt, DomainArgs&  args, int k)
+{
+    if (domain_pt.size() != 3)
+    {
+        fprintf(stderr, "Error: Marschner-Lobb function is only defined for a 3d domain.\n");
+        exit(0);
+    }
+    T fm           = args.f[0];
+    T alpha        = args.s[0];
+//         T fm = 6.0;
+//         T alpha = 0.25;
+    T x            = domain_pt(0);
+    T y            = domain_pt(1);
+    T z            = domain_pt(2);
+
+    T rad       = sqrt(x * x + y * y + z * z);
+    T rho       = cos(2 * M_PI * fm * cos(M_PI * rad / 2.0));
+    T retval    = (1.0 - sin(M_PI * z / 2.0) + alpha * (1.0 + rho * sqrt(x * x + y * y))) / (2 * (1.0 + alpha));
+
+    return retval;
+}
+
+// evaluate f16 function
+template<typename T>
+T f16(const VectorX<T>& domain_pt, DomainArgs&  args, int k)
+{
+    if (domain_pt.size() != 2)
+    {
+        fprintf(stderr, "Error: f16 function is only defined for a 2d domain.\n");
+        exit(0);
+    }
+
+    T retval =
+        (pow(domain_pt(0), 4)                        +
+        pow(domain_pt(1), 4)                        +
+        pow(domain_pt(0), 2) * pow(domain_pt(1), 2) +
+        domain_pt(0) * domain_pt(1)                 ) /
+        (pow(domain_pt(0), 3)                        +
+        pow(domain_pt(1), 3)                        +
+        4                                           );
+
+    return retval;
+}
+
+// evaluate f17 function
+template<typename T>
+T f17(const VectorX<T>& domain_pt, DomainArgs&  args, int k)
+{
+    if (domain_pt.size() != 3)
+    {
+        fprintf(stderr, "Error: f17 function is only defined for a 3d domain.\n");
+        exit(0);
+    }
+
+    T E         = domain_pt(0);
+    T G         = domain_pt(1);
+    T M         = domain_pt(2);
+    T gamma     = sqrt(M * M * (M * M + G * G));
+    T kprop     = (2.0 * sqrt(2.0) * M * G * gamma ) / (M_PI * sqrt(M * M + gamma));
+    T retval    = kprop / ((E * E - M * M) * (E * E - M * M) + M * M * G * G);
+
+    return retval;
+}
+
+// evaluate f18 function
+template<typename T>
+T f18(const VectorX<T>& domain_pt, DomainArgs&  args, int k)
+{
+    if (domain_pt.size() != 4)
+    {
+        fprintf(stderr, "Error: f18 function is only defined for a 4d domain.\n");
+        exit(0);
+    }
+
+    T x1        = domain_pt(0);
+    T x2        = domain_pt(1);
+    T x3        = domain_pt(2);
+    T x4        = domain_pt(3);
+    T retval    = (atanh(x1) + atanh(x2) + atanh(x3) + atanh(x4)) / ((pow(x1, 2) - 1) * pow(x2, -1));
+
+    return retval;
+}
+
+template<typename T>
+T evaluate_function(string fun, const VectorX<T>& domain_pt, DomainArgs& args, int k)
+{
+    if (fun == "sine")          return sine(domain_pt, args, k);
+    else if (fun == "cosine")   return cosine(domain_pt, args, k);
+    else if (fun == "sinc")     return sinc(domain_pt, args, k);
+    else if (fun == "psinc1")   return polysinc1(domain_pt, args, k);
+    else if (fun == "psinc2")   return polysinc2(domain_pt, args, k);
+    else if (fun == "ml")       return ml(domain_pt, args, k);
+    else if (fun == "f16")      return f16(domain_pt, args, k);
+    else if (fun == "f17")      return f17(domain_pt, args, k);
+    else if (fun == "f18")      return f18(domain_pt, args, k);
+    else
+    {
+        cerr << "Invalid function name in evaluate_function. Aborting." << endl;
+        exit(0);
+    }
+
+    return 0;
 }
