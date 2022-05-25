@@ -479,8 +479,8 @@ namespace mfa
                             T mult = B[k]((k==dk) ? deriv : 0, idx);
 
 // TEST: Not sure if we should scale here or not
-                            // if (k == dk)    // if this is a derivative, scale properly
-                            //     mult *= pow(extents(k), deriv);
+                            if (k == dk)    // if this is a derivative, scale properly
+                                mult /= pow(extents(k), deriv);
 
 
                             // multiply by the derivative if k==dk, otherwise normal basis func
