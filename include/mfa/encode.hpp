@@ -462,29 +462,24 @@ namespace mfa
                     mfa_data.DerBasisFuns(k, u, spans[k], deriv, B[k]);
                 }
 
-                // Compute derivative constraints for each direction
-                for (int dk = 0; dk < mfa_data.dom_dim; dk++)   // for each direction derivative
+                // Compute constraints for each directional derivative
+                for (int dk = 0; dk < mfa_data.dom_dim; dk++)
                 {
-
                     VolIterator ctrl_vol_iter(nctrl_patch, ctrl_starts, t.nctrl_pts);
-                    while (!ctrl_vol_iter.done())
+                    while (!ctrl_vol_iter.done())   // for each nonzero basis function at the location for the constraint
                     {
                         int ctrl_idx_full = ctrl_vol_iter.cur_iter_full();
-                        T current_deriv = 1;        // holds one derivative at a time
 
-                        for (auto k = 0; k < mfa_data.dom_dim; k++)
+                        T current_deriv = 1;
+                        for (auto k = 0; k < mfa_data.dom_dim; k++) // compute tensor-product basis function
                         {
                             int idx = ctrl_vol_iter.idx_dim(k);
 
-                            T mult = B[k]((k==dk) ? deriv : 0, idx);
+                            T mult = B[k]((k==dk) ? deriv : 0, idx);    // deriv if k==dk, otherwise normal basis function
 
-// TEST: Not sure if we should scale here or not
                             if (k == dk)    // if this is a derivative, scale properly
                                 mult /= pow(extents(k), deriv);
 
-
-                            // multiply by the derivative if k==dk, otherwise normal basis func
-                            // current_deriv *= edge_factor * B[k]((k==dk) ? deriv : 0, idx);  // new for regularizer
                             current_deriv *= mult;
                         }
 
@@ -496,8 +491,9 @@ namespace mfa
                 pt_it.incr_iter();
             }
 
-            SparseMatrixX<T> C(Ct.transpose());                             // col-major transpose for fast column sums
-            Eigen::DiagonalMatrix<T, Eigen::Dynamic> lambda(C.cols());     // regularization strength
+            // Compute regularization strengths
+            SparseMatrixX<T> C(Ct.transpose());                             // create col-major transpose for fast column sums
+            Eigen::DiagonalMatrix<T, Eigen::Dynamic> lambda(C.cols());      // regularization strengths
             for (int i = 0; i < C.cols(); i++)
             {
                 T c_sum = N.col(i).sum();
@@ -548,7 +544,8 @@ namespace mfa
                 pt_it.incr_iter();
             }
             ofstream reg_st_out;
-            reg_st_out.open("reg-strength.txt");
+            string reg_st_fname = "reg-strength-" + to_string(deriv) + ".txt";
+            reg_st_out.open(reg_st_fname);
             for (int i = 0; i < pt_it.tot_iters(); i++)
             {
                 for (int j = 0; j < mfa_data.dom_dim; j++)
@@ -559,13 +556,10 @@ namespace mfa
             }
             reg_st_out.close();
 
-            // // debug
-            // for (int i = 0; i < lambda.rows(); i++)
-            // {
-            //     cerr << lambda.diagonal()(i) << endl;
-            // }
+            // Scale the constraint matrix Ct by the regularization strengths
+            // Each row of Ct is multiplied by a diagonal entry of lambda
+            Ct = lambda * Ct;
 
-            Ct = lambda * Ct; // We want to scale rows of Ct (cols of C)
             fill_time = clock() - fill_time;
             if (verbose)
                 cerr << "Regularization Total Time: " << setprecision(3) << ((double)fill_time)/CLOCKS_PER_SEC << "s." << endl;
@@ -592,7 +586,7 @@ namespace mfa
             clock_t fill_time = clock();
 
             // resize matrices in case number of control points changed
-            const int           pt_dim  = mfa_data.max_dim - mfa_data.min_dim + 1;        // dimensionality of current model
+            const int           pt_dim  = mfa_data.dim();        // dimensionality of current model
             t.ctrl_pts.resize(t.nctrl_pts.prod(), pt_dim);
             t.weights.resize(t.ctrl_pts.rows());
 

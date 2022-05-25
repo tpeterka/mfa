@@ -500,164 +500,157 @@ int main(int argc, char** argv)
 
                 b->create_ray_model(cp, d_args, 1, n_samples, n_rho, n_alpha, v_samples, v_rho, v_alpha);
 
-        real_t result = 0;
-        VectorX<real_t> start_pt(2), end_pt(2);
+                real_t result = 0;
+                VectorX<real_t> start_pt(2), end_pt(2);
 
-        // horizontal line where function is identically 0
-        // = 0.0
-        start_pt(0) = -3*M_PI; start_pt(1) = 0;
-        end_pt(0) = 3*M_PI; end_pt(1) = 0;
-        result = b->integrate_ray(cp, start_pt, end_pt, 1);
-        cerr << "(-3pi, 0)---(3pi, 0):       " << result << endl;
-        cerr << "actual:                     " << b->sintest(start_pt, end_pt) << endl;
-        cerr << "error:                      " << result << endl << endl;
+                // horizontal line where function is identically 0
+                // = 0.0
+                start_pt(0) = -3*M_PI; start_pt(1) = 0;
+                end_pt(0) = 3*M_PI; end_pt(1) = 0;
+                result = b->integrate_ray(cp, start_pt, end_pt, 1);
+                cerr << "(-3pi, 0)---(3pi, 0):       " << result << endl;
+                cerr << "actual:                     " << sintest(start_pt, end_pt) << endl;
+                cerr << "error:                      " << result << endl << endl;
 
-        // vertical line
-        // = 0.0
-        start_pt(0) = M_PI/2; start_pt(1) = -2*M_PI;
-        end_pt(0) = M_PI/2; end_pt(1) = 2*M_PI;
-        result = b->integrate_ray(cp, start_pt, end_pt, 1);
-        cerr << "(pi/2, -2pi)---(pi/2, 2pi): " << result << endl;
-        cerr << "actual:                     " << b->sintest(start_pt, end_pt) << endl;
-        cerr << "error:                      " << result << endl << endl;
-        
-        // horizontal line
-        // = 2.0
-        start_pt(0) = 0; start_pt(1) = M_PI/2;
-        end_pt(0) = M_PI; end_pt(1) = M_PI/2;
-        result = b->integrate_ray(cp, start_pt, end_pt, 1);
-        cerr << "(0, pi/2)---(pi, pi/2):     " << result << endl;
-        cerr << "actual:                     " << b->sintest(start_pt, end_pt) << endl;
-        cerr << "relative error:             " << abs((result-2)/2) << endl << endl;
+                // vertical line
+                // = 0.0
+                start_pt(0) = M_PI/2; start_pt(1) = -2*M_PI;
+                end_pt(0) = M_PI/2; end_pt(1) = 2*M_PI;
+                result = b->integrate_ray(cp, start_pt, end_pt, 1);
+                cerr << "(pi/2, -2pi)---(pi/2, 2pi): " << result << endl;
+                cerr << "actual:                     " << sintest(start_pt, end_pt) << endl;
+                cerr << "error:                      " << result << endl << endl;
+                
+                // horizontal line
+                // = 2.0
+                start_pt(0) = 0; start_pt(1) = M_PI/2;
+                end_pt(0) = M_PI; end_pt(1) = M_PI/2;
+                result = b->integrate_ray(cp, start_pt, end_pt, 1);
+                cerr << "(0, pi/2)---(pi, pi/2):     " << result << endl;
+                cerr << "actual:                     " << sintest(start_pt, end_pt) << endl;
+                cerr << "relative error:             " << abs((result-2)/2) << endl << endl;
 
-        // line y=x
-        // = 5.75864344326
-        start_pt(0) = 0, start_pt(1) = 0;
-        end_pt(0) = 8, end_pt(1) = 8;
-        result = b->integrate_ray(cp, start_pt, end_pt, 1);
-        cerr << "(0, 0)---(8, 8):            " << result << endl;
-        cerr << "actual:                     " << b->sintest(start_pt, end_pt) << endl;
-        cerr << "relative error:             " << abs((result-5.75864344326)/5.75864344326) << endl << endl;
+                // line y=x
+                // = 5.75864344326
+                start_pt(0) = 0, start_pt(1) = 0;
+                end_pt(0) = 8, end_pt(1) = 8;
+                result = b->integrate_ray(cp, start_pt, end_pt, 1);
+                cerr << "(0, 0)---(8, 8):            " << result << endl;
+                cerr << "actual:                     " << sintest(start_pt, end_pt) << endl;
+                cerr << "relative error:             " << abs((result-5.75864344326)/5.75864344326) << endl << endl;
 
-        // "arbitrary" line
-        // = 1.2198958397433
-        start_pt(0) = -2; start_pt(1) = -4;
-        end_pt(0) = 3; end_pt(1) = 11;
-        result = b->integrate_ray(cp, start_pt, end_pt, 1);
-        cerr << "(-2, -4)---(3, 11):         " << result << endl;
-        cerr << "actual:                     " << b->sintest(start_pt, end_pt) << endl;
-        cerr << "relative error:             " << abs((result-1.2198958397433)/1.2198958397433) << endl << endl;
+                // "arbitrary" line
+                // = 1.2198958397433
+                start_pt(0) = -2; start_pt(1) = -4;
+                end_pt(0) = 3; end_pt(1) = 11;
+                result = b->integrate_ray(cp, start_pt, end_pt, 1);
+                cerr << "(-2, -4)---(3, 11):         " << result << endl;
+                cerr << "actual:                     " << sintest(start_pt, end_pt) << endl;
+                cerr << "relative error:             " << abs((result-1.2198958397433)/1.2198958397433) << endl << endl;
 
-        std::vector<real_t> ierrs_abs;
-        std::vector<real_t> ierrs_rel;
-        std::random_device dev;
-        std::mt19937 rng(dev());
-        real_t x0, x1, y0, y1;
-        real_t ierror_abs=0, ierror_rel=0, actual=0, rms_abs=0, rms_rel=0, avg_abs=0, avg_rel=0, len=0;
-        std::uniform_real_distribution<double> dist(0,1); 
-        for (int i = 0; i < num_ints; i++)
-        {
-            x0 = dist(rng)* 8*M_PI - 4*M_PI;
-            y0 = dist(rng)* 8*M_PI - 4*M_PI;
-            x1 = dist(rng)* 8*M_PI - 4*M_PI;
-            y1 = dist(rng)* 8*M_PI - 4*M_PI;
-            start_pt(0) = x0;
-            start_pt(1) = y0;
-            end_pt(0) = x1;
-            end_pt(1) = y1;
-            len = sqrt((x1-x0)*(x1-x0) + (y1-y0)*(y1-y0));
-            result = b->integrate_ray(cp, start_pt, end_pt, 1) / len;   // normalize by segment length
-            actual = b->sintest(start_pt, end_pt) / len;                        // normalize by segment length
-            ierror_abs = abs(result - actual);
-            ierror_rel = ierror_abs/extent;
-            ierrs_abs.push_back(ierror_abs);
-            ierrs_rel.push_back(ierror_rel);
-            // cerr << "(" << x0 << ", " << y0 << ")---(" << x1 << ", " << y1 << "):  " << endl;
-            // cerr << "  Result: " << setprecision(6) << result << endl;
-            // cerr << "  Actual: " << setprecision(6) << actual << endl;
-            // cerr << "  Length:    " << setprecision(3) << len << endl;
-            // cerr << "  Error (abs):  " << setprecision(6) << ierror_abs << endl;
-            // cerr << "  Error (rel):  " << setprecision(6) << ierror_rel << endl;
-        }
-
-        cerr << "\nComputed " << num_ints << " random line integrals." << endl;
-        cerr << "  Max error (abs): " << setprecision(6) << *max_element(ierrs_abs.begin(), ierrs_abs.end()) << 
-                    "\t" << "Max error (rel): " << *max_element(ierrs_rel.begin(), ierrs_rel.end()) << endl;
-        cerr << "  Min error (abs): " << setprecision(6) << *min_element(ierrs_abs.begin(), ierrs_abs.end()) << 
-                    "\t" << "Min error (rel): " << *min_element(ierrs_rel.begin(), ierrs_rel.end()) << endl;
-        for (int j = 0; j < ierrs_abs.size(); j++)
-        {
-            rms_abs += ierrs_abs[j] * ierrs_abs[j];
-            rms_rel += ierrs_rel[j] * ierrs_rel[j];
-            avg_abs += ierrs_abs[j];
-            avg_rel += ierrs_rel[j];
-        }
-        rms_abs = rms_abs/ierrs_abs.size();
-        rms_abs = sqrt(rms_abs);
-        rms_rel = rms_rel/ierrs_rel.size();
-        rms_rel = sqrt(rms_rel);
-        avg_abs = avg_abs/ierrs_abs.size();
-        avg_rel = avg_rel/ierrs_rel.size();
-        cerr << "  Avg error (abs): " << setprecision(6) << avg_abs << "\t" << "Avg error (rel): " << avg_rel << endl;
-        cerr << "  RMS error (abs): " << setprecision(6) << rms_abs << "\t" << "RMS error (rel): " << rms_rel << endl;
-
-        ofstream errfile_abs, errfile_rel;
-        errfile_abs.open("li_errors_abs.txt");
-        errfile_rel.open("li_errors_rel.txt");
-        for (int i = 0; i < ierrs_abs.size(); i++)
-        {
-            errfile_abs << ierrs_abs[i] << endl;
-            errfile_rel << ierrs_rel[i] << endl;
-        }
-        errfile_abs.close();
-        errfile_rel.close();
-
-        ofstream segmenterrfile;
-        segmenterrfile.open("seg_errors.txt");
-        int test_n_alpha = 150;
-        int test_n_rho = 150;
-        real_t r_lim = b->bounds_maxs(1);   // WARNING TODO: make r_lim query-able in RayMFA class
-        for (int i = 0; i < test_n_alpha; i++)
-        {
-            for (int j = 0; j < test_n_rho; j++)
-            {
-                real_t alpha = 3.14159265 / (test_n_alpha-1) * i;
-                real_t rho = r_lim*2 / (test_n_rho-1) * j - r_lim;
-                real_t x0, x1, y0, y1;   // end points of full line
-
-                cerr << alpha << " " << rho << endl;
-
-                b->get_box_intersections(alpha, rho, x0, y0, x1, y1, b->box_mins, b->box_maxs);
-                if (x0==0 && y0==0 && x1==0 && y1==0)
+                std::vector<real_t> ierrs_abs;
+                std::vector<real_t> ierrs_rel;
+                std::random_device dev;
+                std::mt19937 rng(dev());
+                real_t x0, x1, y0, y1;
+                real_t ierror_abs=0, ierror_rel=0, actual=0, rms_abs=0, rms_rel=0, avg_abs=0, avg_rel=0, len=0;
+                std::uniform_real_distribution<double> dist(0,1); 
+                for (int i = 0; i < num_ints; i++)
                 {
-                    segmenterrfile << alpha << " " << rho << " " << 0 << endl;
-                }
-                else
-                {
-                    // x0 = rho * cos(alpha) - r_lim * sin(alpha); if (x0 < -4*M_PI) x0 = -4*M_PI; if (x0 > 4*M_PI) x0 = 4*M_PI;
-                    // x1 = rho * cos(alpha) + r_lim * sin(alpha); if (x1 < -4*M_PI) x1 = -4*M_PI; if (x1 > 4*M_PI) x1 = 4*M_PI;
-                    // y0 = rho * sin(alpha) + r_lim * cos(alpha); if (y0 < -4*M_PI) y0 = -4*M_PI; if (y0 > 4*M_PI) y0 = 4*M_PI;
-                    // y1 = rho * sin(alpha) - r_lim * cos(alpha); if (y1 < -4*M_PI) y1 = -4*M_PI; if (y1 > 4*M_PI) y1 = 4*M_PI;
-                    real_t length = sqrt((x1-x0)*(x1-x0) + (y1-y0)*(y1-y0));
-
-                    start_pt(0) = x0; 
+                    x0 = dist(rng)* 8*M_PI - 4*M_PI;
+                    y0 = dist(rng)* 8*M_PI - 4*M_PI;
+                    x1 = dist(rng)* 8*M_PI - 4*M_PI;
+                    y1 = dist(rng)* 8*M_PI - 4*M_PI;
+                    start_pt(0) = x0;
                     start_pt(1) = y0;
                     end_pt(0) = x1;
                     end_pt(1) = y1;
-
-                    real_t test_result = b->integrate_ray(cp, start_pt, end_pt, 1) / length;   // normalize by segment length
-                    real_t test_actual = b->sintest(start_pt, end_pt) / length;
-
-                    real_t e_abs = abs(test_result - test_actual);
-                    real_t e_rel = e_abs/extent;
-
-                    segmenterrfile << alpha << " " << rho << " " << e_rel << endl;
+                    len = sqrt((x1-x0)*(x1-x0) + (y1-y0)*(y1-y0));
+                    result = b->integrate_ray(cp, start_pt, end_pt, 1) / len;   // normalize by segment length
+                    actual = sintest(start_pt, end_pt) / len;                        // normalize by segment length
+                    ierror_abs = abs(result - actual);
+                    ierror_rel = ierror_abs/extent;
+                    ierrs_abs.push_back(ierror_abs);
+                    ierrs_rel.push_back(ierror_rel);
+                    // cerr << "(" << x0 << ", " << y0 << ")---(" << x1 << ", " << y1 << "):  " << endl;
+                    // cerr << "  Result: " << setprecision(6) << result << endl;
+                    // cerr << "  Actual: " << setprecision(6) << actual << endl;
+                    // cerr << "  Length:    " << setprecision(3) << len << endl;
+                    // cerr << "  Error (abs):  " << setprecision(6) << ierror_abs << endl;
+                    // cerr << "  Error (rel):  " << setprecision(6) << ierror_rel << endl;
                 }
-                
-            }
-        }
-        segmenterrfile.close();
-                    });
+
+                cerr << "\nComputed " << num_ints << " random line integrals." << endl;
+                cerr << "  Max error (abs): " << setprecision(6) << *max_element(ierrs_abs.begin(), ierrs_abs.end()) << 
+                            "\t" << "Max error (rel): " << *max_element(ierrs_rel.begin(), ierrs_rel.end()) << endl;
+                cerr << "  Min error (abs): " << setprecision(6) << *min_element(ierrs_abs.begin(), ierrs_abs.end()) << 
+                            "\t" << "Min error (rel): " << *min_element(ierrs_rel.begin(), ierrs_rel.end()) << endl;
+                for (int j = 0; j < ierrs_abs.size(); j++)
+                {
+                    rms_abs += ierrs_abs[j] * ierrs_abs[j];
+                    rms_rel += ierrs_rel[j] * ierrs_rel[j];
+                    avg_abs += ierrs_abs[j];
+                    avg_rel += ierrs_rel[j];
+                }
+                rms_abs = rms_abs/ierrs_abs.size();
+                rms_abs = sqrt(rms_abs);
+                rms_rel = rms_rel/ierrs_rel.size();
+                rms_rel = sqrt(rms_rel);
+                avg_abs = avg_abs/ierrs_abs.size();
+                avg_rel = avg_rel/ierrs_rel.size();
+                cerr << "  Avg error (abs): " << setprecision(6) << avg_abs << "\t" << "Avg error (rel): " << avg_rel << endl;
+                cerr << "  RMS error (abs): " << setprecision(6) << rms_abs << "\t" << "RMS error (rel): " << rms_rel << endl;
+
+                ofstream errfile_abs, errfile_rel;
+                errfile_abs.open("li_errors_abs.txt");
+                errfile_rel.open("li_errors_rel.txt");
+                for (int i = 0; i < ierrs_abs.size(); i++)
+                {
+                    errfile_abs << ierrs_abs[i] << endl;
+                    errfile_rel << ierrs_rel[i] << endl;
+                }
+                errfile_abs.close();
+                errfile_rel.close();
+
+                ofstream segmenterrfile;
+                segmenterrfile.open("seg_errors.txt");
+                int test_n_alpha = 150;
+                int test_n_rho = 150;
+                real_t r_lim = b->bounds_maxs(1);   // WARNING TODO: make r_lim query-able in RayMFA class
+                for (int i = 0; i < test_n_alpha; i++)
+                {
+                    for (int j = 0; j < test_n_rho; j++)
+                    {
+                        real_t alpha = 3.14159265 / (test_n_alpha-1) * i;
+                        real_t rho = r_lim*2 / (test_n_rho-1) * j - r_lim;
+                        real_t x0, x1, y0, y1;   // end points of full line
+
+                        b->get_box_intersections(alpha, rho, x0, y0, x1, y1, b->box_mins, b->box_maxs);
+                        if (x0==0 && y0==0 && x1==0 && y1==0)
+                        {
+                            segmenterrfile << alpha << " " << rho << " " << 0 << endl;
+                        }
+                        else
+                        {
+                            real_t length = sqrt((x1-x0)*(x1-x0) + (y1-y0)*(y1-y0));
+                            start_pt(0) = x0; 
+                            start_pt(1) = y0;
+                            end_pt(0) = x1;
+                            end_pt(1) = y1;
+
+                            real_t test_result = b->integrate_ray(cp, start_pt, end_pt, 1) / length;   // normalize by segment length
+                            real_t test_actual = sintest(start_pt, end_pt) / length;
+
+                            real_t e_abs = abs(test_result - test_actual);
+                            real_t e_rel = e_abs/extent;
+
+                            segmenterrfile << alpha << " " << rho << " " << e_rel << endl;
+                        }
+                        
+                    }
+                }
+                segmenterrfile.close();
+            });
     decode_time = MPI_Wtime() - decode_time;
 
     // print results
