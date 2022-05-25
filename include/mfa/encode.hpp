@@ -502,7 +502,23 @@ namespace mfa
             {
                 T c_sum = N.col(i).sum();
                 T c_add = (c_sum < c_target) ? c_target - c_sum : 0;
-                lambda.diagonal()(i) = c_add / C.col(i).cwiseAbs().sum();
+                if (deriv > 1)
+                {
+                    lambda.diagonal()(i) = c_add / C.col(i).cwiseAbs().sum();
+                }
+                else    
+                {
+                    // Experimental: For 1st deriv constraints, only use when there are no value constraints
+                    //      Initial tests indicate this is a good idea. Using only 2nd deriv constraints can 
+                    //      cause the solve to take a long time or not converge, but adding 1st deriv 
+                    //      constraints can lead to artificial "flat patches" when the number of control points
+                    //      is high. This new method seems to mitigate the flat patches while still improving 
+                    //      the solve in terms of conditioning and speed.
+                    if (c_sum == 0)
+                        lambda.diagonal()(i) = c_add / C.col(i).cwiseAbs().sum();
+                    else
+                        lambda.diagonal()(i) = 0;
+                }
 
                 if (i==4)// DEBUG
                 {
