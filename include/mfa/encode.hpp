@@ -502,10 +502,10 @@ namespace mfa
             {
                 T c_sum = N.col(i).sum();
                 T c_add = (c_sum < c_target) ? c_target - c_sum : 0;
+                lambda.diagonal()(i) = c_add / C.col(i).cwiseAbs().sum();
 
                 if (i==4)// DEBUG
                 {
-                    lambda.diagonal()(i) = c_add / C.col(i).cwiseAbs().sum();
                     cerr << "\n" << C.col(i).cwiseAbs().sum() << endl;
                     cerr << lambda.diagonal()(i) << endl;
                     cerr << C.col(i).coeffs().size() << endl;
