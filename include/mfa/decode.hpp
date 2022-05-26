@@ -19,7 +19,8 @@ typedef Eigen::MatrixXi MatrixXi;
 #ifdef MFA_KOKKOS
     using ExecutionSpace = Kokkos::DefaultExecutionSpace;
     using MemorySpace = ExecutionSpace::memory_space;
-#define MAXP1 15
+#define MFA_MAXP1 15
+#define MFA_MAX_DIM 7
 #endif
 //#define  PRINT_DEBUG2
 namespace mfa
@@ -548,14 +549,16 @@ namespace mfa
 		                N(cur_dim,row,i) = 0;*/
 
 		            // init
-		            T scratch[MAXP1];                  // scratchpad, same as N in P&T p. 70
-		            scratch[0] = 1.0;
-
+					// subview replaces scratch
+					auto subv_scr = Kokkos::subview(newNN, k, i, Kokkos::make_pair(mid - pk, mid + 1 ));
+		            //T scratch[MAXP1];                  // scratchpad, same as N in P&T p. 70
+		            //scratch[0] = 1.0;
+					subv_scr(0) = 1.0;
 		            // temporary recurrence results
 		            // left(j)  = u - knots(span + 1 - j)
 		            // right(j) = knots(span + j) - u
-		            T left[MAXP1];
-		            T right[MAXP1];
+		            T left[MFA_MAXP1];
+		            T right[MFA_MAXP1];
 
 		            // fill N
 		            for (int j = 1; j <= pk; j++)
@@ -568,16 +571,19 @@ namespace mfa
 		                T saved = 0.0;
 		                for (int r = 0; r < j; r++)
 		                {
-		                    T temp = scratch[r] / (right[r + 1] + left[j - r]);
-		                    scratch[r] = saved + right[r + 1] * temp;
+		                    // T temp = scratch[r] / (right[r + 1] + left[j - r]);
+		                	T temp = subv_scr(r) / (right[r + 1] + left[j - r]);
+		                    // scratch[r] = saved + right[r + 1] * temp;
+		                    subv_scr(r) = saved + right[r + 1] * temp;
 		                    saved = left[j - r] * temp;
 		                }
-		                scratch[j] = saved;
+		                //scratch[j] = saved;
+		                subv_scr(j) = saved;
 		            }
 
-		            // copy scratch to N
+		            /*// copy scratch to N
 		            for (int j = 0; j < pk + 1; j++)
-		            	newNN (k, i, mid - pk + j) = scratch[j];
+		            	newNN (k, i, mid - pk + j) = scratch[j];*/
 					// end copy
             	});
             }
