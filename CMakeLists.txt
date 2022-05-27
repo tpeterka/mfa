@@ -11,7 +11,7 @@ option                      (KOKKOS_LIBRARY "Kokkos library (optional)"         
 option                      (OPENMP_LIBRARY "OpenMP library if not found automatically (optional)"                                  )
 
 # C++11
-set                         (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
+# set                         (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
 
 # Default to Release
 if                          (NOT CMAKE_BUILD_TYPE)
