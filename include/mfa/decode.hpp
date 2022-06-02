@@ -474,7 +474,7 @@ namespace mfa
             size_t max_ndom_size = ndom_pts.maxCoeff(&max_index);
             // it is hard to do a vector of Kokkos::Views() actually, it is not advisable
             // still need to think about this
-            Kokkos::View<double***> newNN("kNN", kdom_dim, max_ndom_size, max_ctrl_size );
+            Kokkos::View<double***> newNN("kNN", max_ndom_size, max_ctrl_size, kdom_dim );
             //Kokkos::View<double***>::HostMirror h_newNN = Kokkos::create_mirror_view(newNN); // this will be on host, and accessible from CPU
             // also, make a copy of the cs and ct arrays, used for iterations in control points space
             // these need to be on device too: as kcs and kct
@@ -550,7 +550,7 @@ namespace mfa
 
 		            // init
 					// subview replaces scratch
-					auto subv_scr = Kokkos::subview(newNN, k, i, Kokkos::make_pair(mid - pk, mid + 1 ));
+					auto subv_scr = Kokkos::subview(newNN, i, Kokkos::make_pair(mid - pk, mid + 1), k );
 		            //T scratch[MAXP1];                  // scratchpad, same as N in P&T p. 70
 		            //scratch[0] = 1.0;
 					subv_scr(0) = 1.0;
@@ -669,7 +669,7 @@ namespace mfa
                         double ctrl = ctrl_pts_k(ctrl_idx_it);
 
                         for (int k=0; k<kdom_dim; k++)
-                            ctrl *= newNN(k, ij_grid[k] , span_st[k] + ij_patch[k] );
+                            ctrl *= newNN( ij_grid[k] , span_st[k] + ij_patch[k], k );
 
                         value += ctrl;
                     }
