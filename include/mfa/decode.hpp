@@ -518,7 +518,7 @@ namespace mfa
             	for (int i = 0; i < nctk+pk+1; i++)
             		h_lknots(i) =  mfa_data.tmesh.all_knots[k][i];
             	Kokkos::deep_copy(lknots, h_lknots);
-            	Kokkos::parallel_for( "decode_mult", npk,
+            	Kokkos::parallel_for( "shape_func_precom", npk,
             	                KOKKOS_LAMBDA ( const int i ) {
             	    // find span first, and store it for later
             		// binary search
@@ -628,7 +628,7 @@ namespace mfa
             // all local variables are passed by value, which is fine for Kokkos Views and
             // simple types double, int, but not for structures !
             // this is why using kdom_dim inside is fine, while mfa_data.dom_dim is not
-            Kokkos::parallel_for( "shape_func", ntot,
+            Kokkos::parallel_for( "decode_resol", ntot,
                 KOKKOS_LAMBDA ( const int i ) {
 
                     int leftover=i;
