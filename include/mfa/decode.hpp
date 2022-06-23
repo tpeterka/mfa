@@ -501,6 +501,7 @@ namespace mfa
             // we should use it in serial too
             // compute basis functions for points to be decoded
             Kokkos::View<int** > span_starts("spans", kdom_dim, max_ndom_size );
+            Kokkos::Profiling::pushRegion("ShapeFunc");
             //Kokkos::View<int ** >::HostMirror h_span_starts = Kokkos::create_mirror_view(span_starts);
             for (int k = 0; k < mfa_data.dom_dim; k++) {
             	//auto subk = subview (newNN, k, Kokkos::ALL(), Kokkos::ALL());
@@ -587,7 +588,7 @@ namespace mfa
 					// end copy
             	});
             }
-
+            Kokkos::Profiling::popRegion();
             // up to here we computed the shape functions, now use them
 
             // prepare control points view, fill host and copy to device
@@ -619,15 +620,16 @@ namespace mfa
             Kokkos::deep_copy(strides_patch, h_strides_patch);
 
             int ntot = result.rows();
-
+            Kokkos::Profiling::pushRegion("AllocateRes");
             Kokkos::View<double*> res_dev("result", ntot );
             auto res_h = Kokkos::create_mirror_view(res_dev);
-
+            Kokkos::Profiling::popRegion(); // "AllocateRes"
 
             // KOKKOS_LAMBDA expands to [=] __device__ __host__
             // all local variables are passed by value, which is fine for Kokkos Views and
             // simple types double, int, but not for structures !
             // this is why using kdom_dim inside is fine, while mfa_data.dom_dim is not
+            Kokkos::Profiling::pushRegion("DecodeAtRes");
             Kokkos::parallel_for( "decode_resol", ntot,
                 KOKKOS_LAMBDA ( const int i ) {
 
@@ -676,6 +678,7 @@ namespace mfa
                     res_dev(i) = value;
                 }
             );
+            Kokkos::Profiling::popRegion(); // "DecodeAtRes"
             Kokkos::deep_copy(res_h, res_dev);
             for (int j=0; j<ntot; j++)
                 result(j, mfa_data.dom_dim) = res_h(j);
