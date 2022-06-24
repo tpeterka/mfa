@@ -55,7 +55,7 @@ int main(int argc, char** argv)
     int    rand_seed    = -1;                   // seed to use for random data generation (-1 == no randomization)
     int    resolutionGrid = 0;
     bool   help         = false;                // show help
-  
+
 
     // get command line arguments
     opts::Options ops;
@@ -281,7 +281,7 @@ int main(int argc, char** argv)
     fprintf(stderr, "-------------------------------------\n\n");
 
     // save the results in diy format
-    diy::io::write_blocks("approx.out", world, master);
+    diy::io::write_blocks("approx.mfa", world, master);
 
     // check the results of the last (only) science variable
     Block<real_t>* b    = static_cast<Block<real_t>*>(master.block(0));

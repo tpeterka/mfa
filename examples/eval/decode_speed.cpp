@@ -34,7 +34,7 @@ int main(int argc, char** argv)
 
     // default command line arguments
     int     num_iters   = 10000;                // number of random points to decode
-    string  infile      = "approx.out";         // diy input file
+    string  infile      = "approx.mfa";         // diy input file
     bool    help;                               // show help
 
     // get command line arguments

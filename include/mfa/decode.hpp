@@ -246,6 +246,7 @@ namespace mfa
             // ref: https://www.threadingbuildingblocks.org/tutorial-intel-tbb-thread-local-storage
             enumerable_thread_specific<DecodeInfo<T>> thread_decode_info(mfa_data, derivs);
 
+            static affinity_partitioner ap;
             parallel_for (blocked_range<size_t>(0, ps.npts), [&](blocked_range<size_t>& r)
             {
                 auto pt_it  = ps.iterator(r.begin());
@@ -288,7 +289,7 @@ namespace mfa
 
                     ps.domain.block(pt_it.idx(), min_dim, 1, mfa_data.dim()) = cpt.transpose();
                 }
-            });
+            }, ap);
             if (verbose)
                 fprintf(stderr, "100 %% decoded\n");
 
@@ -374,13 +375,13 @@ namespace mfa
                 {
                     N[i]       = MatrixX<T>::Zero(1, tensor.nctrl_pts(i));
 
-                    spans(i) = mfa_data.FindSpan(i, params(i), tensor);
+                    spans(i) = mfa_data.tmesh.FindSpan(i, params(i), tensor);
                     mfa_data.BasisFuns(i, params(i), spans[i], N[i], 0);
                 }
             }
 
-            T span0 = mfa_data.FindSpan(dim, u0, tensor); 
-            T span1 = mfa_data.FindSpan(dim, u1, tensor);
+            T span0 = mfa_data.tmesh.FindSpan(dim, u0, tensor); 
+            T span1 = mfa_data.tmesh.FindSpan(dim, u1, tensor);
             spans(dim) = span0;     // set this so we can pass 'spans' to the VolIterator below
 
             // Compute integrated basis functions in dimension 'dim'
@@ -469,8 +470,8 @@ namespace mfa
 
             for (int i = 0; i < dom_dim; i++)
             {
-                spana(i) = mfa_data.FindSpan(i, a(i), tensor);
-                spanb(i) = mfa_data.FindSpan(i, b(i), tensor);
+                spana(i) = mfa_data.tmesh.FindSpan(i, a(i), tensor);
+                spanb(i) = mfa_data.tmesh.FindSpan(i, b(i), tensor);
             }
 
             VolIterator cp_it(spanb - spana + mfa_data.p + VectorXi::Ones(dom_dim), spana - mfa_data.p, tensor.nctrl_pts);
@@ -519,7 +520,7 @@ namespace mfa
 
                 for (int i = 0; i < dom_dim; i++)
                 {                        
-                    span(i) = mfa_data.FindSpan(i, param(i), tensor);
+                    span(i) = mfa_data.tmesh.FindSpan(i, param(i), tensor);
 
                     if (i != int_dim)
                         mfa_data.OrigBasisFuns(i, param(i), span(i), di.N[i], 0);
@@ -583,7 +584,7 @@ namespace mfa
 
                 for (int i = 0; i < NN[k].rows(); i++)
                 {
-                    int span = mfa_data.FindSpan(k, params[k][i], nctrl_pts(k));
+                    int span = mfa_data.tmesh.FindSpan(k, params[k][i], nctrl_pts(k));
 #ifndef MFA_TMESH   // original version for one tensor product
 
                     mfa_data.OrigBasisFuns(k, params[k][i], span, NN[k], i);
@@ -667,120 +668,76 @@ namespace mfa
         // TODO: serial implementation, no threading
         // TODO: no derivatives as yet
         // TODO: weighs all dims, whereas other versions of VolPt have a choice of all dims or only last dim
+        // TODO: need a tensor product locating structure to quickly locate the tensor product containing param
         void VolPt_tmesh(const VectorX<T>&      param,      // parameters of point to decode
                          VectorX<T>&            out_pt)     // (output) point, allocated by caller
         {
-            // debug
-//             cerr << "VolPt_tmesh(): decoding point with param: " << param.transpose() << endl;
-
-            // debug
-            bool debug = false;
-//             if (fabs(param(0) - 0.010101) < 1e-3 && fabs(param(1) - 0.0) < 1e-3)
-//                 debug = true;
-
             // init
             out_pt = VectorX<T>::Zero(out_pt.size());
             T B_sum = 0.0;                                                          // sum of multidim basis function products
             T w_sum = 0.0;                                                          // sum of control point weights
 
             // compute range of anchors covering decoded point
+            // TODO: need a tensor product locating structure to quickly locate the tensor product containing param
+            // current passing tensor 0 as a seed for the search
             vector<vector<KnotIdx>> anchors(mfa_data.dom_dim);
+            TensorIdx found_idx = mfa_data.tmesh.anchors(param, 0, anchors);        // 0 is the seed for searching for the correct tensor TODO
 
-            //             DEPRECATE using the 'expand' argument in anchors()
-//             mfa_data.tmesh.anchors(param, true, anchors);
-            mfa_data.tmesh.anchors(param, anchors);
+            // extents of original anchors expanded for adjacent tensors
+            vector<vector<KnotIdx>> anchor_extents(mfa_data.dom_dim);
+            bool changed = mfa_data.tmesh.expand_anchors(anchors, found_idx, anchor_extents);
 
             for (auto k = 0; k < mfa_data.tmesh.tensor_prods.size(); k++)           // for all tensor products
             {
                 const TensorProduct<T>& t = mfa_data.tmesh.tensor_prods[k];
 
-                // debug
-                if (debug)
-                {
-                    fmt::print(stderr, "VolPt_tmesh(): tensor {}\n", k);
-                    for (auto j = 0; j < mfa_data.dom_dim; j++)
-                        fmt::print(stderr, "anchors[{}] = [{}]\n", j, fmt::join(anchors[j], ","));
-                }
-
                 // skip entire tensor if knot mins, maxs are too far away from decoded point
                 bool skip = false;
                 for (auto j = 0; j < mfa_data.dom_dim; j++)
                 {
-                    if (t.knot_maxs[j] < anchors[j].front() || t.knot_mins[j] > anchors[j].back())
+                    if (t.knot_maxs[j] < anchor_extents[j].front() || t.knot_mins[j] > anchor_extents[j].back())
                     {
-                        // debug
-                        if (debug)
-                            cerr << "Skipping tensor " << k << " when decoding point param " << param.transpose() << endl;
-
                         skip = true;
                         break;
                     }
                 }
-
                 if (skip)
                     continue;
 
+                // iterate over the control points in the tensor
                 VolIterator         vol_iterator(t.nctrl_pts);                      // iterator over control points in the current tensor
-                vector<KnotIdx>     anchor(mfa_data.dom_dim);                       // one anchor in (global, ie, over all tensors) index space
+                vector<KnotIdx>     ctrl_anchor(mfa_data.dom_dim);                  // anchor of control point in (global, ie, over all tensors) index space
                 VectorXi            ijk(mfa_data.dom_dim);                          // multidim index of current control point
 
-                while (!vol_iterator.done())
+                while (!vol_iterator.done())                                        // for all control points in the tensor
                 {
                     // get anchor of the current control point
                     vol_iterator.idx_ijk(vol_iterator.cur_iter(), ijk);
-                    mfa_data.tmesh.ctrl_pt_anchor(t, ijk, anchor);
+                    mfa_data.tmesh.ctrl_pt_anchor(t, ijk, ctrl_anchor);
 
                     // skip odd degree duplicated control points, indicated by invalid weight
                     if (t.weights(vol_iterator.cur_iter()) == MFA_NAW)
                     {
-                        // debug
-//                         if (debug)
-//                             cerr << "skipping ctrl pt (MFA_NAW) " << t.ctrl_pts.row(vol_iterator.cur_iter()) << endl;
-
                         vol_iterator.incr_iter();
                         continue;
                     }
 
                     // debug
-//                     bool skip = false;
+                    bool skip1 = false;
 
                     // skip control points too far away from the decoded point
-                    if (!mfa_data.tmesh.in_anchors(anchor, anchors))
+                    if (!mfa_data.tmesh.in_anchors(ctrl_anchor, anchor_extents))
                     {
                         // debug
-//                         if (debug)
-//                         {
-//                             cerr << "skipping ctrl pt (too far away) [" << ijk.transpose() << "] " << t.ctrl_pts.row(vol_iterator.cur_iter()) << endl;
-//                             fmt::print(stderr, "anchor [{}]\n", fmt::join(anchor, ","));
-//                         }
-
-                        // debug
-//                         if (debug)
-//                             skip = true;
-
-                        // debug
-//                         skip = true;
+                        skip1 = true;
 
                         vol_iterator.incr_iter();
                         continue;
                     }
-
-                    // debug
-//                     if (debug)
-//                         fmt::print(stderr, "VolPt_tmesh() calling knot_intersections w/ anchor [{}]\n", fmt::join(anchor, ","));
 
                     // intersect tmesh lines to get local knot indices in all directions
                     vector<vector<KnotIdx>> local_knot_idxs(mfa_data.dom_dim);          // local knot vectors in index space
-                    mfa_data.tmesh.knot_intersections(anchor, k, true, local_knot_idxs);
-
-                    // debug
-//                     if (debug)
-//                     {
-//                         fmt::print(stderr, "VolPt_tmesh(): anchor [{}] ", fmt::join(anchor, ","));
-//                         for (auto j = 0; j < mfa_data.dom_dim; j++)
-//                             fmt::print(stderr, "local_knot_idxs[{}] [{}] ", j, fmt::join(local_knot_idxs[j], ","));
-//                         fmt::print(stderr, "\n");
-//                     }
+                    mfa_data.tmesh.knot_intersections(ctrl_anchor, k, local_knot_idxs);
 
                     // compute product of basis functions in each dimension
                     T B = 1.0;                                                          // product of basis function values in each dimension
@@ -797,28 +754,40 @@ namespace mfa
                     out_pt += B * t.ctrl_pts.row(vol_iterator.cur_iter()) * t.weights(vol_iterator.cur_iter());
 
                     // debug
-//                     if (skip && B != 0.0)
+//                     T eps = 1e-8;
+//                     if ((skip || skip1) && B > eps)
 //                     {
-//                         cerr << "\nVolPt_tmesh(): Error: incorrect skip. decoding point with param: " << param.transpose() << endl;
-//                         cerr << "tensor " << k << " skipping ctrl pt [" << ijk.transpose() << "] " << endl;
-//                         fmt::print(stderr, "anchor [{}]\n", fmt::join(anchor, ","));
+//                         vector<KnotIdx> param_anchor(mfa_data.dom_dim);
+//                         mfa_data.tmesh.param_anchor(param, found_idx, param_anchor);
+//                         fmt::print(stderr, "\nVolPt_tmesh(): Error: incorrect skip. decoding point with param [{}] anchor [{}] found in tensor {}\n",
+//                                 param.transpose(), fmt::join(param_anchor, ","), found_idx);
+// 
+//                         vector<vector<KnotIdx>> loc_knots(mfa_data.dom_dim);
+//                         mfa_data.tmesh.knot_intersections(param_anchor, found_idx, loc_knots);
+//                         for (auto i = 0; i < mfa_data.dom_dim; i++)
+//                             fmt::print(stderr, "loc_knots[dim {}] = [{}]\n", i, fmt::join(loc_knots[i], ","));
+// 
+//                         fmt::print(stderr, "tensor {} skipping ctrl pt at ctrl_anchor [{}]\n", k, fmt::join(ctrl_anchor, ","));
+//                         fmt::print(stderr, "B {}\n", B);
+//                         for (auto i = 0; i < mfa_data.dom_dim; i++)
+//                             fmt::print(stderr, "anchors[dim {}] =  [{}] adj_anchors[dim {}] = [{}]\n",
+//                                     i, fmt::join(anchors[i], ","), i, fmt::join(anchor_extents[i], ","));
+//                         fmt::print(stderr, "\n Current T-mesh:\n");
+//                         mfa_data.tmesh.print(true, true);
+//                         abort();
 //                     }
 
                     B_sum += B * t.weights(vol_iterator.cur_iter());
 
                     vol_iterator.incr_iter();                                           // must increment volume iterator at the bottom of the loop
-                }       // volume iterator
+                }       // control points in the tensor
             }       // tensors
-
-            // debug
-//             if (debug)
-//                 cerr << "out_pt: " << out_pt.transpose() << " B_sum: " << B_sum << "\n" << endl;
 
             // divide by sum of weighted basis functions to make a partition of unity
             if (B_sum > 0.0)
                 out_pt /= B_sum;
             else
-                cerr << "Warning: VolPt_tmesh(): B_sum = 0 when decoding param: " << param.transpose() << " This should not happen." << endl;
+                fmt::print(stderr, "Warning: VolPt_tmesh(): B_sum = 0 when decoding param: [{}]\n", param.transpose());
         }
 
         // compute a point from a NURBS n-d volume at a given parameter value
@@ -884,7 +853,7 @@ namespace mfa
             for (size_t i = 0; i < mfa_data.dom_dim; i++)                       // for all dims
             {
                 temp[i]    = VectorX<T>::Zero(last + 1);
-                span[i]    = mfa_data.FindSpan(i, param(i), tensor);
+                span[i]    = mfa_data.tmesh.FindSpan(i, param(i), tensor);
                 N[i]       = MatrixX<T>::Zero(1, tensor.nctrl_pts(i));
                 if (derivs.size() && derivs(i))
                 {
@@ -991,7 +960,7 @@ namespace mfa
             for (size_t i = 0; i < mfa_data.dom_dim; i++)   // for all dims
             {
                 temp[i]    = VectorX<T>::Zero(last + 1);
-                span[i]    = mfa_data.FindSpan(i, param(i), nctrl_pts(i));
+                span[i]    = mfa_data.tmesh.FindSpan(i, param(i), nctrl_pts(i));
                 N[i]       = MatrixX<T>::Zero(1, nctrl_pts(i));
 
                 mfa_data.OrigBasisFuns(i, param(i), span[i], N[i], 0);
@@ -1073,7 +1042,7 @@ namespace mfa
             di.ctrl_idx = 0;
             for (int j = 0; j < mfa_data.dom_dim; j++)
             {
-                di.span[j]    = mfa_data.FindSpan(j, param(j), tensor);
+                di.span[j]    = mfa_data.tmesh.FindSpan(j, param(j), tensor);
                 di.ctrl_idx += (di.span[j] - mfa_data.p(j) + ct(0, j)) * cs[j];
             }
             size_t start_ctrl_idx = di.ctrl_idx;
@@ -1148,7 +1117,7 @@ namespace mfa
             di.ctrl_idx = 0;
             for (int j = 0; j < mfa_data.dom_dim; j++)
             {
-                di.span[j]    = mfa_data.FindSpan(j, param(j), tensor);
+                di.span[j]    = mfa_data.tmesh.FindSpan(j, param(j), tensor);
                 di.ctrl_idx += (di.span[j] - mfa_data.p(j) + ct(0, j)) * cs[j];
             }
             size_t start_ctrl_idx = di.ctrl_idx;
@@ -1233,7 +1202,7 @@ namespace mfa
             // basis funs
             for (size_t i = 0; i < mfa_data.dom_dim; i++)                       // for all dims
             {
-                di.span[i]    = mfa_data.FindSpan(i, param(i), tensor);
+                di.span[i]    = mfa_data.tmesh.FindSpan(i, param(i), tensor);
 
                 if (derivs.size() && derivs(i))
                 {
@@ -1331,7 +1300,7 @@ exit(1);
             // compute spans and basis functions for the given parameters
             for (int i = 0; i < dom_dim; i++)
             {
-                di.span[i] = mfa_data.FindSpan(i, param(i));
+                di.span[i] = mfa_data.tmesh.FindSpan(i, param(i));
 
                 mfa_data.FastBasisFuns(i, param(i), di.span[i], di.N[i], di.bfi);
             }
@@ -1394,7 +1363,7 @@ exit(1);
                 const TensorProduct<T>&         tensor,         // current tensor product
                 VectorX<T>&                     out_pt)         // (output) point
         {
-            int span   = mfa_data.FindSpan(cur_dim, param, tensor);
+            int span   = mfa_data.tmesh.FindSpan(cur_dim, param, tensor);
             MatrixX<T> N = MatrixX<T>::Zero(1, temp_ctrl.rows());// basis coefficients
 
 #ifndef MFA_TMESH                                               // original version for one tensor product

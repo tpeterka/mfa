@@ -74,11 +74,11 @@ add_test                    (NAME integrate-2d-test
 #                             )
 
 add_test                    (NAME differentiate-fixed-test
-                             COMMAND differentiate-test -i approx.out -d 1
+                             COMMAND differentiate-test -i approx.mfa -d 1
                             )
 
 add_test                    (NAME write-vtk-fixed-test
-                             COMMAND write-vtk-test approx.out
+                             COMMAND write-vtk-test approx.mfa
                             )
 
 add_test                    (NAME vol-iterator-test
@@ -103,7 +103,7 @@ foreach                     (p 1 3 4)
 endforeach                  (p)
 
 add_test                    (NAME write-vtk-multiblock-fixed-test
-                             COMMAND write-vtk-test approx.out
+                             COMMAND write-vtk-test approx.mfa
                             )
 
 foreach                     (p 1 2 3 6)
@@ -136,11 +136,11 @@ add_test                    (NAME adaptive-sinc-test
                             )
 
 add_test                    (NAME differentiate-adaptive-test
-                             COMMAND differentiate-test -i approx.out -d 1
+                             COMMAND differentiate-test -i approx.mfa -d 1
                             )
 
 add_test                    (NAME write-vtk-adaptive-test
-                             COMMAND write-vtk-test approx.out
+                             COMMAND write-vtk-test approx.mfa
                             )
 
 add_test                    (NAME adaptive-s3dtest

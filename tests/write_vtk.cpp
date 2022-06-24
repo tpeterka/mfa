@@ -477,7 +477,7 @@ int main(int argc, char ** argv)
     vector<vec3d>               err_pts;            // abs value error field
     string                      input  = "sine";        // input dataset
     int                         ntest  = 0;             // number of input test points in each dim for analytical error tests
-    string                      infile = "approx.out";  // diy input file
+    string                      infile = "approx.mfa";  // diy input file
     bool                        help;                   // show help
     int                         dom_dim, pt_dim;        // domain and point dimensionality, respectively
 

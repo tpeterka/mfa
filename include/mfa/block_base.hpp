@@ -243,7 +243,7 @@ struct BlockBase
 
         VectorX<T> extents = bounds_maxs - bounds_mins;
 
-        mfa->AdaptiveEncode(*input, err_limit, info.weighted, info.local, extents, max_rounds);
+        mfa->AdaptiveEncode(*input, err_limit, info.weighted, extents, max_rounds);
     }
 
     // decode entire block at the same parameter locations as 'input'
@@ -1641,6 +1641,8 @@ namespace diy
                             diy::load(bb, t.level);
                         diy::load(bb, md->tmesh.all_knots);
                         diy::load(bb, md->tmesh.all_knot_levels);
+                        for (TensorProduct<T>& t: md->tmesh.tensor_prods)
+                            md->tmesh.tensor_knot_idxs(t);
                     }   
                 }
         };

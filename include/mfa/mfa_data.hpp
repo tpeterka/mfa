@@ -13,23 +13,9 @@
 // using Eigen dense MartrixX to represent vectors of n-dimensional points
 // rows: points; columns: point coordinates
 //
-// using Eigen VectorX to represent a single point
-// to use a single point from a set of many points,
-// explicitly copying from a row of a matrix to a vector before using the vector for math
-// (and Eigen matrix row and vector are not interchangeable w/o doing an assignment,
-// at least not with the current default column-major matrix ordering, not contiguous)
-//
-// also using Eigen VectorX to represent a set of scalars such as knots or parameters
-//
-// TODO: think about row/column ordering of Eigen, choose the most contiguous one
-// (current default column ordering of points is not friendly to extracting a single point)
-//
-// TODO: think about Eigen sparse matrices
-// (N and NtN matrices, used for solving for control points, are very sparse)
-//
 // There are two types of dimensionality:
 // 1. The dimensionality of the NURBS tensor product (p.size())
-// (1D = NURBS curve, 2D = surface, 3D = volumem 4D = hypervolume, etc.)
+// (1D = NURBS curve, 2D = surface, 3D = volume 4D = hypervolume, etc.)
 // 2. The dimensionality of individual control points (ctrl_pts.cols())
 // p.size() < ctrl_pts.cols()
 //
@@ -99,8 +85,6 @@ namespace mfa
                                                  // for all input points (matrix rows) and control points (matrix cols)
         Tmesh<T>                  tmesh;         // t-mesh of knots, control points, weights
         T                         max_err;       // unnormalized absolute value of maximum error
-        //         DEPRECATED
-//         vector<KnotSpan<T>>       knot_spans;    // knot spans
 
         // constructor for creating an mfa from input points
         MFA_Data(
@@ -184,7 +168,6 @@ namespace mfa
                 for (auto i = 0; i < dom_dim; i++)
                     N[i] = MatrixX<T>::Zero(input.ndom_pts(i), tmesh.all_knots[i].size() - p(i) - 1);
             }
-            
 
             // initialize first tensor product
             vector<size_t> knot_mins(dom_dim);
@@ -206,131 +189,6 @@ namespace mfa
 #else
             UniformKnots(input, tmesh);                    // knots spaced uniformly
 #endif
-        }
-
-        // binary search to find the span in the knots vector containing a given parameter value
-        // returns span index i s.t. u is in [ knots[i], knots[i + 1] )
-        // NB closed interval at left and open interval at right
-        //
-        // i will be in the range [p, n], where n = number of control points - 1 because there are
-        // p + 1 repeated knots at start and end of knot vector
-        // algorithm 2.1, P&T, p. 68
-        int FindSpan(
-                int                     cur_dim,            // current dimension
-                T                       u,                  // parameter value
-                int                     nctrl_pts) const    // number of control points in current dim
-        {
-            if (u == tmesh.all_knots[cur_dim][nctrl_pts])
-                return nctrl_pts - 1;
-
-            // binary search
-            int low = p(cur_dim);
-            int high = nctrl_pts;
-            int mid = (low + high) / 2;
-            while (u < tmesh.all_knots[cur_dim][mid] || u >= tmesh.all_knots[cur_dim][mid + 1])
-            {
-                if (u < tmesh.all_knots[cur_dim][mid])
-                    high = mid;
-                else
-                    low = mid;
-                mid = (low + high) / 2;
-            }
-
-            return mid;
-        }
-
-        // binary search to find the span in the knots vector containing a given parameter value
-        // returns span index i s.t. u is in [ knots[i], knots[i + 1] )
-        // NB closed interval at left and open interval at right
-        //
-        // i will be in the range [p, n], where n = number of control points - 1 because there are
-        // p + 1 repeated knots at start and end of knot vector
-        // algorithm 2.1, P&T, p. 68
-        //
-        // number of control points computed from number of knots
-        int FindSpan(
-                int                     cur_dim,            // current dimension
-                T                       u) const            // parameter value
-        {
-            int nctrl_pts = tmesh.all_knots[cur_dim].size() - p(cur_dim) - 1;
-
-            if (u == tmesh.all_knots[cur_dim][nctrl_pts])
-                return nctrl_pts - 1;
-
-            // binary search
-            int low = p(cur_dim);
-            int high = nctrl_pts;
-            int mid = (low + high) / 2;
-            while (u < tmesh.all_knots[cur_dim][mid] || u >= tmesh.all_knots[cur_dim][mid + 1])
-            {
-                if (u < tmesh.all_knots[cur_dim][mid])
-                    high = mid;
-                else
-                    low = mid;
-                mid = (low + high) / 2;
-            }
-
-            // debug
-//             cerr << "u = " << u << " span = " << mid << endl;
-
-            return mid;
-        }
-
-        // binary search to find the span in the knots vector containing a given parameter value
-        // returns span index i s.t. u is in [ knots[i], knots[i + 1] )
-        // NB closed interval at left and open interval at right
-        // tmesh version
-        //
-        // i will be in the range [p, n], where n = number of control points - 1 because there are
-        // p + 1 repeated knots at start and end of knot vector
-        // algorithm 2.1, P&T, p. 68
-        //
-        // prints an error and returns -1 if u is not in the min,max range of knots in tensor or if levels of u and the span do not match
-        int FindSpan(
-                int                     cur_dim,            // current dimension
-                T                       u,                  // parameter value
-                const TensorProduct<T>& tensor) const       // tensor product in tmesh
-        {
-            if (u < tmesh.all_knots[cur_dim][tensor.knot_mins[cur_dim]] ||
-                    u > tmesh.all_knots[cur_dim][tensor.knot_maxs[cur_dim]])
-            {
-                fprintf(stderr, "FindSpan(): Asking for parameter value outside of the knot min/max of the current tensor. This should not happen.\n");
-                return -1;
-            }
-
-            if (u == tmesh.all_knots[cur_dim][tensor.nctrl_pts(cur_dim)])
-            {
-                if (tmesh.all_knot_levels[cur_dim][tensor.nctrl_pts(cur_dim)] != tensor.level)
-                {
-                    fprintf(stderr, "FindSpan(): level mismatch at nctrl_pts. This should not happen.\n");
-                    return -1;
-                }
-                return tensor.nctrl_pts(cur_dim) - 1;
-            }
-
-            // binary search
-            int low = p(cur_dim);
-            int high = tensor.nctrl_pts(cur_dim);
-            int mid = (low + high) / 2;
-            while (u < tmesh.all_knots[cur_dim][mid] || u >= tmesh.all_knots[cur_dim][mid + 1])
-            {
-                if (u < tmesh.all_knots[cur_dim][mid])
-                    high = mid;
-                else
-                    low = mid;
-                mid = (low + high) / 2;
-            }
-
-            while (tmesh.all_knot_levels[cur_dim][mid] > tensor.level && mid > 0)
-                mid--;
-
-            if (tmesh.all_knot_levels[cur_dim][mid] != tensor.level)
-            {
-                fprintf(stderr, "FindSpan(): level mismatch at mid. This should not happen.\n");
-                return -1;
-            }
-
-            return mid;
         }
 
         // original version of basis functions from algorithm 2.2 of P&T, p. 70
@@ -999,190 +857,28 @@ namespace mfa
         // knot insertion into tensor product
         // Boehm's knot insertion algorithm
         // assumes all control points needed are contained within one tensor
-        // this version is for a new knot not yet added to the tmesh
-        // TODO: expensive deep copies
-        void NewKnotInsertion(const VectorX<T>&    param,              // new knot value to be inserted
-                              TensorProduct<T>&    tensor)             // (output) tensor product for insertion
-        {
-            vector<vector<T>>   new_knots;
-            vector<vector<int>> new_knot_levels;
-            MatrixX<T>          new_ctrl_pts;
-            VectorX<T>          new_weights;
-
-            // debug
-//             fprintf(stderr, "all_knots before insertion: ");
-//             for (int i = 0; i < dom_dim; i++)
-//             {
-//                 fprintf(stderr, "all_knots[dim %d] ", i);
-//                 for (auto j = 0; j < tmesh.all_knots[i].size(); j++)
-//                     fprintf(stderr, "%.2lf (l%d) ", tmesh.all_knots[i][j], tmesh.all_knot_levels[i][j]);
-//                 fprintf(stderr, "\n");
-//             }
-//             fprintf(stderr, "\n");
-//             cerr << "ctrl_pts before insertion:\n" << tensor.ctrl_pts << endl;
-//             cerr << "weights before insertion:\n" << tensor.weights << endl;
-
-            VolKnotIns(tmesh.all_knots,
-                       tmesh.all_knot_levels,
-                       tensor.ctrl_pts,
-                       tensor.weights,
-                       param,
-                       tensor.level,
-                       new_knots,
-                       new_knot_levels,
-                       new_ctrl_pts,
-                       new_weights,
-                       tensor.nctrl_pts);
-
-            // copy results back to tmesh and tensor
-            tmesh.all_knots                     = new_knots;
-            tmesh.all_knot_levels               = new_knot_levels;
-            tensor.ctrl_pts                     = new_ctrl_pts;
-            tensor.weights                      = new_weights;
-
-            for (auto i = 0; i < dom_dim; i++)
-                tensor.knot_maxs[i]++;
-
-            // debug
-//             fprintf(stderr, "all_knots after insertion: ");
-//             for (int i = 0; i < dom_dim; i++)
-//             {
-//                 fprintf(stderr, "all_knots[dim %d] ", i);
-//                 for (auto j = 0; j < tmesh.all_knots[i].size(); j++)
-//                     fprintf(stderr, "%.2lf (l%d) ", tmesh.all_knots[i][j], tmesh.all_knot_levels[i][j]);
-//                 fprintf(stderr, "\n");
-//             }
-//             fprintf(stderr, "\n");
-//             cerr << "ctrl_pts after insertion:\n" << tensor.ctrl_pts << endl;
-//             cerr << "weights after insertion:\n" << tensor.weights << endl;
-        }
-
-        // knot insertion into tensor product
-        // Boehm's knot insertion algorithm
-        // assumes all control points needed are contained within one tensor
-        // this version is for a knot already added to the tmesh
-        // TODO: expensive deep copies
-        //
-        // TODO: only handles first round or insertion into a tensor that has starts at knot index 0
-        // and has ample (p) control points before insertion point
-        //
-        void ExistKnotInsertion(const VectorX<T>&    param,              // new knot value to be inserted
-                                TensorProduct<T>&    tensor)             // (output) tensor product for insertion
-        {
-            MatrixX<T>          new_ctrl_pts;
-            VectorX<T>          new_weights;
-
-            // debug
-//             cerr << "ctrl_pts before insertion:\n" << tensor.ctrl_pts << endl;
-//             cerr << "weights before insertion:\n" << tensor.weights << endl;
-
-            ExistVolKnotIns(tensor.ctrl_pts,
-                       tensor.weights,
-                       param,
-                       tensor.level,
-                       new_ctrl_pts,
-                       new_weights,
-                       tensor.nctrl_pts);
-
-            // copy results back to tensor
-            tensor.ctrl_pts = new_ctrl_pts;
-            tensor.weights  = new_weights;
-
-            for (auto i = 0; i < dom_dim; i++)
-                tensor.knot_maxs[i]++;
-
-            // debug
-//             cerr << "ctrl_pts after insertion:\n" << tensor.ctrl_pts << endl;
-//             cerr << "weights after insertion:\n" << tensor.weights << endl;
-        }
-
-        // knot insertion into tensor product
-        // Boehm's knot insertion algorithm
-        // assumes all control points needed are contained within one tensor
         // This version returns new knots, levels, control points, weights as arguments and does not copy them into tmesh
         // This version is for a new knot that does not yet appear in the tmesh
         // TODO: expensive deep copies
         void NewKnotInsertion(const VectorX<T>&        param,                  // new knot value to be inserted
-                              const TensorProduct<T>&  tensor,                 // tensor product for insertion
+                              TensorIdx                tensor_idx,             // tensor product for insertion
                               VectorXi&                new_nctrl_pts,          // (output) new number of control points in each dim.
                               vector<vector<T>>&       new_all_knots,          // (output) new global all knots
                               vector<vector<int>>&     new_all_knot_levels,    // (output) new global all knot levels
                               MatrixX<T>&              new_ctrl_pts,           // (output) new local control points for this tensor
-                              VectorX<T>&              new_weights) const      // (output) new local weights for this tensor
+                              VectorX<T>&              new_weights,            // (output) new local weights for this tensor
+                              vector<int>&             inserted_dims) const    // which dims actually added a knot and ctrl pt
         {
             // debug
-            fprintf(stderr, "all_knots before insertion: ");
-            for (int i = 0; i < dom_dim; i++)
-            {
-                fprintf(stderr, "all_knots[dim %d] ", i);
-                for (auto j = 0; j < tmesh.all_knots[i].size(); j++)
-                    fprintf(stderr, "%.2lf (l%d) ", tmesh.all_knots[i][j], tmesh.all_knot_levels[i][j]);
-                fprintf(stderr, "\n");
-            }
-            fprintf(stderr, "\n");
-            cerr << "ctrl_pts before insertion:\n" << tensor.ctrl_pts << endl;
-            cerr << "weights before insertion:\n" << tensor.weights << endl;
+//             fmt::print(stderr, "NewKnotInsertion(): ctrl_pts before inserting param [{}]:\n{}\n", param.transpose(), tensor.ctrl_pts);
 
+            auto& tensor = tmesh.tensor_prods[tensor_idx];
             new_nctrl_pts = tensor.nctrl_pts;
-
-            VolKnotIns(tmesh.all_knots,
-                    tmesh.all_knot_levels,
-                    tensor.ctrl_pts,
-                    tensor.weights,
-                    param,
-                    tensor.level,
-                    new_all_knots,
-                    new_all_knot_levels,
-                    new_ctrl_pts,
-                    new_weights,
-                    new_nctrl_pts);
+            NewVolKnotIns(param, tensor_idx, new_all_knots, new_all_knot_levels, new_ctrl_pts, new_weights, new_nctrl_pts, inserted_dims);
 
             // debug
-            fprintf(stderr, "new_all_knots after insertion: ");
-            for (int i = 0; i < dom_dim; i++)
-            {
-                fprintf(stderr, "new_all_knots[dim %d] ", i);
-                for (auto j = 0; j < new_all_knots[i].size(); j++)
-                    fprintf(stderr, "%.2lf (l%d) ", new_all_knots[i][j], new_all_knot_levels[i][j]);
-                fprintf(stderr, "\n");
-            }
-            fprintf(stderr, "\n");
-            cerr << "ctrl_pts after insertion:\n" << new_ctrl_pts << endl;
-            cerr << "weights after insertion:\n" << new_weights << endl;
-        }
+//             fmt::print(stderr, "NewKnotInsertion(): ctrl_pts after inserting param [{}]:\n{}\n", param.transpose(), new_ctrl_pts);
 
-        // knot insertion into tensor product
-        // Boehm's knot insertion algorithm
-        // assumes all control points needed are contained within one tensor
-        // This version returns new control points, weights as arguments and does not copy them into tmesh
-        // This version is for a knot already added to the tmesh
-        // TODO: expensive deep copies
-        void ExistKnotInsertion(const vector<KnotIdx>    inserted_idx,           // index of inserted knot in new all_knots
-                                const VectorX<T>&        param,                  // new knot value to be inserted
-                                const TensorProduct<T>&  tensor,                 // tensor product for insertion
-                                VectorXi&                new_nctrl_pts,          // (output) new number of control points in each dim.
-                                MatrixX<T>&              new_ctrl_pts,           // (output) new local control points for this tensor
-                                VectorX<T>&              new_weights) const      // (output) new local weights for this tensor
-        {
-            // debug
-            fprintf(stderr, "Using local solve version of ExistKnotInsertion\n");
-//             cerr << "ctrl_pts before insertion:\n" << tensor.ctrl_pts << endl;
-//             cerr << "weights before insertion:\n" << tensor.weights << endl;
-
-            new_nctrl_pts = tensor.nctrl_pts;
-
-            ExistVolKnotIns(inserted_idx,
-                            tensor.ctrl_pts,
-                            tensor.weights,
-                            param,
-                            tensor.level,
-                            new_ctrl_pts,
-                            new_weights,
-                            new_nctrl_pts);
-
-            // debug
-//             cerr << "ctrl_pts after insertion:\n" << new_ctrl_pts << endl;
-//             cerr << "weights after insertion:\n" << new_weights << endl;
         }
 
         private:
@@ -1192,18 +888,28 @@ namespace mfa
         // this version assumes the new knot does not yet exist in the knot vector; updates both knots and control points
         // not for inserting a duplicate knot (does not handle knot multiplicity > 1)
         // original algorithm from P&T did handle multiplicity, but I simplified
-        void NewCurveKnotIns(int                   cur_dim,            // current dimension
-                             const vector<T>&      old_knots,          // old knot vector in cur. dim.
-                             const vector<int>&    old_knot_levels,    // old knot levels in cur. dim.
-                             const MatrixX<T>&     old_ctrl_pts,       // old control points of curve
-                             const VectorX<T>&     old_weights,        // old control point weights of curve
-                             T                     u,                  // new knot value to be inserted
-                             int                   level,              // level of new knot to be inserted
-                             vector<T>&            new_knots,          // (output) new knot vector in cur. dim.
-                             vector<int>&          new_knot_levels,    // (output) new knot levels in cur. dim.
-                             MatrixX<T>&           new_ctrl_pts,       // (output) new control points of curve
-                             VectorX<T>&           new_weights) const  // (output) new control point weights of curve
+        void NewCurveKnotIns(
+                const VectorX<T>&       param,              // new knot value to be inserted
+                TensorIdx               tensor_idx,         // original tensor with existing volume of control points from which curve is derived
+                int                     cur_dim,            // current dimension
+                const vector<T>&        old_knots,          // old knot vector in cur. dim.
+                const vector<int>&      old_knot_levels,    // old knot levels in cur. dim.
+                const MatrixX<T>&       old_ctrl_pts,       // old control points of curve
+                const VectorX<T>&       old_weights,        // old control point weights of curve
+                int                     level,              // level of new knot to be inserted
+                vector<T>&              new_knots,          // (output) new knot vector in cur. dim.
+                vector<int>&            new_knot_levels,    // (output) new knot levels in cur. dim.
+                MatrixX<T>&             new_ctrl_pts,       // (output) new control points of curve
+                VectorX<T>&             new_weights) const  // (output) new control point weights of curve
         {
+            // debug
+            bool debug = false;
+            if (fabs(param(0) - 0.3333) < 1e-3 && fabs(param(1) - 0.0606) < 1e-3 && tensor_idx == 2)
+                debug = true;
+
+            auto&   tensor  = tmesh.tensor_prods[tensor_idx];
+            T       u       = param(cur_dim);               // parameter in current dim.
+
             new_knots.resize(old_knots.size() + 1);
             new_knot_levels.resize(old_knot_levels.size() + 1);
             new_ctrl_pts.resize(old_ctrl_pts.rows() + 1, old_ctrl_pts.cols());
@@ -1211,130 +917,191 @@ namespace mfa
             MatrixX<T> temp_ctrl_pts(p(cur_dim) + 1, old_ctrl_pts.cols());
             VectorX<T> temp_weights(p(cur_dim) + 1);
 
-            // TODO: properly should run FindSpan on old_knots rather than tmesh.all_knots
-            int span = FindSpan(cur_dim, u, old_ctrl_pts.rows());
-            if (tmesh.all_knots[cur_dim][span] == u)                // not for multiple knots
+            // anchor corresponding to param in all dims
+            vector<KnotIdx> anchor(dom_dim);
+            for (auto i = 0; i < dom_dim; i++)
+                anchor[i] = tmesh.FindSpan(i, param(i), tensor);
+
+            int global_span    = anchor[cur_dim];                       // global knot span of param in current dim.
+            T eps       = 1.0e-8;
+            if (fabs(old_knots[global_span] - u) < eps)                 // not for multiple knots
             {
-                fprintf(stderr, "Error: CurveKnotIns attempting to insert duplicate knot\n");
+                fmt::print(stderr, "Error: NewCurveKnotIns attempting to insert duplicate knot in dim {} global_span {} knot {} u {}\n",
+                        cur_dim, global_span, tmesh.all_knots[cur_dim][global_span], u);
                 exit(0);
             }
 
             // load new knot vector
-            for (auto i = 0; i <= span; i++)
+            for (auto i = 0; i <= global_span; i++)
             {
                 new_knots[i]        = old_knots[i];
                 new_knot_levels[i]  = old_knot_levels[i];
             }
-            new_knots[span + 1]         = u;
-            new_knot_levels[span + 1]   = level;
-            for (auto i = span + 1; i < old_ctrl_pts.rows() + p(cur_dim) + 1; i++)
+            new_knots[global_span + 1]         = u;
+            new_knot_levels[global_span + 1]   = level;
+            for (auto i = global_span + 1; i < old_ctrl_pts.rows() + p(cur_dim) + 1; i++)
             {
                 new_knots[i + 1]        = old_knots[i];
                 new_knot_levels[i + 1]  = old_knot_levels[i];
             }
 
+            // convert span to local knot index and control point index in tensor
+            // use global_span for indexing knots in global knot vector
+            // use local_span for indexing knots in local tensor
+            // use local_span + shift for indexing control points in local tensor
+            int local_span = tmesh.global2local_knot_idx(global_span, tensor, cur_dim);
+            int shift = tensor.knot_mins[cur_dim] == 0 ? 0 : (p(cur_dim) + 1) / 2;      // shift ctrl pt indices for interior tensors w/o clamped end
+
+            // if too close to edge of interior tensor, only compute the newly inserted control point
+            // w/o recomputing the others in the changed range of p(cur_dim)
+            // this is ok because we only keep the newly inserted control point eventually for our separable local constraints
+            // to do a proper knot insertion, would need to go to side neighbor and get more control points from there
+            // but the control points there likely won't align, setting up a recursion of knot insertions
+            // we don't do this
+            if (tmesh.knot_idx_dist(tensor, tensor.knot_mins[cur_dim], global_span, cur_dim, false) < p(cur_dim) - 1 ||
+                    tmesh.knot_idx_dist(tensor, global_span, tensor.knot_maxs[cur_dim], cur_dim, false) < p(cur_dim))
+            {
+
+                int ctrl_pt = local_span - p(cur_dim) + shift;                      // index of last control point before insertion
+
+                // debug TODO remove once stable
+                if (ctrl_pt >= old_ctrl_pts.rows())
+                    throw MFAError(fmt::format( "NewCurveKnotInsertion(): index out of range\n"));
+
+                // copy control points before local span
+                for (auto i = 0; i <= ctrl_pt; i++)
+                {
+                    new_ctrl_pts.row(i) = old_ctrl_pts.row(i);
+                    new_weights(i)      = old_weights(i);
+                }
+
+                // copy control points after local span
+                for (auto i = ctrl_pt + 1; i < tensor.nctrl_pts(cur_dim); i++)
+                {
+                    new_ctrl_pts.row(i + 1) = old_ctrl_pts.row(i);
+                    new_weights(i + 1)      = old_weights(i);
+                }
+
+                // set up only the two temp_ctrl points that will be needed
+                for (auto i = p(cur_dim) / 2; i <= p(cur_dim) / 2 + 1; i++)
+                {
+                    // debug TODO: remove once stable
+                    if (i >= temp_ctrl_pts.rows() || ctrl_pt + i < 0)
+                        throw MFAError(fmt::format( "NewCurveKnotInsertion(): index out of range\n"));
+
+                    if (ctrl_pt + i < old_ctrl_pts.rows())
+                    {
+
+                        temp_ctrl_pts.row(i)    = old_ctrl_pts.row(ctrl_pt + i);
+                        temp_weights(i)         = old_weights(ctrl_pt + i);
+                    }
+                    // we don't have a second control point in this tensor
+                    // punt and copy the previous control point
+                    // TODO: FIXME
+                    else if (i > p(cur_dim) / 2)
+                    {
+
+                        temp_ctrl_pts.row(i)    = old_ctrl_pts.row(ctrl_pt + i - 1);
+                        temp_weights(i)         = old_weights(ctrl_pt + i - 1);
+                    }
+                    else
+                        throw MFAError(fmt::format( "NewCurveKnotInsertion(): index out of range\n"));
+                }
+
+                // get knots for interpolation
+                // TODO: write a 1-d knot intersection routine; this uses full-d, which is overkill
+                vector<vector<KnotIdx>> loc_knots(dom_dim);
+                tmesh.knot_intersections(anchor, tensor_idx, loc_knots);
+
+                // pick out the two knots to interpolate from the local knot vector
+                KnotIdx left_idx    = loc_knots[cur_dim][1];
+                KnotIdx right_idx   = loc_knots[cur_dim].back();
+
+                // debug TODO: remove once stable
+                if (ctrl_pt + 1 >= old_ctrl_pts.rows() || p(cur_dim) / 2 >= temp_ctrl_pts.rows())
+                    throw MFAError(fmt::format( "NewCurveKnotInsertion(): index out of range\n"));
+
+                // interpolate only the one newly inserted control point
+                int i                           = p(cur_dim) / 2;
+                T alpha                         = (u - old_knots[left_idx]) / (old_knots[right_idx] - old_knots[left_idx]);
+                new_ctrl_pts.row(ctrl_pt + 1)   = alpha * temp_ctrl_pts.row(i + 1) + (1.0 - alpha) * temp_ctrl_pts.row(i);
+                new_weights(ctrl_pt + 1)        = alpha * temp_weights(i + 1) + (1.0 - alpha) * temp_weights(i);
+
+//                 fmt::print(stderr, "NewCurveKnotInsertion() 2: inserting new control point at idx {} value [{}]\n", local_span + 1, new_ctrl_pts.row(local_span + 1));
+
+                return;
+            }
+
             // save unaltered control points and weights
-            for (auto i = 0; i <= span - p(cur_dim); i++)
+            for (auto i = 0; i <= local_span - p(cur_dim) + shift; i++)
             {
                 new_ctrl_pts.row(i) = old_ctrl_pts.row(i);
                 new_weights(i)      = old_weights(i);
             }
-            for (auto i = span; i < old_ctrl_pts.rows(); i++)
+            for (auto i = local_span + shift; i < old_ctrl_pts.rows(); i++)
             {
                 new_ctrl_pts.row(i + 1) = old_ctrl_pts.row(i);
                 new_weights(i + 1)      = old_weights(i);
             }
             for (auto i = 0; i <= p(cur_dim); i++)
             {
-                temp_ctrl_pts.row(i)    = old_ctrl_pts.row(span - p(cur_dim) + i);
-                temp_weights(i)         = old_weights(span - p(cur_dim) + i);
+                // debug
+                // TODO: remove once stable
+                if (i >= temp_ctrl_pts.rows() || local_span - p(cur_dim) + i + shift < 0 || local_span - p(cur_dim) + 1 + shift >= old_ctrl_pts.rows())
+                {
+                    fmt::print(stderr, "Error: NewCurveKnotInsertion(): index out of range\n");
+                    abort();
+                }
+
+                temp_ctrl_pts.row(i)    = old_ctrl_pts.row(local_span - p(cur_dim) + i + shift);
+                temp_weights(i)         = old_weights(local_span - p(cur_dim) + i + shift);
             }
 
-            // insert the new control point
-            auto L = span - p(cur_dim) + 1;
-            for (auto i = 0; i <= p(cur_dim) - 1; i++)
+            // compute p(cur_dim) new control points, one of which is newly inserted and rest are modified
+            // the newly inserted one is temp_ctrl_pts(p_cur(dim) / 2) (using integer division, ie, floor)
+
+            for (auto i = 0; i < p(cur_dim); i++)
             {
-                T alpha                 = (u - old_knots[L + i]) / (old_knots[i + span + 1] - old_knots[L + i]);
+                bool ofst_success;
+
+                KnotIdx ofst1;               // ofst1 = global_span + 1 + i - p(cur_dim)
+                ofst_success = tmesh.knot_idx_ofst(tensor, global_span, i + 1 - p(cur_dim), cur_dim, false, ofst1);
+                if (!ofst_success)
+                {
+                    fmt::print(stderr, "Error: NewCurveKnotInsertion(): unable to offset global_span by 1 + i - p(cur_dim)\n");
+                    abort();
+                }
+
+                KnotIdx ofst2;               // ofst2 = global_span + 1 + i
+                ofst_success = tmesh.knot_idx_ofst(tensor, global_span, i + 1, cur_dim, false, ofst2);
+                if (!ofst_success)
+                {
+                    fmt::print(stderr, "Error: NewCurveKnotInsertion(): unable to offset global span by 1 + i\n");
+                    abort();
+                }
+
+                T alpha                 = (u - old_knots[ofst1]) / (old_knots[ofst2] - old_knots[ofst1]);
                 temp_ctrl_pts.row(i)    = alpha * temp_ctrl_pts.row(i + 1) + (1.0 - alpha) * temp_ctrl_pts.row(i);
                 temp_weights(i)         = alpha * temp_weights(i + 1) + (1.0 - alpha) * temp_weights(i);
             }
-            new_ctrl_pts.row(L)     = temp_ctrl_pts.row(0);
-            new_weights(L)          = temp_weights(0);
-            new_ctrl_pts.row(span)  = temp_ctrl_pts.row(p(cur_dim) - 1);
-            new_weights(span)       = temp_weights(p(cur_dim) - 1);
 
-            // load remaining control points
-            for (auto i = L + 1; i < span; i++)
+            // load modified p(cur_dim) control points
+            auto L = local_span - p(cur_dim) + 1;
+            for (auto i = L; i <= local_span; i++)
             {
-                new_ctrl_pts.row(i) = temp_ctrl_pts.row(i - L);
-                new_weights(i)      = temp_weights(i - L);
-            }
-        }
+                new_ctrl_pts.row(i + shift) = temp_ctrl_pts.row(i - L);
+                new_weights(i + shift)      = temp_weights(i - L);
 
-        // curve knot insertion
-        // Algorithm 5.1 from P&T p. 151 (Boehm's knot insertion algorithm)
-        // this version assumes the new knot already exists in the tmesh knot, only updates control points
-        // not for inserting a duplicate knot (does not handle knot multiplicity > 1)
-        // original algorithm from P&T did handle multiplicity, but I simplified
-        //
-        // TODO: only handles first round or insertion into a tensor that has starts at knot index 0
-        // and has ample (p) control points before insertion point
-        //
-        void ExistCurveKnotIns(int                   cur_dim,            // current dimension
-                               KnotIdx               inserted_knot_idx,  // index of inserted knot in new all_knots
-                               const MatrixX<T>&     old_ctrl_pts,       // old control points of curve
-                               const VectorX<T>&     old_weights,        // old control point weights of curve
-                               T                     u,                  // new knot value that was inserted
-                               int                   level,              // level of new knot that was inserted
-                               MatrixX<T>&           new_ctrl_pts,       // (output) new control points of curve
-                               VectorX<T>&           new_weights) const  // (output) new control point weights of curve
-        {
-            new_ctrl_pts.resize(old_ctrl_pts.rows() + 1, old_ctrl_pts.cols());
-            new_weights.resize(old_weights.size() + 1);
-            MatrixX<T> temp_ctrl_pts(p(cur_dim) + 1, old_ctrl_pts.cols());
-            VectorX<T> temp_weights(p(cur_dim) + 1);
-
-            // span is supposed to be prior to insertion; subtract 1 from span because knot was already inserted into all_knots
-            int span = inserted_knot_idx - 1;
-
-            // save unaltered control points and weights
-            for (auto i = 0; i <= span - p(cur_dim); i++)
-            {
-                new_ctrl_pts.row(i) = old_ctrl_pts.row(i);
-                new_weights(i)      = old_weights(i);
-            }
-            for (auto i = span; i < old_ctrl_pts.rows(); i++)
-            {
-                new_ctrl_pts.row(i + 1) = old_ctrl_pts.row(i);
-                new_weights(i + 1)      = old_weights(i);
-            }
-            for (auto i = 0; i <= p(cur_dim); i++)
-            {
-                temp_ctrl_pts.row(i)    = old_ctrl_pts.row(span - p(cur_dim) + i);
-                temp_weights(i)         = old_weights(span - p(cur_dim) + i);
+                // debug
+//                 if (shift)
+//                 {
+//                     if (i - L == p(cur_dim) / 2)
+//                         fmt::print(stderr, "NewCurveKnotInsertion() 3: inserting new control point at idx {} value [{}]\n", i + shift, new_ctrl_pts.row(i + shift));
+//                 }
             }
 
-            // insert the new control point
-            auto L = span - p(cur_dim) + 1;
-            for (auto i = 0; i <= p(cur_dim) - 1; i++)
-            {
-                // because knot is already inserted, [i + span + 1] is changed to [i + span + 2]
-                // in index of first term of denominator, compared with NewCurveKnotIns() and P&T
-                T alpha                 = (u - tmesh.all_knots[cur_dim][L + i]) / (tmesh.all_knots[cur_dim][i + span + 2] - tmesh.all_knots[cur_dim][L + i]);
-                temp_ctrl_pts.row(i)    = alpha * temp_ctrl_pts.row(i + 1) + (1.0 - alpha) * temp_ctrl_pts.row(i);
-                temp_weights(i)         = alpha * temp_weights(i + 1) + (1.0 - alpha) * temp_weights(i);
-            }
-            new_ctrl_pts.row(L)     = temp_ctrl_pts.row(0);
-            new_weights(L)          = temp_weights(0);
-            new_ctrl_pts.row(span)  = temp_ctrl_pts.row(p(cur_dim) - 1);
-            new_weights(span)       = temp_weights(p(cur_dim) - 1);
-
-            // load remaining control points
-            for (auto i = L + 1; i < span; i++)
-            {
-                new_ctrl_pts.row(i) = temp_ctrl_pts.row(i - L);
-                new_weights(i)      = temp_weights(i - L);
-            }
+            // debug
+//             fmt::print(stderr, "NewCurveKnotInsertion(): new curve ctrl pts:\n{}\n", new_ctrl_pts);
         }
 
         // volume knot insertion
@@ -1343,28 +1110,42 @@ namespace mfa
         // not for inserting a duplicate knot (does not handle knot multiplicity > 1)
         // original algorithm from P&T did handle multiplicity, but I simplified
         // this version assumes the new knot does not yet exist, updates both knots and control points
-        void NewVolKnotIns(const vector<vector<T>>&    old_knots,              // old knots
-                           const vector<vector<int>>&  old_knot_levels,        // old knot levels
-                           const MatrixX<T>&           old_ctrl_pts,           // old control points
-                           const VectorX<T>&           old_weights,            // old control point weights
-                           const VectorX<T>&           param,                  // new knot value to be inserted
-                           int                         level,                  // level of new knot to be inserted
-                           vector<vector<T>>&          new_knots,              // (output) new knots
-                           vector<vector<int>>&        new_knot_levels,        // (output) new knot levels
-                           MatrixX<T>&                 new_ctrl_pts,           // (output) new control points
-                           VectorX<T>&                 new_weights,            // (output) new control point weights
-                           VectorXi&                   nctrl_pts) const        // (input and output) number of control points in all dims
+        void NewVolKnotIns(
+                const VectorX<T>&           param,                  // new knot value to be inserted
+                TensorIdx                   tensor_idx,             // tensor containing existing control points
+                vector<vector<T>>&          new_knots,              // (output) new knots
+                vector<vector<int>>&        new_knot_levels,        // (output) new knot levels
+                MatrixX<T>&                 new_ctrl_pts,           // (output) new control points
+                VectorX<T>&                 new_weights,            // (output) new control point weights
+                VectorXi&                   nctrl_pts,              // (input and output) number of control points in all dims
+                vector<int>&                inserted_dims) const    // which dims actually added a knot and ctrl pt
         {
-            size_t old_cs, new_cs;                                          // stride for old and new control points in curve in cur. dim
+            auto&                         tensor          = tmesh.tensor_prods[tensor_idx];
+            const vector<vector<T>>&      old_knots       = tmesh.all_knots;
+            const vector<vector<int>>&    old_knot_levels = tmesh.all_knot_levels;
+            const MatrixX<T>&             old_ctrl_pts    = tensor.ctrl_pts;
+            const VectorX<T>&             old_weights     = tensor.weights;
+            int                           level           = tensor.level;
 
-            // TODO: if the knot to be added has the same parameter value in some dimension as an existing knot:
-            // distinguish between adding a repeated knot in that dimension and not adding a knot in that dimension
+            size_t old_cs, new_cs;                                              // stride for old and new control points in curve in cur. dim
 
+            // determine new sizes of control points, weights, knots, knot levels in each dim
+            // a knot may be new in one dimension (inserted) and same in another dimension (not inserted)
             VectorXi new_nctrl_pts = nctrl_pts;
-            new_ctrl_pts.resize((nctrl_pts.array() + 1).prod(), old_ctrl_pts.cols());
+            for (auto k = 0; k < dom_dim; k++)
+            {
+                // check if the knot exists in this dimension already
+                int span    = tmesh.FindSpan(k, param(k), tensor);
+                T eps       = 1.0e-8;
+                if (fabs(old_knots[k][span] - param(k)) > eps)            // knot is new in this dim.
+                    new_nctrl_pts(k)++;
+            }
+
+            new_ctrl_pts.resize(new_nctrl_pts.prod(), old_ctrl_pts.cols());
             new_weights.resize(new_ctrl_pts.rows());
             new_knots.resize(dom_dim);
             new_knot_levels.resize(dom_dim);
+            inserted_dims.resize(dom_dim);
 
             // double buffer for new control points and weights (new_ctrl_pts, new_ctrl_pts1; new_weights, new_weights1)
             // so that in alternating dimensions, the output of previous dimension can be input of next dimension
@@ -1373,15 +1154,41 @@ namespace mfa
             new_ctrl_pts1.block(0, 0, old_ctrl_pts.rows(), old_ctrl_pts.cols()) = old_ctrl_pts;
             new_weights1.segment(0, old_weights.rows())                         = old_weights;
 
-            for (size_t k = 0; k < dom_dim; k++)                                // for all domain dimensions
+            for (auto k = 0; k < dom_dim; k++)                                // for all domain dimensions
             {
+                // debug
+//                 fmt::print(stderr, "NewVolKnotInsertion(): param [{}] dim {}\n", param.transpose(), k);
+
+                // check if the knot exists in this dim already (not inserted)
+                if (nctrl_pts(k) == new_nctrl_pts(k))
+                {
+                    if (k % 2 == 0)
+                    {
+                        new_ctrl_pts    = new_ctrl_pts1;
+                        new_weights     = new_weights1;
+                    }
+                    else
+                    {
+                        new_ctrl_pts1   = new_ctrl_pts;
+                        new_weights1    = new_weights;
+                    }
+
+                    old_cs          = (k == 0) ? 1 : old_cs * new_nctrl_pts(k - 1); // stride between curve control points before insertion
+                    new_cs          = (k == 0) ? 1 : new_cs * new_nctrl_pts(k - 1); // stride between curve control points before insertion
+
+                    inserted_dims[k] = 0;
+                    continue;
+                }
+
+                inserted_dims[k] = 1;                                           // inserting a knot in this dimension
+
                 // resize new knots, levels, control points, weights
                 new_knots[k].resize(old_knots[k].size() + 1);
                 new_knot_levels[k].resize(old_knot_levels[k].size() + 1);
 
                 // number of curves in this dimension before knot insertion
                 // current dimension contributes no curves, hence the division by number of control points in cur. dim.
-                size_t old_ncurves = new_nctrl_pts.array().prod() / new_nctrl_pts(k);
+                size_t old_ncurves = new_nctrl_pts.prod() / new_nctrl_pts(k);
 
                 vector<size_t> old_co(old_ncurves);                             // old starting curve points in current dim.
                 old_co[0]       = 0;
@@ -1400,11 +1207,9 @@ namespace mfa
                     }
                 }
 
-                new_nctrl_pts(k)++;
-
-                // number of curves in this dimension before after knot insertion
+                // number of curves in this dimension after knot insertion
                 // current dimension contributes no curves, hence the division by number of control points in cur. dim.
-                size_t new_ncurves = new_nctrl_pts.array().prod() / new_nctrl_pts(k);
+                size_t new_ncurves = new_nctrl_pts.prod() / new_nctrl_pts(k);
                 vector<size_t> new_co(new_ncurves);                             // new starting curve points in current dim.
                 new_co[0]       = 0;
                 size_t new_coo  = 0;                                            // new co at start of contiguous sequence
@@ -1444,8 +1249,8 @@ namespace mfa
 
 
                         // insert a knot in one curve of control points
-                        CurveKnotIns(k, old_knots[k], old_knot_levels[k], old_curve_ctrl_pts.local(), old_curve_weights.local(),
-                                param(k), level, new_knots[k], new_knot_levels[k], new_curve_ctrl_pts.local(), new_curve_weights.local());
+                        NewCurveKnotIns(param, tensor_idx, k, old_knots[k], old_knot_levels[k], old_curve_ctrl_pts.local(), old_curve_weights.local(),
+                                level, new_knots[k], new_knot_levels[k], new_curve_ctrl_pts.local(), new_curve_weights.local());
 
                         // copy new curve control points and weights
                         if (k % 2 == 0)
@@ -1458,7 +1263,7 @@ namespace mfa
 
 #endif              // end TBB version
 
-#ifdef MFA_SERIAL   // serial vesion
+#ifdef MFA_SERIAL   // serial version
 
                 MatrixX<T> old_curve_ctrl_pts, new_curve_ctrl_pts;              // old and new control points for one curve
                 VectorX<T> old_curve_weights, new_curve_weights;                // old and new weights for one curve
@@ -1474,179 +1279,8 @@ namespace mfa
                                 old_curve_weights, nctrl_pts, k, old_co[j], old_cs);
 
                     // insert a knot in one curve of control points
-                    CurveKnotIns(k, old_knots[k], old_knot_levels[k], old_curve_ctrl_pts, old_curve_weights,
-                            param(k), level, new_knots[k], new_knot_levels[k], new_curve_ctrl_pts, new_curve_weights);
-
-                    // copy new curve control points and weights
-                    if (k % 2 == 0)
-                        CtrlCurve2CtrlPts(new_curve_ctrl_pts, new_curve_weights,
-                                new_ctrl_pts, new_weights, new_nctrl_pts, k, new_co[j], new_cs);
-                    else
-                        CtrlCurve2CtrlPts(new_curve_ctrl_pts, new_curve_weights,
-                                new_ctrl_pts1, new_weights1, new_nctrl_pts, k, new_co[j], new_cs);
-                }
-
-#endif              // end serial version
-
-            }   // for all domain dimensions
-
-            // update final output
-            nctrl_pts = new_nctrl_pts;
-            // odd domain dimensions: result already in the right double buffer, new_ctrl_pts, new_weights
-            // even domain dimensions: result ends up in other double buffer, new_ctrl_pts1, new_weights1, and needs to be copied
-            if (dom_dim % 2 == 0)
-            {
-                new_ctrl_pts    = new_ctrl_pts1;
-                new_weights     = new_weights1;
-            }
-        }
-
-        // volume knot insertion
-        // n-dimensional generalization of Algorithm 5.3 from P&T p. 155 (Boehm's knot insertion algorithm)
-        // but without the performance optimizations for now (TODO)
-        // not for inserting a duplicate knot (does not handle knot multiplicity > 1)
-        // original algorithm from P&T did handle multiplicity, but I simplified
-        // this version assumes the new knot already exists in the tmesh, updates only control points
-        //
-        // TODO: only handles first round or insertion into a tensor that has starts at knot index 0
-        // and has ample (p) control points before insertion point
-        //
-        void ExistVolKnotIns(const vector<KnotIdx>       inserted_idx,           // index of inserted knot in new all_knots
-                             const MatrixX<T>&           old_ctrl_pts,           // old control points
-                             const VectorX<T>&           old_weights,            // old control point weights
-                             const VectorX<T>&           param,                  // new knot value that was inserted
-                             int                         level,                  // level of new knot that was inserted
-                             MatrixX<T>&                 new_ctrl_pts,           // (output) new control points
-                             VectorX<T>&                 new_weights,            // (output) new control point weights
-                             VectorXi&                   nctrl_pts) const        // (input and output) number of control points in all dims
-        {
-            size_t old_cs, new_cs;                                          // stride for old and new control points in curve in cur. dim
-
-            // TODO: if the knot to be added has the same parameter value in some dimension as an existing knot:
-            // distinguish between adding a repeated knot in that dimension and not adding a knot in that dimension
-
-            VectorXi new_nctrl_pts = nctrl_pts;
-            new_ctrl_pts.resize((nctrl_pts.array() + 1).prod(), old_ctrl_pts.cols());
-            new_weights.resize(new_ctrl_pts.rows());
-
-            // double buffer for new control points and weights (new_ctrl_pts, new_ctrl_pts1; new_weights, new_weights1)
-            // so that in alternating dimensions, the output of previous dimension can be input of next dimension
-            MatrixX<T> new_ctrl_pts1(new_ctrl_pts.rows(), new_ctrl_pts.cols());
-            VectorX<T> new_weights1(new_weights.size());
-            new_ctrl_pts1.block(0, 0, old_ctrl_pts.rows(), old_ctrl_pts.cols()) = old_ctrl_pts;
-            new_weights1.segment(0, old_weights.rows())                         = old_weights;
-
-            for (size_t k = 0; k < dom_dim; k++)                                // for all domain dimensions
-            {
-                // number of curves in this dimension before knot insertion
-                // current dimension contributes no curves, hence the division by number of control points in cur. dim.
-                size_t old_ncurves = new_nctrl_pts.array().prod() / new_nctrl_pts(k);
-
-                vector<size_t> old_co(old_ncurves);                             // old starting curve points in current dim.
-                old_co[0]       = 0;
-                size_t old_coo  = 0;                                            // old co at start of contiguous sequence
-                old_cs          = (k == 0) ? 1 : old_cs * new_nctrl_pts(k - 1); // stride between curve control points before insertion
-
-                // curve offsets for curves before knot insertion
-                for (auto j = 1; j < old_ncurves; j++)
-                {
-                    if (j % old_cs)
-                        old_co[j] = old_co[j - 1] + 1;
-                    else
-                    {
-                        old_co[j] = old_coo + old_cs * nctrl_pts(k);
-                        old_coo   = old_co[j];
-                    }
-                }
-
-                new_nctrl_pts(k)++;
-
-                // number of curves in this dimension before after knot insertion
-                // current dimension contributes no curves, hence the division by number of control points in cur. dim.
-                size_t new_ncurves = new_nctrl_pts.array().prod() / new_nctrl_pts(k);
-                vector<size_t> new_co(new_ncurves);                             // new starting curve points in current dim.
-                new_co[0]       = 0;
-                size_t new_coo  = 0;                                            // new co at start of contiguous sequence
-                new_cs          = (k == 0) ? 1 : new_cs * new_nctrl_pts(k - 1); // stride between curve control points before insertion
-
-                // curve offsets for curves after knot insertion
-                for (auto j = 1; j < new_ncurves; j++)
-                {
-                    if (j % new_cs)
-                        new_co[j] = new_co[j - 1] + 1;
-                    else
-                    {
-                        new_co[j] = new_coo + new_cs * new_nctrl_pts(k);
-                        new_coo   = new_co[j];
-                    }
-                }
-
-#ifdef MFA_TBB      // TBB version
-
-                // thread-local DecodeInfo
-                // ref: https://www.threadingbuildingblocks.org/tutorial-intel-tbb-thread-local-storage
-                enumerable_thread_specific<MatrixX<T>> old_curve_ctrl_pts, new_curve_ctrl_pts;  // old and new control points for one curve
-                enumerable_thread_specific<VectorX<T>> old_curve_weights, new_curve_weights;    // old and new weights for one curve
-
-                parallel_for (size_t(0), old_ncurves, [&] (size_t j)            // for all the curves in this dimension
-                        {
-                        // debug
-                        // fprintf(stderr, "j=%ld curve\n", j);
-
-                        // copy one curve of old curve control points and weights
-                        if (k % 2 == 0)
-                            CtrlPts2CtrlCurve(new_ctrl_pts1, new_weights1, old_curve_ctrl_pts.local(),
-                                    old_curve_weights.local(), nctrl_pts, k, old_co[j], old_cs);
-                        else
-                            CtrlPts2CtrlCurve(new_ctrl_pts, new_weights, old_curve_ctrl_pts.local(),
-                                    old_curve_weights.local(), nctrl_pts, k, old_co[j], old_cs);
-
-
-                        // insert a knot in one curve of control points
-                        ExistCurveKnotIns(k,
-                                          inserted_idx[k],
-                                          old_curve_ctrl_pts.local(),
-                                          old_curve_weights.local(),
-                                          param(k),
-                                          level,
-                                          new_curve_ctrl_pts.local(),
-                                          new_curve_weights.local());
-
-                        // copy new curve control points and weights
-                        if (k % 2 == 0)
-                            CtrlCurve2CtrlPts(new_curve_ctrl_pts.local(), new_curve_weights.local(),
-                                    new_ctrl_pts, new_weights, new_nctrl_pts, k, new_co[j], new_cs);
-                        else
-                            CtrlCurve2CtrlPts(new_curve_ctrl_pts.local(), new_curve_weights.local(),
-                                    new_ctrl_pts1, new_weights1, new_nctrl_pts, k, new_co[j], new_cs);
-                        });
-
-#endif              // end TBB version
-
-#ifdef MFA_SERIAL   // serial vesion
-
-                MatrixX<T> old_curve_ctrl_pts, new_curve_ctrl_pts;              // old and new control points for one curve
-                VectorX<T> old_curve_weights, new_curve_weights;                // old and new weights for one curve
-
-                for (size_t j = 0; j < old_ncurves; j++)                        // for all curves in this dimension
-                {
-                    // copy one curve of old curve control points and weights
-                    if (k % 2 == 0)
-                        CtrlPts2CtrlCurve(new_ctrl_pts1, new_weights1, old_curve_ctrl_pts,
-                                old_curve_weights, nctrl_pts, k, old_co[j], old_cs);
-                    else
-                        CtrlPts2CtrlCurve(new_ctrl_pts, new_weights, old_curve_ctrl_pts,
-                                old_curve_weights, nctrl_pts, k, old_co[j], old_cs);
-
-                    // insert a knot in one curve of control points
-                    ExistCurveKnotIns(k,
-                                      inserted_idx[k],
-                                      old_curve_ctrl_pts,
-                                      old_curve_weights,
-                                      param(k),
-                                      level,
-                                      new_curve_ctrl_pts,
-                                      new_curve_weights);
+                    NewCurveKnotIns(param, tensor_idx, k, old_knots[k], old_knot_levels[k], old_curve_ctrl_pts, old_curve_weights,
+                            level, new_knots[k], new_knot_levels[k], new_curve_ctrl_pts, new_curve_weights);
 
                     // copy new curve control points and weights
                     if (k % 2 == 0)
@@ -1809,7 +1443,7 @@ namespace mfa
             {
                 // debug
                 cerr << "Using uniform knots (structured input)" << endl;
-                
+
                 uniform_knots_impl_structured(input.params->param_grid, tmesh);
             }
             else
@@ -1855,7 +1489,6 @@ namespace mfa
             }
         }
 
-        
         void uniform_knots_impl_unstructured(Tmesh<T>& tmesh)
         {
             cerr << "Warning: Unstable build, tmesh.all_knot_param_idxs remain uninitialized" << endl; 
@@ -1885,136 +1518,6 @@ namespace mfa
                 }
             }
         }
-
-        // TODO: change over to tmesh or deprecate, depending whether we will be splitting
-        // full-dimensional knot spans and whether an index into knot spans is still needed
-        // now that knots have be reorganized into vectors for each dimension and levels
-        //
-        // initialize knot span index
-//         void KnotSpanIndex()
-//         {
-//             // total number of knot spans = product of number of knot spans over all dims
-//             size_t int_nspans = 1;                  // number of internal (unique) spans
-//             size_t all_nspans = 1;                  // total number of spans, including repeating 0s and 1s
-//             for (auto i = 0; i < dom_dim; i++)
-//             {
-//                 int_nspans *= (nctrl_pts(i) - p(i));
-//                 all_nspans *= (nctrl_pts(i) + p(i));
-//             }
-// 
-//             knot_spans.resize(int_nspans);
-// 
-//             // for all knot spans, fill the KnotSpan fields
-//             VectorXi ijk   = VectorXi::Zero(dom_dim);       // i,j,k of start of span
-//             VectorXi p_ijk = VectorXi::Zero(dom_dim);       // i,j,k of parameter
-//             size_t span_idx = 0;                            // current index into knot_spans
-//             for (auto i = 0; i < all_nspans; i++)           // all knot spans (including repeated 0s and 1s)
-//             {
-//                 // skip repeating knot spans
-//                 bool skip = false;
-//                 for (auto k = 0; k < dom_dim; k++)          // dimensions
-//                     if ((ijk(k) < p[k]) || ijk(k) >= nctrl_pts[k])
-//                     {
-//                         skip = true;
-//                         break;
-//                     }
-// 
-//                 // save knot span
-//                 // TODO: may not be necessary to store all the knot span fields, but for now it is
-//                 // convenient; recheck later to see which are actually used
-//                 // unused ones can be computed locally below but not part of the knot span struct
-//                 if (!skip)
-//                 {
-//                     // knot ijk
-//                     knot_spans[span_idx].min_knot_ijk = ijk;
-//                     knot_spans[span_idx].max_knot_ijk = ijk.array() + 1;
-// 
-//                     // knot values
-//                     knot_spans[span_idx].min_knot.resize(dom_dim);
-//                     knot_spans[span_idx].max_knot.resize(dom_dim);
-//                     for (auto k = 0; k < dom_dim; k++)         // dimensions
-//                     {
-//                         knot_spans[span_idx].min_knot(k) = knots(ko[k] + knot_spans[span_idx].min_knot_ijk(k));
-//                         knot_spans[span_idx].max_knot(k) = knots(ko[k] + knot_spans[span_idx].max_knot_ijk(k));
-//                     }
-// 
-//                     // parameter ijk and parameter values
-//                     knot_spans[span_idx].min_param.resize(dom_dim);
-//                     knot_spans[span_idx].max_param.resize(dom_dim);
-//                     knot_spans[span_idx].min_param_ijk.resize(dom_dim);
-//                     knot_spans[span_idx].max_param_ijk.resize(dom_dim);
-//                     VectorXi po_ijk = p_ijk;                    // remember starting param ijk
-//                     for (auto k = 0; k < dom_dim; k++)         // dimensions in knot spans
-//                     {
-//                         // min param ijk and value
-//                         knot_spans[span_idx].min_param_ijk(k) = p_ijk(k);
-//                         knot_spans[span_idx].min_param(k)     = params(po[k] + p_ijk(k));
-// 
-//                         // max param ijk and value
-//                         // most spans are half open [..., ...)
-//                         while (params(po[k] + p_ijk(k)) < knot_spans[span_idx].max_knot(k))
-//                         {
-//                             knot_spans[span_idx].max_param_ijk(k) = p_ijk(k);
-//                             knot_spans[span_idx].max_param(k)     = params(po[k] + p_ijk(k));
-//                             p_ijk(k)++;
-//                         }
-//                         // the last span in each dimension is fully closed [..., ...]
-//                         if (p_ijk(k) == ndom_pts(k) - 1)
-//                         {
-//                             knot_spans[span_idx].max_param_ijk(k) = p_ijk(k);
-//                             knot_spans[span_idx].max_param(k)     = params(po[k] + p_ijk(k));
-//                         }
-//                     }
-// 
-//                     // increment param ijk
-//                     for (auto k = 0; k < dom_dim; k++)     // dimension in params
-//                     {
-//                         if (p_ijk(k) < ndom_pts[k] - 1)
-//                         {
-//                             po_ijk(k) = p_ijk(k);
-//                             break;
-//                         }
-//                         else
-//                         {
-//                             po_ijk(k) = 0;
-//                             if (k < dom_dim - 1)
-//                                 po_ijk(k + 1)++;
-//                         }
-//                     }
-//                     p_ijk = po_ijk;
-// 
-//                     knot_spans[span_idx].last_split_dim = -1;
-//                     knot_spans[span_idx].done           = false;
-// 
-//                     // debug
-//                     //             cerr <<
-//                     //                 "span_idx="          << span_idx                           <<
-//                     //                 "\nmin_knot_ijk:\n"  << knot_spans[span_idx].min_knot_ijk  <<
-//                     //                 "\nmax_knot_ijk:\n"  << knot_spans[span_idx].max_knot_ijk  <<
-//                     //                 "\nmin_knot:\n"      << knot_spans[span_idx].min_knot      <<
-//                     //                 "\nmax_knot:\n"      << knot_spans[span_idx].max_knot      <<
-//                     //                 "\nmin_param_ijk:\n" << knot_spans[span_idx].min_param_ijk <<
-//                     //                 "\nmax_param_ijk:\n" << knot_spans[span_idx].max_param_ijk <<
-//                     //                 "\nmin_param:\n"     << knot_spans[span_idx].min_param     <<
-//                     //                 "\nmax_param:\n"     << knot_spans[span_idx].max_param     <<
-//                     //                 "\n\n"               << endl;
-// 
-//                     span_idx++;
-//                 }                                               // !skip
-// 
-//                 // increment knot ijk
-//                 for (auto k = 0; k < dom_dim; k++)             // dimension in knot spans
-//                 {
-//                     if (ijk(k) < nctrl_pts[k] + p[k] - 1)
-//                     {
-//                         ijk(k)++;
-//                         break;
-//                     }
-//                     else
-//                         ijk(k) = 0;
-//                 }
-//             }
-//         }
 
     };
 }

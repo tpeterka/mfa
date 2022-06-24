@@ -34,8 +34,8 @@ int main(int argc, char** argv)
     int MAX_DIM     = 10;                       // maximum domain dimensionality (temporary, only for input parameters)
     vector<real_t> lower_lim(MAX_DIM, 0);       // lower limits of integration in parameter space (zeros by default)
     vector<real_t> upper_lim(MAX_DIM, 1);       // upper limits of integration in parameter space (ones by default)  
-    string infile   = "approx.out";               // diy input file 
-    int  deriv      = 1;                         // which derivative to take (1st, 2nd, ...)
+    string infile   = "approx.mfa";             // diy input file 
+    int  deriv      = 1;                        // which derivative to take (1st, 2nd, ...)
     bool help;                                  // show help
 
     // get command line arguments

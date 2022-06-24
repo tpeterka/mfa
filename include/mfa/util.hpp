@@ -10,6 +10,11 @@
 
 namespace mfa
 {
+    struct MFAError: public std::runtime_error
+    {
+        using std::runtime_error::runtime_error;
+    };
+
     // error statistics
     template <typename T>
         struct ErrorStats
@@ -18,15 +23,30 @@ namespace mfa
             T max_norm_err;         // max of normalized errors (absolute value)
             T sum_sq_abs_errs;      // sum of squared absolute errors
             T sum_sq_norm_errs;     // sum of squared normalized errors
+
+            ErrorStats()
+            {
+                max_abs_err         = 0.0;
+                max_norm_err        = 0.0;
+                sum_sq_abs_errs     = 0.0;
+                sum_sq_norm_errs    = 0.0;
+            }
+            ErrorStats(T max_abs_err_, T max_norm_err_, T sum_sq_abs_errs_, T sum_sq_norm_errs_) :
+                max_abs_err(max_abs_err_),
+                max_norm_err(max_norm_err_),
+                sum_sq_abs_errs(sum_sq_abs_errs_),
+                sum_sq_norm_errs(sum_sq_norm_errs_)
+            {}
         };
 
     // object for iterating in a flat loop over an n-dimensional volume
+    // a few member functions are thread-safe (marked); rest are not
     struct VolIterator
     {
-        template<typename>
-        friend class PtIterator;
+        friend struct SliceIterator;
+        friend struct CurveIterator;
 
-        // TODO these variables should be const
+        // TODO these variables ideally should be const
         size_t          dom_dim_;                   // number of domain dimensions
         VectorXi        npts_dim_;                  // size of volume or subvolume in each dimension
         VectorXi        starts_dim_;                // offset to start of subvolume in each dimension
@@ -77,10 +97,10 @@ namespace mfa
                 idx_ijk(idx, idx_dim_);
                 prev_idx_dim_ = idx_dim_;
 
-                // Set done_dim_ for dims which have been traversed up to this point
+                // set done_dim_ for dims which have been traversed up to this point
                 for (size_t i = 0; i < dom_dim_ && ds_(i) <= idx; i++)
                 {
-                    if(idx_dim_(i)==starts_dim_(i))
+                    if (idx_dim_(i) == starts_dim_(i))
                         done_dim_[i] = true;
                 }
             }
@@ -91,7 +111,7 @@ namespace mfa
             }
         }
 
-        // subvolume (slice) version
+        // subvolume version
         VolIterator(const   VectorXi& sub_npts,             // size of subvolume in each dimension
                     const   VectorXi& sub_starts,           // offset to start of subvolume in each dimension
                     const   VectorXi& all_npts,             // size of total volume in each dimension
@@ -121,7 +141,7 @@ namespace mfa
         // null iterator
         VolIterator() :
                     dom_dim_(0),
-                    tot_iters_(0)                                { }
+                    tot_iters_(0)                           { }
 
         // copy constructor
         VolIterator(const VolIterator& other) = default;
@@ -148,30 +168,32 @@ namespace mfa
             first.all_npts_dim_.swap(second.all_npts_dim_);
             first.ds_.swap(second.ds_);
             std::swap(first.tot_iters_, second.tot_iters_);
-
             first.idx_dim_.swap(second.idx_dim_);
             first.prev_idx_dim_.swap(second.prev_idx_dim_);
             std::swap(first.cur_iter_, second.cur_iter_);
             std::swap(first.dom_dim_, second.dom_dim_);
         }
 
+        // reset the iterator, possibly to a given iteration count
+        void reset(size_t idx = 0)                          { init(idx); }
 
         // return total number of iterations in the volume
+        // thread-safe
         size_t tot_iters() const        { return tot_iters_; }
 
         // return whether all iterations are done
         bool done() const              { return cur_iter_ >= tot_iters_; }
 
         // return current index in a dimension
-        // in case of a subvolume (slice), index is w.r.t. entire volume
+        // in case of a subvolume, index is w.r.t. entire volume
         int idx_dim(int dim) const      { return idx_dim_[dim]; }
 
         // return vector of indices in each dimension
-        // in case of a subvolume (slice), index is w.r.t entire volume
+        // in case of a subvolume, index is w.r.t entire volume
         VectorXi idx_dim() const        { return idx_dim_; }
 
         // return previous index, what it was before incrementing, in a dimension
-        // in case of a subvolume (slice), index is w.r.t. entire volume
+        // in case of a subvolume, index is w.r.t. entire volume
         int prev_idx_dim(int dim) const   { return prev_idx_dim_[dim]; }
 
         // return whether a row, col, etc. in a dimension is done
@@ -183,7 +205,8 @@ namespace mfa
         size_t cur_iter() const       { return cur_iter_; }
 
         // convert linear domain point index into (i,j,k,...) multidimensional index
-        // in case of subvolume (slice), idx is w.r.t. subvolume but ijk is w.r.t entire volume
+        // in case of subvolume, idx is w.r.t. subvolume but ijk is w.r.t entire volume
+        // thread-safe
         void idx_ijk(
                 size_t                  idx,            // linear cell index in subvolume
                 VectorXi&               ijk) const      // (output) i,j,k,... indices in all dimensions
@@ -205,7 +228,8 @@ namespace mfa
         }
 
         // convert (i,j,k,...) multidimensional index into linear index into domain
-        // in the case of subvolume (slice), both ijk and idx are w.r.t. entire volume
+        // in the case of subvolume, both ijk and idx are w.r.t. entire volume
+        // thread-safe
         size_t ijk_idx(const VectorXi& ijk) const       // i,j,k,... indices to all dimensions
         {
             size_t idx          = 0;
@@ -231,6 +255,7 @@ namespace mfa
         }
 
         // convert subvolume index into full volume index
+        // thread-safe
         size_t sub_full_idx(size_t sub_idx) const
         {
             VectorXi ijk(dom_dim_);
@@ -263,19 +288,239 @@ namespace mfa
             }
 
             // check for last point, flipping any done flags to true
+            bool done_prev_dims = true;                         // logical and of done state of all previous dims
             for (int i = 0; i < dom_dim_ - 1; i++)
             {
                 // reset iteration for current dim and increment next dim.
-                if (idx_dim_[i] - starts_dim_[i] >= npts_dim_[i])
+                if (done_prev_dims && idx_dim_[i] - starts_dim_[i] >= npts_dim_[i])
                 {
                     done_dim_[i]    = true;
                     idx_dim_[i]     = starts_dim_[i];
                     idx_dim_[i + 1]++;
                     done_dim_[i + 1] = false;
                 }
+                done_prev_dims &= done_dim_[i];
             }
+
+            // special case for last dimension; prevent index overflow when previous dimension was zero size
+            if (idx_dim_[dom_dim_ - 1] - starts_dim_[dom_dim_ - 1] >= npts_dim_[dom_dim_ - 1])
+            {
+                idx_dim_[dom_dim_ - 1] = 0;
+                done_dim_[dom_dim_ - 1] = false;
+            }
+
         }
     };  // VolIterator
+
+    // a slice of a VolIterator missing one dimension
+    struct SliceIterator
+    {
+        friend struct CurveIterator;
+
+        private:
+
+        VolIterator*        vol_iter_;          // the original full-dim vol iterator from which this slice derives
+        int                 missing_dim_;       // the dimension missing in the slice
+        size_t              dom_dim_;           // number of domain dimensions in original volume
+        size_t              cur_iter_;          // current flattened iteration number
+        VectorXi            idx_dim_;           // current index in each dimension in original volume
+        size_t              tot_iters_;         // total number of iterations in slice (not original volume)
+        VolIterator*        sub_vol_iter_;      // subvolume iterator for the slice
+
+        public:
+
+        SliceIterator(VolIterator& vol_iter, int missing_dim) :
+            vol_iter_(&vol_iter),
+            missing_dim_(missing_dim),
+            cur_iter_(0),
+            dom_dim_(vol_iter_->dom_dim_)
+        {
+            VectorXi sub_npts       = vol_iter_->npts_dim_;
+            sub_npts(missing_dim_)  = 1;
+            sub_vol_iter_           = new VolIterator(sub_npts, vol_iter_->starts_dim_, vol_iter_->all_npts_dim_);
+            idx_dim_                = vol_iter_->starts_dim_;
+            tot_iters_              = sub_vol_iter_->tot_iters();
+        }
+
+        // null iterator
+        SliceIterator() :
+            dom_dim_(0),
+            tot_iters_(0)                       {}
+
+        // copy constructor
+        SliceIterator(const SliceIterator& other) = default;
+
+        // move constructor
+        SliceIterator(SliceIterator&& other) :
+            SliceIterator()
+        {
+            swap(*this, other);
+        }
+
+        // move & copy assignment (pass by value for copy-and-swap)
+        SliceIterator& operator=(SliceIterator other)
+        {
+            swap(*this, other);
+            return *this;
+        }
+
+        friend void swap(SliceIterator& first, SliceIterator& second)
+        {
+            std::swap(first.vol_iter_, second.vol_iter_);
+            std::swap(first.missing_dim_, second.missing_dim_);
+            std::swap(first.dom_dim_, second.dom_dim_);
+            std::swap(first.cur_iter_, second.cur_iter_);
+            first.idx_dim_.swap(second.idx_dim_);
+            std::swap(first.tot_iters_, second.tot_iters_);
+            std::swap(first.sub_vol_iter_, second.sub_vol_iter_);
+        }
+
+        ~SliceIterator()
+        {
+            delete sub_vol_iter_;
+        }
+
+        // reset the iterator
+        void reset()
+        {
+            vol_iter_->reset();
+            cur_iter_ = 0;
+            sub_vol_iter_->reset();
+            idx_dim_ = vol_iter_->starts_dim_;
+        }
+
+        // return whether all iterations in slice (not original volume) are done
+        bool done() const
+        {
+            return cur_iter_ >= tot_iters_;
+        }
+
+        // increment iteration; user must call incr_iter() near the bottom of the flattened loop
+        void incr_iter()
+        {
+            sub_vol_iter_->incr_iter();
+            cur_iter_   = sub_vol_iter_->cur_iter();
+            idx_dim_    = sub_vol_iter_->idx_dim();
+        }
+
+        // return ijk of current iterator location w.r.t. full volume
+        VectorXi cur_ijk() const
+        {
+            return idx_dim_;
+        }
+
+        // return one dimension of ijk of current iterator location w.r.t. full volume
+        int cur_ijk(int dim) const
+        {
+            return idx_dim_(dim);
+        }
+
+        // return current total iteration count
+        size_t cur_iter() const       { return cur_iter_; }
+
+    };  // SliceIterator
+
+    // a one-dimension curve of a VolIterator
+    struct CurveIterator
+    {
+        private:
+
+        SliceIterator*          slice_iter_;        // the slice iterator containing the start of this curve
+        size_t                  dom_dim_;           // number of domain dimensions in original volume
+        size_t                  cur_iter_;          // current flattened iteration number
+        VectorXi                idx_dim_;           // current index in each dimension in original volume
+        int                     curve_dim_;         // dimension of curve
+        size_t                  tot_iters_;         // total number of iterations in slice (not original volume)
+
+        public:
+
+        CurveIterator(SliceIterator& slice_iter) :
+            slice_iter_(&slice_iter),
+            cur_iter_(0),
+            curve_dim_(slice_iter_->missing_dim_),
+            dom_dim_(slice_iter_->vol_iter_->dom_dim_)
+        {
+            tot_iters_  = slice_iter_->vol_iter_->npts_dim_(curve_dim_);
+            idx_dim_    = VectorXi::Zero(dom_dim_);
+        }
+
+        // null iterator
+        CurveIterator() :
+                    dom_dim_(0),
+                    tot_iters_(0)                           { }
+
+        // copy constructor
+        CurveIterator(const CurveIterator& other) = default;
+
+        // move constructor
+        CurveIterator(CurveIterator&& other) :
+            CurveIterator()
+        {
+            swap(*this, other);
+        }
+
+        // move & copy assignment (pass by value for copy-and-swap)
+        CurveIterator& operator=(CurveIterator other)
+        {
+            swap(*this, other);
+            return *this;
+        }
+
+        friend void swap(CurveIterator& first, CurveIterator& second)
+        {
+            std::swap(first.slice_iter_, second.slice_iter_);
+            std::swap(first.dom_dim_, second.dom_dim_);
+            std::swap(first.cur_iter_, second.cur_iter_);
+            first.idx_dim_.swap(second.idx_dim_);
+            std::swap(first.curve_dim_, second.curve_dim_);
+            std::swap(first.tot_iters_, second.tot_iters_);
+        }
+
+        // reset the iterator
+        void reset()
+        {
+            slice_iter_->reset();
+            cur_iter_ = 0;
+            idx_dim_ = VectorXi::Zero(dom_dim_);
+        }
+
+        // return whether all iterations in curve (not original volume) are done
+        bool done() const              { return cur_iter_ >= tot_iters_; }
+
+        // return ijk of current iterator location w.r.t. full volume
+        VectorXi cur_ijk() const
+        {
+            return slice_iter_->idx_dim_ + idx_dim_;
+        }
+
+        // return one dimension of ijk of current iterator location w.r.t. full volume
+        int cur_ijk(int dim) const
+        {
+            return slice_iter_->idx_dim_(dim) + idx_dim_(dim);
+        }
+
+        // convert (i,j,k,...) multidimensional index into linear index into domain
+        // both ijk and idx are w.r.t. entire volume
+        // thread-safe
+        size_t ijk_idx(const VectorXi& ijk) const       // i,j,k,... indices to all dimensions
+        {
+            return slice_iter_->vol_iter_->ijk_idx(ijk);
+        }
+
+        // increment iteration; user must call incr_iter() near the bottom of the flattened loop
+        void incr_iter()
+        {
+            cur_iter_++;
+            if (idx_dim_[curve_dim_] < slice_iter_->vol_iter_->npts_dim_[curve_dim_] - 1)
+                idx_dim_[curve_dim_]++;
+            else
+                idx_dim_[curve_dim_] = 0;
+        }
+
+        // return current total iteration count
+        size_t cur_iter() const       { return cur_iter_; }
+
+    };  // CurveIterator
 
     struct GridInfo
     {

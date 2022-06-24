@@ -33,11 +33,16 @@
 // comment out the following line for original single tensor product version
 // #define MFA_TMESH
 
-// linear least squares local solve
-// #define MFA_LINEAR_LOCAL
+// comment out the following line to encode local with unified dims
+#define MFA_ENCODE_LOCAL_SEPARABLE
 
-// refine as many knot spans in one iteration as possible
-#define MFA_ALL_SPANS
+// for debugging, can turn off constraints in local solve
+// #define MFA_NO_CONSTRAINTS
+
+// the following lines control the extent of merging small tensors into larger ones
+#define MFA_TMESH_MERGE_MAX
+// #define MFA_TMESH_MERGE_SOME
+// #define MFA_TMESH_MERGE_NONE
 
 #include    <Eigen/Dense>
 #include    <Eigen/Sparse>
@@ -138,7 +143,18 @@ namespace mfa
         MFA(int dom_dim_, int verbose_ = 0) :
             dom_dim(dom_dim_),
             verbose(verbose_)
-        { }
+        {
+#ifdef EIGEN_OPENMP
+
+            // set openMP threading for Eigen
+            Eigen::initParallel();          // strictly not necessary for Eigen 3.3, but a good safety measure
+            // Most modern CPUs have 2 hyperthreads per core, and openmp (hence Eigen) uses the number hyperthreads by default.
+            // We want an automatic way to set the number of threads to number of physical cores, to prevent oversubscription.
+            // So we set the number of Eigen threads to be half the default.
+            Eigen::setNbThreads(Eigen::nbThreads()  / 2);
+            fmt::print(stderr, "\nEigen is using {} openMP threads.\n\n", Eigen::nbThreads());
+#endif
+        }
 
         // This constructor is intended to be used for loading MFAs in and out of core
         // and can lead to an inconsistent state if the MFA_Data pointers are not set properly
@@ -309,7 +325,6 @@ namespace mfa
                 const PointSet<T>&  input,                  // input points
                 T                   err_limit,              // maximum allowable normalized error
                 bool                weighted,               // solve for and use weights (default = true)
-                bool                local,                  // solve locally (with constraints) each round
                 const VectorX<T>&   extents,                // extents in each dimension, for normalizing error (size 0 means do not normalize)
                 int                 max_rounds) const       // optional maximum number of rounds
         {
@@ -320,7 +335,7 @@ namespace mfa
 #ifndef MFA_TMESH           // original adaptive encode for one tensor product
             encoder.OrigAdaptiveEncode(err_limit, weighted, extents, max_rounds);
 #else                       // adaptive encode for tmesh
-            encoder.AdaptiveEncode(err_limit, weighted, local, extents, max_rounds);
+            encoder.AdaptiveEncode(err_limit, weighted, extents, max_rounds);
 #endif
         }
 
@@ -667,14 +682,13 @@ namespace mfa
         void AdaptiveEncodeGeom(const PointSet<T>&  input,
                                 T                   err_limit,
                                 bool                weighted,
-                                bool                local,
                                 const VectorX<T>&   extents,
                                 int                 max_rounds)
         {
             if (verbose)
                 cout << "MFA: Encoding geometry model (adaptive)" << endl;
 
-            AdaptiveEncodeImpl(*geometry, input, err_limit, weighted, local, extents, max_rounds);
+            AdaptiveEncodeImpl(*geometry, input, err_limit, weighted, extents, max_rounds);
         }
 
         // Adaptive encode single variable model only
@@ -683,7 +697,6 @@ namespace mfa
                                 const PointSet<T>&  input,
                                 T                   err_limit,
                                 bool                weighted,
-                                bool                local,
                                 const VectorX<T>&   extents,
                                 int                 max_rounds)
         {
@@ -696,22 +709,21 @@ namespace mfa
             if (verbose)
                 cout << "MFA: Encoding variable model " << i << " (adaptive)" << endl;
             
-            AdaptiveEncodeImpl(*(vars[i]), input, err_limit, weighted, local, extents, max_rounds);
+            AdaptiveEncodeImpl(*(vars[i]), input, err_limit, weighted, extents, max_rounds);
         }
 
         // Adaptive encode all models simultaneously
         void AdaptiveEncode(const PointSet<T>&  input,
                             T                   err_limit,
                             bool                weighted,
-                            bool                local,
                             const VectorX<T>&   extents,
                             int                 max_rounds)
         {
-            AdaptiveEncodeGeom(input, err_limit, weighted, local, extents, max_rounds);
+            AdaptiveEncodeGeom(input, err_limit, weighted, extents, max_rounds);
 
             for (int i = 0; i < nvars(); i++)
             {
-                AdaptiveEncodeVar(i, input, err_limit, weighted, local, extents, max_rounds);
+                AdaptiveEncodeVar(i, input, err_limit, weighted, extents, max_rounds);
             }
         }
     };      // class MFA

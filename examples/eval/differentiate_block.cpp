@@ -31,7 +31,7 @@ int main(int argc, char** argv)
     diy::mpi::environment  env(argc, argv);     // equivalent of MPI_Init(argc, argv)/MPI_Finalize()
     diy::mpi::communicator world;               // equivalent of MPI_COMM_WORLD
 
-    string infile = "approx.out";               // diy input file
+    string infile = "approx.mfa";               // diy input file
 
     // default command line arguments
     int  deriv     = 1;                         // which derivative to take (1st, 2nd, ...)

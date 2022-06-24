@@ -167,7 +167,6 @@ struct Block : public BlockBase<T>
             generate_rectilinear_analytical_data(cp, fun, args);
         }
     }
-    
 
     // synthetic analytic (scalar) data, sampled on unstructured point cloud
     // when seed = 0, we choose a time-dependent seed for the random number generator
@@ -278,7 +277,7 @@ struct Block : public BlockBase<T>
                     if (u_dist(df_gen) <= keep_frac)
                         keep = true;
                 }
-            } while (!keep);    
+            } while (!keep);
 
             // Add point to Input
             for (size_t k = 0; k < geom_dim; k++)
@@ -2664,11 +2663,10 @@ T sintest( const VectorX<T>& p1,
 template<typename T>
 T sine(const VectorX<T>& domain_pt, DomainArgs&  args, int k)
 {
-    DomainArgs* a = &args;
     T retval = 1.0;
     for (auto i = 0; i < domain_pt.size(); i++)
-        retval *= sin(domain_pt(i) * a->f[k]);
-    retval *= a->s[k];
+        retval *= sin(domain_pt(i) * args.f[k]);
+    retval *= args.s[k];
 
     return retval;
 }
@@ -2676,11 +2674,10 @@ T sine(const VectorX<T>& domain_pt, DomainArgs&  args, int k)
 template<typename T>
 T cosine(const VectorX<T>& domain_pt, DomainArgs&  args, int k)
 {
-    DomainArgs* a = &args;
     T retval = 1.0;
     for (auto i = 0; i < domain_pt.size(); i++)
-        retval *= cos(domain_pt(i) * a->f[k]);
-    retval *= a->s[k];
+        retval *= cos(domain_pt(i) * args.f[k]);
+    retval *= args.s[k];
 
     return retval;        
 }
@@ -2690,11 +2687,10 @@ T cosine(const VectorX<T>& domain_pt, DomainArgs&  args, int k)
 template<typename T>
 T ncosp1(const VectorX<T>& domain_pt, DomainArgs&  args, int k)
 {
-    DomainArgs* a = &args;
     T retval = 1.0;
     for (auto i = 0; i < domain_pt.size(); i++)
-        retval *= 1 - cos(domain_pt(i) * a->f[k]);
-    retval *= a->s[k];
+        retval *= 1 - cos(domain_pt(i) * args.f[k]);
+    retval *= args.s[k];
 
     return retval;        
 }
@@ -2703,53 +2699,115 @@ T ncosp1(const VectorX<T>& domain_pt, DomainArgs&  args, int k)
 template<typename T>
 T sinc(const VectorX<T>& domain_pt, DomainArgs&  args, int k)
 {
-    DomainArgs* a = &args;
     T retval = 1.0;
     for (auto i = 0; i < domain_pt.size(); i++)
     {
         if (domain_pt(i) != 0.0)
-            retval *= (sin(domain_pt(i) * a->f[k] ) / domain_pt(i));
+            retval *= (sin(domain_pt(i) * args.f[k] ) / domain_pt(i));
     }
-    retval *= a->s[k];
+    retval *= args.s[k];
 
     return retval;
 }
 
-// evaluate 2d poly-sinc function version 1
+// evaluate n-d poly-sinc function version 1
 template<typename T>
-T polysinc1(const VectorX<T>& domain_pt, DomainArgs&  args, int k)
+T polysinc1(const VectorX<T>& domain_pt, DomainArgs&  args, int)
 {
-    // only for 2d
-    if (domain_pt.size() != 2)
+    // a = (x + 1)^2 + (y - 1)^2 + (z + 1)^2 + ...
+    // b = (x - 1)^2 + (y + 1)^2 + (z - 1)^2 + ...
+    T a = 0.0;
+    T b = 0.0;
+    for (auto i = 0; i < domain_pt.size(); i++)
     {
-        fprintf(stderr, "Polysinc 1 function only defined for 2d. Aborting.\n");
-        exit(0);
+        T s, r;
+        if (i % 2 == 0)
+        {
+            s = domain_pt(i) + 1.0;
+            r = domain_pt(i) - 1.0;
+        }
+        else
+        {
+            s = domain_pt(i) - 1.0;
+            r = domain_pt(i) + 1.0;
+        }
+        a += (s * s);
+        b += (r * r);
     }
-    T x = domain_pt(0);
-    T y = domain_pt(1);
-    T a = (x + 1) * (x + 1) + (y - 1) * (y - 1);
-    T b = (x - 1) * (x - 1) + (y + 1) * (y + 1);
+
+    // a1 = sinc(a); b1 = sinc(b)
     T a1 = (a == 0.0 ? 1.0 : sin(a) / a);
     T b1 = (b == 0.0 ? 1.0 : sin(b) / b);
+
     return args.s[0] * (a1 + b1);
 }
 
-// evaluate 2d poly-sinc function version 2
+// evaluate n-d poly-sinc function version 2
 template<typename T>
-T polysinc2(const VectorX<T>& domain_pt, DomainArgs&  args, int k)
+T polysinc2(const VectorX<T>& domain_pt, DomainArgs&  args, int)
 {
-    // only for 2d
-    if (domain_pt.size() != 2)
+    // a = x^2 + y^2 + z^2 + ...
+    // b = 2(x - 2)^2 + (y + 2)^2 + (z - 2)^2 + ...
+    T a = 0.0;
+    T b = 0.0;
+    for (auto i = 0; i < domain_pt.size(); i++)
     {
-        fprintf(stderr, "Polysinc 2 function only defined for 2d. Aborting.\n");
-        exit(0);
+        T s, r;
+        s = domain_pt(i);
+        if (i % 2 == 0)
+        {
+            r = domain_pt(i) - 2.0;
+        }
+        else
+        {
+            r = domain_pt(i) + 2.0;
+        }
+        a += (s * s);
+        if (i == 0)
+            b += (2.0 * r * r);
+        else
+            b += (r * r);
     }
-    T x = domain_pt(0);
-    T y = domain_pt(1);
-    T a = x * x + y * y;
-    T b = 2 * (x - 2) * (x - 2) + (y + 2) * (y + 2);
+
+    // a1 = sinc(a); b1 = sinc(b)
     T a1 = (a == 0.0 ? 1.0 : sin(a) / a);
     T b1 = (b == 0.0 ? 1.0 : sin(b) / b);
+
+    return args.s[0] * (a1 + b1);
+}
+
+// evaluate n-d poly-sinc function version 2
+template<typename T>
+T polysinc3(const VectorX<T>& domain_pt, DomainArgs&  args, int)
+{
+    // a = sqrt(x^2 + y^2 + z^2 + ...)
+    // b = 2(x - 2)^2 + (y + 2)^2 + (z - 2)^2 + ...
+    T a = 0.0;
+    T b = 0.0;
+    for (auto i = 0; i < domain_pt.size(); i++)
+    {
+        T s, r;
+        s = domain_pt(i);
+        if (i % 2 == 0)
+        {
+            r = domain_pt(i) - 2.0;
+        }
+        else
+        {
+            r = domain_pt(i) + 2.0;
+        }
+        a += (s * s);
+        if (i == 0)
+            b += (2.0 * r * r);
+        else
+            b += (r * r);
+    }
+    a = sqrt(a);
+
+    // a1 = sinc(a); b1 = sinc(b)
+    T a1 = (a == 0.0 ? 1.0 : sin(a) / a);
+    T b1 = (b == 0.0 ? 1.0 : sin(b) / b);
+
     return args.s[0] * (a1 + b1);
 }
 
@@ -2845,9 +2903,11 @@ T evaluate_function(string fun, const VectorX<T>& domain_pt, DomainArgs& args, i
 {
     if (fun == "sine")          return sine(domain_pt, args, k);
     else if (fun == "cosine")   return cosine(domain_pt, args, k);
+    else if (fun == "ncosp1")   return ncosp1(domain_pt, args, k);
     else if (fun == "sinc")     return sinc(domain_pt, args, k);
     else if (fun == "psinc1")   return polysinc1(domain_pt, args, k);
     else if (fun == "psinc2")   return polysinc2(domain_pt, args, k);
+    else if (fun == "psinc3")   return polysinc3(domain_pt, args, k);
     else if (fun == "ml")       return ml(domain_pt, args, k);
     else if (fun == "f16")      return f16(domain_pt, args, k);
     else if (fun == "f17")      return f17(domain_pt, args, k);

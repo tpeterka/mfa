@@ -338,7 +338,7 @@ int main(int argc, char **argv) {
     }
 
     if (write_output) {
-        diy::io::write_blocks("approx.out", world, master);
+        diy::io::write_blocks("approx.mfa", world, master);
 
     }
     if (ovs[0] == 0 && ovs[1] == 0 && ovs[2] == 0) // no overlap, stop
@@ -394,7 +394,7 @@ int main(int argc, char **argv) {
     // save the results in diy format
     double write_time;
     if (write_output) {
-        diy::io::write_blocks("approx.out", world, master);
+        diy::io::write_blocks("approx.mfa", world, master);
         world.barrier();
         write_time = MPI_Wtime();
     }

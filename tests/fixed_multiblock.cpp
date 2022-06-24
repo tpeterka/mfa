@@ -227,7 +227,7 @@ int main(int argc, char** argv)
         fprintf(stderr, "\noverall encoding time = %.3lf s.\n", encode_time);
 
     // save the results in diy format
-    diy::io::write_blocks("approx.out", world, master);
+    diy::io::write_blocks("approx.mfa", world, master);
 
     // check the results of the last (only) science variable
     // only checking error for one rank and one configuration of total number of blocks
