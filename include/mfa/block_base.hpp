@@ -849,7 +849,10 @@ struct BlockBase
 //#define BLEND_VERBOSE
     void decode_core_ures(const diy::Master::ProxyWithLink &cp,
             std::vector<int> &resolutions) // we already know the core, decode at desired resolution, without any requests sent to neighbors
-            {
+    {
+#ifdef MFA_KOKKOS
+        Kokkos::Profiling::pushRegion("init_decode");
+#endif
         // dom_dim  actual geo dimension for output points
         int tot_core_pts = 1;
 
@@ -872,7 +875,7 @@ struct BlockBase
         int cs = 1;                        // stride of a coordinate in this dim
         T eps = 1.0e-10;                  // floating point roundoff error
         for (int i = 0; i < dom_dim; i++)  // all dimensions in the domain
-                {
+        {
             int k = 0;
             int co = 0;            // j index of start of a new coordinate value
             for (int j = 0; j < tot_core_pts; j++) {
@@ -886,6 +889,9 @@ struct BlockBase
             }
             cs *= ndom_outpts(i);
         }
+#ifdef MFA_KOKKOS
+        Kokkos::Profiling::popRegion(); // "init_decode"
+#endif
         // now decode at resolution
         this->DecodeRequestGrid(0, blend); // so just compute the value, without any further blending
         //mfa->DecodeDomain(*(vars[0].mfa_data), 0, blend, dom_dim, dom_dim, false);

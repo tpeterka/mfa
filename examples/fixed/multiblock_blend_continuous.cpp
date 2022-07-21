@@ -240,7 +240,9 @@ int main(int argc, char **argv) {
                     b->generate_analytical_data(cp, input, d_args);
                 });
     }
-
+#ifdef MFA_KOKKOS
+    Kokkos::Profiling::pushRegion("Encode");
+#endif
     double start_encode = MPI_Wtime();
     // compute the MFA
     if (world.rank() == 0)
@@ -255,7 +257,12 @@ int main(int argc, char **argv) {
     //encode_time = MPI_Wtime() - encode_time;
     if (world.rank() == 0)
         fprintf(stderr, "\n\nFixed encoding done.\n\n");
-
+#ifdef MFA_KOKKOS
+    Kokkos::Profiling::popRegion(); // "Encode"
+#endif
+#ifdef MFA_KOKKOS
+    Kokkos::Profiling::pushRegion("InitialDecode");
+#endif
     // debug: compute error field for visualization and max error to verify that it is below the threshold
     if (world.rank() == 0)
         fprintf(stderr, "\nFinal decoding and computing max. error...\n");
@@ -270,11 +277,19 @@ int main(int argc, char **argv) {
 #endif
     world.barrier();
     double end_decode = MPI_Wtime();
+#ifdef MFA_KOKKOS
+    Kokkos::Profiling::popRegion(); // "InitialDecode"
+#endif
 
+#ifdef MFA_KOKKOS
+    Kokkos::Profiling::pushRegion("RefinedDecode");
+#endif
     master.foreach([&](Block<real_t> *b, const diy::Master::ProxyWithLink &cp) {
         b->decode_core_ures(cp, resolutions);
     });
-
+#ifdef MFA_KOKKOS
+    Kokkos::Profiling::popRegion(); // "RefinedDecode"
+#endif
     world.barrier();
     double end_resolution_decode = MPI_Wtime();
 
