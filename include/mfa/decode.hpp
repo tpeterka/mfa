@@ -455,6 +455,9 @@ namespace mfa
                         const VectorX<T>&   max_params,     // upper corner of decoding points
                         const VectorXi&     ndom_pts)       // number of points to decode in each direction
         {
+#ifdef MFA_KOKKOS
+        	Kokkos::Profiling::pushRegion("InitDecodeGrid");
+#endif
             // precompute basis functions
             const VectorXi&     nctrl_pts = mfa_data.tmesh.tensor_prods[0].nctrl_pts;   // reference to control points (assume only one tensor)
 
@@ -501,6 +504,7 @@ namespace mfa
             // we should use it in serial too
             // compute basis functions for points to be decoded
             Kokkos::View<int** > span_starts("spans", kdom_dim, max_ndom_size );
+            Kokkos::Profiling::popRegion(); // "InitDecodeGrid"
             Kokkos::Profiling::pushRegion("ShapeFunc");
             //Kokkos::View<int ** >::HostMirror h_span_starts = Kokkos::create_mirror_view(span_starts);
             for (int k = 0; k < mfa_data.dom_dim; k++) {

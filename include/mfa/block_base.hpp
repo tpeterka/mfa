@@ -773,6 +773,9 @@ struct BlockBase
     void DecodeRequestGrid(int verbose,
                            MatrixX<T> &localBlock) // local block is in a grid, in lexicographic order
     {
+#ifdef MFA_KOKKOS
+        Kokkos::Profiling::pushRegion("start_decode_req");
+#endif
         VectorXi &ndpts = input->ndom_pts;
 
         VectorX<T> min_bd(this->dom_dim);
@@ -838,9 +841,9 @@ struct BlockBase
             p_max[i] = (max_block[i] - min_bd[i]) / diff;
         }
 #endif
-        // geometry first
-        /*mfa->DecodeAtGrid(*geometry.mfa_data, 0, dom_dim - 1, p_min, p_max,
-                grid_counts, griddom); */
+#ifdef MFA_KOKKOS
+        Kokkos::Profiling::popRegion(); //"start_decode_req"
+#endif
         for (size_t j = 0; j < vars.size(); j++) {
             mfa->DecodeAtGrid(*(this->vars[j].mfa_data), dom_dim + j,
                     dom_dim + j, p_min, p_max, grid_counts, localBlock);
@@ -870,7 +873,10 @@ struct BlockBase
         int nghost_pts;           // number of ghost points in current dimension
         for (int i = 0; i < dom_dim; i++)
             d(i) = (core_maxs(i) - core_mins(i)) / (ndom_outpts(i) - 1);
-
+#ifdef MFA_KOKKOS
+        Kokkos::Profiling::popRegion(); // "init_decode"
+        Kokkos::Profiling::pushRegion("calc_pos");
+#endif
         // assign values to the domain (geometry)
         int cs = 1;                        // stride of a coordinate in this dim
         T eps = 1.0e-10;                  // floating point roundoff error
@@ -890,7 +896,7 @@ struct BlockBase
             cs *= ndom_outpts(i);
         }
 #ifdef MFA_KOKKOS
-        Kokkos::Profiling::popRegion(); // "init_decode"
+        Kokkos::Profiling::popRegion(); // "calc_pos"
 #endif
         // now decode at resolution
         this->DecodeRequestGrid(0, blend); // so just compute the value, without any further blending
