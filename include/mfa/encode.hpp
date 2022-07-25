@@ -821,6 +821,128 @@ namespace mfa
             }
         }
 
+        // void EncodeSeparableConstrained(
+        //         TensorIdx                 t_idx,                  // index of tensor product being encoded
+        //         bool                      weighted = true)        // solve for and use weights
+        // {
+        //     double t0 = MPI_Wtime();
+
+        //     if (mfa_data.tmesh.tensor_prods.size() != 1)
+        //     {
+        //         cerr << "ERROR: Encoder::EncodeSeparableConstrained only implemented for single tensor tmesh" << endl;
+        //         exit(0);
+        //     }
+
+        //     // typing shortcuts
+        //     auto& dom_dim       = mfa_data.dom_dim;
+        //     auto& tmesh         = mfa_data.tmesh;
+        //     auto& tensor_prods  = tmesh.tensor_prods;
+        //     auto& t             = tensor_prods[t_idx];                                      // current tensor product
+        //     int pt_dim          = mfa_data.dim();                                           // control point dimensionality
+
+        //     // get input domain points covered by the tensor, including constraints
+        //     vector<size_t> start_idxs(dom_dim);                                                     // start of input points including constraints
+        //     vector<size_t> end_idxs(dom_dim);                                                       // end of input points including constraints
+        //     mfa_data.tmesh.domain_pts(t_idx, input.params->param_grid, true, start_idxs, end_idxs); // true: extend to cover constraints
+
+        //     // relevant input domain points covering constraints
+        //     VectorXi ndom_pts(dom_dim);
+        //     VectorXi dom_starts(dom_dim);
+        //     for (auto k = 0; k < dom_dim; k++)
+        //     {
+        //         ndom_pts(k)     = end_idxs[k] - start_idxs[k] + 1;
+        //         dom_starts(k)   = start_idxs[k];                                                    // need Eigen vector from STL vector
+        //     }
+
+        //     // resize control points and weights in case number of control points changed
+        //     t.ctrl_pts.resize(t.nctrl_pts.prod(), pt_dim);
+        //     t.weights.resize(t.ctrl_pts.rows());
+        //     t.weights = VectorX<T>::Ones(t.weights.size());                                         // linear solve does not solve for weights; set to 1
+
+        //     // two matrices of input points for subsequent dimensions after dimension 0, which draws directly from input domain
+        //     // input points cover constraints as well as free control point basis functions
+        //     // (double buffering output control points to input points)
+        //     VectorXi npts_dim = input.ndom_pts;           // number of output points in current dim = input pts for next dim
+        //     MatrixX<T> Q(npts_dim.prod(), pt_dim);              // first matrix size of input points
+        //     npts_dim(0) = t.nctrl_pts(0);
+        //     MatrixX<T> Q1(npts.prod(), pt_dim);                                                     // second matrix already smaller, size of ctrl pts in first dim
+
+        //     // input and output number of points
+        //     VectorXi nin_pts    = input.ndom_pts;
+        //     VectorXi nout_pts   = npts_dim;
+        //     VectorXi in_all_pts = input.ndom_pts;
+
+        //     // timing
+        //     double free_time    = 0.0;
+        //     double cons_time    = 0.0;
+        //     double norm_time    = 0.0;
+        //     double solve_time   = 0.0;
+
+        //     for (auto dim = 0; dim < dom_dim; dim++)                                    // for all domain dimensions
+        //     {
+        //         MatrixX<T> R(nin_pts(dim), pt_dim);                         // RHS for solving N * P = R
+        //         VolIterator     in_iter(nin_pts, in_starts, in_all_pts);    // volume of current input points
+        //         VolIterator     out_iter(nout_pts);                         // volume of current output points
+        //         SliceIterator   in_slice_iter(in_iter, dim);                // slice of input points volume missing current dim
+        //         SliceIterator   out_slice_iter(out_iter, dim);              // slice of output points volume missing current dim
+
+        //         // allocate matrices of free and constraint control points and constraint basis functions
+        //         MatrixX<T>  Nfree(nin_pts(dim), t.nctrl_pts(dim));
+        //         MatrixX<T>  Ncons;
+        //         MatrixX<T>  Pcons;
+        //         MatrixX<T>  P(t.nctrl_pts(dim), pt_dim);
+
+        //         // for all curves in the current dimension
+        //         while (!in_slice_iter.done())
+        //         {
+        //             CurveIterator   in_curve_iter(in_slice_iter);       // one curve of the input points in the current dim
+        //             CurveIterator   out_curve_iter(out_slice_iter);     // one curve of the output points in the current dim
+
+        //             start_ijk = in_curve_iter.cur_ijk();
+        //             // add original input point starting offsets to higher dims start_ijk
+        //             // but don't offset the previous dims: start_ijk for previous dims refers to control points, not input points
+        //             if (dim > 0)
+        //             {
+        //                 for (auto j = dim; j < dom_dim; j++)
+        //                     start_ijk(j) += dom_starts(j);
+        //             }
+
+        //             ComputeCtrlPtCurve(in_curve_iter, t_idx, dim, R, Q, Q1, Nfree, Ncons, Pcons, P,
+        //                         cons_type, nin_pts, start_ijk, free_time, cons_time, norm_time, solve_time);
+
+        //             // copy solution to one curve of output points
+        //             while (!out_curve_iter.done())
+        //             {
+        //                 if (dim % 2 == 0)
+        //                     Q1.row(out_curve_iter.ijk_idx(out_curve_iter.cur_ijk())) = P.row(out_curve_iter.cur_iter());
+        //                 else
+        //                     Q.row(out_curve_iter.ijk_idx(out_curve_iter.cur_ijk())) = P.row(out_curve_iter.cur_iter());
+        //                 out_curve_iter.incr_iter();
+        //             }
+
+        //             out_slice_iter.incr_iter();
+        //             in_slice_iter.incr_iter();
+        //         }       // for all curves
+
+        //         // adjust input, output numbers of points for next iteration
+        //         nin_pts(dim) = t.nctrl_pts(dim);
+        //         if (dim < dom_dim - 1)
+        //             nout_pts(dim + 1) = t.nctrl_pts(dim + 1);
+        //         in_starts   = VectorXi::Zero(dom_dim);                  // subvolume = full volume for later dims
+        //         in_all_pts  = nin_pts;
+        //     }       // for all domain dimensions
+
+        //     // copy final result back to tensor product
+        //     if (dom_dim % 2 == 0)
+        //         t.ctrl_pts = Q.block(0, 0, t.nctrl_pts.prod(), pt_dim);
+        //     else
+        //         t.ctrl_pts = Q1.block(0, 0, t.nctrl_pts.prod(), pt_dim);
+
+        //     // timing
+        //     fmt::print(stderr, "EncodeSeparableConstrained() time {} s.\n", MPI_Wtime() - t0);
+        // }
+
+
 #ifdef MFA_TMESH
 
         // whether a curve of input points intersects a tensor product

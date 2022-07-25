@@ -97,20 +97,20 @@ namespace mfa
             }
 #else
             if (structured)
-                setDomainParamsStructured(domain_, dom_mins_, dom_maxs_, param_grid);          // params spaced according to domain spacing
+                setDomainParamsStructured(domain_);          // params spaced according to domain spacing
             else
                 setDomainParamsUnstructured(domain_, dom_mins_, dom_maxs_);
 #endif
 
             // debug
-            fprintf(stderr, "----- params -----\n");
-            for (auto i = 0; i < param_grid.size(); i++)
-            {
-                fprintf(stderr, "dimension %d:\n", i);
-                for (auto j = 0; j < param_grid[i].size(); j++)
-                    fmt::print(stderr, "params[{}][{}] = {}\n", i, j, param_grid[i][j]);
-            }
-            fprintf(stderr, "-----\n");
+            // fprintf(stderr, "----- params -----\n");
+            // for (auto i = 0; i < param_grid.size(); i++)
+            // {
+            //     fprintf(stderr, "dimension %d:\n", i);
+            //     for (auto j = 0; j < param_grid[i].size(); j++)
+            //         fmt::print(stderr, "params[{}][{}] = {}\n", i, j, param_grid[i][j]);
+            // }
+            // fprintf(stderr, "-----\n");
 
             // max extent of input data points
             int last     = domain_.cols() - 1;
@@ -279,49 +279,28 @@ namespace mfa
             check_param_bounds();
         }
 
+        // TODO: Does not properly support geom_dim!
+        // This only works if the first dom_dim dimensions of the 
+        // geometric coordinates should be used for the parametrization
+        // 
         // precompute parameters for input data points using domain spacing only (not length along curve)
         // params are only stored once for each dimension (1st dim params, 2nd dim params, ...)
         // total number of params is the sum of ndom_pts over the dimensions, much less than the total
         // number of data points (which would be the product)
         // assumes params were allocated by caller
-        void setDomainParamsStructured(
-                const MatrixX<T>&     domain,                   // input data points (1st dim changes fastest)
-                const VectorX<T>&     dom_mins,
-                const VectorX<T>&     dom_maxs,
-                vector<vector<T>>&    params)                   // (output) parameters for input points[dimension][index]
+        void setDomainParamsStructured(const MatrixX<T>& domain)                   // input data points (1st dim changes fastest)
         {
-            VectorX<T> mins;
-            VectorX<T> maxs;
-
-            // dom mins/maxs should either be empty or of size dom_dim
-            if (dom_mins.size() > 0 && dom_mins.size() != dom_dim)
-                cerr << "Warning: Invalid size of dom_mins in Param construction" << endl;
-            if (dom_maxs.size() > 0 && dom_maxs.size() != dom_dim)
-                cerr << "Warning: Invalid size of dom_maxs in Param construction" << endl;
-
-            // Set min/max extents in each domain dimension
-            if (dom_mins.size() != dom_dim || dom_maxs.size() != dom_dim)
-            {
-                mins = domain.leftCols(dom_dim).colwise().minCoeff();
-                maxs = domain.leftCols(dom_dim).colwise().maxCoeff();
-            }
-            else
-            {
-                mins = dom_mins;
-                maxs = dom_maxs;
-            }
-
-            VectorX<T> diff = maxs - mins;
-
-            size_t cs = 1;                                      // stride for domain points in current dim.
-            for (size_t k = 0; k < dom_dim; k++)                // for all domain dimensions
+            int cs = 1;                                      // stride for domain points in current dim.
+            for (int k = 0; k < dom_dim; k++)                // for all domain dimensions
             {
                 param_grid[k].resize(ndom_pts(k));
-                for (size_t i = 0; i < ndom_pts(k); i++)
-                    param_grid[k][i]= (domain(cs * i, k) - mins(k)) / diff(k);
+                T width_recip = 1 / (domain(cs * (ndom_pts(k) - 1), k) - domain(0, k));
+
+                for (int i = 0; i < ndom_pts(k); i++)
+                    param_grid[k][i]= (domain(cs * i, k) - domain(0, k)) * width_recip;
 
                 cs *= ndom_pts(k);
-            }                                                    // domain dimensions
+            }
 
             check_param_bounds();
             // debug
@@ -333,6 +312,9 @@ namespace mfa
 //             }
         }
 
+        // TODO: Does not properly support geom_dim!
+        // This only works if the first dom_dim dimensions of the 
+        // geometric coordinates should be used for the parametrization
         void setDomainParamsUnstructured(
             const MatrixX<T>&   domain,
             const VectorX<T>&   dom_mins,

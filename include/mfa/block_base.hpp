@@ -36,41 +36,43 @@ using RCLink = diy::RegularLink<diy::Bounds<T>>;
 template <typename T>
 using Decomposer = diy::RegularDecomposer<Bounds<T>>;
 
-struct ModelInfo
-{
-    ModelInfo(int dom_dim_, int pt_dim_) :
-        dom_dim(dom_dim_),
-        pt_dim(pt_dim_),
-        weighted(true),
-        local(false),
-        verbose(1)
-    {
-        geom_p.resize(dom_dim);
-        vars_p.resize(pt_dim - dom_dim);
-        for (auto i = 0; i < vars_p.size(); i++)
-            vars_p[i].resize(dom_dim);
-        geom_nctrl_pts.resize(dom_dim);
-        vars_nctrl_pts.resize(pt_dim - dom_dim);
-        for (auto i = 0; i < vars_nctrl_pts.size(); i++)
-            vars_nctrl_pts[i].resize(dom_dim);
 
-        regularization = 0;
-    }
-    virtual ~ModelInfo()                        {}
 
-    int                 dom_dim;                // domain dimensionality
-    int                 pt_dim;                 // point dimensionality (> dom_dim)
-    VectorXi            model_dims;             // (currently unused) pt dim for each mfa_data
-    vector<int>         geom_p;                 // degree in each dimension of geometry
-    vector<vector<int>> vars_p;                 // degree in each dimension of each science variable vars_p[var][dim]
-    vector<int>         geom_nctrl_pts;         // number of input points in each dimension of geometry
-    vector<vector<int>> vars_nctrl_pts;         // number of input pts in each dim of each science variable vars_nctrl_pts[var][dim]
-    bool                weighted;               // solve for and use weights (default = true)
-    bool                local;                  // solve locally (with constraints) each round (default = false)
-    float               regularization;         // smoothing parameter for unstructured data with nonuniform point density (value of 0 does nothing)
-    bool                reg1and2;               // regularize with 1st and 2nd derivatives (false --> 2nd derivs only)
-    int                 verbose;                // debug level (default = 1)
-};
+// struct ModelInfo
+// {
+//     ModelInfo(int dom_dim_, int pt_dim_) :
+//         dom_dim(dom_dim_),
+//         pt_dim(pt_dim_),
+//         weighted(true),
+//         local(false),
+//         verbose(1)
+//     {
+//         geom_p.resize(dom_dim);
+//         vars_p.resize(pt_dim - dom_dim);
+//         for (auto i = 0; i < vars_p.size(); i++)
+//             vars_p[i].resize(dom_dim);
+//         geom_nctrl_pts.resize(dom_dim);
+//         vars_nctrl_pts.resize(pt_dim - dom_dim);
+//         for (auto i = 0; i < vars_nctrl_pts.size(); i++)
+//             vars_nctrl_pts[i].resize(dom_dim);
+
+//         regularization = 0;
+//     }
+//     virtual ~ModelInfo()                        {}
+
+//     int                 dom_dim;                // domain dimensionality
+//     int                 pt_dim;                 // point dimensionality (> dom_dim)
+//     VectorXi            model_dims;             // (currently unused) pt dim for each mfa_data
+//     vector<int>         geom_p;                 // degree in each dimension of geometry
+//     vector<vector<int>> vars_p;                 // degree in each dimension of each science variable vars_p[var][dim]
+//     vector<int>         geom_nctrl_pts;         // number of input points in each dimension of geometry
+//     vector<vector<int>> vars_nctrl_pts;         // number of input pts in each dim of each science variable vars_nctrl_pts[var][dim]
+//     bool                weighted;               // solve for and use weights (default = true)
+//     bool                local;                  // solve locally (with constraints) each round (default = false)
+//     float               regularization;         // smoothing parameter for unstructured data with nonuniform point density (value of 0 does nothing)
+//     bool                reg1and2;               // regularize with 1st and 2nd derivatives (false --> 2nd derivs only)
+//     int                 verbose;                // debug level (default = 1)
+// };
 
 
 // block
@@ -174,54 +176,28 @@ struct BlockBase
 //         cerr << "bounds_maxs: " << bounds_maxs.transpose() << endl;
     }
 
-    void setup_models(
+    void setup_MFA(
             const       diy::Master::ProxyWithLink& cp,
-            int         num_vars,
-            ModelInfo&  info)
+            MFAInfo&    info)
     {
-        if (mfa == nullptr)
+        if (mfa != nullptr)
         {
-            cerr << "ERROR: Attempted to set up MFA models before MFA was constructed" << endl;
-            exit(1);
-        }
-        if (info.vars_p.size() != num_vars)
-        {
-            cerr << "ERROR: vars_p and num_vars invalid in BlockBase::setup_models()" << endl;
-            cerr << "       vars_p.size()=" << info.vars_p.size() << ", num_vars=" << num_vars << endl;
-            exit(1);
-        }
-        if (info.vars_nctrl_pts.size() != num_vars)
-        {
-            cerr << "ERROR: vars_nctrl_pts and num_vars invalid in BlockBase::setup_models()" << endl;
-            exit(1);
+            cerr << "\nWarning: Overwriting existing MFA in setup_MFA!\n" << endl;
+            delete mfa;
         }
 
-        VectorXi    nctrl_pts(dom_dim);
-        VectorXi    p(dom_dim);
+        // Silence verbose output if not on rank 0
+        info.verbose = info.verbose && cp.master()->communicator().rank() == 0; 
 
-        for (auto j = 0; j < dom_dim; j++)
-        {
-            nctrl_pts(j)    = info.geom_nctrl_pts[j];
-            p(j)            = info.geom_p[j];
-        }
-        mfa->AddGeometry(p, nctrl_pts, dom_dim);
-
-        for (auto i = 0; i < num_vars; i++)
-        {
-            for (auto j = 0; j < dom_dim; j++)
-            {
-                p(j)            = info.vars_p[i][j];
-                nctrl_pts(j)    = info.vars_nctrl_pts[i][j];
-            }
-            mfa->AddVariable(p, nctrl_pts, 1);   // assumes variable is scalar (1d)
-        }
+        // Construct MFA from MFAInfo
+        this->mfa = new mfa::MFA<T>(info);
     }
 
 
     // fixed number of control points encode block
     void fixed_encode_block(
             const       diy::Master::ProxyWithLink& cp,
-            ModelInfo&  info)
+            MFAInfo&  info)
     {
         mfa->FixedEncode(*input, info.regularization, info.reg1and2, info.weighted, false);
     }
@@ -231,7 +207,7 @@ struct BlockBase
             const diy::Master::ProxyWithLink& cp,
             T                                 err_limit,
             int                               max_rounds,
-            ModelInfo&                        info)
+            MFAInfo&                          info)
     {
         if (!input->structured)
         {
@@ -257,7 +233,7 @@ struct BlockBase
             cerr << "WARNING: Overwriting \"approx\" pointset in BlockBase::decode_block" << endl;
             delete approx;
         }
-        approx = new mfa::PointSet<T>(input->params, input->pt_dim);  // Set decode params from input params
+        approx = new mfa::PointSet<T>(input->params, input->model_dims());  // Set decode params from input params
 
         mfa->Decode(*approx, saved_basis);
     }
@@ -281,7 +257,7 @@ struct BlockBase
             cerr << "WARNING: Overwriting \"approx\" pointset in BlockBase::decode_block_grid" << endl;
             delete approx;
         }
-        approx = new mfa::PointSet<T>(grid_params, input->pt_dim);
+        approx = new mfa::PointSet<T>(grid_params, input->model_dims());
 
         mfa->Decode(*approx, false);
     }
@@ -376,7 +352,7 @@ struct BlockBase
             cerr << "WARNING: Overwriting \"approx\" pointset in BlockBase::integrate_block" << endl;
             delete approx;
         }
-        approx = new mfa::PointSet<T>(input->params, input->pt_dim);
+        approx = new mfa::PointSet<T>(input->params, input->model_dim());
 
         approx->domain.leftCols(dom_dim) = input->domain.leftCols(dom_dim);
 
@@ -405,7 +381,7 @@ struct BlockBase
             cerr << "WARNING: Overwriting \"approx\" pointset in BlockBase::differentiate_block" << endl;
             delete approx;
         }
-        approx = new mfa::PointSet<T>(input->params, input->pt_dim);  // Set decode params from input params
+        approx = new mfa::PointSet<T>(input->params, input->model_dim());  // Set decode params from input params
         
         VectorXi derivs = deriv * VectorXi::Ones(dom_dim);
         if (deriv && dom_dim > 1 && partial >= 0)   // optional limit to one partial derivative
@@ -458,7 +434,7 @@ struct BlockBase
             cerr << "Warning: Overwriting existing error field in BlockBase::range_error" << endl;
             delete errs;
         }
-        errs = new mfa::PointSet<T>(input->params, input->pt_dim);
+        errs = new mfa::PointSet<T>(input->params, input->model_dims());
 
         // saved_basis only applies when not using tmesh
 #ifdef MFA_TMESH
@@ -477,18 +453,27 @@ struct BlockBase
         }
 
         // Compute error metrics
-        MatrixX<T>& errpts = errs->domain;
-
-        for (auto j = dom_dim; j < errs->pt_dim; j++)
-            sum_sq_errs[j - dom_dim] = 0.0;
-        for (auto i = 0; i < errs->npts; i++)
+        for (int k = 0; k < mfa->nvars(); k++)
         {
-            for (auto j = dom_dim; j < input->domain.cols(); j++)
+            T l2sq = 0, linf = 0;
+            sum_sq_errs[k] = 0;
+            max_errs[k] = 0;
+            VectorX<T> var_err(errs->var_dim(k));
+
+            for (int i = 0; i < errs->npts; i++)
             {
-                sum_sq_errs[j - dom_dim] += (errpts(i, j) * errpts(i, j));
-                if ((i == 0 && j == dom_dim) || errpts(i, j) > max_errs[j - dom_dim])
-                    max_errs[j - dom_dim] = errpts(i, j);
+                errs->var_coords(i, k, var_err);    // Fill var_err
+
+                l2sq = var_err.squaredNorm();
+                // linf = var_err.cwiseAbs().maxCoeff();
+
+                sum_sq_errs[k] += l2sq;
+                if (l2sq > max_errs[k])
+                    max_errs[k] = l2sq;
             }
+
+            // Important! Take square root of max squared norm
+            max_errs[k] = sqrt(max_errs[k]);
         }
 
         // copy the computed error in a new array for reduce operations
@@ -507,8 +492,10 @@ struct BlockBase
 //         cerr << "domain\n" << domain << endl;
 
         // max errors over all science variables
-        T all_max_err, all_max_norm_err, all_max_sum_sq_err, all_max_rms_err, all_max_norm_rms_err;
-        int all_max_var, all_max_norm_var, all_max_sum_sq_var, all_max_rms_var, all_max_norm_rms_var;   // variables where the max error occurs
+        // Initializing to 0 so we don't have to initialize with first var's error below
+        T all_max_err = 0, all_max_norm_err = 0, all_max_sum_sq_err = 0, all_max_rms_err = 0, all_max_norm_rms_err = 0;
+        // variables where the max error occurs
+        int all_max_var, all_max_norm_var, all_max_sum_sq_var, all_max_rms_var, all_max_norm_rms_var;   
 
         VectorXi tot_nctrl_pts_dim = VectorXi::Zero(dom_dim);        // total num. ctrl. pts. per dim.
         size_t tot_nctrl_pts = 0;                                                       // total number of control points
@@ -541,9 +528,27 @@ struct BlockBase
 
         // science variables
         cerr << "\n----- science variable models -----" << endl;
-        for (auto i = 0; i < mfa->nvars(); i++)    // TODO: this assumes scalar science variables
+        for (auto i = 0; i < mfa->nvars(); i++)
         {
-            T range_extent = input->domain.col(dom_dim + i).maxCoeff() - input->domain.col(dom_dim + i).minCoeff();
+            int min_dim = mfa->var(i).min_dim;
+            int max_dim = mfa->var(i).max_dim;
+            int vardim  = mfa->var_dim(i);
+            MatrixX<T> varcoords = input->domain.middleCols(min_dim, vardim);
+            // T range_extent = input->domain.col(dom_dim + i).maxCoeff() - input->domain.col(dom_dim + i).minCoeff();
+
+            // range_extents_max is a vector containing the range extent in each component of the science variable
+            // So, the size of 'range_extents_max' is the dimension of the science variable
+            // VectorX<T> range_extents_max = varcoords.colwise().maxCoeff() - varcoords.colwise().minCoeff();
+
+            // 'range_extents' is the difference between the largest and smallest vector norms of the input data
+            // So, for each point in the input, we compute the norm of that point; then we take the difference of the 
+            // largest and smallest norms. 
+            //
+            // NOTE! For scalar science variables, this is different from our older definition. Essentially, we 
+            // are taking the absolute value of every point before taking the max/min. Thus this could vary from
+            // the older definition of range_extent by up to a factor of 2.
+            T range_extent  = varcoords.rowwise().norm().maxCoeff() - varcoords.rowwise().norm().minCoeff();
+
             cerr << "\n---------- var " << i << " ----------" << endl;
             tot_nctrl_pts_dim   = VectorXi::Zero(dom_dim);
             tot_nctrl_pts       = 0;
@@ -583,27 +588,27 @@ struct BlockBase
                 fprintf(stderr, "normalized RMS error  = %e\n",  rms_err / range_extent);
 
                 // find max over all science variables
-                if (i == 0 || max_errs[i] > all_max_err)
+                if (max_errs[i] > all_max_err)
                 {
                     all_max_err = max_errs[i];
                     all_max_var = i;
                 }
-                if (i == 0 || max_errs[i] / range_extent > all_max_norm_err)
+                if (max_errs[i] / range_extent > all_max_norm_err)
                 {
                     all_max_norm_err = max_errs[i] / range_extent;
                     all_max_norm_var = i;
                 }
-                if (i == 0 || sum_sq_errs[i] > all_max_sum_sq_err)
+                if (sum_sq_errs[i] > all_max_sum_sq_err)
                 {
                     all_max_sum_sq_err = sum_sq_errs[i];
                     all_max_sum_sq_var = i;
                 }
-                if (i == 0 || rms_err > all_max_rms_err)
+                if (rms_err > all_max_rms_err)
                 {
                     all_max_rms_err = rms_err;
                     all_max_rms_var = i;
                 }
-                if (i == 0 || rms_err / range_extent > all_max_norm_rms_err)
+                if (rms_err / range_extent > all_max_norm_rms_err)
                 {
                     all_max_norm_rms_err = rms_err / range_extent;
                     all_max_norm_rms_var = i;
@@ -830,8 +835,7 @@ struct BlockBase
         /*mfa->DecodeAtGrid(*geometry.mfa_data, 0, dom_dim - 1, p_min, p_max,
                 grid_counts, griddom); */
         for (size_t j = 0; j < mfa->nvars(); j++) {
-            mfa->DecodeAtGrid(mfa->var(j), dom_dim + j,
-                    dom_dim + j, p_min, p_max, grid_counts, localBlock);
+            mfa->DecodeAtGrid(mfa->var(j), p_min, p_max, grid_counts, localBlock);
         }
     }
 //#define BLEND_VERBOSE
@@ -1508,7 +1512,7 @@ namespace diy
                         diy::save(bb, (int) 1); // indicate that there is a nonempty PointSet to load
 
                         diy::save(bb, ps->dom_dim);
-                        diy::save(bb, ps->pt_dim);
+                        diy::save(bb, ps->model_dims());
                         diy::save(bb, ps->npts);
                         diy::save(bb, ps->ndom_pts);
 
@@ -1541,16 +1545,16 @@ namespace diy
                     }
                     else
                     {
-                        int dom_dim, pt_dim, npts = 0;
-                        VectorXi ndom_pts;
+                        int dom_dim, npts = 0;
+                        VectorXi model_dims, ndom_pts;
                         VectorX<T> dom_mins, dom_maxs;
 
                         // Basic domain structure
                         diy::load(bb, dom_dim);
-                        diy::load(bb, pt_dim);
+                        diy::load(bb, model_dims);
                         diy::load(bb, npts);
                         diy::load(bb, ndom_pts);
-                        ps = new mfa::PointSet<T>(dom_dim, pt_dim, npts, ndom_pts);
+                        ps = new mfa::PointSet<T>(dom_dim, model_dims, npts, ndom_pts);
 
                         // Param info. We need to handle cases where Params may or may not be initialized
                         bool load_param;

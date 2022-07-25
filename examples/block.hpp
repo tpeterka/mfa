@@ -42,10 +42,9 @@ struct vec3d
 };
 
 // arguments to block foreach functions
-struct DomainArgs : public ModelInfo
+struct DomainArgs
 {
-    DomainArgs(int dom_dim, int pt_dim) :
-        ModelInfo(dom_dim, pt_dim)
+    DomainArgs(int dom_dim, int pt_dim) 
     {
         tot_ndom_pts = 0;
         starts.resize(dom_dim);
@@ -97,6 +96,9 @@ struct Block : public BlockBase<T>
     using Base::bounds_maxs;
     using Base::overlaps;
     using Base::input;
+    using Base::approx;
+    using Base::errs;
+    using Base::mfa;
 
     static
         void* create()              { return mfa::create<Block>(); }
@@ -132,6 +134,7 @@ struct Block : public BlockBase<T>
     void generate_analytical_data(
             const diy::Master::ProxyWithLink&   cp,
             string&                             fun,
+            MFAInfo&                            mfa_info,
             DomainArgs&                         args)
     {
         if (args.rand_seed >= 0)  // random point cloud
@@ -144,12 +147,7 @@ struct Block : public BlockBase<T>
                 exit(1);
             }
 
-            // Prep a few more domain arguments which are used by generate_random_analytical_data
-            // TODO: currently hard-coded for one scalar science variable
-            args.model_dims.resize(2);
-            args.model_dims[0] = dom_dim;
-            args.model_dims[1] = 1;
-
+            // Used by generate_random_analytical_data
             args.tot_ndom_pts = 1;
             for (size_t k = 0; k < dom_dim; k++)
             {
@@ -159,12 +157,12 @@ struct Block : public BlockBase<T>
             // create unsigned conversion of seed
             // note: seed is always >= 0 in this code block
             unsigned useed = (unsigned)args.rand_seed;
-            generate_random_analytical_data(cp, fun, args, useed);
+            generate_random_analytical_data(cp, fun, mfa_info, args, useed);
         }
         else    // structured grid of points
         {
             cout << "Generating data on structured grid for function: " << fun << endl;
-            generate_rectilinear_analytical_data(cp, fun, args);
+            generate_rectilinear_analytical_data(cp, fun, mfa_info, args);
         }
     }
 
@@ -173,6 +171,7 @@ struct Block : public BlockBase<T>
     void generate_random_analytical_data(
             const diy::Master::ProxyWithLink&   cp,
             string&                             fun,
+            MFAInfo&                            mfa_info,
             DomainArgs&                         args,
             unsigned int                        seed)
     {
@@ -180,9 +179,11 @@ struct Block : public BlockBase<T>
 
         DomainArgs* a = &args;
 
+        const int nvars         = mfa_info.nvars();
+        const int gdim          = mfa_info.geom_dim();
+        const VectorXi mdims    = mfa_info.model_dims();
+
         // Prepare containers
-        size_t nvars = a->model_dims.size()-1;
-        size_t geom_dim = a->model_dims[0];
         this->max_errs.resize(nvars);
         this->sum_sq_errs.resize(nvars);
 
@@ -191,9 +192,9 @@ struct Block : public BlockBase<T>
         {
             bounds_mins.resize(pt_dim);
             bounds_maxs.resize(pt_dim);
-            core_mins.resize(geom_dim);
-            core_maxs.resize(geom_dim);
-            for (int i = 0; i < geom_dim; i++)
+            core_mins.resize(gdim);
+            core_maxs.resize(gdim);
+            for (int i = 0; i < gdim; i++)
             {
                 bounds_mins(i)  = a->min[i];
                 bounds_maxs(i)  = a->max[i];
@@ -204,7 +205,7 @@ struct Block : public BlockBase<T>
 
         // decide overlap in each direction; they should be symmetric for neighbors
         // so if block a overlaps block b, block b overlaps a the same area
-        for (size_t k = 0; k < geom_dim; k++)
+        for (size_t k = 0; k < gdim; k++)
         {
             overlaps(k) = fabs(core_mins(k) - bounds_mins(k));
             T m2 = fabs(bounds_maxs(k) - core_maxs(k));
@@ -214,7 +215,7 @@ struct Block : public BlockBase<T>
 
 
         // Create input data set and add to block
-        input = new mfa::PointSet<T>(dom_dim, pt_dim, a->tot_ndom_pts);
+        input = new mfa::PointSet<T>(dom_dim, mdims, a->tot_ndom_pts);
         input->set_bounds(core_mins, core_maxs);
 
         // Choose a system-dependent seed if seed==0
@@ -235,10 +236,10 @@ struct Block : public BlockBase<T>
         size_t nvoids = 4;
         double radii_frac = 1.0/8.0;   // fraction of domain width to set as void radius
         VectorX<T> radii(nvoids);
-        MatrixX<T> centers(geom_dim, nvoids);
+        MatrixX<T> centers(gdim, nvoids);
         for (size_t nv = 0; nv < nvoids; nv++) // Randomly generate the centers of each void
         {
-            for (size_t k = 0; k < geom_dim; k++)
+            for (size_t k = 0; k < gdim; k++)
             {
                 centers(k,nv) = input->dom_mins(k) + u_dist(df_gen) * (input->dom_maxs(k) - input->dom_mins(k));
             }
@@ -246,16 +247,16 @@ struct Block : public BlockBase<T>
             radii(nv) = radii_frac * (input->dom_maxs - input->dom_mins).minCoeff();
         }
 
+        VectorX<T> dom_pt(gdim);
         for (size_t j = 0; j < input->domain.rows(); j++)
         {
-
-            VectorX<T> candidate_pt(geom_dim);
+            VectorX<T> candidate_pt(gdim);
 
             bool keep = true;
             do
             {
                 // Generate a random point
-                for (size_t k = 0; k < geom_dim; k++)
+                for (size_t k = 0; k < gdim; k++)
                 {
                     // input->domain(j, k) = input->dom_mins(k) + u_dist(df_gen) * (input->dom_maxs(k) - input->dom_mins(k));
                     candidate_pt(k) = input->dom_mins(k) + u_dist(df_gen) * (input->dom_maxs(k) - input->dom_mins(k));
@@ -280,33 +281,30 @@ struct Block : public BlockBase<T>
             } while (!keep);
 
             // Add point to Input
-            for (size_t k = 0; k < geom_dim; k++)
+            for (size_t k = 0; k < gdim; k++)
             {
                 input->domain(j,k) = candidate_pt(k);
             }
 
-            VectorX<T> dom_pt = input->domain.block(j, 0, 1, geom_dim).transpose();
-            T retval;
-            for (size_t n = 0; n < nvars; n++)        // for all science variables
+            input->geom_coords(j, dom_pt);          // fill dom_pt
+            for (auto k = 0; k < nvars; k++)        // for all science variables
             {
-                retval = evaluate_function(fun, dom_pt, args, n);
-                
-                input->domain(j, geom_dim + n) = retval;
+                int dmin = input->var_min(k);
+                int vardim = input->var_dim(k);
+                VectorX<T> out_pt(input->var_dim(k));
 
-                if (j == 0 || input->domain(j, geom_dim + n) > bounds_maxs(geom_dim + n))
-                    bounds_maxs(geom_dim + n) = input->domain(j, geom_dim + n);
-                if (j == 0 || input->domain(j, geom_dim + n) < bounds_mins(geom_dim + n))
-                    bounds_mins(geom_dim + n) = input->domain(j, geom_dim + n);
-            }      
+                evaluate_function(fun, dom_pt, out_pt, args, k);
+                input->domain.row(j).segment(dmin, vardim) = out_pt;
+            }  
         }
 
+        this->bounds_maxs = input->domain.colwise().maxCoeff();
+        this->bounds_mins = input->domain.colwise().minCoeff();
+
         input->init_params(core_mins, core_maxs);     // Set explicit bounding box for parameter space
-        
-        int verbose = a->verbose && cp.master()->communicator().rank() == 0; 
-        this->mfa = new mfa::MFA<T>(dom_dim, verbose);
 
         // initialize MFA models (geometry, vars, etc)
-        this->setup_models(cp, nvars, args);
+        this->setup_MFA(cp, mfa_info);
 
         // extents
         fprintf(stderr, "gid = %d\n", cp.gid());
@@ -322,14 +320,18 @@ struct Block : public BlockBase<T>
     void generate_rectilinear_analytical_data(
             const diy::Master::ProxyWithLink&   cp,
             string&                             fun,        // function to evaluate
+            MFAInfo&                            mfa_info,
             DomainArgs&                         args)
     {
         DomainArgs* a   = &args;
 
         // TODO: This assumes that dom_dim = dimension of ambient geometry.
         //       Not always true, can model a 2d surface in 3d, e.g.
-        //       Also assumes each var is scalar
-        int nvars       = this->pt_dim - this->dom_dim;             // number of science variables
+        const int nvars         = mfa_info.nvars();
+        const int gdim          = mfa_info.geom_dim();
+        const VectorXi mdims    = mfa_info.model_dims();
+
+        cerr << mdims << endl;
 
         this->max_errs.resize(nvars);
         this->sum_sq_errs.resize(nvars);
@@ -340,6 +342,9 @@ struct Block : public BlockBase<T>
         // get local block bounds
         // if single block, they are passed in args
         // if multiblock, they were decomposed by diy and are already in the block's bounds_mins, maxs
+        // TODO: Need a strategy to partition domain when dom_dim != geom_dim
+        //       For instance, want to be able to partition a 2D manifold in 3D space with a 2D DIY 
+        //       decomposition.
         if (!a->multiblock)
         {
             bounds_mins.resize(pt_dim);
@@ -358,7 +363,6 @@ struct Block : public BlockBase<T>
                 bounds_mins(i) = numeric_limits<T>::min();
                 bounds_maxs(i) = numeric_limits<T>::max();
             }
-            
         }
 
         // adjust number of domain points and starting domain point for ghost
@@ -386,9 +390,9 @@ struct Block : public BlockBase<T>
         }
 
         if (args.structured)
-            input = new mfa::PointSet<T>(dom_dim, pt_dim, ndom_pts.prod(), ndom_pts);
+            input = new mfa::PointSet<T>(dom_dim, mdims, ndom_pts.prod(), ndom_pts);
         else
-            input = new mfa::PointSet<T>(dom_dim, pt_dim, ndom_pts.prod());
+            input = new mfa::PointSet<T>(dom_dim, mdims, ndom_pts.prod());
 
         // assign values to the domain (geometry)
         mfa::VolIterator vol_it(ndom_pts);
@@ -412,26 +416,30 @@ struct Block : public BlockBase<T>
         VectorX<T> dom_pt(dom_dim);
         for (int j = 0; j < input->domain.rows(); j++)
         {
-            dom_pt = input->domain.block(j, 0, 1, dom_dim).transpose();
-            T retval;
+            input->geom_coords(j, dom_pt);          // fill dom_pt
             for (auto k = 0; k < nvars; k++)        // for all science variables
             {
-                retval = evaluate_function(fun, dom_pt, args, k);
-                input->domain(j, this->dom_dim + k) = retval;
+                int dmin = input->var_min(k);
+                int vardim = input->var_dim(k);
+                VectorX<T> out_pt(input->var_dim(k));
+
+                evaluate_function(fun, dom_pt, out_pt, args, k);    // fill out_pt
+                input->domain.row(j).segment(dmin, vardim) = out_pt;
+            }  
+
+            // add some noise (optional)
+            if (a->n != 0)
+            {
+                for (int k = gdim; k < input->pt_dim; k++)
+                {
+                    double noise = distribution(generator);
+                    input->domain(j, k) *= (1.0 + a->n * noise);
+                }
             }
-
-            // add some noise
-            double noise = distribution(generator);
-            input->domain(j, dom_dim) *= (1.0 + a->n * noise);
-
-            if (j == 0 || input->domain(j, dom_dim) > this->bounds_maxs(dom_dim))
-                this->bounds_maxs(dom_dim) = input->domain(j, dom_dim);
-            if (j == 0 || input->domain(j, dom_dim) < this->bounds_mins(dom_dim))
-                this->bounds_mins(dom_dim) = input->domain(j, dom_dim);
         }
 
         // optional wavy domain
-        if (a->t && pt_dim >= 3)
+        if (a->t && gdim >= 2)
         {
             for (auto j = 0; j < input->domain.rows(); j++)
             {
@@ -439,19 +447,11 @@ struct Block : public BlockBase<T>
                 real_t y = input->domain(j, 1);
                 input->domain(j, 0) += a->t * sin(y);
                 input->domain(j, 1) += a->t * sin(x);
-                if (j == 0 || input->domain(j, 0) < bounds_mins(0))
-                    bounds_mins(0) = input->domain(j, 0);
-                if (j == 0 || input->domain(j, 1) < bounds_mins(1))
-                    bounds_mins(1) = input->domain(j, 1);
-                if (j == 0 || input->domain(j, 0) > bounds_maxs(0))
-                    bounds_maxs(0) = input->domain(j, 0);
-                if (j == 0 || input->domain(j, 1) > bounds_maxs(1))
-                    bounds_maxs(1) = input->domain(j, 1);
             }
         }
 
         // optional rotation of the domain
-        if (a->r && pt_dim >= 3)
+        if (a->r && gdim >= 2)
         {
             for (auto j = 0; j < input->domain.rows(); j++)
             {
@@ -459,16 +459,11 @@ struct Block : public BlockBase<T>
                 real_t y = input->domain(j, 1);
                 input->domain(j, 0) = x * cos(a->r) - y * sin(a->r);
                 input->domain(j, 1) = x * sin(a->r) + y * cos(a->r);
-                if (j == 0 || input->domain(j, 0) < bounds_mins(0))
-                    bounds_mins(0) = input->domain(j, 0);
-                if (j == 0 || input->domain(j, 1) < bounds_mins(1))
-                    bounds_mins(1) = input->domain(j, 1);
-                if (j == 0 || input->domain(j, 0) > bounds_maxs(0))
-                    bounds_maxs(0) = input->domain(j, 0);
-                if (j == 0 || input->domain(j, 1) > bounds_maxs(1))
-                    bounds_maxs(1) = input->domain(j, 1);
             }
         }
+
+        this->bounds_maxs = input->domain.colwise().maxCoeff();
+        this->bounds_mins = input->domain.colwise().minCoeff();
 
         // map_dir is used in blending discrete, but because we need to aggregate the discrete logic, we have to use
         // it even for continuous bounds, so in analytical data
@@ -478,11 +473,8 @@ struct Block : public BlockBase<T>
 
         input->init_params();
 
-        int verbose = a->verbose && cp.master()->communicator().rank() == 0; 
-        this->mfa = new mfa::MFA<T>(dom_dim, verbose);
-
         // initialize MFA models (geometry, vars, etc)
-        this->setup_models(cp, nvars, args);
+        this->setup_MFA(cp, mfa_info);
 
         // extents
         fprintf(stderr, "gid = %d\n", cp.gid());
@@ -490,20 +482,28 @@ struct Block : public BlockBase<T>
         cerr << "core_maxs:\n" << this->core_maxs << endl;
         cerr << "bounds_mins:\n" << this->bounds_mins << endl;
         cerr << "bounds_maxs:\n" << this->bounds_maxs << endl;
-
-//         cerr << "ndom_pts:\n" << ndom_pts << "\n" << endl;
-//         cerr << "domain:\n" << this->domain << endl;
     }
 
     // read a floating point 3d vector dataset and take one 1-d curve out of the middle of it
     // f = (x, velocity magnitude)
     void read_1d_slice_3d_vector_data(
             const       diy::Master::ProxyWithLink& cp,
+            MFAInfo&    mfa_info,
             DomainArgs& args)
     {
+        assert(mfa_info.dom_dim == dom_dim);
+        assert(mfa_info.dom_dim == 1);
+        assert(mfa_info.pt_dim() == pt_dim);
+        assert(mfa_info.nvars() == 1);
+        assert(mfa_info.geom_dim() == 1);
+        assert(mfa_info.var_dim(0) == 1);
+
+        const int nvars         = mfa_info.nvars();
+        const int gdim          = mfa_info.geom_dim();
+        const VectorXi mdims    = mfa_info.model_dims();
+
         DomainArgs* a = &args;
         int tot_ndom_pts = 1;
-        int nvars = 1;
         this->max_errs.resize(nvars);
         this->sum_sq_errs.resize(nvars);
 
@@ -519,9 +519,9 @@ struct Block : public BlockBase<T>
 
         // Construct point set to contain input
         if (args.structured)
-            input = new mfa::PointSet<T>(dom_dim, pt_dim, tot_ndom_pts, ndom_pts);
+            input = new mfa::PointSet<T>(dom_dim, mdims, tot_ndom_pts, ndom_pts);
         else
-            input = new mfa::PointSet<T>(dom_dim, pt_dim, tot_ndom_pts);
+            input = new mfa::PointSet<T>(dom_dim, mdims, tot_ndom_pts);
 
         // rest is hard-coded for 1d
 
@@ -575,12 +575,9 @@ struct Block : public BlockBase<T>
         }
 
         input->init_params();
-
-        int verbose = a->verbose && cp.master()->communicator().rank() == 0; 
-        this->mfa = new mfa::MFA<T>(dom_dim, verbose);
         
         // initialize MFA models (geometry, vars, etc)
-        this->setup_models(cp, nvars, args);
+        this->setup_MFA(cp, mfa_info);
 
         // debug
         cerr << "domain extent:\n min\n" << bounds_mins << "\nmax\n" << bounds_maxs << endl;
@@ -590,11 +587,22 @@ struct Block : public BlockBase<T>
     // f = (x, y, velocity magnitude)
     void read_2d_slice_3d_vector_data(
             const       diy::Master::ProxyWithLink& cp,
+            MFAInfo&    mfa_info,
             DomainArgs& args)
     {
+        assert(mfa_info.dom_dim == dom_dim);
+        assert(mfa_info.dom_dim == 2);
+        assert(mfa_info.pt_dim() == pt_dim);
+        assert(mfa_info.nvars() == 1);
+        assert(mfa_info.geom_dim() == 2);
+        assert(mfa_info.var_dim(0) == 1);
+
+        const int nvars         = mfa_info.nvars();
+        const int gdim          = mfa_info.geom_dim();
+        const VectorXi mdims    = mfa_info.model_dims();
+
         DomainArgs* a = &args;
         int tot_ndom_pts = 1;
-        int nvars = 1;
         this->max_errs.resize(nvars);
         this->sum_sq_errs.resize(nvars);
         VectorXi ndom_pts(dom_dim);
@@ -609,9 +617,9 @@ struct Block : public BlockBase<T>
 
         // Construct point set to contain input
         if (args.structured)
-            input = new mfa::PointSet<T>(dom_dim, pt_dim, tot_ndom_pts, ndom_pts);
+            input = new mfa::PointSet<T>(dom_dim, mdims, tot_ndom_pts, ndom_pts);
         else
-            input = new mfa::PointSet<T>(dom_dim, pt_dim, tot_ndom_pts);
+            input = new mfa::PointSet<T>(dom_dim, mdims, tot_ndom_pts);
 
         // rest is hard-coded for 2d
 
@@ -671,11 +679,8 @@ struct Block : public BlockBase<T>
 
         input->init_params();
 
-        int verbose = a->verbose && cp.master()->communicator().rank() == 0; 
-        this->mfa = new mfa::MFA<T>(dom_dim, verbose);
-
         // initialize MFA models (geometry, vars, etc)
-        this->setup_models(cp, nvars, args);
+        this->setup_MFA(cp, mfa_info);
 
         // debug
         cerr << "domain extent:\n min\n" << bounds_mins << "\nmax\n" << bounds_maxs << endl;
@@ -685,11 +690,22 @@ struct Block : public BlockBase<T>
     // f = (x, y, velocity magnitude)
     void read_2d_subset_3d_vector_data(
             const       diy::Master::ProxyWithLink& cp,
+            MFAInfo&    mfa_info,
             DomainArgs& args)
     {
+        assert(mfa_info.dom_dim == dom_dim);
+        assert(mfa_info.dom_dim == 2);
+        assert(mfa_info.pt_dim() == pt_dim);
+        assert(mfa_info.nvars() == 1);
+        assert(mfa_info.geom_dim() == 2);
+        assert(mfa_info.var_dim(0) == 1);
+
+        const int nvars         = mfa_info.nvars();
+        const int gdim          = mfa_info.geom_dim();
+        const VectorXi mdims    = mfa_info.model_dims();
+
         DomainArgs* a = &args;
         int tot_ndom_pts = 1;
-        int nvars = 1;
         this->max_errs.resize(nvars);
         this->sum_sq_errs.resize(nvars);
         VectorXi ndom_pts(dom_dim);
@@ -704,9 +720,9 @@ struct Block : public BlockBase<T>
 
         // Construct point set to contain input
         if (args.structured)
-            input = new mfa::PointSet<T>(dom_dim, pt_dim, tot_ndom_pts, ndom_pts);
+            input = new mfa::PointSet<T>(dom_dim, mdims, tot_ndom_pts, ndom_pts);
         else
-            input = new mfa::PointSet<T>(dom_dim, pt_dim, tot_ndom_pts);
+            input = new mfa::PointSet<T>(dom_dim, mdims, tot_ndom_pts);
 
         FILE *fd = fopen(a->infile.c_str(), "r");
         assert(fd);
@@ -788,11 +804,8 @@ struct Block : public BlockBase<T>
 
         input->init_params();
 
-        int verbose = a->verbose && cp.master()->communicator().rank() == 0; 
-        this->mfa = new mfa::MFA<T>(dom_dim, verbose);
-
         // initialize MFA models (geometry, vars, etc)
-        this->setup_models(cp, nvars, args);
+        this->setup_MFA(cp, mfa_info);
 
         // debug
         cerr << "domain extent:\n min\n" << bounds_mins << "\nmax\n" << bounds_maxs << endl;
@@ -802,11 +815,22 @@ struct Block : public BlockBase<T>
     // f = (x, y, z, velocity magnitude)
     void read_3d_vector_data(
             const       diy::Master::ProxyWithLink& cp,
+            MFAInfo&    mfa_info,
             DomainArgs& args)
     {
+        assert(mfa_info.dom_dim == dom_dim);
+        assert(mfa_info.dom_dim == 3);
+        assert(mfa_info.pt_dim() == pt_dim);
+        assert(mfa_info.nvars() == 1);
+        assert(mfa_info.geom_dim() == 3);
+        assert(mfa_info.var_dim(0) == 1);
+
+        const int nvars         = mfa_info.nvars();
+        const int gdim          = mfa_info.geom_dim();
+        const VectorXi mdims    = mfa_info.model_dims();
+
         DomainArgs* a = &args;
         int tot_ndom_pts = 1;
-        int nvars = 1;
         this->max_errs.resize(nvars);
         this->sum_sq_errs.resize(nvars);
         VectorXi ndom_pts(dom_dim);
@@ -820,9 +844,9 @@ struct Block : public BlockBase<T>
 
         // Construct point set to contain input
         if (args.structured)
-            input = new mfa::PointSet<T>(dom_dim, pt_dim, tot_ndom_pts, ndom_pts);
+            input = new mfa::PointSet<T>(dom_dim, mdims, tot_ndom_pts, ndom_pts);
         else
-            input = new mfa::PointSet<T>(dom_dim, pt_dim, tot_ndom_pts);
+            input = new mfa::PointSet<T>(dom_dim, mdims, tot_ndom_pts);
 
         vector<float> vel(3 * tot_ndom_pts);
 
@@ -886,11 +910,8 @@ struct Block : public BlockBase<T>
 
         input->init_params();
 
-        int verbose = a->verbose && cp.master()->communicator().rank() == 0; 
-        this->mfa = new mfa::MFA<T>(dom_dim, verbose);
-
         // initialize MFA models (geometry, vars, etc)
-        this->setup_models(cp, nvars, args);
+        this->setup_MFA(cp, mfa_info);
 
         // debug
         cerr << "domain extent:\n min\n" << bounds_mins << "\nmax\n" << bounds_maxs << endl;
@@ -900,11 +921,22 @@ struct Block : public BlockBase<T>
     // f = (x, y, z, t, velocity magnitude)
     void read_4d_vector_data(
             const       diy::Master::ProxyWithLink& cp,
+            MFAInfo&    mfa_info,
             DomainArgs& args)
     {
+        assert(mfa_info.dom_dim == dom_dim);
+        assert(mfa_info.dom_dim == 4);
+        assert(mfa_info.pt_dim() == pt_dim);
+        assert(mfa_info.nvars() == 1);
+        assert(mfa_info.geom_dim() == 4);
+        assert(mfa_info.var_dim(0) == 1);
+
+        const int nvars         = mfa_info.nvars();
+        const int gdim          = mfa_info.geom_dim();
+        const VectorXi mdims    = mfa_info.model_dims();
+
         DomainArgs* a = &args;
         size_t tot_ndom_pts = 1;
-        int nvars = 1;
         this->max_errs.resize(nvars);
         this->sum_sq_errs.resize(nvars);
         VectorXi ndom_pts(dom_dim);
@@ -919,9 +951,9 @@ struct Block : public BlockBase<T>
 
         // construct point set to contain input
         if (args.structured)
-            input = new mfa::PointSet<T>(dom_dim, pt_dim, tot_ndom_pts, ndom_pts);
+            input = new mfa::PointSet<T>(dom_dim, mdims, tot_ndom_pts, ndom_pts);
         else
-            input = new mfa::PointSet<T>(dom_dim, pt_dim, tot_ndom_pts);
+            input = new mfa::PointSet<T>(dom_dim, mdims, tot_ndom_pts);
 
         size_t space_ndom_pts = tot_ndom_pts / ndom_pts(3);    // total number of domain points in one time step
         vector<float> vel(3 * space_ndom_pts);
@@ -1019,7 +1051,9 @@ struct Block : public BlockBase<T>
         }
 
         input->init_params();
-        this->mfa = new mfa::MFA<T>(dom_dim);
+
+        // initialize MFA models (geometry, vars, etc)
+        this->setup_MFA(cp, mfa_info);
 
         // debug
         cerr << "domain extent:\n min\n" << bounds_mins << "\nmax\n" << bounds_maxs << endl;
@@ -1029,11 +1063,22 @@ struct Block : public BlockBase<T>
     // f = (x, y, z, velocity magnitude)
     void read_3d_subset_3d_vector_data(
             const       diy::Master::ProxyWithLink& cp,
+            MFAInfo&    mfa_info,
             DomainArgs& args)
     {
+        assert(mfa_info.dom_dim == dom_dim);
+        assert(mfa_info.dom_dim == 3);
+        assert(mfa_info.pt_dim() == pt_dim);
+        assert(mfa_info.nvars() == 1);
+        assert(mfa_info.geom_dim() == 3);
+        assert(mfa_info.var_dim(0) == 1);
+
+        const int nvars         = mfa_info.nvars();
+        const int gdim          = mfa_info.geom_dim();
+        const VectorXi mdims    = mfa_info.model_dims();
+
         DomainArgs* a = &args;
         int tot_ndom_pts = 1;
-        int nvars = 1;
         this->max_errs.resize(nvars);
         this->sum_sq_errs.resize(nvars);
         VectorXi ndom_pts(dom_dim);
@@ -1047,9 +1092,9 @@ struct Block : public BlockBase<T>
 
         // Construct point set to contain input
         if (args.structured)
-            input = new mfa::PointSet<T>(dom_dim, pt_dim, tot_ndom_pts, ndom_pts);
+            input = new mfa::PointSet<T>(dom_dim, mdims, tot_ndom_pts, ndom_pts);
         else
-            input = new mfa::PointSet<T>(dom_dim, pt_dim, tot_ndom_pts);
+            input = new mfa::PointSet<T>(dom_dim, mdims, tot_ndom_pts);
 
         vector<float> vel(a->full_dom_pts[0] * a->full_dom_pts[1] * a->full_dom_pts[2] * 3);
 
@@ -1136,11 +1181,8 @@ struct Block : public BlockBase<T>
 
         input->init_params();
 
-        int verbose = a->verbose && cp.master()->communicator().rank() == 0; 
-        this->mfa = new mfa::MFA<T>(dom_dim, verbose);
-
         // initialize MFA models (geometry, vars, etc)
-        this->setup_models(cp, nvars, args);
+        this->setup_MFA(cp, mfa_info);
 
         // debug
         cerr << "domain extent:\n min\n" << bounds_mins << "\nmax\n" << bounds_maxs << endl;
@@ -1150,11 +1192,22 @@ struct Block : public BlockBase<T>
     // f = (x, y, value)
     void read_2d_scalar_data(
             const       diy::Master::ProxyWithLink& cp,
+            MFAInfo&    mfa_info,
             DomainArgs& args)
     {
+        assert(mfa_info.dom_dim == dom_dim);
+        assert(mfa_info.dom_dim == 2);
+        assert(mfa_info.pt_dim() == pt_dim);
+        assert(mfa_info.nvars() == 1);
+        assert(mfa_info.geom_dim() == 2);
+        assert(mfa_info.var_dim(0) == 1);
+
+        const int nvars         = mfa_info.nvars();
+        const int gdim          = mfa_info.geom_dim();
+        const VectorXi mdims    = mfa_info.model_dims();
+
         DomainArgs* a = &args;
         int tot_ndom_pts = 1;
-        int nvars = 1;
         this->max_errs.resize(nvars);
         this->sum_sq_errs.resize(nvars);
         VectorXi ndom_pts(dom_dim);
@@ -1168,9 +1221,9 @@ struct Block : public BlockBase<T>
 
         // Construct point set to contain input
         if (args.structured)
-            input = new mfa::PointSet<T>(dom_dim, pt_dim, tot_ndom_pts, ndom_pts);
+            input = new mfa::PointSet<T>(dom_dim, mdims, tot_ndom_pts, ndom_pts);
         else
-            input = new mfa::PointSet<T>(dom_dim, pt_dim, tot_ndom_pts);
+            input = new mfa::PointSet<T>(dom_dim, mdims, tot_ndom_pts);
 
         vector<float> val(tot_ndom_pts);
 
@@ -1222,11 +1275,8 @@ struct Block : public BlockBase<T>
 
         input->init_params();
 
-        int verbose = a->verbose && cp.master()->communicator().rank() == 0; 
-        this->mfa = new mfa::MFA<T>(dom_dim, verbose);
-
         // initialize MFA models (geometry, vars, etc)
-        this->setup_models(cp, nvars, args);
+        this->setup_MFA(cp, mfa_info);
 
         // debug
         cerr << "domain extent:\n min\n" << bounds_mins << "\nmax\n" << bounds_maxs << endl;
@@ -1237,11 +1287,22 @@ struct Block : public BlockBase<T>
     template <typename P>                   // input file precision (e.g., float or double)
     void read_3d_scalar_data(
             const       diy::Master::ProxyWithLink& cp,
+            MFAInfo&    mfa_info,
             DomainArgs& args)
     {
+        assert(mfa_info.dom_dim == dom_dim);
+        assert(mfa_info.dom_dim == 3);
+        assert(mfa_info.pt_dim() == pt_dim);
+        assert(mfa_info.nvars() == 1);
+        assert(mfa_info.geom_dim() == 3);
+        assert(mfa_info.var_dim(0) == 1);
+
+        const int nvars         = mfa_info.nvars();
+        const int gdim          = mfa_info.geom_dim();
+        const VectorXi mdims    = mfa_info.model_dims();
+
         DomainArgs* a = &args;
         int tot_ndom_pts = 1;
-        int nvars = 1;
         this->max_errs.resize(nvars);
         this->sum_sq_errs.resize(nvars);
         VectorXi ndom_pts(dom_dim);
@@ -1255,9 +1316,9 @@ struct Block : public BlockBase<T>
 
         // Construct point set to contain input
         if (args.structured)
-            input = new mfa::PointSet<T>(dom_dim, pt_dim, tot_ndom_pts, ndom_pts);
+            input = new mfa::PointSet<T>(dom_dim, mdims, tot_ndom_pts, ndom_pts);
         else
-            input = new mfa::PointSet<T>(dom_dim, pt_dim, tot_ndom_pts);
+            input = new mfa::PointSet<T>(dom_dim, mdims, tot_ndom_pts);
 
         vector<P> val(tot_ndom_pts);
 
@@ -1313,25 +1374,33 @@ struct Block : public BlockBase<T>
 
         input->init_params();
 
-        int verbose = a->verbose && cp.master()->communicator().rank() == 0; 
-        this->mfa = new mfa::MFA<T>(dom_dim, verbose);
-
         // initialize MFA models (geometry, vars, etc)
-        this->setup_models(cp, nvars, args);
+        this->setup_MFA(cp, mfa_info);
 
         // debug
         cerr << "domain extent:\n min\n" << bounds_mins << "\nmax\n" << bounds_maxs << endl;
     }
 
 
+    // TODO: Is this restricted to 3D data only at this point? It has been revised multiple times
+    // since it was first named. It could also be extended to multiple science variables easily.
+    // There is some support for geom_dim, but it is a bit fragile --David
     void read_3d_unstructured_data(
             const       diy::Master::ProxyWithLink& cp,
+            MFAInfo&    mfa_info,
             DomainArgs& args,
             int         varid,
-            int         all_vars,           // total # scalar variables contained in infile
-            int         geom_dim)       
+            int         all_vars)           // total # scalar variables contained in infile (NOT in MFA))       
     {
-        int nvars = 1;
+        assert(mfa_info.dom_dim == dom_dim);
+        assert(mfa_info.pt_dim() == pt_dim);
+        assert(mfa_info.nvars() == 1);
+        assert(mfa_info.var_dim(0) == 1);
+
+        const int nvars         = mfa_info.nvars();
+        const int gdim          = mfa_info.geom_dim();
+        const VectorXi mdims    = mfa_info.model_dims();
+
         this->max_errs.resize(nvars);
         this->sum_sq_errs.resize(nvars);
         core_mins.resize(dom_dim);
@@ -1339,7 +1408,7 @@ struct Block : public BlockBase<T>
         bounds_mins.resize(pt_dim);
         bounds_maxs.resize(pt_dim);
 
-        input = new mfa::PointSet<T>(dom_dim, pt_dim, args.tot_ndom_pts);
+        input = new mfa::PointSet<T>(dom_dim, mdims, args.tot_ndom_pts);
 
         // vector<float> vel(pt_dim * args.tot_ndom_pts);
 
@@ -1358,20 +1427,17 @@ struct Block : public BlockBase<T>
         float val = 0;
         for (int i = 0; i < input->npts; i++)
         {
-            for (int k = 0; k < geom_dim; k++)
+            for (int k = 0; k < gdim; k++)
             {
                 fscanf(fd, "%f", &val);
-                if (k < dom_dim)
-                {
-                    input->domain(i, k) = val;
-                }
+                input->domain(i, k) = val;
             }
             for (int k = 0; k < all_vars; k++)  // read all vars but only store varid
             {
                 fscanf(fd, "%f", &val);
                 if (k == varid)
                 {
-                    input->domain(i, dom_dim) = val;
+                    input->domain(i, gdim) = val;
                 }
             }
 
@@ -1384,6 +1450,7 @@ struct Block : public BlockBase<T>
         }
 
         // compute bounds in each dimension
+        // TODO WARNING use of bounds when dom_dim != geom_dim is not well-defined!
         for (int i = 0; i < pt_dim; i++)
         {
             bounds_mins = input->domain.colwise().minCoeff();
@@ -1400,11 +1467,8 @@ struct Block : public BlockBase<T>
         }
         input->init_params(dom_mins, dom_maxs);
 
-        int verbose = args.verbose && cp.master()->communicator().rank() == 0; 
-        this->mfa = new mfa::MFA<T>(dom_dim, verbose);
-
         // initialize MFA models (geometry, vars, etc)
-        this->setup_models(cp, nvars, args);
+        this->setup_MFA(cp, mfa_info);
 
         // debug
         cerr << "domain extent:\n min\n" << bounds_mins << "\nmax\n" << bounds_maxs << endl;
@@ -1574,6 +1638,7 @@ struct Block : public BlockBase<T>
     // ONLY 2d AT THE MOMENT
     void create_ray_model(
         const       diy::Master::ProxyWithLink& cp,
+        MFAInfo& mfa_info,
         DomainArgs& args,
         bool fixed_length,
         int n_samples,
@@ -1602,14 +1667,18 @@ struct Block : public BlockBase<T>
         int new_dd = dom_dim + 1;   // new dom_dim
         int new_pd = pt_dim + 1;    // new pt_dim
 
+        // Create a model_dims vector for the auxilliary model, and increase the dimension of geometry
+        VectorXi new_mdims = mfa->model_dims();
+        new_mdims[0] += 1;  
+
         VectorXi ndom_pts{{n_samples, n_rho, n_alpha}};
         int npts = ndom_pts.prod();
 
         mfa::PointSet<T>* ray_input = nullptr;
         if (fixed_length)
-            ray_input = new mfa::PointSet<T>(new_dd, new_pd, npts);
+            ray_input = new mfa::PointSet<T>(new_dd, new_mdims, npts);
         else
-            ray_input = new mfa::PointSet<T>(new_dd, new_pd, npts, ndom_pts);
+            ray_input = new mfa::PointSet<T>(new_dd, new_mdims, npts, ndom_pts);
        
 
         // extents of domain in physical space
@@ -1756,7 +1825,7 @@ struct Block : public BlockBase<T>
         // ------------ Creation of new MFA ------------- //
         //
         // Create a new top-level MFA
-        int verbose = a->verbose && cp.master()->communicator().rank() == 0; 
+        int verbose = mfa_info.verbose && cp.master()->communicator().rank() == 0; 
         mfa::MFA<T>* ray_mfa = new mfa::MFA<T>(new_dd, verbose);
 
         // Set up new geometry
@@ -1797,7 +1866,7 @@ struct Block : public BlockBase<T>
 
         // Encode ray model. TODO: regularized encode
         bool force_unified = fixed_length;  // force a unified encoding to use the regularizer
-        ray_mfa->FixedEncode(*ray_input, a->regularization, args.reg1and2, false, force_unified);
+        ray_mfa->FixedEncode(*ray_input, mfa_info.regularization, mfa_info.reg1and2, false, force_unified);
 
 
         // ----------- Replace old block members with new ---------- //
@@ -1832,7 +1901,7 @@ struct Block : public BlockBase<T>
         bounds_maxs(1) = r_lim;
         bounds_mins(2) = 0;
         bounds_maxs(2) = pi;
-        for (int i = 0; i < this->mfa->pt_dim - this->mfa->geom_dim; i++)
+        for (int i = 0; i < this->mfa->pt_dim - this->mfa->geom_dim(); i++)
         {
             bounds_mins(3+i) = old_bounds_mins(2+i);
             bounds_maxs(3+i) = old_bounds_maxs(2+i);
@@ -1862,7 +1931,7 @@ cerr << "\n===========" << endl;
 cerr << "f(x) = sin(x) hardcoded in create_ray_model()" << endl;
 cerr << "===========\n" << endl;
         delete this->errs;
-        this->errs = new mfa::PointSet<T>(dom_dim, pt_dim, gridpoints.prod(), gridpoints);
+        this->errs = new mfa::PointSet<T>(dom_dim, mfa->model_dim(), gridpoints.prod(), gridpoints);
         outpt = VectorX<T>::Zero(1);
         for (int k = 0; k < grid_size[2]; k++)
         {
@@ -2086,51 +2155,71 @@ cerr << "===========\n" << endl;
 
     // Compute error metrics between a pointset and an analytical function
     // evaluated at the points in the pointset
-    // N.B. assumes only one science variable
     void analytical_error_pointset(
         const diy::Master::ProxyWithLink&   cp,
         mfa::PointSet<T>*                   ps,
         string                              fun,
-        T&                                  L1, 
-        T&                                  L2,
-        T&                                  Linf,
+        vector<T>&                          L1, 
+        vector<T>&                          L2,
+        vector<T>&                          Linf,
         DomainArgs&                         args,
-        const std::function<T(const VectorX<T>&, DomainArgs&, int)>& f = {}) const
+        const std::function<T(const VectorX<T>&, VectorX<T>&, DomainArgs&, int)>& f = {}) const
     {
-        // Compute the analytical error at each point
-        T sum_errs      = 0.0;                                  // sum of absolute values of errors (L-1 norm)
-        T sum_sq_errs   = 0.0;                                  // sum of squares of errors (square of L-2 norm)
-        T max_err       = -1.0;                                 // maximum absolute value of error (L-infinity norm)
-        T true_val = 0;
-        T test_val = 0;
-        VectorX<T> dom_pt(dom_dim);
-        for (auto pt_it = ps->begin(), pt_end = ps->end(); pt_it != pt_end; ++pt_it)
+        int nvars = ps->nvars();
+        if (L1.size() != nvars || L2.size() != nvars || Linf.size() != nvars)
         {
-            pt_it.coords(dom_pt, 0, dom_dim-1); // extract the first dom_dim coords (i.e. geometric coords)
-            
-            // evaluate function at dom_pt_real
-            if (f)  // if f is nonempty, ignore 'fun'
-            {
-                true_val = f(dom_pt, args, 0);
-            }
-            else
-            {
-                true_val = evaluate_function(fun, dom_pt, args, 0);
-            }
-
-            test_val = ps->domain(pt_it.idx(), dom_dim);    // hard-coded for first science variable only
-
-            // compute and accrue error
-            T err = fabs(true_val - test_val);
-            sum_errs += err;                                // L1
-            sum_sq_errs += err * err;                       // L2
-            if (err > max_err)                              // Linf
-                max_err = err;
+            cerr << "ERROR: Error metric vector sizes do not match.\nAborting" << endl;
+            exit(1);
         }
 
-        L1    = sum_errs;
-        L2    = sqrt(sum_sq_errs);
-        Linf  = max_err;
+        // Compute the analytical error at each point
+        T l1err = 0, l2err = 0, linferr = 0;
+        VectorX<T> dom_pt(ps->geom_dim());
+
+        for (int k = 0; k < ps->nvars(); k++)
+        {
+            VectorX<T> true_pt(ps->var_dim(k));
+            VectorX<T> test_pt(ps->var_dim(k));
+            VectorX<T> residual(ps->var_dim(k));
+
+            for (auto pt_it = ps->begin(), pt_end = ps->end(); pt_it != pt_end; ++pt_it)
+            {
+                pt_it.geom_coords(dom_pt); // extract the geometry coordinates
+
+                // Get exact value. If 'f' is non-NULL, ignore 'fun'
+                if (f)
+                    f(dom_pt, true_pt, args, k);
+                else
+                    evaluate_function(fun, dom_pt, true_pt, args, k);
+
+                // Get approximate value
+                pt_it.var_coords(k, test_pt);
+
+                // NOTE: For now, we are using the norm of the residual for all error statistics.
+                //       Is this the most appropriate way to measure errors norms of a vector field?
+                //       May want to consider revisiting this.
+                //
+                // Compute errors for this point. When the science variable is vector-valued, we 
+                // distinguish between the L1, L2, and Linfty distances. L1 distance is 
+                // used for 'sum_errs', L2 for 'sum_sq_errs,' and Linfty for 'max_err.'
+                // Thus, 'max_err' reports the maximum difference in any vector
+                // component, taken over all of the points in the Pointset.
+                //
+                // n.b. When the science variable is scalar valued, L2 error and Linfty error are the same. 
+                residual = (true_pt - test_pt).cwiseAbs();
+                // l1err   = residual.sum();
+                l2err   = residual.norm();          // L2 difference between vectors 
+                // linferr = residual.maxCoeff();      // Maximum difference in components
+
+                // Update error statistics
+                L1[k]   += l2err;
+                L2[k]   += l2err * l2err;
+                if (l2err > Linf[k]) Linf[k] = l2err;
+            }
+
+            L1[k] = L1[k] / ps->npts;
+            L2[k] = sqrt(L2[k] / ps->npts);
+        }
     }
 
     // Compute error field on a regularly spaced grid of points. The size of the grid
@@ -2140,9 +2229,9 @@ cerr << "===========\n" << endl;
     void analytical_error_field(
         const diy::Master::ProxyWithLink&   cp,
         string                              fun,                // function to evaluate
-        T&                                  L1,                 // (output) L-1 norm
-        T&                                  L2,                 // (output) L-2 norm
-        T&                                  Linf,               // (output) L-infinity norm
+        vector<T>&                          L1,                 // (output) L-1 norm
+        vector<T>&                          L2,                 // (output) L-2 norm
+        vector<T>&                          Linf,               // (output) L-infinity norm
         DomainArgs&                         args,               // input args
         bool                                keep_approx,        // keep the regular grid approximation we create
         vector<T>                           subset_mins = vector<T>(),
@@ -2191,56 +2280,70 @@ cerr << "===========\n" << endl;
         shared_ptr<mfa::Param<T>> grid_params = make_shared<mfa::Param<T>>(test_pts);
         
         // Create pointsets to hold decoded points and errors
-        mfa::PointSet<T>* grid_approx = new mfa::PointSet<T>(grid_params, pt_dim);
-        this->errs = new mfa::PointSet<T>(grid_params, pt_dim);
+        mfa::PointSet<T>* grid_approx = new mfa::PointSet<T>(grid_params, mfa->model_dims());
+        errs = new mfa::PointSet<T>(grid_params, mfa->model_dims());
 
         // Decode on above-specified grid
-        this->mfa->Decode(*grid_approx, false);
+        mfa->Decode(*grid_approx, false);
 
         // Copy geometric point coordinates into errs PointSet
-        this->errs->domain.leftCols(dom_dim) = grid_approx->domain.leftCols(dom_dim);
+        errs->domain.leftCols(errs->geom_dim()) = grid_approx->domain.leftCols(grid_approx->geom_dim());
 
-        // Compute the analytical error at each point
-        T sum_errs      = 0.0;                                  // sum of absolute values of errors (L-1 norm)
-        T sum_sq_errs   = 0.0;                                  // sum of squares of errors (square of L-2 norm)
-        T max_err       = -1.0;                                 // maximum absolute value of error (L-infinity norm)
-        T true_val = 0;
-        T test_val = 0;
-        VectorX<T> dom_pt(dom_dim);
-        for (auto pt_it = this->errs->begin(), pt_end = this->errs->end(); pt_it != pt_end; ++pt_it)
+        // Compute the analytical error at each point and accrue errors
+        T l1err = 0, l2err = 0, linferr = 0;
+        VectorX<T> dom_pt(grid_approx->geom_dim());
+
+        for (int k = 0; k < grid_approx->nvars(); k++)
         {
-            pt_it.coords(dom_pt, 0, dom_dim-1); // extract the first dom_dim coords (i.e. geometric coords)
-            
-            // evaluate function at dom_pt_real
-            true_val = evaluate_function(fun, dom_pt, args, 0);
-            test_val = grid_approx->domain(pt_it.idx(), dom_dim);    // hard-coded for first science variable only
+            VectorX<T> true_pt(grid_approx->var_dim(k));
+            VectorX<T> test_pt(grid_approx->var_dim(k));
+            VectorX<T> residual(grid_approx->var_dim(k));
+            int num_pts_in_box = 0;
 
-            // compute and accrue error
-            T err = fabs(true_val - test_val);
-            this->errs->domain(pt_it.idx(), dom_dim) = err;
-
-            // accrue only in subset
-
-            in_box = true;
-            if (do_subset) 
+            for (auto pt_it = grid_approx->begin(), pt_end = grid_approx->end(); pt_it != pt_end; ++pt_it)
             {
-                for (int i = 0; i < dom_dim; i++)
-                    in_box = in_box && (dom_pt(i) >= subset_mins[i]) && (dom_pt(i) <= subset_maxs[i]);
+                pt_it.geom_coords(dom_pt); // extract the geometry coordinates
+
+                // Get exact and approximate values
+                evaluate_function(fun, dom_pt, true_pt, args, k);
+                pt_it.var_coords(k, test_pt);
+
+                // Update error field
+                residual = (true_pt - test_pt).cwiseAbs();
+                for (int j = 0; j <= errs->var_dim(k); j++)
+                {
+                    errs->domain(pt_it.idx(), errs->var_min(k) + j) = residual(j);
+                }
+
+                // Accrue error only in subset
+                in_box = true;
+                if (do_subset) 
+                {
+                    for (int i = 0; i < dom_dim; i++)
+                        in_box = in_box && (dom_pt(i) >= subset_mins[i]) && (dom_pt(i) <= subset_maxs[i]);
+                }
+
+                if (in_box)
+                {
+                    // NOTE: For now, we are using the norm of the residual for all error statistics.
+                    //       Is this the most appropriate way to measure errors norms of a vector field?
+                    //       May want to consider revisiting this.
+                    //
+                    // l1err   = residual.sum();           // L1 difference between vectors
+                    l2err   = residual.norm();          // L2 difference between vectors 
+                    // linferr = residual.maxCoeff();      // Maximum difference in components
+
+                    L1[k]   += l2err;
+                    L2[k]   += l2err * l2err;
+                    if (l2err > Linf[k]) Linf[k] = l2err;
+
+                    num_pts_in_box++;
+                }
             }
 
-            if (in_box)
-            {
-                // cerr << dom_pt << '\n' << endl;
-                sum_errs += err;                                // L1
-                sum_sq_errs += err * err;                       // L2
-                if (err > max_err)                              // Linf
-                    max_err = err;
-            }
+            L1[k] = L1[k] / num_pts_in_box;
+            L2[k] = sqrt(L2[k] / num_pts_in_box);
         }
-
-        L1    = sum_errs;
-        L2    = sqrt(sum_sq_errs);
-        Linf  = max_err;
 
         if (keep_approx)
         {
@@ -2255,6 +2358,7 @@ cerr << "===========\n" << endl;
     // outputs L1, L2, Linfinity error
     // optionally outputs true and test point locations and true and test values there
     // if optional test output wanted, caller has to allocate true_pts, test_pts, true_data, and test_data
+    // Hard-coded for one scalar science variable
     void analytical_error(
             const diy::Master::ProxyWithLink&     cp,
             string&                               fun,                // function to evaluate
@@ -2309,7 +2413,9 @@ cerr << "===========\n" << endl;
             }
 
             // evaluate function at dom_pt_real
-            T true_val = evaluate_function(fun, dom_pt_real, args, 0);
+            VectorX<T> out_pt(1);
+            evaluate_function(fun, dom_pt_real, out_pt, args, 0);
+            T true_val = out_pt(0);
 
             // evaluate MFA at dom_pt_param
             VectorX<T> cpt(1);                              // hard-coded for one science variable
@@ -2375,7 +2481,7 @@ cerr << "===========\n" << endl;
             std::vector<unsigned> &shape,   // important, shape of the block
             int chunk,                      // vector dimension for data input (usually 2 or 3)
             int transpose,                  // diy is MPI_C_ORDER always; offer option to transpose
-            DomainArgs &args)               // input args
+            MFAInfo& mfa_info)              // info class describing the MFA
     {
         Block<T> *b = new Block<T>;
         RCLink<int> *l = new RCLink<int>(link);
@@ -2442,7 +2548,10 @@ cerr << "===========\n" << endl;
         }
 
         // Construct point set to contain input
-        b->input = new mfa::PointSet<T>(b->dom_dim, b->pt_dim, tot_ndom_pts, ndom_pts);
+        VectorXi model_dims(2);
+        model_dims(0) = b->dom_dim;
+        model_dims(1) = b->pt_dim - b->dom_dim;
+        b->input = new mfa::PointSet<T>(b->dom_dim, model_dims, tot_ndom_pts, ndom_pts);
 
         if (0 == gid)
             cerr << " total local size : " << tot_ndom_pts << endl;
@@ -2459,7 +2568,7 @@ cerr << "===========\n" << endl;
                 val = sqrt(val);
                 b->input->domain(i, 1) = val;
             }
-            args.vars_nctrl_pts[0][0] = args.vars_nctrl_pts[0][dir0]; // only one direction that matters
+            mfa_info.var_model_infos[0].nctrl_pts[0] = mfa_info.var_model_infos[0].nctrl_pts[dir0]; // only one direction that matters
         } else if (b->dom_dim == 2) // 2d problem, second direction would be x, first would be y
         {
             if (transpose) {
@@ -2581,11 +2690,10 @@ cerr << "===========\n" << endl;
         b->bounds_maxs(b->dom_dim) = b->input->domain.col(b->dom_dim).maxCoeff();
 
         b->input->init_params();
-        b->mfa = new mfa::MFA<T>(b->dom_dim);
 
         // TODO: check that this construction of ProxyWithLink is valid
         // b->setup_models(diy::Master::ProxyWithLink(diy::Master::Proxy(&m, gid), b, l), nvars, args);     // adds models to MFA
-        b->setup_models(m.proxy(m.lid(gid)), nvars, args);
+        b->setup_MFA(m.proxy(m.lid(gid)), mfa_info);
     }
 
 };
@@ -2661,43 +2769,60 @@ T sintest( const VectorX<T>& p1,
 
 // evaluate sine function
 template<typename T>
-T sine(const VectorX<T>& domain_pt, DomainArgs&  args, int k)
+void sine(const VectorX<T>& domain_pt, VectorX<T>& output_pt, DomainArgs&  args, int k)
 {
     T retval = 1.0;
     for (auto i = 0; i < domain_pt.size(); i++)
         retval *= sin(domain_pt(i) * args.f[k]);
     retval *= args.s[k];
 
-    return retval;
+    for (int l = 0; l < output_pt.size(); l++)
+    {
+        output_pt(l) = retval * (1+l);
+    }
+
+    return;
 }
 
 template<typename T>
-T cosine(const VectorX<T>& domain_pt, DomainArgs&  args, int k)
+void cosine(const VectorX<T>& domain_pt, VectorX<T>& output_pt, DomainArgs&  args, int k)
 {
     T retval = 1.0;
     for (auto i = 0; i < domain_pt.size(); i++)
         retval *= cos(domain_pt(i) * args.f[k]);
     retval *= args.s[k];
 
-    return retval;        
+    for (int l = 0; l < output_pt.size(); l++)
+    {
+        output_pt(l) = retval * (1+l);
+    }
+
+    return;        
 }
 
 // evaluate the "negative cosine plus one" (f(x) = -cos(x)+1) function
 // used primarily to test integration of sine
 template<typename T>
-T ncosp1(const VectorX<T>& domain_pt, DomainArgs&  args, int k)
+void ncosp1(const VectorX<T>& domain_pt, VectorX<T>& output_pt, DomainArgs& args, int k)
 {
+    if (output_pt.size() != 1)
+    {
+        fprintf(stderr, "Error: ncosp1 only defined for scalar output.\n");
+        exit(0);
+    }
+
     T retval = 1.0;
     for (auto i = 0; i < domain_pt.size(); i++)
         retval *= 1 - cos(domain_pt(i) * args.f[k]);
     retval *= args.s[k];
 
-    return retval;        
+    output_pt(0) = retval;
+    return;        
 }
 
 // evaluate sinc function
 template<typename T>
-T sinc(const VectorX<T>& domain_pt, DomainArgs&  args, int k)
+void sinc(const VectorX<T>& domain_pt, VectorX<T>& output_pt, DomainArgs& args, int k)
 {
     T retval = 1.0;
     for (auto i = 0; i < domain_pt.size(); i++)
@@ -2707,13 +2832,20 @@ T sinc(const VectorX<T>& domain_pt, DomainArgs&  args, int k)
     }
     retval *= args.s[k];
 
-    return retval;
+    for (int l = 0; l < output_pt.size(); l++)
+    {
+        output_pt(l) = retval * (1+l);
+    }
+
+    return;
 }
 
 // evaluate n-d poly-sinc function version 1
 template<typename T>
-T polysinc1(const VectorX<T>& domain_pt, DomainArgs&  args, int)
+void polysinc1(const VectorX<T>& domain_pt, VectorX<T>& output_pt, DomainArgs&  args, int)
 {
+    int dim = output_pt.size();
+
     // a = (x + 1)^2 + (y - 1)^2 + (z + 1)^2 + ...
     // b = (x - 1)^2 + (y + 1)^2 + (z - 1)^2 + ...
     T a = 0.0;
@@ -2735,17 +2867,24 @@ T polysinc1(const VectorX<T>& domain_pt, DomainArgs&  args, int)
         b += (r * r);
     }
 
-    // a1 = sinc(a); b1 = sinc(b)
-    T a1 = (a == 0.0 ? 1.0 : sin(a) / a);
-    T b1 = (b == 0.0 ? 1.0 : sin(b) / b);
+    // Modulate sinc shape for each output coordinate if science variable is vector-valued
+    for (int l = 0; l < dim; l++)
+    {
+        // a1 = sinc(a*(1+l)); b1 = sinc(b*(1+l))
+        T a1 = (a == 0.0 ? 1.0*(1+l) : sin(a*(1+l)) / a);
+        T b1 = (b == 0.0 ? 1.0*(1+l) : sin(b*(1+l)) / b);
+        output_pt(l) = args.s[l] * (a1 + b1);               // scale entire science variable by s[k]
+    }
 
-    return args.s[0] * (a1 + b1);
+    return;
 }
 
 // evaluate n-d poly-sinc function version 2
 template<typename T>
-T polysinc2(const VectorX<T>& domain_pt, DomainArgs&  args, int)
+void polysinc2(const VectorX<T>& domain_pt, VectorX<T>& output_pt, DomainArgs&  args, int)
 {
+    int dim = output_pt.size();
+
     // a = x^2 + y^2 + z^2 + ...
     // b = 2(x - 2)^2 + (y + 2)^2 + (z - 2)^2 + ...
     T a = 0.0;
@@ -2769,17 +2908,24 @@ T polysinc2(const VectorX<T>& domain_pt, DomainArgs&  args, int)
             b += (r * r);
     }
 
-    // a1 = sinc(a); b1 = sinc(b)
-    T a1 = (a == 0.0 ? 1.0 : sin(a) / a);
-    T b1 = (b == 0.0 ? 1.0 : sin(b) / b);
+    // Modulate sinc shape for each output coordinate if science variable is vector-valued
+    for (int l = 0; l < dim; l++)
+    {
+        // a1 = sinc(a*(1+l)); b1 = sinc(b*(1+l))
+        T a1 = (a == 0.0 ? 1.0*(1+l) : sin(a*(1+l)) / a);
+        T b1 = (b == 0.0 ? 1.0*(1+l) : sin(b*(1+l)) / b);
+        output_pt(l) = args.s[l] * (a1 + b1);               // scale entire science variable by s[k]
+    }
 
-    return args.s[0] * (a1 + b1);
+    return;
 }
 
-// evaluate n-d poly-sinc function version 2
+// evaluate n-d poly-sinc function version 3 (differs from version 2 in definition of a)
 template<typename T>
-T polysinc3(const VectorX<T>& domain_pt, DomainArgs&  args, int)
+void polysinc3(const VectorX<T>& domain_pt, VectorX<T>& output_pt, DomainArgs&  args, int k)
 {
+    int dim = output_pt.size();
+
     // a = sqrt(x^2 + y^2 + z^2 + ...)
     // b = 2(x - 2)^2 + (y + 2)^2 + (z - 2)^2 + ...
     T a = 0.0;
@@ -2804,22 +2950,27 @@ T polysinc3(const VectorX<T>& domain_pt, DomainArgs&  args, int)
     }
     a = sqrt(a);
 
-    // a1 = sinc(a); b1 = sinc(b)
-    T a1 = (a == 0.0 ? 1.0 : sin(a) / a);
-    T b1 = (b == 0.0 ? 1.0 : sin(b) / b);
+    // Modulate sinc shape for each output coordinate if science variable is vector-valued
+    for (int l = 0; l < dim; l++)
+    {
+        // a1 = sinc(a*(1+l)); b1 = sinc(b*(1+l))
+        T a1 = (a == 0.0 ? 1.0*(1+l) : sin(a*(1+l)) / a);
+        T b1 = (b == 0.0 ? 1.0*(1+l) : sin(b*(1+l)) / b);
+        output_pt(l) = args.s[l] * (a1 + b1);               // scale entire science variable by s[k]
+    }
 
-    return args.s[0] * (a1 + b1);
+    return;
 }
 
 // evaluate Marschner-Lobb function [Marschner and Lobb, IEEE VIS, 1994]
 // only for a 3d domain
 // using args f[0] and s[0] for f_M and alpha, respectively, in the paper
 template<typename T>
-T ml(const VectorX<T>& domain_pt, DomainArgs&  args, int k)
+void ml(const VectorX<T>& domain_pt, VectorX<T>& output_pt, DomainArgs&  args, int k)
 {
-    if (domain_pt.size() != 3)
+    if (domain_pt.size() != 3 || output_pt.size() != 1)
     {
-        fprintf(stderr, "Error: Marschner-Lobb function is only defined for a 3d domain.\n");
+        fprintf(stderr, "Error: Marschner-Lobb function is only defined for a 3d domain and scalar output.\n");
         exit(0);
     }
     T fm           = args.f[0];
@@ -2834,16 +2985,17 @@ T ml(const VectorX<T>& domain_pt, DomainArgs&  args, int k)
     T rho       = cos(2 * M_PI * fm * cos(M_PI * rad / 2.0));
     T retval    = (1.0 - sin(M_PI * z / 2.0) + alpha * (1.0 + rho * sqrt(x * x + y * y))) / (2 * (1.0 + alpha));
 
-    return retval;
+    output_pt(0) = retval;
+    return;
 }
 
 // evaluate f16 function
 template<typename T>
-T f16(const VectorX<T>& domain_pt, DomainArgs&  args, int k)
+void f16(const VectorX<T>& domain_pt, VectorX<T>& output_pt, DomainArgs&  args, int k)
 {
-    if (domain_pt.size() != 2)
+    if (domain_pt.size() != 2 || output_pt.size() != 1)
     {
-        fprintf(stderr, "Error: f16 function is only defined for a 2d domain.\n");
+        fprintf(stderr, "Error: f16 function is only defined for a 2d domain and scalar output.\n");
         exit(0);
     }
 
@@ -2856,16 +3008,17 @@ T f16(const VectorX<T>& domain_pt, DomainArgs&  args, int k)
         pow(domain_pt(1), 3)                        +
         4                                           );
 
-    return retval;
+    output_pt(0) = retval;
+    return;
 }
 
 // evaluate f17 function
 template<typename T>
-T f17(const VectorX<T>& domain_pt, DomainArgs&  args, int k)
+void f17(const VectorX<T>& domain_pt, VectorX<T>& output_pt, DomainArgs&  args, int k)
 {
-    if (domain_pt.size() != 3)
+    if (domain_pt.size() != 3 || output_pt.size() != 1)
     {
-        fprintf(stderr, "Error: f17 function is only defined for a 3d domain.\n");
+        fprintf(stderr, "Error: f17 function is only defined for a 3d domain and scalar output.\n");
         exit(0);
     }
 
@@ -2876,16 +3029,17 @@ T f17(const VectorX<T>& domain_pt, DomainArgs&  args, int k)
     T kprop     = (2.0 * sqrt(2.0) * M * G * gamma ) / (M_PI * sqrt(M * M + gamma));
     T retval    = kprop / ((E * E - M * M) * (E * E - M * M) + M * M * G * G);
 
-    return retval;
+    output_pt(0) = retval;
+    return;
 }
 
 // evaluate f18 function
 template<typename T>
-T f18(const VectorX<T>& domain_pt, DomainArgs&  args, int k)
+void f18(const VectorX<T>& domain_pt, VectorX<T>& output_pt, DomainArgs&  args, int k)
 {
-    if (domain_pt.size() != 4)
+    if (domain_pt.size() != 4 || output_pt.size() != 1)
     {
-        fprintf(stderr, "Error: f18 function is only defined for a 4d domain.\n");
+        fprintf(stderr, "Error: f18 function is only defined for a 4d domain and scalar output.\n");
         exit(0);
     }
 
@@ -2895,28 +3049,29 @@ T f18(const VectorX<T>& domain_pt, DomainArgs&  args, int k)
     T x4        = domain_pt(3);
     T retval    = (atanh(x1) + atanh(x2) + atanh(x3) + atanh(x4)) / ((pow(x1, 2) - 1) * pow(x2, -1));
 
-    return retval;
+    output_pt(0) = retval;
+    return;
 }
 
 template<typename T>
-T evaluate_function(string fun, const VectorX<T>& domain_pt, DomainArgs& args, int k)
+void evaluate_function(string fun, const VectorX<T>& domain_pt, VectorX<T>& output_pt, DomainArgs& args, int k)
 {
-    if (fun == "sine")          return sine(domain_pt, args, k);
-    else if (fun == "cosine")   return cosine(domain_pt, args, k);
-    else if (fun == "ncosp1")   return ncosp1(domain_pt, args, k);
-    else if (fun == "sinc")     return sinc(domain_pt, args, k);
-    else if (fun == "psinc1")   return polysinc1(domain_pt, args, k);
-    else if (fun == "psinc2")   return polysinc2(domain_pt, args, k);
-    else if (fun == "psinc3")   return polysinc3(domain_pt, args, k);
-    else if (fun == "ml")       return ml(domain_pt, args, k);
-    else if (fun == "f16")      return f16(domain_pt, args, k);
-    else if (fun == "f17")      return f17(domain_pt, args, k);
-    else if (fun == "f18")      return f18(domain_pt, args, k);
+    if (fun == "sine")          return sine(        domain_pt, output_pt, args, k);
+    else if (fun == "cosine")   return cosine(      domain_pt, output_pt, args, k);
+    else if (fun == "ncosp1")   return ncosp1(      domain_pt, output_pt, args, k);
+    else if (fun == "sinc")     return sinc(        domain_pt, output_pt, args, k);
+    else if (fun == "psinc1")   return polysinc1(   domain_pt, output_pt, args, k);
+    else if (fun == "psinc2")   return polysinc2(   domain_pt, output_pt, args, k);
+    else if (fun == "psinc3")   return polysinc3(   domain_pt, output_pt, args, k);
+    else if (fun == "ml")       return ml(          domain_pt, output_pt, args, k);
+    else if (fun == "f16")      return f16(         domain_pt, output_pt, args, k);
+    else if (fun == "f17")      return f17(         domain_pt, output_pt, args, k);
+    else if (fun == "f18")      return f18(         domain_pt, output_pt, args, k);
     else
     {
         cerr << "Invalid function name in evaluate_function. Aborting." << endl;
         exit(0);
     }
 
-    return 0;
+    return;
 }

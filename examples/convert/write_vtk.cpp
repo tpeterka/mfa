@@ -22,6 +22,8 @@
 #include    "writer.hpp"
 #include    "block.hpp"
 
+// TODO: Only scalar-valued and 3D vector-valued variables are supported (because of the VTK writer)
+// If a variable has a different output dimension, the writer will skip that variable and continue.
 template<typename T>
 void write_pointset_vtk(mfa::PointSet<T>* ps, char* filename)
 {
@@ -38,7 +40,8 @@ void write_pointset_vtk(mfa::PointSet<T>* ps, char* filename)
 
     int dom_dim = ps->dom_dim;
     int pt_dim  = ps->pt_dim;
-    int nvars = pt_dim - dom_dim;   // TODO: this assumes all vars are scalar
+    int geom_dim = ps->geom_dim();
+    int nvars = ps->nvars();   // TODO: this assumes all vars are scalar
 
     vector<int> npts_dim;  // only used if data is structured
     if (ps->structured)
@@ -53,9 +56,9 @@ void write_pointset_vtk(mfa::PointSet<T>* ps, char* filename)
     }
     
     float** pt_data = new float*[nvars];
-    for (size_t j = 0; j < nvars; j++)
+    for (size_t k = 0; k < nvars; k++)
     {
-        pt_data[j]  = new float[ps->npts];
+        pt_data[k]  = new float[ps->npts * ps->var_dim(k)];
     }
 
     vec3d           pt;
@@ -63,24 +66,32 @@ void write_pointset_vtk(mfa::PointSet<T>* ps, char* filename)
     for (size_t j = 0; j < (size_t)(ps->npts); j++)
     {
         pt.x = ps->domain(j, 0);                      // first 3 dims stored as mesh geometry
-        pt.y = ps->domain(j, 1);
-        pt.z = pt_dim > 2 ? ps->domain(j, 2) : 0.0;
+        pt.y = geom_dim > 1 ? ps->domain(j, 1) : 0.0;
+        pt.z = geom_dim > 2 ? ps->domain(j, 2) : 0.0;
         pt_coords.push_back(pt);
 
+        int offset_idx = 0;
+        int all_vars_dim = pt_dim - geom_dim;
         for (int k = 0; k < nvars; k++)                         // science variables
-            pt_data[k][j] = ps->domain(j, dom_dim + k);
+        {
+            for (int l = 0; l < ps->var_dim(k); l++)
+            {
+                pt_data[k][j*all_vars_dim + offset_idx] = ps->domain(j, geom_dim + offset_idx);
+                offset_idx++;
+            }
+        }    
     }
 
     // science variable settings
     int* vardims        = new int[nvars];
     char** varnames     = new char*[nvars];
     int* centerings     = new int[nvars];
-    for (int i = 0; i < nvars; i++)
+    for (int k = 0; k < nvars; k++)
     {
-        vardims[i]      = 1;                                // TODO; treating each variable as a scalar (for now)
-        varnames[i]     = new char[256];
-        centerings[i]   = 1;
-        sprintf(varnames[i], "var%d", i);
+        vardims[k]      = ps->var_dim(k);
+        varnames[k]     = new char[256];
+        centerings[k]   = 1;
+        sprintf(varnames[k], "var%d", k);
     }
 
     // write raw original points
@@ -261,7 +272,7 @@ void PrepRenderingData(
     vec3d p;
 
     // number of geometry dimensions and science variables
-    int ndom_dims   = block->mfa->geom_dim;          // number of geometry dims
+    int ndom_dims   = block->mfa->geom_dim();          // number of geometry dims
     nvars           = block->mfa->nvars();                       // number of science variables
     pt_dim          = block->mfa->pt_dim;                     // dimensionality of point
 
