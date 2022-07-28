@@ -122,11 +122,11 @@ namespace mfa
                 cerr << "Warning: Overwriting existing parameters in PointSet" << endl;
             }
 
-            if (!check_param_domain_agreement(*params_))
+            /*if (!check_param_domain_agreement(*params_))
             {
                 cerr << "ERROR: Attempted to add mismatched Params to PointSet" << endl;
                 exit(1);
-            }
+            }*/
  
             params = params_;
 

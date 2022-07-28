@@ -404,7 +404,7 @@ int main(int argc, char **argv) {
                 std::cout << std::setprecision(14) <<  "passed max_red_err == " << max_red_err << "\n";
             }
             Block<real_t> *blendBlock1 = static_cast<Block<real_t>*>(master.block(1));
-            MatrixX<real_t> &bl = blendBlock1->blend;
+            MatrixX<real_t> &bl = blendBlock1->blend->domain;
             //std::cout<<bl(0,2) << "\n";
             if  ( (fabs(bl(0, 2) - 0.031224744068286) > 1.e-10 ) ||
                   (fabs(bl(1, 2) - 0.022554418713158) > 1.e-10 ) )
@@ -417,7 +417,7 @@ int main(int argc, char **argv) {
             else
             {
                 std::cout << std::setprecision(14) <<  "passed test blend(0, 2) == "
-                        << bl(0, 2) << "  blend(1, 2) == " << bl(1, 2)<< "\n";
+                        << bl(0, 2) << "  blend->domain(1, 2) == " << bl(1, 2)<< "\n";
             }
     }
 #ifdef MFA_KOKKOS

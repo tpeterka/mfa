@@ -326,7 +326,7 @@ int main(int argc, char** argv)
         // now look at some values of the blend matrix
 
         // b still points to the first block !! Block<real_t>* b    = static_cast<Block<real_t>*>(master.block(0));
-        MatrixX<real_t> result = b->blend;
+        MatrixX<real_t> result = b->blend->domain;
 
         // evaluate at 0,0 using decodeatpoint
         VectorX<real_t> param(2); // dom dim is 2, initialize with 0

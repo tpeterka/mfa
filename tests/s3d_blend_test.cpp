@@ -431,7 +431,7 @@ int main(int argc, char **argv) {
         if (world.size() == 1 && 0 == transpose ) {
             Block<real_t> *bmax = static_cast<Block<real_t>*>(master.block(
                     blockMax));
-            MatrixX<real_t> &bl = bmax->blend;
+            MatrixX<real_t> &bl = bmax->blend->domain;
             //std::cout<<bl(0,2) << "\n";
             if  ( (fabs(bl(0, 2) - 31.079045650447384) > 1.e-7 ) ||
                   (fabs(bl(1, 2) - 31.175520176541) > 1.e-7 ) )

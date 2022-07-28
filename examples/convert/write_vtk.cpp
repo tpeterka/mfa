@@ -460,21 +460,21 @@ void PrepRenderingData(
     blend_data  = new float*[nvars];
     for (size_t j = 0; j < nvars; j++)
     {
-        blend_data[j]   = new float[block->blend.rows()];
+        blend_data[j]   = new float[block->blend->domain.rows()];
     }
 
-    for (size_t j = 0; j < (size_t)(block->blend.rows()); j++)
+    for (size_t j = 0; j < (size_t)(block->blend->domain.rows()); j++)
     {
-        p.x = block->blend(j, 0);                               // if domain < 3d, mesh geometry includes a science variable
-        p.y = ndom_dims > 1 ? block->blend(j, 1) : block->blend(j, ndom_dims + sci_var);
+        p.x = block->blend->domain(j, 0);                               // if domain < 3d, mesh geometry includes a science variable
+        p.y = ndom_dims > 1 ? block->blend->domain(j, 1) : block->blend->domain(j, ndom_dims + sci_var);
         if (ndom_dims < 2)
             p.z = 0.0;
         else
-            p.z = ndom_dims > 2 ? block->blend(j, 2) : block->blend(j, ndom_dims + sci_var);
+            p.z = ndom_dims > 2 ? block->blend->domain(j, 2) : block->blend->domain(j, ndom_dims + sci_var);
         blend_pts.push_back(p);
 
         for (int k = 0; k < nvars; k++)                         // science variables
-            blend_data[k][j] = block->blend(j, ndom_dims + k);
+            blend_data[k][j] = block->blend->domain(j, ndom_dims + k);
     }
 
     // tmesh tensor extents
