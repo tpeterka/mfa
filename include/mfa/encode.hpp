@@ -766,10 +766,18 @@ namespace mfa
             MatrixXd::Index max_row, max_col;
             if (P.maxCoeff(&max_row, &max_col) > 300)
             {
-                fmt::print(stderr, "ComputeCtrlPtCurve(): very large control points\n");
+                fmt::print(stderr, "ComputeCtrlPtCurve(): very large control point maxrow {} maxcol {}\n", max_row, max_col);
                 fmt::print(stderr, "N row {}:\n {}\n", max_row, Nfree.row(max_row));
                 fmt::print(stderr, "NtN row {}:\n {}\n", max_row, (Nfree.transpose() * Nfree).row(max_row));
-                fmt::print(stderr, "P row{}:\n {}\n", max_row, P.row(max_row));
+                fmt::print(stderr, "N col {}:\n {}\n", max_row, Nfree.col(max_row));
+                fmt::print(stderr, "NtN col {}:\n {}\n", max_row, (Nfree.transpose() * Nfree).col(max_row));
+                fmt::print(stderr, "P row {}:\n {}\n", max_row, P.row(max_row));
+                fmt::print(stderr, "R:\n {}\n", R);
+
+                for (auto i = 0; i < Nfree.rows(); i++)
+                    fmt::print(stderr, "N row {} sum {}\n", i, Nfree.row(i).sum());
+                for (auto i = 0; i < Nfree.cols(); i++)
+                    fmt::print(stderr, "N col {} sum {}\n", i, Nfree.col(i).sum());
             }
         }
 
@@ -858,7 +866,7 @@ namespace mfa
                 // find correct tensor in case it needs to be adjusted
                 found_idx = mfa_data.tmesh.find_tensor(anchor, found_idx, false, found);
                 if (!found)
-                    throw MFAError(fmt::format("FreeCtrlPtCurve: tensor containing parameter not found\n"));
+                    throw MFAError(fmt::format("InterpCtrlPtCurve: tensor containing parameter not found\n"));
                 auto& ft = tmesh.tensor_prods[found_idx];
 
                 // debug
@@ -2096,7 +2104,7 @@ namespace mfa
 
                 // debug: turn off constraints
 
-#if MFA_NO_CONSTRAINTS
+#ifdef MFA_NO_CONSTRAINTS
 
                 cons_type = ConsType::MFA_NO_CONSTRAINT;
 #else
