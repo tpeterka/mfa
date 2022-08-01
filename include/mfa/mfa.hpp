@@ -109,6 +109,29 @@ struct ModelInfo
     // Default constructor. Dimensions = 0, vectors are empty.
     ModelInfo() { }
 
+    // General-purpose constructor
+    ModelInfo(int dom_dim_, int var_dim_,
+                vector<int> p_, vector<int> nctrl_pts_) :
+        dom_dim(dom_dim_),
+        var_dim(var_dim_),
+        p(Eigen::Map<VectorXi>(&p_[0], p_.size())),
+        nctrl_pts(Eigen::Map<VectorXi>(&nctrl_pts_[0], nctrl_pts_.size()))
+    {
+        validate();
+    }
+
+    // Convenience constructor for models that are identical in each dimension
+    ModelInfo(int dom_dim_, int var_dim_,
+                int p_, int nctrl_pts_) :
+        dom_dim(dom_dim_),
+        var_dim(var_dim_),
+        p(VectorXi::Constant(dom_dim_, p_)),
+        nctrl_pts(VectorXi::Constant(dom_dim_, nctrl_pts_))
+    { 
+        validate();
+    }
+
+    // Convenience constructor for linear model with minimal control points
     ModelInfo(int dom_dim_, int var_dim_) :
         dom_dim(dom_dim_),
         var_dim(var_dim_)
@@ -120,15 +143,7 @@ struct ModelInfo
             p[i] = 1;
             nctrl_pts[i] = p[i] + 1;
         }
-    }
 
-    ModelInfo(int dom_dim_, int var_dim_,
-                vector<int> p_, vector<int> nctrl_pts_) :
-        dom_dim(dom_dim_),
-        var_dim(var_dim_),
-        p(Eigen::Map<VectorXi>(&p_[0], p_.size())),
-        nctrl_pts(Eigen::Map<VectorXi>(&nctrl_pts_[0], nctrl_pts_.size()))
-    {
         validate();
     }
 

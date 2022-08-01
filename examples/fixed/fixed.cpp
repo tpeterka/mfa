@@ -164,7 +164,7 @@ int main(int argc, char** argv)
 
     // set MFA arguments
     ModelInfo   geom_info(dom_dim, dom_dim);
-    ModelInfo   var_info(dom_dim, 1, vector<int>(dom_dim, vars_degree), vector<int>(dom_dim, vars_nctrl));
+    ModelInfo   var_info(dom_dim, 1, vars_degree, vars_nctrl);
     vector<ModelInfo> all_vars_info(pt_dim - dom_dim, var_info);
     MFAInfo     mfa_info(dom_dim, 1, geom_info, all_vars_info);
     mfa_info.weighted       = weighted;
