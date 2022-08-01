@@ -289,9 +289,10 @@ int main(int argc, char** argv)
     // S3D dataset
     if (input == "s3d")
     {
-        if (dom_dim >= 1) d_args.ndom_pts[0]          = 704;
-        if (dom_dim >= 2) d_args.ndom_pts[1]          = 540;
-        if (dom_dim >= 3) d_args.ndom_pts[2]          = 550;
+        d_args.ndom_pts.resize(3);  // Hard-coded to full data set size
+        d_args.ndom_pts[0] = 704;
+        d_args.ndom_pts[1] = 540;
+        d_args.ndom_pts[2] = 550;
         if (dom_dim >= 1) mfa_info.var_model_infos[0].nctrl_pts[0] = 140;
         if (dom_dim >= 2) mfa_info.var_model_infos[0].nctrl_pts[1] = 108;
         if (dom_dim >= 3) mfa_info.var_model_infos[0].nctrl_pts[2] = 110;
@@ -332,10 +333,13 @@ int main(int argc, char** argv)
     // nek5000 dataset
     if (input == "nek")
     {
+        d_args.ndom_pts.resize(3);  // Hard-coded to full data set size
+        d_args.ndom_pts[0] = 200;
+        d_args.ndom_pts[1] = 200;
+        d_args.ndom_pts[2] = 200;
         for (int i = 0; i < dom_dim; i++)
         {
-            d_args.ndom_pts[i] = 200;
-            mfa_info.var_model_infos[i] = 100;
+            mfa_info.var_model_infos[0].nctrl_pts[i] = 100;
         }
         d_args.infile = infile;
 //         d_args.infile = "/Users/tpeterka/datasets/nek5000/200x200x200/0.xyz";
@@ -355,9 +359,10 @@ int main(int argc, char** argv)
     // rti dataset
     if (input == "rti")
     {
-        if (dom_dim >= 1) d_args.ndom_pts[0]  = 288;
-        if (dom_dim >= 2) d_args.ndom_pts[1]  = 512;
-        if (dom_dim >= 3) d_args.ndom_pts[2]  = 512;
+        d_args.ndom_pts.resize(3);  // Hard-coded to full data set size
+        d_args.ndom_pts[0] = 288;
+        d_args.ndom_pts[1] = 512;
+        d_args.ndom_pts[2] = 512;
         if (dom_dim >= 1) mfa_info.var_model_infos[0].nctrl_pts[0] = 72;
         if (dom_dim >= 2) mfa_info.var_model_infos[0].nctrl_pts[1] = 128;
         if (dom_dim >= 3) mfa_info.var_model_infos[0].nctrl_pts[2] = 128;
@@ -436,12 +441,14 @@ int main(int argc, char** argv)
      // tornado dataset
     if (input == "tornado")
     {
-        if (dom_dim >= 1) d_args.ndom_pts[0] = 128;
-        if (dom_dim >= 2) d_args.ndom_pts[1] = 128;
-        if (dom_dim >= 3) d_args.ndom_pts[2] = 128;
-        if (dom_dim >= 1) mfa_info.var_model_infos[0].nctrl_pts[0] = 100;
-        if (dom_dim >= 2) mfa_info.var_model_infos[0].nctrl_pts[1] = 100;
-        if (dom_dim >= 3) mfa_info.var_model_infos[0].nctrl_pts[2] = 100;
+        d_args.ndom_pts.resize(3);  // Hard-coded to full data set size
+        d_args.ndom_pts[0] = 128;
+        d_args.ndom_pts[1] = 128;
+        d_args.ndom_pts[2] = 128;
+        for (int i = 0; i < dom_dim; i++)
+        {
+            mfa_info.var_model_infos[0].nctrl_pts[i] = 100;
+        }
         d_args.infile               = infile;
 //         d_args.infile               = "/Users/tpeterka/datasets/tornado/bov/1.vec.bov";
 
