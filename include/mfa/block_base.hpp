@@ -528,26 +528,22 @@ struct BlockBase
 
         // science variables
         cerr << "\n----- science variable models -----" << endl;
-        for (auto i = 0; i < mfa->nvars(); i++)
+        for (int i = 0; i < mfa->nvars(); i++)
         {
             int min_dim = mfa->var(i).min_dim;
             int max_dim = mfa->var(i).max_dim;
             int vardim  = mfa->var_dim(i);
             MatrixX<T> varcoords = input->domain.middleCols(min_dim, vardim);
-            // T range_extent = input->domain.col(dom_dim + i).maxCoeff() - input->domain.col(dom_dim + i).minCoeff();
 
             // range_extents_max is a vector containing the range extent in each component of the science variable
             // So, the size of 'range_extents_max' is the dimension of the science variable
-            // VectorX<T> range_extents_max = varcoords.colwise().maxCoeff() - varcoords.colwise().minCoeff();
+            VectorX<T> range_extents_max = varcoords.colwise().maxCoeff() - varcoords.colwise().minCoeff();
 
-            // 'range_extents' is the difference between the largest and smallest vector norms of the input data
-            // So, for each point in the input, we compute the norm of that point; then we take the difference of the 
-            // largest and smallest norms. 
-            //
-            // NOTE! For scalar science variables, this is different from our older definition. Essentially, we 
-            // are taking the absolute value of every point before taking the max/min. Thus this could vary from
-            // the older definition of range_extent by up to a factor of 2.
-            T range_extent  = varcoords.rowwise().norm().maxCoeff() - varcoords.rowwise().norm().minCoeff();
+            // 'range_extents' is the norm of the difference between the largest and smallest components
+            // in each vector component. So, for each vector component we take find the difference between the
+            // largest and smallest values in that component. Then we take the norm of the vector that has
+            // this difference in each coordinate.
+            T range_extent = range_extents_max.norm();
 
             cerr << "\n---------- var " << i << " ----------" << endl;
             tot_nctrl_pts_dim   = VectorXi::Zero(dom_dim);
