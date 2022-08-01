@@ -44,7 +44,7 @@ struct vec3d
 // arguments to block foreach functions
 struct DomainArgs
 {
-    DomainArgs(int dom_dim, int pt_dim) 
+    DomainArgs(int dom_dim, int nvars) 
     {
         tot_ndom_pts = 0;
         starts.resize(dom_dim);
@@ -52,9 +52,9 @@ struct DomainArgs
         full_dom_pts.resize(dom_dim);
         min.resize(dom_dim);
         max.resize(dom_dim);
-        s.resize(pt_dim);
-        f.resize(pt_dim);
-        for (auto i = 0; i < pt_dim; i++)
+        s.resize(nvars);
+        f.resize(nvars);
+        for (auto i = 0; i < nvars; i++)
         {
             s[i] = 1.0;
             f[i] = 1.0;

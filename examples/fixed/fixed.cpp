@@ -172,7 +172,7 @@ int main(int argc, char** argv)
     mfa_info.reg1and2       = reg1and2;
 
     // set default args for diy foreach callback functions
-    DomainArgs d_args(dom_dim, pt_dim);
+    DomainArgs d_args(dom_dim, mfa_info.nvars());
     d_args.n            = noise;
     d_args.t            = twist;
     d_args.multiblock   = false;

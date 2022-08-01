@@ -174,7 +174,7 @@ int main(int argc, char** argv)
     mfa_info.reg1and2         = reg1and2;
 
     // set data arguments
-    DomainArgs d_args(dom_dim, pt_dim);
+    DomainArgs d_args(dom_dim, mfa_info.nvars());
     d_args.multiblock   = false;
     d_args.structured   = structured;
     d_args.rand_seed    = rand_seed;
