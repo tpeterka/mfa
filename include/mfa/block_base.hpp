@@ -886,7 +886,7 @@ struct BlockBase
             tot_core_pts *= resolutions[map_dir[i]];
         }
         // get local core bounds are decided already:  core_mins, core_maxs
-        MatrixX<T>          blend1;
+       /* MatrixX<T>          blend1;
         blend1.resize(tot_core_pts, dom_dim + 1); // these are just the evaluation points (core domain pts)
 
         // deltas in each direction
@@ -894,7 +894,7 @@ struct BlockBase
         // starting point in each dimension will be core_mins
         int nghost_pts;           // number of ghost points in current dimension
         for (int i = 0; i < dom_dim; i++)
-            d(i) = (core_maxs(i) - core_mins(i)) / (ndom_outpts(i) - 1);
+            d(i) = (core_maxs(i) - core_mins(i)) / (ndom_outpts(i) - 1);*/
 #ifdef MFA_KOKKOS
         Kokkos::Profiling::popRegion(); // "init_decode"
         Kokkos::Profiling::pushRegion("calc_pos");
@@ -913,7 +913,7 @@ struct BlockBase
         blend->set_params( make_shared<mfa::Param<T>>(param1) );
         mfa->DecodePointSet(*geometry.mfa_data, *blend, 0, 0, dom_dim - 1, false);
 
-        int cs = 1;                        // stride of a coordinate in this dim
+        /*int cs = 1;                        // stride of a coordinate in this dim
         T eps = 1.0e-10;                  // floating point roundoff error
         for (int i = 0; i < dom_dim; i++)  // all dimensions in the domain
         {
@@ -929,7 +929,7 @@ struct BlockBase
                 }
             }
             cs *= ndom_outpts(i);
-        }
+        }*/
 #ifdef MFA_KOKKOS
         Kokkos::Profiling::popRegion(); // "calc_pos"
 #endif
