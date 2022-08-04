@@ -149,23 +149,11 @@ using namespace std;
                         int weighted, int reg1and2, real_t regularization, int verbose,
                         MFAInfo& mfa_info, DomainArgs& d_args)
     {
-
-
-        // pt_dim
-        // dom_dim
-        // --ndomp
-        // input
-        // --weighted
-        // --rot
-        // --twist
-        // --noise
-        // --infile
-        // --structured
-        // --rand_seed
-        // --regularization
-        // --reg1and2
-
-        assert(vars_nctrl.size() == dom_dim);
+        // If only one value for vars_nctrl was parsed, assume it applies to all dims
+        if (vars_nctrl.size() == 1 & dom_dim > 1)
+        {
+            vars_nctrl = vector<int>(dom_dim, vars_nctrl[0]);
+        }
 
         // Set basic info for DomainArgs
         d_args.updateModelDims(model_dims);
