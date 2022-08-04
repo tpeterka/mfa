@@ -131,6 +131,10 @@ struct ModelInfo
         validate();
     }
 
+    ModelInfo(int dom_dim_, int var_dim_, int p_, vector<int> nctrl_pts_) :
+        ModelInfo(dom_dim_, var_dim_, vector<int>(dom_dim_, p_), nctrl_pts_)
+    { }
+
     // Convenience constructor for linear model with minimal control points
     ModelInfo(int dom_dim_, int var_dim_) :
         dom_dim(dom_dim_),
@@ -340,6 +344,14 @@ struct MFAInfo
         {
             addVarInfo(vmis[k]);
         }
+
+        return;
+    }
+
+    void reset()
+    {
+        geom_model_info = ModelInfo();
+        var_model_infos.clear();
 
         return;
     }

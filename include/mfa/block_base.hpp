@@ -5,6 +5,8 @@
 // Argonne National Laboratory
 // tpeterka@mcs.anl.gov
 //--------------------------------------------------------------
+#ifndef _MFA_BLOCK_BASE
+#define _MFA_BLOCK_BASE
 
 #include    <mfa/mfa.hpp>
 
@@ -1713,3 +1715,5 @@ namespace diy
                 }
         };
 }                       // namespace
+
+#endif // _MFA_BLOCK_BASE

@@ -5,6 +5,8 @@
 // Argonne National Laboratory
 // tpeterka@mcs.anl.gov
 //--------------------------------------------------------------
+#ifndef _MFA_BLOCK
+#define _MFA_BLOCK
 
 #include    <mfa/mfa.hpp>
 #include    <mfa/block_base.hpp>
@@ -44,21 +46,17 @@ struct vec3d
 // arguments to block foreach functions
 struct DomainArgs
 {
-    DomainArgs(int dom_dim, int nvars) 
+    DomainArgs(int dom_dim, vector<int> mdims) 
     {
+        // set up per-science variable data: model_dims, s, and f
+        updateModelDims(mdims);
+
         tot_ndom_pts = 0;
         starts.resize(dom_dim);
         ndom_pts.resize(dom_dim);
         full_dom_pts.resize(dom_dim);
         min.resize(dom_dim);
         max.resize(dom_dim);
-        s.resize(nvars);
-        f.resize(nvars);
-        for (auto i = 0; i < nvars; i++)
-        {
-            s[i] = 1.0;
-            f[i] = 1.0;
-        }
         r = 0;
         t = 0;
         n = 0;
@@ -66,6 +64,7 @@ struct DomainArgs
         structured = true;   // Assume structured input by default
         rand_seed  = -1;
     }
+    vector<int>         model_dims;                 // dimension of each model (including geometry)
     size_t              tot_ndom_pts;
     vector<int>         starts;                     // starting offsets of ndom_pts (optional, usually assumed 0)
     vector<int>         ndom_pts;                   // number of points in domain (possibly a subset of full domain)
@@ -81,6 +80,17 @@ struct DomainArgs
     bool                multiblock;                 // multiblock domain, get bounds from block
     bool                structured;                 // input data lies on unstructured grid
     int                 rand_seed;                  // seed for generating random data. -1: no randomization, 0: choose seed at random
+
+    void updateModelDims(vector<int> mdims)
+    {
+        int nvars = mdims.size() - 1;
+
+        model_dims = mdims;
+        s.assign(nvars, 1);
+        f.assign(nvars, 1);
+
+        return;
+    }
 };
 
 // block
@@ -330,8 +340,6 @@ struct Block : public BlockBase<T>
         const int nvars         = mfa_info.nvars();
         const int gdim          = mfa_info.geom_dim();
         const VectorXi mdims    = mfa_info.model_dims();
-
-        cerr << mdims << endl;
 
         this->max_errs.resize(nvars);
         this->sum_sq_errs.resize(nvars);
@@ -1388,9 +1396,7 @@ struct Block : public BlockBase<T>
     void read_3d_unstructured_data(
             const       diy::Master::ProxyWithLink& cp,
             MFAInfo&    mfa_info,
-            DomainArgs& args,
-            int         varid,
-            int         all_vars)           // total # scalar variables contained in infile (NOT in MFA))       
+            DomainArgs& args)
     {
         assert(mfa_info.dom_dim == dom_dim);
         assert(mfa_info.pt_dim() == pt_dim);
@@ -1432,13 +1438,14 @@ struct Block : public BlockBase<T>
                 fscanf(fd, "%f", &val);
                 input->domain(i, k) = val;
             }
-            for (int k = 0; k < all_vars; k++)  // read all vars but only store varid
+            for (int k = 0; k < nvars; k++)  
             {
                 fscanf(fd, "%f", &val);
-                if (k == varid)
-                {
-                    input->domain(i, gdim) = val;
-                }
+                input->domain(i, gdim + k) = val;
+                // if (k == varid)
+                // {
+                //     input->domain(i, gdim) = val;
+                // }
             }
 
             // for (int k = 0; k < pt_dim; k++)
@@ -1825,7 +1832,7 @@ struct Block : public BlockBase<T>
         // ------------ Creation of new MFA ------------- //
         //
         // Create a new top-level MFA
-        int verbose = mfa_info.verbose && cp.master()->communicator().rank() == 0; 
+        int verbose = mfa->verbose && cp.master()->communicator().rank() == 0; 
         mfa::MFA<T>* ray_mfa = new mfa::MFA<T>(new_dd, verbose);
 
         // Set up new geometry
@@ -3075,3 +3082,5 @@ void evaluate_function(string fun, const VectorX<T>& domain_pt, VectorX<T>& outp
 
     return;
 }
+
+#endif // _MFA_BLOCK
