@@ -1400,8 +1400,6 @@ struct Block : public BlockBase<T>
     {
         assert(mfa_info.dom_dim == dom_dim);
         assert(mfa_info.pt_dim() == pt_dim);
-        assert(mfa_info.nvars() == 1);
-        assert(mfa_info.var_dim(0) == 1);
 
         const int nvars         = mfa_info.nvars();
         const int gdim          = mfa_info.geom_dim();
@@ -1433,20 +1431,26 @@ struct Block : public BlockBase<T>
         float val = 0;
         for (int i = 0; i < input->npts; i++)
         {
-            for (int k = 0; k < gdim; k++)
+            for (int j = 0; j < input->pt_dim; j++)
             {
                 fscanf(fd, "%f", &val);
-                input->domain(i, k) = val;
+                input->domain(i, j) = val;
             }
-            for (int k = 0; k < nvars; k++)  
-            {
-                fscanf(fd, "%f", &val);
-                input->domain(i, gdim + k) = val;
-                // if (k == varid)
-                // {
-                //     input->domain(i, gdim) = val;
-                // }
-            }
+            // for (int k = 0; k < gdim; k++)
+            // {
+            //     fscanf(fd, "%f", &val);
+            //     input->domain(i, k) = val;
+            // }
+            // for (int k = 0; k < nvars; k++)  
+            // {
+
+            //     fscanf(fd, "%f", &val);
+            //     input->domain(i, gdim + k) = val;
+            //     // if (k == varid)
+            //     // {
+            //     //     input->domain(i, gdim) = val;
+            //     // }
+            // }
 
             // for (int k = 0; k < pt_dim; k++)
             // {
@@ -2849,7 +2853,7 @@ void sinc(const VectorX<T>& domain_pt, VectorX<T>& output_pt, DomainArgs& args, 
 
 // evaluate n-d poly-sinc function version 1
 template<typename T>
-void polysinc1(const VectorX<T>& domain_pt, VectorX<T>& output_pt, DomainArgs&  args, int)
+void polysinc1(const VectorX<T>& domain_pt, VectorX<T>& output_pt, DomainArgs&  args, int k)
 {
     int dim = output_pt.size();
 
@@ -2880,7 +2884,7 @@ void polysinc1(const VectorX<T>& domain_pt, VectorX<T>& output_pt, DomainArgs&  
         // a1 = sinc(a*(1+l)); b1 = sinc(b*(1+l))
         T a1 = (a == 0.0 ? 1.0*(1+l) : sin(a*(1+l)) / a);
         T b1 = (b == 0.0 ? 1.0*(1+l) : sin(b*(1+l)) / b);
-        output_pt(l) = args.s[l] * (a1 + b1);               // scale entire science variable by s[k]
+        output_pt(l) = args.s[k] * (a1 + b1);               // scale entire science variable by s[k]
     }
 
     return;
@@ -2888,7 +2892,7 @@ void polysinc1(const VectorX<T>& domain_pt, VectorX<T>& output_pt, DomainArgs&  
 
 // evaluate n-d poly-sinc function version 2
 template<typename T>
-void polysinc2(const VectorX<T>& domain_pt, VectorX<T>& output_pt, DomainArgs&  args, int)
+void polysinc2(const VectorX<T>& domain_pt, VectorX<T>& output_pt, DomainArgs&  args, int k)
 {
     int dim = output_pt.size();
 
@@ -2921,7 +2925,7 @@ void polysinc2(const VectorX<T>& domain_pt, VectorX<T>& output_pt, DomainArgs&  
         // a1 = sinc(a*(1+l)); b1 = sinc(b*(1+l))
         T a1 = (a == 0.0 ? 1.0*(1+l) : sin(a*(1+l)) / a);
         T b1 = (b == 0.0 ? 1.0*(1+l) : sin(b*(1+l)) / b);
-        output_pt(l) = args.s[l] * (a1 + b1);               // scale entire science variable by s[k]
+        output_pt(l) = args.s[k] * (a1 + b1);               // scale entire science variable by s[k]
     }
 
     return;
@@ -2963,7 +2967,7 @@ void polysinc3(const VectorX<T>& domain_pt, VectorX<T>& output_pt, DomainArgs&  
         // a1 = sinc(a*(1+l)); b1 = sinc(b*(1+l))
         T a1 = (a == 0.0 ? 1.0*(1+l) : sin(a*(1+l)) / a);
         T b1 = (b == 0.0 ? 1.0*(1+l) : sin(b*(1+l)) / b);
-        output_pt(l) = args.s[l] * (a1 + b1);               // scale entire science variable by s[k]
+        output_pt(l) = args.s[k] * (a1 + b1);               // scale entire science variable by s[k]
     }
 
     return;
