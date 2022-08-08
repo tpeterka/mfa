@@ -22,65 +22,53 @@
 
 using namespace std;
 
-// void set_args(  int&            geom_degree,
-//                 int&            geom_nctrl,
-//                 int&            vars_degree,
-//                 int&            vars_nctrl,
-//                 vector<int>&    ndom_pts,
-//                 vector<real_t>& dom_mins,
-//                 vector<real_t>& dom_maxs,
-//                 vector<real_t>& s_vec,
-//                 vector<real_t>& f_vec,
-//                 vector<int>&    starts,
-//                 vector<int>&    full_dom_pts
-//                 )
+    void echo_args(string run_name, int pt_dim, int dom_dim, int scalar,
+                    int geom_degree, int geom_nctrl, int vars_degree, vector<int> vars_nctrl,
+                    int ndomp, int ntest, string input, string infile,
+                    set<string> analytical_signals,
+                    real_t noise, int structured, int& weighted)    // pass reference to weighted so it can be updated
+    {
+        bool is_analytical = (analytical_signals.count(input) == 1);
 
+        cerr << "Running \'" << run_name << "\'" << endl;
+        cerr << endl;
+        cerr << "--------- Input arguments ----------" << endl;
+        cerr << "pt_dim   = " << pt_dim      << '\t' << "dom_dim    = " << dom_dim 
+                << '\t' << "scalar: " << boolalpha << (bool)scalar << endl;
+        cerr << "geom_deg = " << geom_degree << '\t' << "geom_nctrl = " << geom_nctrl  << endl;
+        cerr << "vars_deg = " << vars_degree << '\t' << "vars_nctrl = " << "{";
+            for (int i = 0; i < vars_nctrl.size(); i++) cerr << vars_nctrl[i] << " ";
+            cerr << "\b}" << endl;
+        cerr << "num pts  = " << ndomp       << '\t' << "test pts   = " << (ntest > 0 ? to_string(ntest) : "N/A") << endl;
+        cerr << "noise    = " << noise       << '\t' << "structured = " << structured << endl;
+        cerr << "input: " << input       << ", " << "infile: " << (is_analytical ? "N/A" : infile) << endl;
+#ifdef MFA_NO_WEIGHTS
+        weighted = 0;
+        cerr << "weighted: false" << endl;
+#else
+        cerr << "weighted: " << boolalpha <<  (bool)weighted << endl;
+#endif
+#ifdef CURVE_PARAMS
+        cerr << "parameterization method: curve" << endl;
+#else
+        cerr << "parameterization method: domain" << endl;
+#endif
+#ifdef MFA_TBB
+        cerr << "threading: TBB" << endl;
+#endif
+#ifdef MFA_KOKKOS
+        cerr << "threading: Kokkos" << endl;
+#endif
+#ifdef MFA_SYCL
+        cerr << "threading: SYCL" << endl;
+#endif
+#ifdef MFA_SERIAL
+        cerr << "threading: serial" << endl;
+#endif
+    cerr << "-------------------------------------\n" << endl;
 
-// TEMP Code snippet for future use
-//
-// for (int i = 0; i < dom_dim; i++)
-//     {
-//         d_args.geom_p[i]            = geom_p[i];
-//         d_args.geom_nctrl_pts[i]    = geom_nctrl_pts[i];
-
-//         for (int k = 0; k < d_args.nvars; k++)
-//         {
-//             d_args.vars_p[k][i]         = vars_p[k][i];      // assuming one science variable, vars_p[0]
-//             d_args.vars_nctrl_pts[k][i] = vars_nctrl_pts[k][i];       // assuming one science variable, vars_nctrl_pts[0]
-//         }
-//     }
-//     d_args.weighted     = weighted;
-//     d_args.reg1and2     = reg1and2;
-//     d_args.regularization   = regularization;
-//     d_args.verbose      = 1;
-
-//     // Data set parameters
-//     for (int i = 0; i < dom_dim; i++)
-//     {
-//         d_args.min[i]               = dom_mins[i];
-//         d_args.max[i]               = dom_maxs[i];
-//         d_args.ndom_pts[i]          = ndom_pts[i];
-//         d_args.starts[i]            = starts[i];
-//         d_args.full_dom_pts[i]      = full_dom_pts[i];
-//     }
-//     d_args.tot_ndom_pts = tot_ndom_pts;
-//     d_args.r            = rot * M_PI / 180;          // TODO change to degrees
-//     d_args.t            = twist;
-//     d_args.n            = noise;
-//     for (int i = 0; i < pt_dim - dom_dim; i++)
-//     {
-//         d_args.s[i]     = scaling[i];
-//         d_args.f        = freq[i];
-//     }
-//     d_args.infile       = infile;
-//     d_args.multiblock   = false;
-//     d_args.structured   = structured;
-//     d_args.rand_seed    = rand_seed;
-/////////////
-
-
-
-
+        return;
+    }
     // Sets the degree and number of control points 
     // For geom and each var, degree is same in each domain dimension
     // For geom, # ctrl points is the same in each domain dimension
@@ -117,28 +105,6 @@ using namespace std;
             ModelInfo var_info(dom_dim, model_dims[k+1], vars_degree, vars_nctrl);
             mfa_info.addVarInfo(var_info);
         }
-
-
-        // geom_p.resize(dom_dim);
-        // geom_nctrl_pts.resize(dom_dim);
-        // for (int i = 0; i < dom_dim; i++)
-        // {
-        //     geom_p[i] = geom_degree;
-        //     geom_nctrl_pts[i] = geom_nctrl;
-        // }
-
-        // vars_p.resize(nvars);
-        // vars_nctrl_pts.resize(nvars);
-        // for (int j = 0; j < nvars; j++)
-        // {
-        //     vars_p[j].resize(dom_dim);
-        //     vars_nctrl_pts[j].resize(dom_dim);
-        //     for (int i = 0; i < dom_dim; i++)
-        //     {
-        //         vars_p[j][i] = vars_degree;
-        //         vars_nctrl_pts[j][i] = vars_nctrl;
-        //     }
-        // }
     }
 
     // Currently for single block examples only
@@ -179,40 +145,22 @@ using namespace std;
         d_args.min.assign(dom_dim, 0.0);
         d_args.max.assign(dom_dim, 1.0);
 
-        // sine function f(x) = sin(x), f(x,y) = sin(x)sin(y), ...
-        if (input == "sine")
+        // sine, cosine functions
+        if (input == "sine" || input == "cosine")
         {
             d_args.min.assign(dom_dim, -4.0 * M_PI);
             d_args.max.assign(dom_dim,  4.0 * M_PI);
-            for (int i = 0; i < d_args.model_dims.size()-1; i++)      // for all science variables
-                d_args.s[i] = i + 1;                        // scaling factor on range
-
-            // master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-            //         { b->generate_analytical_data(cp, input, d_args); });
+            for (int i = 0; i < d_args.model_dims.size()-1; i++)
+                d_args.s[i] = i + 1;
         }
 
-        // sinc function f(x) = sin(x)/x, f(x,y) = sinc(x)sinc(y), ...
-        if (input == "sinc")
+        // sinc, polysinc functions
+        if (input == "sinc" || input == "psinc1" || input == "psinc2" || input == "psinc3")
         {
             d_args.min.assign(dom_dim, -4.0 * M_PI);
             d_args.max.assign(dom_dim,  4.0 * M_PI);
-            for (int i = 0; i < d_args.model_dims.size()-1; i++)      // for all science variables
-                d_args.s[i] = 10.0 * (i + 1);                 // scaling factor on range
-
-            // master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-            //         { b->generate_analytical_data(cp, input, d_args); });
-        }
-
-        // polysinc functions
-        if (input == "psinc1" || input == "psinc2" || input == "psinc3")
-        {
-            d_args.min.assign(dom_dim, -4.0 * M_PI);
-            d_args.max.assign(dom_dim,  4.0 * M_PI);
-            for (int i = 0; i < d_args.model_dims.size()-1; i++)      // for all science variables
-                d_args.s[i] = 10.0 * (i + 1);                 // scaling factor on range
-
-            // master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-            //         { b->generate_analytical_data(cp, input, d_args); });
+            for (int i = 0; i < d_args.model_dims.size()-1; i++)
+                d_args.s[i] = 10.0 * (i + 1);
         }
 
         // Marschner-Lobb function [M&L]: Marschner & Lobb, IEEE Vis 1994
@@ -229,9 +177,6 @@ using namespace std;
             d_args.max.assign(dom_dim,  1.0);
             d_args.f[0] = 6.0;                  // f_M in the M&L paper
             d_args.s[0] = 0.25;                 // alpha in the M&L paper
-
-            // master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-            //         { b->generate_analytical_data(cp, input, d_args); });
         }
 
         // f16 function
@@ -245,9 +190,6 @@ using namespace std;
 
             d_args.min = {-1, -1};
             d_args.max = { 1,  1};
-
-            // master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-            //         { b->generate_analytical_data(cp, input, d_args); });
         }
 
         // f17 function
@@ -261,9 +203,6 @@ using namespace std;
 
             d_args.min = {80,   5, 90};
             d_args.max = {100, 10, 93};
-
-            // master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-            //         { b->generate_analytical_data(cp, input, d_args); });
         }
 
         // f18 function
@@ -277,9 +216,6 @@ using namespace std;
 
             d_args.min = {-0.95, -0.95, -0.95, -0.95};
             d_args.max = { 0.95,  0.95,  0.95,  0.95};
-
-            // master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-            //         { b->generate_analytical_data(cp, input, d_args); });
         }
 
         // S3D dataset:  flame/6_small.xyz
@@ -298,25 +234,6 @@ using namespace std;
             // (MPI uses int for the size, and DIY as yet does not chunk writes into smaller sizes)
             // d_args.ndom_pts = {350, 2250, 250};
             // d_args.starts   = {125, 50, 125};
-
-            // if (dom_dim == 1)
-            //     master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-            //             { b->read_1d_slice_3d_vector_data(cp, d_args); });
-            // else if (dom_dim == 2)
-            //     master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-            //             { b->read_2d_slice_3d_vector_data(cp, d_args); });
-            // else if (dom_dim == 3)
-            //     master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-            //             { b->read_3d_vector_data(cp, d_args); });
-            // else
-            // {
-            //     fprintf(stderr, "S3D data only available in 2 or 3d domain\n");
-            //     exit(0);
-            // }
-
-
-    //         master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-    //                 { b->read_3d_subset_3d_vector_data(cp, d_args); });
         }
 
         // nek5000 dataset:  nek5000/200x200x200/0.xyz
@@ -324,20 +241,10 @@ using namespace std;
         {
             d_args.full_dom_pts = {200, 200, 200};      // Hard-coded to full data set size
             d_args.ndom_pts = d_args.full_dom_pts;
-            vars_nctrl.assign(dom_dim, 100);
-
-
-            // if (dom_dim == 2)
-            //     master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-            //             { b->read_2d_slice_3d_vector_data(cp, d_args); });
-            // else if (dom_dim == 3)
-            //     master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-            //             { b->read_3d_vector_data(cp, d_args); });
-            // else
-            // {
-            //     fprintf(stderr, "nek5000 data only available in 2 or 3d domain\n");
-            //     exit(0);
-            // }
+            
+            if (dom_dim >= 1) vars_nctrl[0] = 100;
+            if (dom_dim >= 2) vars_nctrl[1] = 100;
+            if (dom_dim >= 3) vars_nctrl[2] = 100;
         }
 
         // rti dataset:  rti/dd07g_xxsmall_le.xyz
@@ -349,63 +256,6 @@ using namespace std;
             if (dom_dim >= 1) vars_nctrl[0] = 72;
             if (dom_dim >= 2) vars_nctrl[1] = 128;
             if (dom_dim >= 3) vars_nctrl[2] = 128;
-
-            // for testing, hard-code a subset of a 3d domain, 1/2 the size in each dim and centered
-            // d_args.ndom_pts = {144, 256, 256};
-            // d_args.starts   = {72, 128, 128};
-
-            // if (dom_dim == 2)
-            //     master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-            //             { b->read_2d_slice_3d_vector_data(cp, d_args); });
-            // else if (dom_dim == 3)
-            //     master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-            //             { b->read_3d_vector_data(cp, d_args); });
-            // else
-            // {
-            //     fprintf(stderr, "rti data only available in 2 or 3d domain\n");
-            //     exit(0);
-            // }
-
-
-
-
-    //         master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-    //                 { b->read_3d_subset_3d_vector_data(cp, d_args); });
-        }
-
-        // cesm dataset:  CESM-ATM-tylor/1800x3600/FLDSC_1_1800_3600.dat
-        if (input == "cesm")
-        {
-            d_args.full_dom_pts = {1800, 3600};
-            d_args.ndom_pts = d_args.full_dom_pts;
-            vars_nctrl      = {300, 600};
-
-            // if (dom_dim == 2)
-            //     master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-            //             { b->read_2d_scalar_data(cp, d_args); });
-            // else
-            // {
-            //     fprintf(stderr, "cesm data only available in 2d domain\n");
-            //     exit(0);
-            // }
-        }
-
-        // miranda dataset:  miranda/SDRBENCH-Miranda-256x384x384/density.d64
-        if (input == "miranda")
-        {
-            d_args.full_dom_pts = {256, 384, 384};
-            d_args.ndom_pts = d_args.full_dom_pts;
-
-            vars_nctrl = {256, 384, 384};   // 192, 288, 288
-
-            // if (dom_dim == 3)
-            //     master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-            //             { b->read_3d_scalar_data<double>(cp, d_args); });
-            // else
-            // {
-            //     fprintf(stderr, "miranda data only available in 3d domain\n");
-            //     exit(0);
-            // }
         }
 
         // tornado dataset:  tornado/bov/1.vec.bov
@@ -417,21 +267,25 @@ using namespace std;
             if (dom_dim >= 1) vars_nctrl[0] = 100;
             if (dom_dim >= 2) vars_nctrl[1] = 100;
             if (dom_dim >= 3) vars_nctrl[2] = 100;
+        }
 
-            // if (dom_dim == 1)
-            //     master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-            //             { b->read_1d_slice_3d_vector_data(cp, d_args); });
-            // else if (dom_dim == 2)
-            //     master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-            //             { b->read_2d_slice_3d_vector_data(cp, d_args); });
-            // else if (dom_dim == 3)
-            //     master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-            //             { b->read_3d_vector_data(cp, d_args); });
-            // else
-            // {
-            //     fprintf(stderr, "tornado data only available in 1, 2, or 3d domain\n");
-            //     exit(0);
-            // }
+        // miranda dataset:  miranda/SDRBENCH-Miranda-256x384x384/density.d64
+        if (input == "miranda")
+        {
+            d_args.full_dom_pts = {256, 384, 384};
+            d_args.ndom_pts = d_args.full_dom_pts;
+
+            if (dom_dim >= 1) vars_nctrl[0] = 256; // 192
+            if (dom_dim >= 2) vars_nctrl[1] = 384; // 288
+            if (dom_dim >= 3) vars_nctrl[2] = 384; // 288
+        }
+
+        // cesm dataset:  CESM-ATM-tylor/1800x3600/FLDSC_1_1800_3600.dat
+        if (input == "cesm")
+        {
+            d_args.full_dom_pts = {1800, 3600};
+            d_args.ndom_pts = d_args.full_dom_pts;
+            vars_nctrl      = {300, 600};
         }
 
         // EDelta Wing dataset (unstructured):  edelta/edelta.txt
@@ -444,13 +298,7 @@ using namespace std;
             }
 
             model_dims = {3, 1, 1, 1, 1};
-            d_args.updateModelDims(model_dims);
-            // model_dims.resize(5);
-            // model_dims[0] = geom_dim;
-            // model_dims[1] = 1;
-            // model_dims[2] = 1;
-            // model_dims[3] = 1;
-            // model_dims[4] = 1;
+            d_args.updateModelDims(model_dims);     // Need to update d_args with new model_dims
 
             d_args.min.resize(3);
             d_args.max.resize(3);
@@ -463,9 +311,6 @@ using namespace std;
             vars_degree = 2;
             vars_nctrl[0] = 130;
             vars_nctrl[1] = 92;
-
-            // master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-            //             { b->read_3d_unstructured_data(cp, d_args); });
         }
 
         // Climate dataset:  climate/climate-small.txt
@@ -478,7 +323,7 @@ using namespace std;
             }
 
             model_dims = {3, 1};
-            d_args.updateModelDims(model_dims);
+            d_args.updateModelDims(model_dims);     // Need to update d_args with new model_dims
 
             d_args.min.resize(3);
             d_args.max.resize(3);
@@ -499,13 +344,13 @@ using namespace std;
             }
 
             model_dims = {3, 1, 1, 1, 1};
-            d_args.updateModelDims(model_dims);
+            d_args.updateModelDims(model_dims);     // Need to update d_args with new model_dims
 
             d_args.min[0] =  1.5662432; d_args.max[0] = 30.433756;
             d_args.min[1] = -7.5980764; d_args.max[1] = 22.4019242;
             d_args.min[2] =  10;        d_args.max[2] = 35;
 
-            vars_nctrl[2] = 15;  // fix (reduce) number of control points in z-direction
+            vars_nctrl[2] = 15;  // set (reduce) number of control points in z-direction
             
             d_args.tot_ndom_pts = 63048;
         }
