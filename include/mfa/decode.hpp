@@ -592,24 +592,18 @@ namespace mfa
 					// end copy
             	});
             }
-            Kokkos::Profiling::popRegion();
+            Kokkos::Profiling::popRegion(); // "ShapeFunc"
             // up to here we computed the shape functions, now use them
-
             // prepare control points view, fill host and copy to device
+            // the problem is here, nvar can be more than 1, for geometry for example
+            // the view is double dimension
             int nct = mfa_data.tmesh.tensor_prods[0].ctrl_pts.rows(), nvar=mfa_data.tmesh.tensor_prods[0].ctrl_pts.cols();
             Kokkos::View<double*> ctrl_pts_k("ctrlpts", nct );
             auto h_ctrl_pts_k = Kokkos::create_mirror_view(ctrl_pts_k);
             typedef Kokkos::RangePolicy<>  range_policy;
             typedef Kokkos::OpenMP   HostExecSpace;
             typedef Kokkos::RangePolicy<HostExecSpace>    host_range_policy;
-            // we could say explicitly: Kokkos::RangePolicy<Kokkos::OpenMP> (0, nct) ! this will happen over host
-            Kokkos::parallel_for( "copy_ctrl", host_range_policy(0, nct),
-                KOKKOS_LAMBDA ( const int j ) {
-                  h_ctrl_pts_k(j) = mfa_data.tmesh.tensor_prods[0].ctrl_pts(j,0);
-                }
-              );
-            // and then copy to device
-            Kokkos::deep_copy(ctrl_pts_k, h_ctrl_pts_k);
+
             Kokkos::View<int*> strides_patch("strides_patch", mfa_data.dom_dim );
             Kokkos::View<int*>::HostMirror h_strides_patch = Kokkos::create_mirror_view(strides_patch);
             // for each point we know where that span starts, and how big the support is
@@ -634,58 +628,71 @@ namespace mfa
             // simple types double, int, but not for structures !
             // this is why using kdom_dim inside is fine, while mfa_data.dom_dim is not
             Kokkos::Profiling::pushRegion("DecodeAtRes");
-            Kokkos::parallel_for( "decode_resol", ntot,
-                KOKKOS_LAMBDA ( const int i ) {
 
-                    int leftover=i;
-                    int ctrl_idx = 0;
-                    double value = 0; // this will accumulate (one variable now)
-                    int ij_grid[7]; // could be just smaller; 7 is max dim for Kokkos anyway
-                    int span_st[7];
-                    int ij_patch[7];
+            for (int iv = 0; iv < nvar; iv++)
+            {
+                // we could say explicitly: Kokkos::RangePolicy<Kokkos::OpenMP> (0, nct) ! this will happen over host
+                Kokkos::parallel_for( "copy_ctrl", host_range_policy(0, nct),
+                   KOKKOS_LAMBDA ( const int j ) {
+                     h_ctrl_pts_k(j) = mfa_data.tmesh.tensor_prods[0].ctrl_pts(j,iv);
+                   }
+                 );
+               // and then copy to device
+                Kokkos::deep_copy(ctrl_pts_k, h_ctrl_pts_k);
+                Kokkos::parallel_for( "decode_resol", ntot,
+                    KOKKOS_LAMBDA ( const int i ) {
 
-                    for (int k=kdom_dim-1; k>=0; k--)
-                    {
-                        ij_grid[k] = (int)(leftover/strides(k));
-                        leftover -= strides(k)*ij_grid[k] ;
-                    }
+                        int leftover=i;
+                        int ctrl_idx = 0;
+                        double value = 0; // this will accumulate (one variable now)
+                        int ij_grid[7]; // could be just smaller; 7 is max dim for Kokkos anyway
+                        int span_st[7];
+                        int ij_patch[7];
 
-                    for (int k=0; k<kdom_dim; k++)
-                    {
-                        span_st[k] = span_starts(k, ij_grid[k]);
-                        ctrl_idx += (span_st[k]+kct(0,k))*kcs(k);
-                    }
-
-                    // now we need more loops, in all direction, for local patch, size
-                    // ksupp is p+1 in each direction
-
-                    for (int j=0; j<nb_internal_iter; j++)
-                    {
-                        int leftj = j;
                         for (int k=kdom_dim-1; k>=0; k--)
                         {
-                            ij_patch[k] = (int)(leftj/strides_patch(k));
-                            leftj -= strides_patch(k)*ij_patch[k] ;
+                            ij_grid[k] = (int)(leftover/strides(k));
+                            leftover -= strides(k)*ij_grid[k] ;
                         }
-                        // vijk will be (0,0), (1,0), ..., (4,0), (0,1),..
-                        // role of coordinates in the patch
-                        int ctrl_idx_it = ctrl_idx;
-                        for (int k=0; k<kdom_dim; k++)
-                            ctrl_idx_it += kct(j,k) * kcs(k);
-                        double ctrl = ctrl_pts_k(ctrl_idx_it);
 
                         for (int k=0; k<kdom_dim; k++)
-                            ctrl *= newNN( ij_grid[k] , span_st[k] + ij_patch[k], k );
+                        {
+                            span_st[k] = span_starts(k, ij_grid[k]);
+                            ctrl_idx += (span_st[k]+kct(0,k))*kcs(k);
+                        }
 
-                        value += ctrl;
+                        // now we need more loops, in all direction, for local patch, size
+                        // ksupp is p+1 in each direction
+
+                        for (int j=0; j<nb_internal_iter; j++)
+                        {
+                            int leftj = j;
+                            for (int k=kdom_dim-1; k>=0; k--)
+                            {
+                                ij_patch[k] = (int)(leftj/strides_patch(k));
+                                leftj -= strides_patch(k)*ij_patch[k] ;
+                            }
+                            // vijk will be (0,0), (1,0), ..., (4,0), (0,1),..
+                            // role of coordinates in the patch
+                            int ctrl_idx_it = ctrl_idx;
+                            for (int k=0; k<kdom_dim; k++)
+                                ctrl_idx_it += kct(j,k) * kcs(k);
+                            double ctrl = ctrl_pts_k(ctrl_idx_it);
+
+                            for (int k=0; k<kdom_dim; k++)
+                                ctrl *= newNN( ij_grid[k] , span_st[k] + ij_patch[k], k );
+
+                            value += ctrl;
+                        }
+                        res_dev(i) = value;
                     }
-                    res_dev(i) = value;
-                }
-            );
+                );
+
+                Kokkos::deep_copy(res_h, res_dev);
+                for (int j=0; j<ntot; j++)
+                    result(j, min_dim + iv) = res_h(j);
+            }
             Kokkos::Profiling::popRegion(); // "DecodeAtRes"
-            Kokkos::deep_copy(res_h, res_dev);
-            for (int j=0; j<ntot; j++)
-                result(j, mfa_data.dom_dim) = res_h(j);
 
 
 #else
