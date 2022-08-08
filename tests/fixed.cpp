@@ -13,6 +13,7 @@
 #include <iostream>
 #include <cmath>
 #include <string>
+#include <set>
 
 #include <diy/master.hpp>
 #include <diy/reduce-operations.hpp>
@@ -23,6 +24,7 @@
 #include "opts.h"
 
 #include "block.hpp"
+#include "example-setup.hpp"
 
 using namespace std;
 
@@ -44,7 +46,7 @@ int main(int argc, char** argv)
     int    vars_degree  = 4;                    // degree for science variables (same for all dims)
     int    ndomp        = 100;                  // input number of domain points (same for all dims)
     int    geom_nctrl   = -1;                   // input number of control points for geometry (same for all dims)
-    int    vars_nctrl   = 11;                   // input number of control points for all science variables (same for all dims)
+    vector<int> vars_nctrl   = {11};            // input number of control points for all science variables (default same for all dims)
     string input        = "sine";               // input dataset
     int    weighted     = 1;                    // solve for and use weights (bool 0/1)
     real_t rot          = 0.0;                  // rotation angle in degrees
@@ -55,6 +57,18 @@ int main(int argc, char** argv)
     int    rand_seed    = -1;                   // seed to use for random data generation (-1 == no randomization)
     int    resolutionGrid = 0;
     bool   help         = false;                // show help
+
+    // Define list of test keywords
+    set<string> analytical_signals = {"sine", "cosine", "sinc", "psinc1", "psinc2", "psinc3", "ml", "f16", "f17", "f18"};
+    set<string> datasets_3d = {"s3d", "nek", "rti", "miranda", "tornado"};
+
+    // unused arguments
+    real_t  noise           = 0;
+    int     ntest           = 0;
+    int     scalar          = 1;
+    int     verbose         = 1;
+    int     reg1and2        = 0;
+    real_t  regularization  = 0;
 
 
     // get command line arguments
@@ -84,38 +98,10 @@ int main(int argc, char** argv)
         return 1;
     }
 
-    // minimal number of geometry control points if not specified
-    if (geom_nctrl == -1)
-        geom_nctrl = geom_degree + 1;
-
-    // echo args
-    fprintf(stderr, "\n--------- Input arguments ----------\n");
-    cerr <<
-        "pt_dim = "         << pt_dim       << " dom_dim = "        << dom_dim      <<
-        "\ngeom_degree = "  << geom_degree  << " vars_degree = "    << vars_degree  <<
-        "\ninput pts = "    << ndomp        << " geom_ctrl pts = "  << geom_nctrl   <<
-        "\nvars_ctrl_pts = "<< vars_nctrl   << " input = "          << input        << 
-        "\nstructured = "   << structured   << endl;
-
-#ifdef CURVE_PARAMS
-    cerr << "parameterization method = curve" << endl;
-#else
-    cerr << "parameterization method = domain" << endl;
-#endif
-#ifdef MFA_TBB
-    cerr << "threading: TBB" << endl;
-#endif
-#ifdef MFA_SERIAL
-    cerr << "threading: serial" << endl;
-#endif
-#ifdef MFA_NO_WEIGHTS
-    weighted = 0;
-    cerr << "weighted = 0" << endl;
-#else
-    cerr << "weighted = " << weighted << endl;
-#endif
-    fprintf(stderr, "-------------------------------------\n\n");
-
+// print input arguments
+    echo_args("fixed test", pt_dim, dom_dim, scalar, geom_degree, geom_nctrl, vars_degree, vars_nctrl,
+                ndomp, ntest, input, infile, analytical_signals, noise, structured, weighted);
+    
     // initialize DIY
     diy::FileStorage          storage("./DIY.XXXXXX"); // used for blocks to be moved out of core
     diy::Master               master(world,
@@ -143,100 +129,55 @@ int main(int argc, char** argv)
                          [&](int gid, const Bounds<real_t>& core, const Bounds<real_t>& bounds, const Bounds<real_t>& domain, const RCLink<real_t>& link)
                          { Block<real_t>::add(gid, core, bounds, domain, link, master, dom_dim, pt_dim, 0.0); });
 
-    // set MFA arguments
-    ModelInfo           geom_info(dom_dim, dom_dim);
-    ModelInfo           var_info(dom_dim, 1, vars_degree, vars_nctrl);
-    vector<ModelInfo>   all_vars_info(pt_dim - dom_dim, var_info);
-    MFAInfo             mfa_info(dom_dim, 1, geom_info, all_vars_info);
-    mfa_info.weighted       = weighted;
-
-    // set default args for diy foreach callback functions
-    DomainArgs d_args(dom_dim, mfa_info.nvars());
-    d_args.multiblock   = false;
-    d_args.structured   = structured;
-    d_args.rand_seed    = rand_seed;
-    d_args.ndom_pts     = vector<int>(dom_dim, ndomp);
-
-    // initialize input data
-
-    // sine function f(x) = sin(x), f(x,y) = sin(x)sin(y), ...
-    if (input == "sine")
+    // If scalar == true, assume all science vars are scalar. Else one vector-valued var
+    // We assume that dom_dim == geom_dim
+    vector<int> model_dims;
+    if (scalar) // Set up (pt_dim - dom_dim) separate scalar variables
     {
-        for (int i = 0; i < dom_dim; i++)
-        {
-            d_args.min[i]               = -4.0 * M_PI;
-            d_args.max[i]               = 4.0  * M_PI;
-        }
-        for (int i = 0; i < pt_dim - dom_dim; i++)      // for all science variables
-            d_args.s[i] = i + 1;                        // scaling factor on range
-        master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-                { b->generate_analytical_data(cp, input, mfa_info, d_args); });
+        model_dims.assign(pt_dim - dom_dim + 1, 1);
+        model_dims[0] = dom_dim;                        // index 0 == geometry
+    }
+    else    // Set up a single vector-valued variable
+    {   
+        model_dims = {dom_dim, pt_dim - dom_dim};
     }
 
-    // sinc function f(x) = sin(x)/x, f(x,y) = sinc(x)sinc(y), ...
-    if (input == "sinc")
-    {
-        for (int i = 0; i < dom_dim; i++)
-        {
-            d_args.min[i]               = -4.0 * M_PI;
-            d_args.max[i]               = 4.0  * M_PI;
-        }
-        for (int i = 0; i < pt_dim - dom_dim; i++)      // for all science variables
-            d_args.s[i] = 10.0 * (i + 1);                 // scaling factor on range
-        d_args.r = rot * M_PI / 180.0;   // domain rotation angle in rads
-        d_args.t = twist;                // twist (waviness) of domain
-        master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-                { b->generate_analytical_data(cp, input, mfa_info, d_args); });
-    }
+    // Create empty info classes
+    MFAInfo     mfa_info(dom_dim, verbose);
+    DomainArgs  d_args(dom_dim, model_dims);
 
-    // S3D dataset
-    if (input == "s3d")
+    // set up parameters for examples
+    setup_args(dom_dim, pt_dim, model_dims, geom_degree, geom_nctrl, vars_degree, vars_nctrl,
+                input, infile, ndomp, structured, rand_seed, rot, twist, noise,
+                weighted, reg1and2, regularization, verbose, mfa_info, d_args);
+
+    // Create data set for modeling
+    if (analytical_signals.count(input) == 1)
     {
-        d_args.ndom_pts.resize(3);      // Hard-coded to full data set size
-        d_args.ndom_pts[0]          = 704;
-        d_args.ndom_pts[1]          = 540;
-        d_args.ndom_pts[2]          = 550;
-        if (dom_dim >= 1) mfa_info.var_model_infos[0].nctrl_pts[0] = 140;
-        if (dom_dim >= 2) mfa_info.var_model_infos[0].nctrl_pts[1] = 108;
-        if (dom_dim >= 3) mfa_info.var_model_infos[0].nctrl_pts[2] = 110;
-        d_args.infile               = infile;
-//         d_args.infile               = "/Users/tpeterka/datasets/flame/6_small.xyz";
-        if (dom_dim == 1)
-            master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-                    { b->read_1d_slice_3d_vector_data(cp, mfa_info, d_args); });
-        else if (dom_dim == 2)
-            master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-                    { b->read_2d_slice_3d_vector_data(cp, mfa_info, d_args); });
-        else if (dom_dim == 3)
-            master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-                    { b->read_3d_vector_data(cp, mfa_info, d_args); });
-        else
+        master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
+        { 
+            b->generate_analytical_data(cp, input, mfa_info, d_args); 
+        });
+    }
+    else if (datasets_3d.count(input) == 1)
+    {
+        if (dom_dim > 3)
         {
-            fprintf(stderr, "S3D data only available in 2 or 3d domain\n");
+            fprintf(stderr, "\'%s\' data only available with dimension <= 3\n", input);
             exit(0);
         }
-    }
 
-    // nek5000 dataset
-    if (input == "nek")
+        master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
+        { 
+            if (dom_dim == 1) b->read_1d_slice_3d_vector_data(cp, mfa_info, d_args);
+            if (dom_dim == 2) b->read_2d_slice_3d_vector_data(cp, mfa_info, d_args);
+            if (dom_dim == 3) b->read_3d_vector_data(cp, mfa_info, d_args);
+        });
+    }
+    else
     {
-        d_args.ndom_pts.resize(3);  // Hard-coded to full data set size
-        d_args.ndom_pts[0] = 200;
-        d_args.ndom_pts[1] = 200;
-        d_args.ndom_pts[2] = 200;
-        d_args.infile = infile;
-//         d_args.infile = "/Users/tpeterka/datasets/nek5000/200x200x200/0.xyz";
-        if (dom_dim == 2)
-            master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-                    { b->read_2d_slice_3d_vector_data(cp, mfa_info, d_args); });
-        else if (dom_dim == 3)
-            master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-                    { b->read_3d_vector_data(cp, mfa_info, d_args); });
-        else
-        {
-            fprintf(stderr, "nek5000 data only available in 2 or 3d domain\n");
-            exit(0);
-        }
+        cerr << "Input keyword \'" << input << "\' not recognized. Exiting." << endl;
+        abort();
     }
 
     // compute the MFA

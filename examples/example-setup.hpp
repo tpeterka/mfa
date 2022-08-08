@@ -17,6 +17,7 @@
 #include <string>
 #include <iostream>
 #include <cmath>
+#include <set>
 
 #include "block.hpp"
 
@@ -69,6 +70,7 @@ using namespace std;
 
         return;
     }
+
     // Sets the degree and number of control points 
     // For geom and each var, degree is same in each domain dimension
     // For geom, # ctrl points is the same in each domain dimension
@@ -362,7 +364,5 @@ using namespace std;
         mfa_info.reg1and2         = reg1and2;
 
     } // setup_args()
-
-
 
 #endif // MFA_EX_SETUP_HPP
