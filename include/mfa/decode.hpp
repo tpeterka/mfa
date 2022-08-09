@@ -406,6 +406,7 @@ namespace mfa
                 pt_min.params(min_params);
                 pt_max.params(max_params);
                 DecodeGrid(ps.domain, min_dim, max_dim, min_params, max_params, ps.g.ndom_pts );
+ //               cout << " after DecodeGrid: ndom: " << min_dim << " " <<  max_dim << " " << ps.g.ndom_pts <<  " ps.domain \n" << ps.domain ;
             }
             else
             {

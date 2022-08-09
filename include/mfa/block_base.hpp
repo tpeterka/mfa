@@ -859,7 +859,9 @@ struct BlockBase
         for (int i = 0; i < dom_dim; i++) {
             T diff = max_bd[i] - min_bd[i];
             p_min[i] = (min_block[i] - min_bd[i]) / diff;
+            p_min[i] = ( p_min[i] < 0.) ? 0. : p_min[i];
             p_max[i] = (max_block[i] - min_bd[i]) / diff;
+            p_max[i] = ( p_max[i] > 1.) ? 1. : p_max[i];
         }
 #endif
 #ifdef MFA_KOKKOS
@@ -901,13 +903,25 @@ struct BlockBase
 #endif
         // assign values to the domain (geometry)
         blend = new mfa::PointSet<T>(dom_dim, pt_dim, ndom_outpts.prod(), ndom_outpts);
+        // in case of structured points, actual bounds are not bounds_mins, bounds_maxs
+        VectorXi &ndpts = input->ndom_pts;
+
+        VectorX<T> min_bd(this->dom_dim);
+        VectorX<T> max_bd(this->dom_dim);
+        size_t cs = 1;
+        for (int i = 0; i < this->dom_dim; i++) {
+            min_bd(i) = input->domain(0, i);
+            max_bd(i) = input->domain(cs * (ndpts(i) - 1), i);
+            cs *= ndpts(i);
+        }
+
         VectorX<T>   param_mins, param_maxs;
         param_mins.resize(dom_dim);
         param_maxs.resize(dom_dim);
         for (int i=0; i<dom_dim; i++)
         {
-            param_mins[i] = (core_mins(i) - bounds_mins(i))/(bounds_maxs(i) - bounds_mins(i));
-            param_maxs[i] = (core_maxs(i) - bounds_mins(i))/(bounds_maxs(i) - bounds_mins(i));
+            param_mins[i] = (core_mins(i) - min_bd(i))/(max_bd(i) - min_bd(i));
+            param_maxs[i] = (core_maxs(i) - min_bd(i))/(max_bd(i) - min_bd(i));
         }
         mfa::Param<T>   param1(ndom_outpts, param_mins, param_maxs);
         blend->set_params( make_shared<mfa::Param<T>>(param1) );
