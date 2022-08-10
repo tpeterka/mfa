@@ -40,35 +40,37 @@ int main(int argc, char** argv)
     int num_threads = 1;                        // needed in order to do timing
 
     // default command line arguments
-    int    pt_dim       = 3;                    // dimension of input points
-    int    dom_dim      = 2;                    // dimension of domain (<= pt_dim)
-    int    scalar       = 1;                 // dimension of each science variable (true == multiple scalar vars)
-    int    geom_degree  = 1;                    // degree for geometry (same for all dims)
-    int    vars_degree  = 4;                    // degree for science variables (same for all dims)
-    int    ndomp        = 100;                  // input number of domain points (same for all dims)
-    int    ntest        = 0;                    // number of input test points in each dim for analytical error tests
-    int    geom_nctrl   = -1;                   // input number of control points for geometry (same for all dims)
-    vector<int> vars_nctrl   = {11};                   // input number of control points for all science variables (default same for all dims)
-    string input        = "sinc";               // input dataset
-    int    weighted     = 1;                    // solve for and use weights (bool 0/1)
-    real_t rot          = 0.0;                  // rotation angle in degrees
-    real_t twist        = 0.0;                  // twist (waviness) of domain (0.0-1.0)
-    real_t noise        = 0.0;                  // fraction of noise
-    int    error        = 1;                    // decode all input points and check error (bool 0/1)
-    string infile;                              // input file name
-    int    structured   = 1;                    // input data format (bool 0/1)
-    int    rand_seed    = -1;                   // seed to use for random data generation (-1 == no randomization)
-    real_t regularization = 0;                  // smoothing parameter for models with non-uniform input density (0 == no smoothing)
-    int     reg1and2 = 0;                       // flag for regularizer: 0 --> regularize only 2nd derivs. 1 --> regularize 1st and 2nd
-    int    verbose      = 1;                    // MFA verbosity (0 = no extra output)
-    bool   help         = false;                // show help
+    int         pt_dim          = 3;        // dimension of input points
+    int         dom_dim         = 2;        // dimension of domain (<= pt_dim)
+    int         scalar          = 1;        // flag for scalar or vector-valued science variables (0 == multiple scalar vars)
+    int         geom_degree     = 1;        // degree for geometry (same for all dims)
+    int         vars_degree     = 4;        // degree for science variables (same for all dims)
+    int         ndomp           = 100;      // input number of domain points (same for all dims)
+    int         ntest           = 0;        // number of input test points in each dim for analytical error tests
+    int         geom_nctrl      = -1;       // input number of control points for geometry (same for all dims)
+    vector<int> vars_nctrl      = {11};     // initial # control points for all science variables (default same for all dims)
+    string      input           = "sinc";   // input dataset
+    int         weighted        = 1;        // solve for and use weights (bool 0/1)
+    real_t      rot             = 0.0;      // rotation angle in degrees
+    real_t      twist           = 0.0;      // twist (waviness) of domain (0.0-1.0)
+    real_t      noise           = 0.0;      // fraction of noise
+    int         error           = 1;        // decode all input points and check error (bool 0/1)
+    string      infile;                     // input file name
+    int         structured      = 1;        // input data format (bool 0/1)
+    int         rand_seed       = -1;       // seed to use for random data generation (-1 == no randomization)
+    real_t      regularization  = 0;        // smoothing parameter for models with non-uniform input density (0 == no smoothing)
+    int         reg1and2        = 0;        // flag for regularizer: 0 = regularize only 2nd derivs. 1 = regularize 1st and 2nd
+    int         verbose         = 1;        // MFA verbosity (0 = no extra output)
+    bool        help            = false;    // show help
+
+    // Constants for this example
+    const bool adaptive = false;
 
     // Define list of example keywords
     set<string> analytical_signals = {"sine", "cosine", "sinc", "psinc1", "psinc2", "psinc3", "ml", "f16", "f17", "f18"};
     set<string> datasets_3d = {"s3d", "nek", "rti", "miranda", "tornado"};
     set<string> datasets_2d = {"cesm"};
     set<string> datasets_unstructured = {"edelta", "climate", "nuclear"};
-
 
     // get command line arguments
     opts::Options ops;
@@ -103,7 +105,7 @@ int main(int argc, char** argv)
 
     // print input arguments
     echo_args("fixed example", pt_dim, dom_dim, scalar, geom_degree, geom_nctrl, vars_degree, vars_nctrl,
-                ndomp, ntest, input, infile, analytical_signals, noise, structured, weighted);
+                ndomp, ntest, input, infile, analytical_signals, noise, structured, weighted, adaptive, 0, 0);
 
     // initialize DIY
     diy::FileStorage          storage("./DIY.XXXXXX"); // used for blocks to be moved out of core
@@ -153,7 +155,7 @@ int main(int argc, char** argv)
     // set up parameters for examples
     setup_args(dom_dim, pt_dim, model_dims, geom_degree, geom_nctrl, vars_degree, vars_nctrl,
                 input, infile, ndomp, structured, rand_seed, rot, twist, noise,
-                weighted, reg1and2, regularization, verbose, mfa_info, d_args);
+                weighted, reg1and2, regularization, adaptive, verbose, mfa_info, d_args);
 
     // Create data set for modeling
     if (analytical_signals.count(input) == 1)

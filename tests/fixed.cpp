@@ -62,13 +62,14 @@ int main(int argc, char** argv)
     set<string> analytical_signals = {"sine", "cosine", "sinc", "psinc1", "psinc2", "psinc3", "ml", "f16", "f17", "f18"};
     set<string> datasets_3d = {"s3d", "nek", "rti", "miranda", "tornado"};
 
-    // unused arguments
-    real_t  noise           = 0;
-    int     ntest           = 0;
-    int     scalar          = 1;
-    int     verbose         = 1;
-    int     reg1and2        = 0;
-    real_t  regularization  = 0;
+    // Constants for this example
+    const bool    adaptive        = false;
+    const real_t  noise           = 0;
+    const int     ntest           = 0;
+    const int     scalar          = 1;
+    const int     verbose         = 1;
+    const int     reg1and2        = 0;
+    const real_t  regularization  = 0;
 
 
     // get command line arguments
@@ -98,9 +99,9 @@ int main(int argc, char** argv)
         return 1;
     }
 
-// print input arguments
+    // print input arguments
     echo_args("fixed test", pt_dim, dom_dim, scalar, geom_degree, geom_nctrl, vars_degree, vars_nctrl,
-                ndomp, ntest, input, infile, analytical_signals, noise, structured, weighted);
+                ndomp, ntest, input, infile, analytical_signals, noise, structured, weighted, adaptive, 0, 0);
     
     // initialize DIY
     diy::FileStorage          storage("./DIY.XXXXXX"); // used for blocks to be moved out of core
@@ -149,7 +150,7 @@ int main(int argc, char** argv)
     // set up parameters for examples
     setup_args(dom_dim, pt_dim, model_dims, geom_degree, geom_nctrl, vars_degree, vars_nctrl,
                 input, infile, ndomp, structured, rand_seed, rot, twist, noise,
-                weighted, reg1and2, regularization, verbose, mfa_info, d_args);
+                weighted, reg1and2, regularization, adaptive, verbose, mfa_info, d_args);
 
     // Create data set for modeling
     if (analytical_signals.count(input) == 1)

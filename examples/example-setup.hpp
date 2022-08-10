@@ -27,7 +27,8 @@ using namespace std;
                     int geom_degree, int geom_nctrl, int vars_degree, vector<int> vars_nctrl,
                     int ndomp, int ntest, string input, string infile,
                     set<string> analytical_signals,
-                    real_t noise, int structured, int& weighted)    // pass reference to weighted so it can be updated
+                    real_t noise, int structured, int& weighted,    // pass reference to weighted so it can be updated
+                    bool adaptive, real_t e_threshold, int rounds)
     {
         bool is_analytical = (analytical_signals.count(input) == 1);
 
@@ -41,6 +42,10 @@ using namespace std;
             for (int i = 0; i < vars_nctrl.size(); i++) cerr << vars_nctrl[i] << " ";
             cerr << "\b}" << endl;
         cerr << "num pts  = " << ndomp       << '\t' << "test pts   = " << (ntest > 0 ? to_string(ntest) : "N/A") << endl;
+        if (adaptive)
+        {
+        cerr << "error    = " << e_threshold << '\t' << "max rounds = " << (rounds == 0 ? "unlimited" : to_string(rounds)) << endl;
+        }
         cerr << "noise    = " << noise       << '\t' << "structured = " << structured << endl;
         cerr << "input: " << input       << ", " << "infile: " << (is_analytical ? "N/A" : infile) << endl;
 #ifdef MFA_NO_WEIGHTS
@@ -114,7 +119,7 @@ using namespace std;
                         int geom_degree, int geom_nctrl, int vars_degree, vector<int> vars_nctrl,
                         string input, string infile, int ndomp,
                         int structured, int rand_seed, real_t rot, real_t twist, real_t noise,
-                        int weighted, int reg1and2, real_t regularization, int verbose,
+                        int weighted, int reg1and2, real_t regularization, bool adaptive, int verbose,
                         MFAInfo& mfa_info, DomainArgs& d_args)
     {
         // If only one value for vars_nctrl was parsed, assume it applies to all dims
@@ -226,9 +231,12 @@ using namespace std;
             d_args.full_dom_pts = {704, 540, 550};  // Hard-coded to full data set size
             d_args.ndom_pts = d_args.full_dom_pts;
 
-            if (dom_dim >= 1) vars_nctrl[0] = 140;
-            if (dom_dim >= 2) vars_nctrl[1] = 108;
-            if (dom_dim >= 3) vars_nctrl[2] = 110;
+            if (!adaptive)
+            {
+                if (dom_dim >= 1) vars_nctrl[0] = 140;
+                if (dom_dim >= 2) vars_nctrl[1] = 108;
+                if (dom_dim >= 3) vars_nctrl[2] = 110;
+            }
 
             // for testing, hard-code a subset of a 3d domain, 1/2 the size in each dim and centered
             // in this case, actual size is just under 1/2 size in each dim to satisfy DIY's (MPI's)
@@ -244,9 +252,12 @@ using namespace std;
             d_args.full_dom_pts = {200, 200, 200};      // Hard-coded to full data set size
             d_args.ndom_pts = d_args.full_dom_pts;
             
-            if (dom_dim >= 1) vars_nctrl[0] = 100;
-            if (dom_dim >= 2) vars_nctrl[1] = 100;
-            if (dom_dim >= 3) vars_nctrl[2] = 100;
+            if (!adaptive)
+            {
+                if (dom_dim >= 1) vars_nctrl[0] = 100;
+                if (dom_dim >= 2) vars_nctrl[1] = 100;
+                if (dom_dim >= 3) vars_nctrl[2] = 100;
+            }
         }
 
         // rti dataset:  rti/dd07g_xxsmall_le.xyz
@@ -255,9 +266,12 @@ using namespace std;
             d_args.full_dom_pts = {288, 512, 512};      // Hard-coded to full data set size
             d_args.ndom_pts = d_args.full_dom_pts;
 
-            if (dom_dim >= 1) vars_nctrl[0] = 72;
-            if (dom_dim >= 2) vars_nctrl[1] = 128;
-            if (dom_dim >= 3) vars_nctrl[2] = 128;
+            if (!adaptive)
+            {
+                if (dom_dim >= 1) vars_nctrl[0] = 72;
+                if (dom_dim >= 2) vars_nctrl[1] = 128;
+                if (dom_dim >= 3) vars_nctrl[2] = 128;
+            }
         }
 
         // tornado dataset:  tornado/bov/1.vec.bov
@@ -266,9 +280,12 @@ using namespace std;
             d_args.full_dom_pts = {128, 128, 128};
             d_args.ndom_pts = d_args.full_dom_pts;
 
-            if (dom_dim >= 1) vars_nctrl[0] = 100;
-            if (dom_dim >= 2) vars_nctrl[1] = 100;
-            if (dom_dim >= 3) vars_nctrl[2] = 100;
+            if (!adaptive)
+            {
+                if (dom_dim >= 1) vars_nctrl[0] = 100;
+                if (dom_dim >= 2) vars_nctrl[1] = 100;
+                if (dom_dim >= 3) vars_nctrl[2] = 100;
+            }
         }
 
         // miranda dataset:  miranda/SDRBENCH-Miranda-256x384x384/density.d64
@@ -277,9 +294,12 @@ using namespace std;
             d_args.full_dom_pts = {256, 384, 384};
             d_args.ndom_pts = d_args.full_dom_pts;
 
-            if (dom_dim >= 1) vars_nctrl[0] = 256; // 192
-            if (dom_dim >= 2) vars_nctrl[1] = 384; // 288
-            if (dom_dim >= 3) vars_nctrl[2] = 384; // 288
+            if (!adaptive)
+            {
+                if (dom_dim >= 1) vars_nctrl[0] = 256; // 192
+                if (dom_dim >= 2) vars_nctrl[1] = 384; // 288
+                if (dom_dim >= 3) vars_nctrl[2] = 384; // 288
+            }
         }
 
         // cesm dataset:  CESM-ATM-tylor/1800x3600/FLDSC_1_1800_3600.dat
@@ -287,7 +307,11 @@ using namespace std;
         {
             d_args.full_dom_pts = {1800, 3600};
             d_args.ndom_pts = d_args.full_dom_pts;
-            vars_nctrl      = {300, 600};
+
+            if (!adaptive)
+            {
+                vars_nctrl = {300, 600};
+            }
         }
 
         // EDelta Wing dataset (unstructured):  edelta/edelta.txt

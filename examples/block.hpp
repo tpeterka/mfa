@@ -2174,7 +2174,7 @@ cerr << "===========\n" << endl;
         vector<T>&                          L2,
         vector<T>&                          Linf,
         DomainArgs&                         args,
-        const std::function<T(const VectorX<T>&, VectorX<T>&, DomainArgs&, int)>& f = {}) const
+        const std::function<void(const VectorX<T>&, VectorX<T>&, DomainArgs&, int)>& f = {}) const
     {
         int nvars = ps->nvars();
         if (L1.size() != nvars || L2.size() != nvars || Linf.size() != nvars)
