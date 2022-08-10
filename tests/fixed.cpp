@@ -201,7 +201,7 @@ int main(int argc, char** argv)
 #else                   // range coordinate difference
     bool saved_basis = structured; // TODO: basis functions are currently only saved during encoding of structured data
     master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-            { b->range_error(cp, 1, true, saved_basis); });
+            { b->range_error(cp, true, saved_basis); });
 #endif
     decode_time = MPI_Wtime() - decode_time;
     }

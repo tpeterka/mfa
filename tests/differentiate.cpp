@@ -84,7 +84,7 @@ int main(int argc, char** argv)
     fprintf(stderr, "\nComputing derivative...\n");
     double decode_time = MPI_Wtime();
     master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-            { b->differentiate_block(cp, 1, deriv, partial, -1); });
+            { b->differentiate_block(cp, deriv, partial, -1); });
     decode_time = MPI_Wtime() - decode_time;
 
     // print results

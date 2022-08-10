@@ -492,7 +492,7 @@ int main(int argc, char** argv)
     bool saved_basis = structured; // TODO: basis functions are currently only saved during encoding of structured data
     master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
             { 
-                b->range_error(cp, 1, true, saved_basis);
+                b->range_error(cp, true, saved_basis);
                 b->print_block(cp, true);
 
                 // Assumes one scalar science variable. Used for relative error metric

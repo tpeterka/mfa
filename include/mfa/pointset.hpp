@@ -318,8 +318,7 @@ namespace mfa
 
         void abs_diff(
             const   mfa::PointSet<T>& other,
-                    mfa::PointSet<T>& diff,
-                    int               verbose) const
+                    mfa::PointSet<T>& diff) const
         {
             if (!this->is_same_layout(other) || !this->is_same_layout(diff))
             {

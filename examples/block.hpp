@@ -1927,15 +1927,15 @@ struct Block : public BlockBase<T>
 
 
         // --------- Decode (for visualization) --------- //
-        // this->decode_block(cp, 1, 0);
-        // this->range_error(cp, 1, true, true);
+        // this->decode_block(cp, 0);
+        // this->range_error(cp, true, true);
 
         vector<int> grid_size = {100, 100, 100};
         VectorXi gridpoints(3);
         gridpoints(0) = grid_size[0];
         gridpoints(1) = grid_size[1];
         gridpoints(2) = grid_size[2];
-        this->decode_block_grid(cp, 1, grid_size);
+        this->decode_block_grid(cp, grid_size);
         
 
 cerr << "\n===========" << endl;

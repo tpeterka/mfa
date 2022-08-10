@@ -274,7 +274,7 @@ int main(int argc, char** argv)
                 { b->error(cp, 0, true); });
 #else                   // range coordinate difference
         master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-                { b->range_error(cp, 0, true, true); });
+                { b->range_error(cp, true, true); });
 #endif
         decode_time = MPI_Wtime() - decode_time;
     }

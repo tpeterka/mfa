@@ -243,7 +243,6 @@ struct BlockBase
     // decode entire block over a regular grid
     void decode_block_grid(
         const   diy::Master::ProxyWithLink& cp,
-        int                                 verbose,
         vector<int>&                        grid_size)
     {
         VectorXi grid_npts(dom_dim);
@@ -345,8 +344,7 @@ struct BlockBase
 
     void integrate_block(
             const diy::Master::ProxyWithLink&   cp,
-            int                                 int_dim,
-            int                                 verbose)
+            int                                 int_dim)
     {
         if (approx)
         {
@@ -373,7 +371,6 @@ struct BlockBase
     // if var >= 0, only one variable is differentiated, the rest have their function value decoded
     void differentiate_block(
             const diy::Master::ProxyWithLink& cp,
-            int                               verbose,  // debug level
             int                               deriv,    // which derivative to take (1 = 1st, 2 = 2nd, ...) in each domain dim.
             int                               partial,  // limit to partial derivative in just this dimension (-1 = no limit)
             int                               var)      // differentiate only this one science variable (0 to nvars -1, -1 = all vars)
@@ -407,20 +404,17 @@ struct BlockBase
 
         // the derivative is a vector of same dimensionality as domain
         // derivative needs to be scaled by domain extent because u,v,... are in [0.0, 1.0]
-        if (deriv)
+        if (dom_dim == 1 || partial >= 0) // TODO: not for mixed partials
         {
-            if (dom_dim == 1 || partial >= 0) // TODO: not for mixed partials
+            if (dom_dim == 1)
+                partial = 0;
+
+            T scale = pow(1 / (bounds_maxs(partial) - bounds_mins(partial)), deriv);
+
+            for (int k = 0; k < approx->nvars(); k++)
             {
-                if (dom_dim == 1)
-                    partial = 0;
-
-                T scale = pow(1 / (bounds_maxs(partial) - bounds_mins(partial)), deriv);
-
-                for (int k = 0; k < approx->nvars(); k++)
-                {
-                    if (var < 0 || k == var)
-                        approx->domain.middleCols(approx->var_min(k), approx->var_dim(k)) *= scale;
-                }
+                if (var < 0 || k == var)
+                    approx->domain.middleCols(approx->var_min(k), approx->var_dim(k)) *= scale;
             }
         }
     }
@@ -429,7 +423,6 @@ struct BlockBase
     // uses coordinate-wise difference between values
     void range_error(
             const   diy::Master::ProxyWithLink& cp,
-            int     verbose,                                // output level
             bool    decode_block_,                          // decode entire block first
             bool    saved_basis)                            // whether basis functions were saved and can be reused
     {
@@ -452,13 +445,13 @@ struct BlockBase
         // Decode entire block and then compare to input
         if (decode_block_)
         {
-            decode_block(cp, verbose, saved_basis);
+            decode_block(cp, saved_basis);
 
-            input->abs_diff(*approx, *errs, verbose);
+            input->abs_diff(*approx, *errs);
         }
         else // Compute error at each input point on the fly
         {
-            mfa->AbsPointSetError(*input, *errs, verbose);
+            mfa->AbsPointSetError(*input, *errs);
         }
 
         // Compute error metrics
