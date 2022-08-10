@@ -23,6 +23,7 @@
 #include "opts.h"
 
 #include "block.hpp"
+#include "example-setup.hpp"
 
 using namespace std;
 
@@ -44,7 +45,7 @@ int main(int argc, char** argv)
     int    vars_degree  = 4;                    // degree for science variables (same for all dims)
     int    ndomp        = 100;                  // input number of domain points (same for all dims)
     int    geom_nctrl   = -1;                   // input number of control points for geometry (same for all dims)
-    int    vars_nctrl   = 11;                   // input number of control points for all science variables (same for all dims)
+    vector<int> vars_nctrl   = {11};                   // input number of control points for all science variables (same for all dims)
     string input        = "sine";               // input dataset
     int    weighted     = 1;                    // solve for and use weights (bool 0/1)
     real_t rot          = 0.0;                  // rotation angle in degrees
@@ -56,6 +57,18 @@ int main(int argc, char** argv)
     int    resolutionGrid = 0;
     bool   help         = false;                // show help
   
+    // Define list of test keywords
+    set<string> analytical_signals = {"sine", "cosine", "sinc", "psinc1", "psinc2", "psinc3", "ml", "f16", "f17", "f18"};
+    set<string> datasets_3d = {"s3d", "nek", "rti", "miranda", "tornado"};
+
+    // Constants for this example
+    const bool    adaptive        = false;
+    const real_t  noise           = 0;
+    const int     ntest           = 0;
+    const int     scalar          = 1;
+    const int     verbose         = 1;
+    const int     reg1and2        = 0;
+    const real_t  regularization  = 0;
 
     // get command line arguments
     opts::Options ops;
@@ -84,37 +97,9 @@ int main(int argc, char** argv)
         return 1;
     }
 
-    // minimal number of geometry control points if not specified
-    if (geom_nctrl == -1)
-        geom_nctrl = geom_degree + 1;
-
-    // echo args
-    fprintf(stderr, "\n--------- Input arguments ----------\n");
-    cerr <<
-        "pt_dim = "         << pt_dim       << " dom_dim = "        << dom_dim      <<
-        "\ngeom_degree = "  << geom_degree  << " vars_degree = "    << vars_degree  <<
-        "\ninput pts = "    << ndomp        << " geom_ctrl pts = "  << geom_nctrl   <<
-        "\nvars_ctrl_pts = "<< vars_nctrl   << " input = "          << input        << 
-        "\nstructured = "   << structured   << endl;
-
-#ifdef CURVE_PARAMS
-    cerr << "ERROR: Cannot an MFA with curve parameters" << endl;
-    exit(1);
-#else
-    cerr << "parameterization method = domain" << endl;
-#endif
-#ifdef MFA_TBB
-    cerr << "threading: TBB" << endl;
-#endif
-#ifdef MFA_SERIAL
-    cerr << "threading: serial" << endl;
-#endif
-#ifdef MFA_NO_WEIGHTS
-    cerr << "weighted = 0" << endl;
-#else
-    cerr << "weighted = " << weighted << endl;
-#endif
-    fprintf(stderr, "-------------------------------------\n\n");
+    // print input arguments
+    echo_args("fixed test", pt_dim, dom_dim, scalar, geom_degree, geom_nctrl, vars_degree, vars_nctrl,
+                ndomp, ntest, input, infile, analytical_signals, noise, structured, weighted, adaptive, 0, 0);
 
     // initialize DIY
     diy::FileStorage          storage("./DIY.XXXXXX"); // used for blocks to be moved out of core
@@ -143,43 +128,35 @@ int main(int argc, char** argv)
                          [&](int gid, const Bounds<real_t>& core, const Bounds<real_t>& bounds, const Bounds<real_t>& domain, const RCLink<real_t>& link)
                          { Block<real_t>::add(gid, core, bounds, domain, link, master, dom_dim, pt_dim, 0.0); });
 
-    // set default args for diy foreach callback functions
-    DomainArgs d_args(dom_dim, pt_dim);
-    d_args.weighted     = weighted;
-    d_args.multiblock   = false;
-    d_args.verbose      = 1;
-    d_args.structured   = structured;
-    d_args.rand_seed    = rand_seed;
-    for (int i = 0; i < pt_dim - dom_dim; i++)
-        d_args.f[i] = 1.0;
-    for (int i = 0; i < dom_dim; i++)
+    // If scalar == true, assume all science vars are scalar. Else one vector-valued var
+    // We assume that dom_dim == geom_dim
+    vector<int> model_dims;
+    if (scalar) // Set up (pt_dim - dom_dim) separate scalar variables
     {
-        d_args.geom_p[i]            = geom_degree;
-        d_args.vars_p[0][i]         = vars_degree;      // assuming one science variable, vars_p[0]
-        d_args.ndom_pts[i]          = ndomp;
-        d_args.geom_nctrl_pts[i]    = geom_nctrl;
-        d_args.vars_nctrl_pts[0][i] = vars_nctrl;       // assuming one science variable, vars_nctrl_pts[0]
+        model_dims.assign(pt_dim - dom_dim + 1, 1);
+        model_dims[0] = dom_dim;                        // index 0 == geometry
+    }
+    else    // Set up a single vector-valued variable
+    {   
+        model_dims = {dom_dim, pt_dim - dom_dim};
     }
 
-    // initialize input data
+    // Create empty info classes
+    MFAInfo     mfa_info(dom_dim, verbose);
+    DomainArgs  d_args(dom_dim, model_dims);
 
-    // sine function f(x) = sin(x), f(x,y) = sin(x)sin(y), ...
-    if (input == "sine")
+    // set up parameters for examples
+    setup_args(dom_dim, pt_dim, model_dims, geom_degree, geom_nctrl, vars_degree, vars_nctrl,
+                input, infile, ndomp, structured, rand_seed, rot, twist, noise,
+                weighted, reg1and2, regularization, adaptive, verbose, mfa_info, d_args);
+
+    // Create data set for modeling
+    if (analytical_signals.count(input) == 1)
     {
-        for (int i = 0; i < dom_dim; i++)
-        {
-            d_args.min[i]               = -4.0 * M_PI;
-            d_args.max[i]               = 4.0  * M_PI;
-        }
-        for (int i = 0; i < pt_dim - dom_dim; i++)      // for all science variables
-            d_args.s[i] = i + 1;                        // scaling factor on range
         master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-                { b->generate_analytical_data(cp, input, d_args); });
-    }
-    else
-    {
-        cerr << "ERROR: Invalid input dataset for integral test" << endl;
-        exit(1);
+        { 
+            b->generate_analytical_data(cp, input, mfa_info, d_args); 
+        });
     }
 
     // compute the MFA
@@ -187,7 +164,7 @@ int main(int argc, char** argv)
     fprintf(stderr, "\nStarting fixed encoding...\n\n");
     double encode_time = MPI_Wtime();
     master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-            { b->fixed_encode_block(cp, d_args); });
+            { b->fixed_encode_block(cp, mfa_info); });
     encode_time = MPI_Wtime() - encode_time;
     fprintf(stderr, "\n\nFixed encoding done.\n\n");
 
@@ -220,7 +197,7 @@ int main(int argc, char** argv)
     int    nvars        = 1;
     vector<real_t> l1_error(nvars), l2_error(nvars), linf_error(nvars);
     b->analytical_error_pointset(cp0, b->approx, "", l1_error, l2_error, linf_error, d_args,
-                                [&](const VectorX<real_t>& domain_pt, VectorX<T>& out_pt, DomainArgs& args, int k)
+                                [&](const VectorX<real_t>& domain_pt, VectorX<real_t>& out_pt, DomainArgs& args, int k)
                                 {
                                     if (out_pt.size() != 1)
                                     {

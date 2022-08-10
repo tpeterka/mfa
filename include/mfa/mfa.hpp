@@ -825,7 +825,6 @@ namespace mfa
         void DefiniteIntegral(
             const MFA_Data<T>&  mfa_data,
                   VectorX<T>&   output,
-                  int           verbose,
             const VectorX<T>&   a,
             const VectorX<T>&   b)        
         {
@@ -840,15 +839,12 @@ namespace mfa
         void IntegratePointSet(
                 const MFA_Data<T>&  mfa_data,
                 PointSet<T>&        output,
-                int                 int_dim,
-                int                 verbose,
-                int                 min_dim,
-                int                 max_dim)
+                int                 int_dim)
         {
             const TensorProduct<T>&t = mfa_data.tmesh.tensor_prods[0];
 
             mfa::Decoder<T> decoder(mfa_data, verbose, false);
-            decoder.IntegratePointSet(output, int_dim, t, min_dim, max_dim);
+            decoder.IntegratePointSet(output, int_dim, t, mfa_data.min_dim, mfa_data.max_dim);
         }
 
 

@@ -305,14 +305,13 @@ struct BlockBase
 
     void definite_integral(
             const diy::Master::ProxyWithLink&   cp,
-            int                                 verbose,
                   VectorX<T>&                   output,
             const VectorX<T>&                   lim_a,
             const VectorX<T>&                   lim_b)
     {
         for (auto k = 0; k < mfa->nvars(); k++)
         {
-            mfa->DefiniteIntegral(mfa->var(k), output, verbose, lim_a, lim_b);
+            mfa->DefiniteIntegral(mfa->var(k), output, lim_a, lim_b);
         }
 
         T scale = (core_maxs - core_mins).prod();
@@ -354,23 +353,24 @@ struct BlockBase
             cerr << "WARNING: Overwriting \"approx\" pointset in BlockBase::integrate_block" << endl;
             delete approx;
         }
-        approx = new mfa::PointSet<T>(input->params, input->model_dim());
+        approx = new mfa::PointSet<T>(input->params, input->model_dims());
 
-        approx->domain.leftCols(dom_dim) = input->domain.leftCols(dom_dim);
+        approx->domain.leftCols(mfa->geom_dim()) = input->domain.leftCols(mfa->geom_dim());
 
         for (auto k = 0; k < mfa->nvars(); k++)
         {
-            mfa->IntegratePointSet(mfa->var(k), *approx, int_dim, verbose, dom_dim + k, dom_dim + k);
+            mfa->IntegratePointSet(mfa->var(k), *approx, int_dim);
         }
         
         // scale the integral
         // MFA computes integral with respect to parameter space
         // This scaling factor returns the integral wrt physical space (assuming domain parameterization)
         T scale = core_maxs(int_dim) - core_mins(int_dim);
-        approx->domain.rightCols(mfa->pt_dim - mfa->geom_dim) *= scale;
+        approx->domain.rightCols(mfa->pt_dim - mfa->geom_dim()) *= scale;
     }
 
     // differentiate entire block at the same parameter locations as 'input'
+    // if var >= 0, only one variable is differentiated, the rest have their function value decoded
     void differentiate_block(
             const diy::Master::ProxyWithLink& cp,
             int                               verbose,  // debug level
@@ -383,7 +383,7 @@ struct BlockBase
             cerr << "WARNING: Overwriting \"approx\" pointset in BlockBase::differentiate_block" << endl;
             delete approx;
         }
-        approx = new mfa::PointSet<T>(input->params, input->model_dim());  // Set decode params from input params
+        approx = new mfa::PointSet<T>(input->params, input->model_dims());  // Set decode params from input params
         
         VectorXi derivs = deriv * VectorXi::Ones(dom_dim);
         if (deriv && dom_dim > 1 && partial >= 0)   // optional limit to one partial derivative
@@ -395,7 +395,15 @@ struct BlockBase
             }
         }
 
-        mfa->Decode(*approx, false, derivs);
+        // N.B. We do not differentiate geometry
+        mfa->DecodeGeom(*approx, false);
+        for (int k = 0; k < approx->nvars(); k++)
+        {
+            if (var < 0 || k == var)
+                mfa->DecodeVar(k, *approx, false, derivs);
+            else
+                mfa->DecodeVar(k, *approx, false);
+        }
 
         // the derivative is a vector of same dimensionality as domain
         // derivative needs to be scaled by domain extent because u,v,... are in [0.0, 1.0]
@@ -405,17 +413,16 @@ struct BlockBase
             {
                 if (dom_dim == 1)
                     partial = 0;
-                for (auto j = 0; j < approx->pt_dim; j++)
-                    // scale once for each derivative
-                    for (auto i = 0; i < deriv; i++)
-                        approx->domain.col(j) /= (bounds_maxs(partial) - bounds_mins(partial));
+
+                T scale = pow(1 / (bounds_maxs(partial) - bounds_mins(partial)), deriv);
+
+                for (int k = 0; k < approx->nvars(); k++)
+                {
+                    if (var < 0 || k == var)
+                        approx->domain.middleCols(approx->var_min(k), approx->var_dim(k)) *= scale;
+                }
             }
         }
-
-        // for plotting, set the geometry coordinates to be the same as the input
-        if (deriv)
-            for (auto i = 0; i < dom_dim; i++)
-                approx->domain.col(i) = input->domain.col(i);
     }
 
     // compute error field and maximum error in the block

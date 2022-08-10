@@ -420,13 +420,13 @@ namespace mfa
             // Geometric coordinates at this point
             void geom_coords(VectorX<T>& coord_vec)
             {
-                coord_vec = pset.domain.row(lin_idx).head(geom_dim());
+                coord_vec = pset.domain.row(lin_idx).head(pset.geom_dim());
             }
 
             // Coordinates for variable k at this point
             void var_coords(int k, VectorX<T>& coord_vec)
             {
-                coord_vec = pset.domain.row(lin_idx).segment(dim_mins[k], var_dim(k));
+                coord_vec = pset.domain.row(lin_idx).segment(pset.var_min(k), pset.var_dim(k));
             }
 
             void coords(VectorX<T>& coord_vec, size_t min_dim, size_t max_dim)

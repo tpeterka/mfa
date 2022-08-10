@@ -78,7 +78,7 @@ int main(int argc, char** argv)
     // read MFA model
     diy::io::read_blocks(infile.c_str(), world, assigner, master, &Block<real_t>::load);
     int nblocks = master.size();
-    std::cout << nblocks << " blocks read from file "<< infile << "\n";
+    std::cout << nblocks << " blocks read from file "<< infile << endl;
 
     // compute derivative
     fprintf(stderr, "\nComputing derivative...\n");
@@ -89,7 +89,7 @@ int main(int argc, char** argv)
 
     // print results
     fprintf(stderr, "\n------- Final block results --------\n");
-    master.foreach(&Block<real_t>::print_deriv);
+    // master.foreach(&Block<real_t>::print_deriv);
     fprintf(stderr, "decoding time         = %.3lf s.\n", decode_time);
     fprintf(stderr, "-------------------------------------\n\n");
 
