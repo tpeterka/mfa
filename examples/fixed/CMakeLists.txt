@@ -5,23 +5,20 @@ add_executable              (time_varying                           time_varying
 add_executable              (multiblock_noblend_continuous          multiblock_noblend_continuous.cpp)
 add_executable              (multiblock_blend_continuous            multiblock_blend_continuous.cpp)
 add_executable              (multiblock_blend_discrete              multiblock_blend_discrete.cpp)
-add_executable              (fixed-multivar                         fixed-multivar.cpp)
 
 target_link_libraries       (fixed                                  ${libraries})
 target_link_libraries       (time_varying                           ${libraries})
 target_link_libraries       (multiblock_noblend_continuous          ${libraries})
 target_link_libraries       (multiblock_blend_continuous            ${libraries})
 target_link_libraries       (multiblock_blend_discrete              ${libraries})
-target_link_libraries       (fixed-multivar                         ${libraries})
 
 set_property                (TARGET fixed                           PROPERTY INSTALL_RPATH_USE_LINK_PATH TRUE)
 set_property                (TARGET time_varying                    PROPERTY INSTALL_RPATH_USE_LINK_PATH TRUE)
 set_property                (TARGET multiblock_noblend_continuous   PROPERTY INSTALL_RPATH_USE_LINK_PATH TRUE)
 set_property                (TARGET multiblock_blend_continuous     PROPERTY INSTALL_RPATH_USE_LINK_PATH TRUE)
 set_property                (TARGET multiblock_blend_discrete       PROPERTY INSTALL_RPATH_USE_LINK_PATH TRUE)
-set_property                (TARGET fixed-multivar                  PROPERTY INSTALL_RPATH_USE_LINK_PATH TRUE)
 
-install                     (TARGETS fixed time_varying multiblock_noblend_continuous multiblock_blend_continuous multiblock_blend_discrete fixed-multivar
+install                     (TARGETS fixed time_varying multiblock_noblend_continuous multiblock_blend_continuous multiblock_blend_discrete 
                             DESTINATION ${CMAKE_INSTALL_PREFIX}/examples/fixed/
                             PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE
                             GROUP_READ GROUP_WRITE GROUP_EXECUTE
