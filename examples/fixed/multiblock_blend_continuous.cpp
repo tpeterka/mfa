@@ -61,35 +61,26 @@ int main(int argc, char **argv) {
     opts::Options ops;
     ops >> opts::Option('d', "pt_dim", pt_dim, " dimension of points");
     ops >> opts::Option('m', "dom_dim", dom_dim, " dimension of domain");
-    ops
-            >> opts::Option('p', "geom_degree", geom_degree,
+    ops >> opts::Option('p', "geom_degree", geom_degree,
                     " degree in each dimension of geometry");
-    ops
-            >> opts::Option('q', "vars_degree", vars_degree,
+    ops >> opts::Option('q', "vars_degree", vars_degree,
                     " degree in each dimension of science variables");
-    ops
-            >> opts::Option('n', "ndomp", ndomp,
+    ops >> opts::Option('n', "ndomp", ndomp,
                     " number of input points in each dimension of domain");
-    ops
-            >> opts::Option('r', "resolution", resolutions,
+    ops >> opts::Option('r', "resolution", resolutions,
                     " number of output points in each dimension of domain");
-    ops
-            >> opts::Option('g', "geom_nctrl", geom_nctrl,
+    ops >> opts::Option('g', "geom_nctrl", geom_nctrl,
                     " number of control points in each dimension of geometry");
-    ops
-            >> opts::Option('v', "vars_nctrl", vars_nctrl,
+    ops >> opts::Option('v', "vars_nctrl", vars_nctrl,
                     " number of control points in each dimension of all science variables");
     ops >> opts::Option('i', "input", input, " input dataset");
     ops >> opts::Option('w', "weights", weighted, " solve for and use weights");
-    ops
-            >> opts::Option('b', "tot_blocks", tot_blocks,
+    ops >> opts::Option('b', "tot_blocks", tot_blocks,
                     " total number of blocks");
     ops >> opts::Option('s', "noise", noise, " fraction of noise (0.0 - 1.0)");
-    ops
-            >> opts::Option('t', "strong_sc", strong_sc,
+    ops >> opts::Option('t', "strong_sc", strong_sc,
                     " strong scaling (1 = strong, 0 = weak)");
-    ops
-            >> opts::Option('o', "overlap", ghost,
+    ops >> opts::Option('o', "overlap", ghost,
                     " relative ghost zone overlap (0.0 - 1.0)");
     ops >> opts::Option('W', "write", write_output, " write output file");
     ops >> opts::Option('h', "help", help, " show help");
