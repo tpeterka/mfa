@@ -162,7 +162,7 @@ namespace mfa
         {
             // TODO move this elsewhere (to encode method?), wrapped in "structured==true" block
             // allocate basis functions
-            if (input.structured)
+            if (input.is_structured())
             {
                 N.resize(dom_dim);
                 for (auto i = 0; i < dom_dim; i++)
@@ -180,7 +180,7 @@ namespace mfa
             tmesh.append_tensor(knot_mins, knot_maxs);
 
 #ifdef CURVE_PARAMS
-            if (!input.structured)
+            if (!input.is_structured())
             {
                 cerr << "ERROR: Cannot set curve knots from unstructured input" << endl;
                 exit(1);
@@ -1373,7 +1373,7 @@ namespace mfa
                 // const vector<vector<T>>&    params,                 // parameters for input points[dimension][index]
                 Tmesh<T>&                   tmesh) const            // (output) tmesh
         {
-            if (!input.structured)
+            if (!input.is_structured())
             {
                 cerr << "ERROR: Cannot set curve knots from unstructured input" << endl;
                 exit(1);
@@ -1439,7 +1439,7 @@ namespace mfa
         void UniformKnots( const    PointSet<T>&   input,
                                     Tmesh<T>&       tmesh)
         {
-            if (input.structured)
+            if (input.is_structured())
             {
                 // debug
                 cerr << "Using uniform knots (structured input)" << endl;

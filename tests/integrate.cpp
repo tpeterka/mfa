@@ -98,7 +98,7 @@ int main(int argc, char** argv)
     }
 
     // print input arguments
-    echo_args("fixed test", pt_dim, dom_dim, scalar, geom_degree, geom_nctrl, vars_degree, vars_nctrl,
+    echo_args("integrate test", pt_dim, dom_dim, scalar, geom_degree, geom_nctrl, vars_degree, vars_nctrl,
                 ndomp, ntest, input, infile, analytical_signals, noise, structured, weighted, adaptive, 0, 0);
 
     // initialize DIY

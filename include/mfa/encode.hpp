@@ -96,7 +96,7 @@ namespace mfa
                     bool            weighted = true)        // solve for and use weights
         {
             // check quantities
-            if (mfa_data.p.size() != input.ndom_pts.size())
+            if (mfa_data.p.size() != input.ndom_pts().size())
             {
                 fprintf(stderr, "Error: Encode() size of p must equal size of ndom_pts\n");
                 exit(1);
@@ -116,7 +116,7 @@ namespace mfa
                 }
             }
 
-            int      ndims  = input.ndom_pts.size();          // number of domain dimensions
+            int      ndims  = input.ndom_pts().size();          // number of domain dimensions
             size_t   cs     = 1;                            // stride for input points in curve in cur. dim
             int      pt_dim = mfa_data.max_dim - mfa_data.min_dim + 1;// control point dimensonality
             // resize matrices in case number of control points changed
@@ -139,7 +139,7 @@ namespace mfa
             MatrixX<T> temp_ctrl0 = MatrixX<T>::Zero(tot_ntemp_ctrl, pt_dim);
             MatrixX<T> temp_ctrl1 = MatrixX<T>::Zero(tot_ntemp_ctrl, pt_dim);
 
-            VectorXi ntemp_ctrl = input.ndom_pts;     // current num of temp control pts in each dim
+            VectorXi ntemp_ctrl = input.ndom_pts();     // current num of temp control pts in each dim
 
             for (size_t k = 0; k < ndims; k++)      // for all domain dimensions
             {
@@ -760,8 +760,8 @@ namespace mfa
                 
                 if (reg1and2)   // constrain 1st and 2nd derivs
                 {
-                    ConsMatrix(t_idx, 1, regularization, N, input.dom_mins, input.dom_maxs, Ct1);
-                    ConsMatrix(t_idx, 2, regularization, N, input.dom_mins, input.dom_maxs, Ct2);
+                    ConsMatrix(t_idx, 1, regularization, N, input.mins(), input.maxs(), Ct1);
+                    ConsMatrix(t_idx, 2, regularization, N, input.mins(), input.maxs(), Ct2);
 
                     Ct.conservativeResize(Ct1.rows(), Ct1.cols() + Ct2.cols());
                     Ct.leftCols(Ct1.cols()) = Ct1;
@@ -770,7 +770,7 @@ namespace mfa
                 }
                 else            // constrain only 2nd derivs
                 {
-                    ConsMatrix(t_idx, 2, regularization, N, input.dom_mins, input.dom_maxs, Ct2);
+                    ConsMatrix(t_idx, 2, regularization, N, input.mins(), input.maxs(), Ct2);
                     Ct = Ct2;            // only C2 regularization
                 }
 
@@ -862,15 +862,15 @@ namespace mfa
         //     // two matrices of input points for subsequent dimensions after dimension 0, which draws directly from input domain
         //     // input points cover constraints as well as free control point basis functions
         //     // (double buffering output control points to input points)
-        //     VectorXi npts_dim = input.ndom_pts;           // number of output points in current dim = input pts for next dim
+        //     VectorXi npts_dim = input.ndom_pts();           // number of output points in current dim = input pts for next dim
         //     MatrixX<T> Q(npts_dim.prod(), pt_dim);              // first matrix size of input points
         //     npts_dim(0) = t.nctrl_pts(0);
         //     MatrixX<T> Q1(npts.prod(), pt_dim);                                                     // second matrix already smaller, size of ctrl pts in first dim
 
         //     // input and output number of points
-        //     VectorXi nin_pts    = input.ndom_pts;
+        //     VectorXi nin_pts    = input.ndom_pts();
         //     VectorXi nout_pts   = npts_dim;
-        //     VectorXi in_all_pts = input.ndom_pts;
+        //     VectorXi in_all_pts = input.ndom_pts();
 
         //     // timing
         //     double free_time    = 0.0;
@@ -1289,7 +1289,7 @@ namespace mfa
 
 // #ifdef MFA_TBB  // TBB
 
-            VolIterator dom_iter(ndom_pts, dom_starts, input.ndom_pts); // iterator over input points
+            VolIterator dom_iter(ndom_pts, dom_starts, input.ndom_pts()); // iterator over input points
             VolIterator free_iter(t.nctrl_pts);                         // iterator over free control points
 
             enumerable_thread_specific<vector<vector<KnotIdx>>> thread_local_knot_idxs(mfa_data.dom_dim);   // local knot idices
@@ -1422,7 +1422,7 @@ namespace mfa
 
 #ifdef MFA_TBB  // TBB
 
-            VolIterator dom_iter(ndom_pts, dom_starts, input.ndom_pts); // iterator over input points
+            VolIterator dom_iter(ndom_pts, dom_starts, input.ndom_pts()); // iterator over input points
             VolIterator free_iter(t.nctrl_pts);                         // iterator over free control points
 
             enumerable_thread_specific<vector<vector<KnotIdx>>> thread_local_knot_idxs(mfa_data.dom_dim);   // local knot idices
@@ -1502,7 +1502,7 @@ namespace mfa
 
                 int nnz_col = 0;                                                                // num nonzeros in current column
 
-                VolIterator dom_iter(ndom_pts, dom_starts, input.ndom_pts);                     // iterator over input points
+                VolIterator dom_iter(ndom_pts, dom_starts, input.ndom_pts());                     // iterator over input points
                 while (!dom_iter.done())
                 {
                     for (auto k = 0; k < mfa_data.dom_dim; k++)                                 // for all dims
@@ -1567,7 +1567,7 @@ namespace mfa
                         local_knots[k][n] = mfa_data.tmesh.all_knots[k][local_knot_idxs[k][n]];
 
                 // iterator over input points
-                VolIterator dom_iter(ndom_pts, dom_starts, input.ndom_pts);
+                VolIterator dom_iter(ndom_pts, dom_starts, input.ndom_pts());
                 while (!dom_iter.done())
                 {
                     T v;                                                                        // basis function value
@@ -1970,7 +1970,7 @@ namespace mfa
 
 #ifdef MFA_TBB  // TBB
 
-            VolIterator dom_iter(ndom_pts, dom_starts, input.ndom_pts);                         // iterator over input points
+            VolIterator dom_iter(ndom_pts, dom_starts, input.ndom_pts());                         // iterator over input points
 
             enumerable_thread_specific<vector<vector<KnotIdx>>> thread_local_knot_idxs(mfa_data.dom_dim);   // local knot idices
             enumerable_thread_specific<vector<vector<T>>>       thread_local_knots(mfa_data.dom_dim);       // local knot idices
@@ -2024,7 +2024,7 @@ namespace mfa
                         local_knots[k][n] = mfa_data.tmesh.all_knots[k][local_knot_idxs[k][n]];
 
                 // iterator over input points
-                VolIterator dom_iter(ndom_pts, dom_starts, input.ndom_pts);
+                VolIterator dom_iter(ndom_pts, dom_starts, input.ndom_pts());
                 while (!dom_iter.done())
                 {
                     for (auto k = 0; k < mfa_data.dom_dim; k++)                                 // for all dims
@@ -2088,7 +2088,7 @@ namespace mfa
                 dom_starts(k)   = start_idxs[k];                                                    // need Eigen vector from STL vector
             }
             MatrixX<T> Q(ndom_pts.prod(), pt_dim);
-            VolIterator dom_iter(ndom_pts, dom_starts, input.ndom_pts);
+            VolIterator dom_iter(ndom_pts, dom_starts, input.ndom_pts());
             while (!dom_iter.done())
             {
                 Q.block(dom_iter.cur_iter(), 0, 1, pt_dim) =
@@ -2427,7 +2427,7 @@ namespace mfa
             VectorXi nin_pts    = ndom_pts;
             VectorXi nout_pts   = npts;
             VectorXi in_starts  = dom_starts;
-            VectorXi in_all_pts = input.ndom_pts;
+            VectorXi in_all_pts = input.ndom_pts();
             VectorXi start_ijk  = in_starts;
 
             // timing
@@ -3195,7 +3195,7 @@ namespace mfa
 
             // fill Rk, the matrix of input points
             MatrixX<T> Rk(N.rows(), mfa_data.max_dim - mfa_data.min_dim + 1);           // one row for each input point
-            VolIterator vol_iter(ndom_pts, dom_starts, input.ndom_pts);                 // iterator over input points
+            VolIterator vol_iter(ndom_pts, dom_starts, input.ndom_pts());                 // iterator over input points
             VectorXi ijk(mfa_data.dom_dim);
             while (!vol_iter.done())
             {
@@ -3223,7 +3223,7 @@ namespace mfa
                 VectorXi&       n,              // (output) number of control point spans in each dim
                 VectorXi&       m)              // (output) number of input data point spans in each dim
         {
-            if (mfa_data.p.size() != input.ndom_pts.size())
+            if (mfa_data.p.size() != input.ndom_pts().size())
             {
                 fprintf(stderr, "Error: Encode() size of p must equal size of ndom_pts\n");
                 exit(1);
@@ -3561,7 +3561,7 @@ namespace mfa
             if (!extents.size())
                 extents = VectorX<T>::Ones(input.domain.cols());
 
-            for (auto i = 0; i < input.ndom_pts[k]; i++)      // all domain points in the curve
+            for (auto i = 0; i < input.ndom_pts(k); i++)      // all domain points in the curve
             {
                 while (mfa_data.tmesh.all_knots[k][span + 1] < 1.0 && mfa_data.tmesh.all_knots[k][span + 1] <= input.params->param_grid[k][i])
                     span++;
@@ -4356,7 +4356,7 @@ namespace mfa
             {
                 // check and assign main quantities
                 VectorXi n = t.nctrl_pts - VectorXi::Ones(mfa_data.dom_dim);        // number of control point spans in each domain dim
-                VectorXi m = input.ndom_pts  - VectorXi::Ones(mfa_data.dom_dim);    // number of input data point spans in each domain dim
+                VectorXi m = input.ndom_pts()  - VectorXi::Ones(mfa_data.dom_dim);    // number of input data point spans in each domain dim
 
                 // resize control points and weights
                 t.ctrl_pts.resize(t.nctrl_pts.prod(), mfa_data.max_dim - mfa_data.min_dim + 1);

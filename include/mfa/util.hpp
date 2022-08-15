@@ -524,43 +524,45 @@ namespace mfa
 
     struct GridInfo
     {
-        size_t              dom_dim{0};
+        bool                initialized{false};
+        int                 dom_dim{0};
         VectorXi            ndom_pts{};
         VectorXi            ds{};
         vector<VectorXi>    co{};
-        // bool                initialized{false};
 
         friend void swap(GridInfo& first, GridInfo& second)
         {
+            swap(first.initialized, second.initialized);
             swap(first.dom_dim, second.dom_dim);
             first.ndom_pts.swap(second.ndom_pts);
             first.ds.swap(second.ds);
             swap(first.co, second.co);
         }
 
-        void init(size_t dom_dim_, VectorXi& ndom_pts_ ) 
+        void init(int dom_dim_, VectorXi& ndom_pts_ ) 
         {
+            initialized = true;
             dom_dim = dom_dim_;
             ndom_pts = ndom_pts_;
 
-            size_t npts = ndom_pts.prod();
+            int npts = ndom_pts.prod();
 
             // stride for domain points in different dimensions
             ds = VectorXi::Ones(dom_dim);
-            for (size_t k = 1; k < dom_dim; k++)
+            for (int k = 1; k < dom_dim; k++)
                 ds(k) = ds(k - 1) * ndom_pts(k - 1);
 
             // offsets for curve starting (domain) points in each dimension
             co.resize(dom_dim);
-            for (auto k = 0; k < dom_dim; k++)
+            for (int k = 0; k < dom_dim; k++)
             {
-                size_t ncurves  = npts / ndom_pts(k);    // number of curves in this dimension
-                size_t coo      = 0;                                // co at start of contiguous sequence
+                int ncurves  = npts / ndom_pts(k);    // number of curves in this dimension
+                int coo      = 0;                                // co at start of contiguous sequence
                 co[k].resize(ncurves);
 
                 co[k][0] = 0;
 
-                for (auto j = 1; j < ncurves; j++)
+                for (int j = 1; j < ncurves; j++)
                 {
                     // adjust offsets for the next curve
                     if (j % ds(k))
@@ -574,7 +576,7 @@ namespace mfa
             }
         }
 
-        void idx2ijk(size_t idx, VectorXi& ijk) const
+        void idx2ijk(int idx, VectorXi& ijk) const
         {
             if (dom_dim == 1)
             {
@@ -591,10 +593,10 @@ namespace mfa
             }
         }
 
-        size_t ijk2idx(const VectorXi& ijk) const
+        int ijk2idx(const VectorXi& ijk) const
         {
-            size_t idx          = 0;
-            size_t stride       = 1;
+            int idx          = 0;
+            int stride       = 1;
             for (int k = 0; k < dom_dim; k++)
             {
                 idx     += ijk(k) * stride;

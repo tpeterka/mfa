@@ -238,7 +238,7 @@ namespace mfa
                 const   VectorXi&       derivs)     // derivative to take in each domain dim. (0 = value, 1 = 1st deriv, 2 = 2nd deriv, ...)
                                                     // pass size-0 vector if unused
         {
-            if (saved_basis && !ps.structured)
+            if (saved_basis && !ps.is_structured())
                 cerr << "Warning: Saved basis decoding not implemented with unstructured input. Proceeding with standard decoding" << endl;
 
 #ifdef MFA_TBB                                          // TBB version, faster (~3X) than serial
@@ -261,7 +261,7 @@ namespace mfa
 
 #ifndef MFA_TMESH   // original version for one tensor product
 
-                    if (saved_basis && ps.structured)
+                    if (saved_basis && ps.is_structured())
                     {
                         pt_it.ijk(ijk);
                         VolPt_saved_basis(ijk, param, cpt, thread_decode_info.local(), mfa_data.tmesh.tensor_prods[0]);
@@ -313,7 +313,7 @@ namespace mfa
 
 #ifndef MFA_TMESH   // original version for one tensor product
 
-                if (saved_basis && ps.structured)
+                if (saved_basis && ps.is_structured())
                 {
                     pt_it.ijk(ijk);
                     VolPt_saved_basis(ijk, param, cpt, decode_info, mfa_data.tmesh.tensor_prods[0]);
@@ -569,7 +569,8 @@ namespace mfa
             // precompute basis functions
             const VectorXi&     nctrl_pts = mfa_data.tmesh.tensor_prods[0].nctrl_pts;   // reference to control points (assume only one tensor)
 
-            Param<T> full_params(ndom_pts, min_params, max_params);
+            Param<T> full_params(dom_dim, ndom_pts);
+            full_params.make_grid_params(min_params, max_params);
 
             // TODO: Eventually convert "result" into a PointSet and iterate through that,
             //       instead of simply using a naked Param object  

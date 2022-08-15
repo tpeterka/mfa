@@ -251,10 +251,10 @@ struct Block : public BlockBase<T>
         {
             for (size_t k = 0; k < gdim; k++)
             {
-                centers(k,nv) = input->dom_mins(k) + u_dist(df_gen) * (input->dom_maxs(k) - input->dom_mins(k));
+                centers(k,nv) = input->mins(k) + u_dist(df_gen) * (input->maxs(k) - input->mins(k));
             }
 
-            radii(nv) = radii_frac * (input->dom_maxs - input->dom_mins).minCoeff();
+            radii(nv) = radii_frac * (input->maxs() - input->mins()).minCoeff();
         }
 
         VectorX<T> dom_pt(gdim);
@@ -268,8 +268,7 @@ struct Block : public BlockBase<T>
                 // Generate a random point
                 for (size_t k = 0; k < gdim; k++)
                 {
-                    // input->domain(j, k) = input->dom_mins(k) + u_dist(df_gen) * (input->dom_maxs(k) - input->dom_mins(k));
-                    candidate_pt(k) = input->dom_mins(k) + u_dist(df_gen) * (input->dom_maxs(k) - input->dom_mins(k));
+                    candidate_pt(k) = input->mins(k) + u_dist(df_gen) * (input->maxs(k) - input->mins(k));
                 }
 
                 // Consider discarding point if within a certain radius of a void
@@ -311,7 +310,7 @@ struct Block : public BlockBase<T>
         this->bounds_maxs = input->domain.colwise().maxCoeff();
         this->bounds_mins = input->domain.colwise().minCoeff();
 
-        input->init_params(core_mins, core_maxs);     // Set explicit bounding box for parameter space
+        input->set_domain_params(core_mins, core_maxs);     // Set explicit bounding box for parameter space
 
         // initialize MFA models (geometry, vars, etc)
         this->setup_MFA(cp, mfa_info);
@@ -479,7 +478,7 @@ struct Block : public BlockBase<T>
         for (int k = 0; k < dom_dim; k++)
             this->map_dir.push_back(k);
 
-        input->init_params();
+        input->set_domain_params();
 
         // initialize MFA models (geometry, vars, etc)
         this->setup_MFA(cp, mfa_info);
@@ -582,7 +581,7 @@ struct Block : public BlockBase<T>
             core_maxs(i) = bounds_maxs(i);
         }
 
-        input->init_params();
+        input->set_domain_params();
         
         // initialize MFA models (geometry, vars, etc)
         this->setup_MFA(cp, mfa_info);
@@ -685,7 +684,7 @@ struct Block : public BlockBase<T>
             core_maxs(i) = bounds_maxs(i);
         }
 
-        input->init_params();
+        input->set_domain_params();
 
         // initialize MFA models (geometry, vars, etc)
         this->setup_MFA(cp, mfa_info);
@@ -810,7 +809,7 @@ struct Block : public BlockBase<T>
             core_maxs(i) = bounds_maxs(i);
         }
 
-        input->init_params();
+        input->set_domain_params();
 
         // initialize MFA models (geometry, vars, etc)
         this->setup_MFA(cp, mfa_info);
@@ -916,7 +915,7 @@ struct Block : public BlockBase<T>
             core_maxs(i) = bounds_maxs(i);
         }
 
-        input->init_params();
+        input->set_domain_params();
 
         // initialize MFA models (geometry, vars, etc)
         this->setup_MFA(cp, mfa_info);
@@ -1058,7 +1057,7 @@ struct Block : public BlockBase<T>
             core_maxs(i) = bounds_maxs(i);
         }
 
-        input->init_params();
+        input->set_domain_params();
 
         // initialize MFA models (geometry, vars, etc)
         this->setup_MFA(cp, mfa_info);
@@ -1187,7 +1186,7 @@ struct Block : public BlockBase<T>
             core_maxs(i) = bounds_maxs(i);
         }
 
-        input->init_params();
+        input->set_domain_params();
 
         // initialize MFA models (geometry, vars, etc)
         this->setup_MFA(cp, mfa_info);
@@ -1281,7 +1280,7 @@ struct Block : public BlockBase<T>
             core_maxs(i) = bounds_maxs(i);
         }
 
-        input->init_params();
+        input->set_domain_params();
 
         // initialize MFA models (geometry, vars, etc)
         this->setup_MFA(cp, mfa_info);
@@ -1380,7 +1379,7 @@ struct Block : public BlockBase<T>
             core_maxs(i) = bounds_maxs(i);
         }
 
-        input->init_params();
+        input->set_domain_params();
 
         // initialize MFA models (geometry, vars, etc)
         this->setup_MFA(cp, mfa_info);
@@ -1476,7 +1475,7 @@ struct Block : public BlockBase<T>
             dom_mins(i) = args.min[i];
             dom_maxs(i) = args.max[i];
         }
-        input->init_params(dom_mins, dom_maxs);
+        input->set_domain_params(dom_mins, dom_maxs);
 
         // initialize MFA models (geometry, vars, etc)
         this->setup_MFA(cp, mfa_info);
@@ -1831,7 +1830,7 @@ struct Block : public BlockBase<T>
         if (fixed_length)
             ray_input->set_bounds(input_mins, input_maxs);
 
-        ray_input->init_params();
+        ray_input->set_domain_params();
 
         // ------------ Creation of new MFA ------------- //
         //
@@ -1950,8 +1949,8 @@ cerr << "===========\n" << endl;
             {
                 T rh_param = (T) j / (grid_size[1]-1);
                 T al_param = (T) k / (grid_size[2]-1);
-                T rh = input->dom_mins(1) + (input->dom_maxs(1) - input->dom_mins(1)) * rh_param;
-                T al = input->dom_mins(2) + (input->dom_maxs(2) - input->dom_mins(2)) * al_param;
+                T rh = input->mins(1) + (input->maxs(1) - input->mins(1)) * rh_param;
+                T al = input->mins(2) + (input->maxs(2) - input->mins(2)) * al_param;
 
                 T x0, y0, x1, y1, span_x, span_y;
 
@@ -1972,7 +1971,7 @@ cerr << "===========\n" << endl;
                 {
                     T t_param = (T)i / (grid_size[0]-1);
                     int idx = k*grid_size[0]*grid_size[1] + j*grid_size[0] + i;
-                    T a = input->dom_mins(0) + (input->dom_maxs(0) - input->dom_mins(0)) / (grid_size[0]-1) * i;
+                    T a = input->mins(0) + (input->maxs(0) - input->mins(0)) / (grid_size[0]-1) * i;
                     
                     T x = x0 + i * dx;
                     T y = 0;
@@ -2179,7 +2178,7 @@ cerr << "===========\n" << endl;
         int nvars = ps->nvars();
         if (L1.size() != nvars || L2.size() != nvars || Linf.size() != nvars)
         {
-            cerr << "ERROR: Error metric vector sizes do not match.\nAborting" << endl;
+            cerr << "ERROR: Error metric vector sizes do not match in analytical_error_pointset().\nAborting" << endl;
             exit(1);
         }
 
@@ -2233,22 +2232,44 @@ cerr << "===========\n" << endl;
         }
     }
 
-    // Compute error field on a regularly spaced grid of points. The size of the grid
-    // is given by args.ndom_pts. The error field is stored in the 'error' pointset, 
-    // and the error metrics are saved in L1, L2, Linf. If keep_approx==true, then the 
-    // resampling of the MFA on the regular grid is stored in the 'approx' pointset.
+
+    // Simplified function signature when we don't need to keep the PointSets
     void analytical_error_field(
         const diy::Master::ProxyWithLink&   cp,
-        string                              fun,                // function to evaluate
+        string                              fun,                // analytical function name
         vector<T>&                          L1,                 // (output) L-1 norm
         vector<T>&                          L2,                 // (output) L-2 norm
         vector<T>&                          Linf,               // (output) L-infinity norm
         DomainArgs&                         args,               // input args
-        bool                                keep_approx,        // keep the regular grid approximation we create
         vector<T>                           subset_mins = vector<T>(),
         vector<T>                           subset_maxs = vector<T>() ) // (optional) subset of the domain to consider for errors
     {
-        DomainArgs* a   = &args;
+        mfa::PointSet<T>* unused = nullptr;
+        analytical_error_field(cp, fun, L1, L2, Linf, args, unused, unused, unused, subset_mins, subset_maxs);
+    }
+
+    // Compute error field on a regularly spaced grid of points. The size of the grid
+    // is given by args.ndom_pts. Error metrics are saved in L1, L2, Linf. The fields 
+    // of the exact, approximate, and residual data are save to PointSets.
+    void analytical_error_field(
+        const diy::Master::ProxyWithLink&   cp,
+        string                              fun,                // analytical function name
+        vector<T>&                          L1,                 // (output) L-1 norm
+        vector<T>&                          L2,                 // (output) L-2 norm
+        vector<T>&                          Linf,               // (output) L-infinity norm
+        DomainArgs&                         args,               // input args
+        mfa::PointSet<T>*&                  exact_pts,          // PointSet to contain analytical signal
+        mfa::PointSet<T>*&                  approx_pts,         // PointSet to contain approximation
+        mfa::PointSet<T>*&                  error_pts,          // PointSet to contain errors
+        vector<T>                           subset_mins = vector<T>(),
+        vector<T>                           subset_maxs = vector<T>() ) // (optional) subset of the domain to consider for errors
+    {
+        int nvars = this->mfa->nvars();
+        if (L1.size() != nvars || L2.size() != nvars || Linf.size() != nvars)
+        {
+            cerr << "ERROR: Error metric vector sizes do not match in analytical_error_field().\nAborting" << endl;
+            exit(1);
+        }
 
         // Check if we accumulated errors over subset of domain only and report
         bool do_subset = false;
@@ -2284,34 +2305,42 @@ cerr << "===========\n" << endl;
         VectorXi test_pts(dom_dim);
         for (int i = 0; i < dom_dim; i++)
         {
-            test_pts(i) = a->ndom_pts[i];
+            test_pts(i) = args.ndom_pts[i];
         }
 
-        // Create parameters to decode at
-        shared_ptr<mfa::Param<T>> grid_params = make_shared<mfa::Param<T>>(test_pts);
-        
-        // Create pointsets to hold decoded points and errors
-        mfa::PointSet<T>* grid_approx = new mfa::PointSet<T>(grid_params, mfa->model_dims());
-        errs = new mfa::PointSet<T>(grid_params, mfa->model_dims());
+        // Free any existing memory at PointSet pointers
+        if (exact_pts) cerr << "Warning: Overwriting \'exact_pts\' pointset in analytical_error_field()" << endl;
+        if (approx_pts) cerr << "Warning: Overwriting \'approx_pts\' pointset in analytical_error_field()" << endl;
+        if (error_pts) cerr << "Warning: Overwriting \'error_pts\' pointset in analytical_error_field()" << endl;
+        delete exact_pts;
+        delete approx_pts;
+        delete error_pts;
+
+        // Set up PointSets with grid parametrizations
+        exact_pts = new mfa::PointSet<T>(mfa->dom_dim, mfa->model_dims(), test_pts.prod(), test_pts);
+        approx_pts= new mfa::PointSet<T>(mfa->dom_dim, mfa->model_dims(), test_pts.prod(), test_pts);
+        error_pts = new mfa::PointSet<T>(mfa->dom_dim, mfa->model_dims(), test_pts.prod(), test_pts);
+        approx_pts->set_grid_params();
 
         // Decode on above-specified grid
-        mfa->Decode(*grid_approx, false);
+        mfa->Decode(*approx_pts, false);
 
-        // Copy geometric point coordinates into errs PointSet
-        errs->domain.leftCols(errs->geom_dim()) = grid_approx->domain.leftCols(grid_approx->geom_dim());
+        // Copy geometric point coordinates into error and exact PointSets
+        exact_pts->domain.leftCols(exact_pts->geom_dim()) = approx_pts->domain.leftCols(approx_pts->geom_dim());
+        error_pts->domain.leftCols(error_pts->geom_dim()) = approx_pts->domain.leftCols(approx_pts->geom_dim());
 
         // Compute the analytical error at each point and accrue errors
         T l1err = 0, l2err = 0, linferr = 0;
-        VectorX<T> dom_pt(grid_approx->geom_dim());
+        VectorX<T> dom_pt(approx_pts->geom_dim());
 
-        for (int k = 0; k < grid_approx->nvars(); k++)
+        for (int k = 0; k < nvars; k++)
         {
-            VectorX<T> true_pt(grid_approx->var_dim(k));
-            VectorX<T> test_pt(grid_approx->var_dim(k));
-            VectorX<T> residual(grid_approx->var_dim(k));
+            VectorX<T> true_pt(approx_pts->var_dim(k));
+            VectorX<T> test_pt(approx_pts->var_dim(k));
+            VectorX<T> residual(approx_pts->var_dim(k));
             int num_pts_in_box = 0;
 
-            for (auto pt_it = grid_approx->begin(), pt_end = grid_approx->end(); pt_it != pt_end; ++pt_it)
+            for (auto pt_it = approx_pts->begin(), pt_end = approx_pts->end(); pt_it != pt_end; ++pt_it)
             {
                 pt_it.geom_coords(dom_pt); // extract the geometry coordinates
 
@@ -2321,9 +2350,10 @@ cerr << "===========\n" << endl;
 
                 // Update error field
                 residual = (true_pt - test_pt).cwiseAbs();
-                for (int j = 0; j <= errs->var_dim(k); j++)
+                for (int j = 0; j <= error_pts->var_dim(k); j++)
                 {
-                    errs->domain(pt_it.idx(), errs->var_min(k) + j) = residual(j);
+                    error_pts->domain(pt_it.idx(), error_pts->var_min(k) + j) = residual(j);
+                    exact_pts->domain(pt_it.idx(), exact_pts->var_min(k) + j) = true_pt(j);
                 }
 
                 // Accrue error only in subset
@@ -2355,128 +2385,6 @@ cerr << "===========\n" << endl;
             L1[k] = L1[k] / num_pts_in_box;
             L2[k] = sqrt(L2[k] / num_pts_in_box);
         }
-
-        if (keep_approx)
-        {
-            delete this->approx;
-            this->approx = grid_approx;
-        }
-        else
-            delete grid_approx;
-    }
-
-    // compute error to synthethic, non-noisy function (for HEP applications)
-    // outputs L1, L2, Linfinity error
-    // optionally outputs true and test point locations and true and test values there
-    // if optional test output wanted, caller has to allocate true_pts, test_pts, true_data, and test_data
-    // Hard-coded for one scalar science variable
-    void analytical_error(
-            const diy::Master::ProxyWithLink&     cp,
-            string&                               fun,                // function to evaluate
-            T&                                    L1,                 // (output) L-1 norm
-            T&                                    L2,                 // (output) L-2 norm
-            T&                                    Linf,               // (output) L-infinity norm
-            DomainArgs&                           args,               // input args
-            bool                                  output,             // whether to output test_pts, true_data, test_data or only compute error norms
-            vector<vec3d>&                        true_pts,           // (output) true points locations
-            float**                               true_data,          // (output) true data values (4d)
-            vector<vec3d>&                        test_pts,           // (output) test points locations
-            float**                               test_data)          // (output) test data values (4d)
-    {
-        DomainArgs* a   = &args;
-
-        T sum_errs      = 0.0;                                  // sum of absolute values of errors (L-1 norm)
-        T sum_sq_errs   = 0.0;                                  // sum of squares of errors (square of L-2 norm)
-        T max_err       = -1.0;                                 // maximum absolute value of error (L-infinity norm)
-
-        if (!this->dom_dim)
-            this->dom_dim = this->mfa->dom_dim;
-
-        size_t tot_ndom_pts = 1;
-        for (auto i = 0; i < this->dom_dim; i++)
-            tot_ndom_pts *= a->ndom_pts[i];
-
-        // steps in each dimension in paramater space and real space
-        vector<T> dom_step_real(this->dom_dim);                       // spacing between domain points in real space
-        vector<T> dom_step_param(this->dom_dim);                      // spacing between domain points in parameter space
-        for (auto i = 0; i < this->dom_dim; i++)
-        {
-            dom_step_param[i] = 1.0 / (double)(a->ndom_pts[i] - 1);
-            dom_step_real[i] = dom_step_param[i] * (a->max[i] - a->min[i]);
-        }
-
-        // flattened loop over all the points in a domain in dimension dom_dim
-        VectorXi ndom_pts(this->dom_dim);
-        for (int i = 0; i < this->dom_dim; i++)
-            ndom_pts(i) = a->ndom_pts[i];
-        mfa::VolIterator vol_it(ndom_pts);
-        fmt::print(stderr, "Testing analytical error norms over a total of {} points\n", tot_ndom_pts);
-        while(!vol_it.done())
-        {
-            int j= vol_it.cur_iter();
-            // compute current point in real and parameter space
-            VectorX<T> dom_pt_real(this->dom_dim);                // one domain point in real space
-            VectorX<T> dom_pt_param(this->dom_dim);               // one domain point in parameter space
-            for (auto i = 0; i < this->dom_dim; i++)
-            {
-                dom_pt_real(i) = a->min[i] + vol_it.idx_dim(i) * dom_step_real[i];
-                dom_pt_param(i) = vol_it.idx_dim(i) * dom_step_param[i];
-            }
-
-            // evaluate function at dom_pt_real
-            VectorX<T> out_pt(1);
-            evaluate_function(fun, dom_pt_real, out_pt, args, 0);
-            T true_val = out_pt(0);
-
-            // evaluate MFA at dom_pt_param
-            VectorX<T> cpt(1);                              // hard-coded for one science variable
-            // this->mfa->DecodePt(*(this->vars[0].mfa_data), dom_pt_param, cpt);       // hard-coded for one science variable
-            this->mfa->DecodeVar(0, dom_pt_param, cpt);
-            T test_val = cpt(0);
-
-            // compute and accrue error
-            T err = fabs(true_val - test_val);
-            sum_errs += err;                                // L1
-            sum_sq_errs += err * err;                       // L2
-            if (err > max_err)                              // Linf
-                max_err = err;
-
-            if (output)
-            {
-                vec3d true_pt, test_pt;
-                true_pt.x = test_pt.x = dom_pt_real(0);
-                if (this->dom_dim > 2)        // 3d or greater domain
-                {
-                    true_pt.y = test_pt.y = dom_pt_real(1);
-                    true_pt.z = test_pt.z = dom_pt_real(2);
-                }
-                else if (this->dom_dim > 1)   // 2d domain
-                {
-                    true_pt.y = test_pt.y = dom_pt_real(1);
-                    true_pt.z = true_val;
-                    test_pt.z = test_val;
-                }
-                else                    // 1d domain
-                {
-                    true_pt.y = true_val;
-                    test_pt.y = test_val;
-                    true_pt.z = test_pt.z = 0.0;
-                }
-
-                true_pts[j] = true_pt;
-                test_pts[j] = test_pt;
-
-                true_data[0][j] = true_val;
-                test_data[0][j] = test_val;
-
-//                 fmt::print(stderr, "x={} y={} true_val={} test_val={}\n", test_pt.x, test_pt.y, true_val, test_val);
-            }
-            vol_it.incr_iter();
-        }                                                   // for all points in flattened loop
-
-        L1    = sum_errs;
-        L2    = sqrt(sum_sq_errs);
-        Linf  = max_err;
     }
 
 
@@ -2700,7 +2608,7 @@ cerr << "===========\n" << endl;
         b->bounds_mins(b->dom_dim) = b->input->domain.col(b->dom_dim).minCoeff();
         b->bounds_maxs(b->dom_dim) = b->input->domain.col(b->dom_dim).maxCoeff();
 
-        b->input->init_params();
+        b->input->set_domain_params();
 
         // TODO: check that this construction of ProxyWithLink is valid
         // b->setup_models(diy::Master::ProxyWithLink(diy::Master::Proxy(&m, gid), b, l), nvars, args);     // adds models to MFA

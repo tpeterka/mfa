@@ -648,7 +648,7 @@ namespace mfa
             t.weights = VectorX<T>::Ones(t.nctrl_pts.prod());
             Encoder<T> encoder(*this, mfa_data, input, verbose);
 
-            if (input.structured && !force_unified)
+            if (input.is_structured() && !force_unified)
                 encoder.Encode(t.nctrl_pts, t.ctrl_pts, t.weights, weighted);
             else
                 encoder.EncodeUnified(0, regularization, reg1and2, weighted);  // Assumes only one tensor product
@@ -866,8 +866,7 @@ namespace mfa
                 const MFA_Data<T>&  mfa_data,               // mfa data model
                 const PointSet<T>&  input,
                 size_t              idx,                    // index of domain point
-                VectorX<T>&         error,                  // (output) absolute value of error at each coordinate
-                int                 verbose) const          // debug level
+                VectorX<T>&         error) const            // (output) absolute value of error at each coordinate
         {
             VectorX<T> param(dom_dim);
             input.pt_params(idx, param);
@@ -886,8 +885,7 @@ namespace mfa
         // Much faster to compute a single Decoder and call VolPt directly
         void AbsPointSetError(
             const   mfa::PointSet<T>& base,
-                    mfa::PointSet<T>& error,
-                    int               verbose)
+                    mfa::PointSet<T>& error)
         {
             if (!base.is_same_layout(error))
             {
@@ -912,7 +910,7 @@ namespace mfa
                 for (auto k = 0; k < nvars(); k++)          // for all science models
                 {
                     err_vec.resize(var_dim(k));
-                    AbsCoordError(*(vars[k]), base, i, err_vec, verbose);
+                    AbsCoordError(*(vars[k]), base, i, err_vec);
 
                     for (auto j = 0; j < var_dim(k); j++)
                     {
@@ -936,7 +934,7 @@ namespace mfa
                 for (auto k = 0; k < nvars(); k++)              // for all science models
                 {
                     err_vec.resize(var_dim(k));
-                    AbsCoordError(*(vars[k]), base, i, err_vec, verbose);
+                    AbsCoordError(*(vars[k]), base, i, err_vec);
 
                     for (auto j = 0; j < var_dim(k); j++)
                     {

@@ -16,6 +16,15 @@
 
 namespace mfa
 {
+    // PointSets may have an optional grid structure imposed on them, which must
+    // be set at the time of construction. A grid structure can be asserted
+    // by passing a non-empty vector for 'ndom_pts,' or constructing from a
+    // Params object which is structured. In a structured PointSet, the class
+    // member GridInfo is initialized to be nontrivial. Once a PointSet has
+    // been constructed with a particular grid, any Params that are 
+    // subsequently constructed will inherit this structure. If a Param 
+    // object is manually set to a structured Param object, it must have the
+    // same grid structure.
     template <typename T>
     struct PointSet
     {
@@ -34,24 +43,59 @@ namespace mfa
 
         // Parameter values corresponding to domain
         shared_ptr<Param<T>>    params;
-        VectorX<T>              dom_mins;
-        VectorX<T>              dom_maxs;
+        mutable VectorX<T>      dom_mins;
+        mutable VectorX<T>      dom_maxs;
+        mutable bool            bounds_cached{false};   // Flag if existing domain bounds are valid
 
         // Optional grid data
-        bool        structured;
-        VectorXi    ndom_pts;   // TODO: remove since this is contained in GridInfo?  
+        // bool        structured;
+        // VectorXi    ndom_pts;   // TODO: remove since this is contained in GridInfo?  
         GridInfo    g;
 
-        // Generic constructor with only dimensionality and total points
+        // // TODO Remove this constructor in favor of the next one
+        // // 
+        // // Generic constructor with only dimensionality and total points
+        // PointSet(
+        //         size_t          dom_dim_,
+        //         const VectorXi& mdims_,
+        //         size_t          npts_) :
+        //     dom_dim(dom_dim_),
+        //     pt_dim(mdims_.sum()),
+        //     npts(npts_),
+        //     mdims(mdims_)
+        //     // structured(false)
+        // {
+        //     domain.resize(npts, pt_dim);
+
+        //     // Fill dim_mins/maxs
+        //     dim_mins.resize(nvars());
+        //     dim_maxs.resize(nvars());
+        //     dim_mins[0] = geom_dim();
+        //     dim_maxs[0] = dim_mins[0] + var_dim(0) - 1;
+        //     for (int k = 1; k < nvars(); k++)
+        //     {
+        //         dim_mins[k] = dim_maxs[k-1] + 1;
+        //         dim_maxs[k] = dim_mins[k] + var_dim(k) - 1;
+        //     }
+
+        //     validate();
+        // }   
+
+        // Constructor for (possibly) grid-aligned data
+        // If ndom_pts_ is empty, PointSet is unstructured
+        // 
+        // This constructs an unfilled Param object that shares its
+        // dom_dim and grid structure with the PointSet. The Param object can
+        // be filled with a subsequent call to the set_###_params() methods
         PointSet(
                 size_t          dom_dim_,
                 const VectorXi& mdims_,
-                size_t          npts_) :
+                size_t          npts_,
+                const VectorXi& ndom_pts_ = VectorXi()) :
             dom_dim(dom_dim_),
             pt_dim(mdims_.sum()),
             npts(npts_),
-            mdims(mdims_),
-            structured(false)
+            mdims(mdims_)
         {
             domain.resize(npts, pt_dim);
 
@@ -66,19 +110,13 @@ namespace mfa
                 dim_maxs[k] = dim_mins[k] + var_dim(k) - 1;
             }
 
-            validate();
-        }   
-
-        // Constructor for (possibly) grid-aligned data
-        // If ndom_pts_ is empty, PointSet is unstructured
-        PointSet(
-                size_t          dom_dim_,
-                const VectorXi& mdims_,
-                size_t          npts_,
-                const VectorXi& ndom_pts_) :
-            PointSet(dom_dim_, mdims_, npts_)
-        {
+            // Does nothing if ndom_pts_ is empty
             add_grid(ndom_pts_);
+
+            // n.b. Param object must be constructed after grid is added
+            params = make_shared<Param<T>>(dom_dim, ndom_pts());
+
+            validate();
         }
 
         // Constructor for a PointSet mapped from existing parameters
@@ -91,8 +129,8 @@ namespace mfa
             pt_dim(mdims_.sum()),
             npts(params_->npts()),
             mdims(mdims_),
-            params(params_), 
-            structured(params->structured)
+            params(params_)
+            // structured(params->structured)
         {
             domain.resize(npts, pt_dim);
 
@@ -111,14 +149,17 @@ namespace mfa
                 add_grid(params_->ndom_pts);
         }
 
+        // Manually set (or override) domain bounding box.
+        // If bounds are not set manually, they will be computed during the 
+        // first call to dom_mins() or dom_maxs() by searching 'domain'
+        // for the min/max coordinates in each domain dimension.
         void set_bounds(const VectorX<T>& mins_, const VectorX<T>& maxs_)
         {
-            if ( (mins_.size() > 0 && mins_.size() != dom_dim) ||
-                 (mins_.size() != maxs_.size()) )
+            if ( (mins_.size() != dom_dim) || (mins_.size() != maxs_.size()) )
             {
                 cerr << "ERROR: Invalid bounds passed to PointSet" << endl;
-                cerr << "  dom_mins: " << mins_ << endl;
-                cerr << "  dom_maxs: " << maxs_ << endl;
+                cerr << "  mins: " << mins_.transpose() << endl;
+                cerr << "  maxs: " << maxs_.transpose() << endl;
                 exit(1);
             }
 
@@ -129,9 +170,38 @@ namespace mfa
 
             dom_mins = mins_;
             dom_maxs = maxs_;
+            bounds_cached = true;
         }
 
-        int nvars() const {return mdims.size() - 1;};
+        VectorX<T> mins() const
+        {
+            if (!bounds_cached)
+            {
+                dom_mins = domain.leftCols(dom_dim).colwise().minCoeff();
+                dom_maxs = domain.leftCols(dom_dim).colwise().maxCoeff();
+                bounds_cached = true;
+            }
+
+            return dom_mins;
+        }
+        
+        VectorX<T> maxs() const
+        {
+            if (!bounds_cached)
+            {
+                dom_mins = domain.leftCols(dom_dim).colwise().minCoeff();
+                dom_maxs = domain.leftCols(dom_dim).colwise().maxCoeff();
+                bounds_cached = true;
+            }
+
+            return dom_maxs;
+        }
+
+        T mins(int i) const {return mins()(i);}
+
+        T maxs(int i) const {return maxs()(i);}
+
+        int nvars() const {return mdims.size() - 1;}
 
         int geom_dim() const {return mdims[0];}
 
@@ -143,63 +213,122 @@ namespace mfa
 
         VectorXi model_dims() const {return mdims;}
 
-        // Initialize parameter values from domain points and bounding box (dom_mins/maxs)
-        //   N.B. If dom_mins/maxs are empty, they are set to be the min/max values of the
-        //        domain points during Param construction.
-        void init_params()
-        {
-            // If mins/maxs are NULL, set them to be the min/max coordinates of the pointset
-            if (dom_mins.size() == 0 || dom_maxs.size() == 0)
-            {
-                dom_mins = domain.leftCols(dom_dim).colwise().minCoeff();
-                dom_maxs = domain.leftCols(dom_dim).colwise().maxCoeff();
-            }
+        VectorXi ndom_pts() const {return g.ndom_pts;}
 
-            // n.b. A structured grid which has been rotated will still have its parameters computed correctly.
-            //      dom mins/maxs are not used in the computation of structured parameters, so the parameters
-            //      are computed to be the correct "rotated" grid
-            params = make_shared<Param<T>>(dom_dim, dom_mins, dom_maxs, ndom_pts, domain, structured);
-        }
+        int ndom_pts(int i) const {return g.ndom_pts(i);}
 
-        // Specify bounding box and initialize parameters simultaneously
-        void init_params(const VectorX<T>& dom_mins_, const VectorX<T>& dom_maxs_)
-        {
-            set_bounds(dom_mins_, dom_maxs_);
-            init_params();
-        }
+        bool is_structured() const {return g.initialized;}
+
+        shared_ptr<Param<T>> get_params_ptr() const {return params;}
 
         void set_params(shared_ptr<Param<T>> params_)
         {
-            if (params != nullptr)
-            {
-                cerr << "Warning: Overwriting existing parameters in PointSet" << endl;
-            }
+            // if (params != nullptr)
+            // {
+            //     cerr << "Warning: Overwriting existing parameters in PointSet" << endl;
+            // }
 
             if (!check_param_domain_agreement(*params_))
             {
-                cerr << "ERROR: Attempted to add mismatched Params to PointSet" << endl;
+                cerr << "ERROR: Attempted to add mismatched Params to PointSet. Exiting." << endl;
                 exit(1);
             }
  
             params = params_;
-
-            // If Param is structured and *this does not yet have a grid structure, inherit the 
-            // grid structure from Param
-            if (params_->structured && !this->structured)
-                add_grid(params_->ndom_pts);
         }
+
+        void set_params(const PointSet<T>& ps)
+        {
+            set_params(ps.get_params_ptr());
+        }
+
+        // Create Param object with a domain parametrization
+        void set_domain_params()
+        {
+            // n.b. A structured grid which has been rotated will still have its parameters computed correctly.
+            //      dom mins/maxs are not used in the computation of structured parameters, so the parameters
+            //      are computed to be the correct "rotated" grid
+            params->make_domain_params(domain);
+        }
+
+        // Create Param object with a domain parametrization, with a bounding
+        // box specified by [domain_mins, domain_maxs]
+        void set_domain_params(const VectorX<T>& domain_mins, const VectorX<T>& domain_maxs)
+        {
+            set_bounds(domain_mins, domain_maxs);
+
+            params->make_domain_params(domain, domain_mins, domain_maxs);
+        }
+
+        // Create Param object that is equispaced in parameter space
+        void set_grid_params()
+        {
+            //  Don't need this check anymore, enforce that grid size is existing ndom_pts
+            //
+            // // If the PointSet is already set as structured, make sure
+            // // that the grid sizes are consistent
+            // if (is_structured() && (ndom_pts() != ndom_pts_params))
+            // {
+            //     cerr << "Error: Tried to set Grid Params to a PointSet, but the grid sizes do not match! Exiting." << endl;
+            //     exit(1);
+            // }
+
+            if (!is_structured())
+            {
+                cerr << "ERROR: Cannot set grid parametrization to unstructured PointSet. Exiting." << endl;
+                exit(1);
+            }
+
+            // params = make_shared<Param<T>>(ndom_pts_params)
+            params->make_grid_params();
+        }
+
+        void set_curve_params()
+        {
+            if (!is_structured())
+            {
+                cerr << "ERROR: Cannot set curve parametrization to unstructured PointSet. Exiting." << endl;
+                exit(1);
+            }
+
+            params->make_curve_params(domain);
+        }
+
+        // // Initialize parameter values from domain points and bounding box (dom_mins/maxs)
+        // //   N.B. If dom_mins/maxs are empty, they are set to be the min/max values of the
+        // //        domain points during Param construction.
+        // void init_params()
+        // {
+        //     // If mins/maxs are NULL, set them to be the min/max coordinates of the pointset
+        //     if (dom_mins.size() == 0 || dom_maxs.size() == 0)
+        //     {
+        //         dom_mins = domain.leftCols(dom_dim).colwise().minCoeff();
+        //         dom_maxs = domain.leftCols(dom_dim).colwise().maxCoeff();
+        //     }
+
+        //     // n.b. A structured grid which has been rotated will still have its parameters computed correctly.
+        //     //      dom mins/maxs are not used in the computation of structured parameters, so the parameters
+        //     //      are computed to be the correct "rotated" grid
+        //     params = make_shared<Param<T>>(dom_dim, dom_mins, dom_maxs, ndom_pts, domain, structured);
+        // }
+
+        // // Specify bounding box and initialize parameters simultaneously
+        // void init_params(const VectorX<T>& dom_mins_, const VectorX<T>& dom_maxs_)
+        // {
+        //     set_bounds(dom_mins_, dom_maxs_);
+        //     init_params();
+        // }
+
+
 
 
         // Checks that the Param object does not contradict existing members of PointSet
-        //   N.B. If *this is structured, then Param object must be too.
-        //        However, if *this is not structured, Param is allowed to be structured;
-        //        this allows a new grid structure to be imposed from the Param grid structure.
-        bool check_param_domain_agreement(const Param<T>& params_)
+        bool check_param_domain_agreement(const Param<T>& params_) const
         {
             bool agreement =    (dom_dim == params_.dom_dim)
                             &&  (npts == params_.npts())
-                            &&  (structured ? params_.structured == true : true)
-                            &&  (structured ? ndom_pts == params_.ndom_pts : true)
+                            &&  (is_structured() == params_.structured)
+                            &&  (ndom_pts() == params_.ndom_pts)
                             ;
 
             return agreement;
@@ -223,9 +352,7 @@ namespace mfa
                     exit(1);
                 }
 
-                structured = true;
-                ndom_pts = ndom_pts_;
-                g.init(dom_dim, ndom_pts);
+                g.init(dom_dim, ndom_pts_);
 
                 validate(); // Prints warning and aborts if invalid
             }
@@ -239,8 +366,8 @@ namespace mfa
                             &&  (pt_dim > dom_dim)
                             &&  (pt_dim == domain.cols())
                             &&  (npts == domain.rows())
-                            &&  (structured ? ndom_pts.size() == dom_dim : true)
-                            &&  (structured ? ndom_pts.prod() == domain.rows() : true)
+                            &&  (is_structured() ? ndom_pts().size() == dom_dim : true)
+                            &&  (is_structured() ? ndom_pts().prod() == domain.rows() : true)
                             ;
 
             for (int k = 0; k < nvars(); k++)
@@ -254,11 +381,11 @@ namespace mfa
             else 
             {
                 cerr << "ERROR: PointSet initialized with incompatible data" << endl;
-                cerr << "  structured: " << boolalpha << structured << endl;
+                cerr << "  structured: " << boolalpha << is_structured() << endl;
                 cerr << "  dom_dim: " << dom_dim << ", geom_dim: " << geom_dim() << ",  pt_dim: " << pt_dim << endl;
                 cerr << "  npts: " << npts << endl;
                 cerr << "  ndom_pts: ";
-                for (size_t k=0; k < ndom_pts.size(); k++) 
+                for (size_t k=0; k < ndom_pts().size(); k++) 
                     cerr << ndom_pts(k) << " ";
                 cerr << endl;
                 cerr << "  domain matrix dims: " << domain.rows() << " x " << domain.cols() << endl;
@@ -284,15 +411,15 @@ namespace mfa
 
         bool is_same_layout(const PointSet<T>& ps, int verbose = 1) const
         {
-            bool is_same =      (dom_dim    == ps.dom_dim)
-                            &&  (pt_dim     == ps.pt_dim)
-                            &&  (npts       == ps.npts)
-                            &&  (structured == ps.structured)
-                            &&  (mdims == ps.mdims);
+            bool is_same =      (dom_dim        == ps.dom_dim)
+                            &&  (pt_dim         == ps.pt_dim)
+                            &&  (npts           == ps.npts)
+                            &&  (is_structured()== ps.is_structured())
+                            &&  (mdims          == ps.mdims);
             
-            if (structured)
+            if (is_structured())
             {
-                is_same = is_same && (ndom_pts == ps.ndom_pts);
+                is_same = is_same && (ndom_pts() == ps.ndom_pts());
             }
 
             if (is_same) return is_same;
@@ -304,10 +431,10 @@ namespace mfa
                     cerr << "  dom_dim    = " << dom_dim << ",\t" << ps.dom_dim << endl;
                     cerr << "  pt_dim     = " << pt_dim << ",\t" << ps.pt_dim << endl;
                     cerr << "  npts       = " << npts << ",\t" << ps.npts << endl;
-                    cerr << "  structured = " << boolalpha << structured << ",\t" << ps.structured << endl;
-                    if (structured || ps.structured)
+                    cerr << "  structured = " << boolalpha << is_structured() << ",\t" << ps.is_structured() << endl;
+                    if (is_structured() || ps.is_structured())
                     {
-                        cerr << "  ndom_pts: " << ndom_pts << ps.ndom_pts << endl;
+                        cerr << "  ndom_pts: " << ndom_pts() << ps.ndom_pts() << endl;
                     }
                     cerr << "  model_dims = " << mdims << "\n" << ps.mdims << endl;
                 }
@@ -382,9 +509,9 @@ namespace mfa
 
         public:
             PtIterator(const PointSet& pset_, size_t idx_) :
-                structured(pset_.structured),
+                structured(pset_.is_structured()),
                 lin_idx(idx_),
-                vol_it(structured ? VolIterator(pset_.ndom_pts, idx_) : VolIterator()),
+                vol_it(structured ? VolIterator(pset_.ndom_pts(), idx_) : VolIterator()),
                 pset(pset_)
             { }
 
@@ -501,7 +628,7 @@ namespace mfa
 
         void pt_params(size_t idx, VectorX<T>& param_vec) const
         {
-            if(structured)
+            if(is_structured())
             {
                 VectorXi ijk(dom_dim);
                 g.idx2ijk(idx, ijk);

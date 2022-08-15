@@ -260,12 +260,11 @@ int main(int argc, char** argv)
     // compute the norms of analytical errors synthetic function w/o noise at different domain points than the input
     if (ntest > 0)
     {
-        real_t L1, L2, Linf;                                // L-1, 2, infinity norms
+        int nvars = model_dims.size() - 1;
+        vector<real_t> L1(nvars), L2(nvars), Linf(nvars);                                // L-1, 2, infinity norms
         d_args.ndom_pts = vector<int>(dom_dim, ntest);      // Change grid to testing resolution
-
-        vector<vec3d> unused;
         master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-                { b->analytical_error(cp, input, L1, L2, Linf, d_args, false, unused, NULL, unused, NULL); });
+                { b->analytical_error_field(cp, input, L1, L2, Linf, d_args); });
 
         // print analytical errors
         fprintf(stderr, "\n------ Analytical error norms -------\n");

@@ -106,7 +106,7 @@ namespace mfa
                 }
 
                 // in case of single tensor and structured data, don't allow more control points than input points
-                if (mfa_data.tmesh.tensor_prods.size() == 1 && input.structured &&
+                if (mfa_data.tmesh.tensor_prods.size() == 1 && input.is_structured() &&
                         mfa_data.tmesh.tensor_prods[0].nctrl_pts(k) + inserted_knot_idxs[k].size() > input.ndom_pts(k))
                 {
                     fmt::print(stderr, "OrigInsertKnots(): Unable to insert {} knots in dimension {} because {} control points would outnumber {} input points.\n",
@@ -189,7 +189,7 @@ namespace mfa
                 }
 
                 // in case of single tensor and structured data, don't allow more control points than input points
-                if (mfa_data.tmesh.tensor_prods.size() == 1 && input.structured &&
+                if (mfa_data.tmesh.tensor_prods.size() == 1 && input.is_structured() &&
                         mfa_data.tmesh.tensor_prods[0].nctrl_pts(k) + inserted_knot_idxs[k].size() > input.ndom_pts(k))
                 {
                     fmt::print(stderr, "InsertKnots(): Unable to insert {} knots in dimension {} because {} control points would outnumber {} input points.\n",
@@ -385,7 +385,7 @@ namespace mfa
             VectorXi span_ijk(dom_dim);
             VectorXi param_ijk(dom_dim);
 
-            VolIterator dom_iter(input.ndom_pts);                       // iterator over input domain points
+            VolIterator dom_iter(input.ndom_pts());                       // iterator over input domain points
 
             // debug: sorted set of inserted knots for comparing serial w/ TBB
             set<InsertedKnot, Compare> inserted_knots;

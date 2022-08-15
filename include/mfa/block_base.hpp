@@ -211,7 +211,7 @@ struct BlockBase
             int                               max_rounds,
             MFAInfo&                          info)
     {
-        if (!input->structured)
+        if (!input->is_structured())
         {
             // Can't use adaptive encoding until support for unstructured data is
             // added to NewKnots and tmesh.all_knot_param_idxs
@@ -227,7 +227,6 @@ struct BlockBase
     // decode entire block at the same parameter locations as 'input'
     void decode_block(
             const   diy::Master::ProxyWithLink& cp,
-            int                                 verbose,        // debug level
             bool                                saved_basis)    // whether basis functions were saved and can be reused
     {
         if (approx)
@@ -245,13 +244,8 @@ struct BlockBase
         const   diy::Master::ProxyWithLink& cp,
         vector<int>&                        grid_size)
     {
-        VectorXi grid_npts(dom_dim);
-        for (int k = 0; k < dom_dim; k++)
-        {
-            grid_npts(k) = grid_size[k];
-        }
-
-        shared_ptr<mfa::Param<T>> grid_params = make_shared<mfa::Param<T>>(grid_npts, VectorX<T>::Zero(dom_dim), VectorX<T>::Ones(dom_dim));
+        shared_ptr<mfa::Param<T>> grid_params = make_shared<mfa::Param<T>>(dom_dim, grid_size);
+        grid_params->make_grid_params();
 
         if (approx)
         {
@@ -764,7 +758,7 @@ struct BlockBase
     void DecodeRequestGrid(int verbose,
                            MatrixX<T> &localBlock) // local block is in a grid, in lexicographic order
     {
-        VectorXi &ndpts = input->ndom_pts;
+        VectorXi ndpts = input->ndom_pts();
 
         VectorX<T> min_bd(dom_dim);
         VectorX<T> max_bd(dom_dim);
@@ -1512,7 +1506,7 @@ namespace diy
                         diy::save(bb, ps->dom_dim);
                         diy::save(bb, ps->model_dims());
                         diy::save(bb, ps->npts);
-                        diy::save(bb, ps->ndom_pts);
+                        diy::save(bb, ps->ndom_pts());
 
                         if (ps->params.get() == nullptr)
                         {
@@ -1559,7 +1553,7 @@ namespace diy
                         diy::load(bb, load_param);
                         if (load_param)
                         {
-                            ps->params = make_shared<mfa::Param<T>>();
+                            ps->params = make_shared<mfa::Param<T>>(dom_dim, ndom_pts);
                             diy::load(bb, *(ps->params));
                         }
                         diy::load(bb, dom_mins);

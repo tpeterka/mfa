@@ -22,8 +22,10 @@
 #include    "writer.hpp"
 #include    "block.hpp"
 
+// TODO: Only scalar-valued and 3D vector-valued variables are supported (because of the VTK writer)
+// If a variable has a different output dimension, the writer will skip that variable and continue.
 template<typename T>
-void write_pointset_vtk(mfa::PointSet<T>* ps, char* filename)
+void write_pointset_vtk(mfa::PointSet<T>* ps, char* filename, int sci_var = -1)
 {
     if (ps == nullptr)
     {
@@ -38,10 +40,28 @@ void write_pointset_vtk(mfa::PointSet<T>* ps, char* filename)
 
     int dom_dim = ps->dom_dim;
     int pt_dim  = ps->pt_dim;
-    int nvars = pt_dim - dom_dim;   // TODO: this assumes all vars are scalar
+    int geom_dim = ps->geom_dim();
+    int nvars = ps->nvars();
+    bool include_var = true;        // Include the specified science variable in the geometry coordinates
+    int var_col = ps->model_dims().head(sci_var + 1).sum(); // column of the variable to be visualized
+
+    if (geom_dim < 1 || geom_dim > 3)
+    {
+        cerr << "Did not write " << filename << " due to improper dimension in pointset" << endl;
+        return;
+    }
+    if (ps->var_dim(sci_var) != 1 && geom_dim < 3)
+    {
+        cerr << "For " << filename << ", specified science variable (#" << sci_var << ") is not a scalar. Output will be planar." << endl;
+        include_var = false;
+    }
+    if (sci_var < 0)
+    {
+        include_var = false;
+    }
 
     vector<int> npts_dim;  // only used if data is structured
-    if (ps->structured)
+    if (ps->is_structured())
     {
         for (size_t k = 0; k < 3; k++)
         {
@@ -53,38 +73,64 @@ void write_pointset_vtk(mfa::PointSet<T>* ps, char* filename)
     }
     
     float** pt_data = new float*[nvars];
-    for (size_t j = 0; j < nvars; j++)
+    for (size_t k = 0; k < nvars; k++)
     {
-        pt_data[j]  = new float[ps->npts];
+        pt_data[k]  = new float[ps->npts * ps->var_dim(k)];
     }
 
     vec3d           pt;
     vector<vec3d>   pt_coords;
-    for (size_t j = 0; j < (size_t)(ps->npts); j++)
+    for (int j = 0; j < ps->npts; j++)
     {
-        pt.x = ps->domain(j, 0);                      // first 3 dims stored as mesh geometry
-        pt.y = ps->domain(j, 1);
-        pt.z = pt_dim > 2 ? ps->domain(j, 2) : 0.0;
+        // Add geometric coordinates
+        if (geom_dim == 1)
+        {
+            pt.x = ps->domain(j, 0);
+            pt.y = include_var ? ps->domain(j, var_col) : 0.0;
+            pt.z = 0.0;
+        }
+        else if (geom_dim == 2)
+        {
+            pt.x = ps->domain(j, 0);
+            pt.y = ps->domain(j, 1);
+            pt.z = include_var ? ps->domain(j, var_col) : 0.0;
+        }
+        else
+        {
+            pt.x = ps->domain(j, 0);
+            pt.y = ps->domain(j, 1);
+            pt.z = ps->domain(j, 2);
+        }
         pt_coords.push_back(pt);
 
-        for (int k = 0; k < nvars; k++)                         // science variables
-            pt_data[k][j] = ps->domain(j, dom_dim + k);
+        // Add science variable data
+        int offset_idx = 0;
+        int all_vars_dim = pt_dim - geom_dim;
+        for (int k = 0; k < nvars; k++)
+        {
+            int vd = ps->var_dim(k);
+            for (int l = 0; l < vd; l++)
+            {
+                pt_data[k][j*vd + l] = ps->domain(j, geom_dim + offset_idx);
+                offset_idx++;
+            }
+        }    
     }
 
     // science variable settings
     int* vardims        = new int[nvars];
     char** varnames     = new char*[nvars];
     int* centerings     = new int[nvars];
-    for (int i = 0; i < nvars; i++)
+    for (int k = 0; k < nvars; k++)
     {
-        vardims[i]      = 1;                                // TODO; treating each variable as a scalar (for now)
-        varnames[i]     = new char[256];
-        centerings[i]   = 1;
-        sprintf(varnames[i], "var%d", i);
+        vardims[k]      = ps->var_dim(k);
+        varnames[k]     = new char[256];
+        centerings[k]   = 1;
+        sprintf(varnames[k], "var%d", k);
     }
 
     // write raw original points
-    if (ps->structured)
+    if (ps->is_structured())
     {
         write_curvilinear_mesh(
             /* const char *filename */                  filename,
@@ -134,9 +180,9 @@ void PrepRenderingData(
     vec3d p;
 
     // number of geometry dimensions and science variables
-    int ndom_dims   = block->mfa->geom_dim;          // number of geometry dims
-    nvars           = block->mfa->nvars();                       // number of science variables
-    pt_dim          = block->mfa->pt_dim;                     // dimensionality of point
+    int ndom_dims   = block->mfa->geom_dim();               // number of geometry dims
+    nvars           = block->mfa->nvars();                  // number of science variables
+    pt_dim          = block->mfa->pt_dim;                   // dimensionality of point
 
 
     // geometry control points
@@ -345,54 +391,27 @@ void write_vtk_files(
 void test_and_write(Block<real_t>*                      b,
                     const diy::Master::ProxyWithLink&   cp,
                     string                              input,
+                    int                                 sci_var,
                     DomainArgs&                         args)
 {
-    int                         nvars;              // number of science variables
-    vector<int>                 ntest_pts;          // number of test points in each dim.
-    vector<vec3d>               true_pts;           // locations of true points (<= 3d) (may include data value in 2nd or 3rd coord)
-    vector<vec3d>               test_pts;           // locations of test points (<= 3d) (may include data value in 2nd or 3rd coord)
-    float**                     true_data;          // true data values (4d)
-    float**                     test_data;          // test data values (4d)
-
-    DomainArgs* a   = &args;
-
-    nvars = b->mfa->nvars();
     if (!b->dom_dim)
         b->dom_dim =  b->mfa->dom_dim;
 
     // default args for evaluating analytical functions
-    for (auto i = 0; i < nvars; i++)
+    for (auto i = 0; i < b->mfa->nvars(); i++)
     {
-        a->f[i] = 1.0;
+        args.f[i] = 1.0;
         if (input == "sine")
-            a->s[i] = i + 1;
+            args.s[i] = i + 1;
         if (input == "sinc")
-            a->s[i] = 10.0 * (i + 1);
-    }
-
-    // number of test points
-    size_t tot_ntest = 1;
-    for (auto j = 0; j < b->dom_dim; j++)
-    {
-        ntest_pts.push_back(a->ndom_pts[j]);
-        tot_ntest *= a->ndom_pts[j];
-    }
-
-    true_pts.resize(tot_ntest);
-    test_pts.resize(tot_ntest);
-
-    // allocate variable data
-    true_data = new float*[nvars];
-    test_data = new float*[nvars];
-    for (size_t j = 0; j < nvars; j++)
-    {
-        true_data[j] = new float[tot_ntest];
-        test_data[j] = new float[tot_ntest];
+            args.s[i] = 10.0 * (i + 1);
     }
 
     // compute the norms of analytical errors synthetic function w/o noise at different domain points than the input
-    real_t L1, L2, Linf;                                // L-1, 2, infinity norms
-    b->analytical_error(cp, input, L1, L2, Linf, args, true, true_pts, true_data, test_pts, test_data);
+    int nvars = b->mfa->nvars();
+    vector<real_t> L1(nvars), L2(nvars), Linf(nvars);                                // L-1, 2, infinity norms
+    mfa::PointSet<real_t> *exact_pts = nullptr, *approx_pts = nullptr, *error_pts = nullptr;
+    b->analytical_error_field(cp, input, L1, L2, Linf, args, exact_pts, approx_pts, error_pts);
 
     // print analytical errors
     fprintf(stderr, "\n------ Analytical error norms -------\n");
@@ -401,62 +420,17 @@ void test_and_write(Block<real_t>*                      b,
     fprintf(stderr, "L-infinity norm = %e\n", Linf);
     fprintf(stderr, "-------------------------------------\n\n");
 
-    // pad dimensions up to 3
-    for (auto i = 0; i < 3 - b->dom_dim; i++)
-        ntest_pts.push_back(1);
+    char exact_filename[256], approx_filename[256], error_filename[256];
+    sprintf(exact_filename, "test_exact_pts_gid_%d.vtk", cp.gid());
+    sprintf(approx_filename, "test_approx_pts_gid_%d.vtk", cp.gid());
+    sprintf(error_filename, "test_error_pts_gid_%d.vtk", cp.gid());
+    write_pointset_vtk(exact_pts, exact_filename, sci_var);
+    write_pointset_vtk(approx_pts, approx_filename, sci_var);
+    write_pointset_vtk(error_pts, error_filename, sci_var);
 
-    int* vardims        = new int[nvars];
-    char** varnames     = new char*[nvars];
-    int* centerings     = new int[nvars];
-    float* vars;
-    for (int i = 0; i < nvars; i++)
-    {
-        vardims[i]      = 1;                                // TODO; treating each variable as a scalar (for now)
-        varnames[i]     = new char[256];
-        centerings[i]   = 1;
-        sprintf(varnames[i], "var%d", i);
-    }
-
-    // write true points
-    char filename[256];
-    sprintf(filename, "true_points_gid_%d.vtk", cp.gid());
-    write_curvilinear_mesh(
-            /* const char *filename */                  filename,
-            /* int useBinary */                         0,
-            /* int *dims */                             &ntest_pts[0],
-            /* float *pts */                            &(true_pts[0].x),
-            /* int nvars */                             nvars,
-            /* int *vardim */                           vardims,
-            /* int *centering */                        centerings,
-            /* const char * const *varnames */          varnames,
-            /* float **vars */                          true_data);
-
-    // write test points
-    sprintf(filename, "test_points_gid_%d.vtk", cp.gid());
-    write_curvilinear_mesh(
-            /* const char *filename */                  filename,
-            /* int useBinary */                         0,
-            /* int *dims */                             &ntest_pts[0],
-            /* float *pts */                            &(test_pts[0].x),
-            /* int nvars */                             nvars,
-            /* int *vardim */                           vardims,
-            /* int *centering */                        centerings,
-            /* const char * const *varnames */          varnames,
-            /* float **vars */                          test_data);
-
-
-    delete[] vardims;
-    for (int i = 0; i < nvars; i++)
-        delete[] varnames[i];
-    delete[] varnames;
-    delete[] centerings;
-    for (int j = 0; j < nvars; j++)
-    {
-        delete[] true_data[j];
-        delete[] test_data[j];
-    }
-    delete[] true_data;
-    delete[] test_data;
+    delete exact_pts;
+    delete approx_pts;
+    delete error_pts;
 }
 
 int main(int argc, char ** argv)
@@ -465,21 +439,12 @@ int main(int argc, char ** argv)
     diy::mpi::environment  env(argc, argv);       // equivalent of MPI_Init(argc, argv)/MPI_Finalize()
     diy::mpi::communicator world;                 // equivalent of MPI_COMM_WORLD
 
-    int                         nvars;              // number of science variables (excluding geometry)
-    vector<int>                 nraw_pts;           // number of input points in each dim.
-    vector<vec3d>               raw_pts;            // input raw data points (<= 3d)
-    float**                     raw_data;           // input raw data values (4d)
-    vector<vec3d>               geom_ctrl_pts;      // control points (<= 3d) in geometry
-    vector < vector <vec3d> >   vars_ctrl_pts;      // control points (<= 3d) in science variables
-    float**                     vars_ctrl_data;     // control point data values (4d)
-    vector<vec3d>               approx_pts;         // aproximated data points (<= 3d)
-    float**                     approx_data;        // approximated data values (4d)
-    vector<vec3d>               err_pts;            // abs value error field
     string                      input  = "sine";        // input dataset
     int                         ntest  = 0;             // number of input test points in each dim for analytical error tests
     string                      infile = "approx.mfa";  // diy input file
     bool                        help;                   // show help
     int                         dom_dim, pt_dim;        // domain and point dimensionality, respectively
+    int                         sci_var = 0;            // science variable to render geometrically for 1d and 2d domains
 
     // get command line arguments
     opts::Options ops;
@@ -535,8 +500,17 @@ int main(int argc, char ** argv)
     if (ntest <= 0)
         exit(0);
 
+    // Get dimensions of each science variable from the loaded MFA
+    VectorXi model_dims = master.block<Block<real_t>>(0)->mfa->model_dims();
+    vector<int> mdims(model_dims.size());
+    for (int i = 0; i < model_dims.size(); i++)
+    {
+        mdims[i] = model_dims(i);
+    }
+
     // arguments for analytical functions
-    DomainArgs d_args(dom_dim, pt_dim);
+    DomainArgs d_args(dom_dim, mdims);
+    d_args.ndom_pts = vector<int>(dom_dim, ntest);
 
     if (input == "sine")
     {
@@ -587,9 +561,6 @@ int main(int argc, char ** argv)
 
     // compute the norms of analytical errors of synthetic function w/o noise at test points
     // and write true points and test points to vtk
-    for (int i = 0; i < dom_dim; i++)
-        d_args.ndom_pts[i] = ntest;
-
     master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-            { test_and_write(b, cp, input, d_args); });
+            { test_and_write(b, cp, input, sci_var, d_args); });
 }
