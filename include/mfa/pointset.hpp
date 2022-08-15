@@ -48,42 +48,8 @@ namespace mfa
         mutable bool            bounds_cached{false};   // Flag if existing domain bounds are valid
 
         // Optional grid data
-        // bool        structured;
-        // VectorXi    ndom_pts;   // TODO: remove since this is contained in GridInfo?  
         GridInfo    g;
 
-        // // TODO Remove this constructor in favor of the next one
-        // // 
-        // // Generic constructor with only dimensionality and total points
-        // PointSet(
-        //         size_t          dom_dim_,
-        //         const VectorXi& mdims_,
-        //         size_t          npts_) :
-        //     dom_dim(dom_dim_),
-        //     pt_dim(mdims_.sum()),
-        //     npts(npts_),
-        //     mdims(mdims_)
-        //     // structured(false)
-        // {
-        //     domain.resize(npts, pt_dim);
-
-        //     // Fill dim_mins/maxs
-        //     dim_mins.resize(nvars());
-        //     dim_maxs.resize(nvars());
-        //     dim_mins[0] = geom_dim();
-        //     dim_maxs[0] = dim_mins[0] + var_dim(0) - 1;
-        //     for (int k = 1; k < nvars(); k++)
-        //     {
-        //         dim_mins[k] = dim_maxs[k-1] + 1;
-        //         dim_maxs[k] = dim_mins[k] + var_dim(k) - 1;
-        //     }
-
-        //     validate();
-        // }   
-
-        // Constructor for (possibly) grid-aligned data
-        // If ndom_pts_ is empty, PointSet is unstructured
-        // 
         // This constructs an unfilled Param object that shares its
         // dom_dim and grid structure with the PointSet. The Param object can
         // be filled with a subsequent call to the set_###_params() methods
@@ -149,7 +115,7 @@ namespace mfa
                 add_grid(params_->ndom_pts);
         }
 
-        // Manually set (or override) domain bounding box.
+        // Manually set (or overwrite) domain bounding box.
         // If bounds are not set manually, they will be computed during the 
         // first call to dom_mins() or dom_maxs() by searching 'domain'
         // for the min/max coordinates in each domain dimension.
@@ -223,11 +189,6 @@ namespace mfa
 
         void set_params(shared_ptr<Param<T>> params_)
         {
-            // if (params != nullptr)
-            // {
-            //     cerr << "Warning: Overwriting existing parameters in PointSet" << endl;
-            // }
-
             if (!check_param_domain_agreement(*params_))
             {
                 cerr << "ERROR: Attempted to add mismatched Params to PointSet. Exiting." << endl;
@@ -263,23 +224,12 @@ namespace mfa
         // Create Param object that is equispaced in parameter space
         void set_grid_params()
         {
-            //  Don't need this check anymore, enforce that grid size is existing ndom_pts
-            //
-            // // If the PointSet is already set as structured, make sure
-            // // that the grid sizes are consistent
-            // if (is_structured() && (ndom_pts() != ndom_pts_params))
-            // {
-            //     cerr << "Error: Tried to set Grid Params to a PointSet, but the grid sizes do not match! Exiting." << endl;
-            //     exit(1);
-            // }
-
             if (!is_structured())
             {
                 cerr << "ERROR: Cannot set grid parametrization to unstructured PointSet. Exiting." << endl;
                 exit(1);
             }
 
-            // params = make_shared<Param<T>>(ndom_pts_params)
             params->make_grid_params();
         }
 
@@ -293,35 +243,7 @@ namespace mfa
 
             params->make_curve_params(domain);
         }
-
-        // // Initialize parameter values from domain points and bounding box (dom_mins/maxs)
-        // //   N.B. If dom_mins/maxs are empty, they are set to be the min/max values of the
-        // //        domain points during Param construction.
-        // void init_params()
-        // {
-        //     // If mins/maxs are NULL, set them to be the min/max coordinates of the pointset
-        //     if (dom_mins.size() == 0 || dom_maxs.size() == 0)
-        //     {
-        //         dom_mins = domain.leftCols(dom_dim).colwise().minCoeff();
-        //         dom_maxs = domain.leftCols(dom_dim).colwise().maxCoeff();
-        //     }
-
-        //     // n.b. A structured grid which has been rotated will still have its parameters computed correctly.
-        //     //      dom mins/maxs are not used in the computation of structured parameters, so the parameters
-        //     //      are computed to be the correct "rotated" grid
-        //     params = make_shared<Param<T>>(dom_dim, dom_mins, dom_maxs, ndom_pts, domain, structured);
-        // }
-
-        // // Specify bounding box and initialize parameters simultaneously
-        // void init_params(const VectorX<T>& dom_mins_, const VectorX<T>& dom_maxs_)
-        // {
-        //     set_bounds(dom_mins_, dom_maxs_);
-        //     init_params();
-        // }
-
-
-
-
+        
         // Checks that the Param object does not contradict existing members of PointSet
         bool check_param_domain_agreement(const Param<T>& params_) const
         {

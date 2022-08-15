@@ -34,86 +34,18 @@ namespace mfa
         int                     dom_dim{0};         // dimensionality of domain
         bool                    structured{false};  // true if points lie on structured grid
 
-        // // Default constructor
-        // Param() : dom_dim(0), structured(true) { }
-
-        // // Constructor for equispaced grid over all of parameter space
-        // Param(const VectorXi& ndom_pts_) :
-        //     ndom_pts(ndom_pts_),
-        //     dom_dim(ndom_pts.size()),
-        //     structured(true)
-        // {
-        //     VectorX<T>  param_mins = VectorX<T>::Zero(dom_dim);
-        //     VectorX<T>  param_maxs = VectorX<T>::Ones(dom_dim);
-
-        //     make_grid_params(ndom_pts, param_mins, param_maxs);
-        // }
-
-        // DEPRECATED in favor of having a single constructor and then calling make_grid_params()
-        // 
-        // // Constructor for equispaced grid over subset of parameter space
-        // // N.B. If ndom_pts_(k) = 1 in any dimension, then we expect param_mins_(k) == param_maxs_(k)
-        // Param(  const VectorXi&     ndom_pts_,
-        //         const VectorX<T>&   param_mins_ = VectorX<T>::Zero(ndom_pts_.size()),
-        //         const VectorX<T>&   param_maxs_ = VectorX<T>::Ones(ndom_pts_.size())) :
-        //     ndom_pts(ndom_pts_),
-        //     dom_dim(ndom_pts.size()),
-        //     structured(true)
-        // {
-        //     make_grid_params(param_mins_, param_maxs_);
-        // }
-
-        // DEPRECATED see above
-        //
-        // // Convenience constructor to make equispaced grid of params
-        // // from an STL vector
-        // Param(const vector<int>& ndom_pts_) :
-        //     Param(Eigen::Map<VectorXi>(&ndom_pts_[0], ndom_pts_.size()))
-        // { }
-
         Param(int dom_dim_, const vector<int>& ndom_pts_) :
             Param(dom_dim_, Eigen::Map<VectorXi>(&ndom_pts_[0], ndom_pts_.size()))
         { }
 
         // General constructor for creating unspecified  params with an optional grid structure
-        Param(  int                 dom_dim_,           // domain dimensionality
-                // const VectorX<T>&   dom_mins_,          // minimal extents of bounding box in each dimension (optional, important when data does not cover domain)
-                // const VectorX<T>&   dom_maxs_,          // maximal extents of bounding box in each dimension (see above)
-                const VectorXi&     ndom_pts_ = VectorX<T>()) :          // number of input data points in each dim
-                // const MatrixX<T>&   domain_,            // physical coordinates of points
-                // bool                structured_) :
+        Param(  int                 dom_dim_,                       // domain dimensionality
+                const VectorXi&     ndom_pts_ = VectorX<T>()) :     // number of input data points in each dim (optional)
+
             dom_dim(dom_dim_),
             ndom_pts(ndom_pts_),
             structured(ndom_pts_.size() > 0)
         { }
-//             // TODO: replace with warnings?
-//             if (structured == true)
-//                 assert(ndom_pts.size() > 0);
-//             if (structured == false)
-//                 assert(ndom_pts.size() == 0);
-
-//             // check dimensionality for sanity
-//             assert(dom_dim < domain_.cols());
-
-//             // precompute curve parameters and knots for input points
-//             param_grid.resize(dom_dim);
-
-// #ifdef CURVE_PARAMS
-//             if (structured)
-//                 CurveParams(domain_, param_grid);           // params spaced according to the curve length (per P&T)
-//             else
-//             {
-//                 cerr << "ERROR: Cannot set curve parametrization to unstructured input" << endl;
-//                 exit(1);
-//             }
-// #else
-//             if (structured)
-//                 make_domain_params_structured(domain_);          // params spaced according to domain spacing
-//             else
-//                 make_domain_params_unstructured(domain_, dom_mins_, dom_maxs_);
-// #endif
-//             // print();
-        // }
 
         int npts() const
         {
