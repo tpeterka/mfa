@@ -226,7 +226,6 @@ struct Block : public BlockBase<T>
 
         // Create input data set and add to block
         input = new mfa::PointSet<T>(dom_dim, mdims, a->tot_ndom_pts);
-        input->set_bounds(core_mins, core_maxs);
 
         // Choose a system-dependent seed if seed==0
         if (seed == 0)
@@ -251,10 +250,10 @@ struct Block : public BlockBase<T>
         {
             for (size_t k = 0; k < gdim; k++)
             {
-                centers(k,nv) = input->mins(k) + u_dist(df_gen) * (input->maxs(k) - input->mins(k));
+                centers(k,nv) = core_mins(k) + u_dist(df_gen) * (core_maxs(k) - core_mins(k));
             }
 
-            radii(nv) = radii_frac * (input->maxs() - input->mins()).minCoeff();
+            radii(nv) = radii_frac * (core_maxs - core_mins).minCoeff();
         }
 
         VectorX<T> dom_pt(gdim);
@@ -268,7 +267,7 @@ struct Block : public BlockBase<T>
                 // Generate a random point
                 for (size_t k = 0; k < gdim; k++)
                 {
-                    candidate_pt(k) = input->mins(k) + u_dist(df_gen) * (input->maxs(k) - input->mins(k));
+                    candidate_pt(k) = core_mins(k) + u_dist(df_gen) * (core_maxs(k) - core_mins(k));
                 }
 
                 // Consider discarding point if within a certain radius of a void
@@ -316,11 +315,11 @@ struct Block : public BlockBase<T>
         this->setup_MFA(cp, mfa_info);
 
         // extents
-        fprintf(stderr, "gid = %d\n", cp.gid());
-        cerr << "core_mins:\n" << core_mins << endl;
-        cerr << "core_maxs:\n" << core_maxs << endl;
-        cerr << "bounds_mins:\n" << bounds_mins << endl;
-        cerr << "bounds_maxs:\n" << bounds_maxs << endl;
+        cerr << "gid = " << cp.gid() << endl;
+        cerr << "core_mins:\n" << core_mins.transpose() << endl;
+        cerr << "core_maxs:\n" << core_maxs.transpose() << endl;
+        cerr << "bounds_mins:\n" << bounds_mins.transpose() << endl;
+        cerr << "bounds_maxs:\n" << bounds_maxs.transpose() << endl;
     }
 
     // Creates a synthetic dataset on a rectilinear grid of points
@@ -484,11 +483,11 @@ struct Block : public BlockBase<T>
         this->setup_MFA(cp, mfa_info);
 
         // extents
-        fprintf(stderr, "gid = %d\n", cp.gid());
-        cerr << "core_mins:\n" << this->core_mins << endl;
-        cerr << "core_maxs:\n" << this->core_maxs << endl;
-        cerr << "bounds_mins:\n" << this->bounds_mins << endl;
-        cerr << "bounds_maxs:\n" << this->bounds_maxs << endl;
+        cerr << "gid = " << cp.gid() << endl;
+        cerr << "core_mins: " << core_mins.transpose() << endl;
+        cerr << "core_maxs: " << core_maxs.transpose() << endl;
+        cerr << "bounds_mins: " << bounds_mins.transpose() << endl;
+        cerr << "bounds_maxs: " << bounds_maxs.transpose() << endl;
     }
 
     // read a floating point 3d vector dataset and take one 1-d curve out of the middle of it

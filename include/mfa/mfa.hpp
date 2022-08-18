@@ -348,6 +348,26 @@ struct MFAInfo
         return;
     }
 
+    // Reduce the number of control points of each model for a strong scaling study
+    void splitStrongScaling(vector<int> divs)
+    {
+        for (int i = 0; i < dom_dim; i++)
+        {
+            // Divide geometry control points
+            int gn = geom_model_info.nctrl_pts(i);
+            int gp = geom_model_info.p(i);
+            geom_model_info.nctrl_pts(i) = (gn / divs[i] > gp) ? gn / divs[i] : gp + 1;
+
+            // Divide each variable's control points
+            for (int k = 0; k < nvars(); k++)
+            {
+                int vn = var_model_infos[k].nctrl_pts(i);
+                int vp = var_model_infos[k].p(i);
+                var_model_infos[k].nctrl_pts(i) = (vn / divs[i] > vp) ? vn / divs[i] : vp + 1;
+            }
+        }
+    }
+
     void reset()
     {
         geom_model_info = ModelInfo();

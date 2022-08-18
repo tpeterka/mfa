@@ -23,6 +23,7 @@
 #include "opts.h"
 
 #include "block.hpp"
+#include "example-setup.hpp"
 
 using namespace std;
 
@@ -39,23 +40,38 @@ int main(int argc, char** argv)
     // default command line arguments
     int    pt_dim       = 3;                    // dimension of input points
     int    dom_dim      = 2;                    // dimension of domain (<= pt_dim)
+    int    scalar       = 1;                    // flag for scalar or vector-valued science variables (0 == multiple scalar vars)
     int    geom_degree  = 1;                    // degree for geometry (same for all dims)
     int    vars_degree  = 4;                    // degree for science variables (same for all dims)
     int    ndomp        = 100;                  // input number of domain points (same for all dims)
     int    geom_nctrl   = -1;                   // input number of control points for geometry (same for all dims)
-    int    vars_nctrl   = 11;                   // input number of control points for all science variables (same for all dims)
+    vector<int> vars_nctrl   = {11};                   // input number of control points for all science variables (same for all dims)
     string input        = "sine";               // input dataset
     int    weighted     = 1;                    // solve for and use weights (bool 0 or 1)
     int    strong_sc    = 1;                    // strong scaling (bool 0 or 1, 0 = weak scaling)
     real_t ghost        = 0.1;                  // amount of ghost zone overlap as a factor of block size (0.0 - 1.0)
     int    error        = 1;                    // decode all input points and check error (bool 0 or 1)
     string infile;                              // input file name
+    int    verbose      = 1;
     bool   help;                                // show help
+
+    // Constants for this example
+    const bool      adaptive        = false;
+    const int       structured      = 1;
+    const int       rand_seed       = -1;
+    const real_t    regularization  = 0; 
+    const int       reg1and2        = 0;
+    const int       ntest           = 0;
+    const real_t    noise           = 0;
+
+    // Define list of example keywords
+    set<string> analytical_signals = {"sine", "cosine", "sinc", "psinc1", "psinc2", "psinc3", "ml", "f16", "f17", "f18"};
 
     // get command line arguments
     opts::Options ops;
     ops >> opts::Option('d', "pt_dim",      pt_dim,     " dimension of points");
     ops >> opts::Option('m', "dom_dim",     dom_dim,    " dimension of domain");
+    ops >> opts::Option('l', "scalar",      scalar,     " flag for scalar or vector-valued science variables");
     ops >> opts::Option('p', "geom_degree", geom_degree," degree in each dimension of geometry");
     ops >> opts::Option('q', "vars_degree", vars_degree," degree in each dimension of science variables");
     ops >> opts::Option('n', "ndomp",       ndomp,      " number of input points in each dimension of domain");
@@ -75,39 +91,12 @@ int main(int argc, char** argv)
         return 1;
     }
 
-    // minimal number of geometry control points if not specified
-    if (geom_nctrl == -1)
-        geom_nctrl = geom_degree + 1;
-
-    // echo args
+    // print input arguments
     if (world.rank() == 0)
-    {
-        fprintf(stderr, "\n--------- Input arguments ----------\n");
-        cerr <<
-            "pt_dim = "         << pt_dim       << " dom_dim = "        << dom_dim      <<
-            "\ngeom_degree = "  << geom_degree  << " vars_degree = "    << vars_degree  <<
-            "\ninput pts = "    << ndomp        << " geom_ctrl pts = "  << geom_nctrl   <<
-            "\nvars_ctrl_pts = "<< vars_nctrl   << " input = "          << input        <<
-            " tot_blocks = "    << tot_blocks   << " strong scaling = " << strong_sc    << endl;
-#ifdef CURVE_PARAMS
-        cerr << "parameterization method = curve" << endl;
-#else
-        cerr << "parameterization method = domain" << endl;
-#endif
-#ifdef MFA_NO_TBB
-    cerr << "TBB: off" << endl;
-#else
-    cerr << "TBB: on" << endl;
-#endif
-#ifdef MFA_NO_WEIGHTS
-    weighted = 0;
-    cerr << "weighted = 0" << endl;
-#else
-    cerr << "weighted = " << weighted << endl;
-#endif
-        fprintf(stderr, "-------------------------------------\n\n");
-    }
+        echo_args("fixed multiblock test", pt_dim, dom_dim, scalar, geom_degree, geom_nctrl, vars_degree, vars_nctrl,
+                ndomp, ntest, input, infile, analytical_signals, noise, structured, weighted, adaptive, 0, 0);
 
+    
     // initialize DIY
     diy::FileStorage          storage("./DIY.XXXXXX"); // used for blocks to be moved out of core
     diy::Master               master(world,
@@ -122,11 +111,7 @@ int main(int argc, char** argv)
 
     // set global domain bounds
     Bounds<real_t> dom_bounds(dom_dim);
-    for (int i = 0; i < dom_dim; ++i)
-    {
-        dom_bounds.min[i] = -4.0 * M_PI;
-        dom_bounds.max[i] =  4.0 * M_PI;
-    }
+    set_dom_bounds(dom_bounds, input);
 
     // decompose the domain into blocks
     Decomposer<real_t> decomposer(dom_dim, dom_bounds, tot_blocks);
@@ -137,52 +122,57 @@ int main(int argc, char** argv)
     vector<int> divs(dom_dim);                          // number of blocks in each dimension
     decomposer.fill_divisions(divs);
 
-    DomainArgs d_args(dom_dim, pt_dim);
-
-    // set default args for diy foreach callback functions
-    d_args.weighted     = weighted;
-    d_args.multiblock   = true;
-    d_args.verbose      = 0;
-    d_args.r            = 0.0;
-    d_args.t            = 0.0;
-    d_args.structured   = true; // multiblock not tested for unstructured data yet
-    for (int i = 0; i < dom_dim; i++)
+    // If scalar == true, assume all science vars are scalar. Else one vector-valued var
+    // We assume that dom_dim == geom_dim
+    // Different examples can reset this below
+    vector<int> model_dims;
+    if (scalar) // Set up (pt_dim - dom_dim) separate scalar variables
     {
-        d_args.geom_p[i]    = geom_degree;
-        d_args.vars_p[0][i] = vars_degree;      // assuming one science variable, vars_p[0]
-        if (strong_sc)                          // strong scaling, reduced number of points per block
+        model_dims.assign(pt_dim - dom_dim + 1, 1);
+        model_dims[0] = dom_dim;                        // index 0 == geometry
+    }
+    else    // Set up a single vector-valued variable
+    {   
+        model_dims = {dom_dim, pt_dim - dom_dim};
+    }
+
+    // Create empty info classes
+    MFAInfo     mfa_info(dom_dim, verbose);
+    DomainArgs  d_args(dom_dim, model_dims);
+    
+    // set up parameters for examples
+    setup_args(dom_dim, pt_dim, model_dims, geom_degree, geom_nctrl, vars_degree, vars_nctrl,
+                input, infile, ndomp, structured, rand_seed, 0, 0, noise,
+                weighted, reg1and2, regularization, adaptive, verbose, mfa_info, d_args);
+
+    // Adjust parameters for strong scaling if needed
+    d_args.multiblock   = true;
+    if (strong_sc) 
+    {
+        mfa_info.splitStrongScaling(divs);
+        for (int i = 0; i < dom_dim; i++)
         {
-            d_args.ndom_pts[i]          = ndomp      / divs[i];
-            d_args.geom_nctrl_pts[i]    = geom_nctrl / divs[i] > geom_degree ? geom_nctrl / divs[i] : geom_degree + 1;
-            d_args.vars_nctrl_pts[0][i] = vars_nctrl / divs[i];     // assuming one science variable, vars_nctrl_pts[0]
-        } else                                  // weak scaling, same number of points per block
-        {
-            d_args.ndom_pts[i]          = ndomp;
-            d_args.geom_nctrl_pts[i]    = geom_nctrl;
-            d_args.vars_nctrl_pts[0][i] = vars_nctrl;               // assuming one science variable, vars_nctrl_pts[0]
+            d_args.ndom_pts[i] /= divs[i];
         }
     }
-    for (int i = 0; i < pt_dim - dom_dim; i++)
-        d_args.f[i] = 1.0;
 
-    // initilize input data
+    // Print block layout and scaling info
+    if (world.rank() == 0)
+        echo_multiblock_settings(mfa_info, d_args, tot_blocks, divs, strong_sc, ghost);
 
-    // sine function f(x) = sin(x), f(x,y) = sin(x)sin(y), ...
-    if (input == "sine")
+    // Generate data
+    world.barrier();
+    if (analytical_signals.count(input) == 1)
     {
-        for (int i = 0; i < pt_dim - dom_dim; i++)      // for all science variables
-            d_args.s[i] = i + 1;                        // scaling factor on range
         master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-                { b->generate_analytical_data(cp, input, d_args); });
+        { 
+            b->generate_analytical_data(cp, input, mfa_info, d_args); 
+        });
     }
-
-    // sinc function f(x) = sin(x)/x, f(x,y) = sinc(x)sinc(y), ...
-    if (input == "sinc")
+    else
     {
-        for (int i = 0; i < pt_dim - dom_dim; i++)      // for all science variables
-            d_args.s[i] = 10.0 * (i + 1);               // scaling factor on range
-        master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-                { b->generate_analytical_data(cp, input, d_args); });
+        cerr << "Input keyword \'" << input << "\' not recognized. Exiting." << endl;
+        exit(0);
     }
 
     // compute the MFA
@@ -191,7 +181,7 @@ int main(int argc, char** argv)
         fprintf(stderr, "\nStarting fixed encoding...\n\n");
     world.barrier();                     // to synchronize timing
     master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-            { b->fixed_encode_block(cp, d_args); });
+            { b->fixed_encode_block(cp, mfa_info); });
     world.barrier();                     // to synchronize timing
     encode_time = MPI_Wtime() - encode_time;
     if (world.rank() == 0)
@@ -234,8 +224,7 @@ int main(int argc, char** argv)
     if (world.rank() == 0 && tot_blocks == 4)
     {
         Block<real_t>* b        = static_cast<Block<real_t>*>(master.block(0));
-        int     ndom_dims       = b->dom_dim;        // domain dimensionality
-        real_t  range_extent    = b->input->domain.col(ndom_dims).maxCoeff() - b->input->domain.col(ndom_dims).minCoeff();
+        real_t  range_extent    = b->input->domain.col(dom_dim).maxCoeff() - b->input->domain.col(dom_dim).minCoeff();
         real_t  err_factor      = 1.0e-3;
         real_t  our_err         = b->max_errs[0] / range_extent;    // actual normalized max_err
         real_t  expect_err;                                         // expected (normalized max) error
