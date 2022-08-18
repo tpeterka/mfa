@@ -129,11 +129,6 @@ namespace mfa
                 exit(1);
             }
 
-            if (params != nullptr)
-            {
-                cerr << "Warning: Setting PointSet bounds after parameter initialization, this likely will have no effect" << endl;
-            }
-
             dom_mins = mins_;
             dom_maxs = maxs_;
             bounds_cached = true;
@@ -243,7 +238,7 @@ namespace mfa
 
             params->make_curve_params(domain);
         }
-        
+
         // Checks that the Param object does not contradict existing members of PointSet
         bool check_param_domain_agreement(const Param<T>& params_) const
         {

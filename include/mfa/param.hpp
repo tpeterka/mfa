@@ -226,9 +226,9 @@ namespace mfa
         {
             if (structured)
             {
-                if (dom_mins == VectorX<T>() || dom_maxs == VectorX<T>())
+                if (dom_mins != VectorX<T>() || dom_maxs != VectorX<T>())
                 {
-                    cerr << "Warning: Requested dom_mins, dom_maxs variables are unused in a structured domain parametrization." << endl;
+                    cerr << "Warning: dom_mins/maxs variables are unused in a structured domain parametrization." << endl;
                     cerr << "         Domain bounds will be determine from grid structure." << endl;
                 }
                 make_domain_params_structured(domain);

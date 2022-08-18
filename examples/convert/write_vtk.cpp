@@ -50,13 +50,13 @@ void write_pointset_vtk(mfa::PointSet<T>* ps, char* filename, int sci_var = -1)
         cerr << "Did not write " << filename << " due to improper dimension in pointset" << endl;
         return;
     }
-    if (ps->var_dim(sci_var) != 1 && geom_dim < 3)
-    {
-        cerr << "For " << filename << ", specified science variable (#" << sci_var << ") is not a scalar. Output will be planar." << endl;
-        include_var = false;
-    }
     if (sci_var < 0)
     {
+        include_var = false;
+    }
+    else if (ps->var_dim(sci_var) != 1 && geom_dim < 3)
+    {
+        cerr << "For " << filename << ", specified science variable (#" << sci_var << ") is not a scalar. Output will be planar." << endl;
         include_var = false;
     }
 

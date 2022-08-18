@@ -50,15 +50,16 @@ void write_pointset_vtk(mfa::PointSet<T>* ps, char* filename, int sci_var = -1)
         cerr << "Did not write " << filename << " due to improper dimension in pointset" << endl;
         return;
     }
-    if (ps->var_dim(sci_var) != 1 && geom_dim < 3)
-    {
-        cerr << "For " << filename << ", specified science variable (#" << sci_var << ") is not a scalar. Output will be planar." << endl;
-        include_var = false;
-    }
     if (sci_var < 0)
     {
         include_var = false;
     }
+    else if (ps->var_dim(sci_var) != 1 && geom_dim < 3)
+    {
+        cerr << "For " << filename << ", specified science variable (#" << sci_var << ") is not a scalar. Output will be planar." << endl;
+        include_var = false;
+    }
+
 
     vector<int> npts_dim;  // only used if data is structured
     if (ps->is_structured())
@@ -371,9 +372,9 @@ void write_vtk_files(
     sprintf(input_filename, "initial_points_gid_%d.vtk", cp.gid());
     sprintf(approx_filename, "approx_points_gid_%d.vtk", cp.gid());
     sprintf(errs_filename, "error_gid_%d.vtk", cp.gid());
-    write_pointset_vtk(b->input, input_filename); cerr << "A" << endl;
-    write_pointset_vtk(b->approx, approx_filename); cerr << "B" << endl;
-    write_pointset_vtk(b->errs, errs_filename); cerr << "C" << endl;
+    write_pointset_vtk(b->input, input_filename);
+    write_pointset_vtk(b->approx, approx_filename);
+    write_pointset_vtk(b->errs, errs_filename);
 
     delete[] vardims;
     for (int i = 0; i < nvars; i++)

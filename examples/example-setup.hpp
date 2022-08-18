@@ -23,6 +23,34 @@
 
 using namespace std;
 
+    template<typename T>
+    string print_vec(const vector<T>& vec)
+    {   
+        stringstream ss;
+        ss << "{";
+        for (int i = 0; i < vec.size() - 1; i++)
+        {
+            ss << vec[i] << " ";
+        }
+        ss << vec[vec.size()-1] << "}";
+
+        return ss.str();
+    }
+
+    template<typename T>
+    string print_vec(const VectorX<T>& vec)
+    {
+        stringstream ss;
+        ss << "{";
+        for (int i = 0; i < vec.size() - 1; i++)
+        {
+            ss << vec(i) << " ";
+        }
+        ss << vec.tail(1) << "}";
+
+        return ss.str();
+    }
+
     void echo_args(string run_name, int pt_dim, int dom_dim, int scalar,
                     int geom_degree, int geom_nctrl, int vars_degree, vector<int> vars_nctrl,
                     int ndomp, int ntest, string input, string infile,
@@ -38,9 +66,7 @@ using namespace std;
         cerr << "pt_dim   = " << pt_dim      << '\t' << "dom_dim    = " << dom_dim 
                 << '\t' << "scalar: " << boolalpha << (bool)scalar << endl;
         cerr << "geom_deg = " << geom_degree << '\t' << "geom_nctrl = " << geom_nctrl  << endl;
-        cerr << "vars_deg = " << vars_degree << '\t' << "vars_nctrl = " << "{";
-            for (int i = 0; i < vars_nctrl.size(); i++) cerr << vars_nctrl[i] << " ";
-            cerr << "\b}" << endl;
+        cerr << "vars_deg = " << vars_degree << '\t' << "vars_nctrl = " << print_vec(vars_nctrl) << endl;
         cerr << "num pts  = " << ndomp       << '\t' << "test pts   = " << (ntest > 0 ? to_string(ntest) : "N/A") << endl;
         if (adaptive)
         {
@@ -71,7 +97,68 @@ using namespace std;
 #ifdef MFA_SERIAL
         cerr << "threading: serial" << endl;
 #endif
-    cerr << "-------------------------------------\n" << endl;
+    cerr << "-------------------------------------" << endl;
+
+        return;
+    }
+
+    void echo_multiblock_settings(MFAInfo& mfa_info, DomainArgs& d_args, int tot_blocks, vector<int>& divs, int strong_sc, real_t ghost)
+    {
+        cerr << "------- Multiblock settings ---------" << endl;
+        cerr << "Blocks per dimension: " << print_vec(divs) << " (" << tot_blocks << " blocks total)" << endl;
+        cerr << "Ghost overlap  = " << ghost << endl;
+        cerr << "Strong scaling = " << boolalpha << (bool)strong_sc << endl;
+        cerr << "Per-block settings:" << endl;
+        cerr << "    Input pts (each dim):      " << print_vec(d_args.ndom_pts) << endl;
+        cerr << "    Geom ctrl pts (each dim):  " << print_vec(mfa_info.geom_model_info.nctrl_pts) << endl;
+        for (int k = 0; k < mfa_info.nvars(); k++)
+        {
+            cerr << "    Var " << k << " ctrl pts (each dim): " << print_vec(mfa_info.var_model_infos[k].nctrl_pts) << endl;
+        }
+        cerr << "-------------------------------------" << endl;
+
+        return;
+    }
+
+    void set_dom_bounds(Bounds<real_t>& dom_bounds, string input)
+    {
+        if (input == "sine" || input == "cosine" || input == "sinc" ||
+            input == "psinc1" || input == "psinc2" || input == "psinc3")
+        {
+            for (int i = 0; i < dom_bounds.min.dimension(); i++)
+            {
+                dom_bounds.min[i] = -4.0 * M_PI;
+                dom_bounds.max[i] =  4.0 * M_PI;
+            }
+        }
+        else if (input == "ml")
+        {
+            for (int i = 0; i < dom_bounds.min.dimension(); i++)
+            {
+                dom_bounds.min[i] = -1.0;
+                dom_bounds.max[i] =  1.0;
+            }
+        }
+        else if (input == "f16")
+        {
+            dom_bounds.min = {-1, -1};
+            dom_bounds.max = { 1,  1};
+        }
+        else if (input == "f17")
+        {
+            dom_bounds.min = {80,   5, 90};
+            dom_bounds.max = {100, 10, 93}; 
+        }
+        else if (input == "f18")
+        {
+            dom_bounds.min = {-0.95, -0.95, -0.95, -0.95};
+            dom_bounds.max = { 0.95,  0.95,  0.95,  0.95};
+        }
+        else
+        {
+            cerr << "Unrecognized input in set_dom_bounds(). Exiting." << endl;
+            exit(1);
+        }
 
         return;
     }
