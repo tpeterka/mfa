@@ -149,7 +149,8 @@ struct Block : public BlockBase<T>
     {
         if (args.rand_seed >= 0)  // random point cloud
         {
-            cout << "Generating data on random point cloud for function: " << fun << endl;
+            if (cp.gid() == 0)
+                cout << "Generating data on random point cloud for function: " << fun << endl;
 
             if (args.structured)
             {
@@ -171,7 +172,9 @@ struct Block : public BlockBase<T>
         }
         else    // structured grid of points
         {
-            cout << "Generating data on structured grid for function: " << fun << endl;
+            if (cp.gid() == 0)
+                cout << "Generating data on structured grid for function: " << fun << endl;
+            
             generate_rectilinear_analytical_data(cp, fun, mfa_info, args);
         }
     }
@@ -235,7 +238,9 @@ struct Block : public BlockBase<T>
         std::uniform_real_distribution<double> u_dist(0.0, 1.0);
 
         // Fill domain with randomly distributed points
-        cerr << "Void Sparsity: " << (1 - a->t)*100 << "%" << endl;
+        if (cp.gid() == 0)
+            cout << "Void Sparsity: " << (1 - a->t)*100 << "%" << endl;
+
         double keep_frac = 1 - a->t;
         if (keep_frac < 0 || keep_frac > 1)
         {
@@ -306,8 +311,8 @@ struct Block : public BlockBase<T>
             }  
         }
 
-        this->bounds_maxs = input->domain.colwise().maxCoeff();
-        this->bounds_mins = input->domain.colwise().minCoeff();
+        bounds_mins = input->domain.colwise().minCoeff();
+        bounds_maxs = input->domain.colwise().maxCoeff();
 
         input->set_domain_params(core_mins, core_maxs);     // Set explicit bounding box for parameter space
 
@@ -2068,7 +2073,7 @@ cerr << "===========\n" << endl;
         // TODO: This is for 2d only right now
         if (a.size() != 2 && b.size() != 2)
         {
-            cerr << "Incorrect dimension in integrate ray" << endl;
+            cerr << "ERROR: Incorrect dimension in integrate ray. Exiting." << endl;
             exit(1);
         }
 
@@ -2276,7 +2281,14 @@ cerr << "===========\n" << endl;
         if (subset_mins.size() != 0)
         {
             do_subset = true;
-            cerr << "Accumulating errors over subset of domain" << endl;
+
+            if (cp.gid() == 0)
+            {
+                cout << "Accumulating errors over subset of domain" << endl;
+                cout << "  subset mins: " << mfa::print_vec(subset_mins) << endl;
+                cout << "  subset maxs: " << mfa::print_vec(subset_maxs) << endl;
+            }
+
             if (subset_mins.size() != subset_maxs.size())
             {
                 cerr << "ERROR: Dimensions of subset_mins and subset_maxs do not match" << endl;
@@ -2286,17 +2298,6 @@ cerr << "===========\n" << endl;
             {
                 cerr << "ERROR: subset dimension does not match dom_dim" << endl;
                 exit(1);
-            }
-            cout << "subset mins: ";
-            for (int i = 0; i < dom_dim; i++)
-            {
-                cout << subset_mins[i] << " ";
-            }
-            cout << '\n';
-            cout << "subset maxs: ";
-            for (int i = 0; i < dom_dim; i++)
-            {
-                cout << subset_maxs[i] << " ";
             }
         }
         

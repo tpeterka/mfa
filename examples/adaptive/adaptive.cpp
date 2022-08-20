@@ -70,12 +70,6 @@ int main(int argc, char** argv)
     const int     rand_seed       = -1;
     const real_t  regularization  = 0;
 
-    // Define list of example keywords
-    set<string> analytical_signals = {"sine", "cosine", "sinc", "psinc1", "psinc2", "psinc3", "ml", "f16", "f17", "f18"};
-    set<string> datasets_3d = {"s3d", "nek", "rti", "miranda", "tornado"};
-    set<string> datasets_2d = {"cesm"};
-    set<string> datasets_unstructured = {"edelta", "climate", "nuclear"};
-
     // get command line arguments
     opts::Options ops;
     ops >> opts::Option('e', "error",       norm_err_limit, " maximum normalized error limit");
@@ -106,9 +100,9 @@ int main(int argc, char** argv)
     }
 
     // print input arguments
-    echo_args("adaptive example", pt_dim, dom_dim, scalar, geom_degree, geom_nctrl, vars_degree, vars_nctrl,
-                ndomp, ntest, input, infile, analytical_signals, noise, structured, weighted,
-                true, norm_err_limit, max_rounds);
+    echo_mfa_settings("adaptive example", pt_dim, dom_dim, scalar, geom_degree, geom_nctrl, vars_degree, vars_nctrl,
+                        regularization, reg1and2, weighted, true, norm_err_limit, max_rounds);
+    echo_data_settings(ndomp, ntest, input, infile, noise, rot, twist, structured, rand_seed);
 
     // initialize DIY
     diy::FileStorage          storage("./DIY.XXXXXX"); // used for blocks to be moved out of core
@@ -122,15 +116,9 @@ int main(int argc, char** argv)
                                      &Block<real_t>::load);
     diy::ContiguousAssigner   assigner(world.size(), tot_blocks);
 
-    // even though this is a single-block example, we want diy to do a proper decomposition with a link
-    // so that everything works downstream (reading file with links, e.g.)
-    // therefore, set some dummy global domain bounds and decompose the domain
+    // set global domain bounds and decompose
     Bounds<real_t> dom_bounds(dom_dim);
-    for (int i = 0; i < dom_dim; ++i)
-    {
-        dom_bounds.min[i] = 0.0;
-        dom_bounds.max[i] = 1.0;
-    }
+    set_dom_bounds(dom_bounds, input);
     Decomposer<real_t> decomposer(dom_dim, dom_bounds, tot_blocks);
     decomposer.decompose(world.rank(),
                          assigner,

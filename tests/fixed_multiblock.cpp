@@ -64,9 +64,6 @@ int main(int argc, char** argv)
     const int       ntest           = 0;
     const real_t    noise           = 0;
 
-    // Define list of example keywords
-    set<string> analytical_signals = {"sine", "cosine", "sinc", "psinc1", "psinc2", "psinc3", "ml", "f16", "f17", "f18"};
-
     // get command line arguments
     opts::Options ops;
     ops >> opts::Option('d', "pt_dim",      pt_dim,     " dimension of points");
@@ -93,9 +90,11 @@ int main(int argc, char** argv)
 
     // print input arguments
     if (world.rank() == 0)
-        echo_args("fixed multiblock test", pt_dim, dom_dim, scalar, geom_degree, geom_nctrl, vars_degree, vars_nctrl,
-                ndomp, ntest, input, infile, analytical_signals, noise, structured, weighted, adaptive, 0, 0);
-
+    {
+        echo_mfa_settings("fixed multiblock test", pt_dim, dom_dim, scalar,
+            geom_degree, geom_nctrl, vars_degree, vars_nctrl, regularization, reg1and2, weighted, false, 0, 0);
+        echo_data_settings(ndomp, 0, input, infile);
+    }
     
     // initialize DIY
     diy::FileStorage          storage("./DIY.XXXXXX"); // used for blocks to be moved out of core
@@ -158,7 +157,9 @@ int main(int argc, char** argv)
 
     // Print block layout and scaling info
     if (world.rank() == 0)
-        echo_multiblock_settings(mfa_info, d_args, tot_blocks, divs, strong_sc, ghost);
+    {
+        echo_multiblock_settings(mfa_info, d_args, world.size(), tot_blocks, divs, strong_sc, ghost);
+    }
 
     // Generate data
     world.barrier();

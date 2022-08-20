@@ -66,12 +66,6 @@ int main(int argc, char** argv)
     // Constants for this example
     const bool adaptive = false;
 
-    // Define list of example keywords
-    set<string> analytical_signals = {"sine", "cosine", "sinc", "psinc1", "psinc2", "psinc3", "ml", "f16", "f17", "f18"};
-    set<string> datasets_3d = {"s3d", "nek", "rti", "miranda", "tornado"};
-    set<string> datasets_2d = {"cesm"};
-    set<string> datasets_unstructured = {"edelta", "climate", "nuclear"};
-
     // get command line arguments
     opts::Options ops;
     ops >> opts::Option('d', "pt_dim",      pt_dim,     " dimension of points");
@@ -104,8 +98,9 @@ int main(int argc, char** argv)
     }
 
     // print input arguments
-    echo_args("fixed example", pt_dim, dom_dim, scalar, geom_degree, geom_nctrl, vars_degree, vars_nctrl,
-                ndomp, ntest, input, infile, analytical_signals, noise, structured, weighted, adaptive, 0, 0);
+    echo_mfa_settings("fixed example", pt_dim, dom_dim, scalar, geom_degree, geom_nctrl, vars_degree, vars_nctrl,
+                        regularization, reg1and2, weighted, adaptive, 0, 0);
+    echo_data_settings(ndomp, ntest, input, infile, noise, rot, twist, structured, rand_seed);
 
     // initialize DIY
     diy::FileStorage          storage("./DIY.XXXXXX"); // used for blocks to be moved out of core
@@ -119,15 +114,10 @@ int main(int argc, char** argv)
                                      &Block<real_t>::load);
     diy::ContiguousAssigner   assigner(world.size(), tot_blocks);
 
-    // even though this is a single-block example, we want diy to do a proper decomposition with a link
-    // so that everything works downstream (reading file with links, e.g.)
-    // therefore, set some dummy global domain bounds and decompose the domain
+    // set global domain bounds and decompose
     Bounds<real_t> dom_bounds(dom_dim);
-    for (int i = 0; i < dom_dim; ++i)
-    {
-        dom_bounds.min[i] = 0.0;
-        dom_bounds.max[i] = 1.0;
-    }
+    set_dom_bounds(dom_bounds, input);
+    
     Decomposer<real_t> decomposer(dom_dim, dom_bounds, tot_blocks);
     decomposer.decompose(world.rank(),
                          assigner,
@@ -157,7 +147,7 @@ int main(int argc, char** argv)
                 input, infile, ndomp, structured, rand_seed, rot, twist, noise,
                 weighted, reg1and2, regularization, adaptive, verbose, mfa_info, d_args);
 
-    // Create data set for modeling
+    // Create data set for modeling. Input keywords are defined in example-setup.hpp
     if (analytical_signals.count(input) == 1)
     {
         master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)

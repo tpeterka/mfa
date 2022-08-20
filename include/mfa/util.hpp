@@ -10,6 +10,36 @@
 
 namespace mfa
 {
+    // Not designed for efficiency, should not be used in large loops
+    template<typename T>
+    string print_vec(const vector<T>& vec)
+    {   
+        stringstream ss;
+        ss << "{";
+        for (int i = 0; i < vec.size() - 1; i++)
+        {
+            ss << vec[i] << " ";
+        }
+        ss << vec[vec.size()-1] << "}";
+
+        return ss.str();
+    }
+
+    // Not designed for efficiency, should not be used in large loops
+    template<typename T>
+    string print_vec(const VectorX<T>& vec)
+    {
+        stringstream ss;
+        ss << "{";
+        for (int i = 0; i < vec.size() - 1; i++)
+        {
+            ss << vec(i) << " ";
+        }
+        ss << vec.tail(1) << "}";
+
+        return ss.str();
+    }
+
     struct MFAError: public std::runtime_error
     {
         using std::runtime_error::runtime_error;
