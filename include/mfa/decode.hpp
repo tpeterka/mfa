@@ -594,6 +594,7 @@ namespace mfa
             	});
             }
             Kokkos::Profiling::popRegion(); // "ShapeFunc"
+            Kokkos::Profiling::pushRegion("PrepareDecodeRes");
             // up to here we computed the shape functions, now use them
             // prepare control points view, fill host and copy to device
             // the problem is here, nvar can be more than 1, for geometry for example
@@ -619,10 +620,10 @@ namespace mfa
             Kokkos::deep_copy(strides_patch, h_strides_patch);
 
             int ntot = result.rows();
-            Kokkos::Profiling::pushRegion("AllocateRes");
+
             Kokkos::View<double*> res_dev("result", ntot );
             auto res_h = Kokkos::create_mirror_view(res_dev);
-            Kokkos::Profiling::popRegion(); // "AllocateRes"
+            Kokkos::Profiling::popRegion(); // "PrepareDecodeRes"
 
             // KOKKOS_LAMBDA expands to [=] __device__ __host__
             // all local variables are passed by value, which is fine for Kokkos Views and
@@ -688,10 +689,11 @@ namespace mfa
                         res_dev(i) = value;
                     }
                 );
-
+                Kokkos::Profiling::pushRegion("copyBack");
                 Kokkos::deep_copy(res_h, res_dev);
                 for (int j=0; j<ntot; j++)
                     result(j, min_dim + iv) = res_h(j);
+                Kokkos::Profiling::popRegion(); // "copyBack"
             }
             Kokkos::Profiling::popRegion(); // "DecodeAtRes"
 
