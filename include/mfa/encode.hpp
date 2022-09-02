@@ -903,22 +903,21 @@ namespace mfa
             Nfree = MatrixX<T>::Zero(npts, t.nctrl_pts(dim));
 
             // local knot vector
-            vector<vector<KnotIdx>> local_knot_idxs(mfa_data.dom_dim);                          // local knot indices in all dims
+            vector<KnotIdx> local_knot_idxs(mfa_data.p(dim) + 2);                               // local knot indices for current dim
             vector<T> local_knots(mfa_data.p(dim) + 2);                                         // local knot vector for current dim
-            for (auto k = 0; k < mfa_data.dom_dim; k++)
-                local_knot_idxs[k].resize(mfa_data.p(k) + 2);
 
 #if 0
 
             // TODO: decide whether there is enough parallelism, if so, update TBB for serial version below
+            // TODO: if this is used, needs to be carefully reviewed and updated, not current
 
 // #ifdef MFA_TBB  // TBB
 
             VolIterator dom_iter(ndom_pts, dom_starts, input.ndom_pts); // iterator over input points
             VolIterator free_iter(t.nctrl_pts);                         // iterator over free control points
 
-            enumerable_thread_specific<vector<vector<KnotIdx>>> thread_local_knot_idxs(mfa_data.dom_dim);   // local knot idices
-            enumerable_thread_specific<vector<vector<T>>>       thread_local_knots(mfa_data.dom_dim);       // local knot idices
+            enumerable_thread_specific<vector<KnotIdx>>         thread_local_knot_idxs(mfa_data.p(dim) + 2);// local knot idices
+            enumerable_thread_specific<vector<T>>               thread_local_knots(mfa_data.p(dim) + 2);    // local knot values
             enumerable_thread_specific<VectorXi>                thread_dom_ijk(mfa_data.dom_dim);           // multidim index of domain point
             enumerable_thread_specific<VectorXi>                thread_free_ijk(mfa_data.dom_dim);          // multidim index of control point
             enumerable_thread_specific<vector<KnotIdx>>         thread_anchor(mfa_data.dom_dim);            // anchor of control point
@@ -927,35 +926,19 @@ namespace mfa
             {
                 for (auto i = r.cols().begin(); i < r.cols().end(); i++)                                // for control points
                 {
-                    if (i == r.cols().begin())
-                    {
-                        for (auto k = 0; k < mfa_data.dom_dim; k++)
-                        {
-                            thread_local_knot_idxs.local()[k].resize(mfa_data.p(k) + 2);
-                            thread_local_knots.local()[k].resize(mfa_data.p(k) + 2);
-                        }
-                    }
-
                     free_iter.idx_ijk(i, thread_free_ijk.local());                                      // ijk of domain point
                     mfa_data.tmesh.ctrl_pt_anchor(t, thread_free_ijk.local(), thread_anchor.local());   // anchor of control point
 
                     // local knot vector
-                    mfa_data.tmesh.knot_intersections(thread_anchor.local(), t_idx, true, thread_local_knot_idxs.local());
-                    for (auto k = 0; k < mfa_data.dom_dim; k++)
-                    {
-                        for (auto n = 0; n < thread_local_knot_idxs.local()[k].size(); n++)
-                            thread_local_knots.local()[k][n] = mfa_data.tmesh.all_knots[k][thread_local_knot_idxs.local()[k][n]];
-                    }
+                    mfa_data.tmesh.knot_intersections_dim(thread_anchor.local(), t_idx, true, thread_local_knot_idxs.local(), dim);
+                    for (auto n = 0; n < thread_local_knot_idxs.local().size(); n++)
+                        thread_local_knots.local()[n] = mfa_data.tmesh.all_knots[dim][thread_local_knot_idxs.local()[n]];
 
                     for (auto j = r.rows().begin(); j < r.rows().end(); j++)                            // for input domain points
                     {
                         dom_iter.idx_ijk(j, thread_dom_ijk.local());                                    // ijk of domain point
-                        for (auto k = 0; k < mfa_data.dom_dim; k++)
-                        {
-                            T u = input.params->param_grid[k][thread_dom_ijk.local()(k)];               // parameter of current input point
-                            T B = mfa_data.OneBasisFun(k, u, thread_local_knots.local()[k]);                           // basis function
-                            Nfree(j, i) = (k == 0 ? B : Nfree(j, i) * B);
-                        }
+                        T u = input.params->param_grid[dim][thread_dom_ijk.local()(dim)];               // parameter of current input point
+                        Nfree(j, i) = mfa_data.OneBasisFun(dim, u, thread_local_knots.local());         // basis function
                     }       // for blocked range rows, ie, input domain points
                 }       // for blocked range cols, ie, control points
             }, ap); // parallel for
@@ -1002,9 +985,9 @@ namespace mfa
                 anchor[dim] = mfa_data.tmesh.ctrl_pt_anchor_dim(dim, t, i);
 
                 // local knot vector in currrent dimension
-                mfa_data.tmesh.knot_intersections(anchor, t_idx, local_knot_idxs);                  // local knot indices in all dimensions
-                for (auto n = 0; n < local_knot_idxs[dim].size(); n++)                                  // local knots in only current dim
-                    local_knots[n] = mfa_data.tmesh.all_knots[dim][local_knot_idxs[dim][n]];
+                mfa_data.tmesh.knot_intersections_dim(anchor, t_idx, local_knot_idxs, dim);             // local knot indices in current dim
+                for (auto n = 0; n < local_knot_idxs.size(); n++)                                       // local knots in only current dim
+                    local_knots[n] = mfa_data.tmesh.all_knots[dim][local_knot_idxs[n]];
 
                 for (auto j = 0; j < npts; j++)                                                         // for all input points (for this tensor) in current dim
                 {
@@ -1273,10 +1256,8 @@ namespace mfa
             vector<int>         inserted_dims(dom_dim);                                // which dims actually added a knot and ctrl pt
 
             // local knot vector
-            vector<vector<KnotIdx>> local_knot_idxs(dom_dim);                          // local knot indices in all dims
+            vector<KnotIdx> local_knot_idxs(p(dim) + 2);                                // local knot indices for current dim
             vector<T> local_knots(p(dim) + 2);                                         // local knot vector for current dim
-            for (auto k = 0; k < dom_dim; k++)
-                local_knot_idxs[k].resize(p(k) + 2);
 
             VectorX<T> param(dom_dim);
             VectorX<T> param_eps(dom_dim);                                              // param + small epsilon
@@ -1353,9 +1334,9 @@ namespace mfa
 //                         dim, found_idx, param.transpose(), fmt::join(anchor, ","), start_ijk.transpose());
 
                 // local knot vector in currrent dimension
-                tmesh.knot_intersections(anchor, found_idx, local_knot_idxs);                           // local knot indices in all dimensions
-                for (auto n = 0; n < local_knot_idxs[dim].size(); n++)                                  // local knots in only current dim
-                    local_knots[n] = tmesh.all_knots[dim][local_knot_idxs[dim][n]];
+                tmesh.knot_intersections_dim(anchor, found_idx, local_knot_idxs, dim);                  // local knot indices in all dimensions
+                for (auto n = 0; n < local_knot_idxs.size(); n++)                                  // local knots in only current dim
+                    local_knots[n] = tmesh.all_knots[dim][local_knot_idxs[n]];
 
                 // write Ncons
                 for (auto j = 0; j < npts(dim); j++)                                                         // for all input points (for this tensor) in current dim
@@ -1433,10 +1414,8 @@ namespace mfa
             vector<int>         inserted_dims(dom_dim);                                // which dims actually added a knot and ctrl pt
 
             // local knot vector
-            vector<vector<KnotIdx>> local_knot_idxs(dom_dim);                          // local knot indices in all dims
+            vector<KnotIdx> local_knot_idxs(p(dim) + 2);                                // local knot indices for current dim
             vector<T> local_knots(p(dim) + 2);                                         // local knot vector for current dim
-            for (auto k = 0; k < dom_dim; k++)
-                local_knot_idxs[k].resize(p(k) + 2);
 
             VectorX<T> param(dom_dim);
             VectorX<T> param_eps(dom_dim);                                              // param + small epsilon
@@ -1519,9 +1498,9 @@ namespace mfa
 //                         dim, found_idx, param.transpose(), fmt::join(anchor, ","), start_ijk.transpose());
 
                 // local knot vector in currrent dimension
-                tmesh.knot_intersections(anchor, found_idx, local_knot_idxs);                           // local knot indices in all dimensions
-                for (auto n = 0; n < local_knot_idxs[dim].size(); n++)                                  // local knots in only current dim
-                    local_knots[n] = tmesh.all_knots[dim][local_knot_idxs[dim][n]];
+                tmesh.knot_intersections_dim(anchor, found_idx, local_knot_idxs, dim);                           // local knot indices in all dimensions
+                for (auto n = 0; n < local_knot_idxs.size(); n++)                                  // local knots in only current dim
+                    local_knots[n] = tmesh.all_knots[dim][local_knot_idxs[n]];
 
                 // write Ncons
                 for (auto j = 0; j < npts(dim); j++)                                                         // for all input points (for this tensor) in current dim
