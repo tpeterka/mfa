@@ -695,12 +695,6 @@ namespace mfa
 
 #endif
 
-            // TODO: understand why the second version of normalization gives a worse answer than the first
-            // and why not normalizing at all also gives a good answer, very close to the first version
-            // then pick one of these versions and remove the other
-
-#if 1
-
                 {
                     bool error = false;
                     T sum = Nfree.row(i).sum();
@@ -718,25 +712,6 @@ namespace mfa
 //                         fmt::print(stderr, "ComputeCtrlPtCurve(): row {} has 0.0 row sum for free and constraint basis functions in dim {}\n",
 //                                 i, dim);
                 }
-
-#else
-
-                {
-                    T Nfree_sum, Ncons_sum;
-                    Ncons_sum = 0.0;
-                    T Nfree_sum = Nfree.row(i).sum();
-                    if (cons_type != ConsType::MFA_NO_CONSTRAINT)
-                        Ncons_sum = Ncons.row(i).sum();
-                    if (Nfree_sum + Ncons_sum == 0.0)
-                        throw MFAError(fmt::format("ComputeCtrlPtCurve(): row {} has 0.0 row sum for free and constraint basis functions in dim {}",
-                                    i, dim));
-                    if (Nfree_sum > 0.0)
-                        Nfree.row(i) /= Nfree_sum;
-                    if (Ncons_sum > 0.0)
-                        Ncons.row(i) /= Ncons_sum;
-                }
-
-#endif
 
 #ifdef MFA_TBB
 
