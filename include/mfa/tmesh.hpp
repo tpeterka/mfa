@@ -2234,9 +2234,7 @@ namespace mfa
                 // extend by p/2 + 2 knots from the min corner in all dimensions and then take the min corner of that extension
                 knot_intersections(min_anchor, t_idx, local_knot_idxs, 2);
                 for (auto k = 0; k < dom_dim_; k++)
-                    // DEPRECATE
-//                         start_knot_idxs[k] = local_knot_idxs[k][0]; // both even and odd degree: front knot of local knot vector
-                        start_knot_idxs[k] = local_knot_idxs[k][1]; // both even and odd degree: 1 after front of local knot vector
+                    start_knot_idxs[k] = local_knot_idxs[k][1]; // both even and odd degree: 1 after front of local knot vector
             }
             else
             {
@@ -2259,9 +2257,7 @@ namespace mfa
                 // extend by p/2 + 2 knots from the max corner in all dimensions and then take the max corner of that extension
                 knot_intersections(max_anchor, t_idx, local_knot_idxs, 2);
                 for (auto k = 0; k < dom_dim_; k++)
-                    // DEPRECATE
-//                         end_knot_idxs[k] = local_knot_idxs[k][local_knot_idxs[k].size() - 2]; // both even and odd degree: 1 before back of local knot vector
-                        end_knot_idxs[k] = local_knot_idxs[k][local_knot_idxs[k].size() - 3]; // both even and odd degree: 2 before back of local knot vector
+                    end_knot_idxs[k] = local_knot_idxs[k][local_knot_idxs[k].size() - 3]; // both even and odd degree: 2 before back of local knot vector
             }
             else
             {
@@ -2277,18 +2273,18 @@ namespace mfa
             // input points corresponding to start and end knot values
             for (auto k = 0; k < dom_dim_; k++)
             {
-                // start points begin at all_knot_param_idxs[start_knot_idxs]
+                // start point begins at all_knot_param_idxs[start_knot_idxs]
                 start_idxs[k]   = all_knot_param_idxs[k][start_knot_idxs[k]];
 
-                // DEPRECATE
-                // corner case: if extending and start point = param(start_knot_idx), increment start point
-                // because we used a larger local knot vector (p + 2), we don't want a point at its edge, which would be too far
-//                 if (extend && params[k][start_idxs[k]] == all_knots[k][start_knot_idxs[k]])
-//                     start_idxs[k]++;
-
                 // end points go up to but do not include all_knot_param_ixs[end_knot_idxs + 1]
-                if (all_knots[k].size() - 1 - end_knot_idxs[k] <= p_(k))
-                    end_idxs[k] = all_knot_param_idxs[k][end_knot_idxs[k]];
+
+                // end point within repeated end knots
+                if (end_knot_idxs[k] == all_knots[k].size() - 1)
+                    end_idxs[k] = all_knot_param_idxs[k][all_knots[k].size() - 1];
+                else if (all_knots[k].size() - 1 - end_knot_idxs[k] <= p_(k))
+                    end_idxs[k] = all_knot_param_idxs[k][all_knots[k].size() - 1 - p_(k)] - 1;
+
+                // end point before repeated end knots
                 else
                 {
                     // TODO: following fixes a particular case but not sure if generally correct

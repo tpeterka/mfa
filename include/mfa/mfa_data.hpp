@@ -209,75 +209,11 @@ namespace mfa
                 for (auto i = 0; i < p(cur_dim) + 2; i++)
                     loc_knots[i] = tmesh.all_knots[cur_dim][span - p(cur_dim) + j + i];
 
-//                 // debug
-//                 fprintf(stderr, "span = %d ith basis fun = %d row = %d loc_knots: ", span, span - p(cur_dim) + j, row);
-//                 for (auto i = 0; i < loc_knots.size(); i++)
-//                     fprintf(stderr, "%.3lf ", loc_knots[i]);
-//                 fprintf(stderr, "\n");
-
-                // TODO: this is a hack for not having p+1 control points, not sure if this is right
-//                 if (span - p(cur_dim) + j >= 0 && span - p(cur_dim) + j < N.cols())
-                    N(row, span - p(cur_dim) + j) = OneBasisFun(cur_dim, u, loc_knots);
+                N(row, span - p(cur_dim) + j) = OneBasisFun(cur_dim, u, loc_knots);
             }
 
             // debug
 //             cerr << N << "\n---" << endl;
-        }
-
-        // computes and returns one (the ith) basis function value for a given parameter value
-        // algorithm 2.4 of P&T, p. 74
-        //
-        T OneBasisFun(
-                int                     cur_dim,        // current dimension
-                T                       u,              // parameter value
-                int                     i) const        // compute the ith basis function, 0 <= i <= p(cur_dim)
-        {
-            vector<T> N(p(cur_dim) + 1);                // triangular table result
-            vector<T>& U = tmesh.all_knots[cur_dim];    // alias for knot vector for current dimension
-
-            // 1 at edges of global knot vector
-            if ( (i == 0 && u == U[0]) || ( i == U.size() - p(cur_dim) - 2 && u == U.back()) )
-                return 1.0;
-
-            // zero outside of local knot vector
-            if (u < U[i] || u >= U[i + p(cur_dim) + 1])
-                return 0.0;
-
-            // initialize 0-th degree functions
-            for (auto j = 0; j <= p(cur_dim); j++)
-            {
-                if (u >= U[i + j] && u < U[i + j + 1])
-                    N[j] = 1.0;
-                else
-                    N[j] = 0.0;
-            }
-
-            // compute triangular table
-            T saved, uleft, uright, temp;
-            for (auto k = 1; k <= p(cur_dim); k++)
-            {
-                if (N[0] == 0.0)
-                    saved = 0.0;
-                else
-                    saved = ((u - U[i]) * N[0]) / (U[i + k] - U[i]);
-                for (auto j = 0; j < p(cur_dim) - k + 1; j++)
-                {
-                    uleft     = U[i + j + 1];
-                    uright    = U[i + j + k + 1];
-                    if (N[j + 1] == 0.0)
-                    {
-                        N[j]    = saved;
-                        saved   = 0.0;
-                    }
-                    else
-                    {
-                        temp    = N[j + 1] / (uright - uleft);
-                        N[j]    = saved + (uright - u) * temp;
-                        saved   = (u - uleft) * temp;
-                    }
-                }
-            }
-            return N[0];
         }
 
         // computes and returns one basis function value for a given parameter value and local knot vector
@@ -344,72 +280,130 @@ namespace mfa
             return N[0];
         }
 
-        // computes one row of basis function values for a given parameter value
-        // writes results in a row of N
-        // algorithm 2.2 of P&T, p. 70
-        // tmesh version
-        //
-        // assumes N has been allocated by caller
-        void BasisFuns(
-                const TensorProduct<T>& tensor,     // current tensor product
-                int                     cur_dim,    // current dimension
-                T                       u,          // parameter value
-                int                     span,       // index of span in the knots vector containing u, relative to ko
-                MatrixX<T>&             N,          // matrix of (output) basis function values
-                int                     row) const  // row in N of result
-        {
-            // initialize row to 0
-            N.row(row).setZero();
+//         // DEPRECATED
+//         // computes and returns one (the ith) basis function value for a given parameter value
+//         // algorithm 2.4 of P&T, p. 74
+//         //
+//         T OneBasisFun(
+//                 int                     cur_dim,        // current dimension
+//                 T                       u,              // parameter value
+//                 int                     i) const        // compute the ith basis function, where span - p(cur_dim) <= i <= span
+//         {
+//             vector<T> N(p(cur_dim) + 1);                // triangular table result
+//             const vector<T>& U = tmesh.all_knots[cur_dim];    // alias for knot vector for current dimension
+// 
+//             // 1 at edges of global knot vector
+//             if ( (i == 0 && u == U[0]) || ( i == U.size() - p(cur_dim) - 2 && u == U.back()) )
+//                 return 1.0;
+// 
+//             // zero outside of local knot vector
+//             if (u < U[i] || u >= U[i + p(cur_dim) + 1])
+//                 return 0.0;
+// 
+//             // initialize 0-th degree functions
+//             for (auto j = 0; j <= p(cur_dim); j++)
+//             {
+//                 if (u >= U[i + j] && u < U[i + j + 1])
+//                     N[j] = 1.0;
+//                 else
+//                     N[j] = 0.0;
+//             }
+// 
+//             // compute triangular table
+//             T saved, uleft, uright, temp;
+//             for (auto k = 1; k <= p(cur_dim); k++)
+//             {
+//                 if (N[0] == 0.0)
+//                     saved = 0.0;
+//                 else
+//                     saved = ((u - U[i]) * N[0]) / (U[i + k] - U[i]);
+//                 for (auto j = 0; j < p(cur_dim) - k + 1; j++)
+//                 {
+//                     uleft     = U[i + j + 1];
+//                     uright    = U[i + j + k + 1];
+//                     if (N[j + 1] == 0.0)
+//                     {
+//                         N[j]    = saved;
+//                         saved   = 0.0;
+//                     }
+//                     else
+//                     {
+//                         temp    = N[j + 1] / (uright - uleft);
+//                         N[j]    = saved + (uright - u) * temp;
+//                         saved   = (u - uleft) * temp;
+//                     }
+//                 }
+//             }
+//             return N[0];
+//         }
 
-            // init
-            vector<T> scratch(p(cur_dim) + 1);                  // scratchpad, same as N in P&T p. 70
-            scratch[0] = 1.0;
+        // DEPRECATED
+//         // computes one row of basis function values for a given parameter value
+//         // writes results in a row of N
+//         // algorithm 2.2 of P&T, p. 70
+//         // tmesh version for single tensor skipping knots at a level deeper than current tensor
+//         //
+//         // assumes N has been allocated by caller
+//         void BasisFuns(
+//                 const TensorProduct<T>& tensor,     // current tensor product
+//                 int                     cur_dim,    // current dimension
+//                 T                       u,          // parameter value
+//                 int                     span,       // index of span in the knots vector containing u, relative to ko
+//                 MatrixX<T>&             N,          // matrix of (output) basis function values
+//                 int                     row) const  // row in N of result
+//         {
+//             // initialize row to 0
+//             N.row(row).setZero();
+// 
+//             // init
+//             vector<T> scratch(p(cur_dim) + 1);                  // scratchpad, same as N in P&T p. 70
+//             scratch[0] = 1.0;
+// 
+//             // temporary recurrence results
+//             // left(j)  = u - knots(span + 1 - j)
+//             // right(j) = knots(span + j) - u
+//             vector<T> left(p(cur_dim) + 1);
+//             vector<T> right(p(cur_dim) + 1);
+// 
+//             // fill N
+//             int j_left = 1;             // j_left and j_right are like j in the loop below but skip over knots not in the right level
+//             int j_right = 1;
+//             for (int j = 1; j <= p(cur_dim); j++)
+//             {
+//                 // skip knots not in current level
+//                 while (tmesh.all_knot_levels[cur_dim][span + 1 - j_left] != tensor.level)
+//                 {
+//                     j_left++;
+//                     assert(span + 1 - j_left >= 0);
+//                 }
+//                 // left[j] is u = the jth knot in the correct level to the left of span
+//                 left[j]  = u - tmesh.all_knots[cur_dim][span + 1 - j_left];
+//                 while (tmesh.all_knot_levels[cur_dim][span + j_right] != tensor.level)
+//                 {
+//                     j_right++;
+//                     assert(span + j_right < tmesh.all_knot_levels[cur_dim].size());
+//                 }
+//                 // right[j] = the jth knot in the correct level to the right of span - u
+//                 right[j] = tmesh.all_knots[cur_dim][span + j_right] - u;
+//                 j_left++;
+//                 j_right++;
+// 
+//                 T saved = 0.0;
+//                 for (int r = 0; r < j; r++)
+//                 {
+//                     T temp = scratch[r] / (right[r + 1] + left[j - r]);
+//                     scratch[r] = saved + right[r + 1] * temp;
+//                     saved = left[j - r] * temp;
+//                 }
+//                 scratch[j] = saved;
+//             }
+// 
+//             // copy scratch to N
+//             for (int j = 0; j < p(cur_dim) + 1; j++)
+//                 N(row, span - p(cur_dim) + j) = scratch[j];
+//         }
 
-            // temporary recurrence results
-            // left(j)  = u - knots(span + 1 - j)
-            // right(j) = knots(span + j) - u
-            vector<T> left(p(cur_dim) + 1);
-            vector<T> right(p(cur_dim) + 1);
-
-            // fill N
-            int j_left = 1;             // j_left and j_right are like j in the loop below but skip over knots not in the right level
-            int j_right = 1;
-            for (int j = 1; j <= p(cur_dim); j++)
-            {
-                // skip knots not in current level
-                while (tmesh.all_knot_levels[cur_dim][span + 1 - j_left] != tensor.level)
-                {
-                    j_left++;
-                    assert(span + 1 - j_left >= 0);
-                }
-                // left[j] is u = the jth knot in the correct level to the left of span
-                left[j]  = u - tmesh.all_knots[cur_dim][span + 1 - j_left];
-                while (tmesh.all_knot_levels[cur_dim][span + j_right] != tensor.level)
-                {
-                    j_right++;
-                    assert(span + j_right < tmesh.all_knot_levels[cur_dim].size());
-                }
-                // right[j] = the jth knot in the correct level to the right of span - u
-                right[j] = tmesh.all_knots[cur_dim][span + j_right] - u;
-                j_left++;
-                j_right++;
-
-                T saved = 0.0;
-                for (int r = 0; r < j; r++)
-                {
-                    T temp = scratch[r] / (right[r + 1] + left[j - r]);
-                    scratch[r] = saved + right[r + 1] * temp;
-                    saved = left[j - r] * temp;
-                }
-                scratch[j] = saved;
-            }
-
-            // copy scratch to N
-            for (int j = 0; j < p(cur_dim) + 1; j++)
-                N(row, span - p(cur_dim) + j) = scratch[j];
-        }
-
-        // computes one row of basis function values for a given parameter value
+        // computes one row of derivattive of basis function values for a given parameter value
         // writes results in a row of N
         // computes first k derivatives of one row of basis function values for a given parameter value
         // output is ders, with nders + 1 rows, one for each derivative (N, N', N'', ...)

@@ -706,11 +706,11 @@ namespace mfa
                         if (cons_type != ConsType::MFA_NO_CONSTRAINT)
                             Ncons.row(i) /= sum;
                     }
-//                     else
+                    else
 //                         throw MFAError(fmt::format("ComputeCtrlPtCurve(): row {} has 0.0 row sum for free and constraint basis functions in dim {}",
 //                                 i, dim));
-//                         fmt::print(stderr, "ComputeCtrlPtCurve(): row {} has 0.0 row sum for free and constraint basis functions in dim {}\n",
-//                                 i, dim);
+                        fmt::print(stderr, "ComputeCtrlPtCurve(): row {} has 0.0 row sum for free and constraint basis functions in dim {}\n",
+                                i, dim);
                 }
 
 #ifdef MFA_TBB
@@ -741,7 +741,7 @@ namespace mfa
             MatrixXd::Index max_row, max_col;
             if (P.maxCoeff(&max_row, &max_col) > 300)
             {
-                fmt::print(stderr, "ComputeCtrlPtCurve(): very large control point maxrow {} maxcol {}\n", max_row, max_col);
+                fmt::print(stderr, "ComputeCtrlPtCurve(): dim {} very large control point maxrow {} maxcol {}\n", dim, max_row, max_col);
                 fmt::print(stderr, "N row {}:\n {}\n", max_row, Nfree.row(max_row));
                 fmt::print(stderr, "NtN row {}:\n {}\n", max_row, (Nfree.transpose() * Nfree).row(max_row));
                 fmt::print(stderr, "N col {}:\n {}\n", max_row, Nfree.col(max_row));
@@ -895,7 +895,7 @@ namespace mfa
         {
             // debug
 //             bool debug = false;
-//             if (dim == 0 && t_idx == 5)
+//             if (dim == 0 && t_idx == 3)
 //                 debug = true;
 
             auto&               t = mfa_data.tmesh.tensor_prods[t_idx];
@@ -993,6 +993,11 @@ namespace mfa
                 {
                     T u = input.params->param_grid[dim][start_ijk(dim) + j];                            // parameter of current input point
                     Nfree(j, i) = mfa_data.OneBasisFun(dim, u, local_knots);                            // basis function
+                                                                                                        //
+                    // debug
+//                     if (t_idx == 3 && j >= 60 && dim == 0 && local_knot_idxs[0] == 44)
+//                         fmt::print(stderr, "local_knot_idxs [{}] local_knots [{}] u {} Nfree({}, {}) = {}\n",
+//                                 fmt::join(local_knot_idxs, ","), fmt::join(local_knots, ","), u, j, i, Nfree(j, i));
                 }
             }       // control points
 
