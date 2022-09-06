@@ -3377,9 +3377,13 @@ namespace mfa
 
                 TensorProduct<T>& pt = tensor_prods[parent_tensor_idxs[i]];             // parent tensor of the candidate tensor
 
+// DEPRECATE, added one more knot to pad
                 // intersection proximity (assumes same for all dims)
-                int pad         = p(0) % 2 == 0 ? p(0) + 1 : p(0);                      // padding for all tensors
-                int edge_pad    = (p(0) / 2) + 1;                                       // extra padding for tensor at the global edge
+//                 int pad         = p(0) % 2 == 0 ? p(0) + 1 : p(0);                      // padding for all tensors
+                int pad         = p(0) % 2 == 0 ? p(0) + 2 : p(0) + 1;                  // padding for all tensors
+// DEPRECATE, added one more knot to edge_pad
+//                 int edge_pad    = (p(0) / 2) + 1;                                       // extra padding for tensor at the global edge
+                int edge_pad    = (p(0) / 2) + 2;                                       // extra padding for tensor at the global edge
 
                 // constrain candidate to be no larger than parent in any dimension
                 // also don't leave parent with a small remainder anywhere
@@ -3387,6 +3391,12 @@ namespace mfa
                 {
                     int min_ofst  = (pt.knot_mins[j] == 0) ? pad + edge_pad : pad;
                     int max_ofst  = (pt.knot_maxs[j] == all_knots[j].size() - 1) ? pad + edge_pad : pad;
+
+                    // debug
+//                     if (j == 0 && parent_tensor_idxs[i] == 2)
+//                         fmt::print(stderr, "before adjust: pt idx {}: pt mins [{}] maxs [{}] c mins [{}] maxs [{}] pad {} edge_pad {} min_ofst {} max_ofst {}\n",
+//                                 parent_tensor_idxs[i], fmt::join(pt.knot_mins, ","), fmt::join(pt.knot_maxs, ","),
+//                                 fmt::join(c.knot_mins, ","), fmt::join(c.knot_maxs,  ","), pad, edge_pad, min_ofst, max_ofst);
 
                     // adjust min edge of candidate
                     while (c.knot_mins[j] > pt.knot_mins[j]  &&
@@ -3403,6 +3413,12 @@ namespace mfa
                     if (c.knot_maxs[j] > pt.knot_maxs[j] ||
                             tmesh.knot_idx_dist(pt, c.knot_maxs[j], pt.knot_maxs[j], j, false) < max_ofst)
                         c.knot_maxs[j] = pt.knot_maxs[j];
+
+                    // debug
+//                     if (j == 0 && parent_tensor_idxs[i] == 2)
+//                         fmt::print(stderr, "after adjust: pt idx {}: pt mins [{}] maxs [{}] c mins [{}] maxs [{}] pad {} edge_pad {} min_ofst {} max_ofst {}\n",
+//                                 parent_tensor_idxs[i], fmt::join(pt.knot_mins, ","), fmt::join(pt.knot_maxs, ","),
+//                                 fmt::join(c.knot_mins, ","), fmt::join(c.knot_maxs,  ","), pad, edge_pad, min_ofst, max_ofst);
                 }
 
                 // force knots at candidate tensor bounds to be at level no deeper than previous level
@@ -3415,6 +3431,12 @@ namespace mfa
                     while (all_knot_levels[j][c.knot_maxs[j]] > level && c.knot_maxs[j] < pt.knot_maxs[j])
                         c.knot_maxs[j]++;
                 }
+
+                // debug
+//                 if (parent_tensor_idxs[i] == 2)
+//                     fmt::print(stderr, "1: pt idx {}: pt mins [{}] maxs [{}] c mins [{}] maxs [{}]\n",
+//                             parent_tensor_idxs[i], fmt::join(pt.knot_mins, ","), fmt::join(pt.knot_maxs, ","),
+//                             fmt::join(c.knot_mins, ","), fmt::join(c.knot_maxs,  ","));
 
                 // recheck after adjustments that candidate is no larger than parent in any dimension
                 // and doesn't leave parent with a small remainder anywhere
