@@ -101,7 +101,6 @@ struct BlockBase
     // will be computed only in core, for each block, using neighboring approximations if necessary
     //  needed only at decoding stage
     VectorXi            ndom_outpts;            // number of output points in each dimension
-    //MatrixX<T>          blend;                // output result of blending (lexicographic order)
     mfa::PointSet<T>    *blend;                 // output result of blending (lexicographic order)
     vector<Bounds<T>>   neighOverlaps;          // only the overlapping part of the neighbors to current core is important
                                                 // will store the actual overlap of neighbors
@@ -827,25 +826,6 @@ struct BlockBase
             cs *= grid_counts[i];
         }
 
-
-/*        for (int k=0; k < num_rows; k++)
-        {
-            for (int i=0; i < dom_dim; i++)
-            {
-                if (max_block[i] < localBlock(k,i))
-                {
-                    max_block[i] = localBlock(k,i);
-                    index_max[i] = k; // first index to this extent !
-                }
-            }
-        }*/
-
-        /*for (int i=0; i < dom_dim; i++)
-        {
-            grid_counts[i] = index_max[i] / cs + 1;
-            cs = cs * grid_counts[i];
-        }*/
-        // assert product (grid_counts[i] ) == num_rows ?
         //use domain parametrization logic to compute actual par for block within bounds,
         // to be able to use DecodeAtGrid
         VectorX<T> p_min(dom_dim); // initially, these are for the whole decoded domain
@@ -887,16 +867,7 @@ struct BlockBase
             ndom_outpts[i] = resolutions[map_dir[i]];
             tot_core_pts *= resolutions[map_dir[i]];
         }
-        // get local core bounds are decided already:  core_mins, core_maxs
-       /* MatrixX<T>          blend1;
-        blend1.resize(tot_core_pts, dom_dim + 1); // these are just the evaluation points (core domain pts)
 
-        // deltas in each direction
-        VectorX<T> d(dom_dim);
-        // starting point in each dimension will be core_mins
-        int nghost_pts;           // number of ghost points in current dimension
-        for (int i = 0; i < dom_dim; i++)
-            d(i) = (core_maxs(i) - core_mins(i)) / (ndom_outpts(i) - 1);*/
 #ifdef MFA_KOKKOS
         Kokkos::Profiling::popRegion(); // "init_decode"
         Kokkos::Profiling::pushRegion("calc_pos");
@@ -927,29 +898,11 @@ struct BlockBase
         blend->set_params( make_shared<mfa::Param<T>>(param1) );
         mfa->DecodePointSet(*geometry.mfa_data, *blend, 0, 0, dom_dim - 1, false);
 
-        /*int cs = 1;                        // stride of a coordinate in this dim
-        T eps = 1.0e-10;                  // floating point roundoff error
-        for (int i = 0; i < dom_dim; i++)  // all dimensions in the domain
-        {
-            int k = 0;
-            int co = 0;            // j index of start of a new coordinate value
-            for (int j = 0; j < tot_core_pts; j++) {
-                if (core_mins(i) + k * d(i) > core_maxs(i) + eps)
-                    k = 0;
-                blend1(j, i) = core_mins(i) + k * d(i);
-                if (j + 1 - co >= cs) {
-                    k++;
-                    co = j + 1;
-                }
-            }
-            cs *= ndom_outpts(i);
-        }*/
 #ifdef MFA_KOKKOS
         Kokkos::Profiling::popRegion(); // "calc_pos"
 #endif
         // now decode at resolution
         this->DecodeRequestGrid(0, blend->domain); // so just compute the value, without any further blending
-        //mfa->DecodeDomain(*(vars[0].mfa_data), 0, blend, dom_dim, dom_dim, false);
 #ifdef BLEND_VERBOSE
        cerr << " block: " << cp.gid() << " decode no blend:" << blend << "\n";
 #endif
@@ -1106,11 +1059,7 @@ struct BlockBase
 
                 vol_it.incr_iter();
             }
-
-            //this->DecodeRequestGrid(0, localBlock); //
             this->DecodeRequestGrid(0, localBlockOverCoreK);
-            //mfa->DecodeDomain(*(vars[0].mfa_data), 0, localBlock, dom_dim, dom_dim, false);
-            // local block localBlock(:, dom_dim) will have the decoded  values for science variable
             vector<T> computed_values(sizeBlock);
             for (int k = 0; k < sizeBlock; k++) {
                 computed_values[k] = localBlockOverCoreK(k, dom_dim); // just last dimension
@@ -1188,10 +1137,7 @@ struct BlockBase
                 vol_it.incr_iter();
             }
 
-            //this->DecodeRequestGrid(0, localBlock); //
             this->DecodeRequestGrid(0, localBlockOverCoreK);
-            //mfa->DecodeDomain(*(vars[0].mfa_data), 0, localBlock, dom_dim, dom_dim, false);
-            // local block localBlock(:, dom_dim) will have the decoded  values for science variable
             vector<T> computed_values(sizeBlock);
             for (int k = 0; k < sizeBlock; k++) {
                 computed_values[k] = localBlockOverCoreK(k, dom_dim); // just last dimension
@@ -1203,8 +1149,6 @@ struct BlockBase
         }
     }
     // receive requests , decode, and send back
-
-
     // blending in 1d, on interval -inf, [a , b] +inf, -inf < a < b < +inf
     T blend_1d(T t, T a, T b) {
         if (a == b)

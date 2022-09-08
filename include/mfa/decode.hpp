@@ -476,13 +476,9 @@ namespace mfa
             // what is the maximum number of control points per direction?
             size_t max_ctrl_size = nctrl_pts.maxCoeff(&max_index);
             size_t max_ndom_size = ndom_pts.maxCoeff(&max_index);
-            // it is hard to do a vector of Kokkos::Views() actually, it is not advisable
-            // still need to think about this
+
             Kokkos::View<double***> newNN("kNN", max_ndom_size, max_ctrl_size, kdom_dim );
-            //Kokkos::View<double***>::HostMirror h_newNN = Kokkos::create_mirror_view(newNN); // this will be on host, and accessible from CPU
-            // also, make a copy of the cs and ct arrays, used for iterations in control points space
-            // these need to be on device too: as kcs and kct
-            //
+
             Kokkos::View<int*> kcs("cs", mfa_data.p.size()); // which should be the same as mfa_data.dom_dim
             Kokkos::View<int*>::HostMirror h_kcs = Kokkos::create_mirror_view(kcs);
             Kokkos::View<int**> kct("ct", tot_iters, mfa_data.p.size()); // tot_iters = prod(mfa.p)
@@ -507,7 +503,7 @@ namespace mfa
             Kokkos::View<int** > span_starts("spans", kdom_dim, max_ndom_size );
             Kokkos::Profiling::popRegion(); // "InitDecodeGrid"
             Kokkos::Profiling::pushRegion("ShapeFunc");
-            //Kokkos::View<int ** >::HostMirror h_span_starts = Kokkos::create_mirror_view(span_starts);
+
             for (int k = 0; k < mfa_data.dom_dim; k++) {
             	//auto subk = subview (newNN, k, Kokkos::ALL(), Kokkos::ALL());
             	int npk = ndom_pts(k);
@@ -547,25 +543,12 @@ namespace mfa
 					}
 					// mid is now the span
 					span_starts(k,i) = mid - pk;
-					// we will fill now the whole row corresponding to i
-					// subk(i,j), j=mid, mid+pk+1
-					// copy
-		            // initialize row for cur_dim to 0 (not needed)
-		            /*for (int i=0; i<N.extent(2); i++)
-		                N(cur_dim,row,i) = 0;*/
 
-		            // init
 					// subview replaces scratch
 					auto subv_scr = Kokkos::subview(newNN, i, Kokkos::make_pair(mid - pk, mid + 1), k );
-		            //T scratch[MAXP1];                  // scratchpad, same as N in P&T p. 70
-		            //scratch[0] = 1.0;
 					subv_scr(0) = 1.0;
-		            // temporary recurrence results
-		            // left(j)  = u - knots(span + 1 - j)
-		            // right(j) = knots(span + j) - u
 		            T left[MFA_MAXP1];
 		            T right[MFA_MAXP1];
-
 		            // fill N
 		            for (int j = 1; j <= pk; j++)
 		            {
@@ -577,20 +560,12 @@ namespace mfa
 		                T saved = 0.0;
 		                for (int r = 0; r < j; r++)
 		                {
-		                    // T temp = scratch[r] / (right[r + 1] + left[j - r]);
 		                	T temp = subv_scr(r) / (right[r + 1] + left[j - r]);
-		                    // scratch[r] = saved + right[r + 1] * temp;
 		                    subv_scr(r) = saved + right[r + 1] * temp;
 		                    saved = left[j - r] * temp;
 		                }
-		                //scratch[j] = saved;
 		                subv_scr(j) = saved;
 		            }
-
-		            /*// copy scratch to N
-		            for (int j = 0; j < pk + 1; j++)
-		            	newNN (k, i, mid - pk + j) = scratch[j];*/
-					// end copy
             	});
             }
             Kokkos::Profiling::popRegion(); // "ShapeFunc"
@@ -625,10 +600,6 @@ namespace mfa
             auto res_h = Kokkos::create_mirror_view(res_dev);
             Kokkos::Profiling::popRegion(); // "PrepareDecodeRes"
 
-            // KOKKOS_LAMBDA expands to [=] __device__ __host__
-            // all local variables are passed by value, which is fine for Kokkos Views and
-            // simple types double, int, but not for structures !
-            // this is why using kdom_dim inside is fine, while mfa_data.dom_dim is not
             Kokkos::Profiling::pushRegion("DecodeAtRes");
 
             for (int iv = 0; iv < nvar; iv++)
