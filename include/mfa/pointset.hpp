@@ -122,11 +122,11 @@ namespace mfa
                 cerr << "Warning: Overwriting existing parameters in PointSet" << endl;
             }
 
-            /*if (!check_param_domain_agreement(*params_))
+            if (!check_param_domain_agreement(*params_))
             {
                 cerr << "ERROR: Attempted to add mismatched Params to PointSet" << endl;
                 exit(1);
-            }*/
+            }
  
             params = params_;
 
@@ -141,7 +141,7 @@ namespace mfa
         //   N.B. If *this is structured, then Param object must be too.
         //        However, if *this is not structured, Param is allowed to be structured;
         //        this allows a new grid structure to be imposed from the Param grid structure.
-        bool check_param_domain_agreement(const Param<T>& params_)
+        bool check_param_domain_agreement(Param<T>& params_)
         {
             bool agreement =    (dom_dim == params_.dom_dim)
                             &&  (npts == params_.npts())
