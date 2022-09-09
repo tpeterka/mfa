@@ -39,11 +39,6 @@
 // for debugging, can turn off constraints in local solve
 // #define MFA_NO_CONSTRAINTS
 
-// the following lines control the extent of merging small tensors into larger ones
-#define MFA_TMESH_MERGE_MAX
-// #define MFA_TMESH_MERGE_SOME
-// #define MFA_TMESH_MERGE_NONE
-
 #include    <Eigen/Dense>
 #include    <Eigen/Sparse>
 #include    <Eigen/OrderingMethods>

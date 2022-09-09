@@ -2426,7 +2426,7 @@ namespace mfa
                 int                     ofst,                       // affset amount, can be positive or negative
                 int                     cur_dim,                    // current dimension
                 bool                    edge_check,                 // check for missing control points at global edge
-                KnotIdx&                ofst_idx) const             // (output) offset knot idx
+                KnotIdx&                ofst_idx) const             // (output) offset knot idx, can reuse orig_idx if desired
         {
             ofst_idx    = orig_idx;
             int sgn     = (0 < ofst) - (ofst < 0);                  // sgn = 1 for positive ofst, -1 for negative, 0 for zero
@@ -2810,6 +2810,86 @@ namespace mfa
                     return false;
                 }
             }
+            return true;
+        }
+
+        // check all tensors for minimum size
+        // returns true if the check passes
+        bool check_min_size(int min_interior,                           // minimum size of interior tensors
+                            int min_border) const                       // minimum size of global border tensors
+        {
+            for (auto i = 0; i < tensor_prods.size(); i++)
+            {
+                auto& t = tensor_prods[i];
+
+                for (auto j = 0; j < dom_dim_; j++)
+                {
+                    KnotIdx dist = knot_idx_dist(t, t.knot_mins[j], t.knot_maxs[j], j, true);
+                    if (t.knot_mins[j] == 0 || t.knot_maxs[j] == all_knots[j].size() - 1)      // border tensor
+                    {
+                        if (dist < min_border)
+                        {
+                            fmt::print(stderr, "check_min_size(): border tensor idx {} cur_dim {} has {} knots which is less than min_border {}\n",
+                                    i, j, dist, min_border);
+                            return false;
+                        }
+                    }
+                    else                                                                    // interior tensor
+                    {
+                        if (dist < min_interior)
+                        {
+                            fmt::print(stderr, "check_min_size(): interior tensor idx {} cur_dim {} has {} knots which is less than min_interior {}\n",
+                                    i, j, dist, min_interior);
+                            return false;
+                        }
+                    }
+                }
+            }
+
+            return true;
+        }
+
+        // check all tensors that local knot indices agree with global knot indices
+        // returns true if the check passes
+        bool check_local_knots() const
+        {
+            for (auto i = 0; i < tensor_prods.size(); i++)
+            {
+                auto& t = tensor_prods[i];
+
+                for (auto j = 0; j < dom_dim_; j++)
+                {
+                    KnotIdx dist = knot_idx_dist(t, t.knot_mins[j], t.knot_maxs[j], j, true);
+                    if (dist != t.knot_idxs[j].size())
+                    {
+                        fmt::print(stderr, "check_local_knots(): tensor idx {} cur_dim {} distance between global knots {} != size of local knots {}\n",
+                                i, j, dist, t.knot_idxs[j].size());
+                        return false;
+                    }
+
+                    auto cur_knot_idx = t.knot_mins[j];
+                    for (auto k = 0; k < t.knot_idxs[j].size(); k++)
+                    {
+                        if (t.knot_idxs[j][k] != cur_knot_idx)
+                        {
+                            fmt::print(stderr, "check_local_knots(): tensor idx {} cur_dim {} {}th local knot idx {} does not match global knot idx {}\n",
+                                    i, j, k, t.knot_idxs[j][k], cur_knot_idx);
+                            return false;
+                        }
+
+                        if (k < t.knot_idxs[j].size() - 1)
+                        {
+                            if (!knot_idx_ofst(t, cur_knot_idx, 1, j, false, cur_knot_idx))
+                            {
+                                fmt::print(stderr, "check_local_knots(): tensor idx {} cur_dim {} k = {} cur_knot_idx {} knot_idx_ofst() failed\n",
+                                        i, j, k, cur_knot_idx);
+                                return false;
+                            }
+                        }
+                    }
+                }
+            }
+
             return true;
         }
 

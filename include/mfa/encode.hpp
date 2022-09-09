@@ -737,23 +737,25 @@ namespace mfa
             P = (Nfree.transpose() * Nfree).ldlt().solve(Nfree.transpose() * R);
             solve_time += (MPI_Wtime() - t0);
 
-            // debug
-            MatrixXd::Index max_row, max_col;
-            if (P.maxCoeff(&max_row, &max_col) > 300)
-            {
-                fmt::print(stderr, "ComputeCtrlPtCurve(): dim {} very large control point maxrow {} maxcol {}\n", dim, max_row, max_col);
-                fmt::print(stderr, "N row {}:\n {}\n", max_row, Nfree.row(max_row));
-                fmt::print(stderr, "NtN row {}:\n {}\n", max_row, (Nfree.transpose() * Nfree).row(max_row));
-                fmt::print(stderr, "N col {}:\n {}\n", max_row, Nfree.col(max_row));
-                fmt::print(stderr, "NtN col {}:\n {}\n", max_row, (Nfree.transpose() * Nfree).col(max_row));
-                fmt::print(stderr, "P row {}:\n {}\n", max_row, P.row(max_row));
-                fmt::print(stderr, "R:\n {}\n", R);
-
-                for (auto i = 0; i < Nfree.rows(); i++)
-                    fmt::print(stderr, "N row {} sum {}\n", i, Nfree.row(i).sum());
-                for (auto i = 0; i < Nfree.cols(); i++)
-                    fmt::print(stderr, "N col {} sum {}\n", i, Nfree.col(i).sum());
-            }
+            // debug: check for very large control points
+            // could be an indicator of spike artifacts, but not a robust test
+            // sometimes higher degree (p =3, e.g.) can result in very tall control points but correct approximation
+//             MatrixXd::Index max_row, max_col;
+//             if (P.maxCoeff(&max_row, &max_col) > 300)
+//             {
+//                 fmt::print(stderr, "ComputeCtrlPtCurve(): dim {} very large control point maxrow {} maxcol {}\n", dim, max_row, max_col);
+//                 fmt::print(stderr, "N row {}:\n {}\n", max_row, Nfree.row(max_row));
+//                 fmt::print(stderr, "NtN row {}:\n {}\n", max_row, (Nfree.transpose() * Nfree).row(max_row));
+//                 fmt::print(stderr, "N col {}:\n {}\n", max_row, Nfree.col(max_row));
+//                 fmt::print(stderr, "NtN col {}:\n {}\n", max_row, (Nfree.transpose() * Nfree).col(max_row));
+//                 fmt::print(stderr, "P row {}:\n {}\n", max_row, P.row(max_row));
+//                 fmt::print(stderr, "R:\n {}\n", R);
+// 
+//                 for (auto i = 0; i < Nfree.rows(); i++)
+//                     fmt::print(stderr, "N row {} sum {}\n", i, Nfree.row(i).sum());
+//                 for (auto i = 0; i < Nfree.cols(); i++)
+//                     fmt::print(stderr, "N col {} sum {}\n", i, Nfree.col(i).sum());
+//             }
         }
 
         // interpolates curve of free control points in one dimension using Boehm knot insertion
@@ -2410,10 +2412,7 @@ namespace mfa
             // TODO: comment out after code is debugged
             mfa::NewKnots<T> nk(mfa_data, input);
             if (!nk.CheckAllSpans())
-            {
-                fmt::print(stderr, "AdaptiveEncode(): Error: failed checking all spans for input points\n");
-                abort();
-            }
+                throw MFAError(fmt::format("AdaptiveEncode(): Error: failed checking all spans for input points\n"));
 
             // debug: check if all tensors are marked done
             // TODO: comment out after code is debugged
@@ -2434,6 +2433,18 @@ namespace mfa
             }
             if (all_done)
                 fmt::print(stderr, "All tensors are marked as done.\n");
+
+            // debug: check size of all tensors to be >= minimum
+            // TODO: comment out after code is debugged
+            int min_interior    = mfa_data.p(0) % 2 == 0 ? mfa_data.p(0) + 2 : mfa_data.p(0) + 1;   // min. size for interior tensors
+            int min_border      = 2 * mfa_data.p(0) + 1;                                            // min. size for global border tensors
+            if (!mfa_data.tmesh.check_min_size(min_interior, min_border))
+                throw MFAError(fmt::format("AdaptiveEncode(): Error: failed checking minimum size of tensors\n"));
+
+            // debug: verify that the local knots stored in all tensors correspond to the global knots
+            // TODO: comment out after code is debugged
+            if (!mfa_data.tmesh.check_local_knots())
+                throw MFAError(fmt::format("AdaptiveEncode(): Error: failed checking local knots of tensors\n"));
         }
 
     private:
@@ -3299,12 +3310,9 @@ namespace mfa
                 // debug: check that parent tensor level matches refinement level
                 // TODO: remove after code works
                 if (tensor_prods[parent_tensor_idxs[i]].level > parent_level)
-                {
-                    fmt::print(stderr, "Error: Refine(): insertion index {} with parent tensor idx {} "
+                    throw MFAError(fmt::format("Error: Refine(): insertion index {} with parent tensor idx {} "
                             "at level {}, but parent_level is {}. This should not happen.\n",
-                            i, parent_tensor_idxs[i], tensor_prods[parent_tensor_idxs[i]].level, parent_level);
-                    abort();
-                }
+                            i, parent_tensor_idxs[i], tensor_prods[parent_tensor_idxs[i]].level, parent_level));
 
                 // debug
 //                 fmt::print(stderr, "inserted_knot_idxs[{}] = [{}, {}]\n", i, inserted_knot_idxs[0][i], inserted_knot_idxs[1][i]);
@@ -3377,8 +3385,8 @@ namespace mfa
 
                 TensorProduct<T>& pt = tensor_prods[parent_tensor_idxs[i]];             // parent tensor of the candidate tensor
 
-// DEPRECATE, added one more knot to pad
                 // intersection proximity (assumes same for all dims)
+// DEPRECATE, added one more knot to pad
 //                 int pad         = p(0) % 2 == 0 ? p(0) + 1 : p(0);                      // padding for all tensors
                 int pad         = p(0) % 2 == 0 ? p(0) + 2 : p(0) + 1;                  // padding for all tensors
 // DEPRECATE, added one more knot to edge_pad
@@ -3442,6 +3450,26 @@ namespace mfa
                 // and doesn't leave parent with a small remainder anywhere
                 tmesh.constrain_to_parent(c, pad);
 
+                // debug: check if candidate ended up being same size as parent
+                // TODO: remove once debugged
+                bool shadows_parent = true;
+                for (auto j = 0; j < dom_dim; j++)
+                {
+                    if (c.knot_mins[j] > pt.knot_mins[j])
+                    {
+                        shadows_parent = false;
+                        break;
+                    }
+                    if (c.knot_maxs[j] < pt.knot_maxs[j])
+                    {
+                        shadows_parent = false;
+                        break;
+                    }
+                }
+                if (shadows_parent)
+                    fmt::print(stderr, "*** Refine(): Info: candidate knot_mins, maxs match parent knot_mins [{}] knot_maxs [{}] ***\n",
+                            fmt::join(c.knot_mins, ","), fmt::join(c.knot_maxs,  ","));
+
                 // adjust knot mins, maxs of tensors to be added so far because of inserted knots
                 for (auto tidx = 0; tidx < new_tensors.size(); tidx++)          // for all tensors scheduled to be added so far
                 {
@@ -3465,13 +3493,17 @@ namespace mfa
 
                     // candidate is a subset of an already scheduled tensor
                     if (tmesh.subset(c.knot_mins, c.knot_maxs, t.knot_mins, t.knot_maxs))
+                    {
+                        t.level = child_level;
                         add = false;
+                    }
 
                     // an already scheduled tensor is a subset of the candidate
                     else if (tmesh.subset(t.knot_mins, t.knot_maxs, c.knot_mins, c.knot_maxs))
                     {
                         t.knot_mins = c.knot_mins;
                         t.knot_maxs = c.knot_maxs;
+                        t.level     = child_level;
                         if (t.parent != c.parent)
                         {
                             // TODO: not sure if this should be an error, or if the parent should be reset
@@ -3482,25 +3514,16 @@ namespace mfa
                         add         = false;
                     }
 
-#ifndef MFA_TMESH_MERGE_NONE
-
-                        // candidate intersects an already scheduled tensor, to within some proximity
-                        // the #defines adjust whether we merge tensors that intersect or only those that are close
-#ifdef MFA_TMESH_MERGE_SOME
-                        else if (tmesh.intersect(c, t, pad) && !tmesh.intersect(c, t, 0))
-#endif
-#ifdef MFA_TMESH_MERGE_MAX
-                        else if (tmesh.intersect(c, t, pad))
-#endif
+                    // candidate intersects an already scheduled tensor, to within some proximity
+                    else if (tmesh.intersect(c, t, pad))
                     {
                         if (c.parent == t.parent)       // only merge tensors refined from the same parent
                         {
                             tmesh.merge_tensors(t, c, pad);
+                            t.level     = child_level;
                             add         = false;
                         }
                     }
-
-#endif
 
                 }       // for all tensors scheduled to be added so far
 
