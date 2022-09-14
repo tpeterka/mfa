@@ -221,7 +221,7 @@ namespace mfa
         // returns index of new or existing tensor in the vector of tensor products
         int append_tensor(const vector<KnotIdx>&   knot_mins,       // indices in all_knots of min. corner of tensor to be inserted
                           const vector<KnotIdx>&   knot_maxs,       // indices in all_knots of max. corner
-                          int                      level = -1,      // optional level to assign to new tensor, -1 = choose next level automatically
+                          int                      level,           // level to assign to new tensor
                           bool                     debug = false)   // print debugging output
         {
             bool vec_grew;                          // vector of tensor_prods grew
@@ -234,9 +234,7 @@ namespace mfa
 
                 if (knot_mins == t.knot_mins && knot_maxs == t.knot_maxs)
                 {
-                    // adjust level
-                    if (level >= 0)
-                        t.level = level;
+                    t.level = level;
 
                     // resize control points and weights
                     for (auto j = 0; j < dom_dim_; j++)
@@ -264,13 +262,12 @@ namespace mfa
             // initialize control points
             new_tensor.nctrl_pts.resize(dom_dim_);
             size_t tot_nctrl_pts = 1;
-            if (!tensor_prods.size())
+            if (!tensor_prods.size())                                   // no existing tensor products; this is the first tensor
             {
-                new_tensor.level = 0;
+                new_tensor.level = level;
                 tensor_knot_idxs(new_tensor);
 
                 // resize control points
-                // level 0 has only one box of control points
                 for (auto j = 0; j < dom_dim_; j++)
                 {
                     new_tensor.nctrl_pts[j] = all_knots[j].size() - p_(j) - 1;
@@ -279,9 +276,9 @@ namespace mfa
                 new_tensor.ctrl_pts.resize(tot_nctrl_pts, max_dim_ - min_dim_ + 1);
                 new_tensor.weights.resize(tot_nctrl_pts);               // will get initialized to 1 later
             }
-            else
+            else                                                        // add a new tensor to existing vector of tensor products
             {
-                new_tensor.level = (level == -1 ? tensor_prods.back().level + 1 : level);
+                new_tensor.level = level;
                 tensor_knot_idxs(new_tensor);
 
                 // resize control points

@@ -121,7 +121,7 @@ namespace mfa
                 knot_mins[i] = 0;
                 knot_maxs[i] = tmesh.all_knots[i].size() - 1;
             }
-            tmesh.append_tensor(knot_mins, knot_maxs);
+            tmesh.append_tensor(knot_mins, knot_maxs, 0);
 
 #ifdef CURVE_PARAMS
             if (!input.structured)

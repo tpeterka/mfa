@@ -2360,6 +2360,15 @@ namespace mfa
 
             vector<TensorProduct<T>>    new_tensors;                    // newly refined tensors to be added
 
+            // intersection proximity between tensors (assumes same for all dims)
+            VectorXi& p = mfa_data.p;
+// DEPRECATE, added one more knot to pad
+//             int pad         = p(0) % 2 == 0 ? p(0) + 1 : p(0);                      // padding for all tensors
+            int pad         = p(0) % 2 == 0 ? p(0) + 2 : p(0) + 1;                  // padding for all tensors
+// DEPRECATE, added one more knot to edge_pad
+//             int edge_pad    = (p(0) / 2) + 1;                                       // extra padding for tensor at the global edge
+            int edge_pad    = (p(0) / 2) + 2;                                       // extra padding for tensor at the global edge
+
             // loop until all tensors are done
             int iter;
             for (iter = 0; ; iter++)
@@ -2377,7 +2386,7 @@ namespace mfa
 //                 fmt::print(stderr, "\nTmesh before refinement\n\n");
 //                 mfa_data.tmesh.print(true, true, false, false);
 
-                bool done_parent_level = Refine(parent_level, iter + 1, err_limit, extents, new_tensors);
+                bool done_parent_level = Refine(parent_level, iter + 1, err_limit, extents, pad, edge_pad, new_tensors);
 
                 if (done_parent_level)
                 {
@@ -2389,6 +2398,7 @@ namespace mfa
                     }
                     else                                                // one iteration only is done
                     {
+                        CheckNewTensors(new_tensors, pad, edge_pad);
                         fmt::print(stderr, "Level {} done, adding {} new tensors\n", parent_level, new_tensors.size());
                         double add_tensors_time = MPI_Wtime();
                         AddNewTensors(new_tensors);
@@ -3247,6 +3257,8 @@ namespace mfa
                 int                         child_level,                        // level of children to create
                 T                           err_limit,                          // max allowable error
                 const VectorX<T>&           extents,                            // extents in each dimension, for normalizing error (size 0 means do not normalize)
+                int                         pad,                                // padding for all tensors
+                int                         edge_pad,                           // extra padding for tensor at the global edge
                 vector<TensorProduct<T>>&   new_tensors)                        // (output) new tensors scheduled to be added
         {
             // typing shortcuts
@@ -3385,14 +3397,6 @@ namespace mfa
 
                 TensorProduct<T>& pt = tensor_prods[parent_tensor_idxs[i]];             // parent tensor of the candidate tensor
 
-                // intersection proximity (assumes same for all dims)
-// DEPRECATE, added one more knot to pad
-//                 int pad         = p(0) % 2 == 0 ? p(0) + 1 : p(0);                      // padding for all tensors
-                int pad         = p(0) % 2 == 0 ? p(0) + 2 : p(0) + 1;                  // padding for all tensors
-// DEPRECATE, added one more knot to edge_pad
-//                 int edge_pad    = (p(0) / 2) + 1;                                       // extra padding for tensor at the global edge
-                int edge_pad    = (p(0) / 2) + 2;                                       // extra padding for tensor at the global edge
-
                 // constrain candidate to be no larger than parent in any dimension
                 // also don't leave parent with a small remainder anywhere
                 for (auto j = 0; j < dom_dim; j++)
@@ -3486,57 +3490,139 @@ namespace mfa
                 }
 
                 // check/adjust candidate knot mins and maxs subset and intersection against tensors to be added so far
-                bool add    = true;
-                for (auto tidx = 0; tidx < new_tensors.size(); tidx++)          // for all tensors scheduled to be added so far
+                while (1)
                 {
-                    auto& t = new_tensors[tidx];
+                    bool changed_new_tensors = false;                               // new_tensors changed and will need to be (re)checked
+                    bool add    = true;                                             // the candidate tensor c should be added to the new tensors
 
-                    // candidate is a subset of an already scheduled tensor
-                    if (tmesh.subset(c.knot_mins, c.knot_maxs, t.knot_mins, t.knot_maxs))
+                    for (auto tidx = 0; tidx < new_tensors.size(); tidx++)          // for all tensors scheduled to be added so far
                     {
-                        t.level = child_level;
-                        add = false;
-                    }
+                        auto& t = new_tensors[tidx];
+                        if (t.level < 0)                                            // t was marked as invalid and should be skipped
+                            continue;
 
-                    // an already scheduled tensor is a subset of the candidate
-                    else if (tmesh.subset(t.knot_mins, t.knot_maxs, c.knot_mins, c.knot_maxs))
-                    {
-                        t.knot_mins = c.knot_mins;
-                        t.knot_maxs = c.knot_maxs;
-                        t.level     = child_level;
-                        if (t.parent != c.parent)
+                        // candidate c is a subset of an already scheduled tensor t
+                        // keep t, invalidate c
+                        if (tmesh.subset(c.knot_mins, c.knot_maxs, t.knot_mins, t.knot_maxs))
                         {
-                            // TODO: not sure if this should be an error, or if the parent should be reset
-                            fmt::print(stderr, "Error: already scheduled tensor is a subset of the candidate tensor, but they have different parents. This should not happen\n");
-                            abort();
-//                         t.parent    = c.parent;
+                            t.level             = child_level;
+                            add                 = false;
+                            break;
                         }
-                        add         = false;
-                    }
 
-                    // candidate intersects an already scheduled tensor, to within some proximity
-                    else if (tmesh.intersect(c, t, pad))
-                    {
-                        if (c.parent == t.parent)       // only merge tensors refined from the same parent
+                        // an already scheduled tensor is a subset of the candidate
+                        // keep c, invalidate t
+                        else if (tmesh.subset(t.knot_mins, t.knot_maxs, c.knot_mins, c.knot_maxs))
                         {
-                            tmesh.merge_tensors(t, c, pad);
-                            t.level     = child_level;
-                            add         = false;
+                            if (t.parent != c.parent)
+                            {
+                                // TODO: not sure if this should be an error, or if the parent should be reset
+                                fmt::print(stderr, "Error: already scheduled tensor is a subset of the candidate tensor, but they have different parents. This should not happen\n");
+                                abort();
+                                //                         t.parent    = c.parent;
+                            }
+                            t.level             = -1;
+                            add                 = true;
+                            changed_new_tensors = true;
                         }
-                    }
 
-                }       // for all tensors scheduled to be added so far
+                        // candidate intersects an already scheduled tensor, to within some proximity
+                        // merge c into to t, update and keep t, invalidate c
+                        else if (tmesh.intersect(c, t, pad))
+                        {
+                            if (c.parent == t.parent)                           // only merge tensors refined from the same parent
+                            {
+                                tmesh.merge_tensors(t, c, pad);                 // merge c into t, updating the knot mins, maxs of t
+                                t.level             = child_level;
+                                add                 = false;
+                                break;
+                            }
+                        }
 
-                // schedule the tensor to be added
-                if (add)
-                    new_tensors.push_back(c);
+                    }       // for all tensors scheduled to be added so far
 
+                    // schedule the tensor to be added
+                    if (add)
+                        new_tensors.push_back(c);
+
+                    if (!changed_new_tensors)
+                        break;
+                }   // while !all_done
             }   // for all knots to be inserted
 
             // timing
             fmt::print(stderr, "error spans time:       {} s.\n", error_spans_time);
 
             return false;
+        }
+
+        // final double-check that new tensor products do not intersect each other within some pad amount
+        // check all tensors to be added against each other
+        void CheckNewTensors(
+                vector<TensorProduct<T>>&   new_tensors,                        // new tensors scheduled to be added
+                int                         pad,                                // padding for all tensors
+                int                         edge_pad)                           // extra padding for tensor at the global edge
+        {
+            Tmesh<T>& tmesh = mfa_data.tmesh;
+            VectorXi& p     = mfa_data.p;
+
+            while (1)
+            {
+                bool changed_new_tensors = false;                               // new_tensors changed and will need to be (re)checked
+
+                for (auto cidx = 0; cidx < new_tensors.size(); cidx++)          // for all candidate tensors from tensors scheduled to be added so far
+                {
+                    auto& c = new_tensors[cidx];
+                    if (c.level < 0)                                            // c was marked as invalid and should be skipped
+                        continue;
+
+                    for (auto tidx = 0; tidx < new_tensors.size(); tidx++)      // for all tensors scheduled to be added so far
+                    {
+                        auto& t = new_tensors[tidx];
+                        if (cidx == tidx || t.level < 0)                        // t was marked as invalid and should be skipped
+                            continue;
+
+                        // candidate c is a subset of an already scheduled tensor t
+                        // keep t, invalidate c
+                        if (tmesh.subset(c.knot_mins, c.knot_maxs, t.knot_mins, t.knot_maxs))
+                        {
+                            c.level             = -1;
+                            break;
+                        }
+
+                        // an already scheduled tensor is a subset of the candidate
+                        // keep c, invalidate t
+                        else if (tmesh.subset(t.knot_mins, t.knot_maxs, c.knot_mins, c.knot_maxs))
+                        {
+                            if (t.parent != c.parent)
+                            {
+                                // TODO: not sure if this should be an error, or if the parent should be reset
+                                fmt::print(stderr, "Error: already scheduled tensor is a subset of the candidate tensor, but they have different parents. This should not happen\n");
+                                abort();
+                                //                         t.parent    = c.parent;
+                            }
+                            t.level             = -1;
+                        }
+
+                        // candidate intersects an already scheduled tensor, to within some proximity
+                        // merge c into to t, update and keep t, invalidate c
+                        else if (tmesh.intersect(c, t, pad))
+                        {
+                            if (c.parent == t.parent)                           // only merge tensors refined from the same parent
+                            {
+                                tmesh.merge_tensors(t, c, pad);                 // merge c into t, updating the knot mins, maxs of t
+                                c.level                 = -1;
+                                changed_new_tensors     = true;
+                                break;
+                            }
+                        }
+
+                    }   // for all tensors tidx
+                }   // for all tensors cidx
+
+                if (!changed_new_tensors)
+                    break;
+            }   // while !all_done
         }
 
         // appends and encodes a vector of new tensor products
