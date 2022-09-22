@@ -648,6 +648,108 @@ namespace mfa
             return N[0];
         }
 
+        // computes and returns one differentiated basis function value 
+        // for a given parameter value and local knot vector
+        // Algorithm 2.5 in P&T
+        //
+        // NOTE Algorithm 2.5 in P&T has an error: 
+        //   In the loop "compute table of width k," Uright
+        //   Should be U[i+j+p-k+jj+1], instead of U[i+j+p+jj+1]
+        T OneDerBasisFun(
+                int                     cur_dim,            // current dimension
+                int                     der,                // derivative order
+                T                       u,                  // parameter value
+                const vector<T>&        loc_knots) const    // local knot vector
+        {
+            vector<T> N(p(cur_dim) + 1);                    // triangular table result
+            const vector<T>& U = loc_knots;                 // alias for knot vector for current dimension (size p+2)
+            const int pc = p(cur_dim);
+
+            // If not in local support
+            if (u < U[0] || u >= U[pc + 1])
+                return 0;
+
+            T saved = 0, uleft = 0, uright = 0, temp = 0;
+
+            // matrix from p. 70 of P&T
+            // upper triangle is basis functions
+            // lower triangle is knot differences
+            MatrixX<T> nn(pc + 1, pc + 1);
+
+            for (int j = 0; j <= pc; j++)
+            {
+                if (u >= U[j] && u < U[j+1])
+                    nn(j,0) = 1;
+                else
+                    nn(j,0) = 0;
+            }
+
+            for (int k = 1; k <= pc; k++)
+            {
+                if (nn(0, k-1) == 0) 
+                    saved = 0;
+                else 
+                    saved = ((u - U[0]) * nn(0, k-1)) / (U[k] - U[0]);
+                
+                for (int j = 0; j < pc - k + 1; j++)
+                {
+                    uleft = U[j+1];
+                    uright = U[j+k+1];
+
+                    if (nn(j+1, k-1) == 0)
+                    {
+                        nn(j,k) = saved;
+                        saved = 0;
+                    }
+                    else
+                    {
+                        temp = nn(j+1, k-1) / (uright - uleft);
+                        nn(j,k) = saved + (uright - u)*temp;
+                        saved = (u-uleft) * temp;
+                    }
+                }
+            }
+
+            if (der == 0)
+                return nn(0,pc);    // nn(0,pc) is the 0th-order derivative (function value)
+
+            // Copy the necessary basis functions to a new buffer 'dertable'
+            // dertable will compute intermediate calculations for the requested derivative
+            // We make the copy so that nn is not overwritten (but this may not be necessary)
+            VectorX<T> dertable(der+1);
+            for (int j = 0; j <= der; j++)
+                dertable(j) = nn(j, pc-der);
+
+            // compute the derivative of order 'der'
+            // NOTE: does not compute lower order derivatives
+            for (int l = 1; l <= der; l++)
+            {
+                if (dertable(0) == 0) 
+                    saved = 0;
+                else
+                    saved = dertable(0) / (U[pc - der + l] - U[0]);
+
+                for (int j = 0; j < der - l + 1; j++)
+                {
+                    uleft = U[j+1];
+                    uright = U[j + 1 + pc - der + l];
+                    if (dertable(j+1) == 0)
+                    {
+                        dertable(j) = (pc - der + l)*saved;
+                        saved = 0;
+                    }
+                    else
+                    {
+                        temp = dertable(j+1) / (uright - uleft);
+                        dertable(j) = (pc - der + l)*(saved - temp);
+                        saved = temp;
+                    }
+                }
+            }
+
+            return dertable(0);
+        }
+
         // computes one row of basis function values for a given parameter value
         // writes results in a row of N
         // algorithm 2.2 of P&T, p. 70

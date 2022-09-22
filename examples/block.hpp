@@ -1508,7 +1508,7 @@ struct Block : public BlockBase<T>
         T xh_int = (rho - xh * cos(alpha)) / sin(alpha);
         T xl_int = (rho - xl * cos(alpha)) / sin(alpha);
         // T x0, x1, y0, y1;
-
+ 
         // cerr << "ia=" << ia << ", ir=" << ir << endl;
         // cerr << "rho=" << rho << ", alpha=" << alpha << endl;
         // cerr << xl_int << " " << xh_int << " " << yl_int << " " << yh_int << endl;
@@ -1689,9 +1689,11 @@ struct Block : public BlockBase<T>
         int npts = ndom_pts.prod();
 
         mfa::PointSet<T>* ray_input = nullptr;
-        if (fixed_length)
-            ray_input = new mfa::PointSet<T>(new_dd, new_mdims, npts);
-        else
+
+cout << "\n\nATTENTION: Using experimental separable constrained encode\n" << endl;
+        // if (fixed_length)
+        //     ray_input = new mfa::PointSet<T>(new_dd, new_mdims, npts);
+        // else
             ray_input = new mfa::PointSet<T>(new_dd, new_mdims, npts, ndom_pts);
        
 
@@ -1792,6 +1794,7 @@ struct Block : public BlockBase<T>
                     {
                         if (fixed_length)  // do nothing in fixed_length setting
                         {
+                            ray_input->domain(idx, new_dd) = 0;
                             continue;
                         }
                         else                // else complain and zero-pad (this should not happen)
@@ -1839,7 +1842,7 @@ struct Block : public BlockBase<T>
         // ------------ Creation of new MFA ------------- //
         //
         // Create a new top-level MFA
-        int verbose = mfa->verbose && cp.master()->communicator().rank() == 0; 
+        int verbose = mfa_info.verbose && cp.master()->communicator().rank() == 0; 
         mfa::MFA<T>* ray_mfa = new mfa::MFA<T>(new_dd, verbose);
 
         // Set up new geometry
@@ -1878,9 +1881,12 @@ struct Block : public BlockBase<T>
             ray_mfa->AddVariable(p, nctrl_pts, 1);
         }
 
-        // Encode ray model. TODO: regularized encode
-        bool force_unified = fixed_length;  // force a unified encoding to use the regularizer
-        ray_mfa->FixedEncode(*ray_input, mfa_info.regularization, mfa_info.reg1and2, false, force_unified);
+        // // Encode ray model. TODO: regularized encode
+        // bool force_unified = fixed_length;  // force a unified encoding to use the regularizer
+        // ray_mfa->FixedEncode(*ray_input, mfa_info.regularization, mfa_info.reg1and2, false, force_unified);
+        
+        ray_mfa->FixedEncodeGeom(*ray_input, 0, false);
+        ray_mfa->FixedEncodeSeparableCons(0, *ray_input);
 
 
         // ----------- Replace old block members with new ---------- //
@@ -1938,15 +1944,16 @@ struct Block : public BlockBase<T>
         gridpoints(0) = grid_size[0];
         gridpoints(1) = grid_size[1];
         gridpoints(2) = grid_size[2];
-        this->decode_block_grid(cp, grid_size);
+        this->decode_block(cp, true);
         
 
 cerr << "\n===========" << endl;
 cerr << "f(x) = sin(x) hardcoded in create_ray_model()" << endl;
 cerr << "===========\n" << endl;
         delete this->errs;
-        this->errs = new mfa::PointSet<T>(dom_dim, mfa->model_dim(), gridpoints.prod(), gridpoints);
+        this->errs = new mfa::PointSet<T>(dom_dim, mfa->model_dims(), gridpoints.prod(), gridpoints);
         outpt = VectorX<T>::Zero(1);
+        param.resize(dom_dim); // n.b. this is now the NEW dom_dim
         for (int k = 0; k < grid_size[2]; k++)
         {
             for (int j = 0; j < grid_size[1]; j++)

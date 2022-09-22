@@ -219,24 +219,11 @@ namespace mfa
         // assumes ps contains parameter values to decode at; 
         // decoded points store in ps
         void DecodePointSet(
-                        PointSet<T>&    ps,         // PointSet containing parameters to decode at
-                        int             min_dim,    // first dimension to decode
-                        int             max_dim)    // last dimension to decode
-        {
-            VectorXi no_ders;                       // size 0 means no derivatives
-            DecodePointSet(ps, min_dim, max_dim, no_ders);
-        }
-
-        // computes approximated points from a given set of parameter values  and an n-d NURBS volume
-        // P&T eq. 9.77, p. 424
-        // assumes ps contains parameter values to decode at; 
-        // decoded points store in ps
-        void DecodePointSet(
-                        PointSet<T>&    ps,         // PointSet containing parameters to decode at
-                        int             min_dim,    // first dimension to decode
-                        int             max_dim,    // last dimension to decode
-                const   VectorXi&       derivs)     // derivative to take in each domain dim. (0 = value, 1 = 1st deriv, 2 = 2nd deriv, ...)
-                                                    // pass size-0 vector if unused
+                        PointSet<T>&    ps,                     // PointSet containing parameters to decode at
+                        int             min_dim,                // first dimension to decode
+                        int             max_dim,                // last dimension to decode
+                const   VectorXi&       derivs = VectorXi())    // derivative to take in each domain dim. (0 = value, 1 = 1st deriv, 2 = 2nd deriv, ...)
+                                                                // pass size-0 vector if unused
         {
             if (saved_basis && !ps.is_structured())
                 cerr << "Warning: Saved basis decoding not implemented with unstructured input. Proceeding with standard decoding" << endl;
@@ -359,7 +346,7 @@ namespace mfa
         {
             assert(params.size() == dom_dim);
             assert(output.size() == mfa_data.dim());
-            assert(dim > 0 && dim < dom_dim);
+            assert(dim >= 0 && dim < dom_dim);
 
             BasisFunInfo<T> bfi(mfa_data.p + VectorXi::Constant(dom_dim, 2));
             output = VectorX<T>::Zero(mfa_data.dim());     // reset output to zero

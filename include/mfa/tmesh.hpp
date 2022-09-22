@@ -1736,7 +1736,7 @@ namespace mfa
             vector<NeighborTensor> unused;
 
             // walk the t-mesh in all dimensions, min. and max. directions outward from the anchor
-            // looking for interecting knot lines
+            // looking for intersecting knot lines
 
             for (auto i = 0; i < dom_dim_; i++)                             // for all dims
             {

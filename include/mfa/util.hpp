@@ -119,8 +119,8 @@ namespace mfa
                 ds_(i) = ds_(i - 1) * npts_dim_(i - 1);
 
             cur_iter_   = idx;
-            std::fill(idx_dim_.begin(), idx_dim_.end(), 0);
-            std::fill(prev_idx_dim_.begin(), prev_idx_dim_.end(), 0);
+            idx_dim_.setZero();
+            prev_idx_dim_.setZero();
             std::fill(done_dim_.begin(), done_dim_.end(), false);
             if (idx > 0)
             {
@@ -205,7 +205,7 @@ namespace mfa
         }
 
         // reset the iterator, possibly to a given iteration count
-        void reset(size_t idx = 0)                          { init(idx); }
+        void reset(size_t idx = 0)      { init(idx); }
 
         // return total number of iterations in the volume
         // thread-safe
@@ -460,7 +460,7 @@ namespace mfa
         size_t                  cur_iter_;          // current flattened iteration number
         VectorXi                idx_dim_;           // current index in each dimension in original volume
         int                     curve_dim_;         // dimension of curve
-        size_t                  tot_iters_;         // total number of iterations in slice (not original volume)
+        size_t                  tot_iters_;         // total number of iterations in curve (not original volume)
 
         public:
 
@@ -477,6 +477,7 @@ namespace mfa
         // null iterator
         CurveIterator() :
                     dom_dim_(0),
+                    cur_iter_(0),
                     tot_iters_(0)                           { }
 
         // copy constructor
@@ -535,6 +536,11 @@ namespace mfa
         size_t ijk_idx(const VectorXi& ijk) const       // i,j,k,... indices to all dimensions
         {
             return slice_iter_->vol_iter_->ijk_idx(ijk);
+        }
+
+        int cur_iter_full()
+        {
+            return ijk_idx(cur_ijk());
         }
 
         // increment iteration; user must call incr_iter() near the bottom of the flattened loop

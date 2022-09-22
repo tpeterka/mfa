@@ -657,8 +657,8 @@ namespace mfa
                 const PointSet<T>&  input,                  // input points
                 T                   regularization,
                 bool                reg1and2,
-                bool                weighted,
-                bool                force_unified = false) const         // solve for and use weights (default = true)
+                bool                weighted,               // solve for and use weights (default = true)
+                bool                force_unified = false) const         
         {
             mfa_data.set_knots(input);
 
@@ -666,12 +666,23 @@ namespace mfa
             TensorProduct<T>&t = mfa_data.tmesh.tensor_prods[0];
 
             t.weights = VectorX<T>::Ones(t.nctrl_pts.prod());
-            Encoder<T> encoder(*this, mfa_data, input, verbose);
+            Encoder<T> encoder(mfa_data, input, verbose);
 
             if (input.is_structured() && !force_unified)
                 encoder.Encode(t.nctrl_pts, t.ctrl_pts, t.weights, weighted);
             else
                 encoder.EncodeUnified(0, regularization, reg1and2, weighted);  // Assumes only one tensor product
+        }
+
+        void FixedEncodeSeparableCons(
+                int i,
+                const PointSet<T>& input)
+        {
+            vars[i]->set_knots(input);
+
+            TensorProduct<T>& t = vars[i]->tmesh.tensor_prods[0];
+            Encoder<T> encoder(*vars[i], input, true);
+            encoder.EncodeSeparableConstrained(0, false);
         }
 
         // adaptive encode
@@ -681,11 +692,11 @@ namespace mfa
                 T                   err_limit,              // maximum allowable normalized error
                 bool                weighted,               // solve for and use weights (default = true)
                 const VectorX<T>&   extents,                // extents in each dimension, for normalizing error (size 0 means do not normalize)
-                int                 max_rounds) const       // optional maximum number of rounds
+                int                 max_rounds) const       // maximum number of rounds
         {
             mfa_data.set_knots(input);
             
-            Encoder<T> encoder(*this, mfa_data, input, verbose);
+            Encoder<T> encoder(mfa_data, input, verbose);
 
 #ifndef MFA_TMESH           // original adaptive encode for one tensor product
             encoder.OrigAdaptiveEncode(err_limit, weighted, extents, max_rounds);
@@ -880,6 +891,8 @@ namespace mfa
             decoder.DecodeGrid(result, mfa_data.min_dim, mfa_data.max_dim, par_min, par_max, ndom_pts);
         }
 
+        // NOTE: This is very inefficient if called multiple times. Creation of Decoders and
+        //       VectorX<T> all take non-negligible time due to dynamic memory allocation
         // compute the error (absolute value of coordinate-wise difference) of the mfa at a domain point
         // error is not normalized by the data range (absolute, not relative error)
         void AbsCoordError(

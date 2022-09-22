@@ -116,6 +116,9 @@ using namespace std;
         return;
     }
 
+    // Set DIY Bounds for decomposition based on example
+    // If the input is not an analytical signal, then dummy bounds are used
+    // because we assume the example will be run on a single block
     void set_dom_bounds(Bounds<real_t>& dom_bounds, string input)
     {
         if (input == "sine" || input == "cosine" || input == "sinc" ||

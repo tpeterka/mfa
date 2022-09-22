@@ -34,7 +34,8 @@ namespace mfa
         int                     dom_dim{0};         // dimensionality of domain
         bool                    structured{false};  // true if points lie on structured grid
 
-        Param(int dom_dim_, const vector<int>& ndom_pts_) :
+        // Convenience constructor that accepts a STL vector
+        Param(int dom_dim_, vector<int>& ndom_pts_) :
             Param(dom_dim_, Eigen::Map<VectorXi>(&ndom_pts_[0], ndom_pts_.size()))
         { }
 
@@ -45,7 +46,22 @@ namespace mfa
             dom_dim(dom_dim_),
             ndom_pts(ndom_pts_),
             structured(ndom_pts_.size() > 0)
-        { }
+        { 
+            if (structured)
+            {
+                if (ndom_pts.size() != dom_dim)
+                {
+                    cerr << "ERROR: Dimension mismatch in Param constructor.\nExiting." << endl;
+                    exit(1);
+                }
+                
+                param_grid.resize(dom_dim);
+                for (int i = 0; i < dom_dim; i++)
+                {
+                    param_grid[i].resize(ndom_pts(i));
+                }
+            }
+        }
 
         int npts() const
         {
@@ -63,35 +79,35 @@ namespace mfa
 
         // Structured data only.
         // Get params from VolIterator
-        VectorX<T> pt_params(const VolIterator& it) const
+        void pt_params(const VolIterator& it, VectorX<T>& ret) const
         {
-            VectorX<T> ret(dom_dim);
-            for(int k = 0; k < dom_dim; k++)
+            for(int i = 0; i < dom_dim; i++)
             {
-                ret(k) = param_grid[k][it.idx_dim(k)];
+                ret(i) = param_grid[i][it.idx_dim(i)];
             }
-
-            return ret;
         }
 
         // Structured data only.
         // Get params from param indices in each dimension
-        VectorX<T> pt_params(const VectorXi& idxs) const
+        void pt_params(const VectorXi& idxs, VectorX<T>& ret) const
         {
-            VectorX<T> ret(dom_dim);
-            for(int k = 0; k < dom_dim; k++)
+            for(int i = 0; i < dom_dim; i++)
             {
-                ret(k) = param_grid[k][idxs(k)];
+                ret(i) = param_grid[i][idxs(i)];
             }
-
-            return ret;
         }
 
         // Unstructured data only.
         // Get params from linear index
-        VectorX<T> pt_params(int i) const
+        // TODO: Allow this to work for structured data to?
+        //       Would need a GridInfo class member to 
+        //       convert linear indices to ijk-format
+        void pt_params(int i, VectorX<T>& ret) const
         {
-            return param_list.row(i);
+            for (int j = 0; j < dom_dim; j++)
+            {
+                ret(j) = param_list(i, j);
+            }
         }
 
         void make_grid_params()
@@ -109,12 +125,9 @@ namespace mfa
             }
 
             T step = 0;
-            param_grid.resize(dom_dim);
 
             for (int k = 0; k < dom_dim; k++)
             {
-                param_grid[k].resize(ndom_pts(k));
-
                 param_grid[k][0] = param_mins(k);
 
                 if (ndom_pts(k) > 1)
@@ -149,17 +162,14 @@ namespace mfa
 
             T          tot_dist;                          // total chord length
             VectorX<T> dists(ndom_pts.maxCoeff() - 1);    // chord lengths of data point spans for any dim
-            param_grid = VectorX<T>::Zero(dom_dim);
             VectorX<T> d;                                 // current chord length
 
             // following are counters for slicing domain and params into curves in different dimensions
             size_t co = 0;                     // starting offset for curves in domain in current dim
             size_t cs = 1;                     // stride for domain points in curves in current dim
 
-            param_grid.resize(dom_dim);
             for (size_t k = 0; k < ndom_pts.size(); k++)         // for all domain dimensions
             {
-                param_grid[k].resize(ndom_pts(k));
                 co = 0;
                 size_t coo = 0;                                  // co at start of contiguous sequence
                 size_t ncurves = domain.rows() / ndom_pts(k);    // number of curves in this dimension
@@ -249,12 +259,9 @@ namespace mfa
         // number of data points (which would be the product)
         void make_domain_params_structured(const MatrixX<T>& domain)     // input data points (1st dim changes fastest)
         {
-            param_grid.resize(dom_dim);
-
             int cs = 1;                                      // stride for domain points in current dim.
             for (int k = 0; k < dom_dim; k++)                // for all domain dimensions
             {
-                param_grid[k].resize(ndom_pts(k));
                 T width_recip = 1 / (domain(cs * (ndom_pts(k) - 1), k) - domain(0, k));
 
                 for (int i = 0; i < ndom_pts(k); i++)

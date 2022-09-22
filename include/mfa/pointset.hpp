@@ -479,10 +479,8 @@ namespace mfa
 
             void params(VectorX<T>& param_vec)
             {
-                if(structured)
-                    param_vec = pset.params->pt_params(vol_it);
-                else
-                    param_vec = pset.params->pt_params(lin_idx);
+                if (structured) pset.params->pt_params(vol_it, param_vec);
+                else            pset.params->pt_params(lin_idx, param_vec);
             }
 
             void ijk(VectorXi& ijk_vec)
@@ -543,17 +541,21 @@ namespace mfa
             coord_vec = domain.row(idx).segment(var_min(k), var_dim(k));
         }
 
+        // This should not be called in a large loop because it involves
+        // dynamic memory allocation when VectorXi is constructed
+        // Could pre-allocate a VectorXi in GridInfo to hold the
+        // output of idx2ijk for cases like this.
         void pt_params(size_t idx, VectorX<T>& param_vec) const
         {
             if(is_structured())
             {
                 VectorXi ijk(dom_dim);
                 g.idx2ijk(idx, ijk);
-                param_vec = params->pt_params(ijk);
+                params->pt_params(ijk, param_vec);
             }
             else
             {
-                param_vec = params->pt_params(idx);   
+                params->pt_params(idx, param_vec);   
             }
         }
     };
