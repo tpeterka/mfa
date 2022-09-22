@@ -355,7 +355,7 @@ namespace mfa
         size_t              cur_iter_;          // current flattened iteration number
         VectorXi            idx_dim_;           // current index in each dimension in original volume
         size_t              tot_iters_;         // total number of iterations in slice (not original volume)
-        VolIterator*        sub_vol_iter_;      // subvolume iterator for the slice
+        VolIterator         sub_vol_iter_;      // subvolume iterator for the slice
 
         public:
 
@@ -367,9 +367,9 @@ namespace mfa
         {
             VectorXi sub_npts       = vol_iter_->npts_dim_;
             sub_npts(missing_dim_)  = 1;
-            sub_vol_iter_           = new VolIterator(sub_npts, vol_iter_->starts_dim_, vol_iter_->all_npts_dim_);
+            sub_vol_iter_           = VolIterator(sub_npts, vol_iter_->starts_dim_, vol_iter_->all_npts_dim_);
             idx_dim_                = vol_iter_->starts_dim_;
-            tot_iters_              = sub_vol_iter_->tot_iters();
+            tot_iters_              = sub_vol_iter_.tot_iters();
         }
 
         // null iterator
@@ -407,15 +407,15 @@ namespace mfa
 
         ~SliceIterator()
         {
-            delete sub_vol_iter_;
         }
 
         // reset the iterator
         void reset()
         {
-            vol_iter_->reset();
+            // vol_iter_->reset();      D.L.: I don't think we ever want to reset the parent volIter,
+            // since it may be incrementing independently after SliceIterator is constructed
             cur_iter_ = 0;
-            sub_vol_iter_->reset();
+            sub_vol_iter_.reset();
             idx_dim_ = vol_iter_->starts_dim_;
         }
 
@@ -428,9 +428,9 @@ namespace mfa
         // increment iteration; user must call incr_iter() near the bottom of the flattened loop
         void incr_iter()
         {
-            sub_vol_iter_->incr_iter();
-            cur_iter_   = sub_vol_iter_->cur_iter();
-            idx_dim_    = sub_vol_iter_->idx_dim();
+            sub_vol_iter_.incr_iter();
+            cur_iter_   = sub_vol_iter_.cur_iter();
+            idx_dim_    = sub_vol_iter_.idx_dim();
         }
 
         // return ijk of current iterator location w.r.t. full volume
@@ -510,7 +510,6 @@ namespace mfa
         // reset the iterator
         void reset()
         {
-            slice_iter_->reset();
             cur_iter_ = 0;
             idx_dim_ = VectorXi::Zero(dom_dim_);
         }
