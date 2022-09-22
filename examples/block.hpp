@@ -2394,6 +2394,49 @@ cerr << "===========\n" << endl;
         }
     }
 
+    // static
+    // void readfile_unstructured(
+    //         int gid,                        // block global id
+    //         const Bounds<int> &core,        // block bounds without any ghost added
+    //         const Bounds<int> &bounds,      // block bounds including any ghost region added
+    //         const RCLink<int> &link,        // neighborhood
+    //         diy::Master &master,            // diy master
+    //         std::vector<int> &mapDimension, // domain dimensionality map;
+    //         std::string &s3dfile,           // input file with data
+    //         std::vector<unsigned> &shape,   // important, shape of the block
+    //         int chunk,                      // vector dimension for data input (usually 2 or 3)
+    //         int transpose,                  // diy is MPI_C_ORDER always; offer option to transpose
+    //         MFAInfo& mfa_info)              // info class describing the MFA
+    // {
+    //     Block<T> *b = new Block<T>;
+    //     RCLink<int> *l = new RCLink<int>(link);
+    //     diy::Master & m = const_cast<diy::Master&>(master);
+    //     // write core and bounds only for first block
+    //     if (0 == gid) {
+    //         std::cout << "block:" << gid << "\n  core \t\t  bounds \n";
+    //         for (int j = 0; j < 3; j++)
+    //             std::cout << " " << core.min[j] << ":" << core.max[j] << "\t\t"
+    //                 << " " << bounds.min[j] << ":" << bounds.max[j] << "\n";
+    //     }
+    //     m.add(gid, b, l);
+
+    //     b->dom_dim = (int) mapDimension.size();
+    //     diy::mpi::io::file in(master.communicator(), s3dfile, diy::mpi::io::file::rdonly);
+    //     diy::io::BOV reader(in, shape);
+
+    //     int size_data_read = 1;
+    //     for (int j = 0; j < 3; j++)  // we know how the s3d data is organized
+    //         size_data_read *= (bounds.max[j] - bounds.min[j] + 1);
+    //     std::vector<float> data;
+    //     data.resize(size_data_read * chunk);
+    //     // read bounds will be multiplied by 3 in first direction
+    //     Bounds<int> extBounds = bounds;
+    //     extBounds.min[2] *= chunk; // multiply by 3
+    //     extBounds.max[2] *= chunk; // multiply by 3
+    //     extBounds.max[2] += chunk - 1; // the last coordinate is larger!!
+    //     bool collective = true; //
+    //     reader.read(extBounds, &data[0], collective);
+    // }
 
     static
     void readfile(                          // add the block to the decomposition
