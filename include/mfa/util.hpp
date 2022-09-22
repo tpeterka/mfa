@@ -411,6 +411,9 @@ namespace mfa
         // return current total iteration count
         size_t cur_iter() const       { return cur_iter_; }
 
+        // return total number of iterations in the slice (not in original volume)
+        size_t tot_iters() const        { return tot_iters_; }
+
     };  // SliceIterator
 
     // a one-dimension curve of a VolIterator
@@ -423,7 +426,7 @@ namespace mfa
         size_t                  cur_iter_;          // current flattened iteration number
         VectorXi                idx_dim_;           // current index in each dimension in original volume
         int                     curve_dim_;         // dimension of curve
-        size_t                  tot_iters_;         // total number of iterations in slice (not original volume)
+        size_t                  tot_iters_;         // total number of iterations in curve (not original slice)
 
         public:
 
@@ -512,6 +515,9 @@ namespace mfa
 
         // return current total iteration count
         size_t cur_iter() const       { return cur_iter_; }
+
+        // return total number of iterations in the curve (not in original slice)
+        size_t tot_iters() const        { return tot_iters_; }
 
     };  // CurveIterator
 

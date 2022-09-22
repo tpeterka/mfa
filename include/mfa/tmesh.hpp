@@ -216,6 +216,45 @@ namespace mfa
             return 2;
         }
 
+        // update a tensor product in the vector of tensor_prods
+        // if a tensor matching the knot mins and maxs exists, resizes its control points to the current number of knots
+        // returns index of new or existing tensor in the vector of tensor products or -1 if no match
+        int update_tensor(const vector<KnotIdx>&   knot_mins,       // indices in all_knots of min. corner of tensor to be inserted
+                          const vector<KnotIdx>&   knot_maxs,       // indices in all_knots of max. corner
+                          int                      level,           // level to assign to new tensor
+                          bool                     debug = false)   // print debugging output
+        {
+            // check if the tensor to be added matches any existing ones
+            for (auto k = 0; k < tensor_prods.size(); k++)
+            {
+                auto& t = tensor_prods[k];
+
+                if (knot_mins == t.knot_mins && knot_maxs == t.knot_maxs)
+                {
+                    t.level = level;                // update tensor level to latest deepest knots inserted
+                    t.done  = false;                // force a modified tensor to be rechecked for error spans
+
+                    // resize control points and weights
+                    for (auto j = 0; j < dom_dim_; j++)
+                    {
+                        bool odd_degree = p_(j) % 2;
+                        t.nctrl_pts(j) = knot_idx_dist(t, knot_mins[j], knot_maxs[j], j, odd_degree);
+                        if (knot_mins[j] == 0)
+                            t.nctrl_pts(j) -= (p_(j) + 1) / 2;
+                        if (knot_maxs[j] == all_knots[j].size() - 1)
+                            t.nctrl_pts(j) -= (p_(j) + 1) / 2;
+                    }
+                    t.ctrl_pts.resize(t.nctrl_pts.prod(), t.ctrl_pts.cols());
+                    t.weights = VectorX<T>::Ones(t.ctrl_pts.rows());
+                    tensor_knot_idxs(t);
+
+                    return k;
+                }
+            }
+
+            return -1;
+        }
+
         // append a tensor product to the vector of tensor_prods
         // if a tensor matching the knot mins and maxs exists, resizes its control points to the current number of knots
         // returns index of new or existing tensor in the vector of tensor products
@@ -234,7 +273,8 @@ namespace mfa
 
                 if (knot_mins == t.knot_mins && knot_maxs == t.knot_maxs)
                 {
-                    t.level = level;
+                    t.level = level;                // update tensor level to latest deepest knots inserted
+                    t.done  = false;                // force a modified tensor to be rechecked for error spans
 
                     // resize control points and weights
                     for (auto j = 0; j < dom_dim_; j++)

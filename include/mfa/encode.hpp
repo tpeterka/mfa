@@ -2018,13 +2018,20 @@ namespace mfa
             t.weights.resize(t.ctrl_pts.rows());
             t.weights = VectorX<T>::Ones(t.weights.size());                                         // linear solve does not solve for weights; set to 1
 
+            // max size of input point matrices is the product of the max of input points and control points in each dim
+            size_t max_npts = 1;
+            for (auto k = 0; k < dom_dim; k++)
+                max_npts *= std::max(ndom_pts(k), t.nctrl_pts(k));
+
             // two matrices of input points for subsequent dimensions after dimension 0, which draws directly from input domain
             // input points cover constraints as well as free control point basis functions
             // (double buffering output control points to input points)
-            VectorXi npts = ndom_pts;                                                               // number of output points in current dim = input pts for next dim
-            MatrixX<T> Q(npts.prod(), pt_dim);                                                      // first matrix size of input points
+            MatrixX<T> Q(max_npts, pt_dim);
+            MatrixX<T> Q1(max_npts, pt_dim);
+
+            // number of output points in current dimension and number of input points of next dimension
+            VectorXi npts = ndom_pts;
             npts(0) = t.nctrl_pts(0);
-            MatrixX<T> Q1(npts.prod(), pt_dim);                                                     // second matrix already smaller, size of ctrl pts in first dim
 
             // debug
 //             fmt::print(stderr, "EncodeTensorLocalSeparable(): input domain points covered by tensor and constraints:\n");
@@ -2112,7 +2119,7 @@ namespace mfa
                         InterpCtrlPtCurve(dim, t_idx, start_ijk, nin_pts, P);
 
                     // copy solution to one curve of output points
-                    CurveIterator   out_curve_iter(out_slice_iter);                                     // one curve of the output points in the current dim
+                    CurveIterator   out_curve_iter(out_slice_iter);                                 // one curve of the output points in the current dim
                     while (!out_curve_iter.done())
                     {
                         if (dim % 2 == 0)
@@ -2272,10 +2279,13 @@ namespace mfa
                 vector<vector<KnotIdx>>     inserted_knot_idxs(mfa_data.dom_dim);   // indices in each dim. of inserted knots in full knot vector after insertion
                 vector<vector<T>>           inserted_knots(mfa_data.dom_dim);       // knots to be inserted in each dim.
                 vector<TensorIdx>           parent_tensor_idxs;                     // tensors having knots inserted
+                vector<TensorProduct<T>>    new_tensors;                            // empty, unused
                 bool done = nk.AllErrorSpans(
+                        0,
                         myextents,
                         err_limit,
                         true,
+                        new_tensors,
                         parent_tensor_idxs,
                         inserted_knot_idxs,
                         inserted_knots,
@@ -2318,10 +2328,12 @@ namespace mfa
                     for (auto j = 0; j < mfa_data.dom_dim; j++)
                     {
                         inserted[j] = false;
-                        if (mfa_data.tmesh.insert_knot_at_pos(j,
-                                    inserted_knot_idxs[j][i],
+                        if (mfa_data.tmesh.insert_knot(
+                                    j,
                                     0,                                              // all knots at level 0 in this version
-                                    inserted_knots[j][i], input.params->param_grid))
+                                    inserted_knots[j][i],
+                                    input.params->param_grid,
+                                    inserted_knot_idxs[j][i]))
                         {
                             inserted[j] = true;
                             // increment subsequent insertions
@@ -2348,25 +2360,23 @@ namespace mfa
                 const VectorX<T>&   extents,                            // extents in each dimension, for normalizing error (size 0 means do not normalize)
                 int                 max_rounds = 0)                     // optional maximum number of rounds
         {
+            auto& tmesh         = mfa_data.tmesh;
+            auto& tensor_prods  = tmesh.tensor_prods;
             int parent_level = 0;                                       // parent level currently being refined
 
-            TensorProduct<T>&t = mfa_data.tmesh.tensor_prods[0];        // fixed encode assumes the tmesh has only one tensor product
+            TensorProduct<T>&t = tensor_prods[0];                       // fixed encode assumes the tmesh has only one tensor product
             Encode(t.nctrl_pts, t.ctrl_pts, t.weights, weighted);
 
             // debug: print tmesh
 //             fprintf(stderr, "\n----- initial T-mesh -----\n\n");
-//             mfa_data.tmesh.print();
+//             tmesh.print();
 //             fprintf(stderr, "--------------------------\n\n");
 
             vector<TensorProduct<T>>    new_tensors;                    // newly refined tensors to be added
 
             // intersection proximity between tensors (assumes same for all dims)
             VectorXi& p = mfa_data.p;
-// DEPRECATE, added one more knot to pad
-//             int pad         = p(0) % 2 == 0 ? p(0) + 1 : p(0);                      // padding for all tensors
             int pad         = p(0) % 2 == 0 ? p(0) + 2 : p(0) + 1;                  // padding for all tensors
-// DEPRECATE, added one more knot to edge_pad
-//             int edge_pad    = (p(0) / 2) + 1;                                       // extra padding for tensor at the global edge
             int edge_pad    = (p(0) / 2) + 2;                                       // extra padding for tensor at the global edge
 
             // loop until all tensors are done
@@ -2384,39 +2394,60 @@ namespace mfa
 
                 // debug
 //                 fmt::print(stderr, "\nTmesh before refinement\n\n");
-//                 mfa_data.tmesh.print(true, true, false, false);
+//                 tmesh.print(true, true, false, false);
 
-                bool done_parent_level = Refine(parent_level, iter + 1, err_limit, extents, pad, edge_pad, new_tensors);
+                Refine(parent_level, iter + 1, err_limit, extents, pad, edge_pad, new_tensors);
 
-                if (done_parent_level)
+                UpdateExistingTensors(new_tensors);
+
+                // check if number of control points exceeds input points in any dimension (in the case of a single tensor)
+                if (tensor_prods.size() == 1)
                 {
-                    if (parent_level >= mfa_data.tmesh.max_level)
+                    bool done = false;
+                    int k;
+                    for (k = 0; k < mfa_data.dom_dim; k++)
+                    {
+                        if (input.ndom_pts(k) <= tensor_prods[0].nctrl_pts(k))
+                        {
+                            done = true;
+                            break;
+                        }
+                    }
+                    if (done)
                     {
                         if (verbose)
-                            fprintf(stderr, "\nKnot insertion done after %d iterations; no new knots added.\n\n", iter + 1);
+                            fmt::print(stderr, "\nKnot insertion done after {} iterations; Control points in dim. {} is {} which is the max.\n\n",
+                                    iter + 1, k, tensor_prods[0].nctrl_pts(k));
                         break;
                     }
-                    else                                                // one iteration only is done
-                    {
-                        CheckNewTensors(new_tensors, pad, edge_pad);
-                        fmt::print(stderr, "Level {} done, adding {} new tensors\n", parent_level, new_tensors.size());
-                        double add_tensors_time = MPI_Wtime();
-                        AddNewTensors(new_tensors);
-                        add_tensors_time = MPI_Wtime() - add_tensors_time;
-                        fmt::print(stderr, "Solving and adding new tensors time:   {} s.\n", add_tensors_time);
-                        parent_level++;
-                        new_tensors.clear();
-                    }
+                }
+                // check if all levels are done
+                if (parent_level >= tmesh.max_level)
+                {
+                    if (verbose)
+                        fmt::print(stderr, "\nKnot insertion done after %d iterations; no new knots added.\n\n", iter + 1);
+                    break;
+                }
+                else                                                // one iteration only is done
+                {
+                    CheckNewTensors(new_tensors, pad, edge_pad);
+                    fmt::print(stderr, "Level {} done, adding {} new tensors\n", parent_level, new_tensors.size());
+                    double add_tensors_time = MPI_Wtime();
+                    AddNewTensors(new_tensors);
+                    add_tensors_time = MPI_Wtime() - add_tensors_time;
+                    fmt::print(stderr, "Solving and adding new tensors time:   {} s.\n", add_tensors_time);
+                    parent_level++;
+                    new_tensors.clear();
                 }
             }   // iterations
 
             fmt::print(stderr, "{} iterations.\n", iter + 1);
-            fmt::print(stderr, "{} tensor products.\n", mfa_data.tmesh.tensor_prods.size());
+            fmt::print(stderr, "{} tensor products.\n", tensor_prods.size());
 
             // debug: print tmesh
-            fprintf(stderr, "\n----- final T-mesh -----\n\n");
-            mfa_data.tmesh.print(true, true, false, false);
-            fprintf(stderr, "--------------------------\n\n");
+            fmt::print(stderr, "\n----- final T-mesh -----\n\n");
+            tmesh.print(true, true, false, false);
+            fmt::print(stderr, "--------------------------\n\n");
 
             // debug: check all spans
             // TODO: comment out after code is debugged
@@ -2427,10 +2458,10 @@ namespace mfa
             // debug: check if all tensors are marked done
             // TODO: comment out after code is debugged
             bool all_done = true;
-            for (auto i = 0; i < mfa_data.tmesh.tensor_prods.size(); i++)
+            for (auto i = 0; i < tensor_prods.size(); i++)
             {
                 bool first = true;
-                auto& t = mfa_data.tmesh.tensor_prods[i];
+                auto& t = tensor_prods[i];
                 if (!t.done)
                 {
                     if (first)
@@ -2448,12 +2479,12 @@ namespace mfa
             // TODO: comment out after code is debugged
             int min_interior    = mfa_data.p(0) % 2 == 0 ? mfa_data.p(0) + 2 : mfa_data.p(0) + 1;   // min. size for interior tensors
             int min_border      = 2 * mfa_data.p(0) + 1;                                            // min. size for global border tensors
-            if (!mfa_data.tmesh.check_min_size(min_interior, min_border))
+            if (!tmesh.check_min_size(min_interior, min_border))
                 throw MFAError(fmt::format("AdaptiveEncode(): Error: failed checking minimum size of tensors\n"));
 
             // debug: verify that the local knots stored in all tensors correspond to the global knots
             // TODO: comment out after code is debugged
-            if (!mfa_data.tmesh.check_local_knots())
+            if (!tmesh.check_local_knots())
                 throw MFAError(fmt::format("AdaptiveEncode(): Error: failed checking local knots of tensors\n"));
         }
 
@@ -3300,6 +3331,10 @@ namespace mfa
                     inserted_knots,
                     error_stats);
 
+            // debug
+            fmt::print(stderr, "Refine(): parent_level {} child_level {} n_insertions {} done {}\n",
+                    parent_level, child_level, parent_tensor_idxs.size(), done);
+
             if (done)                                                           // nothing inserted
                 return true;
 
@@ -3690,6 +3725,72 @@ namespace mfa
 #else
                 EncodeTensorLocalUnified(tensor_idx);
 #endif
+            }
+        }
+
+        // updates and encodes existing tensors if they match any in a vector of new tensor products
+        void UpdateExistingTensors(vector<TensorProduct<T>>& new_tensors)
+        {
+            // typing shortcuts
+            auto&   tmesh                   = mfa_data.tmesh;
+            auto&   tensor_prods            = tmesh.tensor_prods;
+            auto&   dom_dim                 = mfa_data.dom_dim;
+            auto&   p                       = mfa_data.p;
+
+            // debug: for checking knot spans for input points
+            // TODO: comment out once the code is debugged
+            mfa::NewKnots<T> nk(mfa_data, input);
+
+            for (auto k = 0; k < new_tensors.size(); k++)
+            {
+                auto& t = new_tensors[k];
+
+                if (t.level < 0)                        // tensor was removed from the schedule
+                    continue;
+
+                int tensor_idx = tmesh.update_tensor(t.knot_mins, t.knot_maxs, t.level);
+
+                if (tensor_idx < 0)
+                    continue;
+
+                // debug
+//                 fmt::print(stderr, "\nT-mesh after append\n\n");
+//                 mfa_data.tmesh.print(true, true);
+
+                // debug: check all spans before solving
+                // TODO: comment out once the code is debugged
+                if (!nk.CheckAllSpans())
+                    throw MFAError(fmt::format("AddNewTensors(): Error: failed checking all spans for input points\n"));
+
+                // debug: check all knot vs control point quantities
+                // TODO: comment out once the code is debugged
+                for (auto j = 0; j < tensor_prods.size(); j++)
+                    if (!tmesh.check_num_knots_ctrl_pts(j))
+                        throw MFAError(fmt::format("AddNewTensors(): number of knots and control points do not agree\n"));
+
+                // debug: confirm that all tensors will have at least p control points
+                // TODO: comment out once the code is debugged
+                for (auto i = 0; i < tensor_prods.size(); i++)
+                {
+                    if (!tmesh.check_num_ctrl_degree(i, 0))
+                    {
+                        auto& t = tensor_prods[k];
+                        fmt::print(stderr, "Error: AddNewTensors(): After appending tensor k {} one of the tensors has fewer than p control points. This should not happen\n", k);
+                        fmt::print(stderr, "New tensor knot_mins [{}] knot_maxs[{}] level {} parent tensor {}\n",
+                                fmt::join(t.knot_mins, ","), fmt::join(t.knot_maxs, ","), t.level, t.parent);
+                        fmt::print(stderr, "\nAddNewTensors(): T-mesh after appending tensor k {}\n", k);
+                        tmesh.print(true, true, false, false);
+                        abort();
+                    }
+                }
+
+                // solve for new control points
+#ifdef MFA_ENCODE_LOCAL_SEPARABLE
+                EncodeTensorLocalSeparable(tensor_idx);
+#else
+                EncodeTensorLocalUnified(tensor_idx);
+#endif
+                t.level = -1;                       // remove this tensor from the new tensors
             }
         }
 
