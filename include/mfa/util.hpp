@@ -201,7 +201,7 @@ namespace mfa
             first.idx_dim_.swap(second.idx_dim_);
             first.prev_idx_dim_.swap(second.prev_idx_dim_);
             std::swap(first.cur_iter_, second.cur_iter_);
-            std::swap(first.dom_dim_, second.dom_dim_);
+            std::swap(first.done_dim_, second.done_dim_);
         }
 
         // reset the iterator, possibly to a given iteration count
