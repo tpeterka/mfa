@@ -1488,6 +1488,292 @@ struct Block : public BlockBase<T>
         cerr << "domain extent:\n min\n" << bounds_mins << "\nmax\n" << bounds_maxs << endl;
     }
 
+    // Provide a container for native volume header data (for a single subdomain).
+    struct NASAHeader {
+        NASAHeader() : n_nodes_0(0), n_nodes(0), size(0) {}
+
+        /// File format version.
+        string version;
+        /// FUN3D internal: number of grid points local to the partition.
+        size_t n_nodes_0;
+        /// Number of nodes (also known as vertices or grid points).
+        size_t n_nodes;
+        /// Names of variables, in the order they occur in the data.
+        vector<string> variables;
+        /// Map from local to global vertex numbering, 1-based.
+        vector<int64_t> local_to_global;
+        /// Header size, in bytes.
+        size_t size;
+    };
+
+    string read_nasa_string(istream& is)
+    {
+        int32_t length;
+        is.read((char*) &length, sizeof(int32_t));
+        vector<char> chars(length);
+        is.read(chars.data(), chars.size());
+        return string(chars.data(), chars.size());
+    }
+
+    void read_nasa_volume_header(istream& is, NASAHeader& h)
+    {
+        int32_t magic;
+        is.read((char*) &magic, sizeof(int32_t));
+        if (magic != 305419896)
+        {
+            cerr << "bad magic" << endl;
+            exit(1);
+        }
+
+        int32_t i32;    
+
+        h.version = read_nasa_string(is);
+
+        is.read((char*) &i32, sizeof(int32_t));
+        h.n_nodes_0 = (size_t) i32;
+
+        is.read((char*) &i32, sizeof(int32_t));
+        h.n_nodes = (size_t) i32;
+
+        is.read((char*) &i32, sizeof(int32_t));
+        size_t n_variables = (size_t) i32;
+
+        h.variables.resize(n_variables);
+        for (size_t i = 0; i < n_variables; ++i)
+            h.variables[i] = read_nasa_string(is);
+
+        h.local_to_global.resize(h.n_nodes);
+        is.read((char*) h.local_to_global.data(), h.local_to_global.size() * sizeof(int64_t));
+
+        h.size = is.tellg();
+
+        cout << "Reading NASA 3d Retropopulsion Dataset" << '\n'
+             << "Header info: " << '\n'
+             << "|   Version: " << h.version << "\n"
+             << "|   File Size (bytes): " << h.size << "\n"
+             << "|   Nodes: " << h.n_nodes << "\n"
+             << "|   Variable Names: ";
+        for (int i = 0; i < h.variables.size(); i++)
+        {
+            cout << h.variables[i] << " ";
+        }
+        cout << "-----------------------" << endl;
+    }
+
+    size_t seek_time_step(istream& is, const NASAHeader& h, int ts)
+    {
+        int ts0 = -1;
+        size_t size1 = sizeof(int32_t) + h.n_nodes * h.variables.size() * sizeof(float);
+        size_t i = 0;
+
+        // On first iteration, we check what the delta-T between the first and second
+        // time steps is. Then, we use that delta-T to seek ahead to the appropriate
+        // position. Note: The time steps are not sequential, so it could be that
+        // ts0 = 1000, ts1 = 1200; then delta-T = 200.
+        for ( ; ; i++) {
+            int32_t tsi;
+            is.seekg(h.size + i * size1);
+            is.read((char*) &tsi, sizeof(int32_t));
+
+            if (is.eof())
+            {
+                cerr << "Time step " << ts << " not found.\nExiting" << endl;
+                exit(1);
+            }
+
+            if (tsi == ts)
+                break;
+
+            if (i == 0) 
+            {
+                ts0 = tsi;
+            }
+            else if (i == 1) 
+            {
+                //
+                // Assuming snapshots saved at a fixed stride, calculate where
+                // we would expect to find time step ts, based on ts0 and ts1,
+                // and see if that is correct.  Seeking to and reading 4-byte
+                // tsi values one at a time can be slow going if there are
+                // many time steps saved to a file.  Use this heuristic to try
+                // to find the matching time step faster.
+                //
+                int ts1 = tsi;
+                int dt = ts1 - ts0;
+                if (dt > 0 && (ts - ts0) > 0 && (ts - ts0) % dt == 0) 
+                {
+                    size_t ii = (size_t) ((ts - ts0) / dt);
+                    is.seekg(h.size + ii * size1);
+                    is.read((char*) &tsi, sizeof(int32_t));
+                    if (!is.eof() && tsi == ts) {
+                        i = ii;
+                        break;
+                    }
+                    else if (is.eof())
+                    {
+                        cerr << "Reached end of file while looking for timestep " << ts << ".\nExiting." << endl;
+                        exit(1);
+                    }
+                    else
+                    {
+                        cerr << "Timestep " << ts << " not found.\nExiting." << endl;
+                        exit(1);
+                    }
+                }
+            }
+        }
+        return i;
+    }
+
+    void read_nasa3d_retro_mesh(string mesh_filename, mfa::PointSet<T>& ps)
+    {
+        ifstream is(mesh_filename);
+        if (!is)
+        {
+            cerr << "Failed to open mesh file.\nExiting." << endl;
+            exit(1);
+        }
+
+        size_t n_nodes = -1;
+        size_t n_surf_tris = -1;
+        size_t n_surf_quads = -1;
+        size_t n_tets = -1;
+        size_t n_pyramids = -1;
+        size_t n_prisms = -1;
+        size_t n_hexs = -1;
+
+        int64_t i64;    
+        is.read((char*) &i64, sizeof(int64_t));
+        n_nodes = (size_t) i64;
+
+        is.read((char*) &i64, sizeof(int64_t));
+        n_surf_tris = (size_t) i64;
+
+        is.read((char*) &i64, sizeof(int64_t));
+        n_surf_quads = (size_t) i64;
+
+        is.read((char*) &i64, sizeof(int64_t));
+        n_tets = (size_t) i64;
+
+        is.read((char*) &i64, sizeof(int64_t));
+        n_pyramids = (size_t) i64;
+
+        is.read((char*) &i64, sizeof(int64_t));
+        n_prisms = (size_t) i64;
+
+        is.read((char*) &i64, sizeof(int64_t));
+        n_hexs = (size_t) i64;
+
+        cout << "Reading mesh file" << "\n"
+             << "  Nodes:             " << n_nodes << "\n"
+             << "  Surface Triangles: " << n_surf_tris << "\n"
+             << "  Surface Quads:     " << n_surf_quads << "\n"
+             << "  Tetrahedra:        " << n_tets << "\n"
+             << "  Pyramids:          " << n_pyramids << "\n"
+             << "  Prisms:            " << n_prisms << "\n"
+             << "  Hexahedra:         " << endl;
+
+        // read x,y,z coordinates of each node
+        vector<float> xyz_coords(n_nodes * 3);
+        is.read((char*) xyz_coords.data(), n_nodes * 3 * sizeof(float));
+        for (size_t i = 0; i < n_nodes; i++)
+        {
+            ps.domain(i, 0) = xyz_coords[i * 3];
+            ps.domain(i, 1) = xyz_coords[i * 3 + 1];
+            ps.domain(i, 2) = xyz_coords[i * 3 + 2];
+        }
+    }
+
+    void read_nasa3d_retro(const       diy::Master::ProxyWithLink& cp,
+                        MFAInfo&    mfa_info,
+                        DomainArgs& args,
+                        int subdomain_id, int time_step, string var_name)
+    {
+        assert(mfa_info.nvars() == 1);
+        assert(mfa_info.geom_dim() == 3);
+        assert(mfa_info.model_dims(1) = 1);
+
+        const int nvars         = mfa_info.nvars();
+        const int gdim          = mfa_info.geom_dim();
+        const VectorXi mdims    = mfa_info.model_dims();
+
+        this->max_errs.resize(nvars);
+        this->sum_sq_errs.resize(nvars);
+        core_mins.resize(dom_dim);
+        core_maxs.resize(dom_dim);
+        bounds_mins.resize(pt_dim);
+        bounds_maxs.resize(pt_dim);
+
+        string mesh_filename = "dAgpu0145_Fa_mesh.lb4." + to_string(subdomain_id);
+        string data_filename = "2000unsteadyiters/dAgpu0145_Fa_volume_data." + to_string(subdomain_id);
+
+        // Read header and print some information
+        ifstream is(data_filename);
+        NASAHeader header;
+        if (!is)
+        {
+            cerr << "Failed to open data file" << endl;
+            exit(1);
+        }
+        read_nasa_volume_header(is, header);
+
+        args.tot_ndom_pts = header.n_nodes;
+        input = new mfa::PointSet<T>(dom_dim, mdims, args.tot_ndom_pts);
+
+        // Read x,y,z coordinates
+        read_nasa3d_retro_mesh(mesh_filename, *input);
+
+        // get variable index from name
+        auto it = std::find(header.variables.begin(), header.variables.end(), var_name);
+        if (it == header.variables.end())
+        {
+            cerr << "Variable \'" << var_name << "\' not in variable name list" << endl;
+            exit(1);
+        }
+        int var_id = std::distance(header.variables.begin(), it);
+
+        // Find start of requested time step in file
+        seek_time_step(is, header, time_step);
+
+        // Read variable data
+        vector<float> tmp(header.n_nodes * header.variables.size());
+        is.read((char*) tmp.data(), tmp.size() * sizeof(float));
+
+        for (int i = 0; i < header.n_nodes; i++)
+        {
+            input->domain(i, 3) = tmp[i * header.variables.size() + var_id];
+        }
+
+        for (int i = 0; i < pt_dim; i++)
+        {
+            bounds_mins = input->domain.colwise().minCoeff();
+            bounds_maxs = input->domain.colwise().maxCoeff();
+        }
+        core_mins = bounds_mins.head(dom_dim);
+        core_maxs = bounds_maxs.head(dom_dim);
+
+        // VectorX<T> dom_mins(dom_dim), dom_maxs(dom_dim);
+        // for (int i = 0; i < dom_dim; i++)
+        // {
+        //     dom_mins(i) = args.min[i];
+        //     dom_maxs(i) = args.max[i];
+        // }
+        // input->set_domain_params(dom_mins, dom_maxs);
+        input->set_domain_params();
+
+        // initialize MFA models (geometry, vars, etc)
+        this->setup_MFA(cp, mfa_info);
+
+        // debug
+        cerr << "data extent:\n";
+        cerr << "  mins: "; mfa::print_vec(bounds_mins);
+        cerr << "  maxs: "; mfa::print_vec(bounds_maxs);
+        // cerr << "bounds extent:\n";
+        // cerr << "  mins: "; mfa::print_vec(dom_mins);
+        // cerr << "  maxs: "; mfa::print_vec(dom_maxs);
+        cerr << endl;
+    }
+
     void get_box_intersections(
         T alpha,
         T rho,
