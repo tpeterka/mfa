@@ -152,6 +152,13 @@ struct BlockBase
         // blending
         overlaps.resize(dom_dim);
 
+        // debug
+        fmt::print(stderr, "1:\n");
+//         fmt::print(stderr, "core min {}\n,", core.min[0]);
+//         fmt::print(stderr, "domain min {}\n,", domain.min[0]);
+        fmt::print(stderr, "dom_dim {} pt_dim {}\n", dom_dim, pt_dim);
+        fmt::print(stderr, "2:\n");
+
         // manually set ghosted block bounds as a factor increase of original core bounds
         for (int i = 0; i < dom_dim; i++)
         {

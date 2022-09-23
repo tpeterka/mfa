@@ -41,21 +41,25 @@ nblocks = w.size                # hard-code 1 block per MPI rank
 domain = diy.DoubleContinuousBounds(d_args.min, d_args.max)
 d = diy.DoubleContinuousDecomposer(dom_dim, domain, nblocks)
 a = diy.ContiguousAssigner(w.size, nblocks)
+
+# debug
+print("MPI size", w.size, "rank", w.rank, "nblocks", nblocks, "domain", domain)
+
 d.decompose(w.rank, a, lambda gid, core, bounds, domain_, link: mfa.Block.add(gid, core, bounds, domain_, link, m, dom_dim, pt_dim))
 
-# initialize input data
-m.foreach(lambda b, cp: b.generate_analytical_data(cp, fun, d_args))
-
-# compute the MFA
-m.foreach(lambda b, cp: b.fixed_encode_block(cp, d_args))
-
-# debug: compute error field
-if error:
-    m.foreach(lambda b, cp: b.range_error(cp, 1, True, True))
-
-# print results
-m.foreach(lambda b, cp: b.print_block(cp, True))
-
-# save the results
-print("\n\nSaving blocks\n")
-diy.write_blocks("approx.out", m, save = mfa.save_block)
+# # initialize input data
+# m.foreach(lambda b, cp: b.generate_analytical_data(cp, fun, d_args))
+# 
+# # compute the MFA
+# m.foreach(lambda b, cp: b.fixed_encode_block(cp, d_args))
+# 
+# # debug: compute error field
+# if error:
+#     m.foreach(lambda b, cp: b.range_error(cp, 1, True, True))
+# 
+# # print results
+# m.foreach(lambda b, cp: b.print_block(cp, True))
+# 
+# # save the results
+# print("\n\nSaving blocks\n")
+# diy.write_blocks("approx.out", m, save = mfa.save_block)

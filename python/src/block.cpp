@@ -4,7 +4,13 @@
 #include    <pybind11/functional.h>
 namespace py = pybind11;
 
-#include    <../examples/block.hpp>
+#include    "../../examples/block.hpp"
+
+#if defined(MFA_MPI4PY)
+#include "mpi-comm.h"
+#endif
+
+#include "mpi-capsule.h"
 
 template <typename T>
 void init_block(py::module& m, std::string name)
@@ -19,7 +25,6 @@ void init_block(py::module& m, std::string name)
         .def_readwrite("pt_dim",            &ModelInfo::pt_dim)
         .def_readwrite("geom_p",            &ModelInfo::geom_p)
         .def_readwrite("vars_p",            &ModelInfo::vars_p)
-        .def_readwrite("ndom_pts",          &ModelInfo::ndom_pts)
         .def_readwrite("geom_nctrl_pts",    &ModelInfo::geom_nctrl_pts)
         .def_readwrite("vars_nctrl_pts",    &ModelInfo::vars_nctrl_pts)
         .def_readwrite("weighted",          &ModelInfo::weighted)
@@ -37,6 +42,7 @@ void init_block(py::module& m, std::string name)
     py::class_<DomainArgs, ModelInfo>(m, "DomainArgs")
         .def(py::init<int, int>())
         .def_readwrite("starts",        &DomainArgs::starts)
+        .def_readwrite("ndom_pts",      &DomainArgs::ndom_pts)
         .def_readwrite("full_dom_pts",  &DomainArgs::full_dom_pts)
         .def_readwrite("min",           &DomainArgs::min)
         .def_readwrite("max",           &DomainArgs::max)
@@ -67,8 +73,9 @@ void init_block(py::module& m, std::string name)
                                         T                   ghost_factor)
             {
                 Block<T>*       b   = new Block<T>;
-                RCLink*         l   = new RCLink(link);
-                master.add(gid, new py::object(py::cast(b)), l);
+                //                 DEPRECATED
+//                 RCLink*         l   = new RCLink(link);
+                master.add(gid, new py::object(py::cast(b)), link.clone());
                 b->init_block(core, domain, dom_dim, pt_dim);
             }, "core"_a, "bounds"_a, "domain"_a, "link"_a, "master"_a, "dom_dim"_a, "pt_dim"_a,
             "ghost_factor"_a = 0.0)

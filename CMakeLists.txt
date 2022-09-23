@@ -83,27 +83,6 @@ if                          (eigen_thread)
     endif                   ()
 endif                       ()
 
-# # Eigen threading (requires OpenMP to be available)
-# if                          (eigen_thread)
-#     find_package            (OpenMP)
-#     message                 ("Using OpenMP for Eigen")
-#     add_definitions         (-DEIGEN_OPENMP)
-#     if                      (APPLE)
-#         set                 (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Xclang -fopenmp")
-#         if                  (${OPENMP_CXX_FOUND})
-#             set             (CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -lomp")
-#         elseif              (DEFINED OPENMP_LIBRARY)
-#             set             (libraries ${libraries} ${OPENMP_LIBRARY})
-#             message         ("Using user-provided OpenMP library: ${OPENMP_LIBRARY}")
-#         else                ()
-#             message         ("Error: cannot find OpenMP and OPENMP_LIBRARY is not set")
-#             message         (FATAL_ERROR "Either provide OPENMP_LIBRARY explicitly or disable eigen_thread")
-#         endif               ()
-#     else                    ()
-#         set                     (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fopenmp")
-#     endif                   ()
-# endif                       ()
-
 # Threads
 find_package                (Threads)
 
@@ -142,7 +121,7 @@ set                         (libraries
                              ${CLP_LIB}
                              ${COIN_UTILS_LIB}
                              ${CMAKE_THREAD_LIBS_INIT}
-			                 ${KK_LIB} )
+                             ${KK_LIB} )
 
 
 # Testing
@@ -151,6 +130,8 @@ enable_testing              ()
 include                     (CTest)
 add_subdirectory            (examples)
 add_subdirectory            (tests)
+
+# Python
 if                          (python)
     add_subdirectory        (include/pybind11)
     add_subdirectory        (python)
