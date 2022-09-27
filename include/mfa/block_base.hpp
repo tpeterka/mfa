@@ -14,7 +14,6 @@
 #include    <diy/assigner.hpp>
 #include    <diy/io/block.hpp>
 #include    <diy/pick.hpp>
-#include    <diy/thirdparty/fmt/format.h>
 #include    <diy/reduce.hpp>
 #include    <diy/partners/merge.hpp>
 

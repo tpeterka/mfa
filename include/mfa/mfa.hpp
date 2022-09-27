@@ -8,6 +8,9 @@
 #ifndef _MFA_HPP
 #define _MFA_HPP
 
+// #define EIGEN_MAX_CPP_VER 14
+// #define EIGEN_COMP_CXXVER 14
+
 #define MFA_NAW -1          // an invalid weight, indicating skip this control point
 
 // comment out the following line for unclamped knots (single knot at each end of knot vector)
@@ -79,7 +82,7 @@ using SparseMatrixX = Eigen::SparseMatrix<T, Eigen::ColMajor>;  // Many sparse s
 template <typename T>
 using SpMatTriplet = Eigen::Triplet<T>;
 
-#include    <diy/thirdparty/fmt/format.h>
+#include    "fmt/format.h"
 
 #include    <mfa/util.hpp>
 #include    <mfa/param.hpp>
