@@ -11,7 +11,7 @@
 
 template<typename T, typename U>
 bool check_if_equal_or_nans(const T& actual, const U& expected) {
-  return (numext::equal_strict(actual, expected) || ((numext::isnan)(actual) && (numext::isnan)(expected)));
+  return ((actual == expected) || ((numext::isnan)(actual) && (numext::isnan)(expected)));
 }
 
 template<typename T, typename U>
@@ -58,20 +58,6 @@ void check_abs() {
     }
     VERIFY( numext::abs(x) >= zero );
     VERIFY_IS_APPROX( numext::abs2(x), numext::abs2(numext::abs(x)) );
-  }
-}
-
-template<typename T>
-void check_arg() {
-  typedef typename NumTraits<T>::Real Real;
-  VERIFY_IS_EQUAL(numext::abs(T(0)), T(0));
-  VERIFY_IS_EQUAL(numext::abs(T(1)), T(1));
-
-  for(int k=0; k<100; ++k)
-  {
-    T x = internal::random<T>();
-    Real y = numext::arg(x);
-    VERIFY_IS_APPROX( y, std::arg(x) );
   }
 }
 
@@ -256,11 +242,9 @@ EIGEN_DECLARE_TEST(numext) {
     CALL_SUBTEST( check_abs<float>() );
     CALL_SUBTEST( check_abs<double>() );
     CALL_SUBTEST( check_abs<long double>() );
+
     CALL_SUBTEST( check_abs<std::complex<float> >() );
     CALL_SUBTEST( check_abs<std::complex<double> >() );
-
-    CALL_SUBTEST( check_arg<std::complex<float> >() );
-    CALL_SUBTEST( check_arg<std::complex<double> >() );
 
     CALL_SUBTEST( check_sqrt<float>() );
     CALL_SUBTEST( check_sqrt<double>() );

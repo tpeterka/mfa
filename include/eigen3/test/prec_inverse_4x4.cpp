@@ -13,12 +13,15 @@
 
 template<typename MatrixType> void inverse_permutation_4x4()
 {
+  typedef typename MatrixType::Scalar Scalar;
   Vector4i indices(0,1,2,3);
   for(int i = 0; i < 24; ++i)
   {
     MatrixType m = PermutationMatrix<4>(indices);
     MatrixType inv = m.inverse();
-    VERIFY_IS_APPROX(m*inv, MatrixType::Identity());
+    double error = double( (m*inv-MatrixType::Identity()).norm() / NumTraits<Scalar>::epsilon() );
+    EIGEN_DEBUG_VAR(error)
+    VERIFY(error == 0.0);
     std::next_permutation(indices.data(),indices.data()+4);
   }
 }
@@ -27,17 +30,18 @@ template<typename MatrixType> void inverse_general_4x4(int repeat)
 {
   using std::abs;
   typedef typename MatrixType::Scalar Scalar;
+  typedef typename MatrixType::RealScalar RealScalar;
   double error_sum = 0., error_max = 0.;
   for(int i = 0; i < repeat; ++i)
   {
     MatrixType m;
-    bool is_invertible;
+    RealScalar absdet;
     do {
       m = MatrixType::Random();
-      is_invertible = Eigen::FullPivLU<MatrixType>(m).isInvertible();
-    } while(!is_invertible);
+      absdet = abs(m.determinant());
+    } while(absdet < NumTraits<Scalar>::epsilon());
     MatrixType inv = m.inverse();
-    double error = double( (m*inv-MatrixType::Identity()).norm());
+    double error = double( (m*inv-MatrixType::Identity()).norm() * absdet / NumTraits<Scalar>::epsilon() );
     error_sum += error;
     error_max = (std::max)(error_max, error);
   }

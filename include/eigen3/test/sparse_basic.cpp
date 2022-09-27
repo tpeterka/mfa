@@ -413,8 +413,10 @@ template<typename SparseMatrixType> void sparse_basic(const SparseMatrixType& re
 
     m.setFromTriplets(triplets.begin(), triplets.end(), std::multiplies<Scalar>());
     VERIFY_IS_APPROX(m, refMat_prod);
+#if (defined(__cplusplus) && __cplusplus >= 201103L)
     m.setFromTriplets(triplets.begin(), triplets.end(), [] (Scalar,Scalar b) { return b; });
     VERIFY_IS_APPROX(m, refMat_last);
+#endif
   }
   
   // test Map
@@ -426,6 +428,12 @@ template<typename SparseMatrixType> void sparse_basic(const SparseMatrixType& re
     {
       Map<SparseMatrixType> mapMat2(m2.rows(), m2.cols(), m2.nonZeros(), m2.outerIndexPtr(), m2.innerIndexPtr(), m2.valuePtr(), m2.innerNonZeroPtr());
       Map<SparseMatrixType> mapMat3(m3.rows(), m3.cols(), m3.nonZeros(), m3.outerIndexPtr(), m3.innerIndexPtr(), m3.valuePtr(), m3.innerNonZeroPtr());
+      VERIFY_IS_APPROX(mapMat2+mapMat3, refMat2+refMat3);
+      VERIFY_IS_APPROX(mapMat2+mapMat3, refMat2+refMat3);
+    }
+    {
+      MappedSparseMatrix<Scalar,SparseMatrixType::Options,StorageIndex> mapMat2(m2.rows(), m2.cols(), m2.nonZeros(), m2.outerIndexPtr(), m2.innerIndexPtr(), m2.valuePtr(), m2.innerNonZeroPtr());
+      MappedSparseMatrix<Scalar,SparseMatrixType::Options,StorageIndex> mapMat3(m3.rows(), m3.cols(), m3.nonZeros(), m3.outerIndexPtr(), m3.innerIndexPtr(), m3.valuePtr(), m3.innerNonZeroPtr());
       VERIFY_IS_APPROX(mapMat2+mapMat3, refMat2+refMat3);
       VERIFY_IS_APPROX(mapMat2+mapMat3, refMat2+refMat3);
     }
@@ -579,38 +587,30 @@ template<typename SparseMatrixType> void sparse_basic(const SparseMatrixType& re
       inc.push_back(std::pair<StorageIndex,StorageIndex>(3,2));
       inc.push_back(std::pair<StorageIndex,StorageIndex>(3,0));
       inc.push_back(std::pair<StorageIndex,StorageIndex>(0,3));
-      inc.push_back(std::pair<StorageIndex,StorageIndex>(0,-1));
-      inc.push_back(std::pair<StorageIndex,StorageIndex>(-1,0));
-      inc.push_back(std::pair<StorageIndex,StorageIndex>(-1,-1));
-
+      
       for(size_t i = 0; i< inc.size(); i++) {
         StorageIndex incRows = inc[i].first;
         StorageIndex incCols = inc[i].second;
         SparseMatrixType m1(rows, cols);
         DenseMatrix refMat1 = DenseMatrix::Zero(rows, cols);
         initSparse<Scalar>(density, refMat1, m1);
-
-        SparseMatrixType m2 = m1;
-        m2.makeCompressed();
-
+        
         m1.conservativeResize(rows+incRows, cols+incCols);
-        m2.conservativeResize(rows+incRows, cols+incCols);
         refMat1.conservativeResize(rows+incRows, cols+incCols);
         if (incRows > 0) refMat1.bottomRows(incRows).setZero();
         if (incCols > 0) refMat1.rightCols(incCols).setZero();
-
+        
         VERIFY_IS_APPROX(m1, refMat1);
-        VERIFY_IS_APPROX(m2, refMat1);
-
+        
         // Insert new values
         if (incRows > 0) 
           m1.insert(m1.rows()-1, 0) = refMat1(refMat1.rows()-1, 0) = 1;
         if (incCols > 0) 
           m1.insert(0, m1.cols()-1) = refMat1(0, refMat1.cols()-1) = 1;
-
+          
         VERIFY_IS_APPROX(m1, refMat1);
-
-
+          
+          
       }
   }
 
@@ -679,8 +679,8 @@ void big_sparse_triplet(Index rows, Index cols, double density) {
   typedef typename SparseMatrixType::Scalar Scalar;
   typedef Triplet<Scalar,Index> TripletType;
   std::vector<TripletType> triplets;
-  double nelements = density * static_cast<double>(rows*cols);
-  VERIFY(nelements>=0 && nelements < static_cast<double>(NumTraits<StorageIndex>::highest()));
+  double nelements = density * rows*cols;
+  VERIFY(nelements>=0 && nelements <  NumTraits<StorageIndex>::highest());
   Index ntriplets = Index(nelements);
   triplets.reserve(ntriplets);
   Scalar sum = Scalar(0);

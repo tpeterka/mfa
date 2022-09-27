@@ -7,8 +7,6 @@
 // Public License v. 2.0. If a copy of the MPL was not distributed
 // with this file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-#include "./InternalHeaderCheck.h"
-
 namespace Eigen { 
 
 namespace internal {
@@ -16,10 +14,10 @@ namespace internal {
   // This FFT implementation was derived from kissfft http:sourceforge.net/projects/kissfft
   // Copyright 2003-2009 Mark Borgerding
 
-template <typename Scalar_>
+template <typename _Scalar>
 struct kiss_cpx_fft
 {
-  typedef Scalar_ Scalar;
+  typedef _Scalar Scalar;
   typedef std::complex<Scalar> Complex;
   std::vector<Complex> m_twiddles;
   std::vector<int> m_stageRadix;
@@ -27,47 +25,16 @@ struct kiss_cpx_fft
   std::vector<Complex> m_scratchBuf;
   bool m_inverse;
 
-  inline void make_twiddles(int nfft, bool inverse)
-  {
-    using numext::sin;
-    using numext::cos;
-    m_inverse = inverse;
-    m_twiddles.resize(nfft);
-    double phinc =  0.25 * double(EIGEN_PI) / nfft;
-    Scalar flip = inverse ? Scalar(1) : Scalar(-1);
-    m_twiddles[0] = Complex(Scalar(1), Scalar(0));
-    if ((nfft&1)==0)
-      m_twiddles[nfft/2] = Complex(Scalar(-1), Scalar(0));
-    int i=1;
-    for (;i*8<nfft;++i)
+  inline
+    void make_twiddles(int nfft,bool inverse)
     {
-      Scalar c = Scalar(cos(i*8*phinc));
-      Scalar s = Scalar(sin(i*8*phinc));
-      m_twiddles[i] = Complex(c, s*flip);
-      m_twiddles[nfft-i] = Complex(c, -s*flip);
+      using std::acos;
+      m_inverse = inverse;
+      m_twiddles.resize(nfft);
+      Scalar phinc =  (inverse?2:-2)* acos( (Scalar) -1)  / nfft;
+      for (int i=0;i<nfft;++i)
+        m_twiddles[i] = exp( Complex(0,i*phinc) );
     }
-    for (;i*4<nfft;++i)
-    {
-      Scalar c = Scalar(cos((2*nfft-8*i)*phinc));
-      Scalar s = Scalar(sin((2*nfft-8*i)*phinc));
-      m_twiddles[i] = Complex(s, c*flip);
-      m_twiddles[nfft-i] = Complex(s, -c*flip);
-    }
-    for (;i*8<3*nfft;++i)
-    {
-      Scalar c = Scalar(cos((8*i-2*nfft)*phinc));
-      Scalar s = Scalar(sin((8*i-2*nfft)*phinc));
-      m_twiddles[i] = Complex(-s, c*flip);
-      m_twiddles[nfft-i] = Complex(-s, -c*flip);
-    }
-    for (;i*2<nfft;++i)
-    {
-      Scalar c = Scalar(cos((4*nfft-8*i)*phinc));
-      Scalar s = Scalar(sin((4*nfft-8*i)*phinc));
-      m_twiddles[i] = Complex(-c, s*flip);
-      m_twiddles[nfft-i] = Complex(-c, -s*flip);
-    }
-  }
 
   void factorize(int nfft)
   {
@@ -92,9 +59,9 @@ struct kiss_cpx_fft
     }while(n>1);
   }
 
-  template <typename Src_>
+  template <typename _Src>
     inline
-    void work( int stage,Complex * xout, const Src_ * xin, size_t fstride,size_t in_stride)
+    void work( int stage,Complex * xout, const _Src * xin, size_t fstride,size_t in_stride)
     {
       int p = m_stageRadix[stage];
       int m = m_stageRemainder[stage];
@@ -294,10 +261,10 @@ struct kiss_cpx_fft
     }
 };
 
-template <typename Scalar_>
+template <typename _Scalar>
 struct kissfft_impl
 {
-  typedef Scalar_ Scalar;
+  typedef _Scalar Scalar;
   typedef std::complex<Scalar> Complex;
 
   void clear() 

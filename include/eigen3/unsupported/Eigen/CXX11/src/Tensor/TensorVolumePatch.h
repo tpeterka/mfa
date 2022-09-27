@@ -4,8 +4,6 @@
 #ifndef EIGEN_CXX11_TENSOR_TENSOR_VOLUME_PATCH_H
 #define EIGEN_CXX11_TENSOR_TENSOR_VOLUME_PATCH_H
 
-#include "./InternalHeaderCheck.h"
-
 namespace Eigen {
 
 /** \class TensorVolumePatch
@@ -28,14 +26,14 @@ namespace internal {
 template<DenseIndex Planes, DenseIndex Rows, DenseIndex Cols, typename XprType>
 struct traits<TensorVolumePatchOp<Planes, Rows, Cols, XprType> > : public traits<XprType>
 {
-  typedef std::remove_const_t<typename XprType::Scalar> Scalar;
+  typedef typename internal::remove_const<typename XprType::Scalar>::type Scalar;
   typedef traits<XprType> XprTraits;
   typedef typename XprTraits::StorageKind StorageKind;
   typedef typename XprTraits::Index Index;
   typedef typename XprType::Nested Nested;
-  typedef std::remove_reference_t<Nested> Nested_;
-  static constexpr int NumDimensions = XprTraits::NumDimensions + 1;
-  static constexpr int Layout = XprTraits::Layout;
+  typedef typename remove_reference<Nested>::type _Nested;
+  static const int NumDimensions = XprTraits::NumDimensions + 1;
+  static const int Layout = XprTraits::Layout;
   typedef typename XprTraits::PointerType PointerType;
 
 };
@@ -137,7 +135,7 @@ class TensorVolumePatchOp : public TensorBase<TensorVolumePatchOp<Planes, Rows, 
     Scalar padding_value() const { return m_padding_value; }
 
     EIGEN_DEVICE_FUNC
-    const internal::remove_all_t<typename XprType::Nested>&
+    const typename internal::remove_all<typename XprType::Nested>::type&
     expression() const { return m_xpr; }
 
   protected:
@@ -172,22 +170,22 @@ struct TensorEvaluator<const TensorVolumePatchOp<Planes, Rows, Cols, ArgType>, D
 {
   typedef TensorVolumePatchOp<Planes, Rows, Cols, ArgType> XprType;
   typedef typename XprType::Index Index;
-  static constexpr int NumInputDims = internal::array_size<typename TensorEvaluator<ArgType, Device>::Dimensions>::value;
-  static constexpr int NumDims = NumInputDims + 1;
+  static const int NumInputDims = internal::array_size<typename TensorEvaluator<ArgType, Device>::Dimensions>::value;
+  static const int NumDims = NumInputDims + 1;
   typedef DSizes<Index, NumDims> Dimensions;
-  typedef std::remove_const_t<typename XprType::Scalar> Scalar;
+  typedef typename internal::remove_const<typename XprType::Scalar>::type Scalar;
   typedef typename XprType::CoeffReturnType CoeffReturnType;
   typedef typename PacketType<CoeffReturnType, Device>::type PacketReturnType;
-  static constexpr int PacketSize = PacketType<CoeffReturnType, Device>::size;
+  static const int PacketSize = PacketType<CoeffReturnType, Device>::size;
   typedef StorageMemory<CoeffReturnType, Device> Storage;
   typedef typename Storage::Type EvaluatorPointerType;
 
-  static constexpr int Layout = TensorEvaluator<ArgType, Device>::Layout;
   enum {
     IsAligned = false,
     PacketAccess = TensorEvaluator<ArgType, Device>::PacketAccess,
     BlockAccess = false,
     PreferBlockAccess = TensorEvaluator<ArgType, Device>::PreferBlockAccess,
+    Layout = TensorEvaluator<ArgType, Device>::Layout,
     CoordAccess = false,
     RawAccess = false
   };
@@ -196,7 +194,7 @@ struct TensorEvaluator<const TensorVolumePatchOp<Planes, Rows, Cols, ArgType>, D
   typedef internal::TensorBlockNotImplemented TensorBlock;
   //===--------------------------------------------------------------------===//
 
-  EIGEN_STRONG_INLINE TensorEvaluator(const XprType& op, const Device& device) :
+  EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE TensorEvaluator(const XprType& op, const Device& device) :
  m_impl(op.expression(), device)
   {
     EIGEN_STATIC_ASSERT((NumDims >= 5), YOU_MADE_A_PROGRAMMING_MISTAKE);
@@ -354,12 +352,12 @@ struct TensorEvaluator<const TensorVolumePatchOp<Planes, Rows, Cols, ArgType>, D
 
   EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE const Dimensions& dimensions() const { return m_dimensions; }
 
-  EIGEN_STRONG_INLINE bool evalSubExprsIfNeeded(EvaluatorPointerType /*data*/) {
+  EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE bool evalSubExprsIfNeeded(EvaluatorPointerType /*data*/) {
     m_impl.evalSubExprsIfNeeded(NULL);
     return true;
   }
 
-  EIGEN_STRONG_INLINE void cleanup() {
+  EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE void cleanup() {
     m_impl.cleanup();
   }
 
@@ -421,6 +419,7 @@ struct TensorEvaluator<const TensorVolumePatchOp<Planes, Rows, Cols, ArgType>, D
   template<int LoadMode>
   EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE PacketReturnType packet(Index index) const
   {
+    EIGEN_STATIC_ASSERT((PacketSize > 1), YOU_MADE_A_PROGRAMMING_MISTAKE)
     eigen_assert(index+PacketSize-1 < dimensions().TotalSize());
 
     if (m_in_row_strides != 1 || m_in_col_strides != 1 || m_row_inflate_strides != 1 || m_col_inflate_strides != 1 ||
@@ -519,21 +518,21 @@ struct TensorEvaluator<const TensorVolumePatchOp<Planes, Rows, Cols, ArgType>, D
   const TensorEvaluator<ArgType, Device>& impl() const { return m_impl; }
 
 
-  EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE Index planePaddingTop() const { return m_planePaddingTop; }
-  EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE Index rowPaddingTop() const { return m_rowPaddingTop; }
-  EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE Index colPaddingLeft() const { return m_colPaddingLeft; }
-  EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE Index outputPlanes() const { return m_outputPlanes; }
-  EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE Index outputRows() const { return m_outputRows; }
-  EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE Index outputCols() const { return m_outputCols; }
-  EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE Index userPlaneStride() const { return m_plane_strides; }
-  EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE Index userRowStride() const { return m_row_strides; }
-  EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE Index userColStride() const { return m_col_strides; }
-  EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE Index userInPlaneStride() const { return m_in_plane_strides; }
-  EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE Index userInRowStride() const { return m_in_row_strides; }
-  EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE Index userInColStride() const { return m_in_col_strides; }
-  EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE Index planeInflateStride() const { return m_plane_inflate_strides; }
-  EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE Index rowInflateStride() const { return m_row_inflate_strides; }
-  EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE Index colInflateStride() const { return m_col_inflate_strides; }
+  Index planePaddingTop() const { return m_planePaddingTop; }
+  Index rowPaddingTop() const { return m_rowPaddingTop; }
+  Index colPaddingLeft() const { return m_colPaddingLeft; }
+  Index outputPlanes() const { return m_outputPlanes; }
+  Index outputRows() const { return m_outputRows; }
+  Index outputCols() const { return m_outputCols; }
+  Index userPlaneStride() const { return m_plane_strides; }
+  Index userRowStride() const { return m_row_strides; }
+  Index userColStride() const { return m_col_strides; }
+  Index userInPlaneStride() const { return m_in_plane_strides; }
+  Index userInRowStride() const { return m_in_row_strides; }
+  Index userInColStride() const { return m_in_col_strides; }
+  Index planeInflateStride() const { return m_plane_inflate_strides; }
+  Index rowInflateStride() const { return m_row_inflate_strides; }
+  Index colInflateStride() const { return m_col_inflate_strides; }
 
 #ifdef EIGEN_USE_SYCL
   // binding placeholder accessors to a command group handler for SYCL
@@ -544,7 +543,7 @@ struct TensorEvaluator<const TensorVolumePatchOp<Planes, Rows, Cols, ArgType>, D
  protected:
   EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE PacketReturnType packetWithPossibleZero(Index index) const
   {
-    EIGEN_ALIGN_MAX std::remove_const_t<CoeffReturnType> values[PacketSize];
+    EIGEN_ALIGN_MAX typename internal::remove_const<CoeffReturnType>::type values[PacketSize];
     EIGEN_UNROLL_LOOP
     for (int i = 0; i < PacketSize; ++i) {
       values[i] = coeff(index+i);

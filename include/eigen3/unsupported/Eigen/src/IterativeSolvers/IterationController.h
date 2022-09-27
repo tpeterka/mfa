@@ -58,11 +58,9 @@
 #ifndef EIGEN_ITERATION_CONTROLLER_H
 #define EIGEN_ITERATION_CONTROLLER_H
 
-#include "./InternalHeaderCheck.h"
-
 namespace Eigen { 
 
-/** \ingroup IterativeLinearSolvers_Module
+/** \ingroup IterativeSolvers_Module
   * \class IterationController
   *
   * \brief Controls the iterations of the iterative solvers

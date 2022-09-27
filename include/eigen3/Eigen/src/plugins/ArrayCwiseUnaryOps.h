@@ -497,45 +497,6 @@ ceil() const
   return CeilReturnType(derived());
 }
 
-template<int N> struct ShiftRightXpr {
-  typedef CwiseUnaryOp<internal::scalar_shift_right_op<Scalar, N>, const Derived> Type;
-};
-
-/** \returns an expression of \c *this with the \a Scalar type arithmetically
-  * shifted right by \a N bit positions.
-  *
-  * The template parameter \a N specifies the number of bit positions to shift.
-  * 
-  * \sa shiftLeft()
-  */
-template<int N>
-EIGEN_DEVICE_FUNC
-typename ShiftRightXpr<N>::Type
-shiftRight() const
-{
-  return typename ShiftRightXpr<N>::Type(derived());
-}
-
-
-template<int N> struct ShiftLeftXpr {
-  typedef CwiseUnaryOp<internal::scalar_shift_left_op<Scalar, N>, const Derived> Type;
-};
-
-/** \returns an expression of \c *this with the \a Scalar type logically
-  * shifted left by \a N bit positions.
-  *
-  * The template parameter \a N specifies the number of bit positions to shift.
-  *
-  * \sa shiftRight()
-  */
-template<int N>
-EIGEN_DEVICE_FUNC
-typename ShiftLeftXpr<N>::Type
-shiftLeft() const
-{
-  return typename ShiftLeftXpr<N>::Type(derived());
-}
-
 /** \returns an expression of the coefficient-wise isnan of *this.
   *
   * Example: \include Cwise_isNaN.cpp
@@ -693,33 +654,4 @@ inline const NdtriReturnType
 ndtri() const
 {
   return NdtriReturnType(derived());
-}
-
-template <typename ScalarExponent>
-using UnaryPowReturnType =
-    std::enable_if_t<internal::is_arithmetic<typename NumTraits<ScalarExponent>::Real>::value,
-                     CwiseUnaryOp<internal::scalar_unary_pow_op<Scalar, ScalarExponent>, const Derived>>;
-
-#ifndef EIGEN_PARSED_BY_DOXYGEN
-template <typename ScalarExponent>
-EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE const UnaryPowReturnType<ScalarExponent> pow(
-    const ScalarExponent& exponent) const {
-  return UnaryPowReturnType<ScalarExponent>(derived(), internal::scalar_unary_pow_op<Scalar, ScalarExponent>(exponent));
-#else
-/** \returns an expression of the coefficients of \c *this rasied to the constant power \a exponent
- *
- * \tparam T is the scalar type of \a exponent. It must be compatible with the scalar type of the given expression.
- *
- * This function computes the coefficient-wise power. The function MatrixBase::pow() in the
- * unsupported module MatrixFunctions computes the matrix power.
- *
- * Example: \include Cwise_pow.cpp
- * Output: \verbinclude Cwise_pow.out
- *
- * \sa ArrayBase::pow(ArrayBase), square(), cube(), exp(), log()
- */
-template <typename ScalarExponent>
-EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE const UnaryPowReturnType<ScalarExponent> pow(
-    const ScalarExponent& exponent) const;
-#endif
 }

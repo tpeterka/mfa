@@ -12,9 +12,7 @@
 
 #include "SkylineUtil.h"
 
-#include "./InternalHeaderCheck.h"
-
-namespace Eigen {
+namespace Eigen { 
 
 /** \ingroup Skyline_Module
  *
@@ -46,7 +44,8 @@ public:
          * \sa MatrixBase::rows(), MatrixBase::cols(), RowsAtCompileTime, SizeAtCompileTime */
 
 
-        SizeAtCompileTime = (internal::size_of_xpr_at_compile_time<Derived>::ret),
+        SizeAtCompileTime = (internal::size_at_compile_time<internal::traits<Derived>::RowsAtCompileTime,
+        internal::traits<Derived>::ColsAtCompileTime>::ret),
         /**< This is equal to the number of coefficients, i.e. the number of
          * rows times the number of columns, or to \a Dynamic if this is not
          * known at compile-time. \sa RowsAtCompileTime, ColsAtCompileTime */
@@ -54,8 +53,8 @@ public:
         MaxRowsAtCompileTime = RowsAtCompileTime,
         MaxColsAtCompileTime = ColsAtCompileTime,
 
-        MaxSizeAtCompileTime = (internal::size_at_compile_time(MaxRowsAtCompileTime,
-        MaxColsAtCompileTime)),
+        MaxSizeAtCompileTime = (internal::size_at_compile_time<MaxRowsAtCompileTime,
+        MaxColsAtCompileTime>::ret),
 
         IsVectorAtCompileTime = RowsAtCompileTime == 1 || ColsAtCompileTime == 1,
         /**< This is set to true if either the number of rows or the number of
@@ -86,8 +85,8 @@ public:
     typedef typename NumTraits<Scalar>::Real RealScalar;
 
     /** type of the equivalent square matrix */
-    typedef Matrix<Scalar, internal::max_size_prefer_dynamic(RowsAtCompileTime, ColsAtCompileTime),
-                           internal::max_size_prefer_dynamic(RowsAtCompileTime, ColsAtCompileTime) > SquareMatrixType;
+    typedef Matrix<Scalar, EIGEN_SIZE_MAX(RowsAtCompileTime, ColsAtCompileTime),
+                           EIGEN_SIZE_MAX(RowsAtCompileTime, ColsAtCompileTime) > SquareMatrixType;
 
     inline const Derived& derived() const {
         return *static_cast<const Derived*> (this);
@@ -103,18 +102,18 @@ public:
 #endif // not EIGEN_PARSED_BY_DOXYGEN
 
     /** \returns the number of rows. \sa cols(), RowsAtCompileTime */
-    inline EIGEN_CONSTEXPR Index rows() const EIGEN_NOEXCEPT {
+    inline Index rows() const {
         return derived().rows();
     }
 
     /** \returns the number of columns. \sa rows(), ColsAtCompileTime*/
-    inline EIGEN_CONSTEXPR Index cols() const EIGEN_NOEXCEPT {
+    inline Index cols() const {
         return derived().cols();
     }
 
     /** \returns the number of coefficients, which is \a rows()*cols().
      * \sa rows(), cols(), SizeAtCompileTime. */
-    inline EIGEN_CONSTEXPR Index size() const EIGEN_NOEXCEPT {
+    inline Index size() const {
         return rows() * cols();
     }
 

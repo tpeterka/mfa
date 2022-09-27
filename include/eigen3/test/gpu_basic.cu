@@ -138,12 +138,10 @@ struct complex_operators {
     out[out_idx++] = a / numext::real(b);
     out[out_idx++] = numext::real(a) / b;
     
-#if !defined(EIGEN_COMP_MSVC)
     out[out_idx] = a; out[out_idx++] += b;
     out[out_idx] = a; out[out_idx++] -= b;
     out[out_idx] = a; out[out_idx++] *= b;
     out[out_idx] = a; out[out_idx++] /= b;
-#endif
     
     const ComplexType true_value = ComplexType(ValueType(1), ValueType(0));
     const ComplexType false_value = ComplexType(ValueType(0), ValueType(0));
@@ -190,7 +188,6 @@ struct complex_operators {
     res.segment(block_idx, size) = x1.real().array() / x2.array();
     block_idx += size;
     
-#if !defined(EIGEN_COMP_MSVC)
     res.segment(block_idx, size) = x1; res.segment(block_idx, size) += x2;
     block_idx += size;
     res.segment(block_idx, size) = x1; res.segment(block_idx, size) -= x2;
@@ -199,19 +196,19 @@ struct complex_operators {
     block_idx += size;
     res.segment(block_idx, size) = x1; res.segment(block_idx, size).array() /= x2.array();
     block_idx += size;
-#endif
 
-    const T true_vector = T::Constant(true_value);
-    const T false_vector = T::Constant(false_value);
-    res.segment(block_idx, size) = (x1 == x2 ? true_vector : false_vector);
-    block_idx += size;
-    // Mixing types in equality comparison does not work.
+    // Equality comparisons currently not functional on device
+    //   (std::equal_to<T> is host-only).
+    // const T true_vector = T::Constant(true_value);
+    // const T false_vector = T::Constant(false_value);
+    // res.segment(block_idx, size) = (x1 == x2 ? true_vector : false_vector);
+    // block_idx += size;
     // res.segment(block_idx, size) = (x1 == x2.real() ? true_vector : false_vector);
     // block_idx += size;
     // res.segment(block_idx, size) = (x1.real() == x2 ? true_vector : false_vector);
     // block_idx += size;
-    res.segment(block_idx, size) = (x1 != x2 ? true_vector : false_vector);
-    block_idx += size;
+    // res.segment(block_idx, size) = (x1 != x2 ? true_vector : false_vector);
+    // block_idx += size;
     // res.segment(block_idx, size) = (x1 != x2.real() ? true_vector : false_vector);
     // block_idx += size;
     // res.segment(block_idx, size) = (x1.real() != x2 ? true_vector : false_vector);
@@ -233,26 +230,6 @@ struct replicate {
     MapType(out+i*stride+0*step, x1.rows()*2, x1.cols()*2) = x1.replicate(2,2);
     MapType(out+i*stride+1*step, x1.rows()*3, x1.cols()) = in[i] * x1.colwise().replicate(3);
     MapType(out+i*stride+2*step, x1.rows(), x1.cols()*3) = in[i] * x1.rowwise().replicate(3);
-  }
-};
-
-template<typename T>
-struct alloc_new_delete {
-  EIGEN_DEVICE_FUNC
-  void operator()(int i, const typename T::Scalar* in, typename T::Scalar* out) const
-  {
-    int offset = 2*i*T::MaxSizeAtCompileTime;
-    T* x = new T(in + offset);
-    Eigen::Map<T> u(out + offset);
-    u = *x;
-    delete x;
-    
-    offset += T::MaxSizeAtCompileTime;
-    T* y = new T[1];
-    y[0] = T(in + offset);
-    Eigen::Map<T> v(out + offset);
-    v = y[0];    
-    delete[] y;
   }
 };
 
@@ -346,21 +323,6 @@ struct matrix_inverse {
   }
 };
 
-template<typename T>
-struct numeric_limits_test {
-  EIGEN_DEVICE_FUNC
-  void operator()(int i, const typename T::Scalar* in, typename T::Scalar* out) const
-  {
-    EIGEN_UNUSED_VARIABLE(in)
-    int out_idx = i * 5;
-    out[out_idx++] = numext::numeric_limits<float>::epsilon();
-    out[out_idx++] = (numext::numeric_limits<float>::max)();
-    out[out_idx++] = (numext::numeric_limits<float>::min)();
-    out[out_idx++] = numext::numeric_limits<float>::infinity();
-    out[out_idx++] = numext::numeric_limits<float>::quiet_NaN();
-  }
-};
-
 template<typename Type1, typename Type2>
 bool verifyIsApproxWithInfsNans(const Type1& a, const Type2& b, typename Type1::Scalar* = 0) // Enabled for Eigen's type only
 {
@@ -427,9 +389,6 @@ EIGEN_DECLARE_TEST(gpu_basic)
   //           (aka 'ArrayBase<Eigen::Replicate<Eigen::Array<float, 4, 1, 0, 4, 1>, -1, -1> >') has protected default constructor
   CALL_SUBTEST( run_and_compare_to_gpu(replicate<Array4f>(), nthreads, in, out) );
   CALL_SUBTEST( run_and_compare_to_gpu(replicate<Array33f>(), nthreads, in, out) );
-
-  // HIP does not support new/delete on device.
-  CALL_SUBTEST( run_and_compare_to_gpu(alloc_new_delete<Vector3f>(), nthreads, in, out) );
 #endif
   
   CALL_SUBTEST( run_and_compare_to_gpu(redux<Array4f>(), nthreads, in, out) );
@@ -451,9 +410,6 @@ EIGEN_DECLARE_TEST(gpu_basic)
   // Test std::complex.
   CALL_SUBTEST( run_and_compare_to_gpu(complex_operators<Vector3cf>(), nthreads, cfin, cfout) );
   CALL_SUBTEST( test_with_infs_nans(complex_sqrt<Vector3cf>(), nthreads, cfin, cfout) );
-
-  // numeric_limits
-  CALL_SUBTEST( test_with_infs_nans(numeric_limits_test<Vector3f>(), 1, in, out) );
 
 #if defined(__NVCC__)
   // FIXME

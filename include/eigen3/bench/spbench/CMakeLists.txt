@@ -1,7 +1,7 @@
 
 
-set(BLAS_FOUND EIGEN_BUILD_BLAS)
-set(LAPACK_FOUND EIGEN_BUILD_LAPACK)
+set(BLAS_FOUND TRUE)
+set(LAPACK_FOUND TRUE)
 set(BLAS_LIBRARIES eigen_blas_static)
 set(LAPACK_LIBRARIES eigen_lapack_static)
 
@@ -13,7 +13,7 @@ set(SPARSE_LIBS "")
 #   set(SPARSE_LIBS ${SPARSE_LIBS} ${PARDISO_LIBRARIES})
 # endif()
 
-find_package(CHOLMOD)
+find_package(Cholmod)
 if(CHOLMOD_FOUND AND BLAS_FOUND AND LAPACK_FOUND)
   add_definitions("-DEIGEN_CHOLMOD_SUPPORT")
   include_directories(${CHOLMOD_INCLUDES})
@@ -21,7 +21,7 @@ if(CHOLMOD_FOUND AND BLAS_FOUND AND LAPACK_FOUND)
   set(CHOLMOD_ALL_LIBS  ${CHOLMOD_LIBRARIES} ${BLAS_LIBRARIES} ${LAPACK_LIBRARIES})
 endif()
 
-find_package(UMFPACK)
+find_package(Umfpack)
 if(UMFPACK_FOUND AND BLAS_FOUND)
   add_definitions("-DEIGEN_UMFPACK_SUPPORT")
   include_directories(${UMFPACK_INCLUDES})
@@ -37,7 +37,7 @@ if(KLU_FOUND)
 endif()
 
 find_package(SuperLU 4.0)
-if(SuperLU_FOUND AND BLAS_FOUND)
+if(SUPERLU_FOUND AND BLAS_FOUND)
   add_definitions("-DEIGEN_SUPERLU_SUPPORT")
   include_directories(${SUPERLU_INCLUDES})
   set(SPARSE_LIBS ${SPARSE_LIBS} ${SUPERLU_LIBRARIES} ${BLAS_LIBRARIES})

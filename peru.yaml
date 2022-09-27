@@ -20,7 +20,7 @@ git module diy:
 
 git module eigen3:
     url: https://gitlab.com/libeigen/eigen
-    rev: 13b69fc1b0d1f7f0cbce70230c9a8794fcaa53b7
+    rev: be0574e2159ce3d6a1748ba6060bea5dedccdbc9
 
 git module fmt:
     url: https://github.com/fmtlib/fmt
