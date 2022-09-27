@@ -1,0 +1,31 @@
+image: archlinux
+triggers:
+  - action: email
+    condition: failure
+    to: Dmitriy Morozov <dmitriy@mrzv.org>
+packages:
+  - cmake
+  - openmpi
+  - jq
+sources:
+  - https://github.com/diatomic/diy
+secrets:
+  - 913178d0-094f-4347-a86f-5ae78f502df1
+  - 019c752e-6b54-4ae5-98ff-f751851360e8
+environment:
+  OMPI_MCA_rmaps_base_oversubscribe: 1
+tasks:
+  #- configure: |
+  #    mkdir diy/build
+  #    cd diy/build
+  #    cmake ..
+  #- build: |
+  #    cd diy/build
+  #    make
+  #- test: |
+  #    cd diy/build
+  #    make test
+  - dependents: |
+      cd diy
+      sh conf/ci/builds.sr.ht/launch-dependents.sh
+
