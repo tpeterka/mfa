@@ -86,6 +86,17 @@ endif                       ()
 # Threads
 find_package                (Threads)
 
+# DIY
+option                      (build_examples "" OFF)
+option                      (build_tests "" OFF)
+add_subdirectory            (include/diy)
+set                         (libraries ${libraries} diy)
+
+# fmt
+option                      (FMT_INSTALL "" OFF)
+add_subdirectory            (include/fmt)
+set                         (libraries ${libraries} fmt::fmt)
+
 # Coin-OR CLP
 find_path                   (CLP_INCLUDE_DIRS   ClpSimplex.hpp)
 find_library                (CLP_LIB NAMES      Clp)
