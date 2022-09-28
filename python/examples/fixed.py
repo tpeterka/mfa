@@ -48,18 +48,18 @@ print("MPI size", w.size, "rank", w.rank, "nblocks", nblocks, "domain", domain)
 d.decompose(w.rank, a, lambda gid, core, bounds, domain_, link: mfa.Block.add(gid, core, bounds, domain_, link, m, dom_dim, pt_dim))
 
 # # initialize input data
-# m.foreach(lambda b, cp: b.generate_analytical_data(cp, fun, d_args))
-# 
-# # compute the MFA
-# m.foreach(lambda b, cp: b.fixed_encode_block(cp, d_args))
-# 
-# # debug: compute error field
-# if error:
-#     m.foreach(lambda b, cp: b.range_error(cp, 1, True, True))
-# 
-# # print results
-# m.foreach(lambda b, cp: b.print_block(cp, True))
-# 
-# # save the results
-# print("\n\nSaving blocks\n")
-# diy.write_blocks("approx.out", m, save = mfa.save_block)
+m.foreach(lambda b, cp: b.generate_analytical_data(cp, fun, d_args))
+
+# compute the MFA
+m.foreach(lambda b, cp: b.fixed_encode_block(cp, d_args))
+
+# debug: compute error field
+if error:
+    m.foreach(lambda b, cp: b.range_error(cp, 1, True, True))
+
+# print results
+m.foreach(lambda b, cp: b.print_block(cp, True))
+
+# save the results
+print("\n\nSaving blocks\n")
+diy.write_blocks("approx.mfa", m, save = mfa.save_block)
