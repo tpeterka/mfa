@@ -110,10 +110,10 @@ struct BlockBase
     vector<T>           max_errs_reduce;        // max_errs used in the reduce operations, plus location (2 T vals per entry)
 
     // zero-initialize pointers during default construction
-    BlockBase() : 
-        mfa(NULL), 
-        input(NULL), 
-        approx(NULL), 
+    BlockBase() :
+        mfa(NULL),
+        input(NULL),
+        approx(NULL),
         blend(NULL),
         errs(NULL) { }
 
@@ -1404,7 +1404,8 @@ namespace mfa
 
             // output for blending
             diy::save(bb, b->ndom_outpts);
-            diy::save(bb, b->blend);
+            if (b->ndom_outpts.rows())
+                diy::save(bb, b->blend);
         }
 
     template<typename B, typename T>                // B = block object, T = float or double
@@ -1479,7 +1480,8 @@ namespace mfa
 
             // output for blending
             diy::load(bb, b->ndom_outpts);
-            diy::load(bb, b->blend);
+            if (b->ndom_outpts.rows())
+                diy::load(bb, b->blend);
         }
 }                       // namespace
 
@@ -1622,7 +1624,7 @@ namespace diy
                             diy::save(bb, true);
                             diy::save(bb, *(ps->params));
                         }
-                        
+
                         diy::save(bb, ps->dom_mins);
                         diy::save(bb, ps->dom_maxs);
 
@@ -1666,7 +1668,7 @@ namespace diy
 
                         // Point info
                         diy::load(bb, ps->domain);
-                    }   
+                    }
                 }
         };
 }                       // namespace

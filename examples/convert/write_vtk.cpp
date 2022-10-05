@@ -457,24 +457,27 @@ void PrepRenderingData(
     }   // science variables
 
     // approximated points
-    blend_data  = new float*[nvars];
-    for (size_t j = 0; j < nvars; j++)
+    if (block->ndom_outpts.rows())
     {
-        blend_data[j]   = new float[block->blend->domain.rows()];
-    }
+        blend_data  = new float*[nvars];
+        for (size_t j = 0; j < nvars; j++)
+        {
+            blend_data[j]   = new float[block->blend->domain.rows()];
+        }
 
-    for (size_t j = 0; j < (size_t)(block->blend->domain.rows()); j++)
-    {
-        p.x = block->blend->domain(j, 0);                               // if domain < 3d, mesh geometry includes a science variable
-        p.y = ndom_dims > 1 ? block->blend->domain(j, 1) : block->blend->domain(j, ndom_dims + sci_var);
-        if (ndom_dims < 2)
-            p.z = 0.0;
-        else
-            p.z = ndom_dims > 2 ? block->blend->domain(j, 2) : block->blend->domain(j, ndom_dims + sci_var);
-        blend_pts.push_back(p);
+        for (size_t j = 0; j < (size_t)(block->blend->domain.rows()); j++)
+        {
+            p.x = block->blend->domain(j, 0);                               // if domain < 3d, mesh geometry includes a science variable
+            p.y = ndom_dims > 1 ? block->blend->domain(j, 1) : block->blend->domain(j, ndom_dims + sci_var);
+            if (ndom_dims < 2)
+                p.z = 0.0;
+            else
+                p.z = ndom_dims > 2 ? block->blend->domain(j, 2) : block->blend->domain(j, ndom_dims + sci_var);
+            blend_pts.push_back(p);
 
-        for (int k = 0; k < nvars; k++)                         // science variables
-            blend_data[k][j] = block->blend->domain(j, ndom_dims + k);
+            for (int k = 0; k < nvars; k++)                         // science variables
+                blend_data[k][j] = block->blend->domain(j, ndom_dims + k);
+        }
     }
 
     // tmesh tensor extents
@@ -655,10 +658,12 @@ void write_vtk_files(
     for (int j = 0; j < nvars; j++)
     {
         delete[] vars_ctrl_data[j];
-        delete[] blend_data[j];
+        if (b->ndom_outpts.rows())
+            delete[] blend_data[j];
     }
     delete[] vars_ctrl_data;
-    delete[] blend_data;
+    if (b->ndom_outpts.rows())
+        delete[] blend_data;
 }
 
 // generate analytical test data and write to vtk

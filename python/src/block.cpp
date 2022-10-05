@@ -12,6 +12,27 @@ namespace py = pybind11;
 
 #include "mpi-capsule.h"
 
+// C++ object representing a python or numpy array
+// array can be 1-d (vector) or 2-d (matrix)
+// ref: https://github.com/pybind/pybind11/issues/3126
+template<typename T>
+struct PyArray
+{
+    py::buffer_info info;
+    T *data;
+    size_t size;
+
+    PyArray(py::array_t<T> arr) :
+        info { arr.request() },
+        data { static_cast<T*>(info.ptr) },
+        size { static_cast<size_t>(info.shape[0]) * (info.ndim > 1 ? static_cast<size_t>(info.shape[1]) : 1)}
+    {}
+
+    PyArray(const PyArray &) = delete;
+    PyArray &operator=(const PyArray &) = delete;
+    PyArray(PyArray&&) = default;
+};
+
 template <typename T>
 void init_block(py::module& m, std::string name)
 {
@@ -23,11 +44,13 @@ void init_block(py::module& m, std::string name)
         .def(py::init<int, int>())
         .def_readwrite("dom_dim",           &ModelInfo::dom_dim)
         .def_readwrite("pt_dim",            &ModelInfo::pt_dim)
+        .def_readwrite("model_dims",        &ModelInfo::model_dims)
         .def_readwrite("geom_p",            &ModelInfo::geom_p)
         .def_readwrite("vars_p",            &ModelInfo::vars_p)
         .def_readwrite("geom_nctrl_pts",    &ModelInfo::geom_nctrl_pts)
         .def_readwrite("vars_nctrl_pts",    &ModelInfo::vars_nctrl_pts)
         .def_readwrite("weighted",          &ModelInfo::weighted)
+        .def_readwrite("local",             &ModelInfo::local)
         .def_readwrite("verbose",           &ModelInfo::verbose)
     ;
 
@@ -53,6 +76,7 @@ void init_block(py::module& m, std::string name)
         .def_readwrite("n",             &DomainArgs::n)
         .def_readwrite("infile",        &DomainArgs::infile)
         .def_readwrite("multiblock",    &DomainArgs::multiblock)
+        .def_readwrite("structured",    &DomainArgs::structured)
     ;
 
     using namespace py::literals;
@@ -73,8 +97,6 @@ void init_block(py::module& m, std::string name)
                                         T                   ghost_factor)
             {
                 Block<T>*       b   = new Block<T>;
-                //                 DEPRECATED
-//                 RCLink*         l   = new RCLink(link);
                 master.add(gid, new py::object(py::cast(b)), link.clone());
                 b->init_block(core, domain, dom_dim, pt_dim);
             }, "core"_a, "bounds"_a, "domain"_a, "link"_a, "master"_a, "dom_dim"_a, "pt_dim"_a,
@@ -85,6 +107,24 @@ void init_block(py::module& m, std::string name)
         .def("range_error",             &Block<T>::range_error)
         .def("save",                    &Block<T>::save)
         .def("load",                    &Block<T>::load)
+
+        .def("input_data",              [](
+                                        const py::object*                   py_b,
+                                        const diy::Master::ProxyWithLink&   cp,
+                                        const py::array_t<T>&               arr,    // input data
+                                        DomainArgs&                         d_args)
+        {
+            PyArray<T> pyarray(arr);
+
+            // debug
+//             fmt::print(stderr, "PyArray size {}\n", pyarray.size);
+//             for (auto i = 0; i < pyarray.size; i++)
+//                 fmt::print(stderr, "data[{}] = {}\n", i, pyarray.data[i]);
+
+            Block<T>* b = py_b->cast<Block<T>*>();
+            b->input_1d_data(pyarray.data, d_args);
+        })
+
         ;
 
     m.def("save_block", [](const py::object* b, diy::BinaryBuffer* bb)
