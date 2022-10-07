@@ -24,9 +24,79 @@
 #include "opts.h"
 
 #include "block.hpp"
+#include "nasa_block.hpp"
 #include "example-setup.hpp"
 
 using namespace std;
+
+// static const unsigned DIM = 3;
+// using SimplePoint = diy::Point<float, DIM>;
+
+// //
+// // callback function for redistribute operator, called in each round of the reduction
+// //
+// void redistribute(Block* b,                                 // local block
+//                   const diy::ReduceProxy& srp,              // communication proxy
+//                   const diy::RegularSwapPartners& partners) // partners of the current block
+// {
+//     unsigned      round    = srp.round();                   // current round number
+
+//     // step 1: dequeue
+//     // dequeue all the incoming points and add them to this block's vector
+//     // could use srp.incoming() instead
+//     for (int i = 0; i < srp.in_link().size(); ++i)
+//     {
+//         int nbr_gid = srp.in_link().target(i).gid;
+//         if (nbr_gid == srp.gid())
+//             continue;
+
+//         std::vector<Block::Point>    in_points;
+//         srp.dequeue(nbr_gid, in_points);
+//         fmt::print(stderr, "[{}:{}] Received {} points from [{}]\n",
+//                    srp.gid(), round, (int) in_points.size(), nbr_gid);
+//         for (size_t j = 0; j < in_points.size(); ++j)
+//             b->points.push_back(in_points[j]);
+//     }
+
+//     // step 2: sort and enqueue
+//     if (srp.out_link().size() == 0)        // final round; nothing needs to be sent
+//         return;
+
+//     std::vector< std::vector<Block::Point> > out_points(srp.out_link().size());
+//     int group_size = srp.out_link().size();  // number of outbound partners
+//     int cur_dim    = partners.dim(round);    // current dimension along which groups are formed
+//     // sort points into vectors corresponding to neighbor blocks
+//     for (size_t i = 0; i < b->points.size(); ++i) // for all points
+//     {
+//         auto loc = static_cast<size_t>(floor((b->points[i][cur_dim] - b->box.min[cur_dim]) /
+//                                              (b->box.max[cur_dim] - b->box.min[cur_dim]) * group_size));
+//         out_points[loc].push_back(b->points[i]);
+//     }
+//     int pos = -1;
+//     // enqueue points to neighbor blocks
+//     for (int i = 0; i < group_size; ++i)     // for all neighbors
+//     {
+//         if (srp.out_link().target(i).gid == srp.gid())
+//         {
+//             b->points.swap(out_points[i]);
+//             pos = i;
+//         }
+//         else
+//         {
+//             srp.enqueue(srp.out_link().target(i), out_points[i]);
+//             fmt::print(stderr, "[{}] Sent {} points to [{}]\n",
+//                        srp.gid(), (int) out_points[i].size(), srp.out_link().target(i).gid);
+//         }
+//     }
+
+//     // step 3: readjust box boundaries for next round
+//     float new_min = b->box.min[cur_dim] + (b->box.max[cur_dim] -
+//                                            b->box.min[cur_dim])/group_size*pos;
+//     float new_max = b->box.min[cur_dim] + (b->box.max[cur_dim] -
+//                                            b->box.min[cur_dim])/group_size*(pos + 1);
+//     b->box.min[cur_dim] = new_min;
+//     b->box.max[cur_dim] = new_max;
+// }
 
 int main(int argc, char** argv)
 {
@@ -35,13 +105,10 @@ int main(int argc, char** argv)
     diy::mpi::communicator world;               // equivalent of MPI_COMM_WORLD
 
     int nblocks     = 1;                        // number of local blocks
-    int tot_blocks  = nblocks * world.size();   // number of global blocks
-    int mem_blocks  = -1;                       // everything in core for now
-    int num_threads = 1;                        // needed in order to do timing
 
     // default command line arguments
-    int         pt_dim          = 3;        // dimension of input points
-    int         dom_dim         = 2;        // dimension of domain (<= pt_dim)
+    int         pt_dim          = 4;        // dimension of input points
+    int         dom_dim         = 3;        // dimension of domain (<= pt_dim)
     int         scalar          = 1;        // flag for scalar or vector-valued science variables (0 == multiple scalar vars)
     int         geom_degree     = 1;        // degree for geometry (same for all dims)
     int         vars_degree     = 4;        // degree for science variables (same for all dims)
@@ -65,6 +132,7 @@ int main(int argc, char** argv)
     int subdomain_id = 0;
     int time_step = 0;
     string var_name;
+    int do_encode = 0;  // false by default
 
     // Constants for this example
     const bool adaptive = false;
@@ -92,6 +160,8 @@ int main(int argc, char** argv)
     ops >> opts::Option('z', "id", subdomain_id, "index of subdomain file to read");
     ops >> opts::Option('z', "ts", time_step, "index of time step to read");
     ops >> opts::Option('z', "var", var_name, "name of variable to read");
+    ops >> opts::Option('z', "num_blocks", nblocks, "number of diy blocks to use");
+    ops >> opts::Option('z', "do_encode", do_encode, "flag to run encoding/decoding");
 
     if (!ops.parse(argc, argv) || help)
     {
@@ -99,6 +169,10 @@ int main(int argc, char** argv)
             std::cout << ops;
         return 1;
     }
+
+    int tot_blocks  = nblocks * world.size();   // number of global blocks
+    int mem_blocks  = -1;                       // everything in core for now
+    int num_threads = 1;                        // needed in order to do timing
 
     // print input arguments
     echo_mfa_settings("nasa retropropulsion example", pt_dim, dom_dim, scalar, geom_degree, geom_nctrl, vars_degree, vars_nctrl,
@@ -110,26 +184,26 @@ int main(int argc, char** argv)
     diy::Master               master(world,
                                      num_threads,
                                      mem_blocks,
-                                     &Block<real_t>::create,
-                                     &Block<real_t>::destroy,
+                                     &NASABlock<real_t>::create,
+                                     &NASABlock<real_t>::destroy,
                                      &storage,
-                                     &Block<real_t>::save,
-                                     &Block<real_t>::load);
+                                     &NASABlock<real_t>::save,
+                                     &NASABlock<real_t>::load);
     diy::ContiguousAssigner   assigner(world.size(), tot_blocks);
 
     // set global domain bounds and decompose
     Bounds<real_t> dom_bounds(dom_dim);
     for (int i = 0; i < dom_bounds.min.dimension(); i++)
     {
-        dom_bounds.min[i] = 0.0;
-        dom_bounds.max[i] = 1.0;
+        dom_bounds.min[i] = -200.0;
+        dom_bounds.max[i] = 200.0;
     }    
 
     Decomposer<real_t> decomposer(dom_dim, dom_bounds, tot_blocks);
     decomposer.decompose(world.rank(),
                          assigner,
                          [&](int gid, const Bounds<real_t>& core, const Bounds<real_t>& bounds, const Bounds<real_t>& domain, const RCLink<real_t>& link)
-                         { Block<real_t>::add(gid, core, bounds, domain, link, master, dom_dim, pt_dim, 0.0); });
+                         { NASABlock<real_t>::add(gid, core, bounds, domain, link, master, dom_dim, pt_dim, 0.0); });
 
     // If scalar == true, assume all science vars are scalar. Else one vector-valued var
     // We assume that dom_dim == geom_dim
@@ -155,32 +229,51 @@ int main(int argc, char** argv)
                 input, infile, ndomp, structured, rand_seed, rot, twist, noise,
                 weighted, reg1and2, regularization, adaptive, verbose, mfa_info, d_args);
 
-    master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
+    master.foreach([&](NASABlock<real_t>* b, const diy::Master::ProxyWithLink& cp)
     { 
         b->read_nasa3d_retro(cp, mfa_info, d_args, subdomain_id, time_step, var_name); 
     });
 
-    // compute the MFA
-    fprintf(stderr, "\nStarting fixed encoding...\n\n");
-    double encode_time = MPI_Wtime();
-    master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-            { b->fixed_encode_block(cp, mfa_info); });
-    encode_time = MPI_Wtime() - encode_time;
-    fprintf(stderr, "\n\nFixed encoding done.\n\n");
+    // partners for swap over regular block grid
+    diy::RegularSwapPartners  partners(decomposer,  // domain decomposition
+                                       2,       // radix of k-ary reduction
+                                       false);  // contiguous = true: distance doubling
+                                                // contiguous = false: distance halving
 
-    // debug: compute error field for visualization and max error to verify that it is below the threshold
-    double decode_time = MPI_Wtime();
-    if (error)
+    diy::reduce(master,                         // Master object
+                assigner,                       // Assigner object
+                partners,                       // RegularSwapPartners object
+                NASABlock<real_t>::redistribute);                 // swap operator callback function
+
+    master.foreach([&](NASABlock<real_t>* b, const diy::Master::ProxyWithLink& cp)
     {
-        fprintf(stderr, "\nFinal decoding and computing max. error...\n");
-        bool saved_basis = structured; // TODO: basis functions are currently only saved during encoding of structured data
-        master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-        { 
-            b->range_error(cp, true, saved_basis);
-        });
-        decode_time = MPI_Wtime() - decode_time;
-    }
+        b->set_input(cp, mfa_info, d_args);
+    });
 
+    double encode_time = 0, decode_time = 0;
+    if (do_encode)
+    {
+        // compute the MFA
+        fprintf(stderr, "\nStarting fixed encoding...\n\n");
+        encode_time = MPI_Wtime();
+        master.foreach([&](NASABlock<real_t>* b, const diy::Master::ProxyWithLink& cp)
+                { b->fixed_encode_block(cp, mfa_info); });
+        encode_time = MPI_Wtime() - encode_time;
+        fprintf(stderr, "\n\nFixed encoding done.\n\n");
+
+        // debug: compute error field for visualization and max error to verify that it is below the threshold
+        decode_time = MPI_Wtime();
+        if (error)
+        {
+            fprintf(stderr, "\nFinal decoding and computing max. error...\n");
+            bool saved_basis = structured; // TODO: basis functions are currently only saved during encoding of structured data
+            master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
+            { 
+                b->range_error(cp, true, saved_basis);
+            });
+            decode_time = MPI_Wtime() - decode_time;
+        }
+    }
 
     // print results
     fprintf(stderr, "\n------- Final block results --------\n");

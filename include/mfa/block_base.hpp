@@ -158,15 +158,16 @@ struct BlockBase
         for (int i = 0; i < dom_dim; i++)
         {
             T ghost_amount = ghost_factor * (core.max[i] - core.min[i]);
-            if (core.min[i] > domain.min[i])
+            if (core.min[i] - ghost_amount > domain.min[i])
                 bounds_mins(i) = core.min[i] - ghost_amount;
             else
-                bounds_mins(i)= core.min[i];
+                bounds_mins(i) = domain.min[i];
 
-            if (core.max[i] < domain.max[i])
+            if (core.max[i] + ghost_amount < domain.max[i])
                 bounds_maxs(i) = core.max[i] + ghost_amount;
             else
-                bounds_maxs(i) = core.max[i];
+                bounds_maxs(i) = domain.max[i];
+                
             core_mins(i) = core.min[i];
             core_maxs(i) = core.max[i];
         }
