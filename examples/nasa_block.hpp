@@ -408,8 +408,11 @@ struct NASABlock : public BlockBase<T>
                     const diy::ReduceProxy& srp,              // communication proxy
                     const diy::RegularSwapPartners& partners) // partners of the current block
     {
-        unsigned      round    = srp.round();                   // current round number
+        string logname = "redistribute.log." + to_string(srp.gid());
+        ofstream log(logname);
 
+        unsigned      round    = srp.round();                   // current round number
+log << "round " << round << " gid " << srp.gid() << endl;
         // step 1: dequeue
         // dequeue all the incoming points and add them to this block's vector
         // could use srp.incoming() instead
@@ -421,12 +424,13 @@ struct NASABlock : public BlockBase<T>
 
             std::vector<Point>    in_points;
             srp.dequeue(nbr_gid, in_points);
+            log << "[" << srp.gid() << ":" << round << "] Received " << (int) in_points.size() << " points from [" << nbr_gid << "]" << endl;
             fmt::print(stderr, "[{}:{}] Received {} points from [{}]\n",
                     srp.gid(), round, (int) in_points.size(), nbr_gid);
             for (size_t j = 0; j < in_points.size(); ++j)
                 b->points.push_back(in_points[j]);
         }
-
+log << "  done dequeuing" << endl;
         // step 2: sort and enqueue
         if (srp.out_link().size() == 0)        // final round; nothing needs to be sent
             return;
@@ -441,6 +445,8 @@ struct NASABlock : public BlockBase<T>
                                                 (b->box_maxs[cur_dim] - b->box_mins[cur_dim]) * group_size));
             out_points[loc].push_back(b->points[i]);
         }
+
+log << "  done sorting" << endl;
         int pos = -1;
         // enqueue points to neighbor blocks
         for (int i = 0; i < group_size; ++i)     // for all neighbors
@@ -453,11 +459,12 @@ struct NASABlock : public BlockBase<T>
             else
             {
                 srp.enqueue(srp.out_link().target(i), out_points[i]);
+                log << "[" << srp.gid() << "] Sent " << (int) out_points[i].size() << " points to [" << srp.out_link().target(i).gid << "]" << endl;
                 fmt::print(stderr, "[{}] Sent {} points to [{}]\n",
                         srp.gid(), (int) out_points[i].size(), srp.out_link().target(i).gid);
             }
         }
-
+log << "  done enqueuing" << endl;
         // step 3: readjust box boundaries for next round
         float new_min = b->box_mins[cur_dim] + (b->box_maxs[cur_dim] -
                                             b->box_mins[cur_dim])/group_size*pos;
