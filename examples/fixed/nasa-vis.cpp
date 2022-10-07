@@ -137,6 +137,7 @@ int main(int argc, char** argv)
     int time_step = 0;
     string var_name;
     int do_encode = 0;  // false by default
+    real_t domain_bound = 300;
 
     // Constants for this example
     const bool adaptive = false;
@@ -167,6 +168,7 @@ int main(int argc, char** argv)
     ops >> opts::Option('z', "var", var_name, "name of variable to read");
     ops >> opts::Option('z', "num_blocks", nblocks, "number of diy blocks to use");
     ops >> opts::Option('z', "do_encode", do_encode, "flag to run encoding/decoding");
+    ops >> opts::Option('z', "domain", domain_bound, "");
 
     if (!ops.parse(argc, argv) || help)
     {
@@ -198,8 +200,8 @@ int main(int argc, char** argv)
     Bounds<real_t> dom_bounds(dom_dim);
     for (int i = 0; i < dom_bounds.min.dimension(); i++)
     {
-        dom_bounds.min[i] = -1000.0;
-        dom_bounds.max[i] = 1000.0;
+        dom_bounds.min[i] = -1 * domain_bound;
+        dom_bounds.max[i] = domain_bound;
     }    
 
     Decomposer<real_t> decomposer(dom_dim, dom_bounds, tot_blocks);

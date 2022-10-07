@@ -277,12 +277,22 @@ struct NASABlock : public BlockBase<T>
         // read x,y,z coordinates of each node
         vector<float> xyz_coords(n_nodes * 3);
         is.read((char*) xyz_coords.data(), n_nodes * 3 * sizeof(float));
+        vector<float> maxs = {xyz_coords[0], xyz_coords[1], xyz_coords[3]};
+        vector<float> mins = {xyz_coords[0], xyz_coords[1], xyz_coords[3]};
         for (size_t i = 0; i < n_nodes; i++)
         {
             points[i][0] = xyz_coords[i * 3];
             points[i][1] = xyz_coords[i * 3 + 1];
             points[i][2] = xyz_coords[i * 3 + 2];
+
+            for (int l = 0; l < 3; l++)
+            {
+                if (points[i][l] > maxs[l]) maxs[l] = points[i][l];
+                if (points[i][l] < mins[l]) mins[l] = points[i][l];
+            }
         }
+        cout << ">>" << mesh_filename << " mins: " << mins[0] << " " << mins[1] << " " << mins[2] << "<<" << endl;
+        cout << ">>" << mesh_filename << " maxs: " << maxs[0] << " " << maxs[1] << " " << maxs[2] << "<<" << endl;
     }
 
     void read_nasa3d_retro_data(string data_filename, int time_step, string var_name, NASAHeader& header)
