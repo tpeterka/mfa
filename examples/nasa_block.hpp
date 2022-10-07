@@ -323,7 +323,7 @@ struct NASABlock : public BlockBase<T>
     {
         assert(mfa_info.nvars() == 1);
         assert(mfa_info.geom_dim() == 3);
-        assert(mfa_info.model_dims(1) = 1);
+        assert(mfa_info.model_dims()(1) = 1);
 
         const int nvars         = mfa_info.nvars();
         const int gdim          = mfa_info.geom_dim();
@@ -374,9 +374,9 @@ struct NASABlock : public BlockBase<T>
                 input->domain(j, l) = points[j][l];
             }
         }
-        cerr << "core extent:\n";
-        cerr << "  mins: " << input->domain.leftCols(dom_dim).colwise().minCoeff();
-        cerr << "  maxs: " << input->domain.leftCols(dom_dim).colwise().maxCoeff();
+        cerr << "core extent:" << endl;
+        cerr << "  mins: " << input->domain.leftCols(dom_dim).colwise().minCoeff() << endl;
+        cerr << "  maxs: " << input->domain.leftCols(dom_dim).colwise().maxCoeff() << endl;
         input->set_domain_params(core_mins, core_maxs);
 
 

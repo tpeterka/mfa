@@ -252,6 +252,8 @@ int main(int argc, char** argv)
                 partners,                       // RegularSwapPartners object
                 NASABlock<real_t>::redistribute);                 // swap operator callback function
     world.barrier();
+    if (world.rank() == 0) cerr << "Done with swap-reduce" << endl;
+    world.barrier();
 
     master.foreach([&](NASABlock<real_t>* b, const diy::Master::ProxyWithLink& cp)
     {
