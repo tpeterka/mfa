@@ -921,7 +921,7 @@ namespace mfa
                 fmt::print(stderr, "Error: in global2local_knot_idx, knot_idx is not within min, max knot_idx of existing tensor\n");
                 fmt::print(stderr, "cur_dim {} knot_idx {} t.knot_mins [{}] t.knot_maxs [{}]\n",
                         cur_dim, knot_idx, fmt::join(t.knot_mins, ","), fmt::join(t.knot_maxs, ","));
-                print(true, true, false, false);
+//                 print(true, true, false, false);
                 abort();
             }
 
@@ -1365,70 +1365,71 @@ namespace mfa
                 constrain_to_parent(inout, pad);
         }
 
-        // finds the tensor containing a point in index space
-        // starts with the parent tensor, then its neighbors, then all tensors
-        // if the point is on a boundary between tensors, finds the first match
-        // if adjust_pt is true and pt is in the knot_mins, knot_maxs of a tensor but is at a deeper level
-        // than the tensor, adjusts pt to the tensor level (potentially dangerous side effect)
-        TensorIdx find_tensor(vector<KnotIdx>&          pt,             // multidim point in index space (input/output, may be adjusted by this routine)
-                              TensorIdx                 parent_idx,     // parent tensor, search starts here
-                              bool                      adjust_pt,      // whether to adjust pt for level of found tensor (potentially dangerous side effect)
-                              bool&                     found) const    // (output) success
-        {
-            auto& parent = tensor_prods[parent_idx];
-            vector<KnotIdx> temp_pt = pt;
-
-            // parent tensor
-            if (in(pt, tensor_prods[parent_idx], true))
-            {
-                found = true;
-                if (!adjust_pt)
-                    pt = temp_pt;
-                return parent_idx;
-            }
-
-            // neighbors of parent tensor
-            for (auto i = 0; i < dom_dim_; i++)
-            {
-                for (auto j = 0; j < parent.prev[i].size(); j++)
-                {
-                    pt = temp_pt;
-                    if (in(pt, tensor_prods[parent.prev[i][j]], true))
-                    {
-                        found = true;
-                        if (!adjust_pt)
-                            pt = temp_pt;
-                        return parent.prev[i][j];
-                    }
-                }
-                for (auto j = 0; j < parent.next[i].size(); j++)
-                {
-                    pt = temp_pt;
-                    if (in(pt, tensor_prods[parent.next[i][j]], true))
-                    {
-                        found = true;
-                        if (!adjust_pt)
-                            pt = temp_pt;
-                        return parent.next[i][j];
-                    }
-                }
-            }
-
-            // all tensors
-            for (auto i = 0; i < tensor_prods.size(); i++)
-            {
-                pt = temp_pt;
-                if (in(pt, tensor_prods[i], true))
-                {
-                    found = true;
-                    if (!adjust_pt)
-                        pt = temp_pt;
-                    return i;
-                }
-            }
-            found = false;
-            return 0;
-        }
+        //         DEPRECATED, not used
+//         // finds the tensor containing a point in index space
+//         // starts with the parent tensor, then its neighbors, then all tensors
+//         // if the point is on a boundary between tensors, finds the first match
+//         // if adjust_pt is true and pt is in the knot_mins, knot_maxs of a tensor but is at a deeper level
+//         // than the tensor, adjusts pt to the tensor level (potentially dangerous side effect)
+//         TensorIdx find_tensor(vector<KnotIdx>&          pt,             // multidim point in index space (input/output, may be adjusted by this routine)
+//                               TensorIdx                 parent_idx,     // parent tensor, search starts here
+//                               bool                      adjust_pt,      // whether to adjust pt for level of found tensor (potentially dangerous side effect)
+//                               bool&                     found) const    // (output) success
+//         {
+//             auto& parent = tensor_prods[parent_idx];
+//             vector<KnotIdx> temp_pt = pt;
+// 
+//             // parent tensor
+//             if (in(pt, tensor_prods[parent_idx], true))
+//             {
+//                 found = true;
+//                 if (!adjust_pt)
+//                     pt = temp_pt;
+//                 return parent_idx;
+//             }
+// 
+//             // neighbors of parent tensor
+//             for (auto i = 0; i < dom_dim_; i++)
+//             {
+//                 for (auto j = 0; j < parent.prev[i].size(); j++)
+//                 {
+//                     pt = temp_pt;
+//                     if (in(pt, tensor_prods[parent.prev[i][j]], true))
+//                     {
+//                         found = true;
+//                         if (!adjust_pt)
+//                             pt = temp_pt;
+//                         return parent.prev[i][j];
+//                     }
+//                 }
+//                 for (auto j = 0; j < parent.next[i].size(); j++)
+//                 {
+//                     pt = temp_pt;
+//                     if (in(pt, tensor_prods[parent.next[i][j]], true))
+//                     {
+//                         found = true;
+//                         if (!adjust_pt)
+//                             pt = temp_pt;
+//                         return parent.next[i][j];
+//                     }
+//                 }
+//             }
+// 
+//             // all tensors
+//             for (auto i = 0; i < tensor_prods.size(); i++)
+//             {
+//                 pt = temp_pt;
+//                 if (in(pt, tensor_prods[i], true))
+//                 {
+//                     found = true;
+//                     if (!adjust_pt)
+//                         pt = temp_pt;
+//                     return i;
+//                 }
+//             }
+//             found = false;
+//             return 0;
+//         }
 
         // finds the tensor containing a point in parameter space
         // starts with the parent tensor, then its neighbors, then all tensors
