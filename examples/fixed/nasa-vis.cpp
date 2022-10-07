@@ -198,8 +198,8 @@ int main(int argc, char** argv)
     Bounds<real_t> dom_bounds(dom_dim);
     for (int i = 0; i < dom_bounds.min.dimension(); i++)
     {
-        dom_bounds.min[i] = -200.0;
-        dom_bounds.max[i] = 200.0;
+        dom_bounds.min[i] = -1000.0;
+        dom_bounds.max[i] = 1000.0;
     }    
 
     Decomposer<real_t> decomposer(dom_dim, dom_bounds, tot_blocks);
