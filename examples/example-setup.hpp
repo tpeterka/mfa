@@ -30,25 +30,25 @@ using namespace std;
     set<string> datasets_unstructured = {"edelta", "climate", "nuclear"};
 
     // Print basic info about data set
-    void echo_data_settings(int ndomp, int ntest, string input, string infile)
+    void echo_data_settings(int ndomp, int ntest, string input, string infile, ostream& os = std::cerr)
     {
         bool is_analytical = (analytical_signals.count(input) == 1);
 
-        cerr << "--------- Data Settings ----------" << endl;
-        cerr << "input: "       << input       << ", " << "infile: " << (is_analytical ? "N/A" : infile) << endl;
-        cerr << "num pts    = " << ndomp       << '\t' << "test pts    = " << (ntest > 0 ? to_string(ntest) : "N/A") << endl;
+        os << "--------- Data Settings ----------" << endl;
+        os << "input: "       << input       << ", " << "infile: " << (is_analytical ? "N/A" : infile) << endl;
+        os << "num pts    = " << ndomp       << '\t' << "test pts    = " << (ntest > 0 ? to_string(ntest) : "N/A") << endl;
 
         return;
     }
 
     // Print all info about data set
     void echo_data_settings(int ndomp, int ntest, string input, string infile, real_t noise, real_t rot, real_t twist,
-                        int structured, int rand_seed)
+                        int structured, int rand_seed, ostream& os = std::cerr)
     {
         echo_data_settings(ndomp, ntest, input, infile);
-        cerr << "structured = " << boolalpha << (bool)structured << '\t' << "random seed = " << rand_seed << endl;
-        cerr << "rotation   = " << setw(7) << left << rot << '\t' << "twist       = " << twist << endl;
-        cerr << "noise      = " << setw(7) << left << noise << endl;
+        os << "structured = " << boolalpha << (bool)structured << '\t' << "random seed = " << rand_seed << endl;
+        os << "rotation   = " << setw(7) << left << rot << '\t' << "twist       = " << twist << endl;
+        os << "noise      = " << setw(7) << left << noise << endl;
 
         return;
     }
@@ -56,61 +56,61 @@ using namespace std;
     void echo_mfa_settings(string run_name, int pt_dim, int dom_dim, int scalar,
                     int geom_degree, int geom_nctrl, int vars_degree, vector<int> vars_nctrl,
                     real_t regularization, int reg1and2, int& weighted,    // pass reference to weighted so it can be updated
-                    bool adaptive, real_t e_threshold, int rounds)
+                    bool adaptive, real_t e_threshold, int rounds, ostream& os = std::cerr)
     {
-        cerr << ">>> Running \'" << run_name << "\'" << endl;
-        cerr << endl;
-        cerr << "--------- MFA Settings ----------" << endl;
-        cerr << "pt_dim   = " << pt_dim      << '\t' << "dom_dim    = " << dom_dim 
+        os << ">>> Running \'" << run_name << "\'" << endl;
+        os << endl;
+        os << "--------- MFA Settings ----------" << endl;
+        os << "pt_dim   = " << pt_dim      << '\t' << "dom_dim    = " << dom_dim 
                 << '\t' << "scalar: " << boolalpha << (bool)scalar << endl;
-        cerr << "geom_deg = " << geom_degree << '\t' << "geom_nctrl = " << geom_nctrl  << endl;
-        cerr << "vars_deg = " << vars_degree << '\t' << "vars_nctrl = " << mfa::print_vec(vars_nctrl) << endl;
-        cerr << "regularization = " << regularization << ", type: " << 
+        os << "geom_deg = " << geom_degree << '\t' << "geom_nctrl = " << geom_nctrl  << endl;
+        os << "vars_deg = " << vars_degree << '\t' << "vars_nctrl = " << mfa::print_vec(vars_nctrl) << endl;
+        os << "regularization = " << regularization << ", type: " << 
             (regularization == 0 ? "N/A" : (reg1and2 > 0 ? "1st and 2nd derivs" : "2nd derivs only")) << endl;
         if (adaptive)
         {
-        cerr << "error    = " << e_threshold << '\t' << "max rounds = " << (rounds == 0 ? "unlimited" : to_string(rounds)) << endl;
+        os << "error    = " << e_threshold << '\t' << "max rounds = " << (rounds == 0 ? "unlimited" : to_string(rounds)) << endl;
         }
 #ifdef MFA_NO_WEIGHTS
         weighted = 0;
-        cerr << "weighted: false" << endl;
+        os << "weighted: false" << endl;
 #else
-        cerr << "weighted: " << boolalpha <<  (bool)weighted << endl;
+        os << "weighted: " << boolalpha <<  (bool)weighted << endl;
 #endif
 #ifdef CURVE_PARAMS
-        cerr << "parameterization method: curve" << endl;
+        os << "parameterization method: curve" << endl;
 #else
-        cerr << "parameterization method: domain" << endl;
+        os << "parameterization method: domain" << endl;
 #endif
 #ifdef MFA_TBB
-        cerr << "threading: TBB" << endl;
+        os << "threading: TBB" << endl;
 #endif
 #ifdef MFA_KOKKOS
-        cerr << "threading: Kokkos" << endl;
+        os << "threading: Kokkos" << endl;
 #endif
 #ifdef MFA_SYCL
-        cerr << "threading: SYCL" << endl;
+        os << "threading: SYCL" << endl;
 #endif
 #ifdef MFA_SERIAL
-        cerr << "threading: serial" << endl;
+        os << "threading: serial" << endl;
 #endif
 
         return;
     }
 
-    void echo_multiblock_settings(MFAInfo& mfa_info, DomainArgs& d_args, int nproc, int tot_blocks, vector<int>& divs, int strong_sc, real_t ghost)
+    void echo_multiblock_settings(MFAInfo& mfa_info, DomainArgs& d_args, int nproc, int tot_blocks, vector<int>& divs, int strong_sc, real_t ghost, ostream& os = std::cerr)
     {
-        cerr << "------- Multiblock Settings ---------" << endl;
-        cerr << "Total MPI processes  =  " << nproc << "\t" << "Total blocks = " << tot_blocks << endl;
-        cerr << "Blocks per dimension = " << mfa::print_vec(divs) << endl;
-        cerr << "Ghost overlap  = " << ghost << endl;
-        cerr << "Strong scaling = " << boolalpha << (bool)strong_sc << endl;
-        cerr << "Per-block settings:" << endl;
-        cerr << "    Input pts (each dim):      " << mfa::print_vec(d_args.ndom_pts) << endl;
-        cerr << "    Geom ctrl pts (each dim):  " << mfa::print_vec(mfa_info.geom_model_info.nctrl_pts) << endl;
+        os << "------- Multiblock Settings ---------" << endl;
+        os << "Total MPI processes  =  " << nproc << "\t" << "Total blocks = " << tot_blocks << endl;
+        os << "Blocks per dimension = " << mfa::print_vec(divs) << endl;
+        os << "Ghost overlap  = " << ghost << endl;
+        os << "Strong scaling = " << boolalpha << (bool)strong_sc << endl;
+        os << "Per-block settings:" << endl;
+        os << "    Input pts (each dim):      " << mfa::print_vec(d_args.ndom_pts) << endl;
+        os << "    Geom ctrl pts (each dim):  " << mfa::print_vec(mfa_info.geom_model_info.nctrl_pts) << endl;
         for (int k = 0; k < mfa_info.nvars(); k++)
         {
-            cerr << "    Var " << k << " ctrl pts (each dim): " << mfa::print_vec(mfa_info.var_model_infos[k].nctrl_pts) << endl;
+            os << "    Var " << k << " ctrl pts (each dim): " << mfa::print_vec(mfa_info.var_model_infos[k].nctrl_pts) << endl;
         }
 
         return;

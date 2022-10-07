@@ -106,6 +106,9 @@ int main(int argc, char** argv)
 
     int nblocks     = 1;                        // number of local blocks
 
+    string logname = "nasa-vis.log." + to_string(world.rank());
+    ofstream log(logname);
+
     // default command line arguments
     int         pt_dim          = 4;        // dimension of input points
     int         dom_dim         = 3;        // dimension of domain (<= pt_dim)
@@ -115,6 +118,7 @@ int main(int argc, char** argv)
     int         ndomp           = 100;      // input number of domain points (same for all dims)
     int         geom_nctrl      = -1;       // input number of control points for geometry (same for all dims)
     vector<int> vars_nctrl      = {11};     // initial # control points for all science variables (default same for all dims)
+    real_t      ghost           = 0.0;      // fraction of block to take as ghost layer
     string      input           = "sinc";   // input dataset
     int         weighted        = 1;        // solve for and use weights (bool 0/1)
     real_t      rot             = 0.0;      // rotation angle in degrees
@@ -147,6 +151,7 @@ int main(int argc, char** argv)
     ops >> opts::Option('n', "ndomp",       ndomp,      " number of input points in each dimension of domain");
     ops >> opts::Option('g', "geom_nctrl",  geom_nctrl, " number of control points in each dimension of geometry");
     ops >> opts::Option('v', "vars_nctrl",  vars_nctrl, " number of control points in each dimension of all science variables");
+    ops >> opts::Option('o', "overlap",     ghost,      " relative ghost zone overlap (0.0 - 1.0)");
     ops >> opts::Option('i', "input",       input,      " input dataset");
     ops >> opts::Option('w', "weights",     weighted,   " solve for and use weights");
     ops >> opts::Option('c', "error",       error,      " decode entire error field (default=true)");
@@ -174,10 +179,8 @@ int main(int argc, char** argv)
     int mem_blocks  = -1;                       // everything in core for now
     int num_threads = 1;                        // needed in order to do timing
 
-    // print input arguments
-    echo_mfa_settings("nasa retropropulsion example", pt_dim, dom_dim, scalar, geom_degree, geom_nctrl, vars_degree, vars_nctrl,
-                        regularization, reg1and2, weighted, adaptive, 0, 0);
-    echo_data_settings(ndomp, 0, input, infile, noise, rot, twist, structured, rand_seed);
+    echo_mfa_settings("nasa retropropulsion example", pt_dim, dom_dim, scalar, geom_degree, geom_nctrl, vars_degree, vars_nctrl, regularization, reg1and2, weighted, adaptive, 0, 0, log);
+    echo_data_settings(ndomp, 0, input, infile, noise, rot, twist, structured, rand_seed, log);
 
     // initialize DIY
     diy::FileStorage          storage("./DIY.XXXXXX"); // used for blocks to be moved out of core
@@ -204,6 +207,8 @@ int main(int argc, char** argv)
                          assigner,
                          [&](int gid, const Bounds<real_t>& core, const Bounds<real_t>& bounds, const Bounds<real_t>& domain, const RCLink<real_t>& link)
                          { NASABlock<real_t>::add(gid, core, bounds, domain, link, master, dom_dim, pt_dim, 0.0); });
+    vector<int> divs(dom_dim);                          // number of blocks in each dimension
+    decomposer.fill_divisions(divs);
 
     // If scalar == true, assume all science vars are scalar. Else one vector-valued var
     // We assume that dom_dim == geom_dim
@@ -228,6 +233,8 @@ int main(int argc, char** argv)
     setup_args(dom_dim, pt_dim, model_dims, geom_degree, geom_nctrl, vars_degree, vars_nctrl,
                 input, infile, ndomp, structured, rand_seed, rot, twist, noise,
                 weighted, reg1and2, regularization, adaptive, verbose, mfa_info, d_args);
+
+    echo_multiblock_settings(mfa_info, d_args, world.size(), tot_blocks, divs, false, ghost, log);
 
     master.foreach([&](NASABlock<real_t>* b, const diy::Master::ProxyWithLink& cp)
     { 
@@ -254,18 +261,18 @@ int main(int argc, char** argv)
     if (do_encode)
     {
         // compute the MFA
-        fprintf(stderr, "\nStarting fixed encoding...\n\n");
+        log << "\nStarting fixed encoding...\n\n" << flush;
         encode_time = MPI_Wtime();
         master.foreach([&](NASABlock<real_t>* b, const diy::Master::ProxyWithLink& cp)
                 { b->fixed_encode_block(cp, mfa_info); });
         encode_time = MPI_Wtime() - encode_time;
-        fprintf(stderr, "\n\nFixed encoding done.\n\n");
+        log << "\n\nFixed encoding done.\n\n" << flush;
 
         // debug: compute error field for visualization and max error to verify that it is below the threshold
         decode_time = MPI_Wtime();
         if (error)
         {
-            fprintf(stderr, "\nFinal decoding and computing max. error...\n");
+            log << "\nFinal decoding and computing max. error...\n" << flush;
             bool saved_basis = structured; // TODO: basis functions are currently only saved during encoding of structured data
             master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
             { 
@@ -276,13 +283,13 @@ int main(int argc, char** argv)
     }
 
     // print results
-    fprintf(stderr, "\n------- Final block results --------\n");
+    log << "\n------- Final block results --------\n" << flush;
     master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
             { b->print_block(cp, error); });
-    fprintf(stderr, "encoding time         = %.3lf s.\n", encode_time);
+    log << "encoding time         = " << setprecision(3) << encode_time << " s." << endl;
     if (error)
-        fprintf(stderr, "decoding time         = %.3lf s.\n", decode_time);
-    fprintf(stderr, "-------------------------------------\n\n");
+        log << "decoding time         = " << setprecision(3) << decode_time << " s." << endl;
+    log << "-------------------------------------\n\n" << flush;
 
     // save the results in diy format
     diy::io::write_blocks("approx.mfa", world, master);
