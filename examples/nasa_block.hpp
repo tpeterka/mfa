@@ -453,6 +453,12 @@ log << "  done dequeuing" << endl;
         {
             auto loc = static_cast<size_t>(floor((b->points[i][cur_dim] - b->box_mins[cur_dim]) /
                                                 (b->box_maxs[cur_dim] - b->box_mins[cur_dim]) * group_size));
+            if (loc > group_size-1)
+            {
+                cerr << "######" << loc << " " << group_size - 1 << endl;
+                cerr << "##########" << b->points[i][0] << " " << b->points[i][1] << " " << b->points[i][2] << endl;
+                cerr << "##########" << cur_dim << " " << b->box_mins[cur_dim] << " " << b->box_maxs[cur_dim] << endl;
+            }
             out_points[loc].push_back(b->points[i]);
         }
 
