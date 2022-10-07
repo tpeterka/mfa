@@ -251,6 +251,7 @@ int main(int argc, char** argv)
                 assigner,                       // Assigner object
                 partners,                       // RegularSwapPartners object
                 NASABlock<real_t>::redistribute);                 // swap operator callback function
+    world.barrier();
 
     master.foreach([&](NASABlock<real_t>* b, const diy::Master::ProxyWithLink& cp)
     {
