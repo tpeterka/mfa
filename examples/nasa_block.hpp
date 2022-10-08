@@ -453,6 +453,13 @@ log << "  done dequeuing" << endl;
         {
             auto loc = static_cast<size_t>(floor((b->points[i][cur_dim] - b->box_mins[cur_dim]) /
                                                 (b->box_maxs[cur_dim] - b->box_mins[cur_dim]) * group_size));
+            
+            // If the point is exactly on the farthest boundary, the above formula can overshoot
+            // and set loc==group_size. However, out_points has size=group_size, so this would cause an error
+            // In this case we simply subtract 1 (thus sending this point to the closest partner)
+            if (loc == group_size) loc--;
+
+            // If, even after decrementing, we still have loc too big, then print an error
             if (loc > group_size-1)
             {
                 cerr << "######" << loc << " " << group_size - 1 << endl;
@@ -481,11 +488,20 @@ log << "  done sorting" << endl;
             }
         }
 log << "  done enqueuing" << endl;
+
+
         // step 3: readjust box boundaries for next round
         float new_min = b->box_mins[cur_dim] + (b->box_maxs[cur_dim] -
                                             b->box_mins[cur_dim])/group_size*pos;
         float new_max = b->box_mins[cur_dim] + (b->box_maxs[cur_dim] -
                                             b->box_mins[cur_dim])/group_size*(pos + 1);
+
+        // Need to handle floating point errors where 
+        // box_mins + (box_maxs - box_mins) / group_size * group_size != box_maxs
+        if (pos == group_size-1)
+        {
+            new_max = b->box_maxs[cur_dim];
+        }
         b->box_mins[cur_dim] = new_min;
         b->box_maxs[cur_dim] = new_max;
     }
