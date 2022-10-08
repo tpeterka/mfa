@@ -137,7 +137,7 @@ int main(int argc, char** argv)
     int time_step = 0;
     string var_name;
     int do_encode = 0;  // false by default
-    real_t domain_bound = 300;
+    real_t domain_bound = 0;
 
     // Constants for this example
     const bool adaptive = false;
@@ -198,11 +198,22 @@ int main(int argc, char** argv)
 
     // set global domain bounds and decompose
     Bounds<real_t> dom_bounds(dom_dim);
-    for (int i = 0; i < dom_bounds.min.dimension(); i++)
+    dom_bounds.min[0] = -150;
+    dom_bounds.min[1] = -100;
+    dom_bounds.min[2] = -150;
+    dom_bounds.max[0] = 200;
+    dom_bounds.max[1] = 100;
+    dom_bounds.max[2] = 100;
+
+    if (domain_bound > 0)
     {
-        dom_bounds.min[i] = -1 * domain_bound;
-        dom_bounds.max[i] = domain_bound;
-    }    
+        for (int i = 0; i < dom_bounds.min.dimension(); i++)
+        {
+            dom_bounds.min[i] = -1 * domain_bound;
+            dom_bounds.max[i] = domain_bound;
+        }
+    }
+    
 
     Decomposer<real_t> decomposer(dom_dim, dom_bounds, tot_blocks);
     decomposer.decompose(world.rank(),
@@ -256,6 +267,19 @@ int main(int argc, char** argv)
     world.barrier();
     if (world.rank() == 0) cerr << "Done with swap-reduce" << endl;
     world.barrier();
+
+    master.foreach([&](NASABlock<real_t>* b, const diy::Master::ProxyWithLink& cp)
+    {
+        string out_filename = "points_out_" + to_string(cp.gid()) + ".txt";
+        ofstream os(out_filename);
+        for (int i = 0; i < b->points.size(); i++)
+        {
+            os << b->points[i][0] << " " << b->points[i][1] << " " << b->points[i][2] << " " << b->points[i][3] << "\n";
+        }
+        os.close();
+    });
+
+    return 0;
 
     master.foreach([&](NASABlock<real_t>* b, const diy::Master::ProxyWithLink& cp)
     {
