@@ -329,7 +329,7 @@ struct NASABlock : public BlockBase<T>
     void read_nasa3d_retro(const       diy::Master::ProxyWithLink& cp,
                         MFAInfo&    mfa_info,
                         DomainArgs& args,
-                        int subdomain_id, int time_step, string var_name)
+                        int subdomain_id, int time_step, int time_step_pre, string var_name)
     {
         assert(mfa_info.nvars() == 1);
         assert(mfa_info.geom_dim() == 3);
@@ -338,6 +338,7 @@ struct NASABlock : public BlockBase<T>
         const int nvars         = mfa_info.nvars();
         const int gdim          = mfa_info.geom_dim();
         const VectorXi mdims    = mfa_info.model_dims();
+        const int num_subdomains= 72; // Total number of subdomains in the data set
 
         cout << "Reading NASA 3d Retropopulsion Dataset" << endl;
 
@@ -350,16 +351,22 @@ struct NASABlock : public BlockBase<T>
 
         subdomain_id = cp.gid() + 1;
 
+        // If the subdomain id is greater than the maximum value, don't do any reading.
+        // This may happen if we use more DIY blocks than there are subdomains in the data set.
+        // The block will still participate in the swap-reduce, it just starts with 0 points.
+        if (subdomain_id > num_subdomains)
+            return;
+
         // Here we expect args.infile to be the path PREFIX to the root of the NASA data folder
         string mesh_filename = args.infile + "dAgpu0145_Fa_mesh.lb4." + to_string(subdomain_id);
-        string data_filename = args.infile + "2000unsteadyiters/dAgpu0145_Fa_volume_data." + to_string(subdomain_id);
+        string data_filename = args.infile + to_string(time_step_pre) + "unsteadyiters/dAgpu0145_Fa_volume_data." + to_string(subdomain_id);
 
         // Read header and print some information
         NASAHeader header;
         read_nasa_volume_header(data_filename, header);
         points.resize(header.n_nodes);
 
-        // Move global vertex ids into block (is this info used?)s
+        // Move global vertex ids into block (is this info used?)
         v_gids = std::move(header.local_to_global);
 
         // args.tot_ndom_pts = header.n_nodes;
@@ -451,15 +458,22 @@ log << "  done dequeuing" << endl;
         // sort points into vectors corresponding to neighbor blocks
         for (size_t i = 0; i < b->points.size(); ++i) // for all points
         {
-            auto loc = static_cast<size_t>(floor((b->points[i][cur_dim] - b->box_mins[cur_dim]) /
+            size_t loc = 0;
+            if (b->points[i][cur_dim] >= b->box_mins[cur_dim] || b->points[i][cur_dim] <= b->box_maxs[cur_dim])
+            {
+                if (b->points[i][cur_dim] == b->box_maxs[cur_dim])
+                {
+                    // edge case: point lies exactly on the box max boundary
+                    loc = group_size;
+                }
+                else
+                {
+                    loc = static_cast<size_t>(floor((b->points[i][cur_dim] - b->box_mins[cur_dim]) /
                                                 (b->box_maxs[cur_dim] - b->box_mins[cur_dim]) * group_size));
-            
-            // If the point is exactly on the farthest boundary, the above formula can overshoot
-            // and set loc==group_size. However, out_points has size=group_size, so this would cause an error
-            // In this case we simply subtract 1 (thus sending this point to the closest partner)
-            if (loc == group_size) loc--;
+                }
+            }
 
-            // If, even after decrementing, we still have loc too big, then print an error
+            // If loc is too big, then print an error (note loc is unsigned so no negative check)
             if (loc > group_size-1)
             {
                 cerr << "######" << loc << " " << group_size - 1 << endl;

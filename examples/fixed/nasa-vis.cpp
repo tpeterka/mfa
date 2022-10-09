@@ -135,9 +135,11 @@ int main(int argc, char** argv)
 
     int subdomain_id = 0;
     int time_step = 0;
+    int time_step_pre = 0;
     string var_name;
     int do_encode = 0;  // false by default
-    real_t domain_bound = 0;
+    vector<real_t> domain_min = {-150, -100, -150};
+    vector<real_t> domain_max = {200, 100, 100};
 
     // Constants for this example
     const bool adaptive = false;
@@ -165,10 +167,12 @@ int main(int argc, char** argv)
 
     ops >> opts::Option('z', "id", subdomain_id, "index of subdomain file to read");
     ops >> opts::Option('z', "ts", time_step, "index of time step to read");
+    ops >> opts::Option('z', "ts_pre", time_step_pre, "prefix of the directory to search for the given time step");
     ops >> opts::Option('z', "var", var_name, "name of variable to read");
     ops >> opts::Option('z', "num_blocks", nblocks, "number of diy blocks to use");
     ops >> opts::Option('z', "do_encode", do_encode, "flag to run encoding/decoding");
-    ops >> opts::Option('z', "domain", domain_bound, "");
+    ops >> opts::Option('z', "domain_min", domain_min, "");
+    ops >> opts::Option('z', "domain_max", domain_max, "");
 
     if (!ops.parse(argc, argv) || help)
     {
@@ -198,20 +202,10 @@ int main(int argc, char** argv)
 
     // set global domain bounds and decompose
     Bounds<real_t> dom_bounds(dom_dim);
-    dom_bounds.min[0] = -150;
-    dom_bounds.min[1] = -100;
-    dom_bounds.min[2] = -150;
-    dom_bounds.max[0] = 200;
-    dom_bounds.max[1] = 100;
-    dom_bounds.max[2] = 100;
-
-    if (domain_bound > 0)
+    for (int i = 0; i < dom_bounds.min.dimension(); i++)
     {
-        for (int i = 0; i < dom_bounds.min.dimension(); i++)
-        {
-            dom_bounds.min[i] = -1 * domain_bound;
-            dom_bounds.max[i] = domain_bound;
-        }
+        dom_bounds.min[i] = domain_min[i];
+        dom_bounds.max[i] = domain_max[i];
     }
     
 
@@ -251,7 +245,7 @@ int main(int argc, char** argv)
 
     master.foreach([&](NASABlock<real_t>* b, const diy::Master::ProxyWithLink& cp)
     { 
-        b->read_nasa3d_retro(cp, mfa_info, d_args, subdomain_id, time_step, var_name); 
+        b->read_nasa3d_retro(cp, mfa_info, d_args, subdomain_id, time_step, time_step_pre, var_name); 
     });
 
     // partners for swap over regular block grid
@@ -270,7 +264,7 @@ int main(int argc, char** argv)
 
     master.foreach([&](NASABlock<real_t>* b, const diy::Master::ProxyWithLink& cp)
     {
-        string out_filename = "points_out_" + to_string(cp.gid()) + ".txt";
+        string out_filename = var_name + "_" + to_string(time_step) + "_out_" + to_string(cp.gid()) + ".txt";
         ofstream os(out_filename);
         for (int i = 0; i < b->points.size(); i++)
         {
@@ -279,16 +273,16 @@ int main(int argc, char** argv)
         os.close();
     });
 
-    return 0;
-
-    master.foreach([&](NASABlock<real_t>* b, const diy::Master::ProxyWithLink& cp)
-    {
-        b->set_input(cp, mfa_info, d_args);
-    });
 
     double encode_time = 0, decode_time = 0;
     if (do_encode)
     {
+        master.foreach([&](NASABlock<real_t>* b, const diy::Master::ProxyWithLink& cp)
+        {
+            cout << "GID" << cp.gid() << ": Set Input." << endl;
+            b->set_input(cp, mfa_info, d_args);
+        });
+        
         // compute the MFA
         log << "\nStarting fixed encoding...\n\n" << flush;
         encode_time = MPI_Wtime();
