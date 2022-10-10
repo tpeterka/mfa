@@ -371,38 +371,40 @@ struct NASABlock : public BlockBase<T>
 
         this->max_errs.resize(nvars);
         this->sum_sq_errs.resize(nvars);
-        core_mins.resize(dom_dim);
-        core_maxs.resize(dom_dim);
-        bounds_mins.resize(pt_dim);
-        bounds_maxs.resize(pt_dim);
 
-        subdomain_id = cp.gid() + 1;
+        // If the number of processes is less than the number of data files to read,
+        // each process will read multiple files. (Assumes 1 block per process)
+        int np = cp.master()->communicator().size(); // total number of processes
+        int file_count = 0;
+        while (file_count < num_subdomains)
+        {
+            subdomain_id = file_count + cp.gid() + 1;
 
-        // If the subdomain id is greater than the maximum value, don't do any reading.
-        // This may happen if we use more DIY blocks than there are subdomains in the data set.
-        // The block will still participate in the swap-reduce, it just starts with 0 points.
-        if (subdomain_id > num_subdomains)
-            return;
+            // If the subdomain id is greater than the maximum value, don't do any reading.
+            // This may happen if we use more DIY blocks than there are subdomains in the data set.
+            // The block will still participate in the swap-reduce, it just starts with 0 points.
+            if (subdomain_id > num_subdomains)
+                return;
 
-        // Here we expect args.infile to be the path PREFIX to the root of the NASA data folder
-        string mesh_filename = args.infile + "dAgpu0145_Fa_mesh.lb4." + to_string(subdomain_id);
-        string data_filename = args.infile + to_string(time_step_pre) + "unsteadyiters/dAgpu0145_Fa_volume_data." + to_string(subdomain_id);
+            // Here we expect args.infile to be the path PREFIX to the root of the NASA data folder
+            string mesh_filename = args.infile + "dAgpu0145_Fa_mesh.lb4." + to_string(subdomain_id);
+            string data_filename = args.infile + to_string(time_step_pre) + "unsteadyiters/dAgpu0145_Fa_volume_data." + to_string(subdomain_id);
 
-        // Read header and print some information
-        NASAHeader header;
-        read_nasa_volume_header(data_filename, header);
-        points.reserve(header.n_nodes);
+            // Read header and print some information
+            NASAHeader header;
+            read_nasa_volume_header(data_filename, header);
+            points.reserve(header.n_nodes);
 
-        // Move global vertex ids into block (is this info used?)
-        v_gids = std::move(header.local_to_global);
+            // Move global vertex ids into block (is this info used?)
+            v_gids = std::move(header.local_to_global);
 
-        // args.tot_ndom_pts = header.n_nodes;
-        // input = new mfa::PointSet<T>(dom_dim, mdims, args.tot_ndom_pts);
+            // Read mesh and data files
+            read_nasa3d_retro_mesh(mesh_filename);
+            read_nasa3d_retro_data(data_filename, time_step, var_name, header);
 
-        // Read x,y,z coordinates
-        read_nasa3d_retro_mesh(mesh_filename);
+            file_count += np;
+        }
 
-        read_nasa3d_retro_data(data_filename, time_step, var_name, header);
     }
 
     void set_input(const       diy::Master::ProxyWithLink& cp,
