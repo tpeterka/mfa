@@ -491,7 +491,7 @@ log << "  done dequeuing" << endl;
                 if (b->points[i][cur_dim] == b->box_maxs[cur_dim])
                 {
                     // edge case: point lies exactly on the box max boundary
-                    loc = group_size;
+                    loc = group_size - 1;
                 }
                 else
                 {
