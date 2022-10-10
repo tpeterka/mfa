@@ -37,8 +37,11 @@ struct NASABlock : public BlockBase<T>
 
     vector<int64_t> v_gids;
     vector<Point> points;
+    vector<bool> keep_points;   // flags if point is in prescribed domain (use for file reading)
     VectorX<T> box_mins;
     VectorX<T> box_maxs;
+    VectorX<T> domain_mins;
+    VectorX<T> domain_maxs;
 
     static
         void* create()              { return mfa::create<NASABlock>(); }
@@ -55,7 +58,8 @@ struct NASABlock : public BlockBase<T>
             diy::Master&        master,             // diy master
             int                 dom_dim,            // domain dimensionality
             int                 pt_dim,             // point dimensionality
-            T                   ghost_factor = 0.0) // amount of ghost zone overlap as a factor of block size (0.0 - 1.0)
+            T                   ghost_factor = 0.0, // amount of ghost zone overlap as a factor of block size (0.0 - 1.0)
+            ostream&            os = std::cerr)     // output stream for logging
     {
         mfa::add<NASABlock, T>(gid, core, bounds, domain, link, master, dom_dim, pt_dim, ghost_factor);
 
@@ -65,14 +69,19 @@ struct NASABlock : public BlockBase<T>
         NASABlock<T>* b = master.get<NASABlock<T>>(lid);
         b->box_mins.resize(dom_dim);
         b->box_maxs.resize(dom_dim);
+        b->domain_mins.resize(dom_dim);
+        b->domain_maxs.resize(dom_dim);
         for (int i = 0; i < dom_dim; i++)
         {
             b->box_mins[i] = domain.min[i];
             b->box_maxs[i] = domain.max[i];
+            b->domain_mins[i] = domain.min[i];
+            b->domain_maxs[i] = domain.max[i];
         }
 
-        cerr << "core: " << b->core_mins.transpose() << "; " << b->core_maxs.transpose() << endl;
-        cerr << "bounds: " << b->bounds_mins.transpose() << "; " << b->bounds_maxs.transpose() << endl;
+        os << "core: " << b->core_mins.transpose() << "; " << b->core_maxs.transpose() << endl;
+        os << "bounds: " << b->bounds_mins.transpose() << "; " << b->bounds_maxs.transpose() << endl;
+        os << "domain: " << b->domain_mins.transpose() << "; " << b->domain_maxs.transpose() << endl;
     }
     static
         void save(const void* b_, diy::BinaryBuffer& bb)    { mfa::save<NASABlock, T>(b_, bb); }
@@ -226,6 +235,7 @@ struct NASABlock : public BlockBase<T>
         return i;
     }
 
+    // Must be called before read_nasa3d_retro_data
     void read_nasa3d_retro_mesh(string mesh_filename)
     {
         ifstream is(mesh_filename);
@@ -276,19 +286,31 @@ struct NASABlock : public BlockBase<T>
 
         // read x,y,z coordinates of each node
         vector<float> xyz_coords(n_nodes * 3);
+        keep_points.resize(n_nodes, false);
+
         is.read((char*) xyz_coords.data(), n_nodes * 3 * sizeof(float));
         vector<float> maxs = {xyz_coords[0], xyz_coords[1], xyz_coords[3]};
         vector<float> mins = {xyz_coords[0], xyz_coords[1], xyz_coords[3]};
         for (size_t i = 0; i < n_nodes; i++)
         {
-            points[i][0] = xyz_coords[i * 3];
-            points[i][1] = xyz_coords[i * 3 + 1];
-            points[i][2] = xyz_coords[i * 3 + 2];
-
-            for (int l = 0; l < 3; l++)
+            float x = xyz_coords[i*3];
+            float y = xyz_coords[i*3 + 1];
+            float z = xyz_coords[i*3 + 2];
+            if (x >= domain_mins[0] && x <= domain_maxs[0]  
+                    && y >= domain_mins[1] && y <= domain_maxs[1]
+                    && z >= domain_mins[2] && z <= domain_maxs[2])
             {
-                if (points[i][l] > maxs[l]) maxs[l] = points[i][l];
-                if (points[i][l] < mins[l]) mins[l] = points[i][l];
+                keep_points[i] = true;
+                points.emplace_back(std::initializer_list<T>{x, y, z, 0});
+                
+                // points[i][0] = xyz_coords[i * 3];
+                // points[i][1] = xyz_coords[i * 3 + 1];
+                // points[i][2] = xyz_coords[i * 3 + 2];
+                for (int l = 0; l < 3; l++)
+                {
+                    if (xyz_coords[i*3+l] > maxs[l]) maxs[l] = xyz_coords[i*3+l];
+                    if (xyz_coords[i*3+l] < mins[l]) mins[l] = xyz_coords[i*3+l];
+                }
             }
         }
         cout << ">>" << mesh_filename << " mins: " << mins[0] << " " << mins[1] << " " << mins[2] << "<<" << endl;
@@ -320,9 +342,14 @@ struct NASABlock : public BlockBase<T>
         vector<float> tmp(header.n_nodes * header.variables.size());
         is.read((char*) tmp.data(), tmp.size() * sizeof(float));
 
+        int j = 0;
         for (int i = 0; i < header.n_nodes; i++)
         {
-            points[i][3] = tmp[i * header.variables.size() + var_id]; 
+            if (keep_points[i])
+            {
+                points[j][3] = tmp[i * header.variables.size() + var_id];
+                j++;
+            }
         }
     }
 
@@ -364,7 +391,7 @@ struct NASABlock : public BlockBase<T>
         // Read header and print some information
         NASAHeader header;
         read_nasa_volume_header(data_filename, header);
-        points.resize(header.n_nodes);
+        points.reserve(header.n_nodes);
 
         // Move global vertex ids into block (is this info used?)
         v_gids = std::move(header.local_to_global);
@@ -372,10 +399,10 @@ struct NASABlock : public BlockBase<T>
         // args.tot_ndom_pts = header.n_nodes;
         // input = new mfa::PointSet<T>(dom_dim, mdims, args.tot_ndom_pts);
 
-        read_nasa3d_retro_data(data_filename, time_step, var_name, header);
-
         // Read x,y,z coordinates
         read_nasa3d_retro_mesh(mesh_filename);
+
+        read_nasa3d_retro_data(data_filename, time_step, var_name, header);
     }
 
     void set_input(const       diy::Master::ProxyWithLink& cp,
@@ -459,7 +486,7 @@ log << "  done dequeuing" << endl;
         for (size_t i = 0; i < b->points.size(); ++i) // for all points
         {
             size_t loc = 0;
-            if (b->points[i][cur_dim] >= b->box_mins[cur_dim] || b->points[i][cur_dim] <= b->box_maxs[cur_dim])
+            if (b->points[i][cur_dim] >= b->box_mins[cur_dim] && b->points[i][cur_dim] <= b->box_maxs[cur_dim])
             {
                 if (b->points[i][cur_dim] == b->box_maxs[cur_dim])
                 {
@@ -471,16 +498,18 @@ log << "  done dequeuing" << endl;
                     loc = static_cast<size_t>(floor((b->points[i][cur_dim] - b->box_mins[cur_dim]) /
                                                 (b->box_maxs[cur_dim] - b->box_mins[cur_dim]) * group_size));
                 }
+
+                // If loc is too big, then print an error (note loc is unsigned so no negative check)
+                if (loc > group_size-1)
+                {
+                    cerr << "######" << loc << " " << group_size - 1 << endl;
+                    cerr << "##########" << b->points[i][0] << " " << b->points[i][1] << " " << b->points[i][2] << endl;
+                    cerr << "##########" << cur_dim << " " << b->box_mins[cur_dim] << " " << b->box_maxs[cur_dim] << endl;
+                }
+
+                out_points[loc].push_back(b->points[i]);
             }
 
-            // If loc is too big, then print an error (note loc is unsigned so no negative check)
-            if (loc > group_size-1)
-            {
-                cerr << "######" << loc << " " << group_size - 1 << endl;
-                cerr << "##########" << b->points[i][0] << " " << b->points[i][1] << " " << b->points[i][2] << endl;
-                cerr << "##########" << cur_dim << " " << b->box_mins[cur_dim] << " " << b->box_maxs[cur_dim] << endl;
-            }
-            out_points[loc].push_back(b->points[i]);
         }
 
 log << "  done sorting" << endl;

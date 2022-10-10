@@ -147,12 +147,18 @@ struct BlockBase
         pt_dim  = pt_dim_;
 
         // NB: using bounds to hold full point dimensionality, but using core to hold only domain dimensionality
-        bounds_mins.resize(pt_dim);
+        bounds_mins.resize(pt_dim); 
+        bounds_mins.setZero();
         bounds_maxs.resize(pt_dim);
+        bounds_maxs.setZero();
         core_mins.resize(dom_dim);
+        core_mins.setZero();
         core_maxs.resize(dom_dim);
+        core_maxs.setZero();
+
         // blending
         overlaps.resize(dom_dim);
+        overlaps.setZero();
 
         // manually set ghosted block bounds as a factor increase of original core bounds
         for (int i = 0; i < dom_dim; i++)
@@ -485,7 +491,17 @@ struct BlockBase
     void print_block(const diy::Master::ProxyWithLink& cp,
             bool                              error)       // error was computed
     {
-        fprintf(stderr, "gid = %d\n", cp.gid());
+        fprintf(stderr, "gid = %d", cp.gid());
+        if (!mfa)
+        {
+            // Continue gracefully if this block never created an MFA for some reason
+            fprintf(stderr, ": No MFA found.\n");
+            return;
+        }
+        else
+        {
+            fprintf(stderr, "\n");
+        }
 //         cerr << "domain\n" << domain << endl;
 
         // max errors over all science variables

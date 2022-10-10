@@ -213,7 +213,7 @@ int main(int argc, char** argv)
     decomposer.decompose(world.rank(),
                          assigner,
                          [&](int gid, const Bounds<real_t>& core, const Bounds<real_t>& bounds, const Bounds<real_t>& domain, const RCLink<real_t>& link)
-                         { NASABlock<real_t>::add(gid, core, bounds, domain, link, master, dom_dim, pt_dim, 0.0); });
+                         { NASABlock<real_t>::add(gid, core, bounds, domain, link, master, dom_dim, pt_dim, 0.0, log); });
     vector<int> divs(dom_dim);                          // number of blocks in each dimension
     decomposer.fill_divisions(divs);
 
@@ -279,7 +279,7 @@ int main(int argc, char** argv)
     {
         master.foreach([&](NASABlock<real_t>* b, const diy::Master::ProxyWithLink& cp)
         {
-            cout << "GID" << cp.gid() << ": Set Input." << endl;
+            log << "Setting up input..." << endl;
             b->set_input(cp, mfa_info, d_args);
         });
         
