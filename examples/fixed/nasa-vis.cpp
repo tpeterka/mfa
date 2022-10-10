@@ -29,75 +29,6 @@
 
 using namespace std;
 
-// static const unsigned DIM = 3;
-// using SimplePoint = diy::Point<float, DIM>;
-
-// //
-// // callback function for redistribute operator, called in each round of the reduction
-// //
-// void redistribute(Block* b,                                 // local block
-//                   const diy::ReduceProxy& srp,              // communication proxy
-//                   const diy::RegularSwapPartners& partners) // partners of the current block
-// {
-//     unsigned      round    = srp.round();                   // current round number
-
-//     // step 1: dequeue
-//     // dequeue all the incoming points and add them to this block's vector
-//     // could use srp.incoming() instead
-//     for (int i = 0; i < srp.in_link().size(); ++i)
-//     {
-//         int nbr_gid = srp.in_link().target(i).gid;
-//         if (nbr_gid == srp.gid())
-//             continue;
-
-//         std::vector<Block::Point>    in_points;
-//         srp.dequeue(nbr_gid, in_points);
-//         fmt::print(stderr, "[{}:{}] Received {} points from [{}]\n",
-//                    srp.gid(), round, (int) in_points.size(), nbr_gid);
-//         for (size_t j = 0; j < in_points.size(); ++j)
-//             b->points.push_back(in_points[j]);
-//     }
-
-//     // step 2: sort and enqueue
-//     if (srp.out_link().size() == 0)        // final round; nothing needs to be sent
-//         return;
-
-//     std::vector< std::vector<Block::Point> > out_points(srp.out_link().size());
-//     int group_size = srp.out_link().size();  // number of outbound partners
-//     int cur_dim    = partners.dim(round);    // current dimension along which groups are formed
-//     // sort points into vectors corresponding to neighbor blocks
-//     for (size_t i = 0; i < b->points.size(); ++i) // for all points
-//     {
-//         auto loc = static_cast<size_t>(floor((b->points[i][cur_dim] - b->box.min[cur_dim]) /
-//                                              (b->box.max[cur_dim] - b->box.min[cur_dim]) * group_size));
-//         out_points[loc].push_back(b->points[i]);
-//     }
-//     int pos = -1;
-//     // enqueue points to neighbor blocks
-//     for (int i = 0; i < group_size; ++i)     // for all neighbors
-//     {
-//         if (srp.out_link().target(i).gid == srp.gid())
-//         {
-//             b->points.swap(out_points[i]);
-//             pos = i;
-//         }
-//         else
-//         {
-//             srp.enqueue(srp.out_link().target(i), out_points[i]);
-//             fmt::print(stderr, "[{}] Sent {} points to [{}]\n",
-//                        srp.gid(), (int) out_points[i].size(), srp.out_link().target(i).gid);
-//         }
-//     }
-
-//     // step 3: readjust box boundaries for next round
-//     float new_min = b->box.min[cur_dim] + (b->box.max[cur_dim] -
-//                                            b->box.min[cur_dim])/group_size*pos;
-//     float new_max = b->box.min[cur_dim] + (b->box.max[cur_dim] -
-//                                            b->box.min[cur_dim])/group_size*(pos + 1);
-//     b->box.min[cur_dim] = new_min;
-//     b->box.max[cur_dim] = new_max;
-// }
-
 int main(int argc, char** argv)
 {
     // initialize MPI
@@ -126,7 +57,7 @@ int main(int argc, char** argv)
     real_t      noise           = 0.0;      // fraction of noise
     int         error           = 1;        // decode all input points and check error (bool 0/1)
     string      infile;                     // input file name
-    int         structured      = 1;        // input data format (bool 0/1)
+    int         structured      = 0;        // input data format (bool 0/1)
     int         rand_seed       = -1;       // seed to use for random data generation (-1 == no randomization)
     real_t      regularization  = 0;        // smoothing parameter for models with non-uniform input density (0 == no smoothing)
     int         reg1and2        = 0;        // flag for regularizer: 0 = regularize only 2nd derivs. 1 = regularize 1st and 2nd
@@ -293,13 +224,16 @@ int main(int argc, char** argv)
 
         // debug: compute error field for visualization and max error to verify that it is below the threshold
         decode_time = MPI_Wtime();
+        vector<int> grid_size = {ndomp, ndomp, ndomp};
         if (error)
         {
             log << "\nFinal decoding and computing max. error...\n" << flush;
+            log << "Grid Size: [" << grid_size[0] << " " << grid_size[1] << " " << grid_size[2] << "]" << endl;
             bool saved_basis = structured; // TODO: basis functions are currently only saved during encoding of structured data
             master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
             { 
-                b->range_error(cp, true, saved_basis);
+                // b->range_error(cp, true, saved_basis);
+                b->decode_block_grid(cp, grid_size);
             });
             decode_time = MPI_Wtime() - decode_time;
         }
