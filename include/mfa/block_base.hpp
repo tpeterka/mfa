@@ -508,7 +508,7 @@ struct BlockBase
         // Initializing to 0 so we don't have to initialize with first var's error below
         T all_max_err = 0, all_max_norm_err = 0, all_max_sum_sq_err = 0, all_max_rms_err = 0, all_max_norm_rms_err = 0;
         // variables where the max error occurs
-        int all_max_var, all_max_norm_var, all_max_sum_sq_var, all_max_rms_var, all_max_norm_rms_var;   
+        int all_max_var = 0, all_max_norm_var = 0, all_max_sum_sq_var = 0, all_max_rms_var = 0, all_max_norm_rms_var = 0;   
 
         VectorXi tot_nctrl_pts_dim = VectorXi::Zero(dom_dim);        // total num. ctrl. pts. per dim.
         size_t tot_nctrl_pts = 0;                                                       // total number of control points

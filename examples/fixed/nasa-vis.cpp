@@ -238,6 +238,7 @@ int main(int argc, char** argv)
             decode_time = MPI_Wtime() - decode_time;
         }
     }
+    world.barrier();
 
     // print results
     log << "\n------- Final block results --------\n" << flush;
