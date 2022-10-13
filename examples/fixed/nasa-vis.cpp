@@ -176,7 +176,7 @@ int main(int argc, char** argv)
 
     master.foreach([&](NASABlock<real_t>* b, const diy::Master::ProxyWithLink& cp)
     { 
-        b->read_nasa3d_retro(cp, mfa_info, d_args, subdomain_id, time_step, time_step_pre, var_name); 
+        b->read_nasa3d_retro(cp, mfa_info, d_args, tot_blocks, subdomain_id, time_step, time_step_pre, var_name); 
     });
 
     // partners for swap over regular block grid

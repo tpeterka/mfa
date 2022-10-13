@@ -1417,18 +1417,12 @@ struct Block : public BlockBase<T>
 
         input = new mfa::PointSet<T>(dom_dim, mdims, args.tot_ndom_pts);
 
-        // vector<float> vel(pt_dim * args.tot_ndom_pts);
-
         FILE *fd = fopen(args.infile.c_str(), "r");
-        assert(fd);
-
-        // // read file into buffer
-        // if (!fread(&vel[0], sizeof(float), args.tot_ndom_pts * pt_dim, fd))
-        // {
-        //     fprintf(stderr, "Error: unable to read file\n");
-        //     exit(0);
-        // }
-
+        if (!fd)
+        {
+            cerr << "ERROR: Could not read file '" << args.infile << "'. Exiting." << endl;
+            exit(1);
+        }
 
         // build PointSet
         float val = 0;
@@ -1439,32 +1433,15 @@ struct Block : public BlockBase<T>
                 fscanf(fd, "%f", &val);
                 input->domain(i, j) = val;
             }
-            // for (int k = 0; k < gdim; k++)
-            // {
-            //     fscanf(fd, "%f", &val);
-            //     input->domain(i, k) = val;
-            // }
-            // for (int k = 0; k < nvars; k++)  
-            // {
-
-            //     fscanf(fd, "%f", &val);
-            //     input->domain(i, gdim + k) = val;
-            //     // if (k == varid)
-            //     // {
-            //     //     input->domain(i, gdim) = val;
-            //     // }
-            // }
-
-            // for (int k = 0; k < pt_dim; k++)
-            // {
-            //     fscanf(fd, "%f", &val);
-            //     input->domain(i, k) = val;
-            //     // input->domain(i, k) = vel[i * pt_dim + k];
-            // }
         }
 
         // compute bounds in each dimension
         // TODO WARNING use of bounds when dom_dim != geom_dim is not well-defined!
+        if (args.min.size() != dom_dim || args.max.size() != dom_dim)
+        {
+            cerr << "ERROR: Invalid size of DomainArgs::min or DomainArgs::max. Exiting." << endl;
+            exit(1);
+        }
         for (int i = 0; i < dom_dim; i++)
         {
             // TODO If not multiblock? We need to disambiguate core_mins, args.min, and domain_mins
@@ -1482,7 +1459,8 @@ struct Block : public BlockBase<T>
         this->setup_MFA(cp, mfa_info);
 
         // debug
-        cerr << "domain extent:\n min\n" << bounds_mins << "\nmax\n" << bounds_maxs << endl;
+        cerr << mfa::print_bbox(bounds_mins, bounds_maxs);
+        // cerr << "domain extent:\n min\n" << bounds_mins << "\nmax\n" << bounds_maxs << endl;
     }
 
 

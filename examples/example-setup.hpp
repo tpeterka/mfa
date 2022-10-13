@@ -27,7 +27,7 @@ using namespace std;
     set<string> analytical_signals = {"sine", "cosine", "sinc", "psinc1", "psinc2", "psinc3", "ml", "f16", "f17", "f18"};
     set<string> datasets_3d = {"s3d", "nek", "rti", "miranda", "tornado"};
     set<string> datasets_2d = {"cesm"};
-    set<string> datasets_unstructured = {"edelta", "climate", "nuclear"};
+    set<string> datasets_unstructured = {"edelta", "climate", "nuclear", "nasa"};
 
     // Print basic info about data set
     void echo_data_settings(int ndomp, int ntest, string input, string infile, ostream& os = std::cerr)
@@ -473,6 +473,25 @@ using namespace std;
             vars_nctrl[2] = 15;  // set (reduce) number of control points in z-direction
             
             d_args.tot_ndom_pts = 63048;
+        }
+
+        // NASA Fun3d retropropulsion dataset
+        if (input == "nasa")
+        {
+            if (dom_dim != 3)
+            {
+                cerr << "dom_dim must be 3 to run nasa example" << endl;
+                exit(1);
+            }
+
+            model_dims = {3, 1};
+            d_args.updateModelDims(model_dims);
+
+            d_args.min[0] = -1; d_args.max[0] = 0;
+            d_args.min[1] = 0;  d_args.max[1] = 2;
+            d_args.min[2] = -5; d_args.max[2] = -4;
+
+            d_args.tot_ndom_pts = 55365;
         }
 
         set_mfa_info(dom_dim, model_dims, geom_degree, geom_nctrl, vars_degree, vars_nctrl, mfa_info);

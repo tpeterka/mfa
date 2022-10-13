@@ -8,6 +8,8 @@
 #ifndef _UTIL_HPP
 #define _UTIL_HPP
 
+#include <iomanip>
+
 namespace mfa
 {
     // Not designed for efficiency, should not be used in large loops
@@ -37,6 +39,22 @@ namespace mfa
         }
         ss << vec.tail(1) << "}";
 
+        return ss.str();
+    }
+
+    template<typename T>
+    string print_bbox(const VectorX<T>& mins, const VectorX<T>& maxs)
+    {
+        if (mins.size() != maxs.size()) return "Bounding Box: <invalid bbox>";
+
+        stringstream ss;
+        ss << std::setprecision(3);
+        ss << "Bounds Box:\n";
+        for (int i = 0; i < mins.size(); i++)
+        {
+            ss << "  Dim " << i << ": [" << mins(i) << ", " << maxs(i) << "]\n";
+        }
+        
         return ss.str();
     }
 

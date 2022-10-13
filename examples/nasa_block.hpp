@@ -354,6 +354,7 @@ struct NASABlock : public BlockBase<T>
     }
 
     void read_nasa3d_retro(const       diy::Master::ProxyWithLink& cp,
+                        int         tot_blocks,
                         MFAInfo&    mfa_info,
                         DomainArgs& args,
                         int subdomain_id, int time_step, int time_step_pre, string var_name)
@@ -373,8 +374,7 @@ struct NASABlock : public BlockBase<T>
         this->sum_sq_errs.resize(nvars);
 
         // If the number of processes is less than the number of data files to read,
-        // each process will read multiple files. (Assumes 1 block per process)
-        int np = cp.master()->communicator().size(); // total number of processes
+        // each process will read multiple files.
         int file_count = 0;
         while (file_count < num_subdomains)
         {
@@ -402,7 +402,7 @@ struct NASABlock : public BlockBase<T>
             read_nasa3d_retro_mesh(mesh_filename);
             read_nasa3d_retro_data(data_filename, time_step, var_name, header);
 
-            file_count += np;
+            file_count += tot_blocks;
         }
 
     }
