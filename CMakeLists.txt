@@ -89,6 +89,8 @@ find_package                (Threads)
 # DIY
 option                      (build_examples "" OFF)
 option                      (build_tests "" OFF)
+option                      (python "" ON)
+option                      (log "" ON)
 add_subdirectory            (include/diy)
 set                         (libraries ${libraries} diy)
 
