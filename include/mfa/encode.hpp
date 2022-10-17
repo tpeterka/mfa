@@ -2478,7 +2478,10 @@ namespace mfa
             int min_interior    = mfa_data.p(0) % 2 == 0 ? mfa_data.p(0) + 2 : mfa_data.p(0) + 1;   // min. size for interior tensors
             int min_border      = 2 * mfa_data.p(0) + 1;                                            // min. size for global border tensors
             if (!tmesh.check_min_size(min_interior, min_border))
-                throw MFAError(fmt::format("AdaptiveEncode(): Error: failed checking minimum size of tensors\n"));
+            {
+                fmt::print(stderr, "AdaptiveEncode(): Error: failed checking minimum size of tensors\n");
+//                 throw MFAError(fmt::format("AdaptiveEncode(): Error: failed checking minimum size of tensors\n"));
+            }
 
             // debug: verify that the local knots stored in all tensors correspond to the global knots
             // TODO: comment out after code is debugged

@@ -1616,7 +1616,7 @@ namespace diy
                             diy::save(bb, true);
                             diy::save(bb, *(ps->params));
                         }
-                        
+
                         diy::save(bb, ps->dom_mins);
                         diy::save(bb, ps->dom_maxs);
 
@@ -1660,7 +1660,7 @@ namespace diy
 
                         // Point info
                         diy::load(bb, ps->domain);
-                    }   
+                    }
                 }
         };
 }                       // namespace
