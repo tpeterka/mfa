@@ -42,6 +42,11 @@ int main(int argc, char **argv) {
     diy::mpi::environment env(argc, argv); // equivalent of MPI_Init(argc, argv)/MPI_Finalize()
     diy::mpi::communicator world;               // equivalent of MPI_COMM_WORLD
 
+    // initialize Kokkos if needed
+#ifdef MFA_KOKKOS
+    Kokkos::initialize( argc, argv );
+#endif
+
     int tot_blocks = world.size();            // default number of global blocks
     int mem_blocks = -1;                       // everything in core for now
     int num_threads = 1;                        // needed in order to do timing
@@ -179,10 +184,22 @@ int main(int argc, char **argv) {
 #else
         cerr << "parameterization method = domain" << endl;
 #endif
-#ifdef MFA_NO_TBB
-    cerr << "TBB: off" << endl;
+#ifdef MFA_TBB
+    cerr << "threading: TBB" << endl;
+#endif
+#ifdef MFA_KOKKOS
+    cerr << "threading: Kokkos" << endl;
+#endif
+#ifdef MFA_SYCL
+    cerr << "threading: SYCL" << endl;
+#endif
+#ifdef MFA_SERIAL
+    cerr << "threading: serial" << endl;
+#endif
+#ifdef MFA_NO_WEIGHTS
+    cerr << "weighted = 0" << endl;
 #else
-        cerr << "TBB: on" << endl;
+    cerr << "weighted = " << weighted << endl;
 #endif
 
         fprintf(stderr, "-------------------------------------\n\n");
@@ -419,6 +436,8 @@ int main(int argc, char **argv) {
                     write_time - recv_blend_end);
 
     }
-
+#ifdef MFA_KOKKOS
+    Kokkos::finalize();
+#endif
 }
 

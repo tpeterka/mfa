@@ -235,7 +235,7 @@ namespace mfa
 
 #endif              // end TBB version
 
-#ifdef MFA_SERIAL   // serial version
+#if defined(MFA_SERIAL) || defined(MFA_KOKKOS)
                 // R is the right hand side needed for solving NtN * P = R
                 MatrixX<T> R(mfa_data.N[k].cols(), pt_dim);
 
@@ -502,7 +502,7 @@ namespace mfa
             // Prep for evaluating basis functions
             VectorXi            q = mfa_data.p + VectorXi::Ones(dom_dim);  // order of basis funs
             BasisFunInfo<T>     bfi(q);                                             // buffers for basis fun evaluation
-            vector<VectorX<T>>  lB(dom_dim);                               // stores value of basis funs
+            vector<vector<T>>  lB(dom_dim);                               // stores value of basis funs
             for (int k = 0; k < dom_dim; k++)
             {
                 lB[k].resize(q[k]);
@@ -548,7 +548,7 @@ namespace mfa
                     {
                         int idx = ctrl_vol_iter.idx_dim(k);
                         ctrl_idx_full += (idx + ctrl_starts(k)) * cps(k);
-                        coeff_prod *= lB[k](idx);
+                        coeff_prod *= lB[k][idx];
                     }
 
                     // increment number of entries in this row (for use in constructing N)

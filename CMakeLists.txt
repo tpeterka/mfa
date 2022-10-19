@@ -43,11 +43,14 @@ elseif                      (mfa_thread MATCHES "kokkos")
     message                 ("Using Kokkos threading")
     add_definitions         (-DMFA_KOKKOS)
     # TODO: for cuda only; how to check for compiler==nvcc_wrapper?
-    set                     (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Xcudafe --diag_suppress=esa_on_defaulted_function_ignored")
-    set                     (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} --expt-relaxed-constexpr")
-    set                     (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} --expt-extended-lambda")
-    include_directories     (${KOKKOS_INCLUDE_DIRS})
-    set                     (libraries ${libraries} ${KOKKOS_LIBRARY} ${CMAKE_DL_LIBS})
+   # set                     (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Xcudafe --diag_suppress=esa_on_defaulted_function_ignored")
+   # set                     (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} --expt-relaxed-constexpr")
+   # set                     (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} --expt-extended-lambda")
+   # include_directories     (${KOKKOS_INCLUDE_DIRS})
+   # set                     (libraries ${libraries} ${KOKKOS_LIBRARY} ${CMAKE_DL_LIBS})
+    find_package ( Kokkos REQUIRED )
+    message                 ( " found KOKKOS in "  ${Kokkos_DIR} )
+    set                     ( KK_LIB  "Kokkos::kokkos" ) 
 elseif                      (mfa_thread MATCHES "sycl")
     message                 ("Using SYCL threading")
     add_definitions         (-DMFA_SYCL)
@@ -79,6 +82,27 @@ if                          (eigen_thread)
         set                     (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fopenmp")
     endif                   ()
 endif                       ()
+
+# # Eigen threading (requires OpenMP to be available)
+# if                          (eigen_thread)
+#     find_package            (OpenMP)
+#     message                 ("Using OpenMP for Eigen")
+#     add_definitions         (-DEIGEN_OPENMP)
+#     if                      (APPLE)
+#         set                 (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Xclang -fopenmp")
+#         if                  (${OPENMP_CXX_FOUND})
+#             set             (CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -lomp")
+#         elseif              (DEFINED OPENMP_LIBRARY)
+#             set             (libraries ${libraries} ${OPENMP_LIBRARY})
+#             message         ("Using user-provided OpenMP library: ${OPENMP_LIBRARY}")
+#         else                ()
+#             message         ("Error: cannot find OpenMP and OPENMP_LIBRARY is not set")
+#             message         (FATAL_ERROR "Either provide OPENMP_LIBRARY explicitly or disable eigen_thread")
+#         endif               ()
+#     else                    ()
+#         set                     (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fopenmp")
+#     endif                   ()
+# endif                       ()
 
 # Threads
 find_package                (Threads)
@@ -117,7 +141,9 @@ set                         (libraries
                              ${libraries}
                              ${CLP_LIB}
                              ${COIN_UTILS_LIB}
-                             ${CMAKE_THREAD_LIBS_INIT})
+                             ${CMAKE_THREAD_LIBS_INIT}
+			                 ${KK_LIB} )
+
 
 # Testing
 # NB testing must be enabled before adding tests subdirectory, otherwise no tests will be found

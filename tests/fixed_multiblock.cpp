@@ -32,7 +32,9 @@ int main(int argc, char** argv)
     // initialize MPI
     diy::mpi::environment  env(argc, argv);     // equivalent of MPI_Init(argc, argv)/MPI_Finalize()
     diy::mpi::communicator world;               // equivalent of MPI_COMM_WORLD
-
+#ifdef MFA_KOKKOS
+    Kokkos::initialize( argc, argv );
+#endif
     int tot_blocks  = world.size();             // default number of global blocks
     int mem_blocks  = -1;                       // everything in core for now
     int num_threads = 1;                        // needed in order to do timing
@@ -247,4 +249,7 @@ int main(int argc, char** argv)
             abort();
         }
     }
+#ifdef MFA_KOKKOS
+    Kokkos::finalize();
+#endif
 }

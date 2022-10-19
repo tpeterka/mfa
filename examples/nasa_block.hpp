@@ -354,9 +354,9 @@ struct NASABlock : public BlockBase<T>
     }
 
     void read_nasa3d_retro(const       diy::Master::ProxyWithLink& cp,
-                        int         tot_blocks,
                         MFAInfo&    mfa_info,
                         DomainArgs& args,
+                        int         tot_blocks,
                         int subdomain_id, int time_step, int time_step_pre, string var_name)
     {
         assert(mfa_info.nvars() == 1);

@@ -216,7 +216,7 @@ namespace mfa
             params->make_domain_params(domain, domain_mins, domain_maxs);
         }
 
-        // Create Param object that is equispaced in parameter space
+        // Create Param object that is equispaced over all parameter space
         void set_grid_params()
         {
             if (!is_structured())
@@ -226,6 +226,18 @@ namespace mfa
             }
 
             params->make_grid_params();
+        }
+
+        // Create Param object that is equispaced on a given subvolume of parameter space
+        void set_grid_params(const VectorX<T>& param_mins, const VectorX<T>& param_maxs)
+        {
+            if (!is_structured())
+            {
+                cerr << "ERROR: Cannot set grid parametrization to unstructured PointSet. Exiting." << endl;
+                exit(1);
+            }
+
+            params->make_grid_params(param_mins, param_maxs);
         }
 
         void set_curve_params()
@@ -524,6 +536,10 @@ namespace mfa
         PtIterator end() const
         {
             return PtIterator(*this, npts);
+        }
+        PtIterator last() const
+        {
+            return PtIterator(*this, npts - 1);
         }
 
         void pt_coords(size_t idx, VectorX<T>& coord_vec) const

@@ -33,7 +33,9 @@ int main(int argc, char** argv)
     // initialize MPI
     diy::mpi::environment  env(argc, argv);     // equivalent of MPI_Init(argc, argv)/MPI_Finalize()
     diy::mpi::communicator world;               // equivalent of MPI_COMM_WORLD
-
+#ifdef MFA_KOKKOS
+    Kokkos::initialize( argc, argv );
+#endif
     int nblocks     = 1;                        // number of local blocks
     int tot_blocks  = nblocks * world.size();   // number of global blocks
     int mem_blocks  = -1;                       // everything in core for now
@@ -247,7 +249,7 @@ int main(int argc, char** argv)
         // now look at some values of the blend matrix
 
         // b still points to the first block !! Block<real_t>* b    = static_cast<Block<real_t>*>(master.block(0));
-        MatrixX<real_t> result = b->blend;
+        MatrixX<real_t> result = b->blend->domain;
 
         // evaluate at 0,0 using decodeatpoint
         VectorX<real_t> param(2); // dom dim is 2, initialize with 0
@@ -274,4 +276,7 @@ int main(int argc, char** argv)
         }
 
     }
+#ifdef MFA_KOKKOS
+    Kokkos::finalize();
+#endif
 }

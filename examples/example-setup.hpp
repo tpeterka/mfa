@@ -87,6 +87,7 @@ using namespace std;
 #endif
 #ifdef MFA_KOKKOS
         os << "threading: Kokkos" << endl;
+        os << "KOKKOS execution space: " << Kokkos::DefaultExecutionSpace::name() << "\n";
 #endif
 #ifdef MFA_SYCL
         os << "threading: SYCL" << endl;
