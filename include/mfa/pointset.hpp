@@ -141,7 +141,7 @@ namespace mfa
         //   N.B. If *this is structured, then Param object must be too.
         //        However, if *this is not structured, Param is allowed to be structured;
         //        this allows a new grid structure to be imposed from the Param grid structure.
-        bool check_param_domain_agreement(const Param<T>& params_)
+        bool check_param_domain_agreement(Param<T>& params_)
         {
             bool agreement =    (dom_dim == params_.dom_dim)
                             &&  (npts == params_.npts())
@@ -349,6 +349,10 @@ namespace mfa
         PtIterator end() const
         {
             return PtIterator(*this, npts);
+        }
+        PtIterator last() const
+        {
+            return PtIterator(*this, npts - 1);
         }
 
         void pt_coords(size_t idx, VectorX<T>& coord_vec) const

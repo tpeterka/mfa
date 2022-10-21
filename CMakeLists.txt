@@ -4,7 +4,7 @@ cmake_minimum_required      (VERSION 3.1)
 option                      (wrapped_mpi    "MPI compiler wrapper requires no further MPI libs, true/false (default false)" OFF     )
 option                      (mfa_thread     "tbb, kokkos, sycl, or serial (default serial)"                                 serial  )
 option                      (s3d_infile     "Path/filename of s3d dataset (for unit testing)"                                       )
-option                      (python         "Build Python bindings, true/false (default false)"                             OFF     )
+option                      (mfa_python     "Build Python bindings, true/false (default false)"                             OFF     )
 option                      (eigen_thread   "Use OpenMP for Eigen threading, true/false (default false)"                    OFF     )
 option                      (KOKKOS_INCLUDE_DIRS    "Path of include directories for Kokkos (optional)"                             )
 option                      (KOKKOS_LIBRARY "Kokkos library (optional)"                                                             )
@@ -43,11 +43,14 @@ elseif                      (mfa_thread MATCHES "kokkos")
     message                 ("Using Kokkos threading")
     add_definitions         (-DMFA_KOKKOS)
     # TODO: for cuda only; how to check for compiler==nvcc_wrapper?
-    set                     (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Xcudafe --diag_suppress=esa_on_defaulted_function_ignored")
-    set                     (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} --expt-relaxed-constexpr")
-    set                     (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} --expt-extended-lambda")
-    include_directories     (${KOKKOS_INCLUDE_DIRS})
-    set                     (libraries ${libraries} ${KOKKOS_LIBRARY} ${CMAKE_DL_LIBS})
+   # set                     (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Xcudafe --diag_suppress=esa_on_defaulted_function_ignored")
+   # set                     (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} --expt-relaxed-constexpr")
+   # set                     (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} --expt-extended-lambda")
+   # include_directories     (${KOKKOS_INCLUDE_DIRS})
+   # set                     (libraries ${libraries} ${KOKKOS_LIBRARY} ${CMAKE_DL_LIBS})
+    find_package ( Kokkos REQUIRED )
+    message                 ( " found KOKKOS in "  ${Kokkos_DIR} )
+    set                     ( KK_LIB  "Kokkos::kokkos" ) 
 elseif                      (mfa_thread MATCHES "sycl")
     message                 ("Using SYCL threading")
     add_definitions         (-DMFA_SYCL)
@@ -83,6 +86,19 @@ endif                       ()
 # Threads
 find_package                (Threads)
 
+# DIY
+option                      (build_examples "" OFF)
+option                      (build_tests "" OFF)
+option                      (python "" ON)
+option                      (log "" ON)
+add_subdirectory            (include/diy)
+set                         (libraries ${libraries} diy)
+
+# fmt
+option                      (FMT_INSTALL "" OFF)
+add_subdirectory            (include/fmt)
+set                         (libraries ${libraries} fmt::fmt)
+
 # Coin-OR CLP
 find_path                   (CLP_INCLUDE_DIRS   ClpSimplex.hpp)
 find_library                (CLP_LIB NAMES      Clp)
@@ -101,6 +117,7 @@ set                         (CMAKE_INCLUDE_SYSTEM_FLAG_CXX "-isystem")
 include_directories         (${CMAKE_CURRENT_SOURCE_DIR}/include
                             ${CMAKE_CURRENT_SOURCE_DIR}/include/cppoptlib/include
                             ${CMAKE_CURRENT_SOURCE_DIR}/include/diy/include
+                            ${CMAKE_CURRENT_SOURCE_DIR}/include/fmt/include
                             ${CMAKE_CURRENT_SOURCE_DIR}/include/eigen3
                             SYSTEM
                             ${MPI_INCLUDE_PATH}
@@ -117,7 +134,9 @@ set                         (libraries
                              ${libraries}
                              ${CLP_LIB}
                              ${COIN_UTILS_LIB}
-                             ${CMAKE_THREAD_LIBS_INIT})
+                             ${CMAKE_THREAD_LIBS_INIT}
+                             ${KK_LIB} )
+
 
 # Testing
 # NB testing must be enabled before adding tests subdirectory, otherwise no tests will be found
@@ -125,7 +144,9 @@ enable_testing              ()
 include                     (CTest)
 add_subdirectory            (examples)
 # add_subdirectory            (tests)
-if                          (python)
+
+# Python
+if                          (mfa_python)
     add_subdirectory        (include/pybind11)
     add_subdirectory        (python)
 endif                       ()

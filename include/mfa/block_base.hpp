@@ -14,7 +14,6 @@
 #include    <diy/assigner.hpp>
 #include    <diy/io/block.hpp>
 #include    <diy/pick.hpp>
-#include    <diy/thirdparty/fmt/format.h>
 #include    <diy/reduce.hpp>
 #include    <diy/partners/merge.hpp>
 
@@ -101,7 +100,7 @@ struct BlockBase
     // will be computed only in core, for each block, using neighboring approximations if necessary
     //  needed only at decoding stage
     VectorXi            ndom_outpts;            // number of output points in each dimension
-    MatrixX<T>          blend;                  // output result of blending (lexicographic order)
+    mfa::PointSet<T>    *blend;                 // output result of blending (lexicographic order)
     vector<Bounds<T>>   neighOverlaps;          // only the overlapping part of the neighbors to current core is important
                                                 // will store the actual overlap of neighbors
     vector<Bounds<T>>   overNeighCore;          // part of current domain over neighbor core;
@@ -111,10 +110,11 @@ struct BlockBase
     vector<T>           max_errs_reduce;        // max_errs used in the reduce operations, plus location (2 T vals per entry)
 
     // zero-initialize pointers during default construction
-    BlockBase() : 
-        mfa(NULL), 
-        input(NULL), 
-        approx(NULL), 
+    BlockBase() :
+        mfa(NULL),
+        input(NULL),
+        approx(NULL),
+        blend(NULL),
         errs(NULL) { }
 
     ~BlockBase()
@@ -123,6 +123,7 @@ struct BlockBase
         delete input;
         delete approx;
         delete errs;
+        delete blend;
 
         delete geometry.mfa_data;
         for (int i = 0; i < vars.size(); i++)
@@ -773,6 +774,9 @@ struct BlockBase
     void DecodeRequestGrid(int verbose,
                            MatrixX<T> &localBlock) // local block is in a grid, in lexicographic order
     {
+#ifdef MFA_KOKKOS
+        Kokkos::Profiling::pushRegion("start_decode_req");
+#endif
         VectorXi &ndpts = input->ndom_pts;
 
         VectorX<T> min_bd(this->dom_dim);
@@ -791,8 +795,10 @@ struct BlockBase
 
             std:: cout << localBlock << "\n";
         }
+
         // determine the max and min extension of localBlock, and dimensions of localBlock
         // it is an inverse problem, from the block extensions, find out the maximum and index
+        // because of increasing lexicographic ordering, each grid dimension is computed
         //
         VectorXi grid_counts(this->dom_dim);
         VectorX<T> min_block(this->dom_dim);
@@ -803,25 +809,22 @@ struct BlockBase
             min_block[i] = localBlock(0,i);
             max_block[i] = localBlock(0,i); // this will be modified in the next loop
         }
-        int num_rows = (int) localBlock.rows();
-        for (int k=0; k < num_rows; k++)
-        {
-            for (int i=0; i < dom_dim; i++)
-            {
-                if (max_block[i] < localBlock(k,i))
-                {
-                    max_block[i] = localBlock(k,i);
-                    index_max[i] = k; // first index to this extent !
-                }
-            }
-        }
         cs = 1;
+        int num_rows = (int) localBlock.rows();
         for (int i=0; i < dom_dim; i++)
         {
-            grid_counts[i] = index_max[i] / cs + 1;
-            cs = cs * grid_counts[i];
+            // see up to what value is the domain increasing in direction i, with current stride cs
+            grid_counts[i] = 1;
+            int index_on_dir = 0;
+            while ( index_on_dir + cs < num_rows &&  localBlock(index_on_dir + cs, i) > localBlock(index_on_dir, i) )
+            {
+                index_on_dir += cs;
+                grid_counts[i]++;
+            }
+            max_block[i] = localBlock(index_on_dir, i);
+            cs *= grid_counts[i];
         }
-        // assert product (grid_counts[i] ) == num_rows ?
+
         //use domain parametrization logic to compute actual par for block within bounds,
         // to be able to use DecodeAtGrid
         VectorX<T> p_min(dom_dim); // initially, these are for the whole decoded domain
@@ -833,14 +836,16 @@ struct BlockBase
         // compute the par min and par max from bounds and core (core is embedded in bounds)
 
         for (int i = 0; i < dom_dim; i++) {
-            T diff = bounds_maxs[i] - bounds_mins[i];
-            p_min[i] = (min_block[i] - bounds_mins[i]) / diff;
-            p_max[i] = (max_block[i] - bounds_mins[i]) / diff;
+            T diff = max_bd[i] - min_bd[i];
+            p_min[i] = (min_block[i] - min_bd[i]) / diff;
+            p_min[i] = ( p_min[i] < 0.) ? 0. : p_min[i];
+            p_max[i] = (max_block[i] - min_bd[i]) / diff;
+            p_max[i] = ( p_max[i] > 1.) ? 1. : p_max[i];
         }
 #endif
-        // geometry first
-        /*mfa->DecodeAtGrid(*geometry.mfa_data, 0, dom_dim - 1, p_min, p_max,
-                grid_counts, griddom); */
+#ifdef MFA_KOKKOS
+        Kokkos::Profiling::popRegion(); //"start_decode_req"
+#endif
         for (size_t j = 0; j < vars.size(); j++) {
             mfa->DecodeAtGrid(*(this->vars[j].mfa_data), dom_dim + j,
                     dom_dim + j, p_min, p_max, grid_counts, localBlock);
@@ -849,7 +854,10 @@ struct BlockBase
 //#define BLEND_VERBOSE
     void decode_core_ures(const diy::Master::ProxyWithLink &cp,
             std::vector<int> &resolutions) // we already know the core, decode at desired resolution, without any requests sent to neighbors
-            {
+    {
+#ifdef MFA_KOKKOS
+        Kokkos::Profiling::pushRegion("init_decode");
+#endif
         // dom_dim  actual geo dimension for output points
         int tot_core_pts = 1;
 
@@ -858,37 +866,42 @@ struct BlockBase
             ndom_outpts[i] = resolutions[map_dir[i]];
             tot_core_pts *= resolutions[map_dir[i]];
         }
-        // get local core bounds are decided already:  core_mins, core_maxs
-        blend.resize(tot_core_pts, dom_dim + 1); // these are just the evaluation points (core domain pts)
 
-        // deltas in each direction
-        VectorX<T> d(dom_dim);
-        // starting point in each dimension will be core_mins
-        int nghost_pts;           // number of ghost points in current dimension
-        for (int i = 0; i < dom_dim; i++)
-            d(i) = (core_maxs(i) - core_mins(i)) / (ndom_outpts(i) - 1);
-
+#ifdef MFA_KOKKOS
+        Kokkos::Profiling::popRegion(); // "init_decode"
+        Kokkos::Profiling::pushRegion("calc_pos");
+#endif
         // assign values to the domain (geometry)
-        int cs = 1;                        // stride of a coordinate in this dim
-        T eps = 1.0e-10;                  // floating point roundoff error
-        for (int i = 0; i < dom_dim; i++)  // all dimensions in the domain
-                {
-            int k = 0;
-            int co = 0;            // j index of start of a new coordinate value
-            for (int j = 0; j < tot_core_pts; j++) {
-                if (core_mins(i) + k * d(i) > core_maxs(i) + eps)
-                    k = 0;
-                blend(j, i) = core_mins(i) + k * d(i);
-                if (j + 1 - co >= cs) {
-                    k++;
-                    co = j + 1;
-                }
-            }
-            cs *= ndom_outpts(i);
+        blend = new mfa::PointSet<T>(dom_dim, pt_dim, ndom_outpts.prod(), ndom_outpts);
+        // in case of structured points, actual bounds are not bounds_mins, bounds_maxs
+        VectorXi &ndpts = input->ndom_pts;
+
+        VectorX<T> min_bd(this->dom_dim);
+        VectorX<T> max_bd(this->dom_dim);
+        size_t cs = 1;
+        for (int i = 0; i < this->dom_dim; i++) {
+            min_bd(i) = input->domain(0, i);
+            max_bd(i) = input->domain(cs * (ndpts(i) - 1), i);
+            cs *= ndpts(i);
         }
+
+        VectorX<T>   param_mins, param_maxs;
+        param_mins.resize(dom_dim);
+        param_maxs.resize(dom_dim);
+        for (int i=0; i<dom_dim; i++)
+        {
+            param_mins[i] = (core_mins(i) - min_bd(i))/(max_bd(i) - min_bd(i));
+            param_maxs[i] = (core_maxs(i) - min_bd(i))/(max_bd(i) - min_bd(i));
+        }
+        mfa::Param<T>   param1(ndom_outpts, param_mins, param_maxs);
+        blend->set_params( make_shared<mfa::Param<T>>(param1) );
+        mfa->DecodePointSet(*geometry.mfa_data, *blend, 0, 0, dom_dim - 1, false);
+
+#ifdef MFA_KOKKOS
+        Kokkos::Profiling::popRegion(); // "calc_pos"
+#endif
         // now decode at resolution
-        this->DecodeRequestGrid(0, blend); // so just compute the value, without any further blending
-        //mfa->DecodeDomain(*(vars[0].mfa_data), 0, blend, dom_dim, dom_dim, false);
+        this->DecodeRequestGrid(0, blend->domain); // so just compute the value, without any further blending
 #ifdef BLEND_VERBOSE
        cerr << " block: " << cp.gid() << " decode no blend:" << blend << "\n";
 #endif
@@ -923,16 +936,18 @@ struct BlockBase
                 neigh_overlaps.min[di] = core_mins[di];
                 // start with full bounds, then restrict to neigh core, based on direction
                 overNeigh.max[di] = bounds_maxs[di];
+                if (bounds_maxs[di] > core_maxs[di])
+                    overNeigh.max[di] = core_maxs[di] + overlaps[di];
                 overNeigh.min[di] = bounds_mins[di];
+                if (bounds_mins[di] < core_mins[di])
+                    overNeigh.min[di] = core_mins[di] - overlaps[di];
                 if (dirc[gdir] < 0) {
                     // it is reciprocity; if my bounds extended, neighbor bounds extended too in opposite direction
-                    neigh_overlaps.max[di] = core_mins[di]
-                            + (core_mins[di] - bounds_mins[di]);
+                    neigh_overlaps.max[di] = core_mins[di] + overlaps[di];
                     overNeigh.max[di] = core_mins[di];
                 }
                 else if (dirc[gdir] > 0) {
-                    neigh_overlaps.min[di] = core_maxs[di]
-                            - (bounds_maxs[di] - core_maxs[di]);
+                    neigh_overlaps.min[di] = core_maxs[di] - overlaps[di];
                     overNeigh.min[di] = core_maxs[di];
                 }
                 else // if (dirc[gdir] == 0 )
@@ -942,13 +957,17 @@ struct BlockBase
 
                 }
 #ifdef BLEND_VERBOSE
-          cerr << "overlaps block:" << cp.gid() << " nb:" << bid.gid << " di:" << di << " min:" <<
-              neigh_overlaps.min[di] << " max:"<< neigh_overlaps.max[di] <<"\n";
+                  cerr << "neighOverlaps " << cp.gid() << " nb: " << bid.gid  <<
+                      " min:" << neigh_overlaps.min[di] << " max:"<< neigh_overlaps.max[di] <<"\n";
+                  cerr << "overNeighCore " << cp.gid() << " nb: " << bid.gid  <<
+                      " min:" <<  overNeigh.min[di] << " max:"<< overNeigh.max[di] <<"\n";
 
 #endif
+
             }
             neighOverlaps.push_back(neigh_overlaps);
             overNeighCore.push_back(overNeigh);
+
         }
 
     }
@@ -1039,11 +1058,7 @@ struct BlockBase
 
                 vol_it.incr_iter();
             }
-
-            //this->DecodeRequestGrid(0, localBlock); //
             this->DecodeRequestGrid(0, localBlockOverCoreK);
-            //mfa->DecodeDomain(*(vars[0].mfa_data), 0, localBlock, dom_dim, dom_dim, false);
-            // local block localBlock(:, dom_dim) will have the decoded  values for science variable
             vector<T> computed_values(sizeBlock);
             for (int k = 0; k < sizeBlock; k++) {
                 computed_values[k] = localBlockOverCoreK(k, dom_dim); // just last dimension
@@ -1121,10 +1136,7 @@ struct BlockBase
                 vol_it.incr_iter();
             }
 
-            //this->DecodeRequestGrid(0, localBlock); //
             this->DecodeRequestGrid(0, localBlockOverCoreK);
-            //mfa->DecodeDomain(*(vars[0].mfa_data), 0, localBlock, dom_dim, dom_dim, false);
-            // local block localBlock(:, dom_dim) will have the decoded  values for science variable
             vector<T> computed_values(sizeBlock);
             for (int k = 0; k < sizeBlock; k++) {
                 computed_values[k] = localBlockOverCoreK(k, dom_dim); // just last dimension
@@ -1136,8 +1148,6 @@ struct BlockBase
         }
     }
     // receive requests , decode, and send back
-
-
     // blending in 1d, on interval -inf, [a , b] +inf, -inf < a < b < +inf
     T blend_1d(T t, T a, T b) {
         if (a == b)
@@ -1197,10 +1207,10 @@ struct BlockBase
         Bounds<T> neigh_bounds(dom_dim); // neighbor block bounds
         diy::Direction dirc(dom_dim, 0); // neighbor direction
 
-        for (auto i = 0; i < (size_t) blend.rows(); i++) {
+        for (auto i = 0; i < (size_t) blend->domain.rows(); i++) {
             vector<int> dests;               // link neighbor targets (not gids)
             for (int j = 0; j < dom_dim; j++)
-                dom_pt[j] = blend(i, j);
+                dom_pt[j] = blend->domain(i, j);
             // decide if a point is inside a neighbor domain;
             // return a list of destinations , similar to diy::near(*l, dom_pt, eps, insert_it, decomposer.domain);
             // this logic will be used at decoding too
@@ -1240,7 +1250,7 @@ struct BlockBase
 
             // current point value, assume 1 variable
             // this needs to be blended
-            T val = blend(i, dom_dim);
+            T val = blend->domain(i, dom_dim);
 #ifdef BLEND_VERBOSE
         cerr << " blend point " << dom_pt[0] << " " << dom_pt[1] << " val:" << val << " factors: " << myBlend(0) <<
             " " << myBlend(1) << "\n";
@@ -1276,7 +1286,7 @@ struct BlockBase
                 val = val + incomingValue * factor;
             }
             // finally, new corrected value for ptc:
-            blend(i, dom_dim) = val;
+            blend->domain(i, dom_dim) = val;
 #ifdef BLEND_VERBOSE
         cerr << "     general direction: " << genDir << " border: " << border.transpose() <<
                          "  blending: "<< myBlend.transpose() << " new val:" << val << endl;
@@ -1394,7 +1404,8 @@ namespace mfa
 
             // output for blending
             diy::save(bb, b->ndom_outpts);
-            diy::save(bb, b->blend);
+            if (b->ndom_outpts.rows())
+                diy::save(bb, b->blend);
         }
 
     template<typename B, typename T>                // B = block object, T = float or double
@@ -1473,7 +1484,8 @@ namespace mfa
 
             // output for blending
             diy::load(bb, b->ndom_outpts);
-            diy::load(bb, b->blend);
+            if (b->ndom_outpts.rows())
+                diy::load(bb, b->blend);
         }
 }                       // namespace
 

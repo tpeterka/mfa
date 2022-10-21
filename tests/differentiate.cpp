@@ -30,7 +30,9 @@ int main(int argc, char** argv)
     // initialize MPI
     diy::mpi::environment  env(argc, argv);     // equivalent of MPI_Init(argc, argv)/MPI_Finalize()
     diy::mpi::communicator world;               // equivalent of MPI_COMM_WORLD
-
+#ifdef MFA_KOKKOS
+    Kokkos::initialize( argc, argv );
+#endif
     string infile = "approx.mfa";               // diy input file
 
     // default command line arguments
@@ -95,4 +97,7 @@ int main(int argc, char** argv)
 
     // save the results in diy format
     diy::io::write_blocks("deriv.out", world, master);
+#ifdef MFA_KOKKOS
+    Kokkos::finalize();
+#endif
 }

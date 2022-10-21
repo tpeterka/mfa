@@ -206,7 +206,7 @@ namespace mfa
                     step = (param_maxs(k) - param_mins(k)) / (ndom_pts(k)-1);
                     for (int j = 1; j < ndom_pts(k)-1; j++)
                     {
-                        param_grid[k][j] = j * step;
+                        param_grid[k][j] = param_mins(k) + j * step;
                     }
                 }
             }
