@@ -89,10 +89,6 @@ find_package                (Threads)
 # DIY
 option                      (build_examples "" OFF)
 option                      (build_tests "" OFF)
-if                          (mfa_python)
-    option                  (python "" ON)
-#    option                  (log "" ON)
-endif                       ()
 add_subdirectory            (include/diy)
 set                         (libraries ${libraries} diy)
 
@@ -100,14 +96,6 @@ set                         (libraries ${libraries} diy)
 option                      (FMT_INSTALL "" OFF)
 add_subdirectory            (include/fmt)
 set                         (libraries ${libraries} fmt::fmt)
-
-# spdlog
-#option                      (SPDLOG_FMT_EXTERNAL "" ON)
-#option                      (SPDLOG_BUILD_EXAMPLE "" OFF)
-#option                      (SPDLOG_BUILD_TESTS "" OFF)
-#add_subdirectory            (include/spdlog)
-#set                         (libraries ${libraries} spdlog)
-#include_directories         (include/spdlog/include)
 
 # Coin-OR CLP
 find_path                   (CLP_INCLUDE_DIRS   ClpSimplex.hpp)
