@@ -4,7 +4,6 @@ imports:
     diy: ./include/diy
     eigen3: ./include/eigen3
     fmt: ./include/fmt
-    spdlog: ./include/spdlog
 
 git module pybind11:
     url: https://github.com/pybind/pybind11
@@ -17,7 +16,6 @@ git module cppoptlib:
 git module diy:
     url: https://github.com/diatomic/diy
     rev: ef460f828c36e8f533ccec1f551024f4da896165
-    drop: include/diy/thirdparty/fmt
 
 git module eigen3:
     url: https://gitlab.com/libeigen/eigen
@@ -26,6 +24,3 @@ git module eigen3:
 git module fmt:
     url: https://github.com/fmtlib/fmt
     rev: 8.1.1
-
-git module spdlog:
-    url: https://github.com/gabime/spdlog
