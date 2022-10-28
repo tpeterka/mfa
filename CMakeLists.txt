@@ -101,6 +101,14 @@ option                      (FMT_INSTALL "" OFF)
 add_subdirectory            (include/fmt)
 set                         (libraries ${libraries} fmt::fmt)
 
+# spdlog
+option                      (SPDLOG_FMT_EXTERNAL "" ON)
+option                      (SPDLOG_BUILD_EXAMPLE "" OFF)
+option                      (SPDLOG_BUILD_TESTS "" OFF)
+add_subdirectory            (include/spdlog)
+set                         (libraries ${libraries} spdlog)
+include_directories         (include/spdlog/include)
+
 # Coin-OR CLP
 find_path                   (CLP_INCLUDE_DIRS   ClpSimplex.hpp)
 find_library                (CLP_LIB NAMES      Clp)
