@@ -16,6 +16,7 @@ git module cppoptlib:
 git module diy:
     url: https://github.com/diatomic/diy
     rev: ef460f828c36e8f533ccec1f551024f4da896165
+    drop: include/diy/thirdparty/fmt
 
 git module eigen3:
     url: https://gitlab.com/libeigen/eigen
