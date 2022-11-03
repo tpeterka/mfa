@@ -3413,16 +3413,21 @@ namespace mfa
                     // make p + 1 control points in the added tensor
                     // start with p + 1 control points, and after trimming to the parent, and making other adjustments,
                     // hopefully we'll end up with no less than p control points in any tensor
-                    c.knot_mins[j] = inserted_knot_idxs[j][i] - p(j) / 2     >= 0                  ? inserted_knot_idxs[j][i] - p(j) / 2     : 0;
-                    c.knot_maxs[j] = inserted_knot_idxs[j][i] + p(j) / 2 + 1 < all_knots[j].size() ? inserted_knot_idxs[j][i] + p(j) / 2 + 1 : all_knots[j].size() - 1;
+//                     c.knot_mins[j] = inserted_knot_idxs[j][i] - p(j) / 2     >= 0                  ? inserted_knot_idxs[j][i] - p(j) / 2     : 0;
+//                     c.knot_maxs[j] = inserted_knot_idxs[j][i] + p(j) / 2 + 1 < all_knots[j].size() ? inserted_knot_idxs[j][i] + p(j) / 2 + 1 : all_knots[j].size() - 1;
 
                     // ---- or -----
 
                     // make p + 2 control points in the added tensor
                     // start with p + 2 control points, and after trimming to the parent, and making other adjustments,
                     // hopefully we'll end up with no less than p + 1 control points in any tensor
-//                     c.knot_mins[j] = inserted_knot_idxs[j][i] - p(j) / 2 - 1 >= 0                  ? inserted_knot_idxs[j][i] - p(j) / 2 - 1 : 0;
-//                     c.knot_maxs[j] = inserted_knot_idxs[j][i] + p(j) / 2 + 1 < all_knots[j].size() ? inserted_knot_idxs[j][i] + p(j) / 2 + 1 : all_knots[j].size() - 1;
+                    c.knot_mins[j] = inserted_knot_idxs[j][i] - p(j) / 2 - 1 >= 0                  ? inserted_knot_idxs[j][i] - p(j) / 2 - 1 : 0;
+                    c.knot_maxs[j] = inserted_knot_idxs[j][i] + p(j) / 2 + 1 < all_knots[j].size() ? inserted_knot_idxs[j][i] + p(j) / 2 + 1 : all_knots[j].size() - 1;
+
+                    // --- or ----
+                    // make the number of control points in the tensor a function of the pad
+//                     c.knot_mins[j] = inserted_knot_idxs[j][i] - pad / 2 - 1 >= 0                  ? inserted_knot_idxs[j][i] - pad / 2 - 1 : 0;
+//                     c.knot_maxs[j] = inserted_knot_idxs[j][i] + pad / 2 + 1 < all_knots[j].size() ? inserted_knot_idxs[j][i] + pad / 2 + 1 : all_knots[j].size() - 1;
                 }
                 c.level     = child_level;
                 c.parent    = parent_tensor_idxs[i];
@@ -3661,14 +3666,15 @@ namespace mfa
                 for (auto j = 0; j < tensor_prods.size(); j++)
                 {
                     auto& e = tensor_prods[j];
-                    if (!tmesh.intersect(t, e, 0, true, false) && tmesh.intersect(t, e, pad, false, false))
+                    if (!tmesh.intersect(t, e, 0, true, false) && tmesh.intersect(t, e, pad, true, false))
                     {
                         // debug
 //                         fmt::print(stderr, "\nAddNewTensors(): new_tensor[{}] knot_mins [{}] knot_maxs [{}] level {} is within pad {} of tensor idx {} level {} knot_mins [{}] knot_maxs [{}]\n",
 //                                 k, fmt::join(t.knot_mins, ","), fmt::join(t.knot_maxs, ","), t.level, pad, j, e.level, fmt::join(e.knot_mins, ","), fmt::join(e.knot_maxs, ","));
 
                         if (t.level - e.level > 1)
-                            throw MFAError(fmt::format("AddNewTensors(): tensors too near each other differ by more than one level."));
+//                             throw MFAError(fmt::format("AddNewTensors(): tensors too near each other differ by more than one level."));
+                            fmt::print(stderr, "Warning: AddNewTensors(): tensors too near each other differ by more than one level.\n");
 
 
                         // merge e (existing tensor) into t (tensor to be added)
