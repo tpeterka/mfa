@@ -520,9 +520,11 @@ namespace mfa
         bool intersect(TensorProduct<T>&    t1,
                        TensorProduct<T>&    t2,
                        KnotIdx              pad = 0,
-                       bool                 adjacency_counts = true)
+                       bool                 adjacency_counts = true,    // whether exact adjacency qualifies as intersection
+                       bool                 corner_pad_counts = true)   // when pad > 0, whether intersecting at a corner is sufficient
         {
-            for (auto k = 0; k < dom_dim_; k++)
+            int k;
+            for (k = 0; k < dom_dim_; k++)
             {
                 if (adjacency_counts)
                 {
@@ -535,6 +537,21 @@ namespace mfa
                         return false;
                 }
             }
+
+            if (pad && !corner_pad_counts)
+            {
+                for (k = 0; k < dom_dim_; k++)
+                {
+                    // either of these two tests is true -> intersects within pad on a face (not a corner)
+                    if (adjacency_counts && t1.knot_maxs[k] >= t2.knot_mins[k] && t2.knot_maxs[k] >= t1.knot_mins[k])
+                            break;
+                    if (!adjacency_counts && t1.knot_maxs[k] > t2.knot_mins[k] && t2.knot_maxs[k] > t1.knot_mins[k])
+                            break;
+                }
+                if (k == dom_dim_)  // did not intersect on any faces, only corner
+                    return false;
+            }
+
             return true;
         }
 
@@ -694,6 +711,7 @@ namespace mfa
             }
             side_tensor.level           = exist_tensor.level;
             side_tensor.done            = exist_tensor.done;
+            side_tensor.parent          = exist_tensor.parent;
             TensorIdx side_tensor_idx   = tensor_prods.size();      // index of new tensor to be added
 
 //             if (debug)
@@ -1328,15 +1346,15 @@ namespace mfa
             }
         }
 
-        // constrain tensor knot_mins, knot_maxs to parent of tensor, if closer to parent than pad
-        void constrain_to_parent(
+        // clamp tensor knot_mins, knot_maxs to parent of tensor, if closer to parent than pad
+        void clamp_to_parent(
                 TensorProduct<T>&   t,          // tensor to constrain
-                int                 pad)        // constrain to parent if tensor is within pad of parent or greater
+                int                 pad,        // constrain to parent if tensor is within pad of parent or greater
+                int                 edge_pad)   // extra padding for tensor at the global edge
         {
             auto& parent = tensor_prods[t.parent];
             for (auto j = 0; j < dom_dim_; j++)
             {
-                int edge_pad = (p_(j) / 2) + 1;                                 // extra padding for tensor at the global edge
                 int ofst = (t.knot_mins[j] == 0) ? pad + edge_pad : pad;
                 if (t.knot_mins[j] < parent.knot_mins[j] ||
                         knot_idx_dist(parent, parent.knot_mins[j], t.knot_mins[j], j, false) < ofst)
@@ -1352,7 +1370,8 @@ namespace mfa
         void merge_tensors(
                 TensorProduct<T>&   inout,      // one of the input tensors and the output of the merge
                 TensorProduct<T>&   in,         // other input tensor
-                int                 pad)        // constrain merge to parent of inout if merge is within pad of parent; -1: don't constrain to parent
+                int                 pad,        // constrain merge to parent of inout if merge is within pad of parent; -1: don't constrain to parent
+                int                 edge_pad)   // extra padding for tensor at the global edge
         {
             vector<KnotIdx> merge_mins(dom_dim_);
             vector<KnotIdx> merge_maxs(dom_dim_);
@@ -1362,7 +1381,7 @@ namespace mfa
 
             // don't overshoot the parent or leave it with a small remainder
             if (pad >= 0)
-                constrain_to_parent(inout, pad);
+                clamp_to_parent(inout, pad, edge_pad);
         }
 
         //         DEPRECATED, not used
@@ -2929,6 +2948,38 @@ namespace mfa
             }
 
             return true;
+        }
+
+        // adjust candidate to another tensor
+        // candidate can be no larger in any dimension than the other tensor and also doesn't leave the other tensor with a small remainder anywhere
+        // candidate tensor knot_mins and knot_maxs will be adjusted accordingly
+        void adjust_candidate(
+                TensorProduct<T>&       c,                      // candidate tensor being constrained
+                const TensorProduct<T>& t,                      // other tensor providing the constraints
+                int                     pad,                    // padding for interior tensor (not at global edge)
+                int                     edge_pad)               // extra padding for tensor at the global edge
+        {
+            for (auto j = 0; j < dom_dim_; j++)
+            {
+                int min_ofst  = (t.knot_mins[j] == 0) ? pad + edge_pad : pad;
+                int max_ofst  = (t.knot_maxs[j] == all_knots[j].size() - 1) ? pad + edge_pad : pad;
+
+                // adjust min edge of candidate
+                while (c.knot_mins[j] > t.knot_mins[j]  &&
+                        knot_idx_dist(t, c.knot_mins[j], t.knot_maxs[j], j, false) < max_ofst)
+                    c.knot_mins[j]--;
+                if (c.knot_mins[j] < t.knot_mins[j] ||
+                        knot_idx_dist(t, t.knot_mins[j], c.knot_mins[j], j, false) < min_ofst)
+                    c.knot_mins[j] = t.knot_mins[j];
+
+                // adjust max edge of candidate
+                while (c.knot_maxs[j] < t.knot_maxs[j]  &&
+                        knot_idx_dist(t, t.knot_mins[j], c.knot_maxs[j], j, false) < min_ofst)
+                    c.knot_maxs[j]++;
+                if (c.knot_maxs[j] > t.knot_maxs[j] ||
+                        knot_idx_dist(t, c.knot_maxs[j], t.knot_maxs[j], j, false) < max_ofst)
+                    c.knot_maxs[j] = t.knot_maxs[j];
+            }
         }
 
         void print_tensor(
