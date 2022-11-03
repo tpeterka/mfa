@@ -1983,7 +1983,7 @@ namespace mfa
                 bool                      weighted = true)        // solve for and use weights
         {
             // debug
-            fmt::print(stderr, "EncodeTensorLocalSeparable tidx = {}\n", t_idx);
+//             fmt::print(stderr, "EncodeTensorLocalSeparable tidx = {}\n", t_idx);
 //             fmt::print(stderr, "\n Current T-mesh:\n");
 //             mfa_data.tmesh.print(true, true);
 
@@ -2146,7 +2146,7 @@ namespace mfa
                 t.ctrl_pts = Q1.block(0, 0, t.nctrl_pts.prod(), pt_dim);
 
             // timing
-            fmt::print(stderr, "EncodeTensorLocalSeparable() time {:.3e} s.\n", MPI_Wtime() - t0);
+            fmt::print(stderr, "EncodeTensorLocalSeparable() tidx {} time {:.3e} s.\n", t_idx, MPI_Wtime() - t0);
         }
 
 #endif  // MFA_TMESH
@@ -2385,10 +2385,7 @@ namespace mfa
                     break;
 
                 if (verbose)
-                {
-                    fmt::print(stderr, "\n--- Iteration {} ---\n", iter);
-                    fmt::print(stderr, "Refining level {} with {} new tensors so far\n", parent_level, new_tensors.size());
-                }
+                    fmt::print(stderr, "\n--- Iteration {}, refining level {} ---\n", iter, parent_level);
 
                 // debug
 //                 fmt::print(stderr, "\nTmesh before refinement\n\n");
@@ -2423,13 +2420,13 @@ namespace mfa
                 if (parent_level >= tmesh.max_level)
                 {
                     if (verbose)
-                        fmt::print(stderr, "\nKnot insertion done after %d iterations; no new knots added.\n\n", iter + 1);
+                        fmt::print(stderr, "\nKnot insertion done after {} iterations; no new knots added.\n\n", iter + 1);
                     break;
                 }
                 else                                                // one iteration only is done
                 {
                     CheckNewTensors(new_tensors, pad, edge_pad);
-                    fmt::print(stderr, "Level {} done, adding {} new tensors\n", parent_level, new_tensors.size());
+                    fmt::print(stderr, "Level {} done, adding {} new tensor(s)\n", parent_level, new_tensors.size());
                     double add_tensors_time = MPI_Wtime();
                     AddNewTensors(new_tensors, pad);
                     add_tensors_time = MPI_Wtime() - add_tensors_time;
@@ -3333,8 +3330,8 @@ namespace mfa
                     error_stats);
 
             // debug
-            fmt::print(stderr, "Refine(): parent_level {} child_level {} n_insertions {} done {}\n",
-                    parent_level, child_level, parent_tensor_idxs.size(), done);
+//             fmt::print(stderr, "Refine(): parent_level {} child_level {} n_insertions {} done {}\n",
+//                     parent_level, child_level, parent_tensor_idxs.size(), done);
 
             if (done)                                                           // nothing inserted
                 return true;
@@ -3459,10 +3456,9 @@ namespace mfa
                 }
 
                 // debug
-                if (c.knot_mins[0] == 9 && c.knot_mins[1] == 86)
-                    fmt::print(stderr, "1: pt idx {}: pt mins [{}] maxs [{}] c mins [{}] maxs [{}] c.parent {}\n",
-                            parent_tensor_idxs[i], fmt::join(pt.knot_mins, ","), fmt::join(pt.knot_maxs, ","),
-                            fmt::join(c.knot_mins, ","), fmt::join(c.knot_maxs,  ","), c.parent);
+//                 fmt::print(stderr, "1: pt idx {}: pt mins [{}] maxs [{}] c mins [{}] maxs [{}] c.parent {}\n",
+//                         parent_tensor_idxs[i], fmt::join(pt.knot_mins, ","), fmt::join(pt.knot_maxs, ","),
+//                         fmt::join(c.knot_mins, ","), fmt::join(c.knot_maxs,  ","), c.parent);
 
                 // recheck after adjustments that candidate is no larger than parent in any dimension
                 // and doesn't leave parent with a small remainder anywhere
@@ -3470,23 +3466,23 @@ namespace mfa
 
                 // debug: check if candidate ended up being same size as parent
                 // TODO: remove once debugged
-                bool shadows_parent = true;
-                for (auto j = 0; j < dom_dim; j++)
-                {
-                    if (c.knot_mins[j] > pt.knot_mins[j])
-                    {
-                        shadows_parent = false;
-                        break;
-                    }
-                    if (c.knot_maxs[j] < pt.knot_maxs[j])
-                    {
-                        shadows_parent = false;
-                        break;
-                    }
-                }
-                if (shadows_parent)
-                    fmt::print(stderr, "*** Refine(): Info: candidate knot_mins, maxs match parent knot_mins [{}] knot_maxs [{}] ***\n",
-                            fmt::join(c.knot_mins, ","), fmt::join(c.knot_maxs,  ","));
+//                 bool shadows_parent = true;
+//                 for (auto j = 0; j < dom_dim; j++)
+//                 {
+//                     if (c.knot_mins[j] > pt.knot_mins[j])
+//                     {
+//                         shadows_parent = false;
+//                         break;
+//                     }
+//                     if (c.knot_maxs[j] < pt.knot_maxs[j])
+//                     {
+//                         shadows_parent = false;
+//                         break;
+//                     }
+//                 }
+//                 if (shadows_parent)
+//                     fmt::print(stderr, "*** Refine(): Info: candidate knot_mins, maxs match parent knot_mins [{}] knot_maxs [{}] ***\n",
+//                             fmt::join(c.knot_mins, ","), fmt::join(c.knot_maxs,  ","));
 
                 // adjust knot mins, maxs of tensors to be added so far because of inserted knots
                 for (auto tidx = 0; tidx < new_tensors.size(); tidx++)          // for all tensors scheduled to be added so far
@@ -3686,8 +3682,8 @@ namespace mfa
                 }
 
                 // debug
-                fmt::print(stderr, "AddNewTensors(): appending new_tensors[{}] knot_mins [{}] knot_maxs [{}] level {} parent {}\n",
-                        k, fmt::join(t.knot_mins, ","), fmt::join(t.knot_maxs, ","), t.level, t.parent);
+//                 fmt::print(stderr, "AddNewTensors(): appending new_tensors[{}] knot_mins [{}] knot_maxs [{}] level {} parent {}\n",
+//                         k, fmt::join(t.knot_mins, ","), fmt::join(t.knot_maxs, ","), t.level, t.parent);
 
                 int tensor_idx = tmesh.append_tensor(t.knot_mins, t.knot_maxs, t.level);
 

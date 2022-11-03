@@ -385,7 +385,7 @@ namespace mfa
                         fprintf(stderr, "Using VolPt_tmesh\n");
                     VolPt_tmesh(param, cpt);
 
-#endif
+#endif          // end tmesh version
 
                     ps.domain.block(pt_it.idx(), min_dim, 1, max_dim - min_dim + 1) = cpt.transpose();
                 }
@@ -395,7 +395,7 @@ namespace mfa
 
 #endif              // end TBB version
 
-#if defined( MFA_SERIAL) || defined (MFA_KOKKOS)
+#if defined( MFA_SERIAL) || defined (MFA_KOKKOS)    // serial version
 
             // use DecodeGrid for structured case that already has KOKKOS
             if (ps.structured && 0 == derivs.size() )
@@ -406,7 +406,7 @@ namespace mfa
                 pt_min.params(min_params);
                 pt_max.params(max_params);
                 DecodeGrid(ps.domain, min_dim, max_dim, min_params, max_params, ps.g.ndom_pts );
- //               cout << " after DecodeGrid: ndom: " << min_dim << " " <<  max_dim << " " << ps.g.ndom_pts <<  " ps.domain \n" << ps.domain ;
+//                 cout << " after DecodeGrid: ndom: " << min_dim << " " <<  max_dim << " " << ps.g.ndom_pts <<  " ps.domain \n" << ps.domain ;
             }
             else
             {
@@ -433,7 +433,7 @@ namespace mfa
                     if (pt_it.idx() == 0)
                         fprintf(stderr, "Using VolPt_tmesh\n");
                     VolPt_tmesh(param, cpt);
-#endif          // end serial version
+#endif          // end tmesh version
 
                     ps.domain.block(pt_it.idx(), min_dim, 1, max_dim - min_dim + 1) = cpt.transpose();
 
@@ -443,7 +443,7 @@ namespace mfa
                             fprintf(stderr, "\r%.0f %% decoded", (T)pt_it.idx() / (T)(ps.npts) * 100);
                }
 
-#endif
+#endif          // end serial version
             }
         }
 
@@ -456,19 +456,24 @@ namespace mfa
                         const VectorX<T>&   max_params,     // upper corner of decoding points
                         const VectorXi&     ndom_pts)       // number of points to decode in each direction
         {
-#ifdef MFA_KOKKOS
-        	Kokkos::Profiling::pushRegion("InitDecodeGrid");
-#endif
+
+#ifdef MFA_KOKKOS       // kokkos version
+
+            Kokkos::Profiling::pushRegion("InitDecodeGrid");
+
+#endif                  // end kokkos version
+
             // precompute basis functions
             const VectorXi&     nctrl_pts = mfa_data.tmesh.tensor_prods[0].nctrl_pts;   // reference to control points (assume only one tensor)
 
             Param<T> full_params(ndom_pts, min_params, max_params);
 
             // TODO: Eventually convert "result" into a PointSet and iterate through that,
-            //       instead of simply using a naked Param object  
+            //       instead of simply using a naked Param object
             auto& params = full_params.param_grid;
 
-#ifdef MFA_KOKKOS
+#ifdef MFA_KOKKOS       // kokkos version
+
             std::cout << "KOKKOS execution space: " << ExecutionSpace::name() << "\n";
             // how many control points per direction is not fixed; we will use just one Kokkos View for NN
             int kdom_dim = mfa_data.dom_dim;
@@ -504,69 +509,70 @@ namespace mfa
             Kokkos::Profiling::popRegion(); // "InitDecodeGrid"
             Kokkos::Profiling::pushRegion("ShapeFunc");
 
-            for (int k = 0; k < mfa_data.dom_dim; k++) {
-            	//auto subk = subview (newNN, k, Kokkos::ALL(), Kokkos::ALL());
-            	int npk = ndom_pts(k);
-            	int nctk = nctrl_pts(k);
-            	int pk = mfa_data.p(k); // degree in direction k
-            	Kokkos::View<double* > paramk("paramk", npk );
-            	Kokkos::View<double * >::HostMirror h_paramk = Kokkos::create_mirror_view(paramk);
-            	for (int i = 0; i < npk; i++)
-            		h_paramk(i) = params[k][i];
-            	Kokkos::deep_copy(paramk, h_paramk);
-            	// copy also all knots from tmesh.all_knots[k]
-            	Kokkos::View<double* > lknots("lknots", nctk+pk+1 );
-            	Kokkos::View<double * >::HostMirror h_lknots = Kokkos::create_mirror_view(lknots);
-            	for (int i = 0; i < nctk+pk+1; i++)
-            		h_lknots(i) =  mfa_data.tmesh.all_knots[k][i];
-            	Kokkos::deep_copy(lknots, h_lknots);
-            	Kokkos::parallel_for( "shape_func_precom", npk,
-            	                KOKKOS_LAMBDA ( const int i ) {
-            	    // find span first, and store it for later
-            		// binary search
-					int low = pk;
-					int high = nctk;
-					int mid = (low + high) / 2;
-					double u = paramk(i);
-					if ( lknots(nctk) == u )
-						mid = nctk - 1;
-					else
-					{
-						while (u < lknots(mid) || u >= lknots(mid + 1) )
-						{
-							if (u < lknots(mid) )
-								high = mid;
-							else
-								low = mid;
-							mid = (low + high) / 2;
-						}
-					}
-					// mid is now the span
-					span_starts(k,i) = mid - pk;
+            for (int k = 0; k < mfa_data.dom_dim; k++)
+            {
+                //auto subk = subview (newNN, k, Kokkos::ALL(), Kokkos::ALL());
+                int npk = ndom_pts(k);
+                int nctk = nctrl_pts(k);
+                int pk = mfa_data.p(k); // degree in direction k
+                Kokkos::View<double* > paramk("paramk", npk );
+                Kokkos::View<double * >::HostMirror h_paramk = Kokkos::create_mirror_view(paramk);
+                for (int i = 0; i < npk; i++)
+                    h_paramk(i) = params[k][i];
+                Kokkos::deep_copy(paramk, h_paramk);
+                // copy also all knots from tmesh.all_knots[k]
+                Kokkos::View<double* > lknots("lknots", nctk+pk+1 );
+                Kokkos::View<double * >::HostMirror h_lknots = Kokkos::create_mirror_view(lknots);
+                for (int i = 0; i < nctk+pk+1; i++)
+                    h_lknots(i) =  mfa_data.tmesh.all_knots[k][i];
+                Kokkos::deep_copy(lknots, h_lknots);
+                Kokkos::parallel_for( "shape_func_precom", npk, KOKKOS_LAMBDA ( const int i )
+                {
+                    // find span first, and store it for later
+                    // binary search
+                    int low = pk;
+                    int high = nctk;
+                    int mid = (low + high) / 2;
+                    double u = paramk(i);
+                    if ( lknots(nctk) == u )
+                    mid = nctk - 1;
+                    else
+                    {
+                        while (u < lknots(mid) || u >= lknots(mid + 1) )
+                        {
+                            if (u < lknots(mid) )
+                                high = mid;
+                            else
+                                low = mid;
+                            mid = (low + high) / 2;
+                        }
+                    }
+                    // mid is now the span
+                    span_starts(k,i) = mid - pk;
 
-					// subview replaces scratch
-					auto subv_scr = Kokkos::subview(newNN, i, Kokkos::make_pair(mid - pk, mid + 1), k );
-					subv_scr(0) = 1.0;
-		            T left[MFA_MAXP1];
-		            T right[MFA_MAXP1];
-		            // fill N
-		            for (int j = 1; j <= pk; j++)
-		            {
-		                // left[j] is u = the jth knot in the correct level to the left of span
-		                left[j]  = u - lknots(mid + 1 - j);
-		                // right[j] = the jth knot in the correct level to the right of span - u
-		                right[j] = lknots(mid + j) - u;
+                    // subview replaces scratch
+                    auto subv_scr = Kokkos::subview(newNN, i, Kokkos::make_pair(mid - pk, mid + 1), k );
+                    subv_scr(0) = 1.0;
+                    T left[MFA_MAXP1];
+                    T right[MFA_MAXP1];
+                    // fill N
+                    for (int j = 1; j <= pk; j++)
+                    {
+                        // left[j] is u = the jth knot in the correct level to the left of span
+                        left[j]  = u - lknots(mid + 1 - j);
+                        // right[j] = the jth knot in the correct level to the right of span - u
+                        right[j] = lknots(mid + j) - u;
 
-		                T saved = 0.0;
-		                for (int r = 0; r < j; r++)
-		                {
-		                	T temp = subv_scr(r) / (right[r + 1] + left[j - r]);
-		                    subv_scr(r) = saved + right[r + 1] * temp;
-		                    saved = left[j - r] * temp;
-		                }
-		                subv_scr(j) = saved;
-		            }
-            	});
+                        T saved = 0.0;
+                        for (int r = 0; r < j; r++)
+                        {
+                            T temp = subv_scr(r) / (right[r + 1] + left[j - r]);
+                            subv_scr(r) = saved + right[r + 1] * temp;
+                            saved = left[j - r] * temp;
+                        }
+                        subv_scr(j) = saved;
+                    }
+                });
             }
             Kokkos::Profiling::popRegion(); // "ShapeFunc"
             Kokkos::Profiling::pushRegion("PrepareDecodeRes");
@@ -605,60 +611,59 @@ namespace mfa
             for (int iv = 0; iv < nvar; iv++)
             {
                 // we could say explicitly: Kokkos::RangePolicy<Kokkos::OpenMP> (0, nct) ! this will happen over host
-                Kokkos::parallel_for( "copy_ctrl", host_range_policy(0, nct),
-                   KOKKOS_LAMBDA ( const int j ) {
-                     h_ctrl_pts_k(j) = mfa_data.tmesh.tensor_prods[0].ctrl_pts(j,iv);
-                   }
-                 );
-               // and then copy to device
+                Kokkos::parallel_for( "copy_ctrl", host_range_policy(0, nct), KOKKOS_LAMBDA ( const int j )
+                {
+                    h_ctrl_pts_k(j) = mfa_data.tmesh.tensor_prods[0].ctrl_pts(j,iv);
+                }
+                );
+                // and then copy to device
                 Kokkos::deep_copy(ctrl_pts_k, h_ctrl_pts_k);
-                Kokkos::parallel_for( "decode_resol", ntot,
-                    KOKKOS_LAMBDA ( const int i ) {
+                Kokkos::parallel_for( "decode_resol", ntot, KOKKOS_LAMBDA ( const int i )
+                {
+                    int leftover=i;
+                    int ctrl_idx = 0;
+                    double value = 0; // this will accumulate (one variable now)
+                    int ij_grid[7]; // could be just smaller; 7 is max dim for Kokkos anyway
+                    int span_st[7];
+                    int ij_patch[7];
 
-                        int leftover=i;
-                        int ctrl_idx = 0;
-                        double value = 0; // this will accumulate (one variable now)
-                        int ij_grid[7]; // could be just smaller; 7 is max dim for Kokkos anyway
-                        int span_st[7];
-                        int ij_patch[7];
+                    for (int k=kdom_dim-1; k>=0; k--)
+                    {
+                        ij_grid[k] = (int)(leftover/strides(k));
+                        leftover -= strides(k)*ij_grid[k] ;
+                    }
 
+                    for (int k=0; k<kdom_dim; k++)
+                    {
+                        span_st[k] = span_starts(k, ij_grid[k]);
+                        ctrl_idx += (span_st[k]+kct(0,k))*kcs(k);
+                    }
+
+                    // now we need more loops, in all direction, for local patch, size
+                    // ksupp is p+1 in each direction
+
+                    for (int j=0; j<nb_internal_iter; j++)
+                    {
+                        int leftj = j;
                         for (int k=kdom_dim-1; k>=0; k--)
                         {
-                            ij_grid[k] = (int)(leftover/strides(k));
-                            leftover -= strides(k)*ij_grid[k] ;
+                            ij_patch[k] = (int)(leftj/strides_patch(k));
+                            leftj -= strides_patch(k)*ij_patch[k] ;
                         }
+                        // vijk will be (0,0), (1,0), ..., (4,0), (0,1),..
+                        // role of coordinates in the patch
+                        int ctrl_idx_it = ctrl_idx;
+                        for (int k=0; k<kdom_dim; k++)
+                            ctrl_idx_it += kct(j,k) * kcs(k);
+                        double ctrl = ctrl_pts_k(ctrl_idx_it);
 
                         for (int k=0; k<kdom_dim; k++)
-                        {
-                            span_st[k] = span_starts(k, ij_grid[k]);
-                            ctrl_idx += (span_st[k]+kct(0,k))*kcs(k);
-                        }
+                            ctrl *= newNN( ij_grid[k] , span_st[k] + ij_patch[k], k );
 
-                        // now we need more loops, in all direction, for local patch, size
-                        // ksupp is p+1 in each direction
-
-                        for (int j=0; j<nb_internal_iter; j++)
-                        {
-                            int leftj = j;
-                            for (int k=kdom_dim-1; k>=0; k--)
-                            {
-                                ij_patch[k] = (int)(leftj/strides_patch(k));
-                                leftj -= strides_patch(k)*ij_patch[k] ;
-                            }
-                            // vijk will be (0,0), (1,0), ..., (4,0), (0,1),..
-                            // role of coordinates in the patch
-                            int ctrl_idx_it = ctrl_idx;
-                            for (int k=0; k<kdom_dim; k++)
-                                ctrl_idx_it += kct(j,k) * kcs(k);
-                            double ctrl = ctrl_pts_k(ctrl_idx_it);
-
-                            for (int k=0; k<kdom_dim; k++)
-                                ctrl *= newNN( ij_grid[k] , span_st[k] + ij_patch[k], k );
-
-                            value += ctrl;
-                        }
-                        res_dev(i) = value;
+                        value += ctrl;
                     }
+                    res_dev(i) = value;
+                }
                 );
                 Kokkos::Profiling::pushRegion("copyBack");
                 Kokkos::deep_copy(res_h, res_dev);
@@ -669,27 +674,26 @@ namespace mfa
             Kokkos::Profiling::popRegion(); // "DecodeAtRes"
 
 
-#else
+#else       // serial version
 
-            // compute basis functions for points to be decoded
+#ifndef MFA_TMESH   // original version for one tensor product
+
+            // precompute basis functions for points to be decoded
             vector<MatrixX<T>>  NN(mfa_data.dom_dim);
             for (int k = 0; k < mfa_data.dom_dim; k++)
                 NN[k] = MatrixX<T>::Zero(ndom_pts(k), nctrl_pts(k));
 
-            for (int k = 0; k < mfa_data.dom_dim; k++) {
+            for (int k = 0; k < mfa_data.dom_dim; k++)
+            {
                 for (int i = 0; i < ndom_pts(k); i++)
                 {
                     int span = mfa_data.tmesh.FindSpan(k, params[k][i], nctrl_pts(k));
-#ifndef MFA_TMESH   // original version for one tensor product
                     mfa_data.OrigBasisFuns(k, params[k][i], span, NN[k], i);
-#else               // tmesh version
-
-                    // TODO: TBD
-
-#endif              // tmesh version
                 }
             }
-#endif
+#endif              // end one tensor product
+
+#endif              // end serial version
 
             VectorXi    derivs;                             // do not use derivatives yet, pass size 0
             VolIterator vol_it(ndom_pts);
@@ -710,9 +714,10 @@ namespace mfa
                 }
 
             }
-#endif
+#endif              // end debug
 
-#ifdef MFA_SERIAL
+#ifdef MFA_SERIAL   // serial version
+
             DecodeInfo<T>   decode_info(mfa_data, derivs);  // reusable decode point info for calling VolPt repeatedly
             VectorX<T>      cpt(mfa_data.tmesh.tensor_prods[0].ctrl_pts.cols());                      // evaluated point
             VectorX<T>      param(mfa_data.dom_dim);       // parameters for one point
@@ -726,6 +731,7 @@ namespace mfa
                     ijk[i] = vol_it.idx_dim(i);             // index along direction i in grid
                     param(i) = params[i][ijk[i]];
                 }
+
 #ifdef PRINT_DEBUG2
                 printf(" %d (%d, %d) ", j, ijk[0], ijk[1]);
 #endif
@@ -736,16 +742,15 @@ namespace mfa
 
 #else               // tmesh version
 
-                    // TODO: TBD
+                VolPt_tmesh(param, cpt);
 
-#endif              // tmesh version
+#endif              // end tmesh version
 
                 vol_it.incr_iter();
-                //counter_grid++;
                 result.block(j, min_dim, 1, max_dim - min_dim + 1) = cpt.transpose();
             }
-            // end serial
-#endif
+
+#endif      // end serial version
 
 #ifdef MFA_TBB      // TBB version
 
@@ -768,14 +773,14 @@ namespace mfa
 
 #else           // tmesh version
 
-                // TODO: TBD
+                VolPt_tmesh(thread_param.local(), thread_cpt.local());
 
-#endif          // tmesh version
+#endif          // end tmesh version
 
                 result.block(j, min_dim, 1, max_dim - min_dim + 1) = thread_cpt.local().transpose();
             });
 
-#endif      // TBB version
+#endif      // end TBB version
 
         }
 
