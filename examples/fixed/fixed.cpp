@@ -56,6 +56,7 @@ int main(int argc, char** argv)
     real_t      noise           = 0.0;      // fraction of noise
     int         error           = 1;        // decode all input points and check error (bool 0/1)
     string      infile;                     // input file name
+    string      infile2;
     int         structured      = 1;        // input data format (bool 0/1)
     int         rand_seed       = -1;       // seed to use for random data generation (-1 == no randomization)
     real_t      regularization  = 0;        // smoothing parameter for models with non-uniform input density (0 == no smoothing)
@@ -89,6 +90,7 @@ int main(int argc, char** argv)
     ops >> opts::Option('y', "rand_seed",   rand_seed,  " seed for random point generation (-1 = no randomization, default)");
     ops >> opts::Option('b', "regularization", regularization, "smoothing parameter for models with non-uniform input density");
     ops >> opts::Option('k', "reg1and2",    reg1and2,   " regularize both 1st and 2nd derivatives (if =1) or just 2nd (if =0)");
+    ops >> opts::Option('z', "infile2",     infile2,    " extra data file (some apps require two file paths");
 
     if (!ops.parse(argc, argv) || help)
     {
@@ -144,7 +146,7 @@ int main(int argc, char** argv)
     
     // set up parameters for examples
     setup_args(dom_dim, pt_dim, model_dims, geom_degree, geom_nctrl, vars_degree, vars_nctrl,
-                input, infile, ndomp, structured, rand_seed, rot, twist, noise,
+                input, infile, infile2, ndomp, structured, rand_seed, rot, twist, noise,
                 weighted, reg1and2, regularization, adaptive, verbose, mfa_info, d_args);
 
     // Create data set for modeling. Input keywords are defined in example-setup.hpp
@@ -193,6 +195,15 @@ int main(int argc, char** argv)
             b->read_3d_unstructured_data(cp, mfa_info, d_args); 
         });
     }
+    else if (input=="xgc")
+    {
+        string xgc_coords_name = "coordinates/values";
+        string xgc_values_name = "dneOverne0";
+        master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
+        {
+            b->read_2d_hdf5_data<float>(cp, mfa_info, d_args, xgc_coords_name, xgc_values_name);
+        });
+    }
     else
     {
         cerr << "Input keyword \'" << input << "\' not recognized. Exiting." << endl;
@@ -218,9 +229,9 @@ int main(int argc, char** argv)
 #else                   // range coordinate difference
         bool saved_basis = structured; // TODO: basis functions are currently only saved during encoding of structured data
         master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-                { 
-                    b->range_error(cp, true, saved_basis);
-                     });
+        { 
+            b->range_error(cp, true, saved_basis);
+        });
 #endif
         decode_time = MPI_Wtime() - decode_time;
     }

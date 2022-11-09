@@ -18,12 +18,10 @@
 #include    <diy/io/block.hpp>
 #include    <diy/io/bov.hpp>
 #include    <diy/pick.hpp>
-
-#include    <stdio.h>
-
 #include    <Eigen/Dense>
-
-#include    <random>
+#include    <highfive/H5DataSet.hpp>
+#include    <highfive/H5DataSpace.hpp>
+#include    <highfive/H5File.hpp>
 
 using namespace std;
 
@@ -77,6 +75,7 @@ struct DomainArgs
     real_t              t;                          // waviness of domain edges or any other usage
     real_t              n;                          // noise factor [0.0 - 1.0]
     string              infile;                     // input filename
+    string              infile2;
     bool                multiblock;                 // multiblock domain, get bounds from block
     bool                structured;                 // input data lies on unstructured grid
     int                 rand_seed;                  // seed for generating random data. -1: no randomization, 0: choose seed at random
@@ -1464,6 +1463,105 @@ struct Block : public BlockBase<T>
         // debug
         cerr << mfa::print_bbox(bounds_mins, bounds_maxs);
         // cerr << "domain extent:\n min\n" << bounds_mins << "\nmax\n" << bounds_maxs << endl;
+    }
+
+    // read a floating point 2d scalar dataset from HDF5
+    // reads point coordinates and point values from two datasets in same file
+    // coords_name: name of dataset within file containing coordinates
+    // values_name: name of dataset within file containing point values
+    // values = f(coord1, coord2)
+    template <typename V>               // floating point type used in HDF5 file (assumed to be only one)
+    void read_2d_hdf5_data(
+            const   diy::Master::ProxyWithLink& cp,
+                    MFAInfo&    mfa_info,
+                    DomainArgs& args,
+                    string      coords_name,        // name of HDF5 dataset for point coordinates
+                    string      values_name)        // name of HDF5 dataset for function values
+    {        
+        // Set up MFA and associated data members
+        const int nvars = 1;
+        this->max_errs.resize(nvars);
+        this->sum_sq_errs.resize(nvars);
+
+        // Read HDF5 data into STL vectors
+        const int           pplane = 0;     // id of the poloidal plane to select
+        vector<vector<V>>   coords;
+        vector<vector<V>>   values_mat;
+        vector<V>           values_vec;
+        size_t              npts = 0;           // total number of points
+        
+        using namespace HighFive;
+        try
+        {
+            File coords_file(args.infile.c_str(), File::ReadWrite);
+            File values_file(args.infile2.c_str(), File::ReadWrite);
+
+            // create the dataset for the masses
+            DataSet         coords_dataset = coords_file.getDataSet(coords_name.c_str());
+            vector<size_t>  coords_dims = coords_dataset.getDimensions();
+            assert(coords_dims.size() == 2);
+            assert(coords_dims[1] == dom_dim);
+            cerr << "reading list of " << coords_dims[0] << " coordinates of dimension " << coords_dims[1] << endl;
+            npts = coords_dims[0];
+
+            // read coordinates
+            coords_dataset.read(coords);
+
+            // create the dataset for the values
+            DataSet         values_dataset = values_file.getDataSet(values_name.c_str());
+            vector<size_t>  values_dims = values_dataset.getDimensions();
+
+            assert(values_dims[0] == npts);
+            cerr << "reading list of " << values_dims[0] << " values" << endl;
+            cerr << "reading poloidal plane " << pplane << " from a total of " << values_dims[1] << "." << endl;
+
+            // read values
+            if (values_dims.size() == 1)
+                values_dataset.read(values_vec);
+            if (values_dims.size() == 2)
+                values_dataset.read(values_mat);
+            else
+                cerr << "Unexpected values DataSet dimensionality" << endl;
+        }
+        catch (Exception& err)
+        {
+            // catch and print any HDF5 error
+            std::cerr << err.what() << std::endl;
+        }
+
+        // Initialize input PointSet from buffers
+        input = new mfa::PointSet<T>(dom_dim, mfa_info.model_dims(), npts);
+        if (values_vec.size() != 0)
+        {
+            for (size_t i = 0; i < input->npts; i++)
+            {
+                input->domain(i, 0) = coords[i][0];
+                input->domain(i, 1) = coords[i][1];
+                input->domain(i, 2) = values_vec[i];
+            }
+        }
+        else    // for when data sets are 2D, with one column per poloidal plane
+        {
+            for (size_t i = 0; i < input->npts; i++)
+            {
+                input->domain(i, 0) = coords[i][0];
+                input->domain(i, 1) = coords[i][1];
+                input->domain(i, 2) = values_mat[i][pplane];
+            }
+        }
+        input->set_domain_params();
+
+        // initialize MFA models (geometry, vars, etc)
+        this->setup_MFA(cp, mfa_info);
+
+        // Find block bounds for coordinates and values
+        bounds_mins = input->domain.colwise().minCoeff();
+        bounds_maxs = input->domain.colwise().maxCoeff();
+        core_mins   = bounds_mins.head(dom_dim);
+        core_maxs   = bounds_maxs.head(dom_dim);
+
+        // debug
+        cerr << mfa::print_bbox(bounds_mins, bounds_maxs);
     }
 
 

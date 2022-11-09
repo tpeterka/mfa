@@ -107,6 +107,28 @@ endif                       ()
 # Threads
 find_package                (Threads)
 
+# HDF5
+if                          (HDF5_LIBRARY AND HDF5_INCLUDE_DIR)
+    message                 ("HDF5_LIBRARY = " ${HDF5_LIBRARY})
+    message                 ("HDF5_INCLUDE_DIR = " ${HDF5_INCLUDE_DIR})
+else                        ()
+    message                 ("Looking for HDF5")
+    find_package            (HDF5)
+    set                     (HDF5_LIBRARY ${HDF5_C_LIBRARY_hdf5})
+endif                       ()
+set                         (libraries ${libraries} ${HDF5_LIBRARY})
+include_directories         (SYSTEM ${HDF5_INCLUDE_DIR})
+
+# zlib
+find_package 		        (ZLIB)
+set 			            (libraries ${libraries} ${ZLIB_LIBRARIES})
+
+# HighFive
+if                          (HighFive_INCLUDE_DIR)
+    include_directories     (SYSTEM ${HighFive_INCLUDE_DIR})
+    message                 ("HighFive_INCLUDE_DIR = " ${HighFive_INCLUDE_DIR})
+endif                       ()
+
 # Coin-OR CLP
 find_path                   (CLP_INCLUDE_DIRS   ClpSimplex.hpp)
 find_library                (CLP_LIB NAMES      Clp)

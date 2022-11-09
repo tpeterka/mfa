@@ -154,7 +154,7 @@ using namespace std;
             dom_bounds.min = {-0.95, -0.95, -0.95, -0.95};
             dom_bounds.max = { 0.95,  0.95,  0.95,  0.95};
         }
-        else if (datasets_3d.count(input) || datasets_2d.count(input) || datasets_unstructured.count(input))
+        else if (datasets_3d.count(input) || datasets_2d.count(input) || datasets_unstructured.count(input) || input=="xgc")
         {
             for (int i = 0; i < dom_bounds.min.dimension(); i++)
             {
@@ -212,7 +212,7 @@ using namespace std;
     // Currently for single block examples only
     void setup_args( int dom_dim, int pt_dim, vector<int> model_dims,
                         int geom_degree, int geom_nctrl, int vars_degree, vector<int> vars_nctrl,
-                        string input, string infile, int ndomp,
+                        string input, string infile, string infile2, int ndomp,
                         int structured, int rand_seed, real_t rot, real_t twist, real_t noise,
                         int weighted, int reg1and2, real_t regularization, bool adaptive, int verbose,
                         MFAInfo& mfa_info, DomainArgs& d_args)
@@ -230,6 +230,7 @@ using namespace std;
         d_args.t            = twist;
         d_args.n            = noise;
         d_args.infile       = infile;
+        d_args.infile2      = infile2;
         d_args.structured   = structured;
         d_args.rand_seed    = rand_seed;
 
@@ -493,6 +494,16 @@ using namespace std;
             d_args.min[2] = -5; d_args.max[2] = -4;
 
             d_args.tot_ndom_pts = 55365;
+        }
+
+        // XGC Fusion Data set
+        if (input == "xgc")
+        {
+            if (dom_dim != 2)
+            {
+                cerr << "dom_dim must be 2 to run xgc example" << endl;
+                exit(1);
+            }
         }
 
         set_mfa_info(dom_dim, model_dims, geom_degree, geom_nctrl, vars_degree, vars_nctrl, mfa_info);
