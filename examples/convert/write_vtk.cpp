@@ -45,6 +45,7 @@ void write_pointset_vtk(mfa::PointSet<T>* ps, char* filename, int sci_var = -1)
     bool include_var = true;        // Include the specified science variable in the geometry coordinates
     int var_col = ps->model_dims().head(sci_var + 1).sum(); // column of the variable to be visualized
 
+    // Sanity checks and modify 'include_var' if settings conflict
     if (geom_dim < 1 || geom_dim > 3)
     {
         cerr << "Did not write " << filename << " due to improper dimension in pointset" << endl;
@@ -294,9 +295,6 @@ void PrepRenderingData(
         vector<vec3d>&              geom_ctrl_pts,
         vector< vector <vec3d> >&   vars_ctrl_pts,
         float**&                    vars_ctrl_data,
-        vector<int> &               nblend_pts,
-        vector<vec3d>&              blend_pts,
-        float**&                    blend_data,
         vector<vec3d>&              tensor_pts_real,
         vector<vec3d>&              tensor_pts_index,
         vector<int>&                ntensor_pts,
@@ -310,10 +308,6 @@ void PrepRenderingData(
     int ndom_dims   = block->mfa->geom_dim();          // number of geometry dims
     nvars           = block->mfa->nvars();                       // number of science variables
     pt_dim          = block->mfa->pt_dim;                     // dimensionality of point
-
-    // number of output points for blend
-    for (size_t j = 0; j < (size_t)(block->ndom_outpts.size()); j++)
-        nblend_pts.push_back(block->ndom_outpts(j));
 
     // --- geometry control points ---
 
@@ -502,27 +496,6 @@ void PrepRenderingData(
         }   // tensor products
     }   // science variables
 
-    // approximated points
-    blend_data  = new float*[nvars];
-    for (size_t j = 0; j < nvars; j++)
-    {
-        blend_data[j]   = new float[block->blend->domain.rows()];
-    }
-
-    for (size_t j = 0; j < (size_t)(block->blend->domain.rows()); j++)
-    {
-        p.x = block->blend->domain(j, 0);                               // if domain < 3d, mesh geometry includes a science variable
-        p.y = ndom_dims > 1 ? block->blend->domain(j, 1) : block->blend->domain(j, ndom_dims + sci_var);
-        if (ndom_dims < 2)
-            p.z = 0.0;
-        else
-            p.z = ndom_dims > 2 ? block->blend->domain(j, 2) : block->blend->domain(j, ndom_dims + sci_var);
-        blend_pts.push_back(p);
-
-        for (int k = 0; k < nvars; k++)                         // science variables
-            blend_data[k][j] = block->blend->domain(j, ndom_dims + k);
-    }
-
     // tmesh tensor extents
     ntensor_pts.resize(3);
     for (auto i = 0; i < 3; i++)
@@ -542,21 +515,15 @@ void write_vtk_files(
     vector<vec3d>               geom_ctrl_pts;      // control points (<= 3d) in geometry
     vector < vector <vec3d> >   vars_ctrl_pts;      // control points (<= 3d) in science variables
     float**                     vars_ctrl_data;     // control point data values (4d)
-    vector<int>                 nblend_pts;         // number of out points in each dim.
-    vector<vec3d>               blend_pts;          // blended data points (<= 3d)
     vector<vec3d>               tensor_pts_real;    // tmesh tensor product extents in real space
     vector<vec3d>               tensor_pts_index;   // tmesh tensor product extents in index space
-    vector<int>                 ntensor_pts;        // number of tensor extent points in each dim.
-    float**                     blend_data;
+    vector<int>                 ntensor_pts;        // number of tensor extent points in each dim
 
     // package rendering data
     PrepRenderingData(nvars,
                       geom_ctrl_pts,
                       vars_ctrl_pts,
                       vars_ctrl_data,
-                      nblend_pts,
-                      blend_pts,
-                      blend_data,
                       tensor_pts_real,
                       tensor_pts_index,
                       ntensor_pts,
@@ -566,10 +533,6 @@ void write_vtk_files(
 
     // pad dimensions up to 3
     dom_dim = b->dom_dim;
-    for (auto i = 0; i < 3 - dom_dim; i++)
-    {
-        nblend_pts.push_back(1); // used for blending only in 2d?
-    }
 
     // science variable settings
     int vardim          = 1;
@@ -619,27 +582,15 @@ void write_vtk_files(
     char input_filename[256];
     char approx_filename[256];
     char errs_filename[256];
+    char blend_filename[256];
     sprintf(input_filename, "initial_points_gid_%d.vtk", cp.gid());
     sprintf(approx_filename, "approx_points_gid_%d.vtk", cp.gid());
     sprintf(errs_filename, "error_gid_%d.vtk", cp.gid());
+    sprintf(blend_filename, "blend_gid_%d.vtk", cp.gid());
     write_pointset_vtk(b->input, input_filename, sci_var);
     write_pointset_vtk(b->approx, approx_filename, sci_var);
     write_pointset_vtk(b->errs, errs_filename, sci_var);
-
-    if (blend_pts.size())
-    {
-        sprintf(filename, "blend_gid_%d.vtk", cp.gid());
-        write_curvilinear_mesh(
-                /* const char *filename */                  filename,
-                /* int useBinary */                         0,
-                /* int *dims */                             &nblend_pts[0],
-                /* float *pts */                            &(blend_pts[0].x),
-                /* int nvars */                             nvars,
-                /* int *vardim */                           vardims,
-                /* int *centering */                        centerings,
-                /* const char * const *varnames */          varnames,
-                /* float **vars */                          blend_data);
-    }
+    write_pointset_vtk(b->blend, blend_filename, sci_var);
 
     // write tensor product extents
     int pts_per_cell = pow(2, dom_dim);
@@ -701,10 +652,8 @@ void write_vtk_files(
     for (int j = 0; j < nvars; j++)
     {
         delete[] vars_ctrl_data[j];
-        delete[] blend_data[j];
     }
     delete[] vars_ctrl_data;
-    delete[] blend_data;
 }
 
 // generate analytical test data and write to vtk
