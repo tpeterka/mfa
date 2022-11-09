@@ -62,6 +62,7 @@ int main(int argc, char** argv)
     real_t      regularization  = 0;        // smoothing parameter for models with non-uniform input density (0 == no smoothing)
     int         reg1and2        = 0;        // flag for regularizer: 0 = regularize only 2nd derivs. 1 = regularize 1st and 2nd
     int         verbose         = 1;        // MFA verbosity (0 = no extra output)
+    vector<int> decode_grid     = {};       // Grid size for uniform decoding
     bool        help            = false;    // show help
 
     // Constants for this example
@@ -90,6 +91,7 @@ int main(int argc, char** argv)
     ops >> opts::Option('y', "rand_seed",   rand_seed,  " seed for random point generation (-1 = no randomization, default)");
     ops >> opts::Option('b', "regularization", regularization, "smoothing parameter for models with non-uniform input density");
     ops >> opts::Option('k', "reg1and2",    reg1and2,   " regularize both 1st and 2nd derivatives (if =1) or just 2nd (if =0)");
+    ops >> opts::Option('u', "grid_decode", decode_grid," size of regular grid to decode MFA");
     ops >> opts::Option('z', "infile2",     infile2,    " extra data file (some apps require two file paths");
 
     if (!ops.parse(argc, argv) || help)
@@ -235,6 +237,15 @@ int main(int argc, char** argv)
 #endif
         decode_time = MPI_Wtime() - decode_time;
     }
+    else if (decode_grid.size() == dom_dim)
+    {
+        fprintf(stderr, "\nDecoding on regular grid of size %s\n", mfa::print_vec(decode_grid).c_str());
+        master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
+        {
+            b->decode_block_grid(cp, decode_grid);
+        });
+        decode_time = MPI_Wtime() - decode_time;
+    }
 
     // debug: write original and approximated data for reading into z-checker
     // only for one block (one file name used, ie, last block will overwrite earlier ones)
@@ -248,18 +259,24 @@ int main(int argc, char** argv)
     // compute the norms of analytical errors synthetic function w/o noise at different domain points than the input
     if (ntest > 0)
     {
+        cerr << "Computing analytical error" << endl;
         int nvars = model_dims.size() - 1;
         vector<real_t> L1(nvars), L2(nvars), Linf(nvars);                                // L-1, 2, infinity norms
         d_args.ndom_pts = vector<int>(dom_dim, ntest);
+        mfa::PointSet<real_t>* temp_in = nullptr;
         master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-                { b->analytical_error_field(cp, input, L1, L2, Linf, d_args); });
+                { b->analytical_error_field(cp, input, L1, L2, Linf, d_args,  temp_in, b->approx, b->errs); });
 
         // print analytical errors
-        fprintf(stderr, "\n------ Analytical error norms -------\n");
-        fprintf(stderr, "L-1        norm = %e\n", L1);
-        fprintf(stderr, "L-2        norm = %e\n", L2);
-        fprintf(stderr, "L-infinity norm = %e\n", Linf);
-        fprintf(stderr, "-------------------------------------\n\n");
+        for (int i = 0; i < nvars; i++)
+        {
+            fprintf(stderr, "\n------ Analytical error: Var %i -------\n", i);
+            fprintf(stderr, "L-1        norm = %e\n", L1[i]);
+            fprintf(stderr, "L-2        norm = %e\n", L2[i]);
+            fprintf(stderr, "L-infinity norm = %e\n", Linf[i]);
+            fprintf(stderr, "-------------------------------------\n\n");
+        }
+
     }
 
     // print results
