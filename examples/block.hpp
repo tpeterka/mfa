@@ -8,9 +8,10 @@
 #ifndef _MFA_BLOCK
 #define _MFA_BLOCK
 
+#include    <random>
+#include    <stdio.h>
 #include    <mfa/mfa.hpp>
 #include    <mfa/block_base.hpp>
-
 #include    <diy/master.hpp>
 #include    <diy/reduce-operations.hpp>
 #include    <diy/decomposition.hpp>
@@ -235,71 +236,59 @@ struct Block : public BlockBase<T>
 
         std::default_random_engine df_gen(seed);
         std::uniform_real_distribution<double> u_dist(0.0, 1.0);
+        auto unitrange = [&](){return u_dist(df_gen);};
+        auto randpoint = [&](){return (VectorX<T>::NullaryExpr(gdim, unitrange).array() * (core_maxs - core_mins).array()).matrix() + core_mins;};
 
         // Fill domain with randomly distributed points
-        if (cp.gid() == 0)
-            cout << "Void Sparsity: " << (1 - a->t)*100 << "%" << endl;
-
-        double keep_frac = 1 - a->t;
-        if (keep_frac < 0 || keep_frac > 1)
+        double sparsity = a->t;
+        double keep_frac = 1;
+        if (sparsity < 0 || sparsity > 1)
         {
             cerr << "Invalid value of void density" << endl;
             exit(1);
         }
-        size_t nvoids = 4;
-        double radii_frac = 1.0/8.0;   // fraction of domain width to set as void radius
-        VectorX<T> radii(nvoids);
-        MatrixX<T> centers(gdim, nvoids);
+        if (cp.gid() == 0)
+            cout << "Void Sparsity: " << (sparsity)*100 << "%" << endl;
+
+        const size_t nvoids = 1;
+        const double radii_frac = 1.0/8.0;   // fraction of domain width to set as void radius
+        T radius = radii_frac * (core_maxs - core_mins).minCoeff();
+        vector<VectorX<T>> centers(nvoids);
         for (size_t nv = 0; nv < nvoids; nv++) // Randomly generate the centers of each void
         {
-            for (size_t k = 0; k < gdim; k++)
-            {
-                centers(k,nv) = core_mins(k) + u_dist(df_gen) * (core_maxs(k) - core_mins(k));
-            }
-
-            radii(nv) = radii_frac * (core_maxs - core_mins).minCoeff();
+            centers[nv] = randpoint();
         }
 
         VectorX<T> dom_pt(gdim);
-        for (size_t j = 0; j < input->domain.rows(); j++)
+        for (size_t j = 0; j < input->npts; j++)
         {
-            VectorX<T> candidate_pt(gdim);
-
-            bool keep = true;
-            do
+            // Generate a random point, randomly discard if within a certain radius of a void
+            while (true)
             {
-                // Generate a random point
-                for (size_t k = 0; k < gdim; k++)
-                {
-                    candidate_pt(k) = core_mins(k) + u_dist(df_gen) * (core_maxs(k) - core_mins(k));
-                }
+                keep_frac = 1;
+                dom_pt = randpoint();
 
-                // Consider discarding point if within a certain radius of a void
                 for (size_t nv = 0; nv < nvoids; nv++)
                 {
-                    if ((candidate_pt - centers.col(nv)).norm() < radii(nv))
+                    if ((dom_pt - centers[nv]).norm() < radius)
                     {
-                        keep = false;
+                        keep_frac = sparsity;
                         break;
                     }
                 }
 
-                // Keep this point anyway a certain fraction of the time
-                if (keep == false)
-                {
-                    if (u_dist(df_gen) <= keep_frac)
-                        keep = true;
-                }
-            } while (!keep);
+                if (u_dist(df_gen) <= keep_frac)
+                    break;
+            }
 
             // Add point to Input
             for (size_t k = 0; k < gdim; k++)
             {
-                input->domain(j,k) = candidate_pt(k);
+                input->domain(j,k) = dom_pt(k);
             }
 
-            input->geom_coords(j, dom_pt);          // fill dom_pt
-            for (auto k = 0; k < nvars; k++)        // for all science variables
+            // Evaluate function at point and add to Input
+            for (auto k = 0; k < nvars; k++)
             {
                 int dmin = input->var_min(k);
                 int vardim = input->var_dim(k);
@@ -320,10 +309,8 @@ struct Block : public BlockBase<T>
 
         // extents
         cerr << "gid = " << cp.gid() << endl;
-        cerr << "core_mins:\n" << core_mins.transpose() << endl;
-        cerr << "core_maxs:\n" << core_maxs.transpose() << endl;
-        cerr << "bounds_mins:\n" << bounds_mins.transpose() << endl;
-        cerr << "bounds_maxs:\n" << bounds_maxs.transpose() << endl;
+        mfa::print_bbox(core_mins, core_maxs, "Core");
+        mfa::print_bbox(bounds_mins, bounds_maxs, "Bounds");
     }
 
     // Creates a synthetic dataset on a rectilinear grid of points
@@ -1461,7 +1448,8 @@ struct Block : public BlockBase<T>
         this->setup_MFA(cp, mfa_info);
 
         // debug
-        cerr << mfa::print_bbox(bounds_mins, bounds_maxs);
+        mfa::print_bbox(core_mins, core_maxs, "Core");
+        mfa::print_bbox(bounds_mins, bounds_maxs, "Bounds");
         // cerr << "domain extent:\n min\n" << bounds_mins << "\nmax\n" << bounds_maxs << endl;
     }
 
@@ -1561,7 +1549,8 @@ struct Block : public BlockBase<T>
         core_maxs   = bounds_maxs.head(dom_dim);
 
         // debug
-        cerr << mfa::print_bbox(bounds_mins, bounds_maxs);
+        mfa::print_bbox(core_mins, core_maxs, "Core");
+        mfa::print_bbox(bounds_mins, bounds_maxs, "Bounds");
     }
 
 

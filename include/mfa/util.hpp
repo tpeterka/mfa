@@ -43,19 +43,16 @@ namespace mfa
     }
 
     template<typename T>
-    string print_bbox(const VectorX<T>& mins, const VectorX<T>& maxs)
+    void print_bbox(const VectorX<T>& mins, const VectorX<T>& maxs, string label="Bounding")
     {
-        if (mins.size() != maxs.size()) return "Bounding Box: <invalid bbox>";
-
-        stringstream ss;
-        ss << std::setprecision(3);
-        ss << "Bounds Box:\n";
+        if (mins.size() != maxs.size()) 
+            fmt::print("{} Box: <invalid box>\n", label);
+        
+        fmt::print("{} Box:\n", label);
         for (int i = 0; i < mins.size(); i++)
         {
-            ss << "  Dim " << i << ": [" << mins(i) << ", " << maxs(i) << "]\n";
-        }
-        
-        return ss.str();
+            fmt::print("  Dim {}: [{:< 5.5g}, {:< 5.5g}]\n", i, mins(i), maxs(i));
+        } 
     }
 
     struct MFAError: public std::runtime_error
