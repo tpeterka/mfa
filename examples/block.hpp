@@ -2423,7 +2423,7 @@ cerr << "===========\n" << endl;
 
                 // Update error field
                 residual = (true_pt - test_pt).cwiseAbs();
-                for (int j = 0; j <= error_pts->var_dim(k); j++)
+                for (int j = 0; j < error_pts->var_dim(k); j++)
                 {
                     error_pts->domain(pt_it.idx(), error_pts->var_min(k) + j) = residual(j);
                     exact_pts->domain(pt_it.idx(), exact_pts->var_min(k) + j) = true_pt(j);
