@@ -281,15 +281,24 @@ namespace mfa
                             int                     deriv,
                             T                       c_target,
                             const SparseMatrixX<T>& N,
-                            const VectorX<T>& dom_mins,
-                            const VectorX<T>& dom_maxs,
+                            const VectorX<T>&       dom_mins,
+                            const VectorX<T>&       dom_maxs,
                             SparseMatrixX<T>&       Ct)
         {
-            VectorX<T> extents = dom_maxs - dom_mins;
-
             clock_t fill_time = clock();
             if (verbose)
                 cerr << "Adjusting matrix for regularization..." << endl;
+
+            const int num_points = N.rows();
+            const int num_ctrl = N.cols();
+            const int num_cons = dom_dim * num_ctrl;
+            const VectorX<T> extents = dom_maxs - dom_mins;
+
+            if (Ct.rows() != num_ctrl || Ct.cols() != num_cons)
+            {
+                fmt::print("ERROR: Incorrect matrix dimensions of Ct in ConsMatrix()\nExiting.\n");
+                exit(1);
+            }
 
             TensorProduct<T>& t = mfa_data.tmesh.tensor_prods[t_idx];
             VectorXi spans(dom_dim);
@@ -393,8 +402,10 @@ namespace mfa
                 pt_it.incr_iter();
             }
 
+#if 0 // OLD regularization technique (column-specific)
             // Compute regularization strengths
             SparseMatrixX<T> C(Ct.transpose());                             // create col-major transpose for fast column sums
+            VectorX<T> reg_strengths(num_ctrl);
             Eigen::DiagonalMatrix<T, Eigen::Dynamic> lambda(C.cols());      // regularization strengths
             for (int i = 0; i < C.cols(); i++)
             {
@@ -406,61 +417,66 @@ namespace mfa
                 }
                 else    
                 {
-                    // Experimental: For 1st deriv constraints, only use when there are no value constraints
-                    //      Initial tests indicate this is a good idea. Using only 2nd deriv constraints can 
-                    //      cause the solve to take a long time or not converge, but adding 1st deriv 
-                    //      constraints can lead to artificial "flat patches" when the number of control points
-                    //      is high. This new method seems to mitigate the flat patches while still improving 
-                    //      the solve in terms of conditioning and speed.
+                    // For 1st deriv constraints, only use when there are no value constraints
                     if (c_sum == 0)
                         lambda.diagonal()(i) = c_add / C.col(i).cwiseAbs().sum();
                     else
                         lambda.diagonal()(i) = 0;
                 }
 
-                if (i==4)// DEBUG
-                {
-                    cerr << "\n" << C.col(i).cwiseAbs().sum() << endl;
-                    cerr << lambda.diagonal()(i) << endl;
-                    cerr << C.col(i).coeffs().size() << endl;
-                    cerr << C.col(i).coeffs().matrix().maxCoeff() << "\t" << C.col(i).coeffs().matrix().minCoeff() << endl;
-                }
-                
+                reg_strengths(i) = lambda.diagonal()(i);
             }
 
-            // // DEBUG: Export the regularization strength and position for each term
-            // vector<vector<T>> st_params(pt_it.tot_iters(), vector<T>(dom_dim));
-            // vector<T> strs(pt_it.tot_iters());
-            // int lidx = 0, id = 0;
-            // pt_it.init();   // reset control point iterator
-            // while (!pt_it.done())
-            // {
-            //     lidx = pt_it.cur_iter();
-            //     strs[lidx] = lambda.diagonal()(lidx);
-            //     for (int i = 0; i < dom_dim; i++)
-            //     {
-            //         id = pt_it.idx_dim(i);
-            //         st_params[lidx][i] = anchor_pts[i][id];
-            //     }
+            // Scale the constraint matrix Ct by the regularization strengths
+            // Each row of Ct (col of C) is multiplied by a diagonal entry of lambda
+            Ct = lambda * Ct;
 
-            //     pt_it.incr_iter();
-            // }
-            // ofstream reg_st_out;
-            // string reg_st_fname = "reg-strength-" + to_string(deriv) + ".txt";
-            // reg_st_out.open(reg_st_fname);
-            // for (int i = 0; i < pt_it.tot_iters(); i++)
-            // {
-            //     for (int j = 0; j < dom_dim; j++)
-            //     {
-            //         reg_st_out << st_params[i][j] << " ";
-            //     }
-            //     reg_st_out << strs[i] << endl;
-            // }
-            // reg_st_out.close();
+#else // NEW regularization technique (row-specific)
+            // Compute regularization strengths
+            SparseMatrixX<T> C(Ct.transpose());                             // create col-major transpose for fast column sums
+            VectorX<T> reg_strengths(num_ctrl);
+            Eigen::DiagonalMatrix<T, Eigen::Dynamic> lambda(C.rows());       // NEW test case
+            T str = 0;
+            for (int i = 0; i < C.cols(); i++)
+            { 
+                T n_sum = N.col(i).sum();
+                T c_sum = C.col(i).cwiseAbs().sum();
+                if (deriv == 1 && n_sum > 0)
+                    str = 0;
+                else
+                    str = max((c_target - n_sum)/c_sum, 0.);
+
+                reg_strengths(i) = str; // nb. for debug below only
+
+                for (int k = 0; k < dom_dim; k++)
+                {
+                    lambda.diagonal()(dom_dim*i + k) = str;
+                }
+            }
 
             // Scale the constraint matrix Ct by the regularization strengths
-            // Each row of Ct is multiplied by a diagonal entry of lambda
-            Ct = lambda * Ct;
+            // Each col of Ct (row of C) is multiplied by a diagonal entry of lambda
+            Ct = Ct*lambda;
+#endif
+
+            // DEBUG: Export the regularization strength and position for each term
+            ofstream reg_st_out;
+            string reg_st_fname = "reg-strength-" + to_string(deriv) + ".txt";
+            reg_st_out.open(reg_st_fname);
+
+            pt_it.init();   // reset control point iterator
+            while (!pt_it.done())
+            {
+                for (int i = 0; i < dom_dim; i++)
+                {
+                    int id = pt_it.idx_dim(i);
+                    reg_st_out << anchor_pts[i][id] << " ";
+                }
+                reg_st_out << reg_strengths(pt_it.cur_iter()) << endl;
+
+                pt_it.incr_iter();
+            }
+            reg_st_out.close();
 
             fill_time = clock() - fill_time;
             if (verbose)
