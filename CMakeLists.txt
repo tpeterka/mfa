@@ -89,10 +89,6 @@ find_package                (Threads)
 # DIY
 option                      (build_examples "" OFF)
 option                      (build_tests "" OFF)
-if                          (mfa_python)
-    option                  (python "" ON)
-    option                  (log "" ON)
-endif                       ()
 add_subdirectory            (include/diy)
 set                         (libraries ${libraries} diy)
 
