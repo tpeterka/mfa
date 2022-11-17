@@ -282,11 +282,15 @@ namespace mfa
             }
 
 #if defined( MFA_SERIAL) || defined( MFA_KOKKOS )   // serial version
+
             int pt_dim = ps1.pt_dim;
             diff.domain.leftCols(dom_dim) = ps1.domain.leftCols(dom_dim);
             diff.domain.rightCols(pt_dim-dom_dim) = (ps1.domain.rightCols(pt_dim-dom_dim) - ps2.domain.rightCols(pt_dim-dom_dim)).cwiseAbs();
+
 #endif // MFA_SERIAL || MFA_KOKKOS
+
 #ifdef MFA_TBB
+
             parallel_for (size_t(0), (size_t)diff.npts, [&] (size_t i)
                 {
                     for (auto j = 0; j < dom_dim; j++)
@@ -302,6 +306,7 @@ namespace mfa
                         diff.domain(i,j) = fabs(ps1.domain(i,j) - ps2.domain(i,j)); // compute distance between each science value
                     }
                 });
+
 #endif // MFA_TBB
         }
 
@@ -342,8 +347,11 @@ namespace mfa
                     }
                 }
             }
+
 #endif // MFA_SERIAL || KOKKOS
+
 #ifdef MFA_TBB
+
             parallel_for (size_t(0), (size_t)error.npts, [&] (size_t i)
                 {
                     for (auto j = 0; j < dom_dim; j++)
@@ -366,6 +374,7 @@ namespace mfa
                     }
                 }
                 });
+
 #endif // MFA_TBB
         }
     };

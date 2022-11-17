@@ -2362,8 +2362,14 @@ namespace mfa
             auto& tensor_prods  = tmesh.tensor_prods;
             int parent_level = 0;                                       // parent level currently being refined
 
+            // timing
+            double t0 = MPI_Wtime();
+
             TensorProduct<T>&t = tensor_prods[0];                       // fixed encode assumes the tmesh has only one tensor product
             Encode(t.nctrl_pts, t.ctrl_pts, t.weights, weighted);
+
+            // timing
+            fmt::print(stderr, "\nInitial full encode time:   {:.3e} s.\n", MPI_Wtime() - t0);
 
             // debug: print tmesh
 //             fprintf(stderr, "\n----- initial T-mesh -----\n\n");

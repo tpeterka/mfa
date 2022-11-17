@@ -1,4 +1,4 @@
-//--------------------------------------------------------------
+
 // decoder object
 //
 // Tom Peterka
@@ -351,7 +351,7 @@ namespace mfa
             {
                 auto pt_it  = ps.iterator(r.begin());
                 auto pt_end = ps.iterator(r.end());
-                for (; pt_it != pt_end; ++pt_it)
+                for (; pt_it != pt_end; ++pt_it)            // for all points
                 {
                     VectorX<T>  cpt(last + 1);              // evaluated point
                     VectorX<T>  param(mfa_data.dom_dim);    // vector of param values
@@ -388,8 +388,8 @@ namespace mfa
 #endif          // end tmesh version
 
                     ps.domain.block(pt_it.idx(), min_dim, 1, max_dim - min_dim + 1) = cpt.transpose();
-                }
-            }, ap);
+                }           // for all points
+            }, ap);     // parallel for
             if (verbose)
                 fprintf(stderr, "100 %% decoded\n");
 
@@ -443,8 +443,9 @@ namespace mfa
                             fprintf(stderr, "\r%.0f %% decoded", (T)pt_it.idx() / (T)(ps.npts) * 100);
                }
 
-#endif          // end serial version
             }
+
+#endif          // end serial version
         }
 
         // decode at a regular grid using saved basis that is computed once by this function
