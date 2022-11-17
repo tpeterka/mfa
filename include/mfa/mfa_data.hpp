@@ -1190,8 +1190,8 @@ namespace mfa
 
 
                         // insert a knot in one curve of control points
-                        CurveKnotIns(k, old_knots[k], old_knot_levels[k], old_curve_ctrl_pts.local(), old_curve_weights.local(),
-                                param(k), level, new_knots[k], new_knot_levels[k], new_curve_ctrl_pts.local(), new_curve_weights.local());
+                        NewCurveKnotIns(param, tensor_idx, k, old_knots[k], old_knot_levels[k], old_curve_ctrl_pts.local(), old_curve_weights.local(),
+                                level, new_knots[k], new_knot_levels[k], new_curve_ctrl_pts.local(), new_curve_weights.local());
 
                         // copy new curve control points and weights
                         if (k % 2 == 0)

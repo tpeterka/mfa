@@ -433,7 +433,7 @@ namespace mfa
                     if (pt_it.idx() == 0)
                         fprintf(stderr, "Using VolPt_tmesh\n");
                     VolPt_tmesh(param, cpt);
-#endif          // end serial version
+#endif          // end tmesh version
 
                     ps.domain.block(pt_it.idx(), min_dim, 1, max_dim - min_dim + 1) = cpt.transpose();
 
@@ -443,8 +443,9 @@ namespace mfa
                             fprintf(stderr, "\r%.0f %% decoded", (T)pt_it.idx() / (T)(ps.npts) * 100);
                }
 
-#endif
             }
+
+#endif      // end serial version
         }
 
         // decode at a regular grid using saved basis that is computed once by this function
