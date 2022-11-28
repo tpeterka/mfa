@@ -351,12 +351,13 @@ namespace mfa
             {
                 auto pt_it  = ps.iterator(r.begin());
                 auto pt_end = ps.iterator(r.end());
+                VectorX<T>  cpt(last + 1);                  // evaluated point
+                VectorX<T>  param(mfa_data.dom_dim);        // vector of param values
+                VectorXi    ijk(mfa_data.dom_dim);          // vector of param indices (structured grid only)
                 for (; pt_it != pt_end; ++pt_it)            // for all points
                 {
-                    VectorX<T>  cpt(last + 1);              // evaluated point
-                    VectorX<T>  param(mfa_data.dom_dim);    // vector of param values
-                    VectorXi    ijk(mfa_data.dom_dim);      // vector of param indices (structured grid only)
                     pt_it.params(param);
+
                     // compute approximated point for this parameter vector
 
 #ifndef MFA_TMESH   // original version for one tensor product
@@ -368,7 +369,7 @@ namespace mfa
 
                         // debug
                         if (pt_it.idx() == 0)
-                            fprintf(stderr, "Using VolPt_saved_basis\n");
+                            fmt::print(stderr, "DecodePointSet: Using VolPt_saved_basis w/ TBB over points\n");
                     }
                     else
                     {
@@ -376,13 +377,13 @@ namespace mfa
 
                         // debug
                         if (pt_it.idx() == 0)
-                            fprintf(stderr, "Using VolPt\n");
+                            fmt::print(stderr, "DecodePointSet: Using VolPt w/ TBB over points\n");
                     }
 
 #else           // tmesh version
 
                     if (pt_it.idx() == 0)
-                        fprintf(stderr, "1: Using VolPt_tmesh\n");
+                        fmt::print(stderr, "DecodePointSet: Using VolPt_tmesh w/ TBB over points\n");
                     VolPt_tmesh(param, cpt);
 
 #endif          // end tmesh version
@@ -391,7 +392,7 @@ namespace mfa
                 }           // for all points
             }, ap);     // parallel for
             if (verbose)
-                fprintf(stderr, "100 %% decoded\n");
+                fmt::print(stderr, "100 % decoded\n");
 
 #endif              // end TBB version
 
@@ -405,8 +406,8 @@ namespace mfa
                 VectorX<T>   min_params, max_params;
                 pt_min.params(min_params);
                 pt_max.params(max_params);
+                fmt::print(stderr, "DecodePointSet: Using DecodGrid w/o TBB (serial or kokkos)\n");
                 DecodeGrid(ps.domain, min_dim, max_dim, min_params, max_params, ps.g.ndom_pts );
-//                 cout << " after DecodeGrid: ndom: " << min_dim << " " <<  max_dim << " " << ps.g.ndom_pts <<  " ps.domain \n" << ps.domain ;
             }
             else
             {
@@ -427,11 +428,11 @@ namespace mfa
 #ifndef MFA_TMESH   // original version for one tensor product
                     // debug
                     if (pt_it.idx() == 0)
-                        fprintf(stderr, "Using VolPt\n");
+                        fmt::print(stderr, "DecodePointSet: Using VolPt w/o TBB (serial or kokkos)\n");
                     VolPt(param, cpt, decode_info, mfa_data.tmesh.tensor_prods[0], derivs);
 #else           // tmesh version
                     if (pt_it.idx() == 0)
-                        fprintf(stderr, "Using VolPt_tmesh\n");
+                        fmt::print(stderr, "DecodePointSet: Using VolPt_tmesh w/o TBB (serial or kokkos)\n");
                     VolPt_tmesh(param, cpt);
 #endif          // end tmesh version
 
@@ -829,6 +830,7 @@ namespace mfa
                 VolIterator         vol_iterator(t.nctrl_pts);                      // iterator over control points in the current tensor
                 vector<KnotIdx>     ctrl_anchor(mfa_data.dom_dim);                  // anchor of control point in (global, ie, over all tensors) index space
                 VectorXi            ijk(mfa_data.dom_dim);                          // multidim index of current control point
+                vector<vector<KnotIdx>> local_knot_idxs(mfa_data.dom_dim);          // local knot vectors in index space
 
                 while (!vol_iterator.done())                                        // for all control points in the tensor
                 {
@@ -857,7 +859,6 @@ namespace mfa
                     }
 
                     // intersect tmesh lines to get local knot indices in all directions
-                    vector<vector<KnotIdx>> local_knot_idxs(mfa_data.dom_dim);          // local knot vectors in index space
                     mfa_data.tmesh.knot_intersections(ctrl_anchor, k, local_knot_idxs);
 
                     // compute product of basis functions in each dimension
@@ -873,32 +874,7 @@ namespace mfa
 
                     // compute the point
                     out_pt += B * t.ctrl_pts.row(vol_iterator.cur_iter()) * t.weights(vol_iterator.cur_iter());
-
-                    // debug
-//                     T eps = 1e-8;
-//                     if ((skip || skip1) && B > eps)
-//                     {
-//                         vector<KnotIdx> param_anchor(mfa_data.dom_dim);
-//                         mfa_data.tmesh.param_anchor(param, found_idx, param_anchor);
-//                         fmt::print(stderr, "\nVolPt_tmesh(): Error: incorrect skip. decoding point with param [{}] anchor [{}] found in tensor {}\n",
-//                                 param.transpose(), fmt::join(param_anchor, ","), found_idx);
-// 
-//                         vector<vector<KnotIdx>> loc_knots(mfa_data.dom_dim);
-//                         mfa_data.tmesh.knot_intersections(param_anchor, found_idx, loc_knots);
-//                         for (auto i = 0; i < mfa_data.dom_dim; i++)
-//                             fmt::print(stderr, "loc_knots[dim {}] = [{}]\n", i, fmt::join(loc_knots[i], ","));
-// 
-//                         fmt::print(stderr, "tensor {} skipping ctrl pt at ctrl_anchor [{}]\n", k, fmt::join(ctrl_anchor, ","));
-//                         fmt::print(stderr, "B {}\n", B);
-//                         for (auto i = 0; i < mfa_data.dom_dim; i++)
-//                             fmt::print(stderr, "anchors[dim {}] =  [{}] adj_anchors[dim {}] = [{}]\n",
-//                                     i, fmt::join(anchors[i], ","), i, fmt::join(anchor_extents[i], ","));
-//                         fmt::print(stderr, "\n Current T-mesh:\n");
-//                         mfa_data.tmesh.print(true, true);
-//                         abort();
-//                     }
-
-                    B_sum += B * t.weights(vol_iterator.cur_iter());
+                    B_sum  += B * t.weights(vol_iterator.cur_iter());
 
                     vol_iterator.incr_iter();                                           // must increment volume iterator at the bottom of the loop
                 }       // control points in the tensor
