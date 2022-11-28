@@ -80,7 +80,7 @@ void write_pointset_vtk(mfa::PointSet<T>* ps, char* filename)
         vardims[i]      = 1;                                // TODO; treating each variable as a scalar (for now)
         varnames[i]     = new char[256];
         centerings[i]   = 1;
-        sprintf(varnames[i], "var%d", i);
+        snprintf(varnames[i], 256, "var%d", i);
     }
 
     // write raw original points
@@ -832,12 +832,12 @@ void write_vtk_files(
         vardims[i]      = 1;                                // TODO; treating each variable as a scalar (for now)
         varnames[i]     = new char[256];
         centerings[i]   = 1;
-        sprintf(varnames[i], "var%d", i);
+        snprintf(varnames[i], 256, "var%d", i);
     }
 
     // write geometry control points
     char filename[256];
-    sprintf(filename, "geom_control_points_gid_%d.vtk", cp.gid());
+    snprintf(filename, 256, "geom_control_points_gid_%d.vtk", cp.gid());
     if (geom_ctrl_pts.size())
         write_point_mesh(
             /* const char *filename */                      filename,
@@ -852,7 +852,7 @@ void write_vtk_files(
     // write science variables control points
     for (auto i = 0; i < nvars; i++)
     {
-        sprintf(filename, "var%d_control_points_gid_%d.vtk", i, cp.gid());
+        snprintf(filename, 256, "var%d_control_points_gid_%d.vtk", i, cp.gid());
         if (vars_ctrl_pts[i].size())
             write_point_mesh(
             /* const char *filename */                      filename,
@@ -868,16 +868,16 @@ void write_vtk_files(
     char input_filename[256];
     char approx_filename[256];
     char errs_filename[256];
-    sprintf(input_filename, "initial_points_gid_%d.vtk", cp.gid());
-    sprintf(approx_filename, "approx_points_gid_%d.vtk", cp.gid());
-    sprintf(errs_filename, "error_gid_%d.vtk", cp.gid());
+    snprintf(input_filename, 256, "initial_points_gid_%d.vtk", cp.gid());
+    snprintf(approx_filename, 256, "approx_points_gid_%d.vtk", cp.gid());
+    snprintf(errs_filename, 256, "error_gid_%d.vtk", cp.gid());
     write_pointset_vtk(b->input, input_filename);
     write_pointset_vtk(b->approx, approx_filename);
     write_pointset_vtk(b->errs, errs_filename);
 
     if (blend_pts.size())
     {
-        sprintf(filename, "blend_gid_%d.vtk", cp.gid());
+        snprintf(filename, 256, "blend_gid_%d.vtk", cp.gid());
         write_curvilinear_mesh(
                 /* const char *filename */                  filename,
                 /* int useBinary */                         0,
@@ -908,7 +908,7 @@ void write_vtk_files(
     for (auto i = 0; i < conn.size(); i++)
         conn[i] = i;
     vars = &tensor_data[0];
-    sprintf(filename, "tensor_real_gid_%d.vtk", cp.gid());
+    snprintf(filename, 256, "tensor_real_gid_%d.vtk", cp.gid());
     const char* name_tensor ="tensor0";
 
     // in real space
@@ -927,7 +927,7 @@ void write_vtk_files(
             /* float **vars */                              &vars);
 
     // in index space
-    sprintf(filename, "tensor_index_gid_%d.vtk", cp.gid());
+    snprintf(filename, 256, "tensor_index_gid_%d.vtk", cp.gid());
     write_unstructured_mesh(
             /* const char *filename */                      filename,
             /* int useBinary */                             0,
@@ -1031,12 +1031,12 @@ void test_and_write(Block<real_t>*                      b,
         vardims[i]      = 1;                                // TODO; treating each variable as a scalar (for now)
         varnames[i]     = new char[256];
         centerings[i]   = 1;
-        sprintf(varnames[i], "var%d", i);
+        snprintf(varnames[i], 256, "var%d", i);
     }
 
     // write true points
     char filename[256];
-    sprintf(filename, "true_points_gid_%d.vtk", cp.gid());
+    snprintf(filename, 256, "true_points_gid_%d.vtk", cp.gid());
     write_curvilinear_mesh(
             /* const char *filename */                  filename,
             /* int useBinary */                         0,
@@ -1049,7 +1049,7 @@ void test_and_write(Block<real_t>*                      b,
             /* float **vars */                          true_data);
 
     // write test points
-    sprintf(filename, "test_points_gid_%d.vtk", cp.gid());
+    snprintf(filename, 256, "test_points_gid_%d.vtk", cp.gid());
     write_curvilinear_mesh(
             /* const char *filename */                  filename,
             /* int useBinary */                         0,

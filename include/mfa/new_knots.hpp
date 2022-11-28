@@ -315,24 +315,25 @@ namespace mfa
             return true;
         }
 
-        // debug: vector of inserted knots sorted by linear index of span
-        struct InsertedKnot
-        {
-            KnotIdx         span_idx;
-            TensorIdx       parent_idx;
-            vector<KnotIdx> knot_idx;
-            vector<T>       knot_val;
-
-            InsertedKnot(int dom_dim_)     { knot_idx.resize(dom_dim_); knot_val.resize(dom_dim_);  }
-        };
-
-        struct Compare
-        {
-            bool operator()(const InsertedKnot& lhs, const InsertedKnot& rhs) const
-            {
-                return lhs.span_idx < rhs.span_idx;
-            }
-        };
+        // DEPRECATE
+//         // debug: vector of inserted knots sorted by linear index of span
+//         struct InsertedKnot
+//         {
+//             KnotIdx         span_idx;
+//             TensorIdx       parent_idx;
+//             vector<KnotIdx> knot_idx;
+//             vector<T>       knot_val;
+// 
+//             InsertedKnot(int dom_dim_)     { knot_idx.resize(dom_dim_); knot_val.resize(dom_dim_);  }
+//         };
+// 
+//         struct Compare
+//         {
+//             bool operator()(const InsertedKnot& lhs, const InsertedKnot& rhs) const
+//             {
+//                 return lhs.span_idx < rhs.span_idx;
+//             }
+//         };
 
         // computes error in knot spans and finds all new knots (in all dimensions at once) that should be inserted at one level
         // returns true if no change in knots; all tensors at the parent level are done
@@ -385,9 +386,6 @@ namespace mfa
 
             VolIterator dom_iter(input.ndom_pts);                       // iterator over input domain points
 
-            // debug: sorted set of inserted knots for comparing serial w/ TBB
-            set<InsertedKnot, Compare> inserted_knots;
-
             for (auto tidx = 0; tidx < tensor_prods.size(); tidx++)     // for all tensors
             {
                 TensorProduct<T>& t = tensor_prods[tidx];
@@ -411,9 +409,9 @@ namespace mfa
 
                 VolIterator span_iter(sub_npts, sub_starts, all_npts);
 
-#if 0            // debug: turn off TBB
+// #if 0            // debug: turn off TBB for reproducible results, fast but not reproducible when TBB is on
 
-// #ifdef MFA_TBB      // TBB version
+#ifdef MFA_TBB      // TBB version
 
                 // thread-local objects
                 // ref: https://www.threadingbuildingblocks.org/tutorial-intel-tbb-thread-local-storage
@@ -421,7 +419,6 @@ namespace mfa
                 enumerable_thread_specific<vector<TensorIdx>>       thread_parent_tensor_idxs;                  // idx of parent tensor of each new knot to be inserted
                 enumerable_thread_specific<vector<vector<KnotIdx>>> thread_new_knot_idxs(dom_dim);              // multidim indixes of (unique) new knots in full knot vector after insertion
                 enumerable_thread_specific<vector<vector<T>>>       thread_new_knots(dom_dim);                  // multidim knot values of knots to be inserted (unique)
-                enumerable_thread_specific<vector<KnotIdx>>         thread_span_idx;                            // debug: span index of inserted knot
 
                 // iterate over spans
                 static affinity_partitioner ap;
@@ -430,7 +427,6 @@ namespace mfa
                     // thread-private data
                     vector<KnotIdx> new_knot_idx(dom_dim);                  // new knot idx
                     vector<T>       new_knot_val(dom_dim);                  // new knot value
-                    vector<size_t>  nnew_knots(dom_dim, 0);                 // number of new knots inserted so far in each dim.
                     DecodeInfo<T>   decode_info(mfa_data, derivs);          // decode info
                     VectorXi        param_ijk(dom_dim);                     // multidim index of parameter
                     VectorXi        span_ijk(dom_dim);                      // multidim index of knot span
@@ -516,20 +512,16 @@ namespace mfa
 
                             if (max_norm_err > err_limit)                       // assumes err_limit is normalized
                             {
-                                if (valid_split_span_local(span_ijk, t, nnew_knots, new_knot_idx, new_knot_val))      // splitting span will have input points
+                                if (valid_split_span_local_all_dims(span_ijk, t, new_knot_idx, new_knot_val))      // splitting span will have input points
                                 {
                                     // record new knot to be inserted
                                     for (auto j = 0; j < dom_dim; j++)
                                     {
                                         thread_new_knot_idxs.local()[j].push_back(new_knot_idx[j]);
                                         thread_new_knots.local()[j].push_back(new_knot_val[j]);
-                                        nnew_knots[j]++;
                                     }
                                     thread_parent_tensor_idxs.local().push_back(tidx);
                                     retval      = false;
-
-                                    // debug: sorted set of insertions for comparing TBB w/ serial
-                                    thread_span_idx.local().push_back(k);
                                 }
                                 break;
                             }
@@ -537,14 +529,6 @@ namespace mfa
                             param_iter.incr_iter();
                         }   // iterator over domain input points in a knot span
                     }   // for k
-
-                    // debug: sanity check TODO: remove once debugged
-                    if (thread_parent_tensor_idxs.local().size() != thread_span_idx.local().size())
-                    {
-                        fmt::print(stderr, "Error: AllErrorSpans: size mismatch in thread-local data\n");
-                        abort();
-                    }
-
                 }, ap); // parallel for all knot spans
 
                 // combine thread-safe error_stats
@@ -571,45 +555,15 @@ namespace mfa
                 });
                 thread_parent_tensor_idxs.combine_each([&](const vector<TensorIdx>& parent_idxs)
                 {
-                    fmt::print(stderr, "parent_tensor_idxs.size() = {}\n", parent_tensor_idxs.size());
+                    // debug
+//                     fmt::print(stderr, "parent_tensor_idxs.size() = {}\n", parent_tensor_idxs.size());
+
                     for (auto k = 0; k < parent_idxs.size(); k++)
                     {
                         parent_tensor_idxs.push_back(parent_idxs[k]);
                         retval      = false;
                     }
                 });
-
-                // debug: sorted set of insertions for comparing TBB w/ serial
-                vector<KnotIdx> span_idxs;
-                thread_span_idx.combine_each([&](const vector<KnotIdx>& spans)
-                {
-                    fmt::print(stderr, "spans.size() = {}\n", spans.size());
-                    for (auto k = 0; k < spans.size(); k++)
-                        span_idxs.push_back(spans[k]);
-                });
-                if (span_idxs.size() != parent_tensor_idxs.size())
-                {
-                    fmt::print(stderr, "Error: AllErrorSpans: size mismatch in thread-aggregated data\n");
-                    fmt::print(stderr, "span_idxs.size() = {} parent_tensor_idxs.size() = {}\n", span_idxs.size(), parent_tensor_idxs.size());
-                    for (auto j = 0; j < dom_dim; j++)
-                    {
-                        fmt::print(stderr, "new_knot_idxs[{}].size() = {}\n", j, new_knot_idxs[j].size());
-                        fmt::print(stderr, "new_knots[{}].size() = {}\n", j, new_knots[j].size());
-                    }
-                    abort();
-                }
-                for (auto k = 0; k < span_idxs.size(); k++)
-                {
-                    InsertedKnot inserted_knot(dom_dim);
-                    inserted_knot.span_idx = span_idxs[k];
-                    inserted_knot.parent_idx = parent_tensor_idxs[k];
-                    for (auto j = 0; j < dom_dim; j++)
-                    {
-                        inserted_knot.knot_idx[j] = new_knot_idxs[j][k];
-                        inserted_knot.knot_val[j] = new_knots[j][k];
-                    }
-                    inserted_knots.insert(inserted_knot);
-                }
 
 #else               // serial version
 
@@ -703,14 +657,6 @@ namespace mfa
                                 }
                                 parent_tensor_idxs.push_back(tidx);
                                 retval      = false;
-
-                                // debug: insert into new knot into set sorted by linear span index
-                                InsertedKnot inserted_knot(dom_dim);
-                                inserted_knot.span_idx = span_iter.cur_iter();
-                                inserted_knot.parent_idx = tidx;
-                                inserted_knot.knot_idx = new_knot_idx;
-                                inserted_knot.knot_val = new_knot_val;
-                                inserted_knots.insert(inserted_knot);
                             }
                             break;
                         }
@@ -723,32 +669,8 @@ namespace mfa
 
 #endif              // TBB or serial
 
-                // debug
-//                 fmt::print(stderr, "AllErrorSpans(): tensor idx {} level {} retval {} tensor_done {}\n",
-//                         tidx, t.level, retval, tensor_done);
-
                 t.done = true;
             }   // for all tensors
-
-            // debug: print sorted set of inserted knots
-            // also for debugging: copy sorted set back into output vectors
-//             fmt::print(stderr, "sorted set of knots to insert:\n");
-//             int n = 0;
-//             for (auto it = inserted_knots.begin(); it != inserted_knots.end(); it++)
-//             {
-//                 fmt::print(stderr, "span_idx {} parent_idx {} knot_idx [{}] knot_val [{}]\n",
-//                         it->span_idx, it->parent_idx, fmt::join(it->knot_idx, ","), fmt::join(it->knot_val, ","));
-// 
-//                 // debug: rewrite output vectors in same order as serial, sorted by knot span idx
-//                 parent_tensor_idxs[n] = it->parent_idx;
-//                 for (auto j = 0; j < dom_dim; j++)
-//                 {
-//                     new_knot_idxs[j][n] = it->knot_idx[j];
-//                     new_knots[j][n]     = it->knot_val[j];
-//                 }
-//                 n++;
-//             }
-//             fmt::print(stderr, "\n");
 
             return retval;
         }

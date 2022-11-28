@@ -382,7 +382,7 @@ namespace mfa
 #else           // tmesh version
 
                     if (pt_it.idx() == 0)
-                        fprintf(stderr, "Using VolPt_tmesh\n");
+                        fprintf(stderr, "1: Using VolPt_tmesh\n");
                     VolPt_tmesh(param, cpt);
 
 #endif          // end tmesh version
