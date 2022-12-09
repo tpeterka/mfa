@@ -14,6 +14,8 @@
 
 #include    <Eigen/Dense>
 
+#include    <mpi.h>     // for MPI_Wtime() only
+
 typedef Eigen::MatrixXi MatrixXi;
 
 #ifdef MFA_KOKKOS
@@ -230,6 +232,26 @@ namespace mfa
         }
     };
 
+    // timing data for debugging
+    struct DecodeTimes
+    {
+        double  volpt_tmesh;
+        double  anchors_extents;
+        double  tensors;
+        double  ctrl_pts;
+
+        DecodeTimes() : volpt_tmesh(0.0),
+        anchors_extents(0.0),
+        tensors(0.0),
+        ctrl_pts(0.0)
+        {}
+
+        void print()
+        {
+            fmt::print(stderr, "decode times: volpt_tmesh {:.3f} anchors_extents {:.3f} tensors {:.3f} ctrl_pts {:.3f}\n",
+                    volpt_tmesh, anchors_extents, tensors, ctrl_pts);
+        }
+    };
 
     template <typename T>                               // float or double
     class Decoder
@@ -251,6 +273,8 @@ namespace mfa
 
         int                 verbose;                    // output level
         bool                saved_basis;                // flag to use saved basis functions within mfa_data
+
+        DecodeTimes         decode_times;               // debug
 
     public:
 
@@ -384,7 +408,7 @@ namespace mfa
 
                     if (pt_it.idx() == 0)
                         fmt::print(stderr, "DecodePointSet: Using VolPt_tmesh w/ TBB over points\n");
-                    VolPt_tmesh(param, cpt);
+                    VolPt_tmesh(param, cpt, false);
 
 #endif          // end tmesh version
 
@@ -392,7 +416,10 @@ namespace mfa
                 }           // for all points
             }, ap);     // parallel for
             if (verbose)
+            {
                 fmt::print(stderr, "100 % decoded\n");
+                decode_times.print();
+            }
 
 #endif              // end TBB version
 
@@ -406,7 +433,7 @@ namespace mfa
                 VectorX<T>   min_params, max_params;
                 pt_min.params(min_params);
                 pt_max.params(max_params);
-                fmt::print(stderr, "DecodePointSet: Using DecodGrid w/o TBB (serial or kokkos)\n");
+                fmt::print(stderr, "DecodePointSet: Using DecodeGrid w/o TBB (serial or kokkos)\n");
                 DecodeGrid(ps.domain, min_dim, max_dim, min_params, max_params, ps.g.ndom_pts );
             }
             else
@@ -443,7 +470,6 @@ namespace mfa
                         if (pt_it.idx() > 0 && ps.npts >= 100 && pt_it.idx() % (ps.npts / 100) == 0)
                             fprintf(stderr, "\r%.0f %% decoded", (T)pt_it.idx() / (T)(ps.npts) * 100);
                }
-
             }
 
 #endif          // end serial version
@@ -720,6 +746,8 @@ namespace mfa
 
 #ifdef MFA_SERIAL   // serial version
 
+            fmt::print(stderr, "DecodeGrid: serial version\n");
+
             DecodeInfo<T>   decode_info(mfa_data, derivs);  // reusable decode point info for calling VolPt repeatedly
             VectorX<T>      cpt(mfa_data.tmesh.tensor_prods[0].ctrl_pts.cols());                      // evaluated point
             VectorX<T>      param(mfa_data.dom_dim);       // parameters for one point
@@ -744,13 +772,16 @@ namespace mfa
 
 #else               // tmesh version
 
-                VolPt_tmesh(param, cpt);
+                VolPt_tmesh(param, cpt, false);
 
 #endif              // end tmesh version
 
                 vol_it.incr_iter();
                 result.block(j, min_dim, 1, max_dim - min_dim + 1) = cpt.transpose();
             }
+
+            // debug
+            decode_times.print();
 
 #endif      // end serial version
 
@@ -787,35 +818,63 @@ namespace mfa
         }
 
         // decode a point in the t-mesh
-        // TODO: serial implementation, no threading
         // TODO: no derivatives as yet
         // TODO: weighs all dims, whereas other versions of VolPt have a choice of all dims or only last dim
         // TODO: need a tensor product locating structure to quickly locate the tensor product containing param
         void VolPt_tmesh(const VectorX<T>&      param,      // parameters of point to decode
-                         VectorX<T>&            out_pt)     // (output) point, allocated by caller
+                         VectorX<T>&            out_pt,     // (output) point, allocated by caller
+                         bool                   timing = false) // collect timing data for debugging
         {
+            // debug
+            double t0, t1, t2;
+            if (timing)
+                t0 = MPI_Wtime();
+
+            // typing shortcuts
+            auto& dom_dim   = mfa_data.dom_dim;
+            auto& tmesh     = mfa_data.tmesh;
+            auto& all_knots = tmesh.all_knots;
+            auto& p         = mfa_data.p;
+
             // init
             out_pt = VectorX<T>::Zero(out_pt.size());
             T B_sum = 0.0;                                                          // sum of multidim basis function products
             T w_sum = 0.0;                                                          // sum of control point weights
-
+                                                                                    //
             // compute range of anchors covering decoded point
             // TODO: need a tensor product locating structure to quickly locate the tensor product containing param
             // current passing tensor 0 as a seed for the search
-            vector<vector<KnotIdx>> anchors(mfa_data.dom_dim);
-            TensorIdx found_idx = mfa_data.tmesh.anchors(param, 0, anchors);        // 0 is the seed for searching for the correct tensor TODO
+            vector<vector<KnotIdx>> anchors(dom_dim);                               // (global) anchor of param point
+            TensorIdx found_idx = tmesh.anchors(param, 0, anchors);                 // 0 is the seed for searching for the correct tensor TODO
 
-            // extents of original anchors expanded for adjacent tensors
-            vector<vector<KnotIdx>> anchor_extents(mfa_data.dom_dim);
-            bool changed = mfa_data.tmesh.expand_anchors(anchors, found_idx, anchor_extents);
+            // (global) extents of original anchors expanded for adjacent tensors
+            vector<vector<KnotIdx>> anchor_extents(dom_dim);
+            bool changed = tmesh.expand_anchors(anchors, found_idx, anchor_extents);
 
-            for (auto k = 0; k < mfa_data.tmesh.tensor_prods.size(); k++)           // for all tensor products
+            // check anchor extents for global edges
+            for (auto i = 0; i < dom_dim; i++)
             {
-                const TensorProduct<T>& t = mfa_data.tmesh.tensor_prods[k];
+                if (anchor_extents[i][0] < (p(i) + 1) / 2)
+                    anchor_extents[i][0] = (p(i) + 1) / 2;
+
+                if (anchor_extents[i][1] >= all_knots[i].size() - (p(i) + 1) / 2)
+                    anchor_extents[i][1] = all_knots[i].size() - (p(i) + 1) / 2 - 1;
+            }
+
+            // debug
+            if (timing)
+            {
+                decode_times.anchors_extents += (MPI_Wtime() - t0);
+                t1 = MPI_Wtime();
+            }
+
+            for (auto k = 0; k < tmesh.tensor_prods.size(); k++)                    // for all tensor products
+            {
+                const TensorProduct<T>& t = tmesh.tensor_prods[k];
 
                 // skip entire tensor if knot mins, maxs are too far away from decoded point
                 bool skip = false;
-                for (auto j = 0; j < mfa_data.dom_dim; j++)
+                for (auto j = 0; j < dom_dim; j++)
                 {
                     if (t.knot_maxs[j] < anchor_extents[j].front() || t.knot_mins[j] > anchor_extents[j].back())
                     {
@@ -826,58 +885,75 @@ namespace mfa
                 if (skip)
                     continue;
 
-                // iterate over the control points in the tensor
-                VolIterator         vol_iterator(t.nctrl_pts);                      // iterator over control points in the current tensor
-                vector<KnotIdx>     ctrl_anchor(mfa_data.dom_dim);                  // anchor of control point in (global, ie, over all tensors) index space
-                VectorXi            ijk(mfa_data.dom_dim);                          // multidim index of current control point
-                vector<vector<KnotIdx>> local_knot_idxs(mfa_data.dom_dim);          // local knot vectors in index space
+                // debug
+                if (timing)
+                    t2 = MPI_Wtime();
 
-                while (!vol_iterator.done())                                        // for all control points in the tensor
+                // iterate over only the relevant control points
+
+                vector<KnotIdx> min_anchor(dom_dim);
+                vector<KnotIdx> max_anchor(dom_dim);
+                VectorXi        sub_starts(dom_dim);
+                VectorXi        sub_sizes(dom_dim);
+                VectorXi        ijk(dom_dim);                                       // multidim index of current control point
+                for (auto i = 0; i < dom_dim; i++)
+                {
+                    min_anchor[i]   = t.knot_mins[i] > anchor_extents[i][0] ? t.knot_mins[i] : anchor_extents[i][0];
+                    max_anchor[i]   = t.knot_maxs[i] < anchor_extents[i][1] ? t.knot_maxs[i] : anchor_extents[i][1];
+                    sub_sizes[i]    = tmesh.knot_idx_dist(t, min_anchor[i], max_anchor[i], i, true);
+                }
+                sub_starts = tmesh.anchor_ctrl_pt_ijk(t, min_anchor);               // local to the tensor
+
+                VolIterator vol_iterator1(sub_sizes, sub_starts, t.nctrl_pts);      // iterator over control points in the current tensor
+                vector<KnotIdx> ctrl_anchor(dom_dim);                               // anchor of control point in (global, ie, over all tensors) index space
+                vector<vector<KnotIdx>> local_knot_idxs(dom_dim);                   // local knot vectors in index space
+
+                while (!vol_iterator1.done())                                       // for all control points in the tensor
                 {
                     // get anchor of the current control point
-                    vol_iterator.idx_ijk(vol_iterator.cur_iter(), ijk);
-                    mfa_data.tmesh.ctrl_pt_anchor(t, ijk, ctrl_anchor);
+                    vol_iterator1.idx_ijk(vol_iterator1.cur_iter(), ijk);
+                    tmesh.ctrl_pt_anchor(t, ijk, ctrl_anchor);
+                    size_t idx = vol_iterator1.ijk_idx(ijk);
 
                     // skip odd degree duplicated control points, indicated by invalid weight
-                    if (t.weights(vol_iterator.cur_iter()) == MFA_NAW)
+                    if (t.weights(idx) == MFA_NAW)
                     {
-                        vol_iterator.incr_iter();
+                        vol_iterator1.incr_iter();
                         continue;
                     }
 
-                    // debug
-                    bool skip1 = false;
-
-                    // skip control points too far away from the decoded point
-                    if (!mfa_data.tmesh.in_anchors(ctrl_anchor, anchor_extents))
-                    {
-                        // debug
-                        skip1 = true;
-
-                        vol_iterator.incr_iter();
-                        continue;
-                    }
+                    // TODO: remove this test once stable
+                    if (!tmesh.in_anchors(ctrl_anchor, anchor_extents))
+                        throw MFAError(fmt::format("VolPt_tmesh: Skipping a control point ctrl_anchor [{}] anchor_extents [{}] x [{}] tensor {}; should not happen",
+                                    fmt::join(ctrl_anchor, ","), fmt::join(anchor_extents[0], ","), fmt::join(anchor_extents[1], ","), k));
 
                     // intersect tmesh lines to get local knot indices in all directions
-                    mfa_data.tmesh.knot_intersections(ctrl_anchor, k, local_knot_idxs);
+                    tmesh.knot_intersections(ctrl_anchor, k, local_knot_idxs);
 
                     // compute product of basis functions in each dimension
-                    T B = 1.0;                                                          // product of basis function values in each dimension
-                    for (auto i = 0; i < mfa_data.dom_dim; i++)
+                    T B = 1.0;                                                      // product of basis function values in each dimension
+                    for (auto i = 0; i < dom_dim; i++)
                     {
-                        vector<T> local_knots(mfa_data.p(i) + 2);                       // local knot vector for current dim in parameter space
+                        vector<T> local_knots(p(i) + 2);                            // local knot vector for current dim in parameter space
                         for (auto n = 0; n < local_knot_idxs[i].size(); n++)
-                            local_knots[n] = mfa_data.tmesh.all_knots[i][local_knot_idxs[i][n]];
+                            local_knots[n] = tmesh.all_knots[i][local_knot_idxs[i][n]];
 
                         B *= mfa_data.OneBasisFun(i, param(i), local_knots);
                     }
 
                     // compute the point
-                    out_pt += B * t.ctrl_pts.row(vol_iterator.cur_iter()) * t.weights(vol_iterator.cur_iter());
-                    B_sum  += B * t.weights(vol_iterator.cur_iter());
+                    out_pt += B * t.ctrl_pts.row(idx) * t.weights(idx);
+                    B_sum  += B * t.weights(idx);
 
-                    vol_iterator.incr_iter();                                           // must increment volume iterator at the bottom of the loop
+                    vol_iterator1.incr_iter();                                      // must increment volume iterator at the bottom of the loop
+
+
                 }       // control points in the tensor
+
+                // debug
+                if (timing)
+                    decode_times.ctrl_pts += (MPI_Wtime() - t2);
+
             }       // tensors
 
             // divide by sum of weighted basis functions to make a partition of unity
@@ -885,6 +961,13 @@ namespace mfa
                 out_pt /= B_sum;
             else
                 fmt::print(stderr, "Warning: VolPt_tmesh(): B_sum = 0 when decoding param: [{}]\n", param.transpose());
+
+            // debug
+            if (timing)
+            {
+                decode_times.tensors += (MPI_Wtime() - t1);
+                decode_times.volpt_tmesh += (MPI_Wtime() - t0);
+            }
         }
 
         // compute a point from a NURBS n-d volume at a given parameter value

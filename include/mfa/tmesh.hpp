@@ -2383,6 +2383,17 @@ namespace mfa
                 const vector<KnotIdx>&  anchor,                     // anchor
                 bool                    check = true) const         // check that global and local indices refer to same knot
         {
+            // TODO: remove once stable
+            for (auto i = 0; i < dom_dim_; i++)
+            {
+                if (anchor[i] < (p_(i) + 1) / 2 || anchor[i] >= all_knots[i].size() - (p_(i) + 1) / 2)
+                    // TODO: throw this error, temporarily disabled for debugging
+//                     throw MFAError(fmt::format("anchor_ctrl_pt_idx(): anchor[{}] = {} must be in [{}, {}]",
+//                                 i, anchor[i], (p_(i) + 1) / 2, all_knots[i].size() - (p_(i) + 1) / 2 - 1));
+                    fmt::print(stderr, "anchor_ctrl_pt_idx(): anchor[{}] = {} must be in [{}, {}]\n",
+                                i, anchor[i], (p_(i) + 1) / 2, all_knots[i].size() - (p_(i) + 1) / 2 - 1);
+            }
+
             VectorXi ijk = anchor_ctrl_pt_ijk(t, anchor, check);    // multidim local index of anchor
             VolIterator vol_iter(t.nctrl_pts);
             return vol_iter.ijk_idx(ijk);
@@ -2395,9 +2406,27 @@ namespace mfa
                 const vector<KnotIdx>&  anchor,                     // anchor
                 bool                    check = true) const         // check that global and local indices refer to same knot
         {
+            // TODO: remove once stable
+            // throw this error, temporarily disabled for debugging
+            for (auto i = 0; i < dom_dim_; i++)
+            {
+                if (anchor[i] < (p_(i) + 1) / 2 || anchor[i] >= all_knots[i].size() - (p_(i) + 1) / 2)
+//                     throw MFAError(fmt::format("anchor_ctrl_pt_ijk(): anchor[{}] = {} must be in [{}, {})",
+//                                 i, anchor[i], (p_(i) + 1) / 2, all_knots[i].size() - (p_(i) + 1) / 2));
+                    fmt::print(stderr, "anchor_ctrl_pt_ijk(): anchor[{}] = {} must be in [{}, {})\n",
+                                i, anchor[i], (p_(i) + 1) / 2, all_knots[i].size() - (p_(i) + 1) / 2);
+            }
+
             VectorXi ijk(dom_dim_);                                 // multidim local index of anchor
             for (auto i = 0; i < dom_dim_; i++)
+            {
                 ijk(i) = anchor_ctrl_pt_dim(t, i, anchor[i], check);
+
+                // TODO: remove once stable
+                if (ijk(i) < 0)
+                    throw MFAError(fmt::format("anchor_ctrl_pt_ijk(): ijk(dim {}) {}  < 0", ijk(i), i));
+            }
+
             return ijk;
         }
 
@@ -2411,8 +2440,20 @@ namespace mfa
         {
             size_t ctrl_idx;
             ctrl_idx = global2local_knot_idx(anchor, t, dim, check);
+
+            // TODO: remove once stable
+            if ((t.knot_mins[dim] == 0 && ctrl_idx < (p_(dim) + 1) / 2) ||
+                (t.knot_maxs[dim] == all_knots[dim].size() - 1 && ctrl_idx >= all_knots[dim].size() - (p_(dim) + 1) / 2))
+                throw MFAError(fmt::format("anchor_ctrl_pt_dim(): ctrl_idx out of range: dim {} ctrl_idx {} must be in [{}, {})",
+                            dim, ctrl_idx, (p_(dim) + 1) / 2, all_knots[dim].size() - (p_(dim) + 1) / 2));
+
             if (t.knot_mins[dim] == 0)
                 ctrl_idx -= (p_(dim) + 1) / 2;
+
+            // TODO: remove once stable
+            if (ctrl_idx >= t.nctrl_pts(dim))
+                throw MFAError(fmt::format("anchor_ctrl_pt_dim(): ctrl_idx out of range: dim {} ctrl_idx {} must be < {}",
+                            dim, ctrl_idx, t.nctrl_pts(dim)));
 
             return ctrl_idx;
         }

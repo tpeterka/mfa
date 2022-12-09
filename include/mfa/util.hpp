@@ -123,6 +123,7 @@ namespace mfa
                     all_npts_dim_(all_npts),
                     tot_iters_(npts_dim_.prod())            { init(idx); }
 
+        // full volume version
         VolIterator(const   VectorXi& npts,                 // size of volume in each dimension
                             size_t idx = 0) :               // linear iteration count within volume
                     dom_dim_(npts.size()),
