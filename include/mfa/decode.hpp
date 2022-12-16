@@ -418,7 +418,7 @@ namespace mfa
             if (verbose)
             {
                 fmt::print(stderr, "100 % decoded\n");
-                decode_times.print();
+//                 decode_times.print();
             }
 
 #endif              // end TBB version
@@ -781,7 +781,7 @@ namespace mfa
             }
 
             // debug
-            decode_times.print();
+//             decode_times.print();
 
 #endif      // end serial version
 
@@ -902,7 +902,7 @@ namespace mfa
                     max_anchor[i]   = t.knot_maxs[i] < anchor_extents[i][1] ? t.knot_maxs[i] : anchor_extents[i][1];
                     sub_sizes[i]    = tmesh.knot_idx_dist(t, min_anchor[i], max_anchor[i], i, true);
                 }
-                sub_starts = tmesh.anchor_ctrl_pt_ijk(t, min_anchor);               // local to the tensor
+                sub_starts = tmesh.anchor_ctrl_pt_ijk(t, min_anchor, false);        // local to the tensor
 
                 VolIterator vol_iterator1(sub_sizes, sub_starts, t.nctrl_pts);      // iterator over control points in the current tensor
                 vector<KnotIdx> ctrl_anchor(dom_dim);                               // anchor of control point in (global, ie, over all tensors) index space

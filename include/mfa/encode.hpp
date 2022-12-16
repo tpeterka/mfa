@@ -1385,7 +1385,7 @@ namespace mfa
                         inserted_anchor[j] = anchor[j] + inserted_dims[j];
 
                     // copy inserted control point into Pcons
-                    Pcons.row(i) = new_tensor.ctrl_pts.row(tmesh.anchor_ctrl_pt_idx(new_tensor, inserted_anchor));
+                    Pcons.row(i) = new_tensor.ctrl_pts.row(tmesh.anchor_ctrl_pt_idx(new_tensor, inserted_anchor, false));
                 }
 
                 // offset anchor for next constraint
@@ -1545,7 +1545,7 @@ namespace mfa
                         inserted_anchor[j] = anchor[j] + inserted_dims[j];
 
                     // copy inserted control point into Pcons
-                    Pcons.row(ofst + i) = new_tensor.ctrl_pts.row(tmesh.anchor_ctrl_pt_idx(new_tensor, inserted_anchor));
+                    Pcons.row(ofst + i) = new_tensor.ctrl_pts.row(tmesh.anchor_ctrl_pt_idx(new_tensor, inserted_anchor, false));
                 }
 
                 // offset anchor for next constraint
