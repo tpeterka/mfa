@@ -2380,6 +2380,7 @@ namespace mfa
 
             // intersection proximity between tensors (assumes same for all dims)
             VectorXi& p = mfa_data.p;
+
             int pad         = p(0) % 2 == 0 ? p(0) + 2 : p(0) + 1;                  // padding for all tensors
             int edge_pad    = (p(0) / 2) + 2;                                       // extra padding for tensor at the global edge
 
@@ -3416,11 +3417,16 @@ namespace mfa
                 TensorProduct<T> c(dom_dim);
                 for (auto j = 0; j < dom_dim; j++)
                 {
+
+#ifdef MFA_SMALLER_TENSORS
+
                     // make p + 1 control points in the added tensor
                     // start with p + 1 control points, and after trimming to the parent, and making other adjustments,
                     // hopefully we'll end up with no less than p control points in any tensor
-//                     c.knot_mins[j] = inserted_knot_idxs[j][i] - p(j) / 2     >= 0                  ? inserted_knot_idxs[j][i] - p(j) / 2     : 0;
-//                     c.knot_maxs[j] = inserted_knot_idxs[j][i] + p(j) / 2 + 1 < all_knots[j].size() ? inserted_knot_idxs[j][i] + p(j) / 2 + 1 : all_knots[j].size() - 1;
+                    c.knot_mins[j] = inserted_knot_idxs[j][i] - p(j) / 2     >= 0                  ? inserted_knot_idxs[j][i] - p(j) / 2     : 0;
+                    c.knot_maxs[j] = inserted_knot_idxs[j][i] + p(j) / 2 + 1 < all_knots[j].size() ? inserted_knot_idxs[j][i] + p(j) / 2 + 1 : all_knots[j].size() - 1;
+
+#else
 
                     // ---- or -----
 
@@ -3429,6 +3435,8 @@ namespace mfa
                     // hopefully we'll end up with no less than p + 1 control points in any tensor
                     c.knot_mins[j] = inserted_knot_idxs[j][i] - p(j) / 2 - 1 >= 0                  ? inserted_knot_idxs[j][i] - p(j) / 2 - 1 : 0;
                     c.knot_maxs[j] = inserted_knot_idxs[j][i] + p(j) / 2 + 1 < all_knots[j].size() ? inserted_knot_idxs[j][i] + p(j) / 2 + 1 : all_knots[j].size() - 1;
+
+#endif
 
                     // --- or ----
                     // make the number of control points in the tensor a function of the pad
@@ -3732,8 +3740,18 @@ namespace mfa
 
                 // debug: check size of all tensors to be >= minimum
                 // TODO: comment out after code is debugged
+
+#ifdef MFA_SMALLER_TENSORS
+
+                int min_interior    = mfa_data.p(0) % 2 == 0 ? mfa_data.p(0) + 1 : mfa_data.p(0) + 0;   // min. size for interior tensors
+                int min_border      = 2 * mfa_data.p(0) + 0;                                            // min. size for global border tensors
+
+#else
+
                 int min_interior    = mfa_data.p(0) % 2 == 0 ? mfa_data.p(0) + 2 : mfa_data.p(0) + 1;   // min. size for interior tensors
                 int min_border      = 2 * mfa_data.p(0) + 1;                                            // min. size for global border tensors
+
+#endif
                 if (!tmesh.check_min_size(min_interior, min_border))
                 {
 //                     fmt::print(stderr, "AddNewTensors(): Error: failed checking minimum size of tensors after adding new_tensors[{}]\n", k);

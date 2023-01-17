@@ -39,6 +39,9 @@
 // for debugging, can turn off constraints in local solve
 // #define MFA_NO_CONSTRAINTS
 
+// smaller tensors (larger by default)
+#define MFA_SMALLER_TENSORS
+
 #include    <Eigen/Dense>
 #include    <Eigen/Sparse>
 #include    <Eigen/OrderingMethods>

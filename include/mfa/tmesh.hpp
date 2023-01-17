@@ -946,6 +946,9 @@ namespace mfa
             for (auto i = min_idx; i < knot_idx; i++)
                 if (all_knot_levels[cur_dim][i] <= cur_level)
                     local_knot_idx++;
+            // if knot_idx is at a deeper level than the tensor (not included), then overcounted by 1
+            if (all_knot_levels[cur_dim][knot_idx] > cur_level && local_knot_idx > 0)
+                local_knot_idx--;
 
             // sanity check that global and local indices refer to same knot
             if (check && t.knot_idxs[cur_dim].size() && knot_idx != t.knot_idxs[cur_dim][local_knot_idx])
@@ -1688,14 +1691,7 @@ namespace mfa
                 }
 
                 if (cur[dim] > 0)                                       // more knots in the tmesh
-                {
-                    // DEPRECATE
-                    // check if next knot borders a higher level; if so, switch to higher level tensor
-//                     border_higher_level(cur, cur_tensor, cur_level);
-
-                    // record the knot
-                    loc_knots[anchor_pos - j - 1] = cur[dim];
-                }
+                    loc_knots[anchor_pos - j - 1] = cur[dim];           // record the knot
                 else                                                    // no more knots in the tmesh
                     loc_knots[anchor_pos - j - 1] = 0;                  // repeat first index as many times as needed
             }       // for j knots
@@ -1752,15 +1748,8 @@ namespace mfa
                 }
 
                 if (cur[dim] < all_knots[dim].size() - 1)
-                {
-                    // DEPRECATE
-                    // if next knot borders a higher level; switch to higher level tensor
-//                     border_higher_level(cur, cur_tensor, cur_level);
-
-                    // record the knot
-                    loc_knots[start_pos + j + 1] = cur[dim];
-                }
-                else                                                        // no more knots in the tmesh
+                    loc_knots[start_pos + j + 1] = cur[dim];                    // record the knot
+                else                                                            // no more knots in the tmesh
                     loc_knots[start_pos + j + 1] = all_knots[dim].size() - 1;   // repeat last index as many times as needed
             }       // for j knots
         }
@@ -1868,7 +1857,7 @@ namespace mfa
 
         // iterates to the next intersection of knot index
         // first checks current tensor before checking its neighbors
-        // if more than one tensor sharing the target, pick highest level
+        // if more than one tensor share the target, pick highest level
         // updates target, cur_tensor, and cur_level
         // returns whether a tensor was found containing the offset target
         bool next_inter(const vector<TensorIdx>& prev_next,          // previous or next neighbor tensors
@@ -1933,23 +1922,6 @@ namespace mfa
 
             return true;
         }
-
-        //         DEPRECATE
-//         // check if target knot index borders a higher level in the given dimension; if so, switch to higher level tensor
-//         void border_higher_level(const vector<KnotIdx>& target,             // target knot indices
-//                                  TensorIdx&             cur_tensor,         // (input / output) highest level neighbor tensor containing the target
-//                                  int&                   cur_level) const    // (input / output) level of current tensor
-//         {
-//             for (auto k = 0; k < tensor_prods.size(); k++)
-//             {
-//                 if (in(target, tensor_prods[k].knot_mins, tensor_prods[k].knot_maxs) &&
-//                         tensor_prods[k].level > cur_level)
-//                 {
-//                     cur_tensor  = k;
-//                     cur_level   = tensor_prods[k].level;
-//                 }
-//             }
-//         }
 
         // given a point in parameter space to decode, compute p + 1 anchor points in all dims in knot index space
         // anchors correspond to those basis functions that cover the decoding point
@@ -2343,7 +2315,7 @@ namespace mfa
                 ctrl_idx -= (p_(dim) + 1) / 2;
 
             // TODO: remove once stable
-            if (ctrl_idx >= t.nctrl_pts(dim))
+            if (check && ctrl_idx >= t.nctrl_pts(dim))
                 throw MFAError(fmt::format("anchor_ctrl_pt_dim(): ctrl_idx out of range: dim {} ctrl_idx {} must be < {}",
                             dim, ctrl_idx, t.nctrl_pts(dim)));
 

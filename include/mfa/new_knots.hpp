@@ -409,9 +409,9 @@ namespace mfa
 
                 VolIterator span_iter(sub_npts, sub_starts, all_npts);
 
-// #if 0            // debug: turn off TBB for reproducible results, fast but not reproducible when TBB is on
+#if 0            // debug: turn off TBB for reproducible results, fast but not reproducible when TBB is on
 
-#ifdef MFA_TBB      // TBB version
+// #ifdef MFA_TBB      // TBB version
 
                 // thread-local objects
                 // ref: https://www.threadingbuildingblocks.org/tutorial-intel-tbb-thread-local-storage
