@@ -56,7 +56,7 @@ int main(int argc, char** argv)
 
     const int verbose = 1;
     const int scalar = 1;
-
+    const string infile2 = "";
 
     // get command line arguments
     opts::Options ops;
@@ -145,7 +145,7 @@ int main(int argc, char** argv)
 
     // set up parameters for examples
     setup_args(dom_dim, pt_dim, model_dims, geom_degree, geom_nctrl, vars_degree, vars_nctrl,
-                input, infile, ndomp, structured, rand_seed, 0, 0, 0,
+                input, infile, infile2, ndomp, structured, rand_seed, 0, 0, 0,
                 weighted, reg1and2, regularization, false, verbose, mfa_info, d_args);
 
     // Create data set for modeling. Input keywords are defined in example-setup.hpp
@@ -185,53 +185,7 @@ int main(int argc, char** argv)
                 b->create_ray_model(cp, mfa_info, d_args, 1, n_samples, n_rho, n_alpha, v_samples, v_rho, v_alpha);
 
                 real_t result = 0;
-                VectorX<real_t> start_pt(2), end_pt(2);
-
-                // horizontal line where function is identically 0
-                // = 0.0
-                start_pt(0) = -3*M_PI; start_pt(1) = 0;
-                end_pt(0) = 3*M_PI; end_pt(1) = 0;
-                result = b->integrate_ray(cp, start_pt, end_pt, 1);
-                cerr << "(-3pi, 0)---(3pi, 0):       " << result << endl;
-                cerr << "actual:                     " << sintest(start_pt, end_pt) << endl;
-                cerr << "error:                      " << result << endl << endl;
-
-                // vertical line
-                // = 0.0
-                start_pt(0) = M_PI/2; start_pt(1) = -2*M_PI;
-                end_pt(0) = M_PI/2; end_pt(1) = 2*M_PI;
-                result = b->integrate_ray(cp, start_pt, end_pt, 1);
-                cerr << "(pi/2, -2pi)---(pi/2, 2pi): " << result << endl;
-                cerr << "actual:                     " << sintest(start_pt, end_pt) << endl;
-                cerr << "error:                      " << result << endl << endl;
-                
-                // horizontal line
-                // = 2.0
-                start_pt(0) = 0; start_pt(1) = M_PI/2;
-                end_pt(0) = M_PI; end_pt(1) = M_PI/2;
-                result = b->integrate_ray(cp, start_pt, end_pt, 1);
-                cerr << "(0, pi/2)---(pi, pi/2):     " << result << endl;
-                cerr << "actual:                     " << sintest(start_pt, end_pt) << endl;
-                cerr << "relative error:             " << abs((result-2)/2) << endl << endl;
-
-                // line y=x
-                // = 5.75864344326
-                start_pt(0) = 0, start_pt(1) = 0;
-                end_pt(0) = 8, end_pt(1) = 8;
-                result = b->integrate_ray(cp, start_pt, end_pt, 1);
-                cerr << "(0, 0)---(8, 8):            " << result << endl;
-                cerr << "actual:                     " << sintest(start_pt, end_pt) << endl;
-                cerr << "relative error:             " << abs((result-5.75864344326)/5.75864344326) << endl << endl;
-
-                // "arbitrary" line
-                // = 1.2198958397433
-                start_pt(0) = -2; start_pt(1) = -4;
-                end_pt(0) = 3; end_pt(1) = 11;
-                result = b->integrate_ray(cp, start_pt, end_pt, 1);
-                cerr << "(-2, -4)---(3, 11):         " << result << endl;
-                cerr << "actual:                     " << sintest(start_pt, end_pt) << endl;
-                cerr << "relative error:             " << abs((result-1.2198958397433)/1.2198958397433) << endl << endl;
-
+                VectorX<real_t> start_pt(dom_dim), end_pt(dom_dim);
                 std::vector<real_t> ierrs_abs;
                 std::vector<real_t> ierrs_rel;
                 std::random_device dev;
@@ -241,15 +195,22 @@ int main(int argc, char** argv)
                 std::uniform_real_distribution<double> dist(0,1); 
                 for (int i = 0; i < num_ints; i++)
                 {
-                    x0 = dist(rng)* 8*M_PI - 4*M_PI;
-                    y0 = dist(rng)* 8*M_PI - 4*M_PI;
-                    x1 = dist(rng)* 8*M_PI - 4*M_PI;
-                    y1 = dist(rng)* 8*M_PI - 4*M_PI;
-                    start_pt(0) = x0;
-                    start_pt(1) = y0;
-                    end_pt(0) = x1;
-                    end_pt(1) = y1;
-                    len = sqrt((x1-x0)*(x1-x0) + (y1-y0)*(y1-y0));
+                    for (int j = 0; j < dom_dim; j++)
+                    {
+                        start_pt(j) = dist(rng) * (d_args.max[j]-d_args.min[j]) + d_args.min[j];
+                        end_pt(j)   = dist(rng) * (d_args.max[j]-d_args.min[j]) + d_args.min[j];
+                        len += (end_pt(j) - start_pt(j))*(end_pt(j) - start_pt(j));
+                    }
+                    len = sqrt(len);
+                    // x0 = dist(rng)* 8*M_PI - 4*M_PI;
+                    // y0 = dist(rng)* 8*M_PI - 4*M_PI;
+                    // x1 = dist(rng)* 8*M_PI - 4*M_PI;
+                    // y1 = dist(rng)* 8*M_PI - 4*M_PI;
+                    // start_pt(0) = x0;
+                    // start_pt(1) = y0;
+                    // end_pt(0) = x1;
+                    // end_pt(1) = y1;
+                    // len = sqrt((x1-x0)*(x1-x0) + (y1-y0)*(y1-y0));
                     result = b->integrate_ray(cp, start_pt, end_pt, 1) / len;   // normalize by segment length
                     actual = sintest(start_pt, end_pt) / len;                        // normalize by segment length
                     ierror_abs = abs(result - actual);

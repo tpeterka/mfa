@@ -956,8 +956,6 @@ namespace mfa
                     in_slice_iter.incr_iter();
                 }       // for all curves
 
-if (dim%2 == 0) cerr << "max:" << Q1.maxCoeff() << endl;
-else cerr << "max:" << Q0.maxCoeff() << endl;
 
                 // adjust input, output numbers of points for next iteration
                 nin_pts(dim) = t.nctrl_pts(dim);
@@ -1000,14 +998,18 @@ else cerr << "max:" << Q0.maxCoeff() << endl;
 
                 CurveIterator c_iter(slice_iter);
                 VectorX<T> param(dom_dim);
+                // param.setZero();
 
                 // for start of the curve, for dims prior to current dim, find anchor and param
                 // those dims are in control point index space for the current tensor
+                int offset = (mfa_data.p(dim) + 1)/2;
                 for (auto i = 0; i < dim; i++)
                 {
-                    mfa_data.tmesh.knot_idx_ofst(t, t.knot_mins[i], start_ijk(i), i, true, anchor[i]);                     // computes anchor as offset from start of tensor
+                    mfa_data.tmesh.knot_idx_ofst(t, t.knot_mins[i], start_ijk(i) + offset, i, false, anchor[i]);                     // computes anchor as offset from start of tensor
                     param(i)    = mfa_data.tmesh.all_knots[i][anchor[i]];
                 }
+                // cout << "DIM" << dim << ". " << start_ijk(0) << " " << start_ijk(1) << " " << start_ijk(2) << ": " << param(0) << " " << param(1) << " " << param(2) << ": " << anchor[0] << " " << anchor[1] << " " << anchor[2] << endl;
+
 
                 // for the start of the curve, for current dim. and higher, find param
                 // these dims are in the input point index space
@@ -1053,8 +1055,8 @@ else cerr << "max:" << Q0.maxCoeff() << endl;
                     // T x = t * x0 + (1 - t) * x1;
                     // T y = t * y0 + (1 - t) * y1;
 
-                    T x = (2*u_rho-1)*cos(u_alpha*M_PI) - (2*u_t-1)*sin(u_alpha*M_PI);
-                    T y = (2*u_rho-1)*sin(u_alpha*M_PI) + (2*u_t-1)*cos(u_alpha*M_PI);
+                    T x = (2*u_rho-1)*cos(u_alpha*M_PI) + (2*u_t-1)*sin(u_alpha*M_PI);
+                    T y = -1*(2*u_rho-1)*sin(u_alpha*M_PI) + (2*u_t-1)*cos(u_alpha*M_PI);
                     
                     // limits of the (square) domain in parameter space
                     // This comes from the fact that we defined r_lim = 1.5 * max_bound,
@@ -1109,18 +1111,75 @@ else cerr << "max:" << Q0.maxCoeff() << endl;
                 // int ct_idx = dom_dim * pt_idx;          // constraint index. there are dom_dim of these per point index
                 cur_ijk = in_curve_iter.cur_ijk();      // ijk coordinates in full dimensional volume
                 
-                // if (in_domain[vol_idx])
-                // {
-// cerr << curve_idx << " " << vol_idx << endl;
+                if (dim == 0)
+                {
+                    if (in_domain[vol_idx])
+                    {
+                        if (dim % 2 == 0)
+                            R.row(curve_idx) = Q0.row(vol_idx);
+                        else
+                            R.row(curve_idx) = Q1.row(vol_idx);
+
+
+                        if (dim % 2 == 0)
+                        {
+                            if (Q0(vol_idx, 0) == 1000.0)
+                            {
+                                cerr << "------\n";
+                                cerr << "idx: " << cur_ijk.transpose() << endl;
+                                cerr << "dim " << dim << ", in_domain=true" << endl;
+                                cerr << Q0.row(vol_idx) << endl;
+                            }
+                        }
+                        else
+                        {
+                            if (Q1(vol_idx, 0) == 1000.0)
+                            {
+                                cerr << "------\n";
+                                cerr << "idx: " << cur_ijk.transpose() << endl;
+                                cerr << "dim " << dim << ", in_domain=true" << endl;
+                                cerr << Q1.row(vol_idx) << endl;
+                            }
+                        }
+                    }
+                    else
+                    {
+                        R.row(curve_idx).setZero();
+                        if (dim % 2 == 0)
+                        {
+                            if (Q0(vol_idx,0) != 1000)
+                            {
+                                cerr << "------\n";
+                                cerr << "idxlin: " << cur_ijk.transpose() << endl;
+                                cerr << "dim " << dim << ", in_domain=false" << endl;
+                                cerr << "Q0: " << Q0(vol_idx,0) << endl;
+                                cerr << hexfloat << Q0(vol_idx,0) << endl;
+                                cerr << hexfloat << 1000 << endl;
+                            }
+                        }
+                        else
+                        {
+                            if (Q1(vol_idx, 0) != 1000)
+                            {
+                                cerr << "------\n";
+                                cerr << "idx: " << cur_ijk.transpose() << endl;
+                                cerr << "idxlin: " << vol_idx << endl;
+                                cerr << "dim " << dim << ", in_domain=false" << endl;
+                                cerr << "Q1: " << Q1(vol_idx,0) << endl;
+                                cerr << hexfloat << Q0(vol_idx,0) << endl;
+                                cerr << hexfloat << 1000 << endl;
+                            }
+                        }
+                    }
+                }
+                else
+                {
                     if (dim % 2 == 0)
                         R.row(curve_idx) = Q0.row(vol_idx);
                     else
                         R.row(curve_idx) = Q1.row(vol_idx);
-                // }
-                // else
-                // {
-                //     R.row(curve_idx).setZero();
-                // }
+                }
+                
 
                 in_curve_iter.incr_iter();
             }
@@ -1142,14 +1201,14 @@ else cerr << "max:" << Q0.maxCoeff() << endl;
             P = (N.transpose() * N).ldlt().solve(N.transpose() * R);
 
             // debug
-            MatrixXd::Index max_row, max_col;
-            if (P.maxCoeff(&max_row, &max_col) > 300)
-            {
-                fmt::print(stderr, "ComputeCtrlPtCurve(): very large control points\n");
-                fmt::print(stderr, "N row {}:\n {}\n", max_row, N.row(max_row));
-                fmt::print(stderr, "NtN row {}:\n {}\n", max_row, (N.transpose() * N).row(max_row));
-                fmt::print(stderr, "P row{}:\n {}\n", max_row, P.row(max_row));
-            }
+            // MatrixXd::Index max_row, max_col;
+            // if (P.maxCoeff(&max_row, &max_col) > 300)
+            // {
+            //     fmt::print(stderr, "ComputeCtrlPtCurve(): very large control points\n");
+            //     fmt::print(stderr, "N row {}:\n {}\n", max_row, N.row(max_row));
+            //     fmt::print(stderr, "NtN row {}:\n {}\n", max_row, (N.transpose() * N).row(max_row));
+            //     fmt::print(stderr, "P row{}:\n {}\n", max_row, P.row(max_row));
+            // }
         }
 
         void ComputeControlCurveMat(
@@ -1186,9 +1245,10 @@ else cerr << "max:" << Q0.maxCoeff() << endl;
 
             // for start of the curve, for dims prior to current dim, find anchor and param
             // those dims are in control point index space for the current tensor
+            int offset = (mfa_data.p(dim) + 1)/2;
             for (auto i = 0; i < dim; i++)
             {
-                mfa_data.tmesh.knot_idx_ofst(t, t.knot_mins[i], start_ijk(i), i, true, anchor[i]);                     // computes anchor as offset from start of tensor
+                mfa_data.tmesh.knot_idx_ofst(t, t.knot_mins[i], start_ijk(i) + offset, i, false, anchor[i]);                     // computes anchor as offset from start of tensor
                 param(i)    = mfa_data.tmesh.all_knots[i][anchor[i]];
             }
 
@@ -1232,10 +1292,18 @@ else cerr << "max:" << Q0.maxCoeff() << endl;
                 {                    
                     T u = input.params->param_grid[dim][start_ijk(dim) + j];
 
-                    // if (in_domain[in_curve_iter.cur_iter_full()])
-                        N(j, i) = mfa_data.OneBasisFun(dim, u, local_knots);
-                    // else
-                    //     N(j, i) = mfa_data.OneDerBasisFun(dim, 1, u, local_knots);
+                    if (dim == 0)
+                    {
+                        if (in_domain[in_curve_iter.cur_iter_full()])
+                            N(j, i) = mfa_data.OneBasisFun(dim, u, local_knots);
+                        else
+                            N(j, i) = mfa_data.OneDerBasisFun(dim, 1, u, local_knots);
+                    }
+                    else
+                    {
+                       N(j, i) = mfa_data.OneBasisFun(dim, u, local_knots); 
+                    }
+
 
                     in_curve_iter.incr_iter();
                 }

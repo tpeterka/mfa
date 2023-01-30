@@ -1860,7 +1860,7 @@ cout << "\n\nATTENTION: Using experimental separable constrained encode\n" << en
                     {
                         if (fixed_length)  // do nothing in fixed_length setting
                         {
-                            ray_input->domain(idx, new_dd) = 0;
+                            ray_input->domain(idx, new_dd) = 1000;
                             continue;
                         }
                         else                // else complain and zero-pad (this should not happen)
