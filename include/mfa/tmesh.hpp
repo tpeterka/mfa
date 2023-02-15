@@ -82,6 +82,12 @@ namespace mfa
         int                         cur_split_dim;      // current split dimension
         int                         max_level;          // deepest level of refinement
 
+#ifdef MFA_DEBUG_KNOT_INSERTION
+
+        TensorProduct<T>            debug_tensor_prod;  // used for viewing inserted control points
+
+#endif
+
         Tmesh(int               dom_dim,                // number of domain dimension
               const VectorXi&   p,                      // degree in each dimension
               int               min_dim,                // starting coordinate of this model in full-dimensional data
@@ -2254,7 +2260,14 @@ namespace mfa
             }
 
             VectorXi ijk = anchor_ctrl_pt_ijk(t, anchor, check);    // multidim local index of anchor
+
             VolIterator vol_iter(t.nctrl_pts);
+
+            // debug
+//             if (anchor[0] == 7 && anchor[1] == 5)
+//                 fmt::print(stderr, "anchor_ctrl_pt_idx(): ijk [{}] nctrl_pts [{}] idx {}\n",
+//                         ijk.transpose(), t.nctrl_pts.transpose(), vol_iter.ijk_idx(ijk));
+
             return vol_iter.ijk_idx(ijk);
         }
 

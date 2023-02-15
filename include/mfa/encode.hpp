@@ -1268,7 +1268,6 @@ namespace mfa
             auto& t             = tensor_prods[t_idx];
 
             vector<KnotIdx>     anchor(dom_dim);                                       // control point anchor
-            vector<KnotIdx>     inserted_anchor(dom_dim);                              // inserted control point anchor
             vector<int>         inserted_dims(dom_dim);                                // which dims actually added a knot and ctrl pt
 
             // local knot vector
@@ -1364,7 +1363,33 @@ namespace mfa
 
                 // find constraint control point aligned with curve
                 if (tmesh.anchor_matches_param(anchor, param))                                          // control point exists already
+                {
+
                     Pcons.row(i) = found_tensor.ctrl_pts.row(tmesh.anchor_ctrl_pt_idx(found_tensor, anchor));
+
+#ifdef MFA_DEBUG_KNOT_INSERTION
+
+                    // debug: add inserted control point to debug_tensor_prod for later visualization
+                    if (i == 0)
+                    {
+                        tmesh.debug_tensor_prod.ctrl_pts.conservativeResize(tmesh.debug_tensor_prod.ctrl_pts.rows() + 2, 1);
+                        tmesh.debug_tensor_prod.weights.conservativeResize(tmesh.debug_tensor_prod.weights.size() + 2);
+                        tmesh.debug_tensor_prod.nctrl_pts(1)++;
+                    }
+                    else
+                    {
+                        tmesh.debug_tensor_prod.ctrl_pts.row(tmesh.debug_tensor_prod.ctrl_pts.rows() - 2) = Pcons.row(i);
+                        tmesh.debug_tensor_prod.ctrl_pts.row(tmesh.debug_tensor_prod.ctrl_pts.rows() - 1) = Pcons.row(i - 1);
+                        tmesh.debug_tensor_prod.weights(tmesh.debug_tensor_prod.weights.size() - 2) = 1.0;
+                        tmesh.debug_tensor_prod.weights(tmesh.debug_tensor_prod.weights.size() - 1) = 1.0;
+                    }
+                    if (fabs(param(0) - 0.27778) < 0.001 && fabs(param(1) - 0.11558) < 0.001)
+                        fmt::print(stderr, "PrevConsCtrlPtCurve: param [{}] copying ctrl pt {} debug nctrl_pts [{}] debug nweights {}\n",
+                                param.transpose(), Pcons.row(i), tmesh.debug_tensor_prod.nctrl_pts.transpose(), tmesh.debug_tensor_prod.weights.size());
+
+#endif
+
+                }
                 else                                                                                    // control point needs to be inserted
                 {
                     TensorProduct<T>        new_tensor(found_tensor.knot_mins, found_tensor.knot_maxs, found_tensor.level); // temporary tensor to hold new control points
@@ -1380,12 +1405,45 @@ namespace mfa
                             new_tensor.weights,
                             inserted_dims);
 
-                    // adjust anchor by inserted dims
+                    // find which control point was inserted
+                    VectorXi ctrl_ijk = tmesh.anchor_ctrl_pt_ijk(found_tensor, anchor, false);
                     for (auto j = 0; j < dom_dim; j++)
-                        inserted_anchor[j] = anchor[j] + inserted_dims[j];
+                        ctrl_ijk(j) += inserted_dims[j];
+                    VolIterator vol_iter(new_tensor.nctrl_pts);
+                    size_t ctrl_idx = vol_iter.ijk_idx(ctrl_ijk);
 
                     // copy inserted control point into Pcons
-                    Pcons.row(i) = new_tensor.ctrl_pts.row(tmesh.anchor_ctrl_pt_idx(new_tensor, inserted_anchor, false));
+                    Pcons.row(i) = new_tensor.ctrl_pts.row(ctrl_idx);
+
+#ifdef MFA_DEBUG_KNOT_INSERTION
+
+                    // debug: add inserted control point to debug_tensor_prod for later visualization
+                    if (i == 0)
+                    {
+                        tmesh.debug_tensor_prod.ctrl_pts.conservativeResize(tmesh.debug_tensor_prod.ctrl_pts.rows() + 2, 1);
+                        tmesh.debug_tensor_prod.weights.conservativeResize(tmesh.debug_tensor_prod.weights.size() + 2);
+                        tmesh.debug_tensor_prod.nctrl_pts(1)++;
+                    }
+                    else
+                    {
+                        tmesh.debug_tensor_prod.ctrl_pts.row(tmesh.debug_tensor_prod.ctrl_pts.rows() - 2) = Pcons.row(i);
+                        tmesh.debug_tensor_prod.ctrl_pts.row(tmesh.debug_tensor_prod.ctrl_pts.rows() - 1) = Pcons.row(i - 1);
+                        tmesh.debug_tensor_prod.weights(tmesh.debug_tensor_prod.weights.size() - 2) = 1.0;
+                        tmesh.debug_tensor_prod.weights(tmesh.debug_tensor_prod.weights.size() - 1) = 1.0;
+                    }
+                    if (fabs(param(0) - 0.27778) < 0.001 && fabs(param(1) - 0.11558) < 0.001)
+                    {
+                        fmt::print(stderr, "PrevConsCtrlPtCurve: anchor [{}] inserted_dims [{}]\n",
+                                fmt::join(anchor, ","), fmt::join(inserted_dims, ","));
+                        fmt::print(stderr, "PrevConsCtrlPtCurve: param [{}] inserting new ctrl pt {} debug nctrl_pts [{}] debug weights {}\n",
+                                param.transpose(), Pcons.row(i), tmesh.debug_tensor_prod.nctrl_pts.transpose(), tmesh.debug_tensor_prod.weights.size());
+                        fmt::print(stderr, "PrevConsCtrlPtCurve: ctrl_ijk [{}] ctrl_idx {}\n", ctrl_ijk.transpose(), ctrl_idx);
+                        fmt::print(stderr, "\nPrevConsCtrlPtCurve: new tensor:\n");
+                        tmesh.print_tensor(new_tensor);
+                    }
+
+#endif
+
                 }
 
                 // offset anchor for next constraint
@@ -1422,7 +1480,6 @@ namespace mfa
             auto& t             = tensor_prods[t_idx];
 
             vector<KnotIdx>     anchor(dom_dim);                                       // control point anchor
-            vector<KnotIdx>     inserted_anchor(dom_dim);                              // inserted control point anchor
             vector<int>         inserted_dims(dom_dim);                                // which dims actually added a knot and ctrl pt
 
             // local knot vector
@@ -1540,12 +1597,15 @@ namespace mfa
                             new_tensor.weights,
                             inserted_dims);
 
-                    // adjust anchor by inserted dims
+                    // find which control point was inserted
+                    VectorXi ctrl_ijk = tmesh.anchor_ctrl_pt_ijk(found_tensor, anchor, false);
                     for (auto j = 0; j < dom_dim; j++)
-                        inserted_anchor[j] = anchor[j] + inserted_dims[j];
+                        ctrl_ijk(j) += inserted_dims[j];
+                    VolIterator vol_iter(new_tensor.nctrl_pts);
+                    size_t ctrl_idx = vol_iter.ijk_idx(ctrl_ijk);
 
                     // copy inserted control point into Pcons
-                    Pcons.row(ofst + i) = new_tensor.ctrl_pts.row(tmesh.anchor_ctrl_pt_idx(new_tensor, inserted_anchor, false));
+                    Pcons.row(ofst + i) = new_tensor.ctrl_pts.row(ctrl_idx);
                 }
 
                 // offset anchor for next constraint
@@ -2039,6 +2099,29 @@ namespace mfa
 //                         k, input.params->param_grid[k][dom_starts(k) + ndom_pts(k) - 1]);
 //             fmt::print(stderr, "\n");
 
+#ifdef MFA_DEBUG_KNOT_INSERTION
+
+            // debug: set up a debug tensor for inserted control points
+            // hardcoded to insert into tensor 0 with degree 2
+            tmesh.debug_tensor_prod.nctrl_pts.resize(dom_dim);
+            tmesh.debug_tensor_prod.nctrl_pts(0) = 2;
+            tmesh.debug_tensor_prod.nctrl_pts(1) = 0;
+            tmesh.debug_tensor_prod.next.resize(dom_dim);
+            tmesh.debug_tensor_prod.prev.resize(dom_dim);
+            tmesh.debug_tensor_prod.knot_idxs.resize(dom_dim);
+            tmesh.debug_tensor_prod.knot_idxs[0].resize(2);
+            tmesh.debug_tensor_prod.knot_idxs[0][0] =
+                tensor_prods[0].knot_idxs[0][tensor_prods[0].knot_idxs[0].size() - 2];
+            tmesh.debug_tensor_prod.knot_idxs[0][1] =
+                tensor_prods[0].knot_idxs[0][tensor_prods[0].knot_idxs[0].size() - 1];
+            tmesh.debug_tensor_prod.knot_idxs[1] = tensor_prods[0].knot_idxs[1];
+            tmesh.debug_tensor_prod.knot_mins = tensor_prods[0].knot_mins;
+            tmesh.debug_tensor_prod.knot_maxs = tensor_prods[0].knot_maxs;
+            tmesh.debug_tensor_prod.knot_mins[0] = tmesh.debug_tensor_prod.knot_maxs[0] - 2;
+            tmesh.debug_tensor_prod.level = tensor_prods[0].level;
+
+#endif
+
             // input and output number of points
             VectorXi nin_pts    = ndom_pts;
             VectorXi nout_pts   = npts;
@@ -2491,6 +2574,20 @@ namespace mfa
             // TODO: comment out after code is debugged
             if (!tmesh.check_local_knots())
                 throw MFAError(fmt::format("AdaptiveEncode(): Error: failed checking local knots of tensors\n"));
+
+#ifdef MFA_DEBUG_KNOT_INSERTION
+
+            // debug: append debug_tensor_product to tensor_prods so it can be visualized
+            // totally hacky, checking number of knots so that we don't do this for geometry
+            if (tmesh.all_knots[0].size() > 10)
+                tmesh.tensor_prods.push_back(tmesh.debug_tensor_prod);
+
+#endif
+
+            // debug: print tmesh
+            fmt::print(stderr, "\n----- final T-mesh -----\n\n");
+            tmesh.print(false, true, false, false);
+            fmt::print(stderr, "--------------------------\n\n");
         }
 
     private:

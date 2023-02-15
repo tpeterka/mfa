@@ -42,6 +42,9 @@
 // smaller tensors (larger by default)
 #define MFA_SMALLER_TENSORS
 
+// debug Boehm knot insertion
+// #define MFA_DEBUG_KNOT_INSERTION
+
 #include    <Eigen/Dense>
 #include    <Eigen/Sparse>
 #include    <Eigen/OrderingMethods>

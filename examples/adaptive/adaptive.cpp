@@ -87,6 +87,13 @@ int main(int argc, char** argv)
         return 1;
     }
 
+#ifdef MFA_DEBUG_KNOT_INSERTION
+
+    // debugging Boehm knot insertion, don't decode error
+    error = 0;
+
+#endif
+
     // start with minimal number of geometry control points if not specified
     if (geom_nctrl == -1)
         geom_nctrl = geom_degree + 1;

@@ -369,7 +369,7 @@ void PrepGeomCtrlPts(
                 else
                     knot_min = tc.knot_mins[k];
                 if (!tmesh.knot_idx_ofst(tc, knot_min, j, k, false, idx))
-                    throw mfa::MFAError(fmt::format("PrepCtrlPts(): unable to offset knot"));
+                    throw mfa::MFAError(fmt::format("PrepGeomCtrlPts(): unable to offset knot"));
 
                 float tsum = all_knots[k][idx];                         // odd degree, tsum is on the knot
 
@@ -381,12 +381,12 @@ void PrepGeomCtrlPts(
                     if (tc.knot_mins[k] == 0 && j == 1)
                     {
                         if (!tmesh.knot_idx_ofst(tc, idx, 1, k, false, idx1))
-                            throw mfa::MFAError(fmt::format("PrepCtrlPts(): unable to offset knot"));
+                            throw mfa::MFAError(fmt::format("PrepGeomCtrlPts(): unable to offset knot"));
                     }
                     else if (tc.knot_maxs[k] == all_knots[k].size() - 1 && j == tc.nctrl_pts(k) - 2)
                     {
                         if (!tmesh.knot_idx_ofst(tc, idx, -1, k, false, idx1))
-                            throw mfa::MFAError(fmt::format("PrepCtrlPts(): unable to offset knot"));
+                            throw mfa::MFAError(fmt::format("PrepGeomCtrlPts(): unable to offset knot"));
                     }
                     tsum += all_knots[k][idx1];
                     tsum /= 2.0;
@@ -396,7 +396,7 @@ void PrepGeomCtrlPts(
                 {
                     KnotIdx idx1;
                     if (!tmesh.knot_idx_ofst(tc, idx, 1, k, false, idx1))
-                        throw mfa::MFAError(fmt::format("PrepCtrlPts(): unable to offset knot"));
+                        throw mfa::MFAError(fmt::format("PrepGeomCtrlPts(): unable to offset knot"));
                     tsum += all_knots[k][idx1];
                     tsum /= 2.0;
                 }
@@ -616,6 +616,16 @@ void PrepSciCtrlPts(
 
             for (auto k = 0; k < ndom_dims; k++)                            // domain dimensions
             {
+
+#ifdef MFA_DEBUG_KNOT_INSERTION
+
+                // debug: inserted control points by Boehm knot insertion
+                // process these separately
+                if (t == tensor_prods.size() - 1)
+                    continue;
+
+#endif
+
                 for (auto j = 0; j < tc.nctrl_pts(k); j++)                  // control points
                 {
                     // offset the knot to the correct control point
@@ -625,7 +635,7 @@ void PrepSciCtrlPts(
                     else
                         knot_min = tc.knot_mins[k];
                     if (!tmesh.knot_idx_ofst(tc, knot_min, j, k, false, idx))
-                        throw mfa::MFAError(fmt::format("PrepCtrlPts(): unable to offset knot"));
+                        throw mfa::MFAError(fmt::format("PrepSciCtrlPts(): unable to offset knot"));
 
                     float tsum = all_knots[k][idx];                         // odd degree, tsum is on the knot
 
@@ -637,12 +647,12 @@ void PrepSciCtrlPts(
                         if (tc.knot_mins[k] == 0 && j == 1)
                         {
                             if (!tmesh.knot_idx_ofst(tc, idx, 1, k, false, idx1))
-                                throw mfa::MFAError(fmt::format("PrepCtrlPts(): unable to offset knot"));
+                                throw mfa::MFAError(fmt::format("PrepSciCtrlPts(): unable to offset knot"));
                         }
                         else if (tc.knot_maxs[k] == all_knots[k].size() - 1 && j == tc.nctrl_pts(k) - 2)
                         {
                             if (!tmesh.knot_idx_ofst(tc, idx, -1, k, false, idx1))
-                                throw mfa::MFAError(fmt::format("PrepCtrlPts(): unable to offset knot"));
+                                throw mfa::MFAError(fmt::format("PrepSciCtrlPts(): unable to offset knot"));
                         }
                         tsum += all_knots[k][idx1];
                         tsum /= 2.0;
@@ -652,7 +662,7 @@ void PrepSciCtrlPts(
                     {
                         KnotIdx idx1;
                         if (!tmesh.knot_idx_ofst(tc, idx, 1, k, false, idx1))
-                            throw mfa::MFAError(fmt::format("PrepCtrlPts(): unable to offset knot"));
+                            throw mfa::MFAError(fmt::format("PrepSciCtrlPts(): unable to offset knot"));
                         tsum += all_knots[k][idx1];
                         tsum /= 2.0;
                     }
@@ -715,12 +725,165 @@ void PrepSciCtrlPts(
     }   // science variables
 }
 
+#ifdef MFA_DEBUG_KNOT_INSERTION
+
+// for debugging, preps inserted control points in last tensor
+void PrepInsCtrlPts(
+        int&                        nvars,
+        vector< vector <vec3d> >&   vars_ctrl_pts,
+        float**&                    vars_ctrl_data,
+        Block<real_t>*              block)
+{
+    vars_ctrl_pts.resize(nvars);
+    vars_ctrl_data = new float*[nvars];
+    vec3d p;
+
+    for (size_t i = 0; i < nvars; i++)                                      // science variables
+    {
+        // typing shortcuts
+        auto& mfa_data          = block->vars[i].mfa_data;
+        auto& tmesh             = mfa_data->tmesh;
+        auto& tensor_prods      = tmesh.tensor_prods;
+        auto& all_knots         = tmesh.all_knots;
+        auto& all_knot_levels   = tmesh.all_knot_levels;
+        int ndom_dims           = block->geometry.mfa_data->tmesh.tensor_prods[0].ctrl_pts.cols();  // number of geometry dims
+        auto t                  = tensor_prods.size() - 1;
+        auto& tc                = block->vars[i].mfa_data->tmesh.tensor_prods[t];
+
+        size_t nctrl_pts = 0;
+        size_t prod = 1;
+        for (auto k = 0; k < ndom_dims; k++)
+            prod *= tc.nctrl_pts(k);
+        nctrl_pts += prod;
+        vars_ctrl_data[i] = new float[nctrl_pts];
+
+        // compute vectors of individual control point coordinates for the tensor product
+        vector<vector<float>> ctrl_pts_coords(ndom_dims);
+
+        for (auto k = 0; k < ndom_dims; k++)                            // domain dimensions
+        {
+            // debug: inserted control points by Boehm knot insertion
+            // totally hacky for one specific case
+            if (k > 0)
+            {
+                for (auto j = 0; j < tc.nctrl_pts(k); j++)
+                {
+                    ctrl_pts_coords[k].push_back(block->input->domain(j * block->input->ndom_pts(k), 1));
+                    fmt::print(stderr, "ctrl_pt[{}][1] = {}\n", j, ctrl_pts_coords[k].back());
+                }
+                continue;
+            }
+
+            for (auto j = 0; j < tc.nctrl_pts(k); j++)                  // control points
+            {
+                // offset the knot to the correct control point
+                KnotIdx knot_min, idx;
+                if (tc.knot_mins[k] == 0)
+                    knot_min = (mfa_data->p(k) + 1) / 2;
+                else
+                    knot_min = tc.knot_mins[k];
+                if (!tmesh.knot_idx_ofst(tc, knot_min, j, k, false, idx))
+                    throw mfa::MFAError(fmt::format("PrepInsCtrlPts(): unable to offset knot"));
+
+                float tsum = all_knots[k][idx];                         // odd degree, tsum is on the knot
+
+                // odd degree, second control point from global edge is an average
+                if ((mfa_data->p(k) % 2 == 1 && tc.knot_mins[k] == 0 && j == 1) ||
+                        (mfa_data->p(k) % 2 == 1 && tc.knot_maxs[k] == all_knots[k].size() - 1 && j == tc.nctrl_pts(k) - 2))
+                {
+                    KnotIdx idx1;
+                    if (tc.knot_mins[k] == 0 && j == 1)
+                    {
+                        if (!tmesh.knot_idx_ofst(tc, idx, 1, k, false, idx1))
+                            throw mfa::MFAError(fmt::format("PrepInsCtrlPts(): unable to offset knot"));
+                    }
+                    else if (tc.knot_maxs[k] == all_knots[k].size() - 1 && j == tc.nctrl_pts(k) - 2)
+                    {
+                        if (!tmesh.knot_idx_ofst(tc, idx, -1, k, false, idx1))
+                            throw mfa::MFAError(fmt::format("PrepInsCtrlPts(): unable to offset knot"));
+                    }
+                    tsum += all_knots[k][idx1];
+                    tsum /= 2.0;
+                }
+
+                if (mfa_data->p(k) % 2 == 0)                            // even degree, find center of knot span
+                {
+                    KnotIdx idx1;
+                    if (!tmesh.knot_idx_ofst(tc, idx, 1, k, false, idx1))
+                        throw mfa::MFAError(fmt::format("PrepInsCtrlPts(): unable to offset knot"));
+                    tsum += all_knots[k][idx1];
+                    tsum /= 2.0;
+                }
+                ctrl_pts_coords[k].push_back(block->core_mins(k) + tsum * (block->core_maxs(k) - block->core_mins(k)));
+
+                // debug
+                //                     fmt::print(stderr, "t {} k {} j {} tsum (param) {} ctrl_pts_coord {}\n",
+                //                             t, k, j, tsum, ctrl_pts_coords[k].back());
+
+            }   // control points
+        }   // domain dimensions
+
+        // form the tensor product of control points from the vectors of individual coordinates
+        VectorXi ofst = VectorXi::Zero(3);                                              // offset of indices for current tensor
+        mfa::VolIterator vol_iter(tc.nctrl_pts);
+        VectorXi ijk(ndom_dims);
+        while (!vol_iter.done())                                                    // control points
+        {
+            vol_iter.idx_ijk(vol_iter.cur_iter(), ijk);
+
+            if (tc.weights(vol_iter.cur_iter()) == MFA_NAW)
+            {
+                vol_iter.incr_iter();
+                continue;
+            }
+
+            // first 3 dims stored as mesh geometry
+            // control point position and optionally science variable, if the total fits in 3d
+            p.x = ctrl_pts_coords[0][ofst(0) + ijk(0)];
+            if (ndom_dims < 2)
+            {
+                p.y = tc.ctrl_pts(vol_iter.cur_iter(), 0);
+                p.z = 0.0;
+            }
+            else
+            {
+                p.y = ctrl_pts_coords[1][ofst(1) + ijk(1)];
+                if (ndom_dims < 3)
+                    p.z = tc.ctrl_pts(vol_iter.cur_iter(), 0);
+                else
+                    p.z = ctrl_pts_coords[2][ofst(2) + ijk(2)];
+            }
+            vars_ctrl_pts[i].push_back(p);
+
+            // science variable also stored as data
+            vars_ctrl_data[i][vars_ctrl_pts[i].size() - 1] = tc.ctrl_pts(vol_iter.cur_iter(), 0);
+
+            // debug
+            //                 fmt::print(stderr, "t {} ctrl_pt [{} {} {}]\n",
+            //                         t, vars_ctrl_pts[i].back().x, vars_ctrl_pts[i].back().y, vars_ctrl_data[i][vars_ctrl_pts[i].size() - 1]);
+
+            vol_iter.incr_iter();
+        }   // control points
+        ofst.head(ndom_dims) += tc.nctrl_pts;
+    }   // science variables
+}
+
+#endif
+
 // package rendering data
 void PrepRenderingData(
         int&                        nvars,
         vector<vec3d>&              geom_ctrl_pts,
         vector< vector <vec3d> >&   vars_ctrl_pts,
         float**&                    vars_ctrl_data,
+
+#ifdef MFA_DEBUG_KNOT_INSERTION
+
+        vector< vector <vec3d> >&   ins_ctrl_pts,
+        float**&                    ins_ctrl_data,
+
+#endif
+
         vector<int> &               nblend_pts,
         vector<vec3d>&              blend_pts,
         float**&                    blend_data,
@@ -747,6 +910,12 @@ void PrepRenderingData(
 
     // science variable control points
     PrepSciCtrlPts(nvars, vars_ctrl_pts, vars_ctrl_data, block);
+
+#ifdef MFA_DEBUG_KNOT_INSERTION
+
+    PrepInsCtrlPts(nvars, ins_ctrl_pts, ins_ctrl_data, block);
+
+#endif
 
     // approximated points
     if (block->ndom_outpts.rows())
@@ -791,6 +960,14 @@ void write_vtk_files(
     vector<vec3d>               geom_ctrl_pts;      // control points (<= 3d) in geometry
     vector < vector <vec3d> >   vars_ctrl_pts;      // control points (<= 3d) in science variables
     float**                     vars_ctrl_data;     // control point data values (4d)
+
+#ifdef MFA_DEBUG_KNOT_INSERTION
+
+    vector < vector <vec3d> >   ins_ctrl_pts;      // control points (<= 3d) inserted by Boehm knot insertion
+    float**                     ins_ctrl_data;     // control point data values (4d)
+
+#endif
+
     vector<int>                 nblend_pts;         // number of out points in each dim.
     vector<vec3d>               blend_pts;          // blended data points (<= 3d)
     vector<vec3d>               tensor_pts_real;    // tmesh tensor product extents in real space
@@ -803,6 +980,13 @@ void write_vtk_files(
                       geom_ctrl_pts,
                       vars_ctrl_pts,
                       vars_ctrl_data,
+
+#ifdef MFA_DEBUG_KNOT_INSERTION
+
+                      ins_ctrl_pts,
+                      ins_ctrl_data,
+#endif
+
                       nblend_pts,
                       blend_pts,
                       blend_data,
@@ -864,6 +1048,26 @@ void write_vtk_files(
             /* const char * const *varnames */              varnames,
             /* float **vars */                              vars_ctrl_data);
     }
+
+#ifdef MFA_DEBUG_KNOT_INSERTION
+
+    // write inserted control points
+    for (auto i = 0; i < nvars; i++)
+    {
+        snprintf(filename, 256, "var%d_inserted_points_gid_%d.vtk", i, cp.gid());
+        if (ins_ctrl_pts[i].size())
+            write_point_mesh(
+            /* const char *filename */                      filename,
+            /* int useBinary */                             0,
+            /* int npts */                                  ins_ctrl_pts[i].size(),
+            /* float *pts */                                &(ins_ctrl_pts[i][0].x),
+            /* int nvars */                                 nvars,
+            /* int *vardim */                               vardims,
+            /* const char * const *varnames */              varnames,
+            /* float **vars */                              vars_ctrl_data);
+    }
+
+#endif
 
     char input_filename[256];
     char approx_filename[256];

@@ -844,8 +844,8 @@ namespace mfa
         {
             // debug
             bool debug = false;
-            if (fabs(param(0) - 0.3333) < 1e-3 && fabs(param(1) - 0.0606) < 1e-3 && tensor_idx == 2)
-                debug = true;
+//             if (cur_dim == 1 && fabs(param(0) - 0.27778) < 0.001 && fabs(param(1) - 0.11558) < 0.001)
+//                 debug = true;
 
             auto&   tensor  = tmesh.tensor_prods[tensor_idx];
             T       u       = param(cur_dim);               // parameter in current dim.
@@ -879,7 +879,7 @@ namespace mfa
             }
             new_knots[global_span + 1]         = u;
             new_knot_levels[global_span + 1]   = level;
-            for (auto i = global_span + 1; i < old_ctrl_pts.rows() + p(cur_dim) + 1; i++)
+            for (auto i = global_span + 1; i < old_knots.size(); i++)
             {
                 new_knots[i + 1]        = old_knots[i];
                 new_knot_levels[i + 1]  = old_knot_levels[i];
@@ -901,7 +901,6 @@ namespace mfa
             if (tmesh.knot_idx_dist(tensor, tensor.knot_mins[cur_dim], global_span, cur_dim, false) < p(cur_dim) - 1 ||
                     tmesh.knot_idx_dist(tensor, global_span, tensor.knot_maxs[cur_dim], cur_dim, false) < p(cur_dim))
             {
-
                 int ctrl_pt = local_span - p(cur_dim) + shift;                      // index of last control point before insertion
 
                 // debug TODO remove once stable
@@ -1023,6 +1022,11 @@ namespace mfa
                 T alpha                 = (u - old_knots[ofst1]) / (old_knots[ofst2] - old_knots[ofst1]);
                 temp_ctrl_pts.row(i)    = alpha * temp_ctrl_pts.row(i + 1) + (1.0 - alpha) * temp_ctrl_pts.row(i);
                 temp_weights(i)         = alpha * temp_weights(i + 1) + (1.0 - alpha) * temp_weights(i);
+
+                // debug
+//                 if (debug)
+//                     fmt::print(stderr, "NewCurveKnotIns(): u {} local_span {} shift {} i {} old_knots[{}]={} old_knots[{}]={}\n",
+//                             u, local_span, shift, i, ofst1, old_knots[ofst1], ofst2, old_knots[ofst2]);
             }
 
             // load modified p(cur_dim) control points
@@ -1033,7 +1037,7 @@ namespace mfa
                 new_weights(i + shift)      = temp_weights(i - L);
 
                 // debug
-//                 if (shift)
+//                 if (debug)
 //                 {
 //                     if (i - L == p(cur_dim) / 2)
 //                         fmt::print(stderr, "NewCurveKnotInsertion() 3: inserting new control point at idx {} value [{}]\n", i + shift, new_ctrl_pts.row(i + shift));
@@ -1060,6 +1064,11 @@ namespace mfa
                 VectorXi&                   nctrl_pts,              // (input and output) number of control points in all dims
                 vector<int>&                inserted_dims) const    // which dims actually added a knot and ctrl pt
         {
+            // debug
+            bool debug = false;
+//             if (fabs(param(0) - 0.27778) < 0.001 && fabs(param(1) - 0.11558) < 0.001)
+//                 debug = true;
+
             auto&                         tensor          = tmesh.tensor_prods[tensor_idx];
             const vector<vector<T>>&      old_knots       = tmesh.all_knots;
             const vector<vector<int>>&    old_knot_levels = tmesh.all_knot_levels;
@@ -1219,9 +1228,17 @@ namespace mfa
                         CtrlPts2CtrlCurve(new_ctrl_pts, new_weights, old_curve_ctrl_pts,
                                 old_curve_weights, nctrl_pts, k, old_co[j], old_cs);
 
+                    // debug: print the last curve
+//                     if (debug && j == old_ncurves - 1)
+//                         fmt::print(stderr, "NewVolKnotIns(): param [{}] old_curve_ctrl_pts:\n [{}]\n", param.transpose(), old_curve_ctrl_pts.transpose());
+
                     // insert a knot in one curve of control points
                     NewCurveKnotIns(param, tensor_idx, k, old_knots[k], old_knot_levels[k], old_curve_ctrl_pts, old_curve_weights,
                             level, new_knots[k], new_knot_levels[k], new_curve_ctrl_pts, new_curve_weights);
+
+                    // debug: print the last curve
+//                     if (debug && j == old_ncurves - 1)
+//                         fmt::print(stderr, "NewVolKnotIns(): param [{}] new_curve_ctrl_pts:\n [{}]\n", param.transpose(), new_curve_ctrl_pts.transpose());
 
                     // copy new curve control points and weights
                     if (k % 2 == 0)

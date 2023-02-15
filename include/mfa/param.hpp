@@ -371,7 +371,7 @@ namespace mfa
                 mins = dom_mins;
                 maxs = dom_maxs;
             }
-            
+
             int npts = domain.rows();
             param_list.resize(npts, dom_dim);
 
@@ -382,7 +382,7 @@ namespace mfa
             {
                 param_list.col(k) = (domain.col(k).array() - mins(k)) * (1/diff(k));
             }
-        
+
             check_param_bounds();
         }
 
