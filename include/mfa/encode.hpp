@@ -773,14 +773,15 @@ namespace mfa
             auto& p             = mfa_data.p;
             auto& t             = tensor_prods[t_idx];
 
-            vector<KnotIdx>     anchor(dom_dim);                                       // control point anchor
-            vector<KnotIdx>     temp_anchor(dom_dim);                                  // temporary anchor
-            vector<KnotIdx>     inserted_anchor(dom_dim);                              // inserted control point anchor
-            vector<int>         inserted_dims(dom_dim);                                // which dims actually added a knot and ctrl pt
+            vector<KnotIdx>     anchor(dom_dim);                                        // control point anchor
+            vector<KnotIdx>     temp_anchor(dom_dim);                                   // temporary anchor
+            vector<KnotIdx>     inserted_anchor(dom_dim);                               // inserted control point anchor
+            vector<int>         new_knot_idxs(dom_dim, -1);                             // inserted positions of new knot in each dim (-1) if no change
+            vector<int>         new_ctrl_pt_idxs(dom_dim, -1);                          // inserted position of new ctrl pt in each dim (-1) if no change
 
             // local knot vector
-            vector<vector<KnotIdx>> local_knot_idxs(dom_dim);                          // local knot indices in all dims
-            vector<T> local_knots(p(dim) + 2);                                         // local knot vector for current dim
+            vector<vector<KnotIdx>> local_knot_idxs(dom_dim);                           // local knot indices in all dims
+            vector<T> local_knots(p(dim) + 2);                                          // local knot vector for current dim
             for (auto k = 0; k < dom_dim; k++)
                 local_knot_idxs[k].resize(p(k) + 2);
 
@@ -867,17 +868,15 @@ namespace mfa
                             new_knot_levels,
                             new_tensor.ctrl_pts,
                             new_tensor.weights,
-                            inserted_dims);
+                            new_knot_idxs,
+                            new_ctrl_pt_idxs);
 
-                    // adjust anchor by inserted dims
-                    for (auto j = 0; j < dom_dim; j++)
-                    {
-                        inserted_anchor[j] = anchor[j] + inserted_dims[j];
-                        new_tensor.knot_maxs[j] += inserted_dims[j];
-                    }
+                    // find which control point was inserted
+                    VolIterator vol_iter(new_tensor.nctrl_pts);
+                    size_t ctrl_idx = vol_iter.ijk_idx(new_ctrl_pt_idxs);
 
                     // copy inserted control point into P
-                    P.row(i) = new_tensor.ctrl_pts.row(tmesh.anchor_ctrl_pt_idx(new_tensor, inserted_anchor));
+                    P.row(i) = new_tensor.ctrl_pts.row(ctrl_idx);
                 }
             }       // control points
         }
@@ -1267,12 +1266,13 @@ namespace mfa
             auto& p             = mfa_data.p;
             auto& t             = tensor_prods[t_idx];
 
-            vector<KnotIdx>     anchor(dom_dim);                                       // control point anchor
-            vector<int>         inserted_dims(dom_dim);                                // which dims actually added a knot and ctrl pt
+            vector<KnotIdx>     anchor(dom_dim);                // control point anchor
+            vector<int>         new_knot_idxs(dom_dim, -1);     // inserted positions of new knot in each dim (-1) if no change
+            vector<int>         new_ctrl_pt_idxs(dom_dim, -1);  // inserted position of new ctrl pt in each dim (-1) if no change
 
             // local knot vector
             vector<KnotIdx> local_knot_idxs(p(dim) + 2);                                // local knot indices for current dim
-            vector<T> local_knots(p(dim) + 2);                                         // local knot vector for current dim
+            vector<T> local_knots(p(dim) + 2);                                          // local knot vector for current dim
 
             VectorX<T> param(dom_dim);
             VectorX<T> param_eps(dom_dim);                                              // param + small epsilon
@@ -1403,14 +1403,12 @@ namespace mfa
                             new_knot_levels,
                             new_tensor.ctrl_pts,
                             new_tensor.weights,
-                            inserted_dims);
+                            new_knot_idxs,
+                            new_ctrl_pt_idxs);
 
                     // find which control point was inserted
-                    VectorXi ctrl_ijk = tmesh.anchor_ctrl_pt_ijk(found_tensor, anchor, false);
-                    for (auto j = 0; j < dom_dim; j++)
-                        ctrl_ijk(j) += inserted_dims[j];
                     VolIterator vol_iter(new_tensor.nctrl_pts);
-                    size_t ctrl_idx = vol_iter.ijk_idx(ctrl_ijk);
+                    size_t ctrl_idx = vol_iter.ijk_idx(new_ctrl_pt_idxs);
 
                     // copy inserted control point into Pcons
                     Pcons.row(i) = new_tensor.ctrl_pts.row(ctrl_idx);
@@ -1433,11 +1431,10 @@ namespace mfa
                     }
                     if (fabs(param(0) - 0.27778) < 0.001 && fabs(param(1) - 0.11558) < 0.001)
                     {
-                        fmt::print(stderr, "PrevConsCtrlPtCurve: anchor [{}] inserted_dims [{}]\n",
-                                fmt::join(anchor, ","), fmt::join(inserted_dims, ","));
                         fmt::print(stderr, "PrevConsCtrlPtCurve: param [{}] inserting new ctrl pt {} debug nctrl_pts [{}] debug weights {}\n",
                                 param.transpose(), Pcons.row(i), tmesh.debug_tensor_prod.nctrl_pts.transpose(), tmesh.debug_tensor_prod.weights.size());
-                        fmt::print(stderr, "PrevConsCtrlPtCurve: ctrl_ijk [{}] ctrl_idx {}\n", ctrl_ijk.transpose(), ctrl_idx);
+                        fmt::print(stderr, "PrevConsCtrlPtCurve: new_ctrl_idxs [{}] ctrl_idx {}\n",
+                                fmt::join(new_ctrl_pt_idxs, ","), ctrl_idx);
                         fmt::print(stderr, "\nPrevConsCtrlPtCurve: new tensor:\n");
                         tmesh.print_tensor(new_tensor);
                     }
@@ -1479,8 +1476,9 @@ namespace mfa
             auto& p             = mfa_data.p;
             auto& t             = tensor_prods[t_idx];
 
-            vector<KnotIdx>     anchor(dom_dim);                                       // control point anchor
-            vector<int>         inserted_dims(dom_dim);                                // which dims actually added a knot and ctrl pt
+            vector<KnotIdx>     anchor(dom_dim);                // control point anchor
+            vector<int>         new_knot_idxs(dom_dim, -1);     // inserted positions of new knot in each dim (-1) if no change
+            vector<int>         new_ctrl_pt_idxs(dom_dim, -1);  // inserted position of new ctrl pt in each dim (-1) if no change
 
             // local knot vector
             vector<KnotIdx> local_knot_idxs(p(dim) + 2);                                // local knot indices for current dim
@@ -1595,14 +1593,12 @@ namespace mfa
                             new_knot_levels,
                             new_tensor.ctrl_pts,
                             new_tensor.weights,
-                            inserted_dims);
+                            new_knot_idxs,
+                            new_ctrl_pt_idxs);
 
                     // find which control point was inserted
-                    VectorXi ctrl_ijk = tmesh.anchor_ctrl_pt_ijk(found_tensor, anchor, false);
-                    for (auto j = 0; j < dom_dim; j++)
-                        ctrl_ijk(j) += inserted_dims[j];
                     VolIterator vol_iter(new_tensor.nctrl_pts);
-                    size_t ctrl_idx = vol_iter.ijk_idx(ctrl_ijk);
+                    size_t ctrl_idx = vol_iter.ijk_idx(new_ctrl_pt_idxs);
 
                     // copy inserted control point into Pcons
                     Pcons.row(ofst + i) = new_tensor.ctrl_pts.row(ctrl_idx);
@@ -2566,8 +2562,8 @@ namespace mfa
             int min_border      = 2 * mfa_data.p(0) + 1;                                            // min. size for global border tensors
             if (!tmesh.check_min_size(min_interior, min_border))
             {
-//                 fmt::print(stderr, "AdaptiveEncode(): Error: failed checking minimum size of tensors\n");
-                throw MFAError(fmt::format("AdaptiveEncode(): Error: failed checking minimum size of tensors\n"));
+                fmt::print(stderr, "AdaptiveEncode(): Error: failed checking minimum size of tensors\n");
+//                 throw MFAError(fmt::format("AdaptiveEncode(): Error: failed checking minimum size of tensors\n"));
             }
 
             // debug: verify that the local knots stored in all tensors correspond to the global knots
@@ -2585,9 +2581,9 @@ namespace mfa
 #endif
 
             // debug: print tmesh
-            fmt::print(stderr, "\n----- final T-mesh -----\n\n");
-            tmesh.print(false, true, false, false);
-            fmt::print(stderr, "--------------------------\n\n");
+//             fmt::print(stderr, "\n----- final T-mesh -----\n\n");
+//             tmesh.print(false, true, false, false);
+//             fmt::print(stderr, "--------------------------\n\n");
         }
 
     private:
