@@ -460,17 +460,22 @@ namespace mfa
             return idx_dim_(dim);
         }
 
-        // return current total iteration count
+        // return current iteration count
         size_t cur_iter() const       { return cur_iter_; }
+
+        // return total number of elements in slice
+        size_t tot_iters() const      { return tot_iters_; }
 
     };  // SliceIterator
 
     // a one-dimension curve of a VolIterator
     struct CurveIterator
     {
-        private:
+
 
         SliceIterator*          slice_iter_;        // the slice iterator containing the start of this curve
+        
+        private:
         size_t                  dom_dim_;           // number of domain dimensions in original volume
         size_t                  cur_iter_;          // current flattened iteration number
         VectorXi                idx_dim_;           // current index in each dimension in original volume

@@ -881,9 +881,9 @@ namespace mfa
                 int                     cur_dim,            // current dimension
                 int                     der,                // derivative order
                 T                       u,                  // parameter value
-                const vector<T>&        loc_knots) const    // local knot vector
+                const vector<T>&        loc_knots,          // local knot vector
+                BasisFunInfo<T>&        bfi) const    
         {
-            vector<T> N(p(cur_dim) + 1);                    // triangular table result
             const vector<T>& U = loc_knots;                 // alias for knot vector for current dimension (size p+2)
             const int pc = p(cur_dim);
 
@@ -896,80 +896,79 @@ namespace mfa
             // matrix from p. 70 of P&T
             // upper triangle is basis functions
             // lower triangle is knot differences
-            MatrixX<T> nn(pc + 1, pc + 1);
-
+            // nn ~ bfi.ndu
             for (int j = 0; j <= pc; j++)
             {
                 if (u >= U[j] && u < U[j+1])
-                    nn(j,0) = 1;
+                    bfi.ndu[j][0] = 1;
                 else
-                    nn(j,0) = 0;
+                    bfi.ndu[j][0] = 0;
             }
 
             for (int k = 1; k <= pc; k++)
             {
-                if (nn(0, k-1) == 0) 
+                if (bfi.ndu[0][k-1] == 0) 
                     saved = 0;
                 else 
-                    saved = ((u - U[0]) * nn(0, k-1)) / (U[k] - U[0]);
+                    saved = ((u - U[0]) * bfi.ndu[0][k-1]) / (U[k] - U[0]);
                 
                 for (int j = 0; j < pc - k + 1; j++)
                 {
                     uleft = U[j+1];
                     uright = U[j+k+1];
 
-                    if (nn(j+1, k-1) == 0)
+                    if (bfi.ndu[j+1][k-1] == 0)
                     {
-                        nn(j,k) = saved;
+                        bfi.ndu[j][k] = saved;
                         saved = 0;
                     }
                     else
                     {
-                        temp = nn(j+1, k-1) / (uright - uleft);
-                        nn(j,k) = saved + (uright - u)*temp;
+                        temp = bfi.ndu[j+1][k-1] / (uright - uleft);
+                        bfi.ndu[j][k] = saved + (uright - u)*temp;
                         saved = (u-uleft) * temp;
                     }
                 }
             }
 
             if (der == 0)
-                return nn(0,pc);    // nn(0,pc) is the 0th-order derivative (function value)
+                return bfi.ndu[0][pc];    // bfi.ndu[0][pc] is the 0th-order derivative (function value)
 
             // Copy the necessary basis functions to a new buffer 'dertable'
             // dertable will compute intermediate calculations for the requested derivative
             // We make the copy so that nn is not overwritten (but this may not be necessary)
-            VectorX<T> dertable(der+1);
-            for (int j = 0; j <= der; j++)
-                dertable(j) = nn(j, pc-der);
+            // VectorX<T> dertable(der+1);
+            // for (int j = 0; j <= der; j++)
+            //     dertable(j) = nn(j, pc-der);
 
             // compute the derivative of order 'der'
             // NOTE: does not compute lower order derivatives
             for (int l = 1; l <= der; l++)
             {
-                if (dertable(0) == 0) 
+                if (bfi.ndu[0][pc-der] == 0) 
                     saved = 0;
                 else
-                    saved = dertable(0) / (U[pc - der + l] - U[0]);
+                    saved = bfi.ndu[0][pc-der] / (U[pc - der + l] - U[0]);
 
                 for (int j = 0; j < der - l + 1; j++)
                 {
                     uleft = U[j+1];
                     uright = U[j + 1 + pc - der + l];
-                    if (dertable(j+1) == 0)
+                    if (bfi.ndu[j+1][pc-der] == 0)
                     {
-                        dertable(j) = (pc - der + l)*saved;
+                        bfi.ndu[j][pc-der] = (pc - der + l)*saved;
                         saved = 0;
                     }
                     else
                     {
-                        temp = dertable(j+1) / (uright - uleft);
-                        dertable(j) = (pc - der + l)*(saved - temp);
+                        temp = bfi.ndu[j+1][pc-der] / (uright - uleft);
+                        bfi.ndu[j][pc-der] = (pc - der + l)*(saved - temp);
                         saved = temp;
                     }
                 }
             }
 
-            return dertable(0);
+            return bfi.ndu[0][pc-der];
         }
 
         // computes one row of basis function values for a given parameter value

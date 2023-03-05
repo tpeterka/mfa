@@ -631,6 +631,211 @@ namespace mfa
 
 #ifdef MFA_TBB
 
+        // computes and returns one differentiated basis function value 
+        // for a given parameter value and local knot vector
+        // Algorithm 2.5 in P&T
+        //
+        // NOTE Algorithm 2.5 in P&T has an error: 
+        //   In the loop "compute table of width k," Uright
+        //   Should be U[i+j+p-k+jj+1], instead of U[i+j+p+jj+1]
+        T OneDerBasisFun(
+                int                     cur_dim,            // current dimension
+                int                     der,                // derivative order
+                T                       u,                  // parameter value
+                const vector<T>&        loc_knots,          // local knot vector
+                BasisFunInfo<T>&        bfi) const    
+        {
+            const vector<T>& U = loc_knots;                 // alias for knot vector for current dimension (size p+2)
+            const int pc = p(cur_dim);
+
+            // If not in local support
+            if (u < U[0] || u >= U[pc + 1])
+                return 0;
+
+            T saved = 0, uleft = 0, uright = 0, temp = 0;
+
+            // matrix from p. 70 of P&T
+            // upper triangle is basis functions
+            // lower triangle is knot differences
+            // nn ~ bfi.ndu
+            for (int j = 0; j <= pc; j++)
+            {
+                if (u >= U[j] && u < U[j+1])
+                    bfi.ndu[j][0] = 1;
+                else
+                    bfi.ndu[j][0] = 0;
+            }
+
+            for (int k = 1; k <= pc; k++)
+            {
+                if (bfi.ndu[0][k-1] == 0) 
+                    saved = 0;
+                else 
+                    saved = ((u - U[0]) * bfi.ndu[0][k-1]) / (U[k] - U[0]);
+                
+                for (int j = 0; j < pc - k + 1; j++)
+                {
+                    uleft = U[j+1];
+                    uright = U[j+k+1];
+
+                    if (bfi.ndu[j+1][k-1] == 0)
+                    {
+                        bfi.ndu[j][k] = saved;
+                        saved = 0;
+                    }
+                    else
+                    {
+                        temp = bfi.ndu[j+1][k-1] / (uright - uleft);
+                        bfi.ndu[j][k] = saved + (uright - u)*temp;
+                        saved = (u-uleft) * temp;
+                    }
+                }
+            }
+
+            if (der == 0)
+                return bfi.ndu[0][pc];    // bfi.ndu[0][pc] is the 0th-order derivative (function value)
+
+            // Copy the necessary basis functions to a new buffer 'dertable'
+            // dertable will compute intermediate calculations for the requested derivative
+            // We make the copy so that nn is not overwritten (but this may not be necessary)
+            // VectorX<T> dertable(der+1);
+            // for (int j = 0; j <= der; j++)
+            //     dertable(j) = nn(j, pc-der);
+
+            // compute the derivative of order 'der'
+            // NOTE: does not compute lower order derivatives
+            for (int l = 1; l <= der; l++)
+            {
+                if (bfi.ndu[0][pc-der] == 0) 
+                    saved = 0;
+                else
+                    saved = bfi.ndu[0][pc-der] / (U[pc - der + l] - U[0]);
+
+                for (int j = 0; j < der - l + 1; j++)
+                {
+                    uleft = U[j+1];
+                    uright = U[j + 1 + pc - der + l];
+                    if (bfi.ndu[j+1][pc-der] == 0)
+                    {
+                        bfi.ndu[j][pc-der] = (pc - der + l)*saved;
+                        saved = 0;
+                    }
+                    else
+                    {
+                        temp = bfi.ndu[j+1][pc-der] / (uright - uleft);
+                        bfi.ndu[j][pc-der] = (pc - der + l)*(saved - temp);
+                        saved = temp;
+                    }
+                }
+            }
+
+            return bfi.ndu[0][pc-der];
+        }
+
+                // computes and returns one differentiated basis function value 
+        // for a given parameter value and local knot vector
+        // Algorithm 2.5 in P&T
+        //
+        // NOTE Algorithm 2.5 in P&T has an error: 
+        //   In the loop "compute table of width k," Uright
+        //   Should be U[i+j+p-k+jj+1], instead of U[i+j+p+jj+1]
+        T OneDerBasisFun(
+                int                     cur_dim,            // current dimension
+                int                     der,                // derivative order
+                T                       u,                  // parameter value
+                const vector<T>&        loc_knots) const    // local knot vector
+        {
+            vector<T> N(p(cur_dim) + 1);                    // triangular table result
+            const vector<T>& U = loc_knots;                 // alias for knot vector for current dimension (size p+2)
+            const int pc = p(cur_dim);
+
+            // If not in local support
+            if (u < U[0] || u >= U[pc + 1])
+                return 0;
+
+            T saved = 0, uleft = 0, uright = 0, temp = 0;
+
+            // matrix from p. 70 of P&T
+            // upper triangle is basis functions
+            // lower triangle is knot differences
+            MatrixX<T> nn(pc + 1, pc + 1);
+
+            for (int j = 0; j <= pc; j++)
+            {
+                if (u >= U[j] && u < U[j+1])
+                    nn(j,0) = 1;
+                else
+                    nn(j,0) = 0;
+            }
+
+            for (int k = 1; k <= pc; k++)
+            {
+                if (nn(0, k-1) == 0) 
+                    saved = 0;
+                else 
+                    saved = ((u - U[0]) * nn(0, k-1)) / (U[k] - U[0]);
+                
+                for (int j = 0; j < pc - k + 1; j++)
+                {
+                    uleft = U[j+1];
+                    uright = U[j+k+1];
+
+                    if (nn(j+1, k-1) == 0)
+                    {
+                        nn(j,k) = saved;
+                        saved = 0;
+                    }
+                    else
+                    {
+                        temp = nn(j+1, k-1) / (uright - uleft);
+                        nn(j,k) = saved + (uright - u)*temp;
+                        saved = (u-uleft) * temp;
+                    }
+                }
+            }
+
+            if (der == 0)
+                return nn(0,pc);    // nn(0,pc) is the 0th-order derivative (function value)
+
+            // Copy the necessary basis functions to a new buffer 'dertable'
+            // dertable will compute intermediate calculations for the requested derivative
+            // We make the copy so that nn is not overwritten (but this may not be necessary)
+            VectorX<T> dertable(der+1);
+            for (int j = 0; j <= der; j++)
+                dertable(j) = nn(j, pc-der);
+
+            // compute the derivative of order 'der'
+            // NOTE: does not compute lower order derivatives
+            for (int l = 1; l <= der; l++)
+            {
+                if (dertable(0) == 0) 
+                    saved = 0;
+                else
+                    saved = dertable(0) / (U[pc - der + l] - U[0]);
+
+                for (int j = 0; j < der - l + 1; j++)
+                {
+                    uleft = U[j+1];
+                    uright = U[j + 1 + pc - der + l];
+                    if (dertable(j+1) == 0)
+                    {
+                        dertable(j) = (pc - der + l)*saved;
+                        saved = 0;
+                    }
+                    else
+                    {
+                        temp = dertable(j+1) / (uright - uleft);
+                        dertable(j) = (pc - der + l)*(saved - temp);
+                        saved = temp;
+                    }
+                }
+            }
+
+            return dertable(0);
+        }
+
+
+
         // Computes the product of two Eigen sparse matrices using TBB.  All matrices must be in column major format.
         void MatProdThreaded(   Eigen::SparseMatrix<T, Eigen::ColMajor>& lhs,
                                 Eigen::SparseMatrix<T, Eigen::ColMajor>& rhs,
@@ -842,6 +1047,11 @@ namespace mfa
         {
             double t0 = MPI_Wtime();
 
+            if (verbose)
+            {
+                cerr << "Starting EncodeSeparableConstrained" << endl;
+            }
+
             if (mfa_data.tmesh.tensor_prods.size() != 1)
             {
                 cerr << "ERROR: Encoder::EncodeSeparableConstrained only implemented for single tensor tmesh" << endl;
@@ -853,6 +1063,9 @@ namespace mfa
             auto& tensor_prods  = tmesh.tensor_prods;
             auto& t             = tensor_prods[t_idx];    // current tensor product
             const int pt_dim    = mfa_data.dim();         // control point dimensionality
+
+            VectorXi            q = mfa_data.p + VectorXi::Ones(dom_dim);  // order of basis funs
+            BasisFunInfo<T>     bfi(q);                                    // buffers for basis fun evaluation
 
             // get input domain points covered by the tensor
             vector<size_t> start_idxs(dom_dim);
@@ -868,6 +1081,8 @@ namespace mfa
                 dom_starts(k)   = start_idxs[k];
             }
 
+cerr << "dom_starts" << dom_starts << endl;
+
             // resize control points and weights in case number of control points changed
             t.ctrl_pts.resize(t.nctrl_pts.prod(), pt_dim);
             t.weights = VectorX<T>::Ones(t.ctrl_pts.rows());           // linear solve does not solve for weights; set to 1
@@ -877,6 +1092,11 @@ namespace mfa
             // (double buffering output control points to input points)
             MatrixX<T> Q0(ndom_pts.prod(), pt_dim);
             MatrixX<T> Q1(ndom_pts.prod(), pt_dim);
+
+            if (verbose)
+            {
+                cerr << "  begin buffer setup" << endl;
+            }
 
             // Fill Q0 buffer from input PointSet.
             // Doing this ahead of time allows us to stop thinking in terms of 
@@ -892,26 +1112,32 @@ namespace mfa
             VectorXi start_ijk;
             VectorXi nin_pts    = ndom_pts;
             VectorXi nout_pts   = ndom_pts;
-            nout_pts(0) = t.nctrl_pts(0);
+            // nout_pts(0) = t.nctrl_pts(0);
+nout_pts(dom_dim-1) = t.nctrl_pts(dom_dim-1);
 
             for (auto dim = 0; dim < dom_dim; dim++)                                    // for all domain dimensions
             {
-                MatrixX<T>      R(nin_pts(dim), pt_dim);                    // RHS for solving N * P = R
+                int altdim = dom_dim - dim - 1; // TRY: reverse order of encoded dimensions
+                if (verbose)
+                {
+                    cerr << "  begin encoding dimension " << altdim << endl;
+                }
+                MatrixX<T>      R(nin_pts(altdim), pt_dim);                    // RHS for solving N * P = R
                 VolIterator     in_iter(nin_pts);                           // volume of current input points
                 VolIterator     out_iter(nout_pts);                         // volume of current output points
-                SliceIterator   in_slice_iter(in_iter, dim);                // slice of input points volume missing current dim
-                SliceIterator   out_slice_iter(out_iter, dim);              // slice of output points volume missing current dim
+                SliceIterator   in_slice_iter(in_iter, altdim);                // slice of input points volume missing current dim
+                SliceIterator   out_slice_iter(out_iter, altdim);              // slice of output points volume missing current dim
 
                 // allocate matrices of free and constraint control points and constraint basis functions
-                MatrixX<T>  N(nin_pts(dim), t.nctrl_pts(dim));
-                MatrixX<T>  P(t.nctrl_pts(dim), pt_dim);
+                MatrixX<T>  N(nin_pts(altdim), t.nctrl_pts(altdim));
+                Eigen::LDLT<MatrixX<T>> NtN_ldlt;
+                MatrixX<T>  P(t.nctrl_pts(altdim), pt_dim);
 
                 vector<bool> in_domain(nin_pts.prod(), false);
-                vector<T> param_buffer(nin_pts(dim), 0);
-                set_in_domain_flags(t_idx, dim, dom_starts, in_domain, param_buffer, in_slice_iter);
+                set_in_domain_flags(t_idx, altdim, dom_starts, in_domain, in_slice_iter);
 
                 VolIterator itc(in_iter);
-                string fname = "indomain"+to_string(dim)+".txt";
+                string fname = "indomain"+to_string(altdim)+".txt";
                 ofstream of(fname);
                 while (!itc.done())
                 {
@@ -926,9 +1152,23 @@ namespace mfa
                 }
                 of.close();
 
+                if (verbose)
+                {
+                    cerr << "    starting curve iteration" << endl;
+                }
+std::chrono::time_point<std::chrono::high_resolution_clock> t1, t2, t3, t4;
+auto duration1 = 0;
+auto duration2 = 0;
+auto duration3 = 0;
+                // Tracks previous curve to avoid redundant computation when possible
+                // Always ignored for first curve of a slice
+                vector<bool> prev_curve_in_domain(nin_pts(altdim), 0);
+
                 // for all curves in the current dimension
                 while (!in_slice_iter.done())
                 {
+                    fprintf(stderr, "\r iteration %d of %d", in_slice_iter.cur_iter(), in_slice_iter.tot_iters());
+
                     CurveIterator   in_curve_iter(in_slice_iter);       // one curve of the input points in the current dim
                     CurveIterator   out_curve_iter(out_slice_iter);     // one curve of the output points in the current dim
 
@@ -940,7 +1180,10 @@ namespace mfa
                     for (int j = dim; j < dom_dim; j++)
                         start_ijk(j) += dom_starts(j);
 
-                    ComputeCtrlPtCurveReg(in_curve_iter, t_idx, dim, R, Q0, Q1, N, P, in_domain, nin_pts, start_ijk);
+                    ComputeCtrlPtCurveReg(in_curve_iter, prev_curve_in_domain, t_idx, altdim, R, Q0, Q1, N, NtN_ldlt, P, in_domain, nin_pts, start_ijk, t1, t2, t3, t4, bfi);
+duration1 += std::chrono::duration_cast<std::chrono::milliseconds>(t2 - t1).count();
+duration2 += std::chrono::duration_cast<std::chrono::milliseconds>(t3 - t2).count();
+duration3 += std::chrono::duration_cast<std::chrono::milliseconds>(t4 - t3).count();
 
                     // copy solution to one curve of output points
                     while (!out_curve_iter.done())
@@ -955,12 +1198,19 @@ namespace mfa
                     out_slice_iter.incr_iter();
                     in_slice_iter.incr_iter();
                 }       // for all curves
-
+                cerr << endl;
+cerr << "duration1: " << duration1 << endl;
+cerr << "duration2: " << duration2 << endl;
+cerr << "duration3: " << duration3 << endl;
 
                 // adjust input, output numbers of points for next iteration
-                nin_pts(dim) = t.nctrl_pts(dim);
-                if (dim < dom_dim - 1)
-                    nout_pts(dim + 1) = t.nctrl_pts(dim + 1);
+                nin_pts(altdim) = t.nctrl_pts(altdim);
+                // if (dim < dom_dim - 1)
+                    // nout_pts(dim + 1) = t.nctrl_pts(dim + 1);
+
+                if (altdim > 0)
+                    nout_pts(altdim - 1) = t.nctrl_pts(altdim - 1);
+
             }       // for all domain dimensions
 
             // copy final result back to tensor product
@@ -978,7 +1228,6 @@ namespace mfa
             int dim, 
             VectorXi& dom_starts,
             vector<bool>& in_domain, 
-            vector<T>& param_buffer, 
             SliceIterator slice_iter)   // important! pass by value to make local copy,
                                         // Want to reuse slice_iter in calling function
         {
@@ -1003,7 +1252,8 @@ namespace mfa
                 // for start of the curve, for dims prior to current dim, find anchor and param
                 // those dims are in control point index space for the current tensor
                 int offset = (mfa_data.p(dim) + 1)/2;
-                for (auto i = 0; i < dim; i++)
+                // for (auto i = 0; i < dim; i++)
+for (int i = dom_dim - 1; i > dim; i--)
                 {
                     mfa_data.tmesh.knot_idx_ofst(t, t.knot_mins[i], start_ijk(i) + offset, i, false, anchor[i]);                     // computes anchor as offset from start of tensor
                     param(i)    = mfa_data.tmesh.all_knots[i][anchor[i]];
@@ -1013,13 +1263,15 @@ namespace mfa
 
                 // for the start of the curve, for current dim. and higher, find param
                 // these dims are in the input point index space
-                for (auto i = dim; i < dom_dim; i++)
+                // for (auto i = dim; i < dom_dim; i++)
+for (int i = dim; i >= 0; i--)
                     param(i) = input.params->param_grid[i][start_ijk(i)];
 
                 // for the start of the curve, for higher than the current dim, find anchor
                 // these dims are in the input point space
                 // in the current dim, the anchor coordinate will be replaced below by the control point anchor
-                for (auto i = dim + 1; i < dom_dim; i++)
+                // for (auto i = dim + 1; i < dom_dim; i++)
+for (int i = dim - 1; i >= 0; i--)
                 {
                     // if param == 0, FindSpan finds the last 0-value knot span, but we want the first control point anchor, which is an earlier span
                     if (param(i) == 0.0)
@@ -1041,7 +1293,6 @@ namespace mfa
                     T u = input.params->param_grid[dim][cur_ijk(dim) + c_iter.cur_iter()];
                     param(dim) = u;
 // cout << "." << endl;
-                    param_buffer[c_iter.cur_iter()] = u;
 
                     T u_t     = param(0);
                     T u_rho   = param(1);
@@ -1088,20 +1339,31 @@ namespace mfa
         // computes curve of free control points in one dimension
         void ComputeCtrlPtCurveReg(
                 CurveIterator&          in_curve_iter,                  // current curve
+                vector<bool>&           prev_curve_in_domain,             // previous curve
                 TensorIdx               t_idx,                          // index of current tensor
                 int                     dim,                            // current curve dimension
                 MatrixX<T>&             R,                              // right hand side, allocated by caller
                 MatrixX<T>&             Q0,                              // first matrix of input points, allocated by caller
                 MatrixX<T>&             Q1,                             // second matrix of input points, allocated by caller
                 MatrixX<T>&             N,                          // free basis functions, allocated by caller
+                Eigen::LDLT<MatrixX<T>>& NtN_ldlt,
                 MatrixX<T>&             P,                              // (output) solution control points, allocated by caller
                 const vector<bool>&           in_domain,  // flags which points are in domain
                 const VectorXi&         nin_pts,                        // number of input points
-                const VectorXi&         start_ijk)                      // i,j,k of start of input points
+                const VectorXi&         start_ijk,                      // i,j,k of start of input points
+                std::chrono::time_point<std::chrono::high_resolution_clock>& t1,
+                std::chrono::time_point<std::chrono::high_resolution_clock>& t2,
+                std::chrono::time_point<std::chrono::high_resolution_clock>& t3,
+                std::chrono::time_point<std::chrono::high_resolution_clock>& t4,
+                BasisFunInfo<T>&        bfi)
         {
             auto& t = mfa_data.tmesh.tensor_prods[t_idx];
             VectorXi cur_ijk = start_ijk;
+            bool same_pattern = true;
 
+            int dimcount = dom_dim - dim - 1;
+
+t1 = std::chrono::high_resolution_clock::now();
             // copy one curve of input points to right hand side
             // add zero entries for rows that will correspond to deriv constraints
             while (!in_curve_iter.done())
@@ -1111,23 +1373,32 @@ namespace mfa
                 // int ct_idx = dom_dim * pt_idx;          // constraint index. there are dom_dim of these per point index
                 cur_ijk = in_curve_iter.cur_ijk();      // ijk coordinates in full dimensional volume
                 
-                if (dim == 0)
+                if (dimcount == 0)
                 {
+                    // If the in_domain pattern of the curve matches the previous
+                    // curve, we can avoid the expensive computation and factorization
+                    // of N.
+                    if (in_domain[vol_idx] != prev_curve_in_domain[curve_idx])
+                    {
+                        same_pattern = false;
+                    }
+                    prev_curve_in_domain[curve_idx] = in_domain[vol_idx]; // save for next curve
+
                     if (in_domain[vol_idx])
                     {
-                        if (dim % 2 == 0)
+                        if (dimcount % 2 == 0)
                             R.row(curve_idx) = Q0.row(vol_idx);
                         else
                             R.row(curve_idx) = Q1.row(vol_idx);
 
 
-                        if (dim % 2 == 0)
+                        if (dimcount % 2 == 0)
                         {
                             if (Q0(vol_idx, 0) == 1000.0)
                             {
                                 cerr << "------\n";
                                 cerr << "idx: " << cur_ijk.transpose() << endl;
-                                cerr << "dim " << dim << ", in_domain=true" << endl;
+                                cerr << "dimcount " << dimcount << ", in_domain=true" << endl;
                                 cerr << Q0.row(vol_idx) << endl;
                             }
                         }
@@ -1137,7 +1408,7 @@ namespace mfa
                             {
                                 cerr << "------\n";
                                 cerr << "idx: " << cur_ijk.transpose() << endl;
-                                cerr << "dim " << dim << ", in_domain=true" << endl;
+                                cerr << "dimcount " << dimcount << ", in_domain=true" << endl;
                                 cerr << Q1.row(vol_idx) << endl;
                             }
                         }
@@ -1145,13 +1416,13 @@ namespace mfa
                     else
                     {
                         R.row(curve_idx).setZero();
-                        if (dim % 2 == 0)
+                        if (dimcount % 2 == 0)
                         {
                             if (Q0(vol_idx,0) != 1000)
                             {
                                 cerr << "------\n";
                                 cerr << "idxlin: " << cur_ijk.transpose() << endl;
-                                cerr << "dim " << dim << ", in_domain=false" << endl;
+                                cerr << "dimcount " << dimcount << ", in_domain=false" << endl;
                                 cerr << "Q0: " << Q0(vol_idx,0) << endl;
                                 cerr << hexfloat << Q0(vol_idx,0) << endl;
                                 cerr << hexfloat << 1000 << endl;
@@ -1164,7 +1435,7 @@ namespace mfa
                                 cerr << "------\n";
                                 cerr << "idx: " << cur_ijk.transpose() << endl;
                                 cerr << "idxlin: " << vol_idx << endl;
-                                cerr << "dim " << dim << ", in_domain=false" << endl;
+                                cerr << "dimcount " << dimcount << ", in_domain=false" << endl;
                                 cerr << "Q1: " << Q1(vol_idx,0) << endl;
                                 cerr << hexfloat << Q0(vol_idx,0) << endl;
                                 cerr << hexfloat << 1000 << endl;
@@ -1174,31 +1445,37 @@ namespace mfa
                 }
                 else
                 {
-                    if (dim % 2 == 0)
+                    if (dimcount % 2 == 0)
                         R.row(curve_idx) = Q0.row(vol_idx);
                     else
                         R.row(curve_idx) = Q1.row(vol_idx);
                 }
                 
-
                 in_curve_iter.incr_iter();
             }
             in_curve_iter.reset();
 
-            // find matrix of free control point basis functions
-            double t0 = MPI_Wtime();
-            ComputeControlCurveMat(dim, t_idx, start_ijk, in_curve_iter, in_domain, nin_pts(dim), N);
-    
-    // cerr << "PRINTING N: " << '\n' << N << endl;
-    // cerr << "PRINTING R: " << '\n' << R << endl;
-    // cerr << R.maxCoeff() << " " << flush;
-            // debug: check matrix product sizes
-            // TODO: remove once stable
-            if (N.rows() != R.rows() || P.rows() != N.cols())
-                throw MFAError(fmt::format("ComputeCtrlPtCurve(): Nfree.rows() {} should equal R.rows {} and P.rows() {} should equal Nfree.cols() {}\n",
-                        N.rows(), R.rows(), P.rows(), N.cols()));
+t2 = std::chrono::high_resolution_clock::now();
 
-            P = (N.transpose() * N).ldlt().solve(N.transpose() * R);
+            // find matrix of free control point basis functions
+cerr << "samepattern: " << boolalpha << same_pattern << ", idx: " << in_curve_iter.slice_iter_->cur_iter();
+            double t0 = MPI_Wtime();
+            if ((dimcount == 0 && same_pattern == false) || in_curve_iter.slice_iter_->cur_iter() == 0)
+            {
+cerr << "recompute";
+                ComputeControlCurveMat(dim, t_idx, start_ijk, in_curve_iter, in_domain, nin_pts(dim), N, bfi);
+            }
+cerr << endl;
+
+t3 = std::chrono::high_resolution_clock::now();
+            if ((dimcount == 0 && same_pattern == false) || in_curve_iter.slice_iter_->cur_iter() == 0)
+            {
+                NtN_ldlt = (N.transpose() * N).ldlt();
+            }
+            P = NtN_ldlt.solve(N.transpose() * R);
+            
+
+t4 = std::chrono::high_resolution_clock::now();
 
             // debug
             // MatrixXd::Index max_row, max_col;
@@ -1218,7 +1495,8 @@ namespace mfa
                 CurveIterator&      in_curve_iter,
                 const vector<bool>& in_domain,
                 size_t              npts,               // number of input points in current dim, including constraints
-                MatrixX<T>&         N)              // (output) matrix of free control points basis functions
+                MatrixX<T>&         N,              // (output) matrix of free control points basis functions
+                BasisFunInfo<T>&    bfi)
         {
             const TensorProduct<T>& t = mfa_data.tmesh.tensor_prods[t_idx];
             const int der_order = 1;
@@ -1246,7 +1524,8 @@ namespace mfa
             // for start of the curve, for dims prior to current dim, find anchor and param
             // those dims are in control point index space for the current tensor
             int offset = (mfa_data.p(dim) + 1)/2;
-            for (auto i = 0; i < dim; i++)
+            // for (auto i = 0; i < dim; i++)
+for (int i = dom_dim - 1; i > dim; i--)
             {
                 mfa_data.tmesh.knot_idx_ofst(t, t.knot_mins[i], start_ijk(i) + offset, i, false, anchor[i]);                     // computes anchor as offset from start of tensor
                 param(i)    = mfa_data.tmesh.all_knots[i][anchor[i]];
@@ -1254,13 +1533,15 @@ namespace mfa
 
             // for the start of the curve, for current dim. and higher, find param
             // these dims are in the input point index space
-            for (auto i = dim; i < dom_dim; i++)
+            // for (auto i = dim; i < dom_dim; i++)
+for (auto i = dim; i >= 0; i--)
                 param(i) = input.params->param_grid[i][start_ijk(i)];
 
             // for the start of the curve, for higher than the current dim, find anchor
             // these dims are in the input point space
             // in the current dim, the anchor coordinate will be replaced below by the control point anchor
-            for (auto i = dim + 1; i < dom_dim; i++)
+            // for (auto i = dim + 1; i < dom_dim; i++)
+for (auto i = dim - 1; i >= 0; i--)
             {
                 // if param == 0, FindSpan finds the last 0-value knot span, but we want the first control point anchor, which is an earlier span
                 if (param(i) == 0.0)
@@ -1297,7 +1578,7 @@ namespace mfa
                         if (in_domain[in_curve_iter.cur_iter_full()])
                             N(j, i) = mfa_data.OneBasisFun(dim, u, local_knots);
                         else
-                            N(j, i) = mfa_data.OneDerBasisFun(dim, 1, u, local_knots);
+                            N(j, i) = mfa_data.OneDerBasisFun(dim, 1, u, local_knots, bfi);
                     }
                     else
                     {

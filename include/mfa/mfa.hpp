@@ -683,6 +683,9 @@ namespace mfa
                 int i,
                 const PointSet<T>& input)
         {
+            if (verbose)
+                cout << "MFA: Starting FixedEncodeSeparableCons" << endl;
+                
             vars[i]->set_knots(input);
 
             TensorProduct<T>& t = vars[i]->tmesh.tensor_prods[0];
@@ -845,7 +848,7 @@ namespace mfa
             T                   rho_param, 
             T                   u0, 
             T                   u1, 
-            VectorX<T>&         output)
+            VectorX<T>&         output) const
         {
             const TensorProduct<T>& t = mfa_data.tmesh.tensor_prods[0];
 
@@ -862,7 +865,7 @@ namespace mfa
             const MFA_Data<T>&  mfa_data,
                   VectorX<T>&   output,
             const VectorX<T>&   a,
-            const VectorX<T>&   b)        
+            const VectorX<T>&   b) const
         {
             const TensorProduct<T>& t = mfa_data.tmesh.tensor_prods[0];
 

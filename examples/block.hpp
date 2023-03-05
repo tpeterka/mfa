@@ -24,14 +24,13 @@
 #include    <highfive/H5DataSpace.hpp>
 #include    <highfive/H5File.hpp>
 
+#include    "types.h"
+#include    "domain_args.hpp"
+#include    "example_signals.hpp"
+
 using namespace std;
 
-// set input and ouptut precision here, float or double
-#if 0
-typedef float                          real_t;
-#else
-typedef double                         real_t;
-#endif
+
 
 // 3d point or vector
 struct vec3d
@@ -42,56 +41,7 @@ struct vec3d
     vec3d() {}
 };
 
-// arguments to block foreach functions
-struct DomainArgs
-{
-    DomainArgs(int dom_dim, vector<int> mdims) 
-    {
-        // set up per-science variable data: model_dims, s, and f
-        updateModelDims(mdims);
 
-        tot_ndom_pts = 0;
-        starts.resize(dom_dim);
-        ndom_pts.resize(dom_dim);
-        full_dom_pts.resize(dom_dim);
-        min.resize(dom_dim);
-        max.resize(dom_dim);
-        r = 0;
-        t = 0;
-        n = 0;
-        multiblock = false;
-        structured = true;   // Assume structured input by default
-        rand_seed  = -1;
-    }
-    vector<int>         model_dims;                 // dimension of each model (including geometry)
-    size_t              tot_ndom_pts;
-    vector<int>         starts;                     // starting offsets of ndom_pts (optional, usually assumed 0)
-    vector<int>         ndom_pts;                   // number of points in domain (possibly a subset of full domain)
-    vector<int>         full_dom_pts;               // number of points in full domain in case a subset is taken
-    vector<real_t>      min;                        // minimum corner of domain
-    vector<real_t>      max;                        // maximum corner of domain
-    vector<real_t>      s;                          // scaling factor for each variable or any other usage
-    real_t              r;                          // x-y rotation of domain or any other usage
-    vector<real_t>      f;                          // frequency multiplier for each variable or any other usage
-    real_t              t;                          // waviness of domain edges or any other usage
-    real_t              n;                          // noise factor [0.0 - 1.0]
-    string              infile;                     // input filename
-    string              infile2;
-    bool                multiblock;                 // multiblock domain, get bounds from block
-    bool                structured;                 // input data lies on unstructured grid
-    int                 rand_seed;                  // seed for generating random data. -1: no randomization, 0: choose seed at random
-
-    void updateModelDims(vector<int> mdims)
-    {
-        int nvars = mdims.size() - 1;
-
-        model_dims = mdims;
-        s.assign(nvars, 1);
-        f.assign(nvars, 1);
-
-        return;
-    }
-};
 
 // block
 template <typename T>
@@ -443,8 +393,8 @@ struct Block : public BlockBase<T>
         {
             for (auto j = 0; j < input->domain.rows(); j++)
             {
-                real_t x = input->domain(j, 0);
-                real_t y = input->domain(j, 1);
+                T x = input->domain(j, 0);
+                T y = input->domain(j, 1);
                 input->domain(j, 0) += a->t * sin(y);
                 input->domain(j, 1) += a->t * sin(x);
             }
@@ -455,8 +405,8 @@ struct Block : public BlockBase<T>
         {
             for (auto j = 0; j < input->domain.rows(); j++)
             {
-                real_t x = input->domain(j, 0);
-                real_t y = input->domain(j, 1);
+                T x = input->domain(j, 0);
+                T y = input->domain(j, 1);
                 input->domain(j, 0) = x * cos(a->r) - y * sin(a->r);
                 input->domain(j, 1) = x * sin(a->r) + y * cos(a->r);
             }
@@ -1562,7 +1512,7 @@ struct Block : public BlockBase<T>
         T& x1,
         T& y1,
         const VectorX<T>& mins,
-        const VectorX<T>& maxs)
+        const VectorX<T>& maxs) const
     {
         T xl = mins(0);
         T xh = maxs(0);
@@ -1950,10 +1900,10 @@ cout << "\n\nATTENTION: Using experimental separable constrained encode\n" << en
         // // Encode ray model. TODO: regularized encode
         // bool force_unified = fixed_length;  // force a unified encoding to use the regularizer
         // ray_mfa->FixedEncode(*ray_input, mfa_info.regularization, mfa_info.reg1and2, false, force_unified);
-        
+cout << "Encoding Ray Model..." << endl;    
         ray_mfa->FixedEncodeGeom(*ray_input, 0, false);
         ray_mfa->FixedEncodeSeparableCons(0, *ray_input);
-
+cout << "    done." << endl;
 
         // ----------- Replace old block members with new ---------- //
         // reset block members as needed
@@ -2004,7 +1954,7 @@ cout << "\n\nATTENTION: Using experimental separable constrained encode\n" << en
         // --------- Decode (for visualization) --------- //
         // this->decode_block(cp, 0);
         // this->range_error(cp, true, true);
-
+cout << "Decoding Ray Model to uniform grid..." << endl;
         vector<int> grid_size = {100, 100, 100};
         VectorXi gridpoints(3);
         gridpoints(0) = grid_size[0];
@@ -2013,9 +1963,9 @@ cout << "\n\nATTENTION: Using experimental separable constrained encode\n" << en
         this->decode_block(cp, true);
         
 
-cerr << "\n===========" << endl;
-cerr << "f(x) = sin(x) hardcoded in create_ray_model()" << endl;
-cerr << "===========\n" << endl;
+cerr << "  ===========" << endl;
+cerr << "  f(x) = sin(x) hardcoded in create_ray_model() for error computation" << endl;
+cerr << "  ===========" << endl;
         delete this->errs;
         this->errs = new mfa::PointSet<T>(dom_dim, mfa->model_dims(), gridpoints.prod(), gridpoints);
         outpt = VectorX<T>::Zero(1);
@@ -2085,6 +2035,7 @@ cerr << "===========\n" << endl;
                 }
             }
         }
+        cout << "done." << endl;
 
         // Compute error metrics
         MatrixX<T>& errpts = this->errs->domain;
@@ -2102,7 +2053,7 @@ cerr << "===========\n" << endl;
         }
     }
 
-    pair<T,T> dualCoords(const VectorX<T>& a, const VectorX<T>& b)
+    pair<T,T> dualCoords(const VectorX<T>& a, const VectorX<T>& b) const
     {
         const double pi = 3.14159265358979;
 
@@ -2138,7 +2089,7 @@ cerr << "===========\n" << endl;
         const   diy::Master::ProxyWithLink& cp,
         const   VectorX<T>& a,
         const   VectorX<T>& b,
-                bool fixed_length)
+                bool fixed_length) const
     {
         const double pi = 3.14159265358979;
         const bool verbose = false;
@@ -2238,6 +2189,70 @@ cerr << "===========\n" << endl;
         this->integrate_axis_ray(cp, alpha, rho, u0, u1, length, output);
 
         return output(0);
+    }
+
+    // Compute segment errors in a RayMFA
+    void compute_sinogram(
+                const   diy::Master::ProxyWithLink& cp,
+                T extent) const
+    {
+        ofstream sinotruefile;
+        ofstream sinoapproxfile;
+        ofstream sinoerrorfile;
+        string sino_true_filename = "sinogram_true_gid" + to_string(cp.gid()) + ".txt";
+        string sino_approx_filename = "sinogram_approx_gid" + to_string(cp.gid()) + ".txt";
+        string sino_error_filename = "sinogram_error_gid" + to_string(cp.gid()) + ".txt";
+        sinotruefile.open(sino_true_filename);
+        sinoapproxfile.open(sino_approx_filename);
+        sinoerrorfile.open(sino_error_filename);
+        int test_n_alpha = 150;
+        int test_n_rho = 150;
+        T r_lim = this->bounds_maxs(1);   // WARNING TODO: make r_lim query-able in RayMFA class
+
+        int old_dom_dim = dom_dim - 1;  // Assume here that dom_dim has already been incremented
+        VectorX<T> start_pt(old_dom_dim), end_pt(old_dom_dim);
+
+        for (int i = 0; i < test_n_alpha; i++)
+        {
+            for (int j = 0; j < test_n_rho; j++)
+            {
+                T alpha = 3.14159265 / (test_n_alpha-1) * i;
+                T rho = r_lim*2 / (test_n_rho-1) * j - r_lim;
+                T x0, x1, y0, y1;   // end points of full line
+
+                get_box_intersections(alpha, rho, x0, y0, x1, y1, this->box_mins, this->box_maxs);
+                if (x0==0 && y0==0 && x1==0 && y1==0)
+                {   
+                    sinotruefile << alpha << " " << rho << " " << " 0 0" << endl;
+                    sinoapproxfile << alpha << " " << rho << " " << " 0 0" << endl;
+                    sinoerrorfile << alpha << " " << rho << " " << " 0 0" << endl;
+                }
+                else
+                {
+                    T length = sqrt((x1-x0)*(x1-x0) + (y1-y0)*(y1-y0));
+                    start_pt(0) = x0; 
+                    start_pt(1) = y0;
+                    end_pt(0) = x1;
+                    end_pt(1) = y1;
+
+                    T test_result = integrate_ray(cp, start_pt, end_pt, 1) / length;   // normalize by segment length
+                    T test_actual = sintest(start_pt, end_pt) / length;
+
+                    T e_abs = abs(test_result - test_actual);
+                    T e_rel = e_abs/extent;
+
+                    sinotruefile << alpha << " " << rho << " 0 " << test_actual << endl;
+                    sinoapproxfile << alpha << " " << rho << " 0 " << test_result << endl;
+                    sinoerrorfile << alpha << " " << rho << " 0 " << e_abs << endl;
+                }
+                
+            }
+        }
+        sinotruefile.close();
+        sinoapproxfile.close();
+        sinoerrorfile.close();
+        
+        return;
     }
 
     // Compute error metrics between a pointset and an analytical function
@@ -2770,345 +2785,5 @@ void max_err_cb(Block<real_t> *b,                  // local block
     }
 }
 
-
-// REMOVE:
-// Computes the analytical line integral from p1 to p2 of sin(x)sin(y). Use for testing
-template<typename T>
-T sintest( const VectorX<T>& p1,
-           const VectorX<T>& p2)
-{
-    T x1 = p1(0);
-    T y1 = p1(1);
-    T x2 = p2(0);
-    T y2 = p2(1);
-
-    T mx = x2 - x1;
-    T my = y2 - y1;
-    T fctr = sqrt(mx*mx + my*my);
-
-    // a1 = mx, b1 = x1, a2 = my, b2 = y1
-    T int0 = 0, int1 = -7;
-    if (mx != my)
-    {
-        int0 = 0.5*(sin(x1-y1+(mx-my)*0)/(mx-my) - sin(x1+y1+(mx+my)*0)/(mx+my));
-        int1 = 0.5*(sin(x1-y1+(mx-my)*1)/(mx-my) - sin(x1+y1+(mx+my)*1)/(mx+my));
-    }
-    else
-    {
-        int0 = 0.5 * (0*cos(x1-y1) + sin(x1+y1+(mx+my)*0)/(mx+my));
-        int1 = 0.5 * (1*cos(x1-y1) + sin(x1+y1+(mx+my)*1)/(mx+my));
-    }
-    
-    return (int1 - int0) * fctr;
-}
-
-// evaluate sine function
-template<typename T>
-void sine(const VectorX<T>& domain_pt, VectorX<T>& output_pt, DomainArgs&  args, int k)
-{
-    T retval = 1.0;
-    for (auto i = 0; i < domain_pt.size(); i++)
-        retval *= sin(domain_pt(i) * args.f[k]);
-    retval *= args.s[k];
-
-    for (int l = 0; l < output_pt.size(); l++)
-    {
-        output_pt(l) = retval * (1+l);
-    }
-
-    return;
-}
-
-template<typename T>
-void cosine(const VectorX<T>& domain_pt, VectorX<T>& output_pt, DomainArgs&  args, int k)
-{
-    T retval = 1.0;
-    for (auto i = 0; i < domain_pt.size(); i++)
-        retval *= cos(domain_pt(i) * args.f[k]);
-    retval *= args.s[k];
-
-    for (int l = 0; l < output_pt.size(); l++)
-    {
-        output_pt(l) = retval * (1+l);
-    }
-
-    return;        
-}
-
-// evaluate the "negative cosine plus one" (f(x) = -cos(x)+1) function
-// used primarily to test integration of sine
-template<typename T>
-void ncosp1(const VectorX<T>& domain_pt, VectorX<T>& output_pt, DomainArgs& args, int k)
-{
-    if (output_pt.size() != 1)
-    {
-        fprintf(stderr, "Error: ncosp1 only defined for scalar output.\n");
-        exit(0);
-    }
-
-    T retval = 1.0;
-    for (auto i = 0; i < domain_pt.size(); i++)
-        retval *= 1 - cos(domain_pt(i) * args.f[k]);
-    retval *= args.s[k];
-
-    output_pt(0) = retval;
-    return;        
-}
-
-// evaluate sinc function
-template<typename T>
-void sinc(const VectorX<T>& domain_pt, VectorX<T>& output_pt, DomainArgs& args, int k)
-{
-    T retval = 1.0;
-    for (auto i = 0; i < domain_pt.size(); i++)
-    {
-        if (domain_pt(i) != 0.0)
-            retval *= (sin(domain_pt(i) * args.f[k] ) / domain_pt(i));
-    }
-    retval *= args.s[k];
-
-    for (int l = 0; l < output_pt.size(); l++)
-    {
-        output_pt(l) = retval * (1+l);
-    }
-
-    return;
-}
-
-// evaluate n-d poly-sinc function version 1
-template<typename T>
-void polysinc1(const VectorX<T>& domain_pt, VectorX<T>& output_pt, DomainArgs&  args, int k)
-{
-    int dim = output_pt.size();
-
-    // a = (x + 1)^2 + (y - 1)^2 + (z + 1)^2 + ...
-    // b = (x - 1)^2 + (y + 1)^2 + (z - 1)^2 + ...
-    T a = 0.0;
-    T b = 0.0;
-    for (auto i = 0; i < domain_pt.size(); i++)
-    {
-        T s, r;
-        if (i % 2 == 0)
-        {
-            s = domain_pt(i) + 1.0;
-            r = domain_pt(i) - 1.0;
-        }
-        else
-        {
-            s = domain_pt(i) - 1.0;
-            r = domain_pt(i) + 1.0;
-        }
-        a += (s * s);
-        b += (r * r);
-    }
-
-    // Modulate sinc shape for each output coordinate if science variable is vector-valued
-    for (int l = 0; l < dim; l++)
-    {
-        // a1 = sinc(a*(1+l)); b1 = sinc(b*(1+l))
-        T a1 = (a == 0.0 ? 1.0*(1+l) : sin(a*(1+l)) / a);
-        T b1 = (b == 0.0 ? 1.0*(1+l) : sin(b*(1+l)) / b);
-        output_pt(l) = args.s[k] * (a1 + b1);               // scale entire science variable by s[k]
-    }
-
-    return;
-}
-
-// evaluate n-d poly-sinc function version 2
-template<typename T>
-void polysinc2(const VectorX<T>& domain_pt, VectorX<T>& output_pt, DomainArgs&  args, int k)
-{
-    int dim = output_pt.size();
-
-    // a = x^2 + y^2 + z^2 + ...
-    // b = 2(x - 2)^2 + (y + 2)^2 + (z - 2)^2 + ...
-    T a = 0.0;
-    T b = 0.0;
-    for (auto i = 0; i < domain_pt.size(); i++)
-    {
-        T s, r;
-        s = domain_pt(i);
-        if (i % 2 == 0)
-        {
-            r = domain_pt(i) - 2.0;
-        }
-        else
-        {
-            r = domain_pt(i) + 2.0;
-        }
-        a += (s * s);
-        if (i == 0)
-            b += (2.0 * r * r);
-        else
-            b += (r * r);
-    }
-
-    // Modulate sinc shape for each output coordinate if science variable is vector-valued
-    for (int l = 0; l < dim; l++)
-    {
-        // a1 = sinc(a*(1+l)); b1 = sinc(b*(1+l))
-        T a1 = (a == 0.0 ? 1.0*(1+l) : sin(a*(1+l)) / a);
-        T b1 = (b == 0.0 ? 1.0*(1+l) : sin(b*(1+l)) / b);
-        output_pt(l) = args.s[k] * (a1 + b1);               // scale entire science variable by s[k]
-    }
-
-    return;
-}
-
-// evaluate n-d poly-sinc function version 3 (differs from version 2 in definition of a)
-template<typename T>
-void polysinc3(const VectorX<T>& domain_pt, VectorX<T>& output_pt, DomainArgs&  args, int k)
-{
-    int dim = output_pt.size();
-
-    // a = sqrt(x^2 + y^2 + z^2 + ...)
-    // b = 2(x - 2)^2 + (y + 2)^2 + (z - 2)^2 + ...
-    T a = 0.0;
-    T b = 0.0;
-    for (auto i = 0; i < domain_pt.size(); i++)
-    {
-        T s, r;
-        s = domain_pt(i);
-        if (i % 2 == 0)
-        {
-            r = domain_pt(i) - 2.0;
-        }
-        else
-        {
-            r = domain_pt(i) + 2.0;
-        }
-        a += (s * s);
-        if (i == 0)
-            b += (2.0 * r * r);
-        else
-            b += (r * r);
-    }
-    a = sqrt(a);
-
-    // Modulate sinc shape for each output coordinate if science variable is vector-valued
-    for (int l = 0; l < dim; l++)
-    {
-        // a1 = sinc(a*(1+l)); b1 = sinc(b*(1+l))
-        T a1 = (a == 0.0 ? 1.0*(1+l) : sin(a*(1+l)) / a);
-        T b1 = (b == 0.0 ? 1.0*(1+l) : sin(b*(1+l)) / b);
-        output_pt(l) = args.s[k] * (a1 + b1);               // scale entire science variable by s[k]
-    }
-
-    return;
-}
-
-// evaluate Marschner-Lobb function [Marschner and Lobb, IEEE VIS, 1994]
-// only for a 3d domain
-// using args f[0] and s[0] for f_M and alpha, respectively, in the paper
-template<typename T>
-void ml(const VectorX<T>& domain_pt, VectorX<T>& output_pt, DomainArgs&  args, int k)
-{
-    if (domain_pt.size() != 3 || output_pt.size() != 1)
-    {
-        fprintf(stderr, "Error: Marschner-Lobb function is only defined for a 3d domain and scalar output.\n");
-        exit(0);
-    }
-    T fm           = args.f[0];
-    T alpha        = args.s[0];
-//         T fm = 6.0;
-//         T alpha = 0.25;
-    T x            = domain_pt(0);
-    T y            = domain_pt(1);
-    T z            = domain_pt(2);
-
-    T rad       = sqrt(x * x + y * y + z * z);
-    T rho       = cos(2 * M_PI * fm * cos(M_PI * rad / 2.0));
-    T retval    = (1.0 - sin(M_PI * z / 2.0) + alpha * (1.0 + rho * sqrt(x * x + y * y))) / (2 * (1.0 + alpha));
-
-    output_pt(0) = retval;
-    return;
-}
-
-// evaluate f16 function
-template<typename T>
-void f16(const VectorX<T>& domain_pt, VectorX<T>& output_pt, DomainArgs&  args, int k)
-{
-    if (domain_pt.size() != 2 || output_pt.size() != 1)
-    {
-        fprintf(stderr, "Error: f16 function is only defined for a 2d domain and scalar output.\n");
-        exit(0);
-    }
-
-    T retval =
-        (pow(domain_pt(0), 4)                        +
-        pow(domain_pt(1), 4)                        +
-        pow(domain_pt(0), 2) * pow(domain_pt(1), 2) +
-        domain_pt(0) * domain_pt(1)                 ) /
-        (pow(domain_pt(0), 3)                        +
-        pow(domain_pt(1), 3)                        +
-        4                                           );
-
-    output_pt(0) = retval;
-    return;
-}
-
-// evaluate f17 function
-template<typename T>
-void f17(const VectorX<T>& domain_pt, VectorX<T>& output_pt, DomainArgs&  args, int k)
-{
-    if (domain_pt.size() != 3 || output_pt.size() != 1)
-    {
-        fprintf(stderr, "Error: f17 function is only defined for a 3d domain and scalar output.\n");
-        exit(0);
-    }
-
-    T E         = domain_pt(0);
-    T G         = domain_pt(1);
-    T M         = domain_pt(2);
-    T gamma     = sqrt(M * M * (M * M + G * G));
-    T kprop     = (2.0 * sqrt(2.0) * M * G * gamma ) / (M_PI * sqrt(M * M + gamma));
-    T retval    = kprop / ((E * E - M * M) * (E * E - M * M) + M * M * G * G);
-
-    output_pt(0) = retval;
-    return;
-}
-
-// evaluate f18 function
-template<typename T>
-void f18(const VectorX<T>& domain_pt, VectorX<T>& output_pt, DomainArgs&  args, int k)
-{
-    if (domain_pt.size() != 4 || output_pt.size() != 1)
-    {
-        fprintf(stderr, "Error: f18 function is only defined for a 4d domain and scalar output.\n");
-        exit(0);
-    }
-
-    T x1        = domain_pt(0);
-    T x2        = domain_pt(1);
-    T x3        = domain_pt(2);
-    T x4        = domain_pt(3);
-    T retval    = (atanh(x1) + atanh(x2) + atanh(x3) + atanh(x4)) / ((pow(x1, 2) - 1) * pow(x2, -1));
-
-    output_pt(0) = retval;
-    return;
-}
-
-template<typename T>
-void evaluate_function(string fun, const VectorX<T>& domain_pt, VectorX<T>& output_pt, DomainArgs& args, int k)
-{
-    if (fun == "sine")          return sine(        domain_pt, output_pt, args, k);
-    else if (fun == "cosine")   return cosine(      domain_pt, output_pt, args, k);
-    else if (fun == "ncosp1")   return ncosp1(      domain_pt, output_pt, args, k);
-    else if (fun == "sinc")     return sinc(        domain_pt, output_pt, args, k);
-    else if (fun == "psinc1")   return polysinc1(   domain_pt, output_pt, args, k);
-    else if (fun == "psinc2")   return polysinc2(   domain_pt, output_pt, args, k);
-    else if (fun == "psinc3")   return polysinc3(   domain_pt, output_pt, args, k);
-    else if (fun == "ml")       return ml(          domain_pt, output_pt, args, k);
-    else if (fun == "f16")      return f16(         domain_pt, output_pt, args, k);
-    else if (fun == "f17")      return f17(         domain_pt, output_pt, args, k);
-    else if (fun == "f18")      return f18(         domain_pt, output_pt, args, k);
-    else
-    {
-        cerr << "Invalid function name in evaluate_function. Aborting." << endl;
-        exit(0);
-    }
-
-    return;
-}
 
 #endif // _MFA_BLOCK

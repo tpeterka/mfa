@@ -26,6 +26,8 @@
 
 using namespace std;
 
+
+
 int main(int argc, char** argv)
 {
     // initialize MPI
@@ -175,127 +177,77 @@ int main(int argc, char** argv)
     fprintf(stderr, "\nFinal decoding and computing max. error...\n");
     bool saved_basis = structured; // TODO: basis functions are currently only saved during encoding of structured data
     master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-            { 
-                b->range_error(cp, true, saved_basis);
-                b->print_block(cp, true);
+    { 
+        // Compute original MFA
+        b->range_error(cp, true, saved_basis);
+        b->print_block(cp, true);
 
-                // Assumes one scalar science variable. Used for relative error metric
-                real_t extent = b->input->domain.col(dom_dim).maxCoeff() - b->input->domain.col(dom_dim).minCoeff();
+        // Assumes one scalar science variable. Used for relative error metric
+        real_t extent = b->input->domain.col(dom_dim).maxCoeff() - b->input->domain.col(dom_dim).minCoeff();
 
-                b->create_ray_model(cp, mfa_info, d_args, 1, n_samples, n_rho, n_alpha, v_samples, v_rho, v_alpha);
+        b->create_ray_model(cp, mfa_info, d_args, 1, n_samples, n_rho, n_alpha, v_samples, v_rho, v_alpha);
 
-                real_t result = 0;
-                VectorX<real_t> start_pt(dom_dim), end_pt(dom_dim);
-                std::vector<real_t> ierrs_abs;
-                std::vector<real_t> ierrs_rel;
-                std::random_device dev;
-                std::mt19937 rng(dev());
-                real_t x0, x1, y0, y1;
-                real_t ierror_abs=0, ierror_rel=0, actual=0, rms_abs=0, rms_rel=0, avg_abs=0, avg_rel=0, len=0;
-                std::uniform_real_distribution<double> dist(0,1); 
-                for (int i = 0; i < num_ints; i++)
-                {
-                    for (int j = 0; j < dom_dim; j++)
-                    {
-                        start_pt(j) = dist(rng) * (d_args.max[j]-d_args.min[j]) + d_args.min[j];
-                        end_pt(j)   = dist(rng) * (d_args.max[j]-d_args.min[j]) + d_args.min[j];
-                        len += (end_pt(j) - start_pt(j))*(end_pt(j) - start_pt(j));
-                    }
-                    len = sqrt(len);
-                    // x0 = dist(rng)* 8*M_PI - 4*M_PI;
-                    // y0 = dist(rng)* 8*M_PI - 4*M_PI;
-                    // x1 = dist(rng)* 8*M_PI - 4*M_PI;
-                    // y1 = dist(rng)* 8*M_PI - 4*M_PI;
-                    // start_pt(0) = x0;
-                    // start_pt(1) = y0;
-                    // end_pt(0) = x1;
-                    // end_pt(1) = y1;
-                    // len = sqrt((x1-x0)*(x1-x0) + (y1-y0)*(y1-y0));
-                    result = b->integrate_ray(cp, start_pt, end_pt, 1) / len;   // normalize by segment length
-                    actual = sintest(start_pt, end_pt) / len;                        // normalize by segment length
-                    ierror_abs = abs(result - actual);
-                    ierror_rel = ierror_abs/extent;
-                    ierrs_abs.push_back(ierror_abs);
-                    ierrs_rel.push_back(ierror_rel);
-                    // cerr << "(" << x0 << ", " << y0 << ")---(" << x1 << ", " << y1 << "):  " << endl;
-                    // cerr << "  Result: " << setprecision(6) << result << endl;
-                    // cerr << "  Actual: " << setprecision(6) << actual << endl;
-                    // cerr << "  Length:    " << setprecision(3) << len << endl;
-                    // cerr << "  Error (abs):  " << setprecision(6) << ierror_abs << endl;
-                    // cerr << "  Error (rel):  " << setprecision(6) << ierror_rel << endl;
-                }
+        real_t result = 0;
+        VectorX<real_t> start_pt(dom_dim), end_pt(dom_dim);
+        std::vector<real_t> ierrs_abs;
+        std::vector<real_t> ierrs_rel;
+        std::random_device dev;
+        std::mt19937 rng(dev());
+        real_t x0, x1, y0, y1;
+        real_t ierror_abs=0, ierror_rel=0, actual=0, rms_abs=0, rms_rel=0, avg_abs=0, avg_rel=0, len=0;
+        std::uniform_real_distribution<double> dist(0,1); 
+        for (int i = 0; i < num_ints; i++)
+        {
+            for (int j = 0; j < dom_dim; j++)
+            {
+                start_pt(j) = dist(rng) * (d_args.max[j]-d_args.min[j]) + d_args.min[j];
+                end_pt(j)   = dist(rng) * (d_args.max[j]-d_args.min[j]) + d_args.min[j];
+                len += (end_pt(j) - start_pt(j))*(end_pt(j) - start_pt(j));
+            }
+            len = sqrt(len);
 
-                cerr << "\nComputed " << num_ints << " random line integrals." << endl;
-                cerr << "  Max error (abs): " << setprecision(6) << *max_element(ierrs_abs.begin(), ierrs_abs.end()) << 
-                            "\t" << "Max error (rel): " << *max_element(ierrs_rel.begin(), ierrs_rel.end()) << endl;
-                cerr << "  Min error (abs): " << setprecision(6) << *min_element(ierrs_abs.begin(), ierrs_abs.end()) << 
-                            "\t" << "Min error (rel): " << *min_element(ierrs_rel.begin(), ierrs_rel.end()) << endl;
-                for (int j = 0; j < ierrs_abs.size(); j++)
-                {
-                    rms_abs += ierrs_abs[j] * ierrs_abs[j];
-                    rms_rel += ierrs_rel[j] * ierrs_rel[j];
-                    avg_abs += ierrs_abs[j];
-                    avg_rel += ierrs_rel[j];
-                }
-                rms_abs = rms_abs/ierrs_abs.size();
-                rms_abs = sqrt(rms_abs);
-                rms_rel = rms_rel/ierrs_rel.size();
-                rms_rel = sqrt(rms_rel);
-                avg_abs = avg_abs/ierrs_abs.size();
-                avg_rel = avg_rel/ierrs_rel.size();
-                cerr << "  Avg error (abs): " << setprecision(6) << avg_abs << "\t" << "Avg error (rel): " << avg_rel << endl;
-                cerr << "  RMS error (abs): " << setprecision(6) << rms_abs << "\t" << "RMS error (rel): " << rms_rel << endl;
+            result = b->integrate_ray(cp, start_pt, end_pt, 1) / len;   // normalize by segment length
+            actual = sintest(start_pt, end_pt) / len;                        // normalize by segment length
+            ierror_abs = abs(result - actual);
+            ierror_rel = ierror_abs/extent;
+            ierrs_abs.push_back(ierror_abs);
+            ierrs_rel.push_back(ierror_rel);
+        }
 
-                ofstream errfile_abs, errfile_rel;
-                errfile_abs.open("li_errors_abs.txt");
-                errfile_rel.open("li_errors_rel.txt");
-                for (int i = 0; i < ierrs_abs.size(); i++)
-                {
-                    errfile_abs << ierrs_abs[i] << endl;
-                    errfile_rel << ierrs_rel[i] << endl;
-                }
-                errfile_abs.close();
-                errfile_rel.close();
+        cerr << "\nComputed " << num_ints << " random line integrals." << endl;
+        cerr << "  Max error (abs): " << setprecision(6) << *max_element(ierrs_abs.begin(), ierrs_abs.end()) << 
+                    "\t" << "Max error (rel): " << *max_element(ierrs_rel.begin(), ierrs_rel.end()) << endl;
+        cerr << "  Min error (abs): " << setprecision(6) << *min_element(ierrs_abs.begin(), ierrs_abs.end()) << 
+                    "\t" << "Min error (rel): " << *min_element(ierrs_rel.begin(), ierrs_rel.end()) << endl;
+        for (int j = 0; j < ierrs_abs.size(); j++)
+        {
+            rms_abs += ierrs_abs[j] * ierrs_abs[j];
+            rms_rel += ierrs_rel[j] * ierrs_rel[j];
+            avg_abs += ierrs_abs[j];
+            avg_rel += ierrs_rel[j];
+        }
+        rms_abs = rms_abs/ierrs_abs.size();
+        rms_abs = sqrt(rms_abs);
+        rms_rel = rms_rel/ierrs_rel.size();
+        rms_rel = sqrt(rms_rel);
+        avg_abs = avg_abs/ierrs_abs.size();
+        avg_rel = avg_rel/ierrs_rel.size();
+        cerr << "  Avg error (abs): " << setprecision(6) << avg_abs << "\t" << "Avg error (rel): " << avg_rel << endl;
+        cerr << "  RMS error (abs): " << setprecision(6) << rms_abs << "\t" << "RMS error (rel): " << rms_rel << endl;
 
-                ofstream segmenterrfile;
-                segmenterrfile.open("seg_errors.txt");
-                int test_n_alpha = 150;
-                int test_n_rho = 150;
-                real_t r_lim = b->bounds_maxs(1);   // WARNING TODO: make r_lim query-able in RayMFA class
-                for (int i = 0; i < test_n_alpha; i++)
-                {
-                    for (int j = 0; j < test_n_rho; j++)
-                    {
-                        real_t alpha = 3.14159265 / (test_n_alpha-1) * i;
-                        real_t rho = r_lim*2 / (test_n_rho-1) * j - r_lim;
-                        real_t x0, x1, y0, y1;   // end points of full line
+        ofstream errfile_abs, errfile_rel;
+        errfile_abs.open("li_errors_abs.txt");
+        errfile_rel.open("li_errors_rel.txt");
+        for (int i = 0; i < ierrs_abs.size(); i++)
+        {
+            errfile_abs << ierrs_abs[i] << endl;
+            errfile_rel << ierrs_rel[i] << endl;
+        }
+        errfile_abs.close();
+        errfile_rel.close();
 
-                        b->get_box_intersections(alpha, rho, x0, y0, x1, y1, b->box_mins, b->box_maxs);
-                        if (x0==0 && y0==0 && x1==0 && y1==0)
-                        {
-                            segmenterrfile << alpha << " " << rho << " " << " 0 0" << endl;
-                        }
-                        else
-                        {
-                            real_t length = sqrt((x1-x0)*(x1-x0) + (y1-y0)*(y1-y0));
-                            start_pt(0) = x0; 
-                            start_pt(1) = y0;
-                            end_pt(0) = x1;
-                            end_pt(1) = y1;
-
-                            real_t test_result = b->integrate_ray(cp, start_pt, end_pt, 1) / length;   // normalize by segment length
-                            real_t test_actual = sintest(start_pt, end_pt) / length;
-
-                            real_t e_abs = abs(test_result - test_actual);
-                            real_t e_rel = e_abs/extent;
-
-                            segmenterrfile << alpha << " " << rho << " 0 " << e_rel << endl;
-                        }
-                        
-                    }
-                }
-                segmenterrfile.close();
-            });
+        b->compute_sinogram(cp, extent);
+    });
     decode_time = MPI_Wtime() - decode_time;
 
     // print results
