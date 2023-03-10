@@ -200,7 +200,7 @@ struct Block : public BlockBase<T>
         if (cp.gid() == 0)
             cout << "Void Sparsity: " << (sparsity)*100 << "%" << endl;
 
-        const size_t nvoids = 1;
+        const size_t nvoids = 4;
         const double radii_frac = 1.0/8.0;   // fraction of domain width to set as void radius
         T radius = radii_frac * (core_maxs - core_mins).minCoeff();
         vector<VectorX<T>> centers(nvoids);

@@ -327,7 +327,7 @@ struct BlockBase
         T                                   u0,
         T                                   u1,
         T                                   scale,
-        VectorX<T>&                         output)
+        VectorX<T>&                         output) const
     {
         // TODO: Create a subclass RayMFA from MFA which has methods like this in it?
         if (!is_ray_model)

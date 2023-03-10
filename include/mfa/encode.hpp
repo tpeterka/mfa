@@ -17,6 +17,7 @@
 #include    <vector>
 #include    <set>
 #include    <iostream>
+#include    <algorithm>
 
 // temporary utilities for testing
 #include    <ctime>
@@ -281,6 +282,7 @@ namespace mfa
                             int                     deriv,
                             T                       c_target,
                             const SparseMatrixX<T>& N,
+                            const SparseMatrixX<T>& Nt,
                             const VectorX<T>&       dom_mins,
                             const VectorX<T>&       dom_maxs,
                             SparseMatrixX<T>&       Ct)
@@ -402,10 +404,47 @@ namespace mfa
                 pt_it.incr_iter();
             }
 
-#if 0 // OLD regularization technique (column-specific)
+            VectorX<T> reg_strengths(num_ctrl);
+
+            // uniform_reg(t, N, Nt, Ct, reg_strengths, deriv, c_target);
+            yeh_reg(t, N, Nt, Ct, reg_strengths, deriv, c_target);
+            // vazquez_reg(t, N, Nt, Ct, reg_strengths, deriv, c_target);
+
+            write_reg_strength(t, deriv, reg_strengths, anchor_pts);            
+
+            fill_time = clock() - fill_time;
+            if (verbose)
+                cerr << "Regularization Total Time: " << setprecision(3) << ((double)fill_time)/CLOCKS_PER_SEC << "s." << endl;
+        }
+
+        void uniform_reg(TensorProduct<T>& t,
+                            const SparseMatrixX<T>& N,
+                            const SparseMatrixX<T>& Nt,
+                            SparseMatrixX<T>& Ct,
+                            VectorX<T>& reg_strengths,
+                            int deriv,
+                            T c_target)
+        {
+            reg_strengths = VectorX<T>::Ones(t.nctrl_pts.prod());
+            reg_strengths = c_target*reg_strengths;
+
+            Ct = c_target*Ct;
+
+            return;
+        }
+
+        void yeh_reg(TensorProduct<T>& t,
+                            const SparseMatrixX<T>& N,
+                            const SparseMatrixX<T>& Nt,
+                            SparseMatrixX<T>& Ct,
+                            VectorX<T>& reg_strengths,
+                            int deriv,
+                            T c_target)
+        {
+#if 1 // OLD regularization technique (column-specific)
             // Compute regularization strengths
             SparseMatrixX<T> C(Ct.transpose());                             // create col-major transpose for fast column sums
-            VectorX<T> reg_strengths(num_ctrl);
+
             Eigen::DiagonalMatrix<T, Eigen::Dynamic> lambda(C.cols());      // regularization strengths
             for (int i = 0; i < C.cols(); i++)
             {
@@ -434,7 +473,6 @@ namespace mfa
 #else // NEW regularization technique (row-specific)
             // Compute regularization strengths
             SparseMatrixX<T> C(Ct.transpose());                             // create col-major transpose for fast column sums
-            VectorX<T> reg_strengths(num_ctrl);
             Eigen::DiagonalMatrix<T, Eigen::Dynamic> lambda(C.rows());       // NEW test case
             T str = 0;
             for (int i = 0; i < C.cols(); i++)
@@ -459,12 +497,102 @@ namespace mfa
             Ct = Ct*lambda;
 #endif
 
+            return;
+        }
+
+        void vazquez_reg(TensorProduct<T>& t,
+                            const SparseMatrixX<T>& N,
+                            const SparseMatrixX<T>& Nt,
+                            SparseMatrixX<T>& Ct,
+                            VectorX<T>& reg_strengths,
+                            int deriv,
+                            T c_target) // should always be =2 for vazquez's method
+        {
+            if (deriv != 2)
+            {
+                cerr << "ERROR: deriv order not equal to 2 in Encoder::vazquez_reg()\nExiting" << endl;
+                exit(0);
+            }
+
+            T str = 0;
+            int lid = 0;
+            VectorXi ijk(dom_dim);
+            VectorXi ijk_r(dom_dim);
+            GridInfo g;
+            g.init(dom_dim, t.nctrl_pts);
+
+            SparseMatrixX<T> NtN = Nt * Nt.transpose();
+
+            int* op = NtN.outerIndexPtr();
+            int* ip = NtN.innerIndexPtr();
+            T*   vp = NtN.valuePtr();
+            int oi = 0, ii = 0;
+            T val = 0;
+
+
+            Eigen::DiagonalMatrix<T, Eigen::Dynamic> lambda(Ct.cols());
+
+            for (int j = 0; j < t.nctrl_pts.prod(); j++) // loop thru cols of NtN
+            {
+                T sum0 = 0, sum1 = 0;
+                // oo = op[j];
+
+                g.idx2ijk(j, ijk_r); // ijk coords of basis functions for col j
+                
+                VolIterator pt_it(t.nctrl_pts);
+                while (!pt_it.done())
+                {
+                    lid = pt_it.cur_iter();
+                    ijk = pt_it.idx_dim();
+
+
+                    if ((ijk_r-ijk)(0) % 2 == 1) // if x offset between basis funs is odd
+                    {
+                        sum0 -= NtN.coeff(lid, j);
+                    }
+                    else
+                    {
+                        sum0 += NtN.coeff(lid, j);
+                    }
+
+                    if ((ijk_r-ijk)(1) % 2 == 1) // if y offset between basis funs is odd
+                    {
+                        sum1 -= NtN.coeff(lid, j);
+                    }
+                    else
+                    {
+                        sum1 += NtN.coeff(lid, j);
+                    }
+
+                    pt_it.incr_iter();
+                }
+                // cerr << "VazSum0: " << sum0 << endl;
+                // cerr << "VazSum1: " << sum1 << endl;
+
+                str = c_target * max(0.0, max(.11111 - abs(sum0), .11111 - abs(sum1)));
+                reg_strengths(j) = str;
+                for (int k = 0; k < dom_dim; k++)
+                {
+                    lambda.diagonal()(dom_dim*j + k) = str;
+                }
+            }
+            
+            Ct = Ct*lambda;     // right multiply for vazquez method
+
+            return;
+        }
+
+        void write_reg_strength(TensorProduct<T>& t,
+                                int deriv, 
+                                VectorX<T>& reg_strengths, 
+                                vector<vector<T>>& anchor_pts)
+        {
             // DEBUG: Export the regularization strength and position for each term
             ofstream reg_st_out;
             string reg_st_fname = "reg-strength-" + to_string(deriv) + ".txt";
             reg_st_out.open(reg_st_fname);
 
-            pt_it.init();   // reset control point iterator
+            VolIterator pt_it(t.nctrl_pts);
             while (!pt_it.done())
             {
                 for (int i = 0; i < dom_dim; i++)
@@ -477,10 +605,6 @@ namespace mfa
                 pt_it.incr_iter();
             }
             reg_st_out.close();
-
-            fill_time = clock() - fill_time;
-            if (verbose)
-                cerr << "Regularization Total Time: " << setprecision(3) << ((double)fill_time)/CLOCKS_PER_SEC << "s." << endl;
         }
 
         // Assemble B-spline collocation matrix for a full tensor, using sparse matrices
@@ -979,8 +1103,8 @@ namespace mfa
                 
                 if (reg1and2)   // constrain 1st and 2nd derivs
                 {
-                    ConsMatrix(t_idx, 1, regularization, N, input.mins(), input.maxs(), Ct1);
-                    ConsMatrix(t_idx, 2, regularization, N, input.mins(), input.maxs(), Ct2);
+                    ConsMatrix(t_idx, 1, regularization, N, Nt, input.mins(), input.maxs(), Ct1);
+                    ConsMatrix(t_idx, 2, regularization, N, Nt, input.mins(), input.maxs(), Ct2);
 
                     Ct.conservativeResize(Ct1.rows(), Ct1.cols() + Ct2.cols());
                     Ct.leftCols(Ct1.cols()) = Ct1;
@@ -989,7 +1113,7 @@ namespace mfa
                 }
                 else            // constrain only 2nd derivs
                 {
-                    ConsMatrix(t_idx, 2, regularization, N, input.mins(), input.maxs(), Ct2);
+                    ConsMatrix(t_idx, 2, regularization, N, Nt, input.mins(), input.maxs(), Ct2);
                     Ct = Ct2;            // only C2 regularization
                 }
 
