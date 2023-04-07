@@ -673,6 +673,12 @@ namespace mfa
             free_time   += (MPI_Wtime() - t0);
             t0          = MPI_Wtime();
 
+            // save old sizes of Ncons and Pcons in case they get resized because of insufficient constraints
+            int old_Ncons_rows  = Ncons.rows();
+            int old_Ncons_cols  = Ncons.cols();
+            int old_Pcons_rows  = Pcons.rows();
+            int old_Pcons_cols  = Pcons.cols();
+
             if (cons_type != ConsType::MFA_NO_CONSTRAINT)
                 ConsCtrlPtCurve(dim, t_idx, start_ijk, nin_pts, cons_type, Ncons, Pcons);
 
@@ -736,6 +742,12 @@ namespace mfa
 
             P = (Nfree.transpose() * Nfree).ldlt().solve(Nfree.transpose() * R);
             solve_time += (MPI_Wtime() - t0);
+
+            // restore sizes of Ncons, Pcons in case they were resized due to insufficient constraints
+            if (Ncons.rows() != old_Ncons_rows || Ncons.cols() != old_Ncons_cols)
+                Ncons.conservativeResize(old_Ncons_rows, old_Ncons_cols);
+            if (Pcons.rows() != old_Pcons_rows || Pcons.cols() != old_Pcons_cols)
+                Pcons.conservativeResize(old_Pcons_rows, old_Pcons_cols);
 
             // debug: check for very large control points
             // could be an indicator of spike artifacts, but not a robust test
@@ -1249,7 +1261,7 @@ namespace mfa
         // assumes Ncons was allocated by caller to correct size for number of constraints
         // the curve of input points may not be in the tensor of control points, but can be in a neighbor if the
         //  curve is in the constraint region in a dim. orthogonal to the current dim.
-        // helper function for EncodeTensorLocalSeparable
+        // helper function for ConsCtrlPtCurve
         // returns: actual number of constraints found (which could be less than the expected number)
         int PrevConsCtrlPtCurve(
                 int                 dim,                // current dimension
@@ -1339,8 +1351,9 @@ namespace mfa
 
             // compute the p constraints
             // these are in descending index order
-            int i;
+            int i, retval;
             for (i = 0; i < p(dim); i++)                                                                // for all constraint control points in current dim
+//             for (i = 0; i < 1; i++)     // TODO: debug
             {
                 // reset parameter in current dim to anchor of control point
                 param(dim) = tmesh.all_knots[dim][anchor[dim]];
@@ -1363,33 +1376,8 @@ namespace mfa
 
                 // find constraint control point aligned with curve
                 if (tmesh.anchor_matches_param(anchor, param))                                          // control point exists already
-                {
 
                     Pcons.row(i) = found_tensor.ctrl_pts.row(tmesh.anchor_ctrl_pt_idx(found_tensor, anchor));
-
-#ifdef MFA_DEBUG_KNOT_INSERTION
-
-                    // debug: add inserted control point to debug_tensor_prod for later visualization
-                    if (i == 0)
-                    {
-                        tmesh.debug_tensor_prod.ctrl_pts.conservativeResize(tmesh.debug_tensor_prod.ctrl_pts.rows() + 2, 1);
-                        tmesh.debug_tensor_prod.weights.conservativeResize(tmesh.debug_tensor_prod.weights.size() + 2);
-                        tmesh.debug_tensor_prod.nctrl_pts(1)++;
-                    }
-                    else
-                    {
-                        tmesh.debug_tensor_prod.ctrl_pts.row(tmesh.debug_tensor_prod.ctrl_pts.rows() - 2) = Pcons.row(i);
-                        tmesh.debug_tensor_prod.ctrl_pts.row(tmesh.debug_tensor_prod.ctrl_pts.rows() - 1) = Pcons.row(i - 1);
-                        tmesh.debug_tensor_prod.weights(tmesh.debug_tensor_prod.weights.size() - 2) = 1.0;
-                        tmesh.debug_tensor_prod.weights(tmesh.debug_tensor_prod.weights.size() - 1) = 1.0;
-                    }
-                    if (fabs(param(0) - 0.27778) < 0.001 && fabs(param(1) - 0.11558) < 0.001)
-                        fmt::print(stderr, "PrevConsCtrlPtCurve: param [{}] copying ctrl pt {} debug nctrl_pts [{}] debug nweights {}\n",
-                                param.transpose(), Pcons.row(i), tmesh.debug_tensor_prod.nctrl_pts.transpose(), tmesh.debug_tensor_prod.weights.size());
-
-#endif
-
-                }
                 else                                                                                    // control point needs to be inserted
                 {
                     TensorProduct<T>        new_tensor(found_tensor.knot_mins, found_tensor.knot_maxs, found_tensor.level); // temporary tensor to hold new control points
@@ -1413,43 +1401,103 @@ namespace mfa
                     // copy inserted control point into Pcons
                     Pcons.row(i) = new_tensor.ctrl_pts.row(ctrl_idx);
 
-#ifdef MFA_DEBUG_KNOT_INSERTION
+                    // debug: keep the inserted knot and decode a point to see if it changes
+#ifdef MFA_KEEP_KNOT_INSERTION
 
-                    // debug: add inserted control point to debug_tensor_prod for later visualization
-                    if (i == 0)
+                    if (start_ijk(1) == 50)     // only one curve
                     {
-                        tmesh.debug_tensor_prod.ctrl_pts.conservativeResize(tmesh.debug_tensor_prod.ctrl_pts.rows() + 2, 1);
-                        tmesh.debug_tensor_prod.weights.conservativeResize(tmesh.debug_tensor_prod.weights.size() + 2);
-                        tmesh.debug_tensor_prod.nctrl_pts(1)++;
-                    }
-                    else
-                    {
-                        tmesh.debug_tensor_prod.ctrl_pts.row(tmesh.debug_tensor_prod.ctrl_pts.rows() - 2) = Pcons.row(i);
-                        tmesh.debug_tensor_prod.ctrl_pts.row(tmesh.debug_tensor_prod.ctrl_pts.rows() - 1) = Pcons.row(i - 1);
-                        tmesh.debug_tensor_prod.weights(tmesh.debug_tensor_prod.weights.size() - 2) = 1.0;
-                        tmesh.debug_tensor_prod.weights(tmesh.debug_tensor_prod.weights.size() - 1) = 1.0;
-                    }
-                    if (fabs(param(0) - 0.27778) < 0.001 && fabs(param(1) - 0.11558) < 0.001)
-                    {
-                        fmt::print(stderr, "PrevConsCtrlPtCurve: param [{}] inserting new ctrl pt {} debug nctrl_pts [{}] debug weights {}\n",
-                                param.transpose(), Pcons.row(i), tmesh.debug_tensor_prod.nctrl_pts.transpose(), tmesh.debug_tensor_prod.weights.size());
-                        fmt::print(stderr, "PrevConsCtrlPtCurve: new_ctrl_idxs [{}] ctrl_idx {}\n",
-                                fmt::join(new_ctrl_pt_idxs, ","), ctrl_idx);
-                        fmt::print(stderr, "\nPrevConsCtrlPtCurve: new tensor:\n");
-                        tmesh.print_tensor(new_tensor);
+                        fmt::print(stderr, "start_ijk [{}]\n", start_ijk.transpose());
+
+//                         fmt::print(stderr, "\ntmesh before knot insertion\n");
+//                         tmesh.print(true, true, false, false);
+
+                        // try decoding a point
+                        mfa::Decoder<T> decoder(mfa_data, 0);
+                        VectorX<T> cpt(1);
+                        decoder.VolPt_tmesh(param, cpt);
+                        fmt::print(stderr, "\ndecoding before insertion param [{}] cpt [{}]\n", param.transpose(), cpt.transpose());
+
+                        // debug: intentionally change the control point added to verify that the decode point would change
+//                         new_tensor.ctrl_pts(ctrl_idx, 0) *= 5.0;
+
+                        // figure out which dimensions changed
+                        std::vector<int> changed(dom_dim, 0);
+                        for (auto j = 0; j < dom_dim; j++)
+                        {
+                            if (found_tensor.nctrl_pts(j) < new_tensor.nctrl_pts(j))
+                                changed[j]++;
+                        }
+
+                        found_tensor.nctrl_pts  = new_tensor.nctrl_pts;
+                        found_tensor.ctrl_pts   = new_tensor.ctrl_pts;
+                        found_tensor.weights    = new_tensor.weights;
+                        for (auto j = 0; j < dom_dim; j++)
+                        {
+                            if (new_knots[j].size())
+                            {
+                                tmesh.all_knots[j]         = new_knots[j];
+                                tmesh.all_knot_levels[j]   = new_knot_levels[j];
+                            }
+                        }
+
+                        // update knot_mins, knot_maxs, local knots of all tensors
+                        for (auto k = 0; k < tensor_prods.size(); k++)
+                        {
+                            auto& tp = tensor_prods[k];
+                            for (auto j = 0; j < dom_dim; j++)
+                            {
+                                if (!changed[j])
+                                    continue;
+                                if (new_knot_idxs[j] >= tp.knot_mins[j] && new_knot_idxs[j] <= tp.knot_maxs[j])
+                                {
+                                    tp.knot_maxs[j]++;
+                                    // update local knots
+                                    tp.knot_idxs[j].clear();
+                                    for (auto a = 0; a < tmesh.all_knots[j].size(); a++)
+                                    {
+                                        if (tmesh.all_knots[j][a] >= tp.knot_mins[j] && tmesh.all_knots[j][a] <= tp.knot_maxs[j] &&
+                                                tmesh.all_knot_levels[j][a] <= tp.level)
+                                            tp.knot_idxs[j].push_back(a);
+                                    }
+                                }
+                            }
+                        }
+
+//                         fmt::print(stderr, "\ntmesh after knot insertion\n");
+//                         tmesh.print(true, true, false, false);
+
+                        decoder.VolPt_tmesh(param, cpt);
+                        fmt::print(stderr, "\ndecoding after insertion param [{}] cpt [{}]\n", param.transpose(), cpt.transpose());
                     }
 
 #endif
-
                 }
 
                 // offset anchor for next constraint
                 if (i < p(dim) - 1 && !tmesh.knot_idx_ofst(found_tensor, anchor[dim], -1, dim, true, anchor[dim]))
-                    return i + 1;
+                {
+                    retval = i + 1;
+                    break;
+                }
 
+                retval = i + 1;
             }   // control points
 
-            return i;
+#ifdef MFA_DEBUG_KNOT_INSERTION
+
+            // debug: add inserted control point to debug_tensor_prod for later visualization
+            tmesh.debug_tensor_prod.ctrl_pts.conservativeResize(tmesh.debug_tensor_prod.ctrl_pts.rows() + retval, 1);
+            tmesh.debug_tensor_prod.weights.conservativeResize(tmesh.debug_tensor_prod.weights.size() + retval);
+            tmesh.debug_tensor_prod.nctrl_pts(1)++;         // TODO: only for curves in x direction, new rows added in y direction
+            for (auto j = 0; j < retval; j++)
+            {
+                tmesh.debug_tensor_prod.ctrl_pts.row(tmesh.debug_tensor_prod.ctrl_pts.rows() - retval + j) = Pcons.row(j);
+                tmesh.debug_tensor_prod.weights(tmesh.debug_tensor_prod.weights.size() - retval + j) = 1.0;
+            }
+
+#endif
+
+            return retval;
         }
 
         // computes curve of next constraint control points basis functions in one dimension
@@ -1459,7 +1507,7 @@ namespace mfa
         // assumes Ncons was allocated by caller to correct size for number of constraints
         // the curve of input points may not be in the tensor of control points, but can be in a neighbor if the
         //  curve is in the constraint region in a dim. orthogonal to the current dim.
-        // helper function for EncodeTensorLocalSeparable
+        // helper function for ConsCtrlPtCurve
         int NextConsCtrlPtCurve(
                 int                 dim,                // current dimension
                 TensorIdx           t_idx,              // index of original tensor of (free) control points

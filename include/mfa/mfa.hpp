@@ -43,7 +43,8 @@
 #define MFA_SMALLER_TENSORS
 
 // debug Boehm knot insertion
-// #define MFA_DEBUG_KNOT_INSERTION
+// #define MFA_DEBUG_KNOT_INSERTION        // make an extra tensor with the inserted control points
+// #define MFA_KEEP_KNOT_INSERTION         // replace original tensor with new tensor that includes inserted control points and test decoding for any change
 
 #include    <Eigen/Dense>
 #include    <Eigen/Sparse>

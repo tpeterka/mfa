@@ -894,80 +894,6 @@ namespace mfa
             int local_span = tmesh.global2local_knot_idx(global_span, tensor, cur_dim);
             int shift = tensor.knot_mins[cur_dim] == 0 ? 0 : (p(cur_dim) + 1) / 2;      // shift ctrl pt indices for interior tensors w/o clamped end
 
-            //             DEPRECATE
-//             // if too close to edge of interior tensor, only compute the newly inserted control point
-//             // w/o recomputing the others in the changed range of p(cur_dim)
-//             // this is ok because we only keep the newly inserted control point eventually for our separable local constraints
-//             // to do a proper knot insertion, would need to go to side neighbor and get more control points from there
-//             // but the control points there likely won't align, setting up a recursion of knot insertions
-//             // we don't do this
-//             if (tmesh.knot_idx_dist(tensor, tensor.knot_mins[cur_dim], global_span, cur_dim, false) < p(cur_dim) - 1 ||
-//                     tmesh.knot_idx_dist(tensor, global_span, tensor.knot_maxs[cur_dim], cur_dim, false) < p(cur_dim))
-//             {
-//                 // copy control points before local span
-//                 for (auto i = 0; i <= local_span - p(cur_dim) + shift; i++)
-//                 {
-//                     new_ctrl_pts.row(i) = old_ctrl_pts.row(i);
-//                     new_weights(i)      = old_weights(i);
-//                 }
-// 
-//                 // copy control points after local span
-//                 for (auto i = local_span + shift; i < tensor.nctrl_pts(cur_dim); i++)
-//                 {
-//                     new_ctrl_pts.row(i + 1) = old_ctrl_pts.row(i);
-//                     new_weights(i + 1)      = old_weights(i);
-//                 }
-// 
-//                 // index of new control point to be inserted
-//                 new_ctrl_pt_idx = local_span - (p(cur_dim) + 1) / 2 + 1 + shift;
-// 
-//                 // set up only the two temp_ctrl points that will be needed
-//                 for (auto i = 0; i < 2; i++)
-//                 {
-//                     if (new_ctrl_pt_idx + i < old_ctrl_pts.rows())
-//                     {
-//                         temp_ctrl_pts.row(i)    = old_ctrl_pts.row(new_ctrl_pt_idx - 1 + i);
-//                         temp_weights(i)         = old_weights(new_ctrl_pt_idx - 1 + i);
-//                     }
-//                     // we don't have a second control point in this tensor
-//                     // punt and copy the previous control point
-//                     // TODO: FIXME
-//                     else if (i == 1)
-//                     {
-//                         temp_ctrl_pts.row(i)    = old_ctrl_pts.row(ctrl_pt + i - 1);
-//                         temp_weights(i)         = old_weights(ctrl_pt + i - 1);
-//                     }
-//                     else
-//                     {
-//                         fmt::print(stderr, "NewCurveKnotIns() 2: ctrl_pt {} global_span {} local_span {} shift {} ctrl_pts {} t_idx {} dim {}\n",
-//                                 ctrl_pt, global_span, local_span, shift, old_ctrl_pts.rows(), tensor_idx, cur_dim);
-//                         tmesh.print_tensor(tensor);
-//                         throw MFAError(fmt::format( "NewCurveKnotInsertion(): index out of range\n"));
-//                     }
-//                 }
-// 
-//                 // get knots for interpolation
-//                 vector<KnotIdx> loc_knots(p(cur_dim) + 2);
-//                 tmesh.knot_intersections_dim(anchor, tensor_idx, loc_knots, cur_dim);
-// 
-//                 // pick out the two knots to interpolate from the local knot vector
-//                 // TODO: why these two knots?
-//                 KnotIdx left_idx    = loc_knots[1];
-//                 KnotIdx right_idx   = loc_knots.back();
-// 
-//                 // interpolate only the one newly inserted control point
-//                 int i                           = p(cur_dim) / 2;
-//                 T alpha                         = (u - old_knots[left_idx]) / (old_knots[right_idx] - old_knots[left_idx]);
-//                 new_ctrl_pts.row(ctrl_pt + 1)   = alpha * temp_ctrl_pts.row(i + 1) + (1.0 - alpha) * temp_ctrl_pts.row(i);
-//                 new_weights(ctrl_pt + 1)        = alpha * temp_weights(i + 1) + (1.0 - alpha) * temp_weights(i);
-//                 new_ctrl_pt_idx                 = ctrl_pt + 1;
-// 
-//                 // debug
-// //                 fmt::print(stderr, "NewCurveKnotInsertion(): inserting new control point using linear interpolation at idx {} value [{}]\n", new_ctrl_pt_idx, new_ctrl_pts.row(local_span + 1));
-// 
-//                 return;
-//             }
-
             // save unaltered control points and weights
             for (auto i = 0; i <= local_span - p(cur_dim) + shift; i++)     // control points before the p altered ones
             {
@@ -1016,35 +942,20 @@ namespace mfa
 
                 auto ofst1 = prev_knots[i];                             // ofst1 = global_span + 1 + i - p(cur_dim)
                 auto ofst2 = next_knots[i + 1];                         // ofst2 = global_span + 1 + i
+                T alpha    = (u - old_knots[ofst1]) / (old_knots[ofst2] - old_knots[ofst1]);
 
-                // ------ DEPRECATE -----
+                // debug
+                MatrixX<T> old_ctrl0 = temp_ctrl_pts.row(i);
+                MatrixX<T> old_ctrl1 = temp_ctrl_pts.row(i + 1);
 
-//                 bool ofst_success;
-// 
-//                 KnotIdx old_ofst1;               // ofst1 = global_span + 1 + i - p(cur_dim)
-//                 ofst_success = tmesh.knot_idx_ofst(tensor, global_span, i + 1 - p(cur_dim), cur_dim, false, old_ofst1);
-//                 if (!ofst_success)
-//                     fmt::print(stderr, "Error: NewCurveKnotInsertion(): unable to offset global_span by 1 + i - p(cur_dim)\n");
-// //                     throw MFAError(fmt::format("Error: NewCurveKnotInsertion(): unable to offset global_span by 1 + i - p(cur_dim)\n"));
-// 
-//                 KnotIdx old_ofst2;               // ofst2 = global_span + 1 + i
-//                 ofst_success = tmesh.knot_idx_ofst(tensor, global_span, i + 1, cur_dim, false, old_ofst2);
-//                 if (!ofst_success)
-//                     fmt::print(stderr, "Error: NewCurveKnotInsertion(): unable to offset global span by 1 + i\n");
-// //                     throw MFAError(fmt::format("Error: NewCurveKnotInsertion(): unable to offset global span by 1 + i\n"));
-// 
-//                 // check if knot offsets match knot intersections
-//                 if (ofst1 != old_ofst1)
-//                     fmt::print(stderr, "ofst1 {} != old_ofst1 {}\n", ofst1, old_ofst1);
-//                 if (ofst2 != old_ofst2)
-//                     fmt::print(stderr, "ofst2 {} != old_ofst2 {}\n", ofst2, old_ofst2);
-
-                // ----- end of DEPRCATE -----
-
-                T alpha                 = (u - old_knots[ofst1]) / (old_knots[ofst2] - old_knots[ofst1]);
                 temp_ctrl_pts.row(i)    = alpha * temp_ctrl_pts.row(i + 1) + (1.0 - alpha) * temp_ctrl_pts.row(i);
                 temp_weights(i)         = alpha * temp_weights(i + 1) + (1.0 - alpha) * temp_weights(i);
                 nrecomp_ctrl++;
+
+                // debug
+//                 if (i == p(cur_dim) / 2)
+//                     fmt::print(stderr, "new ctrl pt {} at i {} alpha {} param u {} global_span {} old_ctrl0 {} old_ctrl1 {}\n",
+//                             temp_ctrl_pts.row(i), i, alpha, u, global_span, old_ctrl0, old_ctrl1);
             }
 
             // load modified p(cur_dim) control points
@@ -1056,8 +967,8 @@ namespace mfa
             new_ctrl_pt_idx = local_span - (p(cur_dim) + 1) / 2 + 1 + shift;
 
             // debug
-//             fmt::print(stderr, "NewCurveKnotInsertion(): inserting new curve ctrl pt at idx {} with value {}\n",
-//             new_ctrl_pt_idx, new_ctrl_pts.row(new_ctrl_pt_idx));
+//             fmt::print(stderr, "NewCurveKnotInsertion(): inserting new curve ctrl pt at idx {} param u {} with value {}\n",
+//             new_ctrl_pt_idx, u, new_ctrl_pts.row(new_ctrl_pt_idx));
         }
 
         // volume knot insertion
