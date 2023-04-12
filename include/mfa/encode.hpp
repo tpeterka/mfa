@@ -1299,7 +1299,7 @@ auto duration3 = 0;
                 // for all curves in the current dimension
                 while (!in_slice_iter.done())
                 {
-                    fprintf(stderr, "\r iteration %d of %d", in_slice_iter.cur_iter(), in_slice_iter.tot_iters());
+                    // fprintf(stderr, "\r iteration %d of %d", in_slice_iter.cur_iter(), in_slice_iter.tot_iters());
 
                     CurveIterator   in_curve_iter(in_slice_iter);       // one curve of the input points in the current dim
                     CurveIterator   out_curve_iter(out_slice_iter);     // one curve of the output points in the current dim
@@ -1605,17 +1605,17 @@ t1 = std::chrono::high_resolution_clock::now();
 t2 = std::chrono::high_resolution_clock::now();
 
             // find matrix of free control point basis functions
-cerr << "samepattern: " << boolalpha << same_pattern << ", idx: " << in_curve_iter.slice_iter_->cur_iter();
+// cerr << "samepattern: " << boolalpha << same_pattern << ", idx: " << in_curve_iter.slice_iter_->cur_iter();
             double t0 = MPI_Wtime();
-            if ((dimcount == 0 && same_pattern == false) || in_curve_iter.slice_iter_->cur_iter() == 0)
+            // if ((dimcount == 0 && same_pattern == false) || in_curve_iter.slice_iter_->cur_iter() == 0)
             {
-cerr << "recompute";
+// cerr << "recompute";
                 ComputeControlCurveMat(dim, t_idx, start_ijk, in_curve_iter, in_domain, nin_pts(dim), N, bfi);
             }
-cerr << endl;
+// cerr << endl;
 
 t3 = std::chrono::high_resolution_clock::now();
-            if ((dimcount == 0 && same_pattern == false) || in_curve_iter.slice_iter_->cur_iter() == 0)
+            // if ((dimcount == 0 && same_pattern == false) || in_curve_iter.slice_iter_->cur_iter() == 0)
             {
                 NtN_ldlt = (N.transpose() * N).ldlt();
             }
