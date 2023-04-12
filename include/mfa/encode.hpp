@@ -1236,12 +1236,20 @@ cerr << "dom_starts" << dom_starts << endl;
             VectorXi start_ijk;
             VectorXi nin_pts    = ndom_pts;
             VectorXi nout_pts   = ndom_pts;
-            // nout_pts(0) = t.nctrl_pts(0);
-nout_pts(dom_dim-1) = t.nctrl_pts(dom_dim-1);
+
+#ifndef MFAREV
+            nout_pts(0) = t.nctrl_pts(0);
+#else
+            nout_pts(dom_dim-1) = t.nctrl_pts(dom_dim-1);
+#endif
 
             for (auto dim = 0; dim < dom_dim; dim++)                                    // for all domain dimensions
             {
+#ifndef MFAREV
+                int altdim = dim;
+#else
                 int altdim = dom_dim - dim - 1; // TRY: reverse order of encoded dimensions
+#endif 
                 if (verbose)
                 {
                     cerr << "  begin encoding dimension " << altdim << endl;
@@ -1329,11 +1337,13 @@ cerr << "duration3: " << duration3 << endl;
 
                 // adjust input, output numbers of points for next iteration
                 nin_pts(altdim) = t.nctrl_pts(altdim);
-                // if (dim < dom_dim - 1)
-                    // nout_pts(dim + 1) = t.nctrl_pts(dim + 1);
-
+#ifndef MFAREV
+                if (dim < dom_dim - 1)
+                    nout_pts(dim + 1) = t.nctrl_pts(dim + 1);
+#else
                 if (altdim > 0)
                     nout_pts(altdim - 1) = t.nctrl_pts(altdim - 1);
+#endif
 
             }       // for all domain dimensions
 
@@ -1376,8 +1386,11 @@ cerr << "duration3: " << duration3 << endl;
                 // for start of the curve, for dims prior to current dim, find anchor and param
                 // those dims are in control point index space for the current tensor
                 int offset = (mfa_data.p(dim) + 1)/2;
-                // for (auto i = 0; i < dim; i++)
-for (int i = dom_dim - 1; i > dim; i--)
+#ifndef MFAREV
+                for (auto i = 0; i < dim; i++)
+#else
+                for (int i = dom_dim - 1; i > dim; i--)
+#endif
                 {
                     mfa_data.tmesh.knot_idx_ofst(t, t.knot_mins[i], start_ijk(i) + offset, i, false, anchor[i]);                     // computes anchor as offset from start of tensor
                     param(i)    = mfa_data.tmesh.all_knots[i][anchor[i]];
@@ -1387,15 +1400,21 @@ for (int i = dom_dim - 1; i > dim; i--)
 
                 // for the start of the curve, for current dim. and higher, find param
                 // these dims are in the input point index space
-                // for (auto i = dim; i < dom_dim; i++)
-for (int i = dim; i >= 0; i--)
+#ifndef MFAREV
+                for (auto i = dim; i < dom_dim; i++)
+#else
+                for (int i = dim; i >= 0; i--)
+#endif
                     param(i) = input.params->param_grid[i][start_ijk(i)];
 
                 // for the start of the curve, for higher than the current dim, find anchor
                 // these dims are in the input point space
                 // in the current dim, the anchor coordinate will be replaced below by the control point anchor
-                // for (auto i = dim + 1; i < dom_dim; i++)
-for (int i = dim - 1; i >= 0; i--)
+#ifndef MFAREV
+                for (auto i = dim + 1; i < dom_dim; i++)
+#else
+                for (int i = dim - 1; i >= 0; i--)
+#endif
                 {
                     // if param == 0, FindSpan finds the last 0-value knot span, but we want the first control point anchor, which is an earlier span
                     if (param(i) == 0.0)
@@ -1485,7 +1504,11 @@ for (int i = dim - 1; i >= 0; i--)
             VectorXi cur_ijk = start_ijk;
             bool same_pattern = true;
 
+#ifndef MFAREV
+            int dimcount = dim;
+#else
             int dimcount = dom_dim - dim - 1;
+#endif
 
 t1 = std::chrono::high_resolution_clock::now();
             // copy one curve of input points to right hand side
@@ -1648,8 +1671,11 @@ t4 = std::chrono::high_resolution_clock::now();
             // for start of the curve, for dims prior to current dim, find anchor and param
             // those dims are in control point index space for the current tensor
             int offset = (mfa_data.p(dim) + 1)/2;
-            // for (auto i = 0; i < dim; i++)
-for (int i = dom_dim - 1; i > dim; i--)
+#ifndef MFAREV
+            for (auto i = 0; i < dim; i++)
+#else 
+            for (int i = dom_dim - 1; i > dim; i--)
+#endif
             {
                 mfa_data.tmesh.knot_idx_ofst(t, t.knot_mins[i], start_ijk(i) + offset, i, false, anchor[i]);                     // computes anchor as offset from start of tensor
                 param(i)    = mfa_data.tmesh.all_knots[i][anchor[i]];
@@ -1657,15 +1683,21 @@ for (int i = dom_dim - 1; i > dim; i--)
 
             // for the start of the curve, for current dim. and higher, find param
             // these dims are in the input point index space
-            // for (auto i = dim; i < dom_dim; i++)
-for (auto i = dim; i >= 0; i--)
+#ifndef MFAREV
+            for (auto i = dim; i < dom_dim; i++)
+#else
+            for (auto i = dim; i >= 0; i--)
+#endif
                 param(i) = input.params->param_grid[i][start_ijk(i)];
 
             // for the start of the curve, for higher than the current dim, find anchor
             // these dims are in the input point space
             // in the current dim, the anchor coordinate will be replaced below by the control point anchor
-            // for (auto i = dim + 1; i < dom_dim; i++)
-for (auto i = dim - 1; i >= 0; i--)
+#ifndef MFAREV
+            for (auto i = dim + 1; i < dom_dim; i++)
+#else
+            for (auto i = dim - 1; i >= 0; i--)
+#endif
             {
                 // if param == 0, FindSpan finds the last 0-value knot span, but we want the first control point anchor, which is an earlier span
                 if (param(i) == 0.0)
@@ -1697,7 +1729,11 @@ for (auto i = dim - 1; i >= 0; i--)
                 {                    
                     T u = input.params->param_grid[dim][start_ijk(dim) + j];
 
+#ifndef MFAREV
                     if (dim == 0)
+#else
+                    if (dim == dom_dim-1)
+#endif
                     {
                         if (in_domain[in_curve_iter.cur_iter_full()])
                             N(j, i) = mfa_data.OneBasisFun(dim, u, local_knots);
