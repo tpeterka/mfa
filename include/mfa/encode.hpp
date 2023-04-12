@@ -441,7 +441,7 @@ namespace mfa
                             int deriv,
                             T c_target)
         {
-#if 1 // OLD regularization technique (column-specific)
+#if 0 // OLD regularization technique (column-specific)
             // Compute regularization strengths
             SparseMatrixX<T> C(Ct.transpose());                             // create col-major transpose for fast column sums
 

@@ -1666,7 +1666,7 @@ exit(1);
             // This small loop accounts for ~40% of the total time for this method (measured 11/16/21 for 3d, p=4, ctrlpts=30)
             for (int i = 0; i < dom_dim; i++)
             {
-                di.span[i] = mfa_data.FindSpan(i, param(i));
+                di.span[i] = mfa_data.tmesh.FindSpan(i, param(i));
                 mfa_data.FastBasisFunsDers(i, param(i), di.span[i], 1, di.D[i], di.bfi);
             }
 

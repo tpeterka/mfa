@@ -161,6 +161,7 @@ endif                       ()
 # Libraries
 set                         (libraries
                              ${libraries}
+                             ${CMAKE_DL_LIBS} 
                              ${CLP_LIB}
                              ${COIN_UTILS_LIB}
                              ${CMAKE_THREAD_LIBS_INIT}
