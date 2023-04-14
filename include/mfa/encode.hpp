@@ -968,7 +968,7 @@ namespace mfa
         {
             double t0 = MPI_Wtime();
 
-// #define MFAREV
+#define MFAREV
             if (verbose)
             {
                 cerr << "Starting EncodeSeparableConstrained" << endl;
@@ -1455,141 +1455,6 @@ t4 = std::chrono::high_resolution_clock::now();
             // }
         }
 
-//         void ComputeControlCurveMat(
-//                 int                 dim,                // current dimension
-//                 TensorIdx           t_idx,              // index of tensor of control points
-//                 const VectorXi&     start_ijk,          // multidim index of first input point for the curve, including constraints
-//                 CurveIterator&      in_curve_iter,
-//                 const vector<bool>& in_domain,
-//                 size_t              npts,               // number of input points in current dim, including constraints
-//                 MatrixX<T>&         N,              // (output) matrix of free control points basis functions
-//                 BasisFunInfo<T>&    bfi)
-//         {
-//             const TensorProduct<T>& t = mfa_data.tmesh.tensor_prods[t_idx];
-//             const int der_order = 1;
-//             const int nctrl = t.nctrl_pts(dim);
-
-//             N = MatrixX<T>::Zero(npts, nctrl);
-//             VectorXi cur_ijk = start_ijk;
-
-//             if (N.rows() != npts)
-//             {
-//                 cerr << "Ack 1" << endl;
-//                 exit(1);
-//             }
-
-//             vector<KnotIdx>     anchor(dom_dim);          
-
-//             // local knot vector
-//             vector<vector<KnotIdx>> local_knot_idxs(dom_dim); // local knot indices in all dims
-//             vector<T> local_knots(mfa_data.p(dim) + 2);       // local knot vector for current dim
-//             for (auto k = 0; k < dom_dim; k++)
-//                 local_knot_idxs[k].resize(mfa_data.p(k) + 2);
-
-//             VectorX<T> param(dom_dim);
-
-//             // for start of the curve, for dims prior to current dim, find anchor and param
-//             // those dims are in control point index space for the current tensor
-//             int offset = (mfa_data.p(dim) + 1)/2;
-// #ifndef MFAREV
-//             for (auto i = 0; i < dim; i++)
-// #else 
-//             for (int i = dom_dim - 1; i > dim; i--)
-// #endif
-//             {
-//                 mfa_data.tmesh.knot_idx_ofst(t, t.knot_mins[i], start_ijk(i) + offset, i, false, anchor[i]);                     // computes anchor as offset from start of tensor
-//                 param(i)    = mfa_data.tmesh.all_knots[i][anchor[i]];
-//             }
-
-//             // for the start of the curve, for current dim. and higher, find param
-//             // these dims are in the input point index space
-// #ifndef MFAREV
-//             for (auto i = dim; i < dom_dim; i++)
-// #else
-//             for (auto i = dim; i >= 0; i--)
-// #endif
-//                 param(i) = input.params->param_grid[i][start_ijk(i)];
-
-//             // for the start of the curve, for higher than the current dim, find anchor
-//             // these dims are in the input point space
-//             // in the current dim, the anchor coordinate will be replaced below by the control point anchor
-// #ifndef MFAREV
-//             for (auto i = dim + 1; i < dom_dim; i++)
-// #else
-//             for (auto i = dim - 1; i >= 0; i--)
-// #endif
-//             {
-//                 // if param == 0, FindSpan finds the last 0-value knot span, but we want the first control point anchor, which is an earlier span
-//                 if (param(i) == 0.0)
-//                     anchor[i] = (mfa_data.p(i) + 1) / 2;
-//                 else if (param(i) == 1.0)
-//                     anchor[i] = mfa_data.tmesh.all_knots[i].size() - 2 - (mfa_data.p(i) + 1) / 2;
-//                 else
-//                     anchor[i] = mfa_data.tmesh.FindSpan(i, param(i), t);
-//             }
-
-//             // for all control points in current dim
-//             for (int i = 0; i < t.nctrl_pts(dim); i++)
-//             {
-//                 // anchor of control point in current dim
-//                 anchor[dim] = mfa_data.tmesh.ctrl_pt_anchor_dim(dim, t, i);
-
-//                 // local knot vector in currrent dimension
-//                 mfa_data.tmesh.knot_intersections(anchor, t_idx, local_knot_idxs);                  // local knot indices in all dimensions
-
-//                 // local knots in only current dim
-//                 for (int n = 0; n < local_knot_idxs[dim].size(); n++)
-//                     local_knots[n] = mfa_data.tmesh.all_knots[dim][local_knot_idxs[dim][n]];
-
-//                 // for all input points (for this tensor) in current dim
-//                 cur_ijk = start_ijk;
-
-//                 in_curve_iter.reset();
-//                 for (int j = 0; j < npts; j++)
-//                 {                    
-//                     T u = input.params->param_grid[dim][start_ijk(dim) + j];
-
-// #ifndef MFAREV
-//                     if (dim == 0)
-// #else
-//                     if (dim == dom_dim-1)
-// #endif
-//                     {
-//                         if (in_domain[in_curve_iter.cur_iter_full()])
-//                             N(j, i) = mfa_data.OneBasisFun(dim, u, local_knots);
-//                         else
-//                             N(j, i) = mfa_data.OneDerBasisFun(dim, 1, u, local_knots, bfi);
-//                     }
-//                     else
-//                     {
-//                        N(j, i) = mfa_data.OneBasisFun(dim, u, local_knots); 
-//                     }
-
-
-//                     in_curve_iter.incr_iter();
-//                 }
-//             }
-
-//             // for (int j = 0; j < npts; j++)  
-//             // {
-//             //     cur_ijk(dim) = start_ijk(dim) + j;
-//             //     T u = input.params->param_grid[dim][cur_ijk(dim)];
-//             //     int span = mfa_data.tmesh.FindSpan(dim, u, nctrl);
-
-//             //     mfa_data.DerBasisFuns(dim, u, span, der_order, ders);
-
-//             //     for (int i = 0; i < dom_dim; i++)
-//             //     {
-//             //         if (i == dom_dim && !value_constraint(cur_ijk))
-//             //             N.row(j*dom_dim + i) = ders.row(1);
-//             //         else
-//             //             N.row(j*dom_dim + i) = ders.row(0);
-//             //     }
-//             // }
-
-//             return;
-//         }
-
         void ComputeControlCurveMat(
                 int                 dim,                // current dimension
                 TensorIdx           t_idx,              // index of tensor of control points
@@ -1604,7 +1469,11 @@ t4 = std::chrono::high_resolution_clock::now();
             const int nctrl = t.nctrl_pts(dim);
             N = MatrixX<T>::Zero(npts, nctrl);
 
+#ifndef MFAREV
             if (dim != 0)
+#else
+            if (dim != dom_dim - 1)
+#endif
             {
                 N = coll;
                 return;
