@@ -72,6 +72,7 @@ namespace mfa
         size_t              max_num_curves;                 // max num. curves per dimension to check in curve version
         MatrixX<T>          coll;       // temporary collocation matrix
         MatrixX<T>          coll_d;     // temporary differentiated collocation matrix
+        vector<int>         t_spans;      // temporary vector to hold spans of each input point
 
     public:
 
@@ -756,212 +757,6 @@ namespace mfa
         }
 
 #ifdef MFA_TBB
-
-        // computes and returns one differentiated basis function value 
-        // for a given parameter value and local knot vector
-        // Algorithm 2.5 in P&T
-        //
-        // NOTE Algorithm 2.5 in P&T has an error: 
-        //   In the loop "compute table of width k," Uright
-        //   Should be U[i+j+p-k+jj+1], instead of U[i+j+p+jj+1]
-        T OneDerBasisFun(
-                int                     cur_dim,            // current dimension
-                int                     der,                // derivative order
-                T                       u,                  // parameter value
-                const vector<T>&        loc_knots,          // local knot vector
-                BasisFunInfo<T>&        bfi) const    
-        {
-            const vector<T>& U = loc_knots;                 // alias for knot vector for current dimension (size p+2)
-            const int pc = p(cur_dim);
-
-            // If not in local support
-            if (u < U[0] || u >= U[pc + 1])
-                return 0;
-
-            T saved = 0, uleft = 0, uright = 0, temp = 0;
-
-            // matrix from p. 70 of P&T
-            // upper triangle is basis functions
-            // lower triangle is knot differences
-            // nn ~ bfi.ndu
-            for (int j = 0; j <= pc; j++)
-            {
-                if (u >= U[j] && u < U[j+1])
-                    bfi.ndu[j][0] = 1;
-                else
-                    bfi.ndu[j][0] = 0;
-            }
-
-            for (int k = 1; k <= pc; k++)
-            {
-                if (bfi.ndu[0][k-1] == 0) 
-                    saved = 0;
-                else 
-                    saved = ((u - U[0]) * bfi.ndu[0][k-1]) / (U[k] - U[0]);
-                
-                for (int j = 0; j < pc - k + 1; j++)
-                {
-                    uleft = U[j+1];
-                    uright = U[j+k+1];
-
-                    if (bfi.ndu[j+1][k-1] == 0)
-                    {
-                        bfi.ndu[j][k] = saved;
-                        saved = 0;
-                    }
-                    else
-                    {
-                        temp = bfi.ndu[j+1][k-1] / (uright - uleft);
-                        bfi.ndu[j][k] = saved + (uright - u)*temp;
-                        saved = (u-uleft) * temp;
-                    }
-                }
-            }
-
-            if (der == 0)
-                return bfi.ndu[0][pc];    // bfi.ndu[0][pc] is the 0th-order derivative (function value)
-
-            // Copy the necessary basis functions to a new buffer 'dertable'
-            // dertable will compute intermediate calculations for the requested derivative
-            // We make the copy so that nn is not overwritten (but this may not be necessary)
-            // VectorX<T> dertable(der+1);
-            // for (int j = 0; j <= der; j++)
-            //     dertable(j) = nn(j, pc-der);
-
-            // compute the derivative of order 'der'
-            // NOTE: does not compute lower order derivatives
-            for (int l = 1; l <= der; l++)
-            {
-                if (bfi.ndu[0][pc-der] == 0) 
-                    saved = 0;
-                else
-                    saved = bfi.ndu[0][pc-der] / (U[pc - der + l] - U[0]);
-
-                for (int j = 0; j < der - l + 1; j++)
-                {
-                    uleft = U[j+1];
-                    uright = U[j + 1 + pc - der + l];
-                    if (bfi.ndu[j+1][pc-der] == 0)
-                    {
-                        bfi.ndu[j][pc-der] = (pc - der + l)*saved;
-                        saved = 0;
-                    }
-                    else
-                    {
-                        temp = bfi.ndu[j+1][pc-der] / (uright - uleft);
-                        bfi.ndu[j][pc-der] = (pc - der + l)*(saved - temp);
-                        saved = temp;
-                    }
-                }
-            }
-
-            return bfi.ndu[0][pc-der];
-        }
-
-                // computes and returns one differentiated basis function value 
-        // for a given parameter value and local knot vector
-        // Algorithm 2.5 in P&T
-        //
-        // NOTE Algorithm 2.5 in P&T has an error: 
-        //   In the loop "compute table of width k," Uright
-        //   Should be U[i+j+p-k+jj+1], instead of U[i+j+p+jj+1]
-        T OneDerBasisFun(
-                int                     cur_dim,            // current dimension
-                int                     der,                // derivative order
-                T                       u,                  // parameter value
-                const vector<T>&        loc_knots) const    // local knot vector
-        {
-            vector<T> N(p(cur_dim) + 1);                    // triangular table result
-            const vector<T>& U = loc_knots;                 // alias for knot vector for current dimension (size p+2)
-            const int pc = p(cur_dim);
-
-            // If not in local support
-            if (u < U[0] || u >= U[pc + 1])
-                return 0;
-
-            T saved = 0, uleft = 0, uright = 0, temp = 0;
-
-            // matrix from p. 70 of P&T
-            // upper triangle is basis functions
-            // lower triangle is knot differences
-            MatrixX<T> nn(pc + 1, pc + 1);
-
-            for (int j = 0; j <= pc; j++)
-            {
-                if (u >= U[j] && u < U[j+1])
-                    nn(j,0) = 1;
-                else
-                    nn(j,0) = 0;
-            }
-
-            for (int k = 1; k <= pc; k++)
-            {
-                if (nn(0, k-1) == 0) 
-                    saved = 0;
-                else 
-                    saved = ((u - U[0]) * nn(0, k-1)) / (U[k] - U[0]);
-                
-                for (int j = 0; j < pc - k + 1; j++)
-                {
-                    uleft = U[j+1];
-                    uright = U[j+k+1];
-
-                    if (nn(j+1, k-1) == 0)
-                    {
-                        nn(j,k) = saved;
-                        saved = 0;
-                    }
-                    else
-                    {
-                        temp = nn(j+1, k-1) / (uright - uleft);
-                        nn(j,k) = saved + (uright - u)*temp;
-                        saved = (u-uleft) * temp;
-                    }
-                }
-            }
-
-            if (der == 0)
-                return nn(0,pc);    // nn(0,pc) is the 0th-order derivative (function value)
-
-            // Copy the necessary basis functions to a new buffer 'dertable'
-            // dertable will compute intermediate calculations for the requested derivative
-            // We make the copy so that nn is not overwritten (but this may not be necessary)
-            VectorX<T> dertable(der+1);
-            for (int j = 0; j <= der; j++)
-                dertable(j) = nn(j, pc-der);
-
-            // compute the derivative of order 'der'
-            // NOTE: does not compute lower order derivatives
-            for (int l = 1; l <= der; l++)
-            {
-                if (dertable(0) == 0) 
-                    saved = 0;
-                else
-                    saved = dertable(0) / (U[pc - der + l] - U[0]);
-
-                for (int j = 0; j < der - l + 1; j++)
-                {
-                    uleft = U[j+1];
-                    uright = U[j + 1 + pc - der + l];
-                    if (dertable(j+1) == 0)
-                    {
-                        dertable(j) = (pc - der + l)*saved;
-                        saved = 0;
-                    }
-                    else
-                    {
-                        temp = dertable(j+1) / (uright - uleft);
-                        dertable(j) = (pc - der + l)*(saved - temp);
-                        saved = temp;
-                    }
-                }
-            }
-
-            return dertable(0);
-        }
-
-
-
         // Computes the product of two Eigen sparse matrices using TBB.  All matrices must be in column major format.
         void MatProdThreaded(   Eigen::SparseMatrix<T, Eigen::ColMajor>& lhs,
                                 Eigen::SparseMatrix<T, Eigen::ColMajor>& rhs,
@@ -1264,10 +1059,12 @@ cerr << "dom_starts" << dom_starts << endl;
                 int nc = t.nctrl_pts(altdim);
                 coll = MatrixX<T>::Zero(np, nc);
                 coll_d = MatrixX<T>::Zero(np, nc);
+                t_spans = vector<int>(np, 0);
                 vector<vector<T>> funs(2, vector<T>(mfa_data.p(dim)+1, 0));
                 for (int i = 0; i < coll.rows(); i++)
                 {
                     int span = mfa_data.tmesh.FindSpan(altdim, input.params->param_grid[altdim][i], nc);
+                    t_spans[i] = span;
                     mfa_data.FastBasisFunsDer1(altdim, input.params->param_grid[altdim][i], span, funs, bfi);
 
                     for (int j = 0; j < mfa_data.p(altdim)+1; j++)
@@ -1294,11 +1091,6 @@ cerr << "dom_starts" << dom_starts << endl;
 
                 vector<bool> in_domain(nin_pts.prod(), false);
                 set_in_domain_flags(t_idx, altdim, dom_starts, in_domain, in_slice_iter);
-
-// cerr << "_______________________---------------" << endl;
-// cerr << "Artificially setting in_domain to all true" << endl;
-// cerr << "_______________________----------------" << endl;
-//                 in_domain = vector<bool>(nin_pts.prod(), true);
 
                 VolIterator itc(in_iter);
                 string fname = "indomain"+to_string(altdim)+".txt";
@@ -1345,9 +1137,9 @@ auto duration3 = 0;
                         start_ijk(j) += dom_starts(j);
 
                     ComputeCtrlPtCurveReg(in_curve_iter, prev_curve_in_domain, t_idx, altdim, R, Q0, Q1, N, NtN_ldlt, P, in_domain, nin_pts, start_ijk, t1, t2, t3, t4, recomputes, all_out_ldlt, all_in_ldlt, bfi);
-duration1 += std::chrono::duration_cast<std::chrono::milliseconds>(t2 - t1).count();
-duration2 += std::chrono::duration_cast<std::chrono::milliseconds>(t3 - t2).count();
-duration3 += std::chrono::duration_cast<std::chrono::milliseconds>(t4 - t3).count();
+duration1 += std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1).count();
+duration2 += std::chrono::duration_cast<std::chrono::microseconds>(t3 - t2).count();
+duration3 += std::chrono::duration_cast<std::chrono::microseconds>(t4 - t3).count();
 
                     // copy solution to one curve of output points
                     while (!out_curve_iter.done())
@@ -1363,9 +1155,9 @@ duration3 += std::chrono::duration_cast<std::chrono::milliseconds>(t4 - t3).coun
                     in_slice_iter.incr_iter();
                 }       // for all curves
                 cerr << endl;
-cerr << "duration1: " << duration1 << endl;
-cerr << "duration2: " << duration2 << endl;
-cerr << "duration3: " << duration3 << endl;
+cerr << "duration1: " << duration1/1000000. << endl;
+cerr << "duration2: " << duration2/1000000. << endl;
+cerr << "duration3: " << duration3/1000000. << endl;
 
                 // adjust input, output numbers of points for next iteration
                 nin_pts(altdim) = t.nctrl_pts(altdim);
@@ -1818,19 +1610,19 @@ t4 = std::chrono::high_resolution_clock::now();
                 return;
             }
 
-            // for all control points in current dim
-            for (int i = 0; i < t.nctrl_pts(dim); i++)
+            for (int j = 0; j < npts; j++)
             {
-                in_curve_iter.reset();
-                for (int j = 0; j < npts; j++)
-                {                    
-                    if (in_domain[in_curve_iter.cur_iter_full()])
-                        N(j, i) = coll(j,i);
+                bool in_dom = in_domain[in_curve_iter.cur_iter_full()];
+                int ctrl_idx = t_spans[j] - mfa_data.p(dim);
+                for (int i = 0; i < mfa_data.p(dim) + 1; i++)
+                {
+                    if (in_dom)
+                        N(j, ctrl_idx + i) = coll(j, ctrl_idx + i);
                     else
-                        N(j, i) = coll_d(j,i);
-                    
-                    in_curve_iter.incr_iter();
+                        N(j, ctrl_idx + i) = coll_d(j, ctrl_idx + i);
                 }
+
+                in_curve_iter.incr_iter();
             }
 
             return;
