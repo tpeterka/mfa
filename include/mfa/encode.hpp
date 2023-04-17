@@ -1092,7 +1092,7 @@ cerr << "dom_starts" << dom_starts << endl;
                 vector<bool> in_domain(nin_pts.prod(), false);
                 if (dim == 0)
                 {
-                    set_in_domain_flags(t_idx, altdim, dom_starts, in_domain, in_slice_iter);
+                    set_in_domain_flags(t_idx, dom_starts, in_domain, in_slice_iter);
                     VolIterator itc(in_iter);
                     string fname = "indomain"+to_string(altdim)+".txt";
                     ofstream of(fname);
@@ -1185,17 +1185,14 @@ cerr << "Recomputes: " << recomputes << endl;
 
         void set_in_domain_flags(
             TensorIdx t_idx,
-            int dim, 
             VectorXi& dom_starts,
             vector<bool>& in_domain, 
             SliceIterator slice_iter)   // important! pass by value to make local copy,
                                         // Want to reuse slice_iter in calling function
         {
             auto& t = mfa_data.tmesh.tensor_prods[t_idx];
-
             VectorXi start_ijk;
-            VectorXi cur_ijk;
-            vector<KnotIdx> anchor(dom_dim);
+            int dim = slice_iter.missing_dim();
 
             while (!slice_iter.done())
             {
@@ -1203,77 +1200,26 @@ cerr << "Recomputes: " << recomputes << endl;
                 for (int j = dim; j < dom_dim; j++)
                     start_ijk(j) += dom_starts(j);
 
-                cur_ijk = start_ijk;
-
                 CurveIterator c_iter(slice_iter);
-                VectorX<T> param(dom_dim);
-                // param.setZero();
+                VectorX<T> param(dom_dim);   
 
-                // for start of the curve, for dims prior to current dim, find anchor and param
-                // those dims are in control point index space for the current tensor
-                int offset = (mfa_data.p(dim) + 1)/2;
-#ifndef MFAREV
-                for (auto i = 0; i < dim; i++)
-#else
-                for (int i = dom_dim - 1; i > dim; i--)
-#endif
+                // Find params for start of curve
+                for (auto i = 0; i < dom_dim; i++)
                 {
-                    mfa_data.tmesh.knot_idx_ofst(t, t.knot_mins[i], start_ijk(i) + offset, i, false, anchor[i]);                     // computes anchor as offset from start of tensor
-                    param(i)    = mfa_data.tmesh.all_knots[i][anchor[i]];
-                }
-                // cout << "DIM" << dim << ". " << start_ijk(0) << " " << start_ijk(1) << " " << start_ijk(2) << ": " << param(0) << " " << param(1) << " " << param(2) << ": " << anchor[0] << " " << anchor[1] << " " << anchor[2] << endl;
-
-
-                // for the start of the curve, for current dim. and higher, find param
-                // these dims are in the input point index space
-#ifndef MFAREV
-                for (auto i = dim; i < dom_dim; i++)
-#else
-                for (int i = dim; i >= 0; i--)
-#endif
                     param(i) = input.params->param_grid[i][start_ijk(i)];
-
-                // for the start of the curve, for higher than the current dim, find anchor
-                // these dims are in the input point space
-                // in the current dim, the anchor coordinate will be replaced below by the control point anchor
-#ifndef MFAREV
-                for (auto i = dim + 1; i < dom_dim; i++)
-#else
-                for (int i = dim - 1; i >= 0; i--)
-#endif
-                {
-                    // if param == 0, FindSpan finds the last 0-value knot span, but we want the first control point anchor, which is an earlier span
-                    if (param(i) == 0.0)
-                        anchor[i] = (mfa_data.p(i) + 1) / 2;
-                    else if (param(i) == 1.0)
-                        anchor[i] = mfa_data.tmesh.all_knots[i].size() - 2 - (mfa_data.p(i) + 1) / 2;
-                    else
-                        anchor[i] = mfa_data.tmesh.FindSpan(i, param(i), t);
                 }
 
                 // go through curve and update parameter, then test for inclusion in domain
-                // consider saving param(dim) and anchor (full vec)
                 while (!c_iter.done())
                 {
                     int idx = c_iter.cur_iter_full();
-// cout << "dim " << dim << endl;
-// cout << "iter " << c_iter.cur_iter() << endl;
-// cout << "ijk " << cur_ijk.transpose() << endl;
-                    T u = input.params->param_grid[dim][cur_ijk(dim) + c_iter.cur_iter()];
+
+                    T u = input.params->param_grid[dim][start_ijk(dim) + c_iter.cur_iter()];
                     param(dim) = u;
-// cout << "." << endl;
 
                     T u_t     = param(0);
                     T u_rho   = param(1);
                     T u_alpha = param(2);
-
-                    // T x0 = rho * cos(alpha) - r_lim * sin(alpha);
-                    // T x1 = rho * cos(alpha) + r_lim * sin(alpha);
-                    // T y0 = rho * sin(alpha) + r_lim * cos(alpha);
-                    // T y1 = rho * sin(alpha) - r_lim * cos(alpha);
-
-                    // T x = t * x0 + (1 - t) * x1;
-                    // T y = t * y0 + (1 - t) * y1;
 
                     T x = (2*u_rho-1)*cos(u_alpha*M_PI) + (2*u_t-1)*sin(u_alpha*M_PI);
                     T y = -1*(2*u_rho-1)*sin(u_alpha*M_PI) + (2*u_t-1)*cos(u_alpha*M_PI);
