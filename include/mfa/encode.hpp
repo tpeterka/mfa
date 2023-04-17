@@ -1050,11 +1050,13 @@ cerr << "dom_starts" << dom_starts << endl;
 #else
                 int altdim = dom_dim - dim - 1; // TRY: reverse order of encoded dimensions
 #endif 
-                int recomputes = 0;
-                Eigen::LLT<MatrixX<T>> all_out_llt;
-                Eigen::LLT<MatrixX<T>> all_in_llt;
+                if (verbose)
+                {
+                    cerr << "  begin encoding dimension " << altdim << endl;
+                }
 
                 // Initialize matrix of basis functions and differentiated basis functions
+                // TODO: this does not support tensor subvolumes
                 int np = ndom_pts(altdim);
                 int nc = t.nctrl_pts(altdim);
                 coll = MatrixX<T>::Zero(np, nc);
@@ -1073,11 +1075,10 @@ cerr << "dom_starts" << dom_starts << endl;
                         coll_d(i, span - mfa_data.p(altdim) + j) = funs[1][j];
                     }
                 }
+                Eigen::LLT<MatrixX<T>> all_in_llt = (coll.transpose() * coll).llt();
+                Eigen::LLT<MatrixX<T>> all_out_llt = (coll_d.transpose() * coll_d).llt();
 
-                if (verbose)
-                {
-                    cerr << "  begin encoding dimension " << altdim << endl;
-                }
+
                 MatrixX<T>      R(nin_pts(altdim), pt_dim);                    // RHS for solving N * P = R
                 VolIterator     in_iter(nin_pts);                           // volume of current input points
                 VolIterator     out_iter(nout_pts);                         // volume of current output points
@@ -1089,14 +1090,11 @@ cerr << "dom_starts" << dom_starts << endl;
                 Eigen::LLT<MatrixX<T>> NtN_llt(t.nctrl_pts(altdim));
                 MatrixX<T>  P(t.nctrl_pts(altdim), pt_dim);
 
-                if (verbose)
-                {
-                    cerr << "    starting curve iteration" << endl;
-                }
 std::chrono::time_point<std::chrono::high_resolution_clock> t1, t2, t3, t4;
 auto duration1 = 0;
 auto duration2 = 0;
 auto duration3 = 0;
+int recomputes = 0;
                 // Tracks previous curve to avoid redundant computation when possible
                 // Always ignored for first curve of a slice
                 vector<bool> prev_curve_in_domain(nin_pts(altdim), 0);
@@ -1104,20 +1102,10 @@ auto duration3 = 0;
                 // for all curves in the current dimension
                 while (!in_slice_iter.done())
                 {
-                    // fprintf(stderr, "\r iteration %d of %d", in_slice_iter.cur_iter(), in_slice_iter.tot_iters());
-
                     CurveIterator   in_curve_iter(in_slice_iter);       // one curve of the input points in the current dim
                     CurveIterator   out_curve_iter(out_slice_iter);     // one curve of the output points in the current dim
 
-                    // cur_ijk() is relative to the tensor subvolume. However, start_ijk
-                    // should be indices in full volume.
-                    // NOTE: We adjust only for dimensions >= 'dim' because the lower dimensions
-                    //       are in control point space
-                    start_ijk = in_curve_iter.cur_ijk();
-                    for (int j = dim; j < dom_dim; j++)
-                        start_ijk(j) += dom_starts(j);
-
-                    ComputeCtrlPtCurveReg(in_curve_iter, prev_curve_in_domain, t_idx, altdim, R, Q0, Q1, N, NtN_llt, P,  nin_pts, start_ijk, t1, t2, t3, t4, recomputes, all_out_llt, all_in_llt, bfi);
+                    ComputeCtrlPtCurveReg(in_curve_iter, prev_curve_in_domain, R, Q0, Q1, N, NtN_llt, P, t1, t2, t3, t4, recomputes, all_out_llt, all_in_llt);
 duration1 += std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1).count();
 duration2 += std::chrono::duration_cast<std::chrono::microseconds>(t3 - t2).count();
 duration3 += std::chrono::duration_cast<std::chrono::microseconds>(t4 - t3).count();
@@ -1135,10 +1123,6 @@ duration3 += std::chrono::duration_cast<std::chrono::microseconds>(t4 - t3).coun
                     out_slice_iter.incr_iter();
                     in_slice_iter.incr_iter();
                 }       // for all curves
-                cerr << endl;
-cerr << "duration1: " << duration1/1000000. << endl;
-cerr << "duration2: " << duration2/1000000. << endl;
-cerr << "duration3: " << duration3/1000000. << endl;
 
                 // adjust input, output numbers of points for next iteration
                 nin_pts(altdim) = t.nctrl_pts(altdim);
@@ -1149,6 +1133,10 @@ cerr << "duration3: " << duration3/1000000. << endl;
                 if (altdim > 0)
                     nout_pts(altdim - 1) = t.nctrl_pts(altdim - 1);
 #endif
+
+cerr << "duration1: " << duration1/1000000. << endl;
+cerr << "duration2: " << duration2/1000000. << endl;
+cerr << "duration3: " << duration3/1000000. << endl;
 cerr << "Recomputes: " << recomputes << endl;
             }       // for all domain dimensions
 
@@ -1162,7 +1150,8 @@ cerr << "Recomputes: " << recomputes << endl;
             fmt::print(stderr, "EncodeSeparableConstrained() time {} s.\n", MPI_Wtime() - t0);
         }
 
-        // Test if input point with global index ijk is in domain
+        // Test if input point with index ijk is in domain
+        // TODO does not support tensor subvolumes
         bool in_domain(const VectorXi& ijk)
         {
             T u_t     = input.params->param_grid[0][ijk(0)];
@@ -1195,30 +1184,27 @@ cerr << "Recomputes: " << recomputes << endl;
         void ComputeCtrlPtCurveReg(
                 CurveIterator&          in_curve_iter,                  // current curve
                 vector<bool>&           curve_in_domain,             // previous curve
-                TensorIdx               t_idx,                          // index of current tensor
-                int                     dim,                            // current curve dimension
                 MatrixX<T>&             R,                              // right hand side, allocated by caller
                 MatrixX<T>&             Q0,                              // first matrix of input points, allocated by caller
                 MatrixX<T>&             Q1,                             // second matrix of input points, allocated by caller
                 MatrixX<T>&             N,                          // free basis functions, allocated by caller
                 Eigen::LLT<MatrixX<T>>& NtN_llt,
                 MatrixX<T>&             P,                              // (output) solution control points, allocated by caller
-                const VectorXi&         nin_pts,                        // number of input points
-                const VectorXi&         start_ijk,                      // i,j,k of start of input points
                 std::chrono::time_point<std::chrono::high_resolution_clock>& t1,
                 std::chrono::time_point<std::chrono::high_resolution_clock>& t2,
                 std::chrono::time_point<std::chrono::high_resolution_clock>& t3,
                 std::chrono::time_point<std::chrono::high_resolution_clock>& t4,
                 int& recomputes,
                 Eigen::LLT<MatrixX<T>>& all_out_llt,
-                Eigen::LLT<MatrixX<T>>& all_in_llt,
-                BasisFunInfo<T>&        bfi)
+                Eigen::LLT<MatrixX<T>>& all_in_llt)
         {
-            auto& t = mfa_data.tmesh.tensor_prods[t_idx];
-            VectorXi cur_ijk = start_ijk;
+            VectorXi cur_ijk;
             bool same_pattern = true;
             bool all_out = true;
             bool all_in = true;
+            int dim = in_curve_iter.curve_dim();
+            int npts = in_curve_iter.tot_iters();
+            int nctrl = coll.cols();
 
 #ifndef MFAREV
             int dimcount = dim;
@@ -1233,7 +1219,6 @@ t1 = std::chrono::high_resolution_clock::now();
             {
                 int curve_idx = in_curve_iter.cur_iter();
                 int vol_idx = in_curve_iter.cur_iter_full();  // point index. One for each grid point on this curve
-                // int ct_idx = dom_dim * pt_idx;          // constraint index. there are dom_dim of these per point index
                 cur_ijk = in_curve_iter.cur_ijk();      // ijk coordinates in full dimensional volume
                 
                 if (dimcount == 0)
@@ -1281,46 +1266,14 @@ t1 = std::chrono::high_resolution_clock::now();
             in_curve_iter.reset();
 
 t2 = std::chrono::high_resolution_clock::now();
-
             // find matrix of free control point basis functions
             double t0 = MPI_Wtime();
-            if (all_out && dimcount == 0)
-            {
-                if (all_out_llt.rows() == 0)
-                {
-                    recomputes++;
-                    // ComputeControlCurveMat(dim, t_idx, curve_in_domain, nin_pts(dim), N);
-                    // all_out_llt = (N.transpose() * N).llt();
-
-                    all_out_llt = (coll_d.transpose() * coll_d).llt();
-                }
-                // NtN_llt = all_out_llt;
-            }
-            else if (all_in && dimcount == 0)
-            {
-                if (all_in_llt.rows() == 0)
-                {
-                    recomputes++;
-                    // ComputeControlCurveMat(dim, t_idx, curve_in_domain, nin_pts(dim), N);
-                    // all_in_llt = (N.transpose() * N).llt();
-
-                    all_in_llt = (coll.transpose() * coll).llt();
-                }
-                // NtN_llt = all_in_llt;
-            }
-            else if ((dimcount == 0 && same_pattern == false) || in_curve_iter.slice_iter_->cur_iter() == 0)
+            if ((dimcount == 0 && same_pattern == false) || in_curve_iter.slice_iter_->cur_iter() == 0)
             {
                 recomputes++;
-                ComputeControlCurveMat(dim, t_idx, curve_in_domain, nin_pts(dim), N);
+                ComputeControlCurveMat(dim, curve_in_domain, npts, nctrl, N);
                 NtN_llt.compute(N.transpose() * N);
             }
-
-            // if ((dimcount == 0 && same_pattern == false) || in_curve_iter.slice_iter_->cur_iter() == 0)
-            // {
-            //     recomputes++;
-            //     ComputeControlCurveMat(dim, t_idx, curve_in_domain, nin_pts(dim), N);
-            //     NtN_llt = (N.transpose() * N).llt();
-            // }
 
 t3 = std::chrono::high_resolution_clock::now();
             if (dimcount == 0)
@@ -1338,27 +1291,15 @@ t3 = std::chrono::high_resolution_clock::now();
             }
 
 t4 = std::chrono::high_resolution_clock::now();
-
-            // debug
-            // MatrixXd::Index max_row, max_col;
-            // if (P.maxCoeff(&max_row, &max_col) > 300)
-            // {
-            //     fmt::print(stderr, "ComputeCtrlPtCurve(): very large control points\n");
-            //     fmt::print(stderr, "N row {}:\n {}\n", max_row, N.row(max_row));
-            //     fmt::print(stderr, "NtN row {}:\n {}\n", max_row, (N.transpose() * N).row(max_row));
-            //     fmt::print(stderr, "P row{}:\n {}\n", max_row, P.row(max_row));
-            // }
         }
 
         void ComputeControlCurveMat(
                 int                 dim,                // current dimension
-                TensorIdx           t_idx,              // index of tensor of control points
                 const vector<bool>& curve_in_domain,
-                size_t              npts,               // number of input points in current dim, including constraints
+                int                 npts,               // number of input points in current dim, including constraints
+                int                 nctrl,
                 MatrixX<T>&         N)                  // (output) matrix of free control points basis functions
         {
-            const TensorProduct<T>& t = mfa_data.tmesh.tensor_prods[t_idx];
-            const int nctrl = t.nctrl_pts(dim);
             N = MatrixX<T>::Zero(npts, nctrl);
 
 #ifndef MFAREV

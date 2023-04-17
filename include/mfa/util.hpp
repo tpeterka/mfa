@@ -581,6 +581,9 @@ namespace mfa
         // return curve dimension
         int curve_dim() const       { return curve_dim_; }
 
+        // return number of points on the curve
+        int tot_iters() const       { return tot_iters_; }
+
     };  // CurveIterator
 
     struct GridInfo
