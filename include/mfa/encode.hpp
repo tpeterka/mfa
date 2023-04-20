@@ -631,6 +631,7 @@ namespace mfa
         }
 
         // computes curve of free control points in one dimension
+        // helper function for EncodeTensorLocalSeparable
         void ComputeCtrlPtCurve(
                 CurveIterator&          in_curve_iter,                  // current curve
                 TensorIdx               t_idx,                          // index of current tensor
@@ -645,6 +646,7 @@ namespace mfa
                 ConsType                cons_type,                      // constraint type
                 const VectorXi&         nin_pts,                        // number of input points
                 const VectorXi&         start_ijk,                      // i,j,k of start of input points
+                int                     ncons,                          // number of constraints
                 double                  free_time,                      // time to find free basis functions
                 double                  cons_time,                      // time to find constraints
                 double                  norm_time,                      // time to normalize basis functions
@@ -680,7 +682,7 @@ namespace mfa
             int old_Pcons_cols  = Pcons.cols();
 
             if (cons_type != ConsType::MFA_NO_CONSTRAINT)
-                ConsCtrlPtCurve(dim, t_idx, start_ijk, nin_pts, cons_type, Ncons, Pcons);
+                ConsCtrlPtCurve(dim, t_idx, start_ijk, nin_pts, cons_type, Ncons, Pcons, ncons);
 
             // timing
             cons_time   += (MPI_Wtime() - t0);
@@ -726,6 +728,11 @@ namespace mfa
 #endif
 
             norm_time += (MPI_Wtime() - t0);                    // timing
+
+            // debug
+//             if (Pcons.rows())
+//                 fmt::print(stderr, "ComputeCtrlPtCurve: ncons {} Ncons size [{} x {}] Pcons size [{} x {}] Pcons:\n {}\n",
+//                         ncons, Ncons.rows(), Ncons.cols(), Pcons.rows(), Pcons.cols(), Pcons);
 
             // R is the right hand side needed for solving N * P = R
             if (Pcons.rows())
@@ -1223,15 +1230,16 @@ namespace mfa
         // assumes Ncons was allocated by caller to correct size for number of constraints
         // the curve of input points may not be in the tensor of control points, but can be in a neighbor if the
         //  curve is in the constraint region in a dim. orthogonal to the current dim.
-        // helper function for EncodeTensorLocalSeparable
+        // helper function for ComputeCtrlPtCurve
         void ConsCtrlPtCurve(
                 int                 dim,                // current dimension
                 TensorIdx           t_idx,              // index of original tensor of (free) control points
                 const VectorXi&     start_ijk,          // multidim index of first input point for the curve, including constraints
                 const VectorXi&     npts,               // number of input points (could be control points for input in some dims) including constraints
                 ConsType            cons_type,          // none, left, right, both
-                MatrixX<T>&         Ncons,              // (output) matrix of constraint control points basis functions
-                MatrixX<T>&         Pcons)              // (output) matrix of constraint control points
+                MatrixX<T>&         Ncons,              // (output) matrix of constraint control points basis functions, allocated by caller
+                MatrixX<T>&         Pcons,              // (output) matrix of constraint control points, allocated by caller
+                int                 ncons)              // number of constraints
         {
             if (cons_type == ConsType::MFA_NO_CONSTRAINT)
                 return;
@@ -1241,11 +1249,11 @@ namespace mfa
 
             // find the left constraints
             if (cons_type == ConsType::MFA_LEFT_ONLY_CONSTRAINT || cons_type == ConsType::MFA_BOTH_CONSTRAINT)
-                nprev = PrevConsCtrlPtCurve(dim, t_idx, start_ijk, npts, Ncons, Pcons);
+                nprev = PrevConsCtrlPtCurve(dim, t_idx, start_ijk, npts, Ncons, Pcons, ncons);
 
             // find the right constraints
             if (cons_type == ConsType::MFA_RIGHT_ONLY_CONSTRAINT || cons_type == ConsType::MFA_BOTH_CONSTRAINT)
-                nnext = NextConsCtrlPtCurve(dim, t_idx, start_ijk, npts, nprev, Ncons, Pcons);
+                nnext = NextConsCtrlPtCurve(dim, t_idx, start_ijk, npts, nprev, Ncons, Pcons, ncons);
 
             // truncate matrices in case actual number of constraints found is less than expected
             if (nprev + nnext < Ncons.cols())
@@ -1268,8 +1276,9 @@ namespace mfa
                 TensorIdx           t_idx,              // index of original tensor of (free) control points
                 const VectorXi&     start_ijk,          // multidim index of first input point for the curve, including constraints
                 const VectorXi&     npts,               // number of input points (could be control points for input in some dims) including constraints
-                MatrixX<T>&         Ncons,              // (output) matrix of constraint control points basis functions
-                MatrixX<T>&         Pcons)              // (output) matrix of constraint control points
+                MatrixX<T>&         Ncons,              // (output) matrix of constraint control points basis functions, allocated by caller
+                MatrixX<T>&         Pcons,              // (output) matrix of constraint control points, allocated by caller
+                int                 ncons)              // number of constraints
         {
             // typing shortcuts
             auto& dom_dim       = mfa_data.dom_dim;
@@ -1349,11 +1358,15 @@ namespace mfa
 //             fmt::print(stderr, "PrevConsCtrlPtCurve(): 1: dim {} found_idx {} param [{}] anchor [{}]\n",
 //                     dim, found_idx, param.transpose(), fmt::join(anchor, ","));
 
-            // compute the p constraints
+            // compute the constraints
             // these are in descending index order
             int i, retval;
-            for (i = 0; i < p(dim); i++)                                                                // for all constraint control points in current dim
-//             for (i = 0; i < 1; i++)     // TODO: debug
+
+            // debug
+//             fmt::print(stderr, "PrevConsCtrlPtCurve: ncons {} Ncons size [{} x {}] Pcons size [{} x {}]\n",
+//                     ncons, Ncons.rows(), Ncons.cols(), Pcons.rows(), Pcons.cols());
+
+            for (i = 0; i < ncons; i++)                                                                // for all constraint control points in current dim
             {
                 // reset parameter in current dim to anchor of control point
                 param(dim) = tmesh.all_knots[dim][anchor[dim]];
@@ -1376,7 +1389,6 @@ namespace mfa
 
                 // find constraint control point aligned with curve
                 if (tmesh.anchor_matches_param(anchor, param))                                          // control point exists already
-
                     Pcons.row(i) = found_tensor.ctrl_pts.row(tmesh.anchor_ctrl_pt_idx(found_tensor, anchor));
                 else                                                                                    // control point needs to be inserted
                 {
@@ -1474,7 +1486,7 @@ namespace mfa
                 }
 
                 // offset anchor for next constraint
-                if (i < p(dim) - 1 && !tmesh.knot_idx_ofst(found_tensor, anchor[dim], -1, dim, true, anchor[dim]))
+                if (i < ncons - 1 && !tmesh.knot_idx_ofst(found_tensor, anchor[dim], -1, dim, true, anchor[dim]))
                 {
                     retval = i + 1;
                     break;
@@ -1497,6 +1509,9 @@ namespace mfa
 
 #endif
 
+            // debug
+//             fmt::print(stderr, "PrevConsCtrlPtCurve: retval {}\n", retval);
+
             return retval;
         }
 
@@ -1514,8 +1529,9 @@ namespace mfa
                 const VectorXi&     start_ijk,          // multidim index of first input point for the curve, including constraints
                 const VectorXi&     npts,               // number of input points (could be control points for input in some dims) including constraints
                 int                 ofst,               // column-offset to start writing into Ncons (and row-offset for Pcons)
-                MatrixX<T>&         Ncons,              // (output) matrix of constraint control points basis functions
-                MatrixX<T>&         Pcons)              // (output) matrix of constraint control points
+                MatrixX<T>&         Ncons,              // (output) matrix of constraint control points basis functions, allocated by caller
+                MatrixX<T>&         Pcons,              // (output) matrix of constraint control points, allocated by caller
+                int                 ncons)              // number of constraints
         {
             // typing shortcuts
             auto& dom_dim       = mfa_data.dom_dim;
@@ -1601,10 +1617,15 @@ namespace mfa
 //             fmt::print(stderr, "NextConsCtrlPtCurve(): 1: dim {} found_idx {} param [{}] anchor [{}]\n",
 //                     dim, found_idx, param.transpose(), fmt::join(anchor, ","));
 
-            // compute the p constraints
+            // compute the constraints
             // these are in ascending index order
             int i = 0;
-            for (i = 0; i < p(dim); i++)                                                                // for all constraint control points in current dim
+
+            // debug
+//             fmt::print(stderr, "NextConsCtrlPtCurve: ncons {} Ncons size [{} x {}] Pcons size [{} x {}]\n",
+//                     ncons, Ncons.rows(), Ncons.cols(), Pcons.rows(), Pcons.cols());
+
+            for (i = 0; i < ncons; i++)                                                                // for all constraint control points in current dim
             {
                 // reset parameter in current dim to anchor of control point
                 param(dim) = tmesh.all_knots[dim][anchor[dim]];
@@ -1653,10 +1674,18 @@ namespace mfa
                 }
 
                 // offset anchor for next constraint
-                if (i < p(dim) - 1 && !tmesh.knot_idx_ofst(found_tensor, anchor[dim], 1, dim, true, anchor[dim]))
+                if (i < ncons - 1 && !tmesh.knot_idx_ofst(found_tensor, anchor[dim], 1, dim, true, anchor[dim]))
+                {
+                    // debug
+//                     fmt::print(stderr, "NextConsCtrlPtCurve: retval {}\n", i + 1);
+
                     return i + 1;
+                }
 
             }   // control points
+
+            // debug
+//             fmt::print(stderr, "NextConsCtrlPtCurve: retval {}\n", i);
 
             return i;
         }
@@ -2091,6 +2120,10 @@ namespace mfa
 //             fmt::print(stderr, "\n Current T-mesh:\n");
 //             mfa_data.tmesh.print(true, true);
 
+            // additional constraints
+            // it turns out these don't change anything, leave set to 0
+            int extra_cons = 0;
+
             double t0 = MPI_Wtime();
 
             // typing shortcuts
@@ -2104,7 +2137,7 @@ namespace mfa
             // get input domain points covered by the tensor, including constraints
             vector<size_t> start_idxs(dom_dim);                                                     // start of input points including constraints
             vector<size_t> end_idxs(dom_dim);                                                       // end of input points including constraints
-            mfa_data.tmesh.domain_pts(t_idx, input.params->param_grid, true, start_idxs, end_idxs); // true: extend to cover constraints
+            mfa_data.tmesh.domain_pts(t_idx, input.params->param_grid, true, extra_cons, start_idxs, end_idxs); // true: extend to cover constraints
 
             // relevant input domain points covering constraints
             VectorXi ndom_pts(dom_dim);
@@ -2200,27 +2233,30 @@ namespace mfa
 #ifdef MFA_NO_CONSTRAINTS
 
                 cons_type = ConsType::MFA_NO_CONSTRAINT;
+                int ncons = 0;
 #else
+
+                int ncons = mfa_data.p(dim) + extra_cons;
 
                 if (t.knot_mins[dim] == 0 && t.knot_maxs[dim] == tmesh.all_knots[dim].size() - 1)
                     cons_type = ConsType::MFA_NO_CONSTRAINT;
                 else if (t.knot_mins[dim] == 0)
                 {
                     cons_type   = ConsType::MFA_RIGHT_ONLY_CONSTRAINT;
-                    Ncons       = MatrixX<T>::Zero(nin_pts(dim), mfa_data.p(dim));
-                    Pcons       = MatrixX<T>::Zero(mfa_data.p(dim), t.ctrl_pts.cols());
+                    Ncons       = MatrixX<T>::Zero(nin_pts(dim), ncons);
+                    Pcons       = MatrixX<T>::Zero(ncons, t.ctrl_pts.cols());
                 }
                 else if (t.knot_maxs[dim] == tmesh.all_knots[dim].size() - 1)
                 {
                     cons_type   = ConsType::MFA_LEFT_ONLY_CONSTRAINT;
-                    Ncons       = MatrixX<T>::Zero(nin_pts(dim), mfa_data.p(dim));
-                    Pcons       = MatrixX<T>::Zero(mfa_data.p(dim), t.ctrl_pts.cols());
+                    Ncons       = MatrixX<T>::Zero(nin_pts(dim), ncons);
+                    Pcons       = MatrixX<T>::Zero(ncons, t.ctrl_pts.cols());
                 }
                 else
                 {
                     cons_type   = ConsType::MFA_BOTH_CONSTRAINT;
-                    Ncons       = MatrixX<T>::Zero(nin_pts(dim),  2 * mfa_data.p(dim));
-                    Pcons       = MatrixX<T>::Zero(2 * mfa_data.p(dim), t.ctrl_pts.cols());
+                    Ncons       = MatrixX<T>::Zero(nin_pts(dim),  2 * ncons);
+                    Pcons       = MatrixX<T>::Zero(2 * ncons, t.ctrl_pts.cols());
                 }
 #endif
                 // for all curves in the current dimension
@@ -2239,7 +2275,7 @@ namespace mfa
 
                     if (CurveIntersectsTensor(t_idx, dim, nin_pts, start_ijk))
                         ComputeCtrlPtCurve(in_curve_iter, t_idx, dim, R, Q, Q1, Nfree, Ncons, Pcons, P,
-                                cons_type, nin_pts, start_ijk, free_time, cons_time, norm_time, solve_time);
+                                cons_type, nin_pts, start_ijk, ncons, free_time, cons_time, norm_time, solve_time);
                     else
                         InterpCtrlPtCurve(dim, t_idx, start_ijk, nin_pts, P);
 
@@ -2508,8 +2544,13 @@ namespace mfa
             // intersection proximity between tensors (assumes same for all dims)
             VectorXi& p = mfa_data.p;
 
-            int pad         = p(0) % 2 == 0 ? p(0) + 2 : p(0) + 1;                  // padding for all tensors
-            int edge_pad    = (p(0) / 2) + 2;                                       // extra padding for tensor at the global edge
+            // padding for all tensors
+            // following was found empirically to be best: even p: pad = p + 1; odd p: pad = p + 2
+            // only tested p=2 and p=3, however
+            int pad         = p(0) % 2 == 0 ? p(0) + 1 : p(0) + 2;
+
+            // extra padding for tensor at global edge
+            int edge_pad    = (p(0) / 2) + 2;
 
             // loop until all tensors are done
             int iter;
@@ -3434,8 +3475,8 @@ namespace mfa
                 int                         child_level,                        // level of children to create
                 T                           err_limit,                          // max allowable error
                 const VectorX<T>&           extents,                            // extents in each dimension, for normalizing error (size 0 means do not normalize)
-                int                         pad,                                // padding for all tensors
-                int                         edge_pad,                           // extra padding for tensor at the global edge
+                int                         pad,                                // padding (per side) for all tensors
+                int                         edge_pad,                           // extra padding (per side) for tensor at the global edge
                 vector<TensorProduct<T>>&   new_tensors)                        // (output) new tensors scheduled to be added
         {
             // typing shortcuts
@@ -3558,32 +3599,14 @@ namespace mfa
                 TensorProduct<T> c(dom_dim);
                 for (auto j = 0; j < dom_dim; j++)
                 {
-
-#ifdef MFA_SMALLER_TENSORS
-
-                    // make p + 1 control points in the added tensor
-                    // start with p + 1 control points, and after trimming to the parent, and making other adjustments,
-                    // hopefully we'll end up with no less than p control points in any tensor
-                    c.knot_mins[j] = inserted_knot_idxs[j][i] - p(j) / 2     >= 0                  ? inserted_knot_idxs[j][i] - p(j) / 2     : 0;
-                    c.knot_maxs[j] = inserted_knot_idxs[j][i] + p(j) / 2 + 1 < all_knots[j].size() ? inserted_knot_idxs[j][i] + p(j) / 2 + 1 : all_knots[j].size() - 1;
-
-#else
-
-                    // ---- or -----
-
-                    // make p + 2 control points in the added tensor
-                    // start with p + 2 control points, and after trimming to the parent, and making other adjustments,
-                    // hopefully we'll end up with no less than p + 1 control points in any tensor
-                    c.knot_mins[j] = inserted_knot_idxs[j][i] - p(j) / 2 - 1 >= 0                  ? inserted_knot_idxs[j][i] - p(j) / 2 - 1 : 0;
-                    c.knot_maxs[j] = inserted_knot_idxs[j][i] + p(j) / 2 + 1 < all_knots[j].size() ? inserted_knot_idxs[j][i] + p(j) / 2 + 1 : all_knots[j].size() - 1;
-
-#endif
-
-                    // --- or ----
-                    // make the number of control points in the tensor a function of the pad
-//                     c.knot_mins[j] = inserted_knot_idxs[j][i] - pad / 2 - 1 >= 0                  ? inserted_knot_idxs[j][i] - pad / 2 - 1 : 0;
-//                     c.knot_maxs[j] = inserted_knot_idxs[j][i] + pad / 2 + 1 < all_knots[j].size() ? inserted_knot_idxs[j][i] + pad / 2 + 1 : all_knots[j].size() - 1;
+                    // extend edge of tensor pad / 2 + 1 per side beyond inserted knot
+                    c.knot_mins[j] = inserted_knot_idxs[j][i] - pad / 2 - 1 >= 0                  ? inserted_knot_idxs[j][i] - pad / 2 - 1 : 0;
+                    if (p(j) % 2)       // odd degree
+                        c.knot_maxs[j] = inserted_knot_idxs[j][i] + pad / 2 + 1 < all_knots[j].size() ? inserted_knot_idxs[j][i] + pad / 2 + 1 : all_knots[j].size() - 1;
+                    else                // even degree, max edge is one knot past inserted knot
+                        c.knot_maxs[j] = inserted_knot_idxs[j][i] + pad / 2 + 2 < all_knots[j].size() ? inserted_knot_idxs[j][i] + pad / 2 + 2 : all_knots[j].size() - 1;
                 }
+
                 c.level     = child_level;
                 c.parent    = parent_tensor_idxs[i];
                 c.parent_exists = true;
@@ -3843,8 +3866,8 @@ namespace mfa
                 }
 
                 // debug
-//                 fmt::print(stderr, "AddNewTensors(): appending new_tensors[{}] knot_mins [{}] knot_maxs [{}] level {} parent {}\n",
-//                         k, fmt::join(t.knot_mins, ","), fmt::join(t.knot_maxs, ","), t.level, t.parent);
+                fmt::print(stderr, "AddNewTensors(): appending new_tensors[{}] knot_mins [{}] knot_maxs [{}] level {} parent {}\n",
+                        k, fmt::join(t.knot_mins, ","), fmt::join(t.knot_maxs, ","), t.level, t.parent);
 
                 int tensor_idx = tmesh.append_tensor(t.knot_mins, t.knot_maxs, t.level);
 
@@ -3895,8 +3918,8 @@ namespace mfa
 #endif
                 if (!tmesh.check_min_size(min_interior, min_border))
                 {
-//                     fmt::print(stderr, "AddNewTensors(): Error: failed checking minimum size of tensors after adding new_tensors[{}]\n", k);
-                    throw MFAError(fmt::format("AddNewTensors(): Error: failed checking minimum size of tensors after adding new_tensors[{}]\n", k));
+                    fmt::print(stderr, "AddNewTensors(): Error: failed checking minimum size of tensors after adding new_tensors[{}]\n", k);
+//                     throw MFAError(fmt::format("AddNewTensors(): Error: failed checking minimum size of tensors after adding new_tensors[{}]\n", k));
                 }
 
                 // solve for new control points

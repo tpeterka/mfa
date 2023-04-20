@@ -341,10 +341,10 @@ namespace mfa
                         nanchors = nknots - 1;
                     else                            // odd degree: anchors are on knot lines
                         nanchors = nknots;
-                    if (knot_mins[j] < p_(j) - 1)                       // skip up to p-1 anchors at start of global knots
-                        nanchors -= (p_(j) - 1 - knot_mins[j]);
-                    if (knot_maxs[j] > all_knots[j].size() - p_(j))     // skip up to p-1 anchors at end of global knots
-                        nanchors -= (knot_maxs[j] + p_(j) - all_knots[j].size());
+                    if (knot_mins[j] < (p_(j) + 1) / 2)                       // skip up to (p+1)/2 anchors at start of global knots
+                        nanchors -= ((p_(j) + 1) / 2 - knot_mins[j]);
+                    if (knot_maxs[j] > all_knots[j].size() - (p_(j) + 1) / 2 - 1)     // skip up to p-1 anchors at end of global knots
+                        nanchors -= (knot_maxs[j] + (p_(j) + 1) / 2 + 1 - all_knots[j].size());
                     new_tensor.nctrl_pts[j] = nanchors;
                     tot_nctrl_pts *= nanchors;
                 }
@@ -525,7 +525,7 @@ namespace mfa
         // subset also counts as intersection
         bool intersect(TensorProduct<T>&    t1,
                        TensorProduct<T>&    t2,
-                       KnotIdx              pad = 0,
+                       KnotIdx              pad = 0,                    // pad distance per side that counts as intersecting
                        bool                 adjacency_counts = true,    // whether exact adjacency qualifies as intersection
                        bool                 corner_pad_counts = true)   // when pad > 0, whether intersecting at a corner is sufficient
         {
@@ -1358,8 +1358,8 @@ namespace mfa
         // clamp tensor knot_mins, knot_maxs to parent of tensor, if closer to parent than pad
         void clamp_to_parent(
                 TensorProduct<T>&   t,          // tensor to constrain
-                int                 pad,        // constrain to parent if tensor is within pad of parent or greater
-                int                 edge_pad)   // extra padding for tensor at the global edge
+                int                 pad,        // constrain to parent if tensor is within pad (per side) of parent or greater
+                int                 edge_pad)   // extra padding per side for tensor at the global edge
         {
             auto& parent = tensor_prods[t.parent];
             for (auto j = 0; j < dom_dim_; j++)
@@ -1379,8 +1379,8 @@ namespace mfa
         void merge_tensors(
                 TensorProduct<T>&   inout,      // one of the input tensors and the output of the merge
                 TensorProduct<T>&   in,         // other input tensor
-                int                 pad,        // constrain merge to parent of inout if merge is within pad of parent; -1: don't constrain to parent
-                int                 edge_pad)   // extra padding for tensor at the global edge
+                int                 pad,        // constrain merge to parent of inout if merge is within pad (per side) of parent; -1: don't constrain to parent
+                int                 edge_pad)   // extra padding per side for tensor at the global edge
         {
             vector<KnotIdx> merge_mins(dom_dim_);
             vector<KnotIdx> merge_maxs(dom_dim_);
@@ -2136,6 +2136,7 @@ namespace mfa
         void domain_pts(TensorIdx               t_idx,              // index of current tensor product
                         vector<vector<T>>&      params,             // params of input points
                         bool                    extend,             // extend input points to cover neighbors (eg., constraints)
+                        int                     extra_cons,         // extra constraints beyond normal extension (if extend is true)
                         vector<size_t>&         start_idxs,         // (output) starting idxs of input points
                         vector<size_t>&         end_idxs) const     // (output) ending idxs of input points
         {
@@ -2154,7 +2155,7 @@ namespace mfa
             if (extend)
             {
                 // extend by p/2 + 2 knots from the min corner in all dimensions and then take the min corner of that extension
-                knot_intersections(min_anchor, t_idx, local_knot_idxs, 2);
+                knot_intersections(min_anchor, t_idx, local_knot_idxs, 2 + extra_cons);
                 for (auto k = 0; k < dom_dim_; k++)
                     start_knot_idxs[k] = local_knot_idxs[k][1]; // both even and odd degree: 1 after front of local knot vector
             }
@@ -2177,7 +2178,7 @@ namespace mfa
             if (extend)
             {
                 // extend by p/2 + 2 knots from the max corner in all dimensions and then take the max corner of that extension
-                knot_intersections(max_anchor, t_idx, local_knot_idxs, 2);
+                knot_intersections(max_anchor, t_idx, local_knot_idxs, 2 + extra_cons);
                 for (auto k = 0; k < dom_dim_; k++)
                     end_knot_idxs[k] = local_knot_idxs[k][local_knot_idxs[k].size() - 3]; // both even and odd degree: 2 before back of local knot vector
             }
@@ -2751,6 +2752,7 @@ namespace mfa
                     fmt::print(stderr, "Error: check_num_knots_ctrl_pts(): Number of knots and control points in tensor {} in dim. {} do not agree.\n",
                             tidx, i);
                     print_tensor(t, true, false, false);
+//                     print(true, true);
                     return false;
                 }
             }
@@ -2876,8 +2878,8 @@ namespace mfa
         void adjust_candidate(
                 TensorProduct<T>&       c,                      // candidate tensor being constrained
                 const TensorProduct<T>& t,                      // other tensor providing the constraints
-                int                     pad,                    // padding for interior tensor (not at global edge)
-                int                     edge_pad)               // extra padding for tensor at the global edge
+                int                     pad,                    // padding per side for interior tensor (not at global edge)
+                int                     edge_pad)               // extra padding per side for tensor at the global edge
         {
             for (auto j = 0; j < dom_dim_; j++)
             {

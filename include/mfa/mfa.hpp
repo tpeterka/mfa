@@ -39,9 +39,6 @@
 // for debugging, can turn off constraints in local solve
 // #define MFA_NO_CONSTRAINTS
 
-// smaller tensors (larger by default)
-#define MFA_SMALLER_TENSORS
-
 // debug Boehm knot insertion
 // #define MFA_DEBUG_KNOT_INSERTION        // make an extra tensor with the inserted control points
 // #define MFA_KEEP_KNOT_INSERTION         // replace original tensor with new tensor that includes inserted control points and test decoding for any change
