@@ -1892,6 +1892,8 @@ cout << "\n\nATTENTION: Using experimental separable constrained encode\n" << en
             nctrl_pts(0) = v_samples;
             nctrl_pts(1) = v_rho;
             nctrl_pts(2) = v_alpha;
+            // p(0) = 2;
+            // p(1) = 2;
             // p(2) = 2;
 
             ray_mfa->AddVariable(p, nctrl_pts, 1);

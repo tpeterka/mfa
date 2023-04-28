@@ -79,7 +79,7 @@ namespace mfa
         void encode(TensorIdx t_idx = 0, bool weighted = false)                  // index of tensor product being encoded
         {
             double t0 = MPI_Wtime();
-            reverse_encode = false;
+            reverse_encode = true;
             if (verbose)
             {
                 cerr << "Starting ray model encoding" << endl;
@@ -200,6 +200,7 @@ namespace mfa
                                     SparseMatrixX<T>& Nt, 
                                     Eigen::SimplicialLDLT<SparseMatrixX<T>>& NtN_llt)
         {
+            const int der = 2;
             VectorXi            q = mfa_data.p + VectorXi::Ones(dom_dim);  // order of basis funs
             BasisFunInfo<T>     bfi(q);                                    // buffers for basis fun evaluation
 
@@ -209,16 +210,15 @@ namespace mfa
             coll1_t.reserve(VectorXi::Constant(coll1_t.cols(), mfa_data.p(dim)+1));
 
             t_spans = vector<int>(np, 0);
-            vector<vector<T>> funs(2, vector<T>(mfa_data.p(dim)+1, 0));
+            vector<vector<T>> funs(der + 1, vector<T>(mfa_data.p(dim)+1, 0));
             for (int i = 0; i < coll0_t.cols(); i++)
             {
                 int span = mfa_data.tmesh.FindSpan(dim, input.params->param_grid[dim][i], nc);
                 t_spans[i] = span;
-                mfa_data.FastBasisFunsDer1(dim, input.params->param_grid[dim][i], span, funs, bfi);
+                mfa_data.FastBasisFunsDers(dim, input.params->param_grid[dim][i], span, der, funs, bfi);
 
                 for (int j = 0; j < mfa_data.p(dim)+1; j++)
                 {
-                    // coll(i, span - mfa_data.p(dim) + j) = funs[0][j];
                     coll0_t.coeffRef(span - mfa_data.p(dim) + j, i) = funs[0][j];
                     coll1_t.coeffRef(span - mfa_data.p(dim) + j, i) = funs[1][j];
                 }
@@ -231,7 +231,7 @@ namespace mfa
             // Fill Nt with dummy values in the correct sparsity pattern,
             // so that analyzePattern() can be called
             Nt.reserve(VectorXi::Constant(Nt.cols(), mfa_data.p(dim)+1));
-            compute_curve_mat(0, vector<bool>(np, true), np, nc, Nt);
+            compute_curve_mat(dim, vector<bool>(np, true), np, nc, Nt);
             NtN_llt.analyzePattern(Nt*Nt.transpose());
 
             return;
@@ -270,7 +270,7 @@ namespace mfa
         // computes curve of free control points in one dimension
         void solve_curve(
                 CurveIterator&          in_curve_iter,                  // current curve
-                vector<bool>&           curve_in_domain,             // previous curve
+                vector<bool>&           curve_in_domain,                // previous curve
                 MatrixX<T>&             R,                              // right hand side, allocated by caller
                 MatrixX<T>&             Q0,                             // first matrix of input points, allocated by caller
                 MatrixX<T>&             Q1,                             // second matrix of input points, allocated by caller
@@ -374,10 +374,10 @@ namespace mfa
 
         void compute_curve_mat(
                 int                 dim,                // current dimension
-                const vector<bool>& curve_in_domain,
-                int                 npts,               // number of input points in current dim, including constraints
-                int                 nctrl,
-                SparseMatrixX<T>&   Nt)                  // (output) matrix of free control points basis functions
+                const vector<bool>& curve_in_domain,    // flag if in domain for each point on curve
+                int                 npts,               // number of input points in current dim
+                int                 nctrl,              // number of control points in current dim
+                SparseMatrixX<T>&   Nt)                 // (output) matrix of free control points basis functions
         {
             for (int j = 0; j < npts; j++)
             {
