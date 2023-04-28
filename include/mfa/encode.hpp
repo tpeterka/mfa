@@ -70,8 +70,8 @@ namespace mfa
         int                 verbose;                        // output level
         const PointSet<T>&  input;                          // input points
         size_t              max_num_curves;                 // max num. curves per dimension to check in curve version
-        SparseMatrixX<T>          coll_t;       // temporary collocation matrix
-        SparseMatrixX<T>          coll_d_t;     // temporary differentiated collocation matrix
+        SparseMatrixX<T>          coll0_t;       // temporary collocation matrix
+        SparseMatrixX<T>          coll1_t;     // temporary differentiated collocation matrix
         vector<int>         t_spans;      // temporary vector to hold spans of each input point
         bool reverse_encode{false};
 
@@ -962,13 +962,44 @@ namespace mfa
             }
         }
 
+        void InitCollocationMats(int dim, int np, int nc, SparseMatrixX<T>& Nt)
+        {
+            VectorXi            q = mfa_data.p + VectorXi::Ones(dom_dim);  // order of basis funs
+            BasisFunInfo<T>     bfi(q);                                    // buffers for basis fun evaluation
+
+            coll0_t = SparseMatrixX<T>(nc, np);
+            coll1_t = SparseMatrixX<T>(nc, np);
+            coll0_t.reserve(VectorXi::Constant(coll0_t.cols(), mfa_data.p(dim)+1));
+            coll1_t.reserve(VectorXi::Constant(coll1_t.cols(), mfa_data.p(dim)+1));
+
+            t_spans = vector<int>(np, 0);
+            vector<vector<T>> funs(2, vector<T>(mfa_data.p(dim)+1, 0));
+            for (int i = 0; i < coll0_t.cols(); i++)
+            {
+                int span = mfa_data.tmesh.FindSpan(dim, input.params->param_grid[dim][i], nc);
+                t_spans[i] = span;
+                mfa_data.FastBasisFunsDer1(dim, input.params->param_grid[dim][i], span, funs, bfi);
+
+                for (int j = 0; j < mfa_data.p(dim)+1; j++)
+                {
+                    // coll(i, span - mfa_data.p(dim) + j) = funs[0][j];
+                    coll0_t.coeffRef(span - mfa_data.p(dim) + j, i) = funs[0][j];
+                    coll1_t.coeffRef(span - mfa_data.p(dim) + j, i) = funs[1][j];
+                }
+            }
+
+            Nt.reserve(VectorXi::Constant(Nt.cols(), mfa_data.p(dim)+1));
+            ComputeControlCurveMat(0, vector<bool>(np, true), np, nc, Nt);
+
+            return;
+        }
 
         void EncodeSeparableConstrained(
                 TensorIdx                 t_idx,                  // index of tensor product being encoded
                 bool                      weighted = true)        // solve for and use weights
         {
             double t0 = MPI_Wtime();
-
+            reverse_encode = false;
             if (verbose)
             {
                 cerr << "Starting EncodeSeparableConstrained" << endl;
@@ -980,16 +1011,11 @@ namespace mfa
                 exit(0);
             }
 
-            reverse_encode = false;
-
-            // typing shortcuts
+            // Basic definitions
             auto& tmesh         = mfa_data.tmesh;
-            auto& tensor_prods  = tmesh.tensor_prods;
-            auto& t             = tensor_prods[t_idx];    // current tensor product
+            auto& t             = tmesh.tensor_prods[t_idx];    // current tensor product
             const int pt_dim    = mfa_data.dim();         // control point dimensionality
-
-            VectorXi            q = mfa_data.p + VectorXi::Ones(dom_dim);  // order of basis funs
-            BasisFunInfo<T>     bfi(q);                                    // buffers for basis fun evaluation
+            t.weights = VectorX<T>::Ones(t.ctrl_pts.rows());           // linear solve does not solve for weights; set to 1
 
             // get input domain points covered by the tensor
             vector<size_t> start_idxs(dom_dim);
@@ -1005,20 +1031,13 @@ namespace mfa
                 dom_starts(k)   = start_idxs[k];
             }
 
-            // resize control points and weights in case number of control points changed
-            t.ctrl_pts.resize(t.nctrl_pts.prod(), pt_dim);
-            t.weights = VectorX<T>::Ones(t.ctrl_pts.rows());           // linear solve does not solve for weights; set to 1
-
             // two matrices of input points for subsequent dimensions after dimension 0, which draws directly from input domain
             // input points cover constraints as well as free control point basis functions
             // (double buffering output control points to input points)
             MatrixX<T> Q0(ndom_pts.prod(), pt_dim);
             MatrixX<T> Q1(ndom_pts.prod(), pt_dim);
-
-            if (verbose)
-            {
-                cerr << "  begin buffer setup" << endl;
-            }
+            VectorXi nin_pts    = ndom_pts;
+            VectorXi nout_pts   = ndom_pts;
 
             // Fill Q0 buffer from input PointSet.
             // Doing this ahead of time allows us to stop thinking in terms of 
@@ -1030,89 +1049,49 @@ namespace mfa
                 setup_iter.incr_iter();
             }
 
-            // input and output number of points
-            VectorXi start_ijk;
-            VectorXi nin_pts    = ndom_pts;
-            VectorXi nout_pts   = ndom_pts;
-
-            if (!reverse_encode)
-                nout_pts(0) = t.nctrl_pts(0);
-            else
-                nout_pts(dom_dim-1) = t.nctrl_pts(dom_dim-1);
-
+            // Main loop over each dimension
             for (auto dimcount = 0; dimcount < dom_dim; dimcount++)
             {
                 int dim = reverse_encode ? dom_dim - dimcount - 1 : dimcount;
+                int np = ndom_pts(dim);
+                int nc = t.nctrl_pts(dim);
+                nout_pts(dim) = nc;
 
                 if (verbose)
                 {
                     cerr << "  begin encoding dimension " << dim << endl;
                 }
-
-                // Initialize matrix of basis functions and differentiated basis functions
-                // TODO: this does not support tensor subvolumes
-                int np = ndom_pts(dim);
-                int nc = t.nctrl_pts(dim);
-                coll_t = SparseMatrixX<T>(nc, np);
-                coll_d_t = SparseMatrixX<T>(nc, np);
-                coll_t.reserve(VectorXi::Constant(coll_t.cols(), mfa_data.p(dim)+1));
-                coll_d_t.reserve(VectorXi::Constant(coll_d_t.cols(), mfa_data.p(dim)+1));
-                t_spans = vector<int>(np, 0);
-                vector<vector<T>> funs(2, vector<T>(mfa_data.p(dim)+1, 0));
-                for (int i = 0; i < coll_t.cols(); i++)
-                {
-                    int span = mfa_data.tmesh.FindSpan(dim, input.params->param_grid[dim][i], nc);
-                    t_spans[i] = span;
-                    mfa_data.FastBasisFunsDer1(dim, input.params->param_grid[dim][i], span, funs, bfi);
-
-                    for (int j = 0; j < mfa_data.p(dim)+1; j++)
-                    {
-                        // coll(i, span - mfa_data.p(dim) + j) = funs[0][j];
-                        coll_t.coeffRef(span - mfa_data.p(dim) + j, i) = funs[0][j];
-                        coll_d_t.coeffRef(span - mfa_data.p(dim) + j, i) = funs[1][j];
-                    }
-                }
-
-
-                MatrixX<T>      R(nin_pts(dim), pt_dim);                    // RHS for solving N * P = R
-                VolIterator     in_iter(nin_pts);                           // volume of current input points
-                VolIterator     out_iter(nout_pts);                         // volume of current output points
-                SliceIterator   in_slice_iter(in_iter, dim);                // slice of input points volume missing current dim
-                SliceIterator   out_slice_iter(out_iter, dim);              // slice of output points volume missing current dim
-
-                // allocate matrices of free and constraint control points and constraint basis functions
-                MatrixX<T>  N(nin_pts(dim), t.nctrl_pts(dim));
-                MatrixX<T>  P(t.nctrl_pts(dim), pt_dim);
-
-                Eigen::SimplicialLDLT<SparseMatrixX<T>> NtN_llt;
-                SparseMatrixX<T> Nt(nc, np);
-                Nt.reserve(VectorXi::Constant(Nt.cols(), mfa_data.p(dim)+1));
-                ComputeControlCurveMat(0, vector<bool>(np, true), np, nc, Nt);
-                NtN_llt.analyzePattern(Nt*Nt.transpose());
-
-                Eigen::SimplicialLDLT<SparseMatrixX<T>> all_in_llt(coll_t * coll_t.transpose());
-                Eigen::SimplicialLDLT<SparseMatrixX<T>> all_out_llt(coll_d_t * coll_d_t.transpose());
-
 std::chrono::time_point<std::chrono::high_resolution_clock> t1, t2, t3, t4;
 auto duration1 = 0;
 auto duration2 = 0;
 auto duration3 = 0;
 int recomputes = 0;
-                // Tracks previous curve to avoid redundant computation when possible
-                // Always ignored for first curve of a slice
-                vector<bool> prev_curve_in_domain(nin_pts(dim), 0);
+
+                // Initialize matrix of basis functions and differentiated basis functions
+                // TODO: this does not support tensor subvolumes
+                SparseMatrixX<T> Nt(nc, np);
+                InitCollocationMats(dim, np, nc, Nt);
+                
+                Eigen::SimplicialLDLT<SparseMatrixX<T>> all_in_llt(coll0_t * coll0_t.transpose());
+                Eigen::SimplicialLDLT<SparseMatrixX<T>> all_out_llt(coll1_t * coll1_t.transpose());
+                Eigen::SimplicialLDLT<SparseMatrixX<T>> NtN_llt;
+                NtN_llt.analyzePattern(Nt*Nt.transpose());
+
+                // Declarations
+                MatrixX<T>      R(nin_pts(dim), pt_dim);                    // RHS for solving N * P = R
+                MatrixX<T>      P(t.nctrl_pts(dim), pt_dim);                // Control points
+                VolIterator     in_iter(nin_pts);                           // volume of current input points
+                VolIterator     out_iter(nout_pts);                         // volume of current output points
+                SliceIterator   in_slice_iter(in_iter, dim);                // slice of input points volume missing current dim
+                SliceIterator   out_slice_iter(out_iter, dim);              // slice of output points volume missing current dim
+                vector<bool>    prev_curve_in_domain(nin_pts(dim), 0);
 
                 // for all curves in the current dimension
                 while (!in_slice_iter.done())
                 {
                     CurveIterator   in_curve_iter(in_slice_iter);       // one curve of the input points in the current dim
                     CurveIterator   out_curve_iter(out_slice_iter);     // one curve of the output points in the current dim
-
-                    // ComputeCtrlPtCurveReg(in_curve_iter, prev_curve_in_domain, R, Q0, Q1, N, NtN_llt, P, t1, t2, t3, t4, recomputes, all_out_llt, all_in_llt);
                     ComputeCtrlPtCurveReg(in_curve_iter, prev_curve_in_domain, R, Q0, Q1, Nt, NtN_llt, P, t1, t2, t3, t4, recomputes, all_out_llt, all_in_llt);
-duration1 += std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1).count();
-duration2 += std::chrono::duration_cast<std::chrono::microseconds>(t3 - t2).count();
-duration3 += std::chrono::duration_cast<std::chrono::microseconds>(t4 - t3).count();
 
                     // copy solution to one curve of output points
                     while (!out_curve_iter.done())
@@ -1126,17 +1105,13 @@ duration3 += std::chrono::duration_cast<std::chrono::microseconds>(t4 - t3).coun
 
                     out_slice_iter.incr_iter();
                     in_slice_iter.incr_iter();
+duration1 += std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1).count();
+duration2 += std::chrono::duration_cast<std::chrono::microseconds>(t3 - t2).count();
+duration3 += std::chrono::duration_cast<std::chrono::microseconds>(t4 - t3).count();
                 }       // for all curves
 
-                // adjust input, output numbers of points for next iteration
+                // adjust number of input points for next iteration
                 nin_pts(dim) = t.nctrl_pts(dim);
-                if (dimcount < dom_dim - 1)
-                {
-                    if (reverse_encode)
-                        nout_pts(dim - 1) = t.nctrl_pts(dim - 1);
-                    else
-                        nout_pts(dim + 1) = t.nctrl_pts(dim + 1);
-                }
 
 cerr << "duration1: " << duration1/1000000. << endl;
 cerr << "duration2: " << duration2/1000000. << endl;
@@ -1208,7 +1183,7 @@ cerr << "Recomputes: " << recomputes << endl;
             bool all_in = true;
             int dim = in_curve_iter.curve_dim();
             int npts = in_curve_iter.tot_iters();
-            int nctrl = coll_t.rows();
+            int nctrl = coll0_t.rows();
 
             int dimcount = 0;
             if (!reverse_encode)
@@ -1283,15 +1258,15 @@ t3 = std::chrono::high_resolution_clock::now();
             if (dimcount == 0)
             {
                 if (all_out)
-                    P = all_out_llt.solve(coll_d_t * R);
+                    P = all_out_llt.solve(coll1_t * R);
                 else if (all_in)
-                    P = all_in_llt.solve(coll_t * R);
+                    P = all_in_llt.solve(coll0_t * R);
                 else
                     P = NtN_llt.solve(Nt*R);
             }
             else
             {
-                P = all_in_llt.solve(coll_t * R);
+                P = all_in_llt.solve(coll0_t * R);
             }
 
 t4 = std::chrono::high_resolution_clock::now();
@@ -1311,49 +1286,14 @@ t4 = std::chrono::high_resolution_clock::now();
                 for (int i = 0; i < mfa_data.p(dim) + 1; i++)
                 {
                     if (inside)
-                        Nt.coeffRef(ctrl_idx + i, j) = coll_t.coeffRef(ctrl_idx + i, j);
+                        Nt.coeffRef(ctrl_idx + i, j) = coll0_t.coeffRef(ctrl_idx + i, j);
                     else
-                        Nt.coeffRef(ctrl_idx + i, j) = coll_d_t.coeffRef(ctrl_idx + i, j);
+                        Nt.coeffRef(ctrl_idx + i, j) = coll1_t.coeffRef(ctrl_idx + i, j);
                 }
             }
 
             return;
         }
-
-        // void ComputeControlCurveMat(
-        //         int                 dim,                // current dimension
-        //         const vector<bool>& curve_in_domain,
-        //         int                 npts,               // number of input points in current dim, including constraints
-        //         int                 nctrl,
-        //         MatrixX<T>&         N)                  // (output) matrix of free control points basis functions
-        // {
-        //     N = MatrixX<T>::Zero(npts, nctrl);
-
-        //     // int dim0 = 0;
-        //     // if (reverse_encode)
-        //     //     dim0 = dom_dim - 1;
-
-        //     // if (dim != dim0)
-        //     // {
-        //     //     N = coll;
-        //     //     return;
-        //     // }
-
-        //     for (int j = 0; j < npts; j++)
-        //     {
-        //         bool inside = curve_in_domain[j];
-        //         int ctrl_idx = t_spans[j] - mfa_data.p(dim);
-        //         for (int i = 0; i < mfa_data.p(dim) + 1; i++)
-        //         {
-        //             if (inside)
-        //                 N(j, ctrl_idx + i) = coll_t.coeffRef(ctrl_idx + i, j);
-        //             else
-        //                 N(j, ctrl_idx + i) = coll_d(j, ctrl_idx + i);
-        //         }
-        //     }
-
-        //     return;
-        // }
 
 #ifdef MFA_TMESH
 
