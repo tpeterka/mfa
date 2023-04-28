@@ -1897,13 +1897,9 @@ cout << "\n\nATTENTION: Using experimental separable constrained encode\n" << en
             ray_mfa->AddVariable(p, nctrl_pts, 1);
         }
 
-        // // Encode ray model. TODO: regularized encode
-        // bool force_unified = fixed_length;  // force a unified encoding to use the regularizer
-        // ray_mfa->FixedEncode(*ray_input, mfa_info.regularization, mfa_info.reg1and2, false, force_unified);
-cout << "Encoding Ray Model..." << endl;    
+        // Encode ray model. 
         ray_mfa->FixedEncodeGeom(*ray_input, 0, false);
-        ray_mfa->FixedEncodeSeparableCons(0, *ray_input);
-cout << "    done." << endl;
+        ray_mfa->RayEncode(0, *ray_input);
 
         // ----------- Replace old block members with new ---------- //
         // reset block members as needed

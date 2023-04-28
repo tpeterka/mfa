@@ -94,6 +94,7 @@ using SpMatTriplet = Eigen::Triplet<T>;
 #include    <mfa/mfa_data.hpp>
 #include    <mfa/decode.hpp>
 #include    <mfa/encode.hpp>
+#include    <mfa/ray_encode.hpp>
 
 /*  The ModelInfo struct contains all of the information necessary to set up a MFA_Data object.
     This struct can be used to construct both geometry and science variable MFA_Data's. The 
@@ -679,18 +680,17 @@ namespace mfa
                 encoder.EncodeUnified(0, regularization, reg1and2, weighted);  // Assumes only one tensor product
         }
 
-        void FixedEncodeSeparableCons(
+        void RayEncode(
                 int i,
                 const PointSet<T>& input)
         {
             if (verbose)
-                cout << "MFA: Starting FixedEncodeSeparableCons" << endl;
+                cout << "MFA: Starting Ray Encoding" << endl;
                 
             vars[i]->set_knots(input);
 
-            TensorProduct<T>& t = vars[i]->tmesh.tensor_prods[0];
-            Encoder<T> encoder(*vars[i], input, true);
-            encoder.EncodeSeparableConstrained(0, false);
+            RayEncoder<T> encoder(*vars[i], input, true);
+            encoder.encode();
         }
 
         // adaptive encode

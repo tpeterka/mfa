@@ -178,7 +178,7 @@ namespace mfa
             return max_dim - min_dim + 1;
         }
 
-        void set_knots(const PointSet<T>& input)
+        void set_knots(const PointSet<T>& input, int verbose = 0)
         {
             // TODO move this elsewhere (to encode method?), wrapped in "structured==true" block
             // allocate basis functions
@@ -205,9 +205,9 @@ namespace mfa
                 cerr << "ERROR: Cannot set curve knots from unstructured input" << endl;
                 exit(1);
             }
-            Knots(input, tmesh);       // knots spaced according to parameters (per P&T)
+            Knots(input, tmesh, verbose);       // knots spaced according to parameters (per P&T)
 #else
-            UniformKnots(input, tmesh);                    // knots spaced uniformly
+            UniformKnots(input, tmesh, verbose);                    // knots spaced uniformly
 #endif
         }
 
@@ -1694,7 +1694,8 @@ namespace mfa
                 const PointSet<T>&         input,                  // input domain
                 // const VectorXi&             ndom_pts,               // number of input points in each dim.
                 // const vector<vector<T>>&    params,                 // parameters for input points[dimension][index]
-                Tmesh<T>&                   tmesh) const            // (output) tmesh
+                Tmesh<T>&                   tmesh,                  // (output) tmesh
+                int verbose) const                                  // verbosity level
         {
             if (!input.is_structured())
             {
@@ -1759,20 +1760,21 @@ namespace mfa
         // resulting knots are same for all curves and stored once for each dimension (1st dim knots, 2nd dim, ...)
         // total number of knots is the sum of number of knots over the dimensions, much less than the product
         // assumes knots were allocated by caller
-        void UniformKnots( const    PointSet<T>&   input,
-                                    Tmesh<T>&       tmesh)
+        void UniformKnots( const    PointSet<T>&    input,
+                                    Tmesh<T>&       tmesh,
+                                    int             verbose)
         {
             if (input.is_structured())
             {
-                // debug
-                cerr << "Using uniform knots (structured input)" << endl;
+                if (verbose)
+                    cerr << "Using uniform knots (structured input)" << endl;
 
                 uniform_knots_impl_structured(input.params->param_grid, tmesh);
             }
             else
             {
-                // debug
-                cerr << "Using uniform knots (unstructured input)" << endl;
+                if (verbose)
+                    cerr << "Using uniform knots (unstructured input)" << endl;
 
                 uniform_knots_impl_unstructured(tmesh);
             }
@@ -1814,9 +1816,14 @@ namespace mfa
 
         void uniform_knots_impl_unstructured(Tmesh<T>& tmesh)
         {
-            cerr << "Warning: Unstable build, tmesh.all_knot_param_idxs remain uninitialized" << endl; 
-            cerr << "  => tmesh.insert_knot() and tmesh.domain_pts() will not be valid" << endl;
-            cerr << "  => use of NewKnots class will not be valid" << endl;
+            if (tmesh.tensor_prods.size() > 1)
+            {
+                // Warning: Unstable build, tmesh.all_knot_param_idxs remain uninitialized
+                //   => tmesh.insert_knot() and tmesh.domain_pts() will not be valid
+                //   => use of NewKnots class will not be valid
+                cerr << "ERROR: Cannot encode unstructured data with a nontrivial TMesh\nExiting." << endl;
+                exit(1);
+            }
 
             for (size_t k = 0; k < dom_dim; k++)                // for all domain dimensions
             {
