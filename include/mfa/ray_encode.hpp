@@ -58,6 +58,8 @@ namespace mfa
         const PointSet<T>&  input;                          // input points
         SparseMatrixX<T>          coll0_t;       // temporary collocation matrix
         SparseMatrixX<T>          coll1_t;     // temporary differentiated collocation matrix
+        Eigen::SimplicialLDLT<SparseMatrixX<T>> all_out_llt;
+        Eigen::SimplicialLDLT<SparseMatrixX<T>> all_in_llt;
         vector<int>         t_spans;      // temporary vector to hold spans of each input point
         bool reverse_encode{false};
 
@@ -137,24 +139,15 @@ namespace mfa
 
                 if (verbose)
                 {
-                    cerr << "  begin encoding dimension " << dim << endl;
+                    cerr << "  encoding dimension " << dim << endl;
                 }
-std::chrono::time_point<std::chrono::high_resolution_clock> t1, t2, t3, t4;
-auto duration1 = 0;
-auto duration2 = 0;
-auto duration3 = 0;
-int recomputes = 0;
 
                 // Initialize matrix of basis functions and differentiated basis functions
                 // TODO: this does not support tensor subvolumes
                 SparseMatrixX<T> Nt(nc, np);
-                init_coll_mats(dim, np, nc, Nt);
-                
-                Eigen::SimplicialLDLT<SparseMatrixX<T>> all_in_llt(coll0_t * coll0_t.transpose());
-                Eigen::SimplicialLDLT<SparseMatrixX<T>> all_out_llt(coll1_t * coll1_t.transpose());
                 Eigen::SimplicialLDLT<SparseMatrixX<T>> NtN_llt;
-                NtN_llt.analyzePattern(Nt*Nt.transpose());
-
+                init_matrix_factors(dim, np, nc, Nt, NtN_llt);
+                
                 // Declarations
                 MatrixX<T>      R(nin_pts(dim), pt_dim);                    // RHS for solving N * P = R
                 MatrixX<T>      P(t.nctrl_pts(dim), pt_dim);                // Control points
@@ -169,7 +162,7 @@ int recomputes = 0;
                 {
                     CurveIterator   in_curve_iter(in_slice_iter);       // one curve of the input points in the current dim
                     CurveIterator   out_curve_iter(out_slice_iter);     // one curve of the output points in the current dim
-                    solve_curve(in_curve_iter, prev_curve_in_domain, R, Q0, Q1, Nt, NtN_llt, P, t1, t2, t3, t4, recomputes, all_out_llt, all_in_llt);
+                    solve_curve(in_curve_iter, prev_curve_in_domain, R, Q0, Q1, Nt, NtN_llt, P);
 
                     // copy solution to one curve of output points
                     while (!out_curve_iter.done())
@@ -183,18 +176,10 @@ int recomputes = 0;
 
                     out_slice_iter.incr_iter();
                     in_slice_iter.incr_iter();
-duration1 += std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1).count();
-duration2 += std::chrono::duration_cast<std::chrono::microseconds>(t3 - t2).count();
-duration3 += std::chrono::duration_cast<std::chrono::microseconds>(t4 - t3).count();
                 }       // for all curves
 
                 // adjust number of input points for next iteration
                 nin_pts(dim) = t.nctrl_pts(dim);
-
-cerr << "duration1: " << duration1/1000000. << endl;
-cerr << "duration2: " << duration2/1000000. << endl;
-cerr << "duration3: " << duration3/1000000. << endl;
-cerr << "Recomputes: " << recomputes << endl;
             }       // for all domain dimensions
 
             // copy final result back to tensor product
@@ -207,9 +192,13 @@ cerr << "Recomputes: " << recomputes << endl;
             fmt::print(stderr, "EncodeSeparableConstrained() time {} s.\n", MPI_Wtime() - t0);
         }
 
-        // Create and fill matrices that contain evaluated basis functions at each point
+        // Create, fill, and factor matrices that contain evaluated basis functions at each point
         // These matrices are recomputed for each dimension during encoding
-        void init_coll_mats(int dim, int np, int nc, SparseMatrixX<T>& Nt)
+        void init_matrix_factors(   int dim, 
+                                    int np, 
+                                    int nc, 
+                                    SparseMatrixX<T>& Nt, 
+                                    Eigen::SimplicialLDLT<SparseMatrixX<T>>& NtN_llt)
         {
             VectorXi            q = mfa_data.p + VectorXi::Ones(dom_dim);  // order of basis funs
             BasisFunInfo<T>     bfi(q);                                    // buffers for basis fun evaluation
@@ -235,8 +224,15 @@ cerr << "Recomputes: " << recomputes << endl;
                 }
             }
 
+            // Compute matrix factorizations
+            all_in_llt.compute(coll0_t * coll0_t.transpose());
+            all_out_llt.compute(coll1_t * coll1_t.transpose());
+
+            // Fill Nt with dummy values in the correct sparsity pattern,
+            // so that analyzePattern() can be called
             Nt.reserve(VectorXi::Constant(Nt.cols(), mfa_data.p(dim)+1));
             compute_curve_mat(0, vector<bool>(np, true), np, nc, Nt);
+            NtN_llt.analyzePattern(Nt*Nt.transpose());
 
             return;
         }
@@ -276,18 +272,11 @@ cerr << "Recomputes: " << recomputes << endl;
                 CurveIterator&          in_curve_iter,                  // current curve
                 vector<bool>&           curve_in_domain,             // previous curve
                 MatrixX<T>&             R,                              // right hand side, allocated by caller
-                MatrixX<T>&             Q0,                              // first matrix of input points, allocated by caller
+                MatrixX<T>&             Q0,                             // first matrix of input points, allocated by caller
                 MatrixX<T>&             Q1,                             // second matrix of input points, allocated by caller
-                SparseMatrixX<T>& Nt,
+                SparseMatrixX<T>&       Nt,
                 Eigen::SimplicialLDLT<SparseMatrixX<T>>& NtN_llt,
-                MatrixX<T>&             P,                              // (output) solution control points, allocated by caller
-                std::chrono::time_point<std::chrono::high_resolution_clock>& t1,
-                std::chrono::time_point<std::chrono::high_resolution_clock>& t2,
-                std::chrono::time_point<std::chrono::high_resolution_clock>& t3,
-                std::chrono::time_point<std::chrono::high_resolution_clock>& t4,
-                int& recomputes,
-                Eigen::SimplicialLDLT<SparseMatrixX<T>>& all_out_llt,
-                Eigen::SimplicialLDLT<SparseMatrixX<T>>& all_in_llt)
+                MatrixX<T>&             P)                              // (output) control points
         {
             VectorXi cur_ijk;
             bool same_pattern = true;
@@ -303,7 +292,6 @@ cerr << "Recomputes: " << recomputes << endl;
             else
                 dimcount = dom_dim - dim - 1;
 
-t1 = std::chrono::high_resolution_clock::now();
             // copy one curve of input points to right hand side
             // add zero entries for rows that will correspond to deriv constraints
             while (!in_curve_iter.done())
@@ -356,32 +344,32 @@ t1 = std::chrono::high_resolution_clock::now();
             }
             in_curve_iter.reset();
 
-t2 = std::chrono::high_resolution_clock::now();
-            // find matrix of free control point basis functions
+            // Compute constraint matrix (if necessary) and solve
             double t0 = MPI_Wtime();
-            if (dimcount == 0 && (same_pattern == false || in_curve_iter.slice_iter_->cur_iter() == 0))
-            {
-                recomputes++;
-                compute_curve_mat(dim, curve_in_domain, npts, nctrl, Nt);
-                NtN_llt.factorize(Nt * Nt.transpose());
-            }
-
-t3 = std::chrono::high_resolution_clock::now();
             if (dimcount == 0)
             {
                 if (all_out)
+                {
                     P = all_out_llt.solve(coll1_t * R);
+                }
                 else if (all_in)
+                {
                     P = all_in_llt.solve(coll0_t * R);
+                }
                 else
+                {
+                    if (same_pattern == false || in_curve_iter.slice_iter_->cur_iter() == 0)
+                    {
+                        compute_curve_mat(dim, curve_in_domain, npts, nctrl, Nt);
+                        NtN_llt.factorize(Nt * Nt.transpose());
+                    }
                     P = NtN_llt.solve(Nt*R);
+                } 
             }
             else
             {
                 P = all_in_llt.solve(coll0_t * R);
             }
-
-t4 = std::chrono::high_resolution_clock::now();
         }
 
         void compute_curve_mat(

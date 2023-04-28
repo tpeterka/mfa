@@ -70,10 +70,6 @@ namespace mfa
         int                 verbose;                        // output level
         const PointSet<T>&  input;                          // input points
         size_t              max_num_curves;                 // max num. curves per dimension to check in curve version
-        SparseMatrixX<T>          coll0_t;       // temporary collocation matrix
-        SparseMatrixX<T>          coll1_t;     // temporary differentiated collocation matrix
-        vector<int>         t_spans;      // temporary vector to hold spans of each input point
-        bool reverse_encode{false};
 
     public:
 
