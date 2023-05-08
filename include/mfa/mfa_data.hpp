@@ -178,6 +178,11 @@ namespace mfa
             return max_dim - min_dim + 1;
         }
 
+        int ntensors() const
+        {
+            return tmesh.tensor_prods.size();
+        }
+
         void set_knots(const PointSet<T>& input, int verbose = 0)
         {
             // TODO move this elsewhere (to encode method?), wrapped in "structured==true" block

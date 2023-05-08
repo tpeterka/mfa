@@ -21,6 +21,7 @@
 
 #include "opts.h"
 #include "block.hpp"
+#include "rayblock.hpp"
 #include "example-setup.hpp"
 
 
@@ -110,11 +111,11 @@ int main(int argc, char** argv)
     diy::Master               master(world,
                                      num_threads,
                                      mem_blocks,
-                                     &Block<real_t>::create,
-                                     &Block<real_t>::destroy,
+                                     &RayBlock<real_t>::create,
+                                     &RayBlock<real_t>::destroy,
                                      &storage,
-                                     &Block<real_t>::save,
-                                     &Block<real_t>::load);
+                                     &RayBlock<real_t>::save,
+                                     &RayBlock<real_t>::load);
     diy::ContiguousAssigner   assigner(world.size(), tot_blocks);
 
     // set global domain bounds and decompose
@@ -125,7 +126,7 @@ int main(int argc, char** argv)
     decomposer.decompose(world.rank(),
                          assigner,
                          [&](int gid, const Bounds<real_t>& core, const Bounds<real_t>& bounds, const Bounds<real_t>& domain, const RCLink<real_t>& link)
-                         { Block<real_t>::add(gid, core, bounds, domain, link, master, dom_dim, pt_dim, 0.0); });
+                         { RayBlock<real_t>::add(gid, core, bounds, domain, link, master, dom_dim, pt_dim, 0.0); });
 
     // If scalar == true, assume all science vars are scalar. Else one vector-valued var
     // We assume that dom_dim == geom_dim
@@ -153,7 +154,7 @@ int main(int argc, char** argv)
     // Create data set for modeling. Input keywords are defined in example-setup.hpp
     if (analytical_signals.count(input) == 1)
     {
-        master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
+        master.foreach([&](RayBlock<real_t>* b, const diy::Master::ProxyWithLink& cp)
         { 
             b->generate_analytical_data(cp, input, mfa_info, d_args); 
         });
@@ -167,7 +168,7 @@ int main(int argc, char** argv)
     // compute the MFA
     fprintf(stderr, "\nStarting fixed encoding...\n\n");
     double encode_time = MPI_Wtime();
-    master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
+    master.foreach([&](RayBlock<real_t>* b, const diy::Master::ProxyWithLink& cp)
             { b->fixed_encode_block(cp, mfa_info); });
     encode_time = MPI_Wtime() - encode_time;
     fprintf(stderr, "\n\nFixed encoding done.\n\n");
@@ -176,7 +177,7 @@ int main(int argc, char** argv)
     double decode_time = MPI_Wtime();
     fprintf(stderr, "\nFinal decoding and computing max. error...\n");
     bool saved_basis = structured; // TODO: basis functions are currently only saved during encoding of structured data
-    master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
+    master.foreach([&](RayBlock<real_t>* b, const diy::Master::ProxyWithLink& cp)
     { 
         // Compute original MFA
         b->range_error(cp, true, saved_basis);
@@ -252,8 +253,8 @@ int main(int argc, char** argv)
 
     // print results
     fprintf(stderr, "\n------- Final block results --------\n");
-    master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-            { b->print_block(cp, true); });
+    master.foreach([&](RayBlock<real_t>* b, const diy::Master::ProxyWithLink& cp)
+            { b->print_ray_model(cp, true); });
     fprintf(stderr, "encoding time         = %.3lf s.\n", encode_time);
     fprintf(stderr, "decoding time         = %.3lf s.\n", decode_time);
     fprintf(stderr, "-------------------------------------\n\n");

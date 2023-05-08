@@ -842,6 +842,7 @@ namespace mfa
         // TODO: maybe make a subclass RayMFA to which this method belongs.
         //       too many things about this method are arbitrary (rho/alpha order, etc)
         //       and the use case is very specific for this to be a generic method.
+        // TODO change this to be a 1D integral method, which is more generic
         void IntegrateAxisRay(
             const MFA_Data<T>&  mfa_data,
             T                   alpha_param, 

@@ -268,8 +268,8 @@ namespace mfa
 
                 // print progress
                 if (verbose)
-                    fprintf(stderr, "\ndimension %ld of %d encoded\n", k + 1, ndims);
-            }                                                      // domain dimensions
+                    fprintf(stderr, "\r dimension %ld: 100%% encoded                                       \n", k);
+            }  // domain dimensions
 
             // debug
 //             cerr << "Encode() ctrl_pts:\n" << ctrl_pts << endl;

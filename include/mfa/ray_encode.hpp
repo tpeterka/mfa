@@ -79,7 +79,7 @@ namespace mfa
         void encode(TensorIdx t_idx = 0, bool weighted = false)                  // index of tensor product being encoded
         {
             double t0 = MPI_Wtime();
-            reverse_encode = true;
+            reverse_encode = false;
             if (verbose)
             {
                 cerr << "Starting ray model encoding" << endl;

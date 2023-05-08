@@ -39,44 +39,6 @@ template <typename T>
 using Decomposer = diy::RegularDecomposer<Bounds<T>>;
 
 
-
-// struct ModelInfo
-// {
-//     ModelInfo(int dom_dim_, int pt_dim_) :
-//         dom_dim(dom_dim_),
-//         pt_dim(pt_dim_),
-//         weighted(true),
-//         local(false),
-//         verbose(1)
-//     {
-//         geom_p.resize(dom_dim);
-//         vars_p.resize(pt_dim - dom_dim);
-//         for (auto i = 0; i < vars_p.size(); i++)
-//             vars_p[i].resize(dom_dim);
-//         geom_nctrl_pts.resize(dom_dim);
-//         vars_nctrl_pts.resize(pt_dim - dom_dim);
-//         for (auto i = 0; i < vars_nctrl_pts.size(); i++)
-//             vars_nctrl_pts[i].resize(dom_dim);
-
-//         regularization = 0;
-//     }
-//     virtual ~ModelInfo()                        {}
-
-//     int                 dom_dim;                // domain dimensionality
-//     int                 pt_dim;                 // point dimensionality (> dom_dim)
-//     VectorXi            model_dims;             // (currently unused) pt dim for each mfa_data
-//     vector<int>         geom_p;                 // degree in each dimension of geometry
-//     vector<vector<int>> vars_p;                 // degree in each dimension of each science variable vars_p[var][dim]
-//     vector<int>         geom_nctrl_pts;         // number of input points in each dimension of geometry
-//     vector<vector<int>> vars_nctrl_pts;         // number of input pts in each dim of each science variable vars_nctrl_pts[var][dim]
-//     bool                weighted;               // solve for and use weights (default = true)
-//     bool                local;                  // solve locally (with constraints) each round (default = false)
-//     float               regularization;         // smoothing parameter for unstructured data with nonuniform point density (value of 0 does nothing)
-//     bool                reg1and2;               // regularize with 1st and 2nd derivatives (false --> 2nd derivs only)
-//     int                 verbose;                // debug level (default = 1)
-// };
-
-
 // block
 template <typename T>
 struct BlockBase
@@ -88,10 +50,6 @@ struct BlockBase
     VectorX<T>          bounds_maxs;            // local domain maximum corner
     VectorX<T>          core_mins;              // local domain minimum corner w/o ghost
     VectorX<T>          core_maxs;              // local domain maximum corner w/o ghost
-
-    bool is_ray_model{false};
-    VectorX<T>  box_mins;   // TODO remove this. This is solely for line integrals but should not be a permanent member
-    VectorX<T>  box_maxs;   
 
     // data sets
     mfa::PointSet<T>    *input;                 // input data
@@ -128,7 +86,7 @@ struct BlockBase
         blend(nullptr),
         errs(nullptr) { }
 
-    ~BlockBase()
+    virtual ~BlockBase()
     {
         delete mfa;
         delete input;
@@ -317,31 +275,6 @@ struct BlockBase
         }
 
         T scale = (core_maxs - core_mins).prod();
-        output *= scale;
-    }
-
-    void integrate_axis_ray(
-        const diy::Master::ProxyWithLink&   cp,
-        T                                   alpha,
-        T                                   rho,
-        T                                   u0,
-        T                                   u1,
-        T                                   scale,
-        VectorX<T>&                         output) const
-    {
-        // TODO: Create a subclass RayMFA from MFA which has methods like this in it?
-        if (!is_ray_model)
-        {
-            cerr << "ERROR: Attempting to call BlockBase::integrate_axis_ray but is_ray_model=false" << endl;
-            exit(1);
-        }
-
-        T alpha_param = (alpha - bounds_mins(2)) / (bounds_maxs(2) - bounds_mins(2));
-        T rho_param = (rho - bounds_mins(1)) / (bounds_maxs(1) - bounds_mins(1));
-        
-        // TODO: this is first science variable only
-        mfa->IntegrateAxisRay(mfa->var(0), alpha_param, rho_param, u0, u1, output);
-
         output *= scale;
     }
 
