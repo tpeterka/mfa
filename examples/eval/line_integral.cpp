@@ -180,13 +180,13 @@ int main(int argc, char** argv)
     master.foreach([&](RayBlock<real_t>* b, const diy::Master::ProxyWithLink& cp)
     { 
         // Compute original MFA
-        b->range_error(cp, true, saved_basis);
+        b->range_error(cp, true, false);
         b->print_block(cp, true);
 
         // Assumes one scalar science variable. Used for relative error metric
         real_t extent = b->input->domain.col(dom_dim).maxCoeff() - b->input->domain.col(dom_dim).minCoeff();
 
-        b->create_ray_model(cp, mfa_info, d_args, 1, n_samples, n_rho, n_alpha, v_samples, v_rho, v_alpha);
+        b->create_ray_model(cp, mfa_info, d_args, n_samples, n_rho, n_alpha, v_samples, v_rho, v_alpha);
 
         real_t result = 0;
         VectorX<real_t> start_pt(dom_dim), end_pt(dom_dim);

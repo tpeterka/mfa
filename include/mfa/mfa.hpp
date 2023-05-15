@@ -71,6 +71,7 @@ using VectorXd = Eigen::VectorXd;
 using VectorXi = Eigen::VectorXi;
 using ArrayXXf = Eigen::ArrayXXf;
 using ArrayXXd = Eigen::ArrayXXd;
+using Eigen::ArrayXi;
 // NB, storing matrices and arrays in col-major order
 template <typename T>
 using MatrixX = Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic, Eigen::ColMajor>;
