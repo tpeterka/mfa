@@ -720,7 +720,7 @@ namespace mfa
                 bool                saved_basis,
                 const VectorXi&     derivs = VectorXi()) const
         {
-            cout << endl << "--- Decoding geometry ---" << endl << endl;
+            fmt::print("MFA: Decoding geometry\n");
 
             mfa::Decoder<T> decoder(geom(), verbose, saved_basis);
             decoder.DecodePointSet(output, geometry->min_dim, geometry->max_dim, derivs);
@@ -751,7 +751,7 @@ namespace mfa
                 bool                saved_basis,
                 const VectorXi&     derivs = VectorXi()) const
         {
-            cout << endl << "--- Decoding science variable " << i << " ---" << endl << endl;
+            fmt::print("MFA: Decoding science variable {}\n", i);
 
             if (i < 0 || i >= nvars())
             {

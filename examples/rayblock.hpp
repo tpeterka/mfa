@@ -560,140 +560,12 @@ struct RayBlock : public Block<T>
         ray_mfa->FixedEncodeGeom(*ray_input, 0, false);
         ray_mfa->RayEncode(0, *ray_input);
 
-        cerr << "geom ctrl" << endl;
-        cerr << "  " << ray_mfa->geom().tmesh.tensor_prods[0].ctrl_pts << endl;
-
-        // --------- Decode (for visualization) --------- //
-        cout << "Decoding Ray Model to uniform grid..." << endl;
-        vector<int> grid_size{{n_samples, n_rho, n_alpha}};
-        // VectorXi gridpoints(3);
-        // gridpoints(0) = grid_size[0];
-        // gridpoints(1) = grid_size[1];
-        // gridpoints(2) = grid_size[2];
-        // decode_ray_block(cp);
-
-cerr << "  ===========" << endl;
-cerr << "  f(x) = sin(x) hardcoded in create_ray_model() for error computation" << endl;
-cerr << "  ===========" << endl;
-        // ray_errs = new mfa::PointSet<T>(ray_dom_dim, ray_mfa->model_dims(), gridpoints.prod(), gridpoints);
-
-        int nvars = ray_mfa->nvars();
-        vector<T> L1(nvars), L2(nvars), Linf(nvars);
+        // --------- Decode and compute errors --------- //
+        fmt::print("Computing errors on uniform grid...\n");
         mfa::PointSet<T>* unused = nullptr;
-        analytical_ray_error_field(cp, ray_mfa, grid_size, "sine", L1, L2, Linf, args, unused, ray_approx, ray_errs);
-        // , 
-        //         [&](const VectorX<T>& domain_pt, VectorX<T>& output_pt, DomainArgs& args, int k)
-        //         {
-        //             output_pt(0) = sin(x)*sin(y);
-        //             T t = domain_pt(0);
-        //             T rho = domain_pt(1);
-        //             T alpha = domain_pt(2);
-
-        //             T x0, y0, x1, y1, span_x, span_y;
-        //             T SA = sin(alpha);
-        //             T CA = cos(alpha);
-        //             span_x = 2 * r_lim * SA;
-        //             span_y = 2 * r_lim * CA;
-        //             x0 = rho * CA - r_lim * SA;
-        //             // x1 = rh * cos(al) + r_lim * sin(al);
-        //             y0 = rho * SA + r_lim * CA;
-        //             // y1 = rh * sin(al) - r_lim * cos(al);
-
-        //             T x = x0 + t*span_x;
-        //             T y = y0 - t*span_y;
-
-        //             cerr << t << " " << rho << " " << alpha << endl;
-        //             cerr << x << " " << y << endl;
-        //             cerr << sin(x) * sin(y) << endl;
-
-        //             output_pt(0) = sin(x) * sin(y);
-        //         });
-
-        // outpt = VectorX<T>::Zero(1);
-        // param.resize(ray_dom_dim); // n.b. this is now the NEW dom_dim
-        // for (int k = 0; k < grid_size[2]; k++)
-        // {
-        //     for (int j = 0; j < grid_size[1]; j++)
-        //     {
-        //         T rh_param = (T) j / (grid_size[1]-1);
-        //         T al_param = (T) k / (grid_size[2]-1);
-        //         T rh = ray_input->mins(1) + (ray_input->maxs(1) - ray_input->mins(1)) * rh_param;
-        //         T al = ray_input->mins(2) + (ray_input->maxs(2) - ray_input->mins(2)) * al_param;
-
-        //         T x0, y0, x1, y1, span_x, span_y;
-
-        //         // "parallel-plate setup"
-        //         // start/end coordinates of the ray (alpha, rho)
-        //         // In this setup the length of every segment (x0,y0)--(x1,y1) is constant
-        //         span_x = 2 * r_lim * sin(al);
-        //         span_y = 2 * r_lim * cos(al);
-        //         x0 = rh * cos(al) - r_lim * sin(al);
-        //         x1 = rh * cos(al) + r_lim * sin(al);
-        //         y0 = rh * sin(al) + r_lim * cos(al);
-        //         y1 = rh * sin(al) - r_lim * cos(al);
-
-        //         T dx = span_x / (grid_size[0]-1);
-        //         T dy = span_y / (grid_size[0]-1);
-
-        //         for (int i = 0; i < grid_size[0]; i++)
-        //         {
-        //             T t_param = (T)i / (grid_size[0]-1);
-        //             int idx = k*grid_size[0]*grid_size[1] + j*grid_size[0] + i;
-        //             T a = ray_input->mins(0) + (ray_input->maxs(0) - ray_input->mins(0)) / (grid_size[0]-1) * i;
-                    
-        //             T x = x0 + i * dx;
-        //             T y = y0 - i * dy;
-                    
-        //             param(0) = t_param;
-        //             param(1) = rh_param;
-        //             param(2) = al_param;
-
-        //             // Truncate to [0,1] in the presence of small round-off errors
-        //             param(0) = param(0) < 0 ? 0 : param(0);
-        //             param(1) = param(1) < 0 ? 0 : param(1);
-        //             param(2) = param(2) < 0 ? 0 : param(2);
-        //             param(0) = param(0) > 1 ? 1 : param(0);
-        //             param(1) = param(1) > 1 ? 1 : param(1);
-        //             param(2) = param(2) > 1 ? 1 : param(2);
-
-        //             ray_mfa->DecodeVar(0, param, outpt);
-
-        //             T trueval = sin(x) * sin(y);
-
-        //             ray_errs->domain(idx, 0) = t_param;
-        //             ray_errs->domain(idx, 1) = rh;
-        //             ray_errs->domain(idx, 2) = al;
-        //             ray_errs->domain(idx, 3) = abs(trueval - outpt(0));
-
-        //             // ignore "errors" when querying outside the domain
-        //             if (x < xl || x > xh || y < yl || y > yh)
-        //                 ray_errs->domain(idx, 3) = 0;
-        //         }
-        //     }
-        // }
-        cout << "done." << endl;
-
-        // // TODO hardcoded for scalar science vars
-        // for (int k = 0; k < ray_mfa->nvars(); k++)
-        // {
-        //     ray_max_errs[k] = Linf[k];
-        //     ray_sum_sq_errs[k] = L2[k] * L2[k]
-        // }
-
-        // Compute error metrics
-        MatrixX<T>& errpts = ray_errs->domain;
-
-        for (auto j = ray_dom_dim; j < ray_errs->pt_dim; j++)
-            ray_sum_sq_errs[j - ray_dom_dim] = 0.0;
-        for (auto i = 0; i < ray_errs->npts; i++)
-        {
-            for (auto j = ray_dom_dim; j < ray_errs->pt_dim; j++)
-            {
-                ray_sum_sq_errs[j - ray_dom_dim] += (errpts(i, j) * errpts(i, j));
-                if ((i == 0 && j == ray_dom_dim) || errpts(i, j) > ray_max_errs[j - ray_dom_dim])
-                    ray_max_errs[j - ray_dom_dim] = errpts(i, j);
-            }
-        }
+        VectorXi grid_size{{n_samples, n_rho, n_alpha}};
+        analytical_ray_error_field(cp, ray_mfa, grid_size, "sine", args, unused, ray_approx, ray_errs);
+        fmt::print("done.\n");
 
         delete input;
         delete approx;
@@ -719,15 +591,13 @@ cerr << "  ===========" << endl;
         T rho = radon_coords(1);
         T alpha = radon_coords(2);
 
-        T x0, y0, x1, y1, span_x, span_y;
+        T x0, y0, span_x, span_y;
         T SA = sin(alpha);
         T CA = cos(alpha);
         span_x = 2 * r_lim * SA;
         span_y = 2 * r_lim * CA;
         x0 = rho * CA - r_lim * SA;
-        // x1 = rh * cos(al) + r_lim * sin(al);
         y0 = rho * SA + r_lim * CA;
-        // y1 = rh * sin(al) - r_lim * cos(al);
 
         T x = x0 + t*span_x;
         T y = y0 - t*span_y;
@@ -749,31 +619,15 @@ cerr << "  ===========" << endl;
     void analytical_ray_error_field(
         const diy::Master::ProxyWithLink&   cp,
         mfa::MFA<T>*                        models,
-        vector<int>&                        grid,               // size of regular grid
+        VectorXi&                           grid,               // size of regular grid
         string                              fun,                // analytical function name
-        vector<T>&                          L1,                 // (output) L-1 norm
-        vector<T>&                          L2,                 // (output) L-2 norm
-        vector<T>&                          Linf,               // (output) L-infinity norm
         DomainArgs&                         args,               // input args
         mfa::PointSet<T>*&                  exact_pts,          // PointSet to contain analytical signal
         mfa::PointSet<T>*&                  approx_pts,         // PointSet to contain approximation
         mfa::PointSet<T>*&                  error_pts,          // PointSet to contain errors
-        const std::function<void(const VectorX<T>&, VectorX<T>&, DomainArgs&, int)>& f = {}) // (optional) subset of the domain to consider for errors
+        const std::function<void(const VectorX<T>&, VectorX<T>&, DomainArgs&, int)>& f = {}) // (optional) lambda expression for signal
     {
-        int nvars = models->nvars();
-        if (L1.size() != nvars || L2.size() != nvars || Linf.size() != nvars)
-        {
-            cerr << "ERROR: Error metric vector sizes do not match in analytical_error_field().\nAborting" << endl;
-            exit(1);
-        }
-
-        // Size of grid on which to test error
-        VectorXi test_pts(models->dom_dim);
-        for (int i = 0; i < models->dom_dim; i++)
-        {
-            test_pts(i) = grid[i];
-        }
-
+        // Initialize container for error statistics
         ray_stats.init(ray_input);
 
         // Free any existing memory at PointSet pointers
@@ -785,9 +639,9 @@ cerr << "  ===========" << endl;
         delete error_pts;
 
         // Set up PointSets with grid parametrizations
-        exact_pts = new mfa::PointSet<T>(models->dom_dim, models->model_dims(), test_pts.prod(), test_pts);
-        approx_pts= new mfa::PointSet<T>(models->dom_dim, models->model_dims(), test_pts.prod(), test_pts);
-        error_pts = new mfa::PointSet<T>(models->dom_dim, models->model_dims(), test_pts.prod(), test_pts);
+        exact_pts = new mfa::PointSet<T>(models->dom_dim, models->model_dims(), grid.prod(), grid);
+        approx_pts= new mfa::PointSet<T>(models->dom_dim, models->model_dims(), grid.prod(), grid);
+        error_pts = new mfa::PointSet<T>(models->dom_dim, models->model_dims(), grid.prod(), grid);
         approx_pts->set_grid_params();
 
         // Decode on above-specified grid
@@ -798,10 +652,9 @@ cerr << "  ===========" << endl;
         error_pts->domain.leftCols(error_pts->geom_dim()) = approx_pts->domain.leftCols(approx_pts->geom_dim());
 
         // Compute the analytical error at each point and accrue errors
-        T l1err = 0, l2err = 0, linferr = 0;
         VectorX<T> xy_pt(mfa->geom_dim());
         VectorX<T> dom_pt(approx_pts->geom_dim());
-        for (int k = 0; k < nvars; k++)
+        for (int k = 0; k < models->nvars(); k++)
         {
             VectorX<T> true_pt(approx_pts->var_dim(k));
             VectorX<T> test_pt(approx_pts->var_dim(k));
@@ -822,9 +675,6 @@ cerr << "  ===========" << endl;
                         
                     // Get approximate value
                     pt_it.var_coords(k, test_pt);
-    // cerr << test_pt.transpose() << endl;
-    // cerr << true_pt.transpose() << endl;
-    // cerr << "----------------------" << endl;
 
                     // Update error field
                     residual = (true_pt - test_pt).cwiseAbs();
@@ -837,19 +687,7 @@ cerr << "  ===========" << endl;
                     // NOTE: For now, we are using the norm of the residual for all error statistics.
                     //       Is this the most appropriate way to measure errors norms of a vector field?
                     //       May want to consider revisiting this.
-                    //
-                    // l1err   = residual.sum();           // L1 difference between vectors
-                    l2err   = residual.norm();          // L2 difference between vectors 
-                    // linferr = residual.maxCoeff();      // Maximum difference in components
-
-                    ray_stats.update(k, l2err);
-
-                    // ray_stats.l1[k]   += l2err;
-                    // ray_stats.l2[k]   += l2err * l2err;
-                    // if (l2err > ray_stats.linf[k]) 
-                    //     ray_stats.linf[k] = l2err;
-
-                    // ray_stats.num_pts++;
+                    ray_stats.update(k, residual.norm());
                 }
                 else    // does not correspond to real xy point
                 {
@@ -860,11 +698,6 @@ cerr << "  ===========" << endl;
                     }
                 }
             }
-cerr << "6" << endl;
-            // ray_stats.npts = num_pts;
-            // ray_stats.l1[k] = L1[k] / num_pts;
-            // L2[k] = sqrt(L2[k] / num_pts);
-
         }
     }
 
@@ -893,7 +726,6 @@ cerr << "6" << endl;
          // distance in x and y between the endpoints of the segment
         T delta_x = b_x - a_x;
         T delta_y = b_y - a_y;
-
 
         T alpha = -1;
         T rho = 0;
@@ -1105,111 +937,36 @@ cerr << "6" << endl;
         cerr << "]" << endl;
     }
 
-    void print_ray_model(const diy::Master::ProxyWithLink& cp,
-            bool                              error)    // error was computed
+    void print_ray_model(const diy::Master::ProxyWithLink& cp)    // error was computed
     {
-        fprintf(stderr, "gid = %d", cp.gid());
         if (!ray_mfa)
         {
-            // Continue gracefully if this block never created an MFA for some reason
-            fprintf(stderr, ": No Ray MFA found.\n");
+            fmt::print("gid = {}: No Ray MFA found.\n", cp.gid());
             return;
         }
-        else
-        {
-            fprintf(stderr, "\n");
-        }
 
-        // max errors over all science variables, and variables where the max error occurs
-        // Initializing to 0 so we don't have to initialize with first var's error below
-        T all_max_err = 0, all_max_norm_err = 0, all_max_sum_sq_err = 0, all_max_rms_err = 0, all_max_norm_rms_err = 0;
-        int all_max_var = 0, all_max_norm_var = 0, all_max_sum_sq_var = 0, all_max_rms_var = 0, all_max_norm_rms_var = 0;   
+        fmt::print("gid = {}\n", cp.gid());
 
         // geometry
-        cerr << "\n------- geometry model -------" << endl;
+        fmt::print("---------------- geometry model ----------------\n");
         print_knots_ctrl(ray_mfa->geom());
-        cerr << "-----------------------------" << endl;
+        fmt::print("------------------------------------------------\n");
 
         // science variables
-        cerr << "\n----- science variable models -----" << endl;
+        fmt::print("\n----------- science variable models ------------\n");
         for (int i = 0; i < ray_mfa->nvars(); i++)
         {
-            cerr << "\n---------- var " << i << " ----------" << endl;
+            fmt::print("-------------------- var {} --------------------\n", i);
             print_knots_ctrl(ray_mfa->var(i));
-            cerr << "-----------------------------" << endl;
-
-
+            fmt::print("------------------------------------------------\n");
             ray_stats.print_var(i);
-            // int min_dim = ray_mfa->var(i).min_dim;
-            // int vardim  = ray_mfa->var_dim(i);
-            // MatrixX<T> varcoords = ray_input->domain.middleCols(min_dim, vardim);
-
-            // // range_extents_max is a vector containing the range extent in each component of the science variable
-            // // So, the size of 'range_extents_max' is the dimension of the science variable
-            // VectorX<T> range_extents_max = varcoords.colwise().maxCoeff() - varcoords.colwise().minCoeff();
-
-            // // 'range_extents' is the norm of the difference between the largest and smallest components
-            // // in each vector component. So, for each vector component we take find the difference between the
-            // // largest and smallest values in that component. Then we take the norm of the vector that has
-            // // this difference in each coordinate.
-            // T range_extent = range_extents_max.norm();
-
-            // if (error)
-            // {
-            //     T rms_err = sqrt(ray_sum_sq_errs[i] / (ray_input->npts));
-            //     fprintf(stderr, "range extent          = %e\n",  range_extent);
-            //     fprintf(stderr, "max_err               = %e\n",  ray_max_errs[i]);
-            //     fprintf(stderr, "normalized max_err    = %e\n",  ray_max_errs[i] / range_extent);
-            //     fprintf(stderr, "sum of squared errors = %e\n",  ray_sum_sq_errs[i]);
-            //     fprintf(stderr, "RMS error             = %e\n",  rms_err);
-            //     fprintf(stderr, "normalized RMS error  = %e\n",  rms_err / range_extent);
-
-            //     // find max over all science variables
-            //     if (ray_max_errs[i] > all_max_err)
-            //     {
-            //         all_max_err = ray_max_errs[i];
-            //         all_max_var = i;
-            //     }
-            //     if (ray_max_errs[i] / range_extent > all_max_norm_err)
-            //     {
-            //         all_max_norm_err = ray_max_errs[i] / range_extent;
-            //         all_max_norm_var = i;
-            //     }
-            //     if (ray_sum_sq_errs[i] > all_max_sum_sq_err)
-            //     {
-            //         all_max_sum_sq_err = ray_sum_sq_errs[i];
-            //         all_max_sum_sq_var = i;
-            //     }
-            //     if (rms_err > all_max_rms_err)
-            //     {
-            //         all_max_rms_err = rms_err;
-            //         all_max_rms_var = i;
-            //     }
-            //     if (rms_err / range_extent > all_max_norm_rms_err)
-            //     {
-            //         all_max_norm_rms_err = rms_err / range_extent;
-            //         all_max_norm_rms_var = i;
-            //     }
-            // }
-            cerr << "-----------------------------" << endl;
+            fmt::print("------------------------------------------------\n");
         }
-
-        if (error)
-        {
-            ray_stats.print_max();
-            // fprintf(stderr, "\n");
-            // fprintf(stderr, "Maximum errors over all science variables:\n");
-            // fprintf(stderr, "max_err                (var %d)    = %e\n",  all_max_var,          all_max_err);
-            // fprintf(stderr, "normalized max_err     (var %d)    = %e\n",  all_max_norm_var,     all_max_norm_err);
-            // fprintf(stderr, "sum of squared errors  (var %d)    = %e\n",  all_max_sum_sq_var,   all_max_sum_sq_err);
-            // fprintf(stderr, "RMS error              (var %d)    = %e\n",  all_max_rms_var,      all_max_rms_err);
-            // fprintf(stderr, "normalized RMS error   (var %d)    = %e\n",  all_max_norm_rms_var, all_max_norm_rms_err);
-        }
-
-       cerr << "-----------------------------------" << endl;
-
-        fprintf(stderr, "# input points        = %ld\n", ray_input->npts);
-        fprintf(stderr, "compression ratio     = %.2f\n", this->compute_ray_compression());
+        
+        ray_stats.print_max();
+        fmt::print("------------------------------------------------\n");
+        fmt::print("# input points        = {}\n", ray_input->npts);
+        fmt::print("compression ratio     = {:.2f}\n", compute_ray_compression());
     }
 
     // compute compression ratio

@@ -254,7 +254,7 @@ int main(int argc, char** argv)
     // print results
     fprintf(stderr, "\n------- Final block results --------\n");
     master.foreach([&](RayBlock<real_t>* b, const diy::Master::ProxyWithLink& cp)
-            { b->print_ray_model(cp, true); });
+            { b->print_ray_model(cp); });
     fprintf(stderr, "encoding time         = %.3lf s.\n", encode_time);
     fprintf(stderr, "decoding time         = %.3lf s.\n", decode_time);
     fprintf(stderr, "-------------------------------------\n\n");

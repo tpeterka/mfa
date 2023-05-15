@@ -80,10 +80,6 @@ namespace mfa
         {
             double t0 = MPI_Wtime();
             reverse_encode = false;
-            if (verbose)
-            {
-                cerr << "Starting ray model encoding" << endl;
-            }
 
             if (mfa_data.tmesh.tensor_prods.size() != 1)
             {
