@@ -173,81 +173,16 @@ int main(int argc, char** argv)
     encode_time = MPI_Wtime() - encode_time;
     fprintf(stderr, "\n\nFixed encoding done.\n\n");
 
-    // debug: compute error field for visualization and max error to verify that it is below the threshold
     double decode_time = MPI_Wtime();
-    fprintf(stderr, "\nFinal decoding and computing max. error...\n");
-    bool saved_basis = structured; // TODO: basis functions are currently only saved during encoding of structured data
     master.foreach([&](RayBlock<real_t>* b, const diy::Master::ProxyWithLink& cp)
     { 
-        // Compute original MFA
-        b->range_error(cp, true, false);
-        b->print_block(cp, true);
-
-        // Assumes one scalar science variable. Used for relative error metric
-        real_t extent = b->input->domain.col(dom_dim).maxCoeff() - b->input->domain.col(dom_dim).minCoeff();
+        // Compute errors for original MFA
+        // b->range_error(cp, true, false);
+        // b->print_block(cp, true);
 
         b->create_ray_model(cp, mfa_info, d_args, n_samples, n_rho, n_alpha, v_samples, v_rho, v_alpha);
-
-        real_t result = 0;
-        VectorX<real_t> start_pt(dom_dim), end_pt(dom_dim);
-        std::vector<real_t> ierrs_abs;
-        std::vector<real_t> ierrs_rel;
-        std::random_device dev;
-        std::mt19937 rng(dev());
-        real_t x0, x1, y0, y1;
-        real_t ierror_abs=0, ierror_rel=0, actual=0, rms_abs=0, rms_rel=0, avg_abs=0, avg_rel=0, len=0;
-        std::uniform_real_distribution<double> dist(0,1); 
-        for (int i = 0; i < num_ints; i++)
-        {
-            for (int j = 0; j < dom_dim; j++)
-            {
-                start_pt(j) = dist(rng) * (d_args.max[j]-d_args.min[j]) + d_args.min[j];
-                end_pt(j)   = dist(rng) * (d_args.max[j]-d_args.min[j]) + d_args.min[j];
-                len += (end_pt(j) - start_pt(j))*(end_pt(j) - start_pt(j));
-            }
-            len = sqrt(len);
-
-            result = b->integrate_ray(cp, start_pt, end_pt, 1) / len;   // normalize by segment length
-            actual = sintest(start_pt, end_pt) / len;                        // normalize by segment length
-            ierror_abs = abs(result - actual);
-            ierror_rel = ierror_abs/extent;
-            ierrs_abs.push_back(ierror_abs);
-            ierrs_rel.push_back(ierror_rel);
-        }
-
-        cerr << "\nComputed " << num_ints << " random line integrals." << endl;
-        cerr << "  Max error (abs): " << setprecision(6) << *max_element(ierrs_abs.begin(), ierrs_abs.end()) << 
-                    "\t" << "Max error (rel): " << *max_element(ierrs_rel.begin(), ierrs_rel.end()) << endl;
-        cerr << "  Min error (abs): " << setprecision(6) << *min_element(ierrs_abs.begin(), ierrs_abs.end()) << 
-                    "\t" << "Min error (rel): " << *min_element(ierrs_rel.begin(), ierrs_rel.end()) << endl;
-        for (int j = 0; j < ierrs_abs.size(); j++)
-        {
-            rms_abs += ierrs_abs[j] * ierrs_abs[j];
-            rms_rel += ierrs_rel[j] * ierrs_rel[j];
-            avg_abs += ierrs_abs[j];
-            avg_rel += ierrs_rel[j];
-        }
-        rms_abs = rms_abs/ierrs_abs.size();
-        rms_abs = sqrt(rms_abs);
-        rms_rel = rms_rel/ierrs_rel.size();
-        rms_rel = sqrt(rms_rel);
-        avg_abs = avg_abs/ierrs_abs.size();
-        avg_rel = avg_rel/ierrs_rel.size();
-        cerr << "  Avg error (abs): " << setprecision(6) << avg_abs << "\t" << "Avg error (rel): " << avg_rel << endl;
-        cerr << "  RMS error (abs): " << setprecision(6) << rms_abs << "\t" << "RMS error (rel): " << rms_rel << endl;
-
-        ofstream errfile_abs, errfile_rel;
-        errfile_abs.open("li_errors_abs.txt");
-        errfile_rel.open("li_errors_rel.txt");
-        for (int i = 0; i < ierrs_abs.size(); i++)
-        {
-            errfile_abs << ierrs_abs[i] << endl;
-            errfile_rel << ierrs_rel[i] << endl;
-        }
-        errfile_abs.close();
-        errfile_rel.close();
-
-        b->compute_sinogram(cp, extent);
+        b->compute_random_ints(cp, d_args, num_ints);
+        b->compute_sinogram(cp);
     });
     decode_time = MPI_Wtime() - decode_time;
 

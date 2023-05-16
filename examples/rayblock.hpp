@@ -12,6 +12,12 @@
 
 using namespace std;
 
+enum class PrintStyle
+{
+    Vert,
+    Side
+};
+
 template <typename T>
 struct ErrorStats
 {
@@ -23,10 +29,10 @@ struct ErrorStats
     ArrayX<T> sum;  // sum of errors
     ArrayX<T> ssq;  // sum of squares
     ArrayX<T> mxv;  // max value
-    // ArrayX<T> l1;
-    // ArrayX<T> l2;
-    // ArrayX<T> linf;
     int nvars;
+
+    bool log;       // save all data points (to write to files)
+    vector<vector<T>> data;
 
     T l1_max;
     T l2_max;
@@ -41,14 +47,22 @@ struct ErrorStats
     int l2_rel_max_var;
     int linf_rel_max_var;
 
+    PrintStyle style;
+
 public:
-    ErrorStats() :
-        nvars(0),
+    ErrorStats(bool log_ = false) :
+        nvars(0), log(log_),
         l1_max(0), l2_max(0), linf_max(0),
         l1_rel_max(0), l2_rel_max(0), linf_rel_max(0),
         l1_max_var(-1), l2_max_var(-1), linf_max_var(-1),
-        l1_rel_max_var(-1), l2_rel_max_var(-1), linf_rel_max_var(-1)
+        l1_rel_max_var(-1), l2_rel_max_var(-1), linf_rel_max_var(-1),
+        style(PrintStyle::Vert)
     { }
+
+    void set_style(PrintStyle option)
+    {
+        style = option;
+    }
 
     void init(mfa::PointSet<T>* input)
     {
@@ -57,6 +71,7 @@ public:
         sum = ArrayX<T>::Zero(nvars);
         ssq = ArrayX<T>::Zero(nvars);
         mxv = ArrayX<T>::Zero(nvars);
+        data.resize(nvars);
 
         extent = ArrayX<T>::Zero(nvars);
         for (int k = 0; k < nvars; k++)
@@ -110,6 +125,46 @@ public:
         ssq(k) += x*x;
         if (x > mxv(k))
             mxv(k) = x;
+
+        if (log)
+            data[k].push_back(x);
+    }
+
+    void write_var(int k, string filepattern)
+    {
+        if (!log)
+        {
+            fmt::print("Warning: ErrorStats did not save data and will not write data file \"{}_var{}\"\n", filepattern, k);
+            return;
+        }
+
+        string filename_abs = fmt::format("{}_var{}_abs.txt", filepattern, k);
+        string filename_rel = fmt::format("{}_var{}_rel.txt", filepattern, k);
+        FILE* absfile = fopen(filename_abs.c_str(), "w");
+        FILE* relfile = fopen(filename_rel.c_str(), "w");
+        // ofstream os_abs(filename_abs);
+        // ofstream os_rel(filename_rel);
+
+        for (int i = 0; i < data[k].size(); i++)
+        {
+            fmt::print(absfile, "{}\n", data[k][i]);
+            fmt::print(relfile, "{}\n", data[k][i] / extent(k));
+        }
+
+        // os_abs.close();
+        // os_rel.close();
+        fclose(absfile);
+        fclose(relfile);
+
+        return;
+    }
+
+    void write_all_vars(string filepattern)
+    {
+        for (int k = 0; k < nvars; k++)
+            write_var(k, filepattern);
+
+        return;
     }
 
     // find max over all science variables
@@ -132,13 +187,27 @@ public:
             cerr << "Exiting." << endl;
             exit(1);
         }
-        fmt::print("Range Extent           = {:.4e}\n", extent(k));
-        fmt::print("Max Error              = {:.4e}\n", linf(k));
-        fmt::print("RMS Error              = {:.4e}\n", l2(k));
-        fmt::print("Avg Error              = {:.4e}\n", l1(k));
-        fmt::print("Max Error (normalized) = {:.4e}\n", linf(k) / extent(k));
-        fmt::print("RMS Error (normalized) = {:.4e}\n", l2(k) / extent(k));
-        fmt::print("Avg Error (normalized) = {:.4e}\n", l1(k) / extent(k));
+
+        if (style == PrintStyle::Vert)
+        {
+            fmt::print("Range Extent           = {:.4e}\n", extent(k));
+            fmt::print("Max Error              = {:.4e}\n", linf(k));
+            fmt::print("RMS Error              = {:.4e}\n", l2(k));
+            fmt::print("Avg Error              = {:.4e}\n", l1(k));
+            fmt::print("Max Error (normalized) = {:.4e}\n", linf(k) / extent(k));
+            fmt::print("RMS Error (normalized) = {:.4e}\n", l2(k) / extent(k));
+            fmt::print("Avg Error (normalized) = {:.4e}\n", l1(k) / extent(k));
+        }
+        else if (style == PrintStyle::Side)
+        {
+            fmt::print("Max Error: {:.4e}\tMax Error (rel): {:.4e}\n", linf(k), linf(k) / extent(k));
+            fmt::print("RMS Error: {:.4e}\tRMS Error (rel): {:.4e}\n", l2(k), l2(k) / extent(k));
+            fmt::print("Avg Error: {:.4e}\tAvg Error (rel): {:.4e}\n", l1(k), l1(k) / extent(k));
+        }
+        else
+        {
+            fmt::print("Error: Unrecognized print style in ErrorStats\n");
+        }
     }
 
     void print_max()
@@ -419,17 +488,13 @@ struct RayBlock : public Block<T>
             exit(1);
         }
 
-        ray_dom_dim = dom_dim + 1;   // new dom_dim
-        int new_pd = pt_dim + 1;    // new pt_dim
-
-        // Create a model_dims vector for the auxilliary model, and increase the dimension of geometry
+        // Update dimensionality
+        ray_dom_dim = dom_dim + 1;
         VectorXi new_mdims = mfa->model_dims();
         new_mdims[0] += 1;  
 
         VectorXi ndom_pts{{n_samples, n_rho, n_alpha}};
-        int npts = ndom_pts.prod();
-
-        ray_input = new mfa::PointSet<T>(ray_dom_dim, new_mdims, npts, ndom_pts);
+        ray_input = new mfa::PointSet<T>(ray_dom_dim, new_mdims, ndom_pts.prod(), ndom_pts);
 
         // extents of domain in physical space
         VectorX<T> param(dom_dim);
@@ -443,8 +508,9 @@ struct RayBlock : public Block<T>
         double max_radius = max(max(abs(xl),abs(xh)), max(abs(yl),abs(yh)));
         r_lim = max_radius * 1.5;
 
+        // Increments of rho and alpha
         double dr = r_lim * 2 / (n_rho-1);
-        double da = pi / (n_alpha-1); // d_alpha; amount to rotate on each slice
+        double da = pi / (n_alpha-1);
 
         // Set extents of rotated model
         ray_bounds_mins.resize(pt_dim + 1);
@@ -502,10 +568,10 @@ struct RayBlock : public Block<T>
                     T y = y0 - is * dy;
 
                     // If this point is not in the original domain
-                    if (x < xl - 1e-8 || x > xh + 1e-8 || y < yl - 1e-8 || y > yh + 1e-8)
+                    if (x < xl + 1e-8 || x > xh - 1e-8 || y < yl + 1e-8 || y > yh - 1e-8)
                     {
                         // add dummy value, which will never be queried
-                        ray_input->domain(idx, ray_dom_dim) = 1000;
+                        ray_input->domain(idx, ray_dom_dim) = 0;
                     }
                     else    // point is in domain, decode value from existing MFA
                     {
@@ -518,8 +584,7 @@ struct RayBlock : public Block<T>
                         param(0) = param(0) > 1 ? 1 : param(0);
                         param(1) = param(1) > 1 ? 1 : param(1);
 
-                        outpt.resize(pt_dim);
-                        this->mfa->Decode(param, outpt);
+                        mfa->Decode(param, outpt);
                         ray_input->domain.block(idx, ray_dom_dim, 1, pt_dim - dom_dim) = outpt.tail(pt_dim - dom_dim).transpose();
                     }
                 }
@@ -567,12 +632,12 @@ struct RayBlock : public Block<T>
         analytical_ray_error_field(cp, ray_mfa, grid_size, "sine", args, unused, ray_approx, ray_errs);
         fmt::print("done.\n");
 
-        delete input;
-        delete approx;
-        delete errs;
-        input = ray_input;
-        approx = ray_approx;
-        errs = ray_errs;
+        // delete input;
+        // delete approx;
+        // delete errs;
+        // input = ray_input;
+        // approx = ray_approx;
+        // errs = ray_errs;
         // ray_input = nullptr;
         // ray_approx = nullptr;
         // ray_errs = nullptr;
@@ -755,7 +820,7 @@ struct RayBlock : public Block<T>
         const bool verbose = false;
 
         // TODO: This is for 2d only right now
-        if (a.size() != 2 && b.size() != 2)
+        if (a.size() != 2 || b.size() != 2)
         {
             cerr << "ERROR: Incorrect dimension in integrate ray. Exiting." << endl;
             exit(1);
@@ -851,10 +916,10 @@ struct RayBlock : public Block<T>
     }
 
     // Compute segment errors in a RayMFA
-    void compute_sinogram(
-                const   diy::Master::ProxyWithLink& cp,
-                T extent) const
+    void compute_sinogram(const   diy::Master::ProxyWithLink& cp) const
     {
+        real_t extent = input->domain.col(dom_dim).maxCoeff() - input->domain.col(dom_dim).minCoeff();
+
         ofstream sinotruefile;
         ofstream sinoapproxfile;
         ofstream sinoerrorfile;
@@ -866,11 +931,8 @@ struct RayBlock : public Block<T>
         sinoerrorfile.open(sino_error_filename);
         int test_n_alpha = 150;
         int test_n_rho = 150;
-        T r_lim = this->bounds_maxs(1);   // WARNING TODO: make r_lim query-able in RayMFA class
 
-        int old_dom_dim = ray_dom_dim - 1;  // Assume here that dom_dim has already been incremented
-        VectorX<T> start_pt(old_dom_dim), end_pt(old_dom_dim);
-
+        VectorX<T> start_pt(dom_dim), end_pt(dom_dim);
         for (int i = 0; i < test_n_alpha; i++)
         {
             for (int j = 0; j < test_n_rho; j++)
@@ -912,6 +974,43 @@ struct RayBlock : public Block<T>
         sinoerrorfile.close();
         
         return;
+    }
+
+    void compute_random_ints(
+        const   diy::Master::ProxyWithLink& cp,
+        const   DomainArgs& d_args,
+        int     num_ints)
+    {
+        // Error summary
+        ErrorStats<T> stats(true);
+        stats.init(input);
+
+        // Randomness generation
+        std::uniform_real_distribution<double> dist(0,1); 
+        std::random_device dev;
+        std::mt19937 rng(dev());
+
+        real_t result = 0, actual = 0, len = 0, err = 0;
+        VectorX<real_t> start_pt(dom_dim), end_pt(dom_dim);
+        for (int i = 0; i < num_ints; i++)
+        {
+            for (int j = 0; j < dom_dim; j++)
+            {
+                start_pt(j) = dist(rng) * (d_args.max[j]-d_args.min[j]) + d_args.min[j];
+                end_pt(j)   = dist(rng) * (d_args.max[j]-d_args.min[j]) + d_args.min[j];
+            }
+            len = (end_pt - start_pt).norm();
+
+            result = integrate_ray(cp, start_pt, end_pt, 1) / len;   // normalize by segment length
+            actual = sintest(start_pt, end_pt) / len;                        // normalize by segment length
+            err = abs(result - actual);
+            stats.update(0, err);
+        }
+
+        fmt::print("\nComputed {} random line integrals.\n", num_ints);
+        stats.set_style(PrintStyle::Side);
+        stats.print_var(0);
+        stats.write_all_vars("li_errors");
     }
 
     void print_knots_ctrl(const mfa::MFA_Data<T>& model) const
