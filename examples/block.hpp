@@ -10,6 +10,7 @@
 
 #include    <random>
 #include    <stdio.h>
+#include    <mfa/types.hpp>
 #include    <mfa/mfa.hpp>
 #include    <mfa/block_base.hpp>
 #include    <diy/master.hpp>
@@ -24,7 +25,6 @@
 #include    <highfive/H5DataSpace.hpp>
 #include    <highfive/H5File.hpp>
 
-#include    "types.h"
 #include    "domain_args.hpp"
 #include    "example_signals.hpp"
 

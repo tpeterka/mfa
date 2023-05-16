@@ -262,10 +262,10 @@ int main(int argc, char** argv)
         cerr << "Computing analytical error" << endl;
         int nvars = model_dims.size() - 1;
         vector<real_t> L1(nvars), L2(nvars), Linf(nvars);                                // L-1, 2, infinity norms
-        d_args.ndom_pts = vector<int>(dom_dim, ntest);
+        vector<int> grid_size(dom_dim, ntest);
         mfa::PointSet<real_t>* temp_in = nullptr;
         master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-                { b->analytical_error_field(cp, input, L1, L2, Linf, d_args,  temp_in, b->approx, b->errs); });
+                { b->analytical_error_field(cp, grid_size, input, L1, L2, Linf, d_args,  temp_in, b->approx, b->errs); });
 
         // print analytical errors
         for (int i = 0; i < nvars; i++)

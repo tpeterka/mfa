@@ -3,7 +3,7 @@
 
 #include <vector>
 #include <string>
-#include "types.h"
+#include <mfa/types.hpp>
 
 // arguments to block foreach functions
 struct DomainArgs

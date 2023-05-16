@@ -1,89 +1,24 @@
 //--------------------------------------------------------------
-// mfa utilities
+// Custom iterators for MFA
 //
 // Tom Peterka
 // Argonne National Laboratory
 // tpeterka@mcs.anl.gov
+//
+// David Lenz
+// Argonne National Laboratory
+// dlenz@anl.gov
 //--------------------------------------------------------------
-#ifndef _UTIL_HPP
-#define _UTIL_HPP
+#ifndef _MFA_ITER_HPP
+#define _MFA_ITER_HPP
 
-#include <iomanip>
+#include <vector>
+#include <iostream>
+#include <cstdio>
+#include <mfa/types.hpp>
 
 namespace mfa
 {
-    // Not designed for efficiency, should not be used in large loops
-    template<typename T>
-    string print_vec(const vector<T>& vec)
-    {   
-        stringstream ss;
-        ss << "{";
-        for (int i = 0; i < vec.size() - 1; i++)
-        {
-            ss << vec[i] << " ";
-        }
-        ss << vec[vec.size()-1] << "}";
-
-        return ss.str();
-    }
-
-    // Not designed for efficiency, should not be used in large loops
-    template<typename T>
-    string print_vec(const VectorX<T>& vec)
-    {
-        stringstream ss;
-        ss << "{";
-        for (int i = 0; i < vec.size() - 1; i++)
-        {
-            ss << vec(i) << " ";
-        }
-        ss << vec.tail(1) << "}";
-
-        return ss.str();
-    }
-
-    template<typename T>
-    void print_bbox(const VectorX<T>& mins, const VectorX<T>& maxs, string label="Bounding")
-    {
-        if (mins.size() != maxs.size()) 
-            fmt::print("{} Box: <invalid box>\n", label);
-        
-        fmt::print("{} Box:\n", label);
-        for (int i = 0; i < mins.size(); i++)
-        {
-            fmt::print("  Dim {}: [{:< 5.5g}, {:< 5.5g}]\n", i, mins(i), maxs(i));
-        } 
-    }
-
-    struct MFAError: public std::runtime_error
-    {
-        using std::runtime_error::runtime_error;
-    };
-
-    // error statistics
-    template <typename T>
-        struct ErrorStats
-        {
-            T max_abs_err;          // max of absolute errors (absolute value)
-            T max_norm_err;         // max of normalized errors (absolute value)
-            T sum_sq_abs_errs;      // sum of squared absolute errors
-            T sum_sq_norm_errs;     // sum of squared normalized errors
-
-            ErrorStats()
-            {
-                max_abs_err         = 0.0;
-                max_norm_err        = 0.0;
-                sum_sq_abs_errs     = 0.0;
-                sum_sq_norm_errs    = 0.0;
-            }
-            ErrorStats(T max_abs_err_, T max_norm_err_, T sum_sq_abs_errs_, T sum_sq_norm_errs_) :
-                max_abs_err(max_abs_err_),
-                max_norm_err(max_norm_err_),
-                sum_sq_abs_errs(sum_sq_abs_errs_),
-                sum_sq_norm_errs(sum_sq_norm_errs_)
-            {}
-        };
-
     // object for iterating in a flat loop over an n-dimensional volume
     // a few member functions are thread-safe (marked); rest are not
     struct VolIterator
@@ -585,91 +520,6 @@ namespace mfa
         int tot_iters() const       { return tot_iters_; }
 
     };  // CurveIterator
-
-    struct GridInfo
-    {
-        bool                initialized{false};
-        int                 dom_dim{0};
-        VectorXi            ndom_pts{};
-        VectorXi            ds{};
-        vector<VectorXi>    co{};
-
-        friend void swap(GridInfo& first, GridInfo& second)
-        {
-            swap(first.initialized, second.initialized);
-            swap(first.dom_dim, second.dom_dim);
-            first.ndom_pts.swap(second.ndom_pts);
-            first.ds.swap(second.ds);
-            swap(first.co, second.co);
-        }
-
-        void init(int dom_dim_, VectorXi& ndom_pts_ ) 
-        {
-            initialized = true;
-            dom_dim = dom_dim_;
-            ndom_pts = ndom_pts_;
-
-            int npts = ndom_pts.prod();
-
-            // stride for domain points in different dimensions
-            ds = VectorXi::Ones(dom_dim);
-            for (int k = 1; k < dom_dim; k++)
-                ds(k) = ds(k - 1) * ndom_pts(k - 1);
-
-            // offsets for curve starting (domain) points in each dimension
-            co.resize(dom_dim);
-            for (int k = 0; k < dom_dim; k++)
-            {
-                int ncurves  = npts / ndom_pts(k);    // number of curves in this dimension
-                int coo      = 0;                                // co at start of contiguous sequence
-                co[k].resize(ncurves);
-
-                co[k][0] = 0;
-
-                for (int j = 1; j < ncurves; j++)
-                {
-                    // adjust offsets for the next curve
-                    if (j % ds(k))
-                        co[k][j] = co[k][j - 1] + 1;
-                    else
-                    {
-                        co[k][j] = coo + ds(k) * ndom_pts(k);
-                        coo = co[k][j];
-                    }
-                }
-            }
-        }
-
-        void idx2ijk(int idx, VectorXi& ijk) const
-        {
-            if (dom_dim == 1)
-            {
-                ijk(0) = idx;
-                return;
-            }
-
-            for (int k = 0; k < dom_dim; k++)
-            {
-                if (k < dom_dim - 1)
-                    ijk(k) = (idx % ds(k + 1)) / ds(k);
-                else
-                    ijk(k) = idx  / ds(k);
-            }
-        }
-
-        int ijk2idx(const VectorXi& ijk) const
-        {
-            int idx          = 0;
-            int stride       = 1;
-            for (int k = 0; k < dom_dim; k++)
-            {
-                idx     += ijk(k) * stride;
-                stride  *= ndom_pts(k);
-            }
-            return idx;
-        }
-    };  // GridInfo
-
 }   // namespace mfa
-#endif
 
+#endif  // _MFA_ITER_HPP

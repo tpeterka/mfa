@@ -8,8 +8,6 @@
 #ifndef _TMESH_HPP
 #define _TMESH_HPP
 
-using namespace std;
-
 using KnotIdx   = size_t;
 using TensorIdx = size_t;
 using ParamIdx  = size_t;

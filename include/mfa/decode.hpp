@@ -12,8 +12,6 @@
 #include    <mfa/mfa_data.hpp>
 #include    <mfa/mfa.hpp>
 
-#include    <Eigen/Dense>
-
 typedef Eigen::MatrixXi MatrixXi;
 
 #ifdef MFA_KOKKOS

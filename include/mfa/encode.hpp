@@ -28,18 +28,9 @@
 #include    <mpi.h>     // for MPI_Wtime() only
 
 #ifndef      MFA_NO_WEIGHTS
-
 #include    "coin/ClpSimplex.hpp"
 #include    "coin/ClpInterior.hpp"
-
 #endif
-
-typedef Eigen::MatrixXf MatrixXf;
-typedef Eigen::MatrixXi MatrixXi;
-typedef Eigen::VectorXf VectorXf;
-typedef Eigen::VectorXi VectorXi;
-
-using namespace std;
 
 template <typename T>                                       // float or double
 class NewKnots;

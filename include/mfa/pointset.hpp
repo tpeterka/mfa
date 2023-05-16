@@ -13,6 +13,9 @@
 #define _POINTSET_HPP
 
 #include <memory>
+#include <mfa/types.hpp>
+#include <mfa/param.hpp>
+#include <mfa/utilities/util.hpp>
 
 namespace mfa
 {

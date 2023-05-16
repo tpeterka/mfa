@@ -27,31 +27,12 @@
 #include    <sstream>
 #include    <mpi.h>     // for MPI_Wtime() only
 
-#ifndef      MFA_NO_WEIGHTS
-
-#include    "coin/ClpSimplex.hpp"
-#include    "coin/ClpInterior.hpp"
-
-#endif
-
-
-
-using namespace std;
-
-// template <typename T>                                       // float or double
-// struct MFA;
-
 namespace mfa
 {
     template <typename T>                                   // float or double
     class RayEncoder
     {
-
     private:
-
-        template <typename>
-        friend class NewKnots;
-
         MFA_Data<T>&        mfa_data;                       // the mfa data model
         int                 dom_dim;                        // domain dimension of mfa_data
         int                 verbose;                        // output level
