@@ -840,39 +840,39 @@ namespace mfa
             }
         }
 
-        // TODO: maybe make a subclass RayMFA to which this method belongs.
-        //       too many things about this method are arbitrary (rho/alpha order, etc)
-        //       and the use case is very specific for this to be a generic method.
-        // TODO change this to be a 1D integral method, which is more generic
-        void IntegrateAxisRay(
-            const MFA_Data<T>&  mfa_data,
-            T                   alpha_param, 
-            T                   rho_param, 
-            T                   u0, 
-            T                   u1, 
+        // One-dimensional integral in direction 'dim' from u0 to u1
+        void Integrate1D(
+            int                 k,
+            int                 dim,
+            T                   u0,
+            T                   u1,
+            const VectorX<T>    params,
             VectorX<T>&         output) const
         {
-            const TensorProduct<T>& t = mfa_data.tmesh.tensor_prods[0];
+            if (k < 0 || k >= nvars())
+            {
+                fmt::print("ERROR: var index out of range in MFA::Integrate1D()\n");
+                exit(1);
+            }
 
-            mfa::Decoder<T> decoder(mfa_data, verbose, false);
-
-            VectorX<T> params = VectorX<T>::Zero(dom_dim);
-            params(0) = 0; // ignored
-            params(1) = rho_param;
-            params(2) = alpha_param;
-            decoder.AxisIntegral(t, 0, u0, u1, params, output);
+            mfa::Decoder<T> decoder(*(vars[k]), false, false);  // no verbose output for single points
+            decoder.AxisIntegral(dim, u0, u1, params, output);
         }
 
         void DefiniteIntegral(
-            const MFA_Data<T>&  mfa_data,
+                  int           k,
                   VectorX<T>&   output,
             const VectorX<T>&   a,
             const VectorX<T>&   b) const
         {
-            const TensorProduct<T>& t = mfa_data.tmesh.tensor_prods[0];
+            if (k < 0 || k >= nvars())
+            {
+                fmt::print("ERROR: var index out of range in MFA::DefiniteIntegral()\n");
+                exit(1);
+            }
 
-            mfa::Decoder<T> decoder(mfa_data, verbose, false);
-            decoder.DefiniteIntegral(t, a, b, output);
+            mfa::Decoder<T> decoder(*(vars[k]), verbose, false);
+            decoder.DefiniteIntegral(a, b, output);
         }
 
         // Integrates with respect to parameter space

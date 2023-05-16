@@ -813,8 +813,7 @@ struct RayBlock : public Block<T>
     T integrate_ray(
         const   diy::Master::ProxyWithLink& cp,
         const   VectorX<T>& a,
-        const   VectorX<T>& b,
-                bool fixed_length) const
+        const   VectorX<T>& b) const
     {
         const double pi = 3.14159265358979;
         const bool verbose = false;
@@ -837,29 +836,17 @@ struct RayBlock : public Block<T>
 
         T x0, x1, y0, y1;   // end points of full line
         T u0 = 0, u1 = 0;
-        T length = 0;
-        T r_lim = ray_bounds_maxs(1);   // WARNING TODO: make r_lim query-able in RayMFA class
-        if (fixed_length)
-        {
-            x0 = rho * cos(alpha) - r_lim * sin(alpha);
-            x1 = rho * cos(alpha) + r_lim * sin(alpha);
-            y0 = rho * sin(alpha) + r_lim * cos(alpha);
-            y1 = rho * sin(alpha) - r_lim * cos(alpha);
-        }
-        else
-        {
-            get_box_intersections(alpha, rho, x0, y0, x1, y1, core_mins, core_maxs);
-        }
+        T length = 2*r_lim;
+        x0 = rho * cos(alpha) - r_lim * sin(alpha);
+        x1 = rho * cos(alpha) + r_lim * sin(alpha);
+        y0 = rho * sin(alpha) + r_lim * cos(alpha);
+        y1 = rho * sin(alpha) - r_lim * cos(alpha);
 
         // parameter values along ray for 'start' and 'end'
         // compute in terms of Euclidean distance to avoid weird cases
         //   when line is nearly horizontal or vertical
         T x_sep = abs(x1 - x0);
         T y_sep = abs(y1 - y0);
-        if (fixed_length)
-            length = 2 * r_lim;
-        else
-            length = sqrt(x_sep*x_sep + y_sep*y_sep);
         
         if (x_sep > y_sep)  // want to avoid dividing by near-epsilon numbers
         {
@@ -892,27 +879,15 @@ struct RayBlock : public Block<T>
         }
 
         VectorX<T> output(1); // todo: this is hardcoded for the first (scalar) variable only
-        integrate_axis_ray(cp, alpha, rho, u0, u1, length, output);
+        VectorX<T> params(ray_dom_dim);
+        params(0) = 0;  // unused
+        params(1) = (rho - ray_bounds_mins(1)) / (ray_bounds_maxs(1) - ray_bounds_mins(1));
+        params(2) = (alpha - ray_bounds_mins(2)) / (ray_bounds_maxs(2) - ray_bounds_mins(2));
+
+        ray_mfa->Integrate1D(0, 0, u0, u1, params, output);
+        output *= length;
 
         return output(0);
-    }
-
-    void integrate_axis_ray(
-        const diy::Master::ProxyWithLink&   cp,
-        T                                   alpha,
-        T                                   rho,
-        T                                   u0,
-        T                                   u1,
-        T                                   scale,
-        VectorX<T>&                         output) const
-    {
-        T alpha_param = (alpha - ray_bounds_mins(2)) / (ray_bounds_maxs(2) - ray_bounds_mins(2));
-        T rho_param = (rho - ray_bounds_mins(1)) / (ray_bounds_maxs(1) - ray_bounds_mins(1));
-        
-        // TODO: this is first science variable only
-        ray_mfa->IntegrateAxisRay(ray_mfa->var(0), alpha_param, rho_param, u0, u1, output);
-
-        output *= scale;
     }
 
     // Compute segment errors in a RayMFA
@@ -956,7 +931,7 @@ struct RayBlock : public Block<T>
                     end_pt(0) = x1;
                     end_pt(1) = y1;
 
-                    T test_result = integrate_ray(cp, start_pt, end_pt, 1) / length;   // normalize by segment length
+                    T test_result = integrate_ray(cp, start_pt, end_pt) / length;   // normalize by segment length
                     T test_actual = sintest(start_pt, end_pt) / length;
 
                     T e_abs = abs(test_result - test_actual);
@@ -1001,7 +976,7 @@ struct RayBlock : public Block<T>
             }
             len = (end_pt - start_pt).norm();
 
-            result = integrate_ray(cp, start_pt, end_pt, 1) / len;   // normalize by segment length
+            result = integrate_ray(cp, start_pt, end_pt) / len;   // normalize by segment length
             actual = sintest(start_pt, end_pt) / len;                        // normalize by segment length
             err = abs(result - actual);
             stats.update(0, err);

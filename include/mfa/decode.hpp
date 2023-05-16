@@ -450,8 +450,7 @@ namespace mfa
 #endif  // end serial/kokkos version
         }
 
-        void AxisIntegral(  const TensorProduct<T>& tensor,
-                            int                     dim,
+        void AxisIntegral(  int                     dim,
                             T                       u0,
                             T                       u1,
                             const VectorX<T>&       params, // params at which axis line is fixed (we ignore params(dim))
@@ -460,11 +459,11 @@ namespace mfa
             assert(params.size() == dom_dim);
             assert(output.size() == mfa_data.dim());
             assert(dim >= 0 && dim < dom_dim);
+            const TensorProduct<T>& tensor = mfa_data.tmesh.tensor_prods[0]; // TODO hard-coded
 
             BasisFunInfo<T> bfi(mfa_data.p + VectorXi::Constant(dom_dim, 2));
             output = VectorX<T>::Zero(mfa_data.dim());     // reset output to zero
 
-            int dom_dim = mfa_data.dom_dim;
             VectorXi            spans(dom_dim);
             vector<MatrixX<T>>  N(dom_dim);                           // basis functions in each dim.
 
@@ -551,14 +550,14 @@ namespace mfa
             
         }
 
-        void DefiniteIntegral(  const TensorProduct<T>& tensor,
-                                const VectorX<T>&       a,          // start limit of integration (parameter)
+        void DefiniteIntegral(  const VectorX<T>&       a,          // start limit of integration (parameter)
                                 const VectorX<T>&       b,          // end limit of integration (parameter)
                                 VectorX<T>&             output)
         {
             assert(tensor.ctrl_pts.cols() == mfa_data.dim());
             assert(a.size() == b.size() && a.size() == dom_dim);
             assert(output.size() == mfa_data.dim());
+            const TensorProduct<T>& tensor = mfa_data.tmesh.tensor_prods[0]; // TODO hard-coded
 
             int      local_pt_dim = mfa_data.dim();
             VectorXi spana(dom_dim);
