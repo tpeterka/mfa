@@ -24,6 +24,7 @@
 #include "opts.h"
 
 #include "block.hpp"
+#include "parser.hpp"
 #include "example-setup.hpp"
 
 using namespace std;
@@ -34,77 +35,27 @@ int main(int argc, char** argv)
     diy::mpi::environment  env(argc, argv);     // equivalent of MPI_Init(argc, argv)/MPI_Finalize()
     diy::mpi::communicator world;               // equivalent of MPI_COMM_WORLD
 
-    int nblocks     = 1;                        // number of local blocks
-    int tot_blocks  = nblocks * world.size();   // number of global blocks
-    int mem_blocks  = -1;                       // everything in core for now
-    int num_threads = 1;                        // needed in order to do timing
 
-    // default command line arguments
-    int         pt_dim          = 3;        // dimension of input points
-    int         dom_dim         = 2;        // dimension of domain (<= pt_dim)
-    int         scalar          = 1;        // flag for scalar or vector-valued science variables (0 == multiple scalar vars)
-    int         geom_degree     = 1;        // degree for geometry (same for all dims)
-    int         vars_degree     = 4;        // degree for science variables (same for all dims)
-    int         ndomp           = 100;      // input number of domain points (same for all dims)
-    int         ntest           = 0;        // number of input test points in each dim for analytical error tests
-    int         geom_nctrl      = -1;       // input number of control points for geometry (same for all dims)
-    vector<int> vars_nctrl      = {11};     // initial # control points for all science variables (default same for all dims)
-    string      input           = "sinc";   // input dataset
-    int         weighted        = 1;        // solve for and use weights (bool 0/1)
-    real_t      rot             = 0.0;      // rotation angle in degrees
-    real_t      twist           = 0.0;      // twist (waviness) of domain (0.0-1.0)
-    real_t      noise           = 0.0;      // fraction of noise
-    int         error           = 1;        // decode all input points and check error (bool 0/1)
-    string      infile;                     // input file name
-    string      infile2;
-    int         structured      = 1;        // input data format (bool 0/1)
-    int         rand_seed       = -1;       // seed to use for random data generation (-1 == no randomization)
-    real_t      regularization  = 0;        // smoothing parameter for models with non-uniform input density (0 == no smoothing)
-    int         reg1and2        = 0;        // flag for regularizer: 0 = regularize only 2nd derivs. 1 = regularize 1st and 2nd
-    int         verbose         = 1;        // MFA verbosity (0 = no extra output)
-    vector<int> decode_grid     = {};       // Grid size for uniform decoding
-    bool        help            = false;    // show help
-
-    // Constants for this example
-    const bool adaptive = false;
-
-    // get command line arguments
-    opts::Options ops;
-    ops >> opts::Option('d', "pt_dim",      pt_dim,     " dimension of points");
-    ops >> opts::Option('m', "dom_dim",     dom_dim,    " dimension of domain");
-    ops >> opts::Option('l', "scalar",      scalar,     " flag for scalar or vector-valued science variables");
-    ops >> opts::Option('p', "geom_degree", geom_degree," degree in each dimension of geometry");
-    ops >> opts::Option('q', "vars_degree", vars_degree," degree in each dimension of science variables");
-    ops >> opts::Option('n', "ndomp",       ndomp,      " number of input points in each dimension of domain");
-    ops >> opts::Option('a', "ntest",       ntest,      " number of test points in each dimension of domain (for analytical error calculation)");
-    ops >> opts::Option('g', "geom_nctrl",  geom_nctrl, " number of control points in each dimension of geometry");
-    ops >> opts::Option('v', "vars_nctrl",  vars_nctrl, " number of control points in each dimension of all science variables");
-    ops >> opts::Option('i', "input",       input,      " input dataset");
-    ops >> opts::Option('w', "weights",     weighted,   " solve for and use weights");
-    ops >> opts::Option('r', "rotate",      rot,        " rotation angle of domain in degrees");
-    ops >> opts::Option('t', "twist",       twist,      " twist (waviness) of domain (0.0-1.0)");
-    ops >> opts::Option('s', "noise",       noise,      " fraction of noise (0.0 - 1.0)");
-    ops >> opts::Option('c', "error",       error,      " decode entire error field (default=true)");
-    ops >> opts::Option('f', "infile",      infile,     " input file name");
-    ops >> opts::Option('h', "help",        help,       " show help");
-    ops >> opts::Option('x', "structured",  structured, " input data format (default=structured=true)");
-    ops >> opts::Option('y', "rand_seed",   rand_seed,  " seed for random point generation (-1 = no randomization, default)");
-    ops >> opts::Option('b', "regularization", regularization, "smoothing parameter for models with non-uniform input density");
-    ops >> opts::Option('k', "reg1and2",    reg1and2,   " regularize both 1st and 2nd derivatives (if =1) or just 2nd (if =0)");
-    ops >> opts::Option('u', "grid_decode", decode_grid," size of regular grid to decode MFA");
-    ops >> opts::Option('z', "infile2",     infile2,    " extra data file (some apps require two file paths");
-
-    if (!ops.parse(argc, argv) || help)
+    MFAParser opts;
+    bool proceed = opts.parse_input(argc, argv);
+    if (!proceed)
     {
         if (world.rank() == 0)
-            std::cout << ops;
+            std::cout << opts.ops;
         return 1;
     }
 
+    int tot_blocks = opts.tot_blocks;
+    int mem_blocks  = -1;                       // everything in core for now
+    int num_threads = 1;                        // needed in order to do timing
+
+    int dom_dim = opts.dom_dim;
+    int pt_dim = opts.pt_dim;
+    string input = opts.input;
+
     // print input arguments
-    echo_mfa_settings("fixed example", pt_dim, dom_dim, scalar, geom_degree, geom_nctrl, vars_degree, vars_nctrl,
-                        regularization, reg1and2, weighted, adaptive, 0, 0);
-    echo_data_settings(ndomp, ntest, input, infile, noise, rot, twist, structured, rand_seed);
+    opts.echo_mfa_settings("fixed example");
+    opts.echo_all_data_settings();
 
     // initialize DIY
     diy::FileStorage          storage("./DIY.XXXXXX"); // used for blocks to be moved out of core
@@ -132,7 +83,7 @@ int main(int argc, char** argv)
     // We assume that dom_dim == geom_dim
     // Different examples can reset this below
     vector<int> model_dims;
-    if (scalar) // Set up (pt_dim - dom_dim) separate scalar variables
+    if (opts.scalar) // Set up (pt_dim - dom_dim) separate scalar variables
     {
         model_dims.assign(pt_dim - dom_dim + 1, 1);
         model_dims[0] = dom_dim;                        // index 0 == geometry
@@ -142,14 +93,10 @@ int main(int argc, char** argv)
         model_dims = {dom_dim, pt_dim - dom_dim};
     }
 
-    // Create empty info classes
-    MFAInfo     mfa_info(dom_dim, verbose);
-    DomainArgs  d_args(dom_dim, model_dims);
-    
     // set up parameters for examples
-    setup_args(dom_dim, pt_dim, model_dims, geom_degree, geom_nctrl, vars_degree, vars_nctrl,
-                input, infile, infile2, ndomp, structured, rand_seed, rot, twist, noise,
-                weighted, reg1and2, regularization, adaptive, verbose, mfa_info, d_args);
+    MFAInfo     mfa_info(dom_dim, opts.verbose);
+    DomainArgs  d_args(dom_dim, model_dims);
+    opts.setup_args(model_dims, mfa_info, d_args);
 
     // Create data set for modeling. Input keywords are defined in example-setup.hpp
     if (analytical_signals.count(input) == 1)
@@ -222,14 +169,14 @@ int main(int argc, char** argv)
 
     // debug: compute error field for visualization and max error to verify that it is below the threshold
     double decode_time = MPI_Wtime();
-    if (error)
+    if (opts.error)
     {
         fprintf(stderr, "\nFinal decoding and computing max. error...\n");
 #ifdef CURVE_PARAMS     // normal distance
         master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
                 { b->error(cp, 1, true); });
 #else                   // range coordinate difference
-        bool saved_basis = structured; // TODO: basis functions are currently only saved during encoding of structured data
+        bool saved_basis = opts.structured; // TODO: basis functions are currently only saved during encoding of structured data
         master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
         { 
             b->range_error(cp, true, saved_basis);
@@ -237,12 +184,12 @@ int main(int argc, char** argv)
 #endif
         decode_time = MPI_Wtime() - decode_time;
     }
-    else if (decode_grid.size() == dom_dim)
+    else if (opts.decode_grid.size() == dom_dim)
     {
-        fprintf(stderr, "\nDecoding on regular grid of size %s\n", mfa::print_vec(decode_grid).c_str());
+        fprintf(stderr, "\nDecoding on regular grid of size %s\n", mfa::print_vec(opts.decode_grid).c_str());
         master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
         {
-            b->decode_block_grid(cp, decode_grid);
+            b->decode_block_grid(cp, opts.decode_grid);
         });
         decode_time = MPI_Wtime() - decode_time;
     }
@@ -257,15 +204,15 @@ int main(int argc, char** argv)
 //             { b->knot_span_domains(cp); });
 
     // compute the norms of analytical errors synthetic function w/o noise at different domain points than the input
-    if (ntest > 0)
+    if (opts.ntest > 0)
     {
         cerr << "Computing analytical error" << endl;
         int nvars = model_dims.size() - 1;
         vector<real_t> L1(nvars), L2(nvars), Linf(nvars);                                // L-1, 2, infinity norms
-        vector<int> grid_size(dom_dim, ntest);
+        vector<int> grid_size(dom_dim, opts.ntest);
         mfa::PointSet<real_t>* temp_in = nullptr;
         master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-                { b->analytical_error_field(cp, grid_size, input, L1, L2, Linf, d_args,  temp_in, b->approx, b->errs); });
+                { b->analytical_error_field(cp, grid_size, input, L1, L2, Linf, d_args, temp_in, b->approx, b->errs); });
 
         // print analytical errors
         for (int i = 0; i < nvars; i++)
@@ -276,15 +223,14 @@ int main(int argc, char** argv)
             fprintf(stderr, "L-infinity norm = %e\n", Linf[i]);
             fprintf(stderr, "-------------------------------------\n\n");
         }
-
     }
 
     // print results
     fprintf(stderr, "\n------- Final block results --------\n");
     master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-            { b->print_block(cp, error); });
+            { b->print_block(cp, opts.error); });
     fprintf(stderr, "encoding time         = %.3lf s.\n", encode_time);
-    if (error)
+    if (opts.error)
         fprintf(stderr, "decoding time         = %.3lf s.\n", decode_time);
     fprintf(stderr, "-------------------------------------\n\n");
 

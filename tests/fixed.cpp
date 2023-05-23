@@ -23,6 +23,7 @@
 
 #include "opts.h"
 
+#include "parser.hpp"
 #include "block.hpp"
 #include "example-setup.hpp"
 
@@ -36,71 +37,27 @@ int main(int argc, char** argv)
 #ifdef MFA_KOKKOS
     Kokkos::initialize( argc, argv );
 #endif
-    int nblocks     = 1;                        // number of local blocks
-    int tot_blocks  = nblocks * world.size();   // number of global blocks
-    int mem_blocks  = -1;                       // everything in core for now
-    int num_threads = 1;                        // needed in order to do timing
 
-    // default command line arguments
-    int    pt_dim       = 3;                    // dimension of input points
-    int    dom_dim      = 2;                    // dimension of domain (<= pt_dim)
-    int    geom_degree  = 1;                    // degree for geometry (same for all dims)
-    int    vars_degree  = 4;                    // degree for science variables (same for all dims)
-    int    ndomp        = 100;                  // input number of domain points (same for all dims)
-    int    geom_nctrl   = -1;                   // input number of control points for geometry (same for all dims)
-    vector<int> vars_nctrl   = {11};            // input number of control points for all science variables (default same for all dims)
-    string input        = "sine";               // input dataset
-    int    weighted     = 1;                    // solve for and use weights (bool 0/1)
-    real_t rot          = 0.0;                  // rotation angle in degrees
-    real_t twist        = 0.0;                  // twist (waviness) of domain (0.0-1.0)
-    int    error        = 1;                    // decode all input points and check error (bool 0/1)
-    string infile;                              // input file name
-    int    structured   = 1;                    // input data format (bool 0/1)
-    int    rand_seed    = -1;                   // seed to use for random data generation (-1 == no randomization)
-    int    resolutionGrid = 0;
-    bool   help         = false;                // show help
-
-    // Constants for this example
-    const bool    adaptive        = false;
-    const real_t  noise           = 0;
-    const int     ntest           = 0;
-    const int     scalar          = 1;
-    const int     verbose         = 1;
-    const int     reg1and2        = 0;
-    const real_t  regularization  = 0;
-
-
-    // get command line arguments
-    opts::Options ops;
-    ops >> opts::Option('d', "pt_dim",      pt_dim,     " dimension of points");
-    ops >> opts::Option('m', "dom_dim",     dom_dim,    " dimension of domain");
-    ops >> opts::Option('p', "geom_degree", geom_degree," degree in each dimension of geometry");
-    ops >> opts::Option('q', "vars_degree", vars_degree," degree in each dimension of science variables");
-    ops >> opts::Option('n', "ndomp",       ndomp,      " number of input points in each dimension of domain");
-    ops >> opts::Option('g', "geom_nctrl",  geom_nctrl, " number of control points in each dimension of geometry");
-    ops >> opts::Option('v', "vars_nctrl",  vars_nctrl, " number of control points in each dimension of all science variables");
-    ops >> opts::Option('i', "input",       input,      " input dataset");
-    ops >> opts::Option('w', "weights",     weighted,   " solve for and use weights");
-    ops >> opts::Option('r', "rotate",      rot,        " rotation angle of domain in degrees");
-    ops >> opts::Option('t', "twist",       twist,      " twist (waviness) of domain (0.0-1.0)");
-    ops >> opts::Option('c', "error",       error,      " decode entire error field (default=true)");
-    ops >> opts::Option('f', "infile",      infile,     " input file name");
-    ops >> opts::Option('h', "help",        help,       " show help");
-    ops >> opts::Option('u', "resolution",  resolutionGrid,    " resolution for grid test ");
-    ops >> opts::Option('x', "structured",  structured, " input data format (default=structured=true)");
-    ops >> opts::Option('y', "rand_seed",   rand_seed,  " seed for random point generation (-1 = no randomization, default)");
-
-    if (!ops.parse(argc, argv) || help)
+    MFAParser opts;
+    bool proceed = opts.parse_input(argc, argv);
+    if (!proceed)
     {
         if (world.rank() == 0)
-            std::cout << ops;
+            std::cout << opts.ops;
         return 1;
     }
 
+    int tot_blocks = opts.tot_blocks;
+    int mem_blocks  = -1;                       // everything in core for now
+    int num_threads = 1;                        // needed in order to do timing
+
+    int dom_dim = opts.dom_dim;
+    int pt_dim = opts.pt_dim;
+    string input = opts.input;
+
     // print input arguments
-    echo_mfa_settings("fixed test", pt_dim, dom_dim, scalar, geom_degree, geom_nctrl, vars_degree, vars_nctrl,
-                        regularization, reg1and2, weighted, adaptive, 0, 0);
-    echo_data_settings(ndomp, ntest, input, infile, noise, rot, twist, structured, rand_seed);
+    opts.echo_mfa_settings("fixed test");
+    opts.echo_all_data_settings();
     
     // initialize DIY
     diy::FileStorage          storage("./DIY.XXXXXX"); // used for blocks to be moved out of core
@@ -116,7 +73,7 @@ int main(int argc, char** argv)
 
     // set global domain bounds and decompose
     Bounds<real_t> dom_bounds(dom_dim);
-    set_dom_bounds(dom_bounds, input);
+    set_dom_bounds(dom_bounds, opts.input);
 
     Decomposer<real_t> decomposer(dom_dim, dom_bounds, tot_blocks);
     decomposer.decompose(world.rank(),
@@ -127,7 +84,7 @@ int main(int argc, char** argv)
     // If scalar == true, assume all science vars are scalar. Else one vector-valued var
     // We assume that dom_dim == geom_dim
     vector<int> model_dims;
-    if (scalar) // Set up (pt_dim - dom_dim) separate scalar variables
+    if (opts.scalar) // Set up (pt_dim - dom_dim) separate scalar variables
     {
         model_dims.assign(pt_dim - dom_dim + 1, 1);
         model_dims[0] = dom_dim;                        // index 0 == geometry
@@ -137,14 +94,10 @@ int main(int argc, char** argv)
         model_dims = {dom_dim, pt_dim - dom_dim};
     }
 
-    // Create empty info classes
-    MFAInfo     mfa_info(dom_dim, verbose);
-    DomainArgs  d_args(dom_dim, model_dims);
-
     // set up parameters for examples
-    setup_args(dom_dim, pt_dim, model_dims, geom_degree, geom_nctrl, vars_degree, vars_nctrl,
-                input, infile, ndomp, structured, rand_seed, rot, twist, noise,
-                weighted, reg1and2, regularization, adaptive, verbose, mfa_info, d_args);
+    MFAInfo     mfa_info(dom_dim, opts.verbose);
+    DomainArgs  d_args(dom_dim, model_dims);
+    opts.setup_args(model_dims, mfa_info, d_args);
 
     // Create data set for modeling
     if (analytical_signals.count(input) == 1)
@@ -186,14 +139,14 @@ int main(int argc, char** argv)
 
     // debug: compute error field for visualization and max error to verify that it is below the threshold
     double decode_time = MPI_Wtime();
-    if (error)
+    if (opts.error)
     {
     fprintf(stderr, "\nFinal decoding and computing max. error...\n");
 #ifdef CURVE_PARAMS     // normal distance
     master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
             { b->error(cp, 1, true); });
 #else                   // range coordinate difference
-    bool saved_basis = structured; // TODO: basis functions are currently only saved during encoding of structured data
+    bool saved_basis = opts.structured; // TODO: basis functions are currently only saved during encoding of structured data
     master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
             { b->range_error(cp, true, saved_basis); });
 #endif
@@ -203,9 +156,9 @@ int main(int argc, char** argv)
     // print results
     fprintf(stderr, "\n------- Final block results --------\n");
     master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-            { b->print_block(cp, error); });
+            { b->print_block(cp, opts.error); });
     fprintf(stderr, "encoding time         = %.3lf s.\n", encode_time);
-    if (error)
+    if (opts.error)
         fprintf(stderr, "decoding time         = %.3lf s.\n", decode_time);
     fprintf(stderr, "-------------------------------------\n\n");
 
@@ -218,16 +171,16 @@ int main(int argc, char** argv)
     real_t err_factor   = 1.0e-3;
     real_t expect_err   = -0.0;
     // for ./fixed-test -i sinc -d 3 -m 2 -p 1 -q 5 -v 20 -w 0
-    if (input == "sinc" && dom_dim == 2 && rand_seed == -1)
+    if (opts.input == "sinc" && dom_dim == 2 && opts.rand_seed == -1)
         expect_err   = 4.304489e-4;
     // for ./fixed-test -i sinc -d 3 -m 2 -p 1 -q 5 -v 20 -w 0 -x 0 -y 4444
-    if (input == "s3d" && dom_dim == 1 && rand_seed == 4444)
+    if (opts.input == "s3d" && dom_dim == 1 && opts.rand_seed == 4444)
         expect_err   = 4.282089e-04;
     // for ./fixed-test -i s3d -d 2 -m 1 -p 1 -q 3 -w 0
-    if (input == "s3d" && dom_dim == 1 && rand_seed == -1)
+    if (opts.input == "s3d" && dom_dim == 1 && opts.rand_seed == -1)
         expect_err   = 6.819451e-2;
     // for ./fixed-test -i s3d -d 3 -m 2 -p 1 -q 3 -w 0
-    if (input == "s3d" && dom_dim == 2)
+    if (opts.input == "s3d" && dom_dim == 2)
         expect_err   = 2.778071e-1;
     real_t our_err      = b->max_errs[0] / range_extent;    // normalized max_err
     if (fabs(expect_err - our_err) / expect_err > err_factor)
@@ -236,14 +189,20 @@ int main(int argc, char** argv)
         abort();
     }
 
-    if (resolutionGrid > 0 && input == "sinc" && dom_dim == 2) {
+    if (opts.decode_grid.size() > 0 && opts.input == "sinc" && dom_dim == 2) {
+        if (opts.decode_grid.size() != 2 || opts.decode_grid[0] != opts.decode_grid[1])
+        {
+            cerr << "Error in decode_grid setup" << endl;
+            abort();
+        }
         // do an extra test for decode grid
         VectorXi ndom_pts;
         std::vector<int> counts;
         ndom_pts.resize(2);
-        ndom_pts[0] = resolutionGrid;
-        ndom_pts[1] = resolutionGrid;
-        counts.push_back(resolutionGrid); counts.push_back(resolutionGrid);
+        ndom_pts[0] = opts.decode_grid[0];
+        ndom_pts[1] = opts.decode_grid[1];
+        counts.push_back(opts.decode_grid[0]); 
+        counts.push_back(opts.decode_grid[1]);
         master.foreach( [&](Block<real_t> *b, const diy::Master::ProxyWithLink &cp) {
                     b->decode_core_ures(cp, counts); });
         // now look at some values of the blend matrix
@@ -255,14 +214,14 @@ int main(int argc, char** argv)
         VectorX<real_t> param(2); // dom dim is 2, initialize with 0
         VectorX<real_t> var_cpt(1);
         // loop over all points in the resulted grid, and compare with the DecodePt
-        // we have 2 dimensions, each direction has resolutionGrid points
+        // we have 2 dimensions, each direction has decode_grid[i] points
 
         mfa::VolIterator vol_it(ndom_pts);
         while (!vol_it.done()) {
             int jj = (int) vol_it.cur_iter();
             for (auto ii = 0; ii < 2; ii++) {
                 int ix = vol_it.idx_dim(ii); // index along direction ii in grid
-                param[ii] = ix / (resolutionGrid - 1.);
+                param[ii] = ix / (opts.decode_grid[0] - 1.);
             }
             b->mfa->DecodeVar(0, param, var_cpt);
             // compare with our blend result

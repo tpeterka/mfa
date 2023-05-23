@@ -23,6 +23,7 @@
 #include "opts.h"
 
 #include "block.hpp"
+#include "parser.hpp"
 #include "example-setup.hpp"
 
 using namespace std;
@@ -35,68 +36,26 @@ int main(int argc, char** argv)
 #ifdef MFA_KOKKOS
     Kokkos::initialize( argc, argv );
 #endif
-    int tot_blocks  = world.size();             // default number of global blocks
-    int mem_blocks  = -1;                       // everything in core for now
-    int num_threads = 1;                        // needed in order to do timing
 
-    // default command line arguments
-    int    pt_dim       = 3;                    // dimension of input points
-    int    dom_dim      = 2;                    // dimension of domain (<= pt_dim)
-    int    scalar       = 1;                    // flag for scalar or vector-valued science variables (0 == multiple scalar vars)
-    int    geom_degree  = 1;                    // degree for geometry (same for all dims)
-    int    vars_degree  = 4;                    // degree for science variables (same for all dims)
-    int    ndomp        = 100;                  // input number of domain points (same for all dims)
-    int    geom_nctrl   = -1;                   // input number of control points for geometry (same for all dims)
-    vector<int> vars_nctrl   = {11};                   // input number of control points for all science variables (same for all dims)
-    string input        = "sine";               // input dataset
-    int    weighted     = 1;                    // solve for and use weights (bool 0 or 1)
-    int    strong_sc    = 1;                    // strong scaling (bool 0 or 1, 0 = weak scaling)
-    real_t ghost        = 0.1;                  // amount of ghost zone overlap as a factor of block size (0.0 - 1.0)
-    int    error        = 1;                    // decode all input points and check error (bool 0 or 1)
-    string infile;                              // input file name
-    int    verbose      = 1;
-    bool   help;                                // show help
-
-    // Constants for this example
-    const bool      adaptive        = false;
-    const int       structured      = 1;
-    const int       rand_seed       = -1;
-    const real_t    regularization  = 0; 
-    const int       reg1and2        = 0;
-    const int       ntest           = 0;
-    const real_t    noise           = 0;
-
-    // get command line arguments
-    opts::Options ops;
-    ops >> opts::Option('d', "pt_dim",      pt_dim,     " dimension of points");
-    ops >> opts::Option('m', "dom_dim",     dom_dim,    " dimension of domain");
-    ops >> opts::Option('l', "scalar",      scalar,     " flag for scalar or vector-valued science variables");
-    ops >> opts::Option('p', "geom_degree", geom_degree," degree in each dimension of geometry");
-    ops >> opts::Option('q', "vars_degree", vars_degree," degree in each dimension of science variables");
-    ops >> opts::Option('n', "ndomp",       ndomp,      " number of input points in each dimension of domain");
-    ops >> opts::Option('g', "geom_nctrl",  geom_nctrl, " number of control points in each dimension of geometry");
-    ops >> opts::Option('v', "vars_nctrl",  vars_nctrl, " number of control points in each dimension of all science variables");
-    ops >> opts::Option('i', "input",       input,      " input dataset");
-    ops >> opts::Option('w', "weights",     weighted,   " solve for and use weights");
-    ops >> opts::Option('b', "tot_blocks",  tot_blocks, " total number of blocks");
-    ops >> opts::Option('t', "strong_sc",   strong_sc,  " strong scaling (1 = strong, 0 = weak)");
-    ops >> opts::Option('o', "overlap",     ghost,      " relative ghost zone overlap (0.0 - 1.0)");
-    ops >> opts::Option('f', "infile",      infile,     " input file name");
-
-    if (!ops.parse(argc, argv) || help)
+    MFAParser opts;
+    bool proceed = opts.parse_input(argc, argv);
+    if (!proceed)
     {
         if (world.rank() == 0)
-            std::cout << ops;
+            std::cout << opts.ops;
         return 1;
     }
 
-    // print input arguments
-    if (world.rank() == 0)
-    {
-        echo_mfa_settings("fixed multiblock test", pt_dim, dom_dim, scalar,
-            geom_degree, geom_nctrl, vars_degree, vars_nctrl, regularization, reg1and2, weighted, false, 0, 0);
-        echo_data_settings(ndomp, 0, input, infile);
-    }
+    // default number of global blocks is world.size(), unless set by user
+    int tot_blocks  = opts.tot_blocks > 1 ? opts.tot_blocks : world.size();             
+    int mem_blocks  = -1;                       // everything in core for now
+    int num_threads = 1;                        // needed in order to do timing
+
+    int dom_dim = opts.dom_dim;
+    int pt_dim = opts.pt_dim;
+    string input = opts.input;
+    opts.echo_mfa_settings("fixed multiblock test");
+    opts.echo_all_data_settings();
     
     // initialize DIY
     diy::FileStorage          storage("./DIY.XXXXXX"); // used for blocks to be moved out of core
@@ -119,7 +78,7 @@ int main(int argc, char** argv)
     decomposer.decompose(world.rank(),
                          assigner,
                          [&](int gid, const Bounds<real_t>& core, const Bounds<real_t>& bounds, const Bounds<real_t>& domain, const RCLink<real_t>& link)
-                         { Block<real_t>::add(gid, core, bounds, domain, link, master, dom_dim, pt_dim, ghost); });
+                         { Block<real_t>::add(gid, core, bounds, domain, link, master, dom_dim, pt_dim, opts.ghost); });
     vector<int> divs(dom_dim);                          // number of blocks in each dimension
     decomposer.fill_divisions(divs);
 
@@ -127,7 +86,7 @@ int main(int argc, char** argv)
     // We assume that dom_dim == geom_dim
     // Different examples can reset this below
     vector<int> model_dims;
-    if (scalar) // Set up (pt_dim - dom_dim) separate scalar variables
+    if (opts.scalar) // Set up (pt_dim - dom_dim) separate scalar variables
     {
         model_dims.assign(pt_dim - dom_dim + 1, 1);
         model_dims[0] = dom_dim;                        // index 0 == geometry
@@ -137,18 +96,14 @@ int main(int argc, char** argv)
         model_dims = {dom_dim, pt_dim - dom_dim};
     }
 
-    // Create empty info classes
-    MFAInfo     mfa_info(dom_dim, verbose);
-    DomainArgs  d_args(dom_dim, model_dims);
-    
     // set up parameters for examples
-    setup_args(dom_dim, pt_dim, model_dims, geom_degree, geom_nctrl, vars_degree, vars_nctrl,
-                input, infile, ndomp, structured, rand_seed, 0, 0, noise,
-                weighted, reg1and2, regularization, adaptive, verbose, mfa_info, d_args);
+    MFAInfo     mfa_info(dom_dim, opts.verbose);
+    DomainArgs  d_args(dom_dim, model_dims);
+    opts.setup_args(model_dims, mfa_info, d_args);
 
     // Adjust parameters for strong scaling if needed
     d_args.multiblock   = true;
-    if (strong_sc) 
+    if (opts.strong_sc) 
     {
         mfa_info.splitStrongScaling(divs);
         for (int i = 0; i < dom_dim; i++)
@@ -160,7 +115,7 @@ int main(int argc, char** argv)
     // Print block layout and scaling info
     if (world.rank() == 0)
     {
-        echo_multiblock_settings(mfa_info, d_args, world.size(), tot_blocks, divs, strong_sc, ghost);
+        opts.echo_multiblock_settings(mfa_info, d_args, world.size(), tot_blocks, divs, opts.strong_sc, opts.ghost);
     }
 
     // Generate data
@@ -192,7 +147,7 @@ int main(int argc, char** argv)
 
     // debug: compute error field for visualization and max error to verify that it is below the threshold
     double decode_time = MPI_Wtime();
-    if (error)
+    if (opts.error)
     {
         if (world.rank() == 0)
             fprintf(stderr, "\nFinal decoding and computing max. error...\n");
@@ -209,9 +164,9 @@ int main(int argc, char** argv)
     // print block results
     fprintf(stderr, "\n------- Final block results --------\n");
     master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-            { b->print_block(cp, error); });
+            { b->print_block(cp, opts.error); });
     fprintf(stderr, "encoding time         = %.3lf s.\n", encode_time);
-    if (error)
+    if (opts.error)
         fprintf(stderr, "decoding time         = %.3lf s.\n", decode_time);
     fprintf(stderr, "-------------------------------------\n\n");
 
@@ -233,14 +188,14 @@ int main(int argc, char** argv)
         real_t  expect_err;                                         // expected (normalized max) error
 
         // for ./fixed-multiblock-test> -i sinc -d 3 -m 2 -p 1 -q 5 -n 500 -v 50 -b 4 -t 1 -w 0
-        if (strong_sc && !ghost)
+        if (opts.strong_sc && !opts.ghost)
             expect_err   = 4.021332e-07;
-        if (strong_sc && ghost)
+        if (opts.strong_sc && opts.ghost)
             expect_err   = 9.842469e-07;
         // for ./fixed-multiblock-test> -i sinc -d 3 -m 2 -p 1 -q 5 -n 100 -v 10 -b 4 -t 0 -w 0
-        if (!strong_sc && !ghost)
+        if (!opts.strong_sc && !opts.ghost)
             expect_err   = 7.246910e-03;
-        if (!strong_sc && ghost)
+        if (!opts.strong_sc && opts.ghost)
             expect_err   = 7.655586e-03;
 
         if (fabs(expect_err - our_err) / expect_err > err_factor)

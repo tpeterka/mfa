@@ -53,7 +53,6 @@
 #include <Kokkos_Core.hpp>
 #endif
 
-
 #ifdef MFA_TBB
 #define     TBB_SUPPRESS_DEPRECATED_MESSAGES    1
 #include    <tbb/tbb.h>
