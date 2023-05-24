@@ -36,8 +36,17 @@
 // comment out the following line to encode local with unified dims
 #define MFA_ENCODE_LOCAL_SEPARABLE
 
+// unified dims solve use dense solver
+// #define MFA_DENSE
+
+// for debugging, use nearest control point instead of Boehm knot insertion
+// #define MFA_NEAREST_CTRL_PT
+
 // for debugging, can turn off constraints in local solve
 // #define MFA_NO_CONSTRAINTS
+
+// use constraints in local support of end of curve
+#define MFA_LOCAL_SUPP_CONSTRAINTS
 
 // debug Boehm knot insertion
 // #define MFA_DEBUG_KNOT_INSERTION        // make an extra tensor with the inserted control points
