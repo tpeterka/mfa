@@ -144,15 +144,6 @@ int main(int argc, char** argv)
             b->read_3d_unstructured_data(cp, mfa_info, d_args); 
         });
     }
-    else if (input=="xgc")
-    {
-        string xgc_coords_name = "coordinates/values";
-        string xgc_values_name = "dneOverne0";
-        master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-        {
-            b->read_2d_hdf5_data<float>(cp, mfa_info, d_args, xgc_coords_name, xgc_values_name);
-        });
-    }
     else
     {
         cerr << "Input keyword \'" << input << "\' not recognized. Exiting." << endl;
