@@ -305,19 +305,19 @@ void PrepRenderingData(
     vec3d p;
 
     // number of geometry dimensions and science variables
-    int ndom_dims   = block->mfa->geom_dim();          // number of geometry dims
-    nvars           = block->mfa->nvars();                       // number of science variables
+    int dom_dim     = block->mfa->dom_dim;
+    nvars           = block->mfa->nvars();                    // number of science variables
     pt_dim          = block->mfa->pt_dim;                     // dimensionality of point
 
     // --- geometry control points ---
 
     // compute vectors of individual control point coordinates for the tensor product
-    vector<vector<float>> ctrl_pts_coords(ndom_dims);
+    vector<vector<float>> ctrl_pts_coords(dom_dim);
     for (auto t = 0; t < block->mfa->geom().tmesh.tensor_prods.size(); t++)                      // tensor products
     {
         const TensorProduct<real_t>& tc = block->mfa->geom().tmesh.tensor_prods[t];
         mfa::VolIterator vol_iter(tc.nctrl_pts);
-        for (auto k = 0; k < ndom_dims; k++)                                                            // domain dimensions
+        for (auto k = 0; k < dom_dim; k++)                                                            // domain dimensions
         {
             int skip = 0;
             // starting knot in sequence for computing control point coordinate
@@ -360,7 +360,7 @@ void PrepRenderingData(
     {
         const TensorProduct<real_t>& tc   = block->mfa->geom().tmesh.tensor_prods[t];
         mfa::VolIterator vol_iter(tc.nctrl_pts);
-        VectorXi ijk(ndom_dims);
+        VectorXi ijk(dom_dim);
         while (!vol_iter.done())                                    // control points
         {
             vol_iter.idx_ijk(vol_iter.cur_iter(), ijk);
@@ -373,11 +373,11 @@ void PrepRenderingData(
 
             // first 3 dims stored as mesh geometry
             p.x = ctrl_pts_coords[0][ofst(0) + ijk(0)];
-            if (ndom_dims < 2)
+            if (dom_dim < 2)
                 p.y = 0.0;
             else
                 p.y = ctrl_pts_coords[1][ofst(1) + ijk(1)];
-            if (ndom_dims < 3)
+            if (dom_dim < 3)
                 p.z = 0.0;
             else
                 p.z = ctrl_pts_coords[2][ofst(2) + ijk(2)];
@@ -388,7 +388,7 @@ void PrepRenderingData(
 
             vol_iter.incr_iter();
         }       // control points
-        ofst.head(ndom_dims) += tc.nctrl_pts;
+        ofst.head(dom_dim) += tc.nctrl_pts;
     }       // tensor products
 
     // --- science variable control points ---
@@ -401,19 +401,19 @@ void PrepRenderingData(
         for (auto t = 0; t < block->mfa->var(i).tmesh.tensor_prods.size(); t++)                   // tensor products
         {
             size_t prod = 1;
-            for (auto k = 0; k < ndom_dims; k++)                                                        // domain dimensions
+            for (auto k = 0; k < dom_dim; k++)                                                        // domain dimensions
                 prod *= block->mfa->var(i).tmesh.tensor_prods[t].nctrl_pts(k);
             nctrl_pts += prod;
         }
         vars_ctrl_data[i] = new float[nctrl_pts];
 
         // compute vectors of individual control point coordinates for the tensor product
-        vector<vector<float>> ctrl_pts_coords(ndom_dims);
+        vector<vector<float>> ctrl_pts_coords(dom_dim);
         for (auto t = 0; t < block->mfa->var(i).tmesh.tensor_prods.size(); t++)                   // tensor products
         {
             const TensorProduct<real_t>& tc = block->mfa->var(i).tmesh.tensor_prods[t];
             mfa::VolIterator vol_iter(tc.nctrl_pts);
-            for (auto k = 0; k < ndom_dims; k++)                                                        // domain dimensions
+            for (auto k = 0; k < dom_dim; k++)                                                        // domain dimensions
             {
                 int skip = 0;
                 // starting knot in sequence for computing control point coordinate
@@ -455,7 +455,7 @@ void PrepRenderingData(
         {
             const TensorProduct<real_t>& tc   = block->mfa->var(i).tmesh.tensor_prods[t];
             mfa::VolIterator vol_iter(tc.nctrl_pts);
-            VectorXi ijk(ndom_dims);
+            VectorXi ijk(dom_dim);
             while (!vol_iter.done())                                        // control points
             {
                 vol_iter.idx_ijk(vol_iter.cur_iter(), ijk);
@@ -469,7 +469,7 @@ void PrepRenderingData(
                 // first 3 dims stored as mesh geometry
                 // control point position and optionally science variable, if the total fits in 3d
                 p.x = ctrl_pts_coords[0][ofst(0) + ijk(0)];
-                if (ndom_dims < 2)
+                if (dom_dim < 2)
                 {
                     p.y = tc.ctrl_pts(vol_iter.cur_iter(), 0);
                     p.z = 0.0;
@@ -477,7 +477,7 @@ void PrepRenderingData(
                 else
                 {
                     p.y = ctrl_pts_coords[1][ofst(1) + ijk(1)];
-                    if (ndom_dims < 3)
+                    if (dom_dim < 3)
                         p.z = tc.ctrl_pts(vol_iter.cur_iter(), 0);
                     else
                         p.z = ctrl_pts_coords[2][ofst(2) + ijk(2)];
@@ -492,15 +492,15 @@ void PrepRenderingData(
 
                 vol_iter.incr_iter();
             }   // control points
-            ofst.head(ndom_dims) += tc.nctrl_pts;
+            ofst.head(dom_dim) += tc.nctrl_pts;
         }   // tensor products
     }   // science variables
 
     // tmesh tensor extents
     ntensor_pts.resize(3);
     for (auto i = 0; i < 3; i++)
-        ntensor_pts[i] = (i >= ndom_dims ? 1 : 2);
-    PrepTmeshTensorExtents(nvars, ndom_dims, tensor_pts_real, tensor_pts_index, block);
+        ntensor_pts[i] = (i >= dom_dim ? 1 : 2);
+    PrepTmeshTensorExtents(nvars, dom_dim, tensor_pts_real, tensor_pts_index, block);
 }
 
 // write vtk files for initial, approximated, control points
@@ -656,52 +656,6 @@ void write_vtk_files(
     delete[] vars_ctrl_data;
 }
 
-// generate analytical test data and write to vtk
-void test_and_write(Block<real_t>*                      b,
-                    const diy::Master::ProxyWithLink&   cp,
-                    string                              input,
-                    int                                 sci_var,
-                    DomainArgs&                         args)
-{
-    if (!b->dom_dim)
-        b->dom_dim =  b->mfa->dom_dim;
-
-    // default args for evaluating analytical functions
-    for (auto i = 0; i < b->mfa->nvars(); i++)
-    {
-        args.f[i] = 1.0;
-        if (input == "sine")
-            args.s[i] = i + 1;
-        if (input == "sinc")
-            args.s[i] = 10.0 * (i + 1);
-    }
-
-    // compute the norms of analytical errors synthetic function w/o noise at different domain points than the input
-    int nvars = b->mfa->nvars();
-    vector<real_t> L1(nvars), L2(nvars), Linf(nvars);                                // L-1, 2, infinity norms
-    mfa::PointSet<real_t> *exact_pts = nullptr, *approx_pts = nullptr, *error_pts = nullptr;
-    b->analytical_error_field(cp, input, L1, L2, Linf, args, exact_pts, approx_pts, error_pts);
-
-    // print analytical errors
-    fprintf(stderr, "\n------ Analytical error norms -------\n");
-    fprintf(stderr, "L-1        norm = %e\n", L1);
-    fprintf(stderr, "L-2        norm = %e\n", L2);
-    fprintf(stderr, "L-infinity norm = %e\n", Linf);
-    fprintf(stderr, "-------------------------------------\n\n");
-
-    char exact_filename[256], approx_filename[256], error_filename[256];
-    sprintf(exact_filename, "test_exact_pts_gid_%d.vtk", cp.gid());
-    sprintf(approx_filename, "test_approx_pts_gid_%d.vtk", cp.gid());
-    sprintf(error_filename, "test_error_pts_gid_%d.vtk", cp.gid());
-    write_pointset_vtk(exact_pts, exact_filename, sci_var);
-    write_pointset_vtk(approx_pts, approx_filename, sci_var);
-    write_pointset_vtk(error_pts, error_filename, sci_var);
-
-    delete exact_pts;
-    delete approx_pts;
-    delete error_pts;
-}
-
 int main(int argc, char ** argv)
 {
     // initialize MPI
@@ -764,73 +718,4 @@ int main(int argc, char ** argv)
     // write vtk files for initial and approximated points
     master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
             { write_vtk_files(b, cp, sci_var, dom_dim, pt_dim); });
-
-    // rest of the code tests analytical functions and writes those files
-
-    if (ntest <= 0)
-        exit(0);
-
-    // Get dimensions of each science variable from the loaded MFA
-    VectorXi model_dims = master.block<Block<real_t>>(0)->mfa->model_dims();
-    vector<int> mdims(model_dims.size());
-    for (int i = 0; i < model_dims.size(); i++)
-    {
-        mdims[i] = model_dims(i);
-    }
-
-    // arguments for analytical functions
-    DomainArgs d_args(dom_dim, mdims);
-    d_args.ndom_pts = vector<int>(dom_dim, ntest);
-
-    if (input == "sine")
-    {
-        for (int i = 0; i < dom_dim; i++)
-        {
-            d_args.min[i]               = -4.0 * M_PI;
-            d_args.max[i]               = 4.0  * M_PI;
-        }
-    }
-
-    // sinc function f(x) = sin(x)/x, f(x,y) = sinc(x)sinc(y), ...
-    if (input == "sinc")
-    {
-        for (int i = 0; i < dom_dim; i++)
-        {
-            d_args.min[i]               = -4.0 * M_PI;
-            d_args.max[i]               = 4.0  * M_PI;
-        }
-    }
-
-    // f16 function
-    if (input == "f16")
-    {
-        for (int i = 0; i < dom_dim; i++)
-        {
-            d_args.min[i]               = -1.0;
-            d_args.max[i]               = 1.0;
-        }
-    }
-
-    // f17 function
-    if (input == "f17")
-    {
-        d_args.min[0] = 80.0;   d_args.max[0] = 100.0;
-        d_args.min[1] = 5.0;    d_args.max[1] = 10.0;
-        d_args.min[2] = 90.0;   d_args.max[2] = 93.0;
-    }
-
-    // f18 function
-    if (input == "f18")
-    {
-        for (int i = 0; i < dom_dim; i++)
-        {
-            d_args.min[i]               = -0.95;
-            d_args.max[i]               = 0.95;
-        }
-    }
-
-    // compute the norms of analytical errors of synthetic function w/o noise at test points
-    // and write true points and test points to vtk
-    master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-            { test_and_write(b, cp, input, sci_var, d_args); });
 }
