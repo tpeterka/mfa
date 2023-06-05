@@ -45,8 +45,18 @@
 // for debugging, can turn off constraints in local solve
 // #define MFA_NO_CONSTRAINTS
 
+// types of constraints for separable encoding
+// default is separable curve-wise constraints with Boehm knot insertion
+
+// --- or ---
+
 // use constraints in local support of end of curve
-#define MFA_LOCAL_SUPP_CONSTRAINTS
+// #define MFA_LOCAL_SUPP_CONSTRAINTS
+
+// --- or ---
+
+// use unified constraints
+#define MFA_UNIFIED_CONSTRAINTS
 
 // debug Boehm knot insertion
 // #define MFA_DEBUG_KNOT_INSERTION        // make an extra tensor with the inserted control points
