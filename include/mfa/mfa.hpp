@@ -39,28 +39,8 @@
 // unified dims solve use dense solver
 // #define MFA_DENSE
 
-// for debugging, use nearest control point instead of Boehm knot insertion
-// #define MFA_NEAREST_CTRL_PT
-
 // for debugging, can turn off constraints in local solve
 // #define MFA_NO_CONSTRAINTS
-
-// types of constraints for separable encoding
-// default is separable curve-wise constraints with Boehm knot insertion
-
-// --- or ---
-
-// use constraints in local support of end of curve
-// #define MFA_LOCAL_SUPP_CONSTRAINTS
-
-// --- or ---
-
-// use unified constraints
-#define MFA_UNIFIED_CONSTRAINTS
-
-// debug Boehm knot insertion
-// #define MFA_DEBUG_KNOT_INSERTION        // make an extra tensor with the inserted control points
-// #define MFA_KEEP_KNOT_INSERTION         // replace original tensor with new tensor that includes inserted control points and test decoding for any change
 
 #include    <Eigen/Dense>
 #include    <Eigen/Sparse>
