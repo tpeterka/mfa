@@ -1,4 +1,4 @@
-//--------------------------------------------------------------
+
 // decoder object
 //
 // Tom Peterka
@@ -13,6 +13,8 @@
 #include    <mfa/mfa.hpp>
 
 #include    <Eigen/Dense>
+
+#include    <mpi.h>     // for MPI_Wtime() only
 
 typedef Eigen::MatrixXi MatrixXi;
 
@@ -230,6 +232,26 @@ namespace mfa
         }
     };
 
+    // timing data for debugging
+    struct DecodeTimes
+    {
+        double  volpt_tmesh;
+        double  anchors_extents;
+        double  tensors;
+        double  ctrl_pts;
+
+        DecodeTimes() : volpt_tmesh(0.0),
+        anchors_extents(0.0),
+        tensors(0.0),
+        ctrl_pts(0.0)
+        {}
+
+        void print()
+        {
+            fmt::print(stderr, "decode times: volpt_tmesh {:.3f} anchors_extents {:.3f} tensors {:.3f} ctrl_pts {:.3f}\n",
+                    volpt_tmesh, anchors_extents, tensors, ctrl_pts);
+        }
+    };
 
     template <typename T>                               // float or double
     class Decoder
@@ -251,6 +273,8 @@ namespace mfa
 
         int                 verbose;                    // output level
         bool                saved_basis;                // flag to use saved basis functions within mfa_data
+
+        DecodeTimes         decode_times;               // debug
 
     public:
 
@@ -351,12 +375,13 @@ namespace mfa
             {
                 auto pt_it  = ps.iterator(r.begin());
                 auto pt_end = ps.iterator(r.end());
-                for (; pt_it != pt_end; ++pt_it)
+                VectorX<T>  cpt(last + 1);                  // evaluated point
+                VectorX<T>  param(mfa_data.dom_dim);        // vector of param values
+                VectorXi    ijk(mfa_data.dom_dim);          // vector of param indices (structured grid only)
+                for (; pt_it != pt_end; ++pt_it)            // for all points
                 {
-                    VectorX<T>  cpt(last + 1);              // evaluated point
-                    VectorX<T>  param(mfa_data.dom_dim);    // vector of param values
-                    VectorXi    ijk(mfa_data.dom_dim);      // vector of param indices (structured grid only)
                     pt_it.params(param);
+
                     // compute approximated point for this parameter vector
 
 #ifndef MFA_TMESH   // original version for one tensor product
@@ -368,7 +393,7 @@ namespace mfa
 
                         // debug
                         if (pt_it.idx() == 0)
-                            fprintf(stderr, "Using VolPt_saved_basis\n");
+                            fmt::print(stderr, "DecodePointSet: Using VolPt_saved_basis w/ TBB over points\n");
                     }
                     else
                     {
@@ -376,26 +401,29 @@ namespace mfa
 
                         // debug
                         if (pt_it.idx() == 0)
-                            fprintf(stderr, "Using VolPt\n");
+                            fmt::print(stderr, "DecodePointSet: Using VolPt w/ TBB over points\n");
                     }
 
 #else           // tmesh version
 
                     if (pt_it.idx() == 0)
-                        fprintf(stderr, "Using VolPt_tmesh\n");
-                    VolPt_tmesh(param, cpt);
+                        fmt::print(stderr, "DecodePointSet: Using VolPt_tmesh w/ TBB over points\n");
+                    VolPt_tmesh(param, cpt, false);
 
-#endif
+#endif          // end tmesh version
 
                     ps.domain.block(pt_it.idx(), min_dim, 1, max_dim - min_dim + 1) = cpt.transpose();
-                }
-            }, ap);
+                }           // for all points
+            }, ap);     // parallel for
             if (verbose)
-                fprintf(stderr, "100 %% decoded\n");
+            {
+                fmt::print(stderr, "100 % decoded\n");
+//                 decode_times.print();
+            }
 
 #endif              // end TBB version
 
-#if defined( MFA_SERIAL) || defined (MFA_KOKKOS)
+#if defined( MFA_SERIAL) || defined (MFA_KOKKOS)    // serial version
 
             // use DecodeGrid for structured case that already has KOKKOS
             if (ps.structured && 0 == derivs.size() )
@@ -405,8 +433,8 @@ namespace mfa
                 VectorX<T>   min_params, max_params;
                 pt_min.params(min_params);
                 pt_max.params(max_params);
+                fmt::print(stderr, "DecodePointSet: Using DecodeGrid w/o TBB (serial or kokkos)\n");
                 DecodeGrid(ps.domain, min_dim, max_dim, min_params, max_params, ps.g.ndom_pts );
- //               cout << " after DecodeGrid: ndom: " << min_dim << " " <<  max_dim << " " << ps.g.ndom_pts <<  " ps.domain \n" << ps.domain ;
             }
             else
             {
@@ -427,11 +455,11 @@ namespace mfa
 #ifndef MFA_TMESH   // original version for one tensor product
                     // debug
                     if (pt_it.idx() == 0)
-                        fprintf(stderr, "Using VolPt\n");
+                        fmt::print(stderr, "DecodePointSet: Using VolPt w/o TBB (serial or kokkos)\n");
                     VolPt(param, cpt, decode_info, mfa_data.tmesh.tensor_prods[0], derivs);
 #else           // tmesh version
                     if (pt_it.idx() == 0)
-                        fprintf(stderr, "Using VolPt_tmesh\n");
+                        fmt::print(stderr, "DecodePointSet: Using VolPt_tmesh w/o TBB (serial or kokkos)\n");
                     VolPt_tmesh(param, cpt);
 #endif          // end tmesh version
 
@@ -442,10 +470,9 @@ namespace mfa
                         if (pt_it.idx() > 0 && ps.npts >= 100 && pt_it.idx() % (ps.npts / 100) == 0)
                             fprintf(stderr, "\r%.0f %% decoded", (T)pt_it.idx() / (T)(ps.npts) * 100);
                }
-
             }
 
-#endif      // end serial version
+#endif          // end serial version
         }
 
         // decode at a regular grid using saved basis that is computed once by this function
@@ -457,19 +484,24 @@ namespace mfa
                         const VectorX<T>&   max_params,     // upper corner of decoding points
                         const VectorXi&     ndom_pts)       // number of points to decode in each direction
         {
-#ifdef MFA_KOKKOS
-        	Kokkos::Profiling::pushRegion("InitDecodeGrid");
-#endif
+
+#ifdef MFA_KOKKOS       // kokkos version
+
+            Kokkos::Profiling::pushRegion("InitDecodeGrid");
+
+#endif                  // end kokkos version
+
             // precompute basis functions
             const VectorXi&     nctrl_pts = mfa_data.tmesh.tensor_prods[0].nctrl_pts;   // reference to control points (assume only one tensor)
 
             Param<T> full_params(ndom_pts, min_params, max_params);
 
             // TODO: Eventually convert "result" into a PointSet and iterate through that,
-            //       instead of simply using a naked Param object  
+            //       instead of simply using a naked Param object
             auto& params = full_params.param_grid;
 
-#ifdef MFA_KOKKOS
+#ifdef MFA_KOKKOS       // kokkos version
+
             std::cout << "KOKKOS execution space: " << ExecutionSpace::name() << "\n";
             // how many control points per direction is not fixed; we will use just one Kokkos View for NN
             int kdom_dim = mfa_data.dom_dim;
@@ -505,69 +537,70 @@ namespace mfa
             Kokkos::Profiling::popRegion(); // "InitDecodeGrid"
             Kokkos::Profiling::pushRegion("ShapeFunc");
 
-            for (int k = 0; k < mfa_data.dom_dim; k++) {
-            	//auto subk = subview (newNN, k, Kokkos::ALL(), Kokkos::ALL());
-            	int npk = ndom_pts(k);
-            	int nctk = nctrl_pts(k);
-            	int pk = mfa_data.p(k); // degree in direction k
-            	Kokkos::View<double* > paramk("paramk", npk );
-            	Kokkos::View<double * >::HostMirror h_paramk = Kokkos::create_mirror_view(paramk);
-            	for (int i = 0; i < npk; i++)
-            		h_paramk(i) = params[k][i];
-            	Kokkos::deep_copy(paramk, h_paramk);
-            	// copy also all knots from tmesh.all_knots[k]
-            	Kokkos::View<double* > lknots("lknots", nctk+pk+1 );
-            	Kokkos::View<double * >::HostMirror h_lknots = Kokkos::create_mirror_view(lknots);
-            	for (int i = 0; i < nctk+pk+1; i++)
-            		h_lknots(i) =  mfa_data.tmesh.all_knots[k][i];
-            	Kokkos::deep_copy(lknots, h_lknots);
-            	Kokkos::parallel_for( "shape_func_precom", npk,
-            	                KOKKOS_LAMBDA ( const int i ) {
-            	    // find span first, and store it for later
-            		// binary search
-					int low = pk;
-					int high = nctk;
-					int mid = (low + high) / 2;
-					double u = paramk(i);
-					if ( lknots(nctk) == u )
-						mid = nctk - 1;
-					else
-					{
-						while (u < lknots(mid) || u >= lknots(mid + 1) )
-						{
-							if (u < lknots(mid) )
-								high = mid;
-							else
-								low = mid;
-							mid = (low + high) / 2;
-						}
-					}
-					// mid is now the span
-					span_starts(k,i) = mid - pk;
+            for (int k = 0; k < mfa_data.dom_dim; k++)
+            {
+                //auto subk = subview (newNN, k, Kokkos::ALL(), Kokkos::ALL());
+                int npk = ndom_pts(k);
+                int nctk = nctrl_pts(k);
+                int pk = mfa_data.p(k); // degree in direction k
+                Kokkos::View<double* > paramk("paramk", npk );
+                Kokkos::View<double * >::HostMirror h_paramk = Kokkos::create_mirror_view(paramk);
+                for (int i = 0; i < npk; i++)
+                    h_paramk(i) = params[k][i];
+                Kokkos::deep_copy(paramk, h_paramk);
+                // copy also all knots from tmesh.all_knots[k]
+                Kokkos::View<double* > lknots("lknots", nctk+pk+1 );
+                Kokkos::View<double * >::HostMirror h_lknots = Kokkos::create_mirror_view(lknots);
+                for (int i = 0; i < nctk+pk+1; i++)
+                    h_lknots(i) =  mfa_data.tmesh.all_knots[k][i];
+                Kokkos::deep_copy(lknots, h_lknots);
+                Kokkos::parallel_for( "shape_func_precom", npk, KOKKOS_LAMBDA ( const int i )
+                {
+                    // find span first, and store it for later
+                    // binary search
+                    int low = pk;
+                    int high = nctk;
+                    int mid = (low + high) / 2;
+                    double u = paramk(i);
+                    if ( lknots(nctk) == u )
+                    mid = nctk - 1;
+                    else
+                    {
+                        while (u < lknots(mid) || u >= lknots(mid + 1) )
+                        {
+                            if (u < lknots(mid) )
+                                high = mid;
+                            else
+                                low = mid;
+                            mid = (low + high) / 2;
+                        }
+                    }
+                    // mid is now the span
+                    span_starts(k,i) = mid - pk;
 
-					// subview replaces scratch
-					auto subv_scr = Kokkos::subview(newNN, i, Kokkos::make_pair(mid - pk, mid + 1), k );
-					subv_scr(0) = 1.0;
-		            T left[MFA_MAXP1];
-		            T right[MFA_MAXP1];
-		            // fill N
-		            for (int j = 1; j <= pk; j++)
-		            {
-		                // left[j] is u = the jth knot in the correct level to the left of span
-		                left[j]  = u - lknots(mid + 1 - j);
-		                // right[j] = the jth knot in the correct level to the right of span - u
-		                right[j] = lknots(mid + j) - u;
+                    // subview replaces scratch
+                    auto subv_scr = Kokkos::subview(newNN, i, Kokkos::make_pair(mid - pk, mid + 1), k );
+                    subv_scr(0) = 1.0;
+                    T left[MFA_MAXP1];
+                    T right[MFA_MAXP1];
+                    // fill N
+                    for (int j = 1; j <= pk; j++)
+                    {
+                        // left[j] is u = the jth knot in the correct level to the left of span
+                        left[j]  = u - lknots(mid + 1 - j);
+                        // right[j] = the jth knot in the correct level to the right of span - u
+                        right[j] = lknots(mid + j) - u;
 
-		                T saved = 0.0;
-		                for (int r = 0; r < j; r++)
-		                {
-		                	T temp = subv_scr(r) / (right[r + 1] + left[j - r]);
-		                    subv_scr(r) = saved + right[r + 1] * temp;
-		                    saved = left[j - r] * temp;
-		                }
-		                subv_scr(j) = saved;
-		            }
-            	});
+                        T saved = 0.0;
+                        for (int r = 0; r < j; r++)
+                        {
+                            T temp = subv_scr(r) / (right[r + 1] + left[j - r]);
+                            subv_scr(r) = saved + right[r + 1] * temp;
+                            saved = left[j - r] * temp;
+                        }
+                        subv_scr(j) = saved;
+                    }
+                });
             }
             Kokkos::Profiling::popRegion(); // "ShapeFunc"
             Kokkos::Profiling::pushRegion("PrepareDecodeRes");
@@ -606,60 +639,59 @@ namespace mfa
             for (int iv = 0; iv < nvar; iv++)
             {
                 // we could say explicitly: Kokkos::RangePolicy<Kokkos::OpenMP> (0, nct) ! this will happen over host
-                Kokkos::parallel_for( "copy_ctrl", host_range_policy(0, nct),
-                   KOKKOS_LAMBDA ( const int j ) {
-                     h_ctrl_pts_k(j) = mfa_data.tmesh.tensor_prods[0].ctrl_pts(j,iv);
-                   }
-                 );
-               // and then copy to device
+                Kokkos::parallel_for( "copy_ctrl", host_range_policy(0, nct), KOKKOS_LAMBDA ( const int j )
+                {
+                    h_ctrl_pts_k(j) = mfa_data.tmesh.tensor_prods[0].ctrl_pts(j,iv);
+                }
+                );
+                // and then copy to device
                 Kokkos::deep_copy(ctrl_pts_k, h_ctrl_pts_k);
-                Kokkos::parallel_for( "decode_resol", ntot,
-                    KOKKOS_LAMBDA ( const int i ) {
+                Kokkos::parallel_for( "decode_resol", ntot, KOKKOS_LAMBDA ( const int i )
+                {
+                    int leftover=i;
+                    int ctrl_idx = 0;
+                    double value = 0; // this will accumulate (one variable now)
+                    int ij_grid[7]; // could be just smaller; 7 is max dim for Kokkos anyway
+                    int span_st[7];
+                    int ij_patch[7];
 
-                        int leftover=i;
-                        int ctrl_idx = 0;
-                        double value = 0; // this will accumulate (one variable now)
-                        int ij_grid[7]; // could be just smaller; 7 is max dim for Kokkos anyway
-                        int span_st[7];
-                        int ij_patch[7];
+                    for (int k=kdom_dim-1; k>=0; k--)
+                    {
+                        ij_grid[k] = (int)(leftover/strides(k));
+                        leftover -= strides(k)*ij_grid[k] ;
+                    }
 
+                    for (int k=0; k<kdom_dim; k++)
+                    {
+                        span_st[k] = span_starts(k, ij_grid[k]);
+                        ctrl_idx += (span_st[k]+kct(0,k))*kcs(k);
+                    }
+
+                    // now we need more loops, in all direction, for local patch, size
+                    // ksupp is p+1 in each direction
+
+                    for (int j=0; j<nb_internal_iter; j++)
+                    {
+                        int leftj = j;
                         for (int k=kdom_dim-1; k>=0; k--)
                         {
-                            ij_grid[k] = (int)(leftover/strides(k));
-                            leftover -= strides(k)*ij_grid[k] ;
+                            ij_patch[k] = (int)(leftj/strides_patch(k));
+                            leftj -= strides_patch(k)*ij_patch[k] ;
                         }
+                        // vijk will be (0,0), (1,0), ..., (4,0), (0,1),..
+                        // role of coordinates in the patch
+                        int ctrl_idx_it = ctrl_idx;
+                        for (int k=0; k<kdom_dim; k++)
+                            ctrl_idx_it += kct(j,k) * kcs(k);
+                        double ctrl = ctrl_pts_k(ctrl_idx_it);
 
                         for (int k=0; k<kdom_dim; k++)
-                        {
-                            span_st[k] = span_starts(k, ij_grid[k]);
-                            ctrl_idx += (span_st[k]+kct(0,k))*kcs(k);
-                        }
+                            ctrl *= newNN( ij_grid[k] , span_st[k] + ij_patch[k], k );
 
-                        // now we need more loops, in all direction, for local patch, size
-                        // ksupp is p+1 in each direction
-
-                        for (int j=0; j<nb_internal_iter; j++)
-                        {
-                            int leftj = j;
-                            for (int k=kdom_dim-1; k>=0; k--)
-                            {
-                                ij_patch[k] = (int)(leftj/strides_patch(k));
-                                leftj -= strides_patch(k)*ij_patch[k] ;
-                            }
-                            // vijk will be (0,0), (1,0), ..., (4,0), (0,1),..
-                            // role of coordinates in the patch
-                            int ctrl_idx_it = ctrl_idx;
-                            for (int k=0; k<kdom_dim; k++)
-                                ctrl_idx_it += kct(j,k) * kcs(k);
-                            double ctrl = ctrl_pts_k(ctrl_idx_it);
-
-                            for (int k=0; k<kdom_dim; k++)
-                                ctrl *= newNN( ij_grid[k] , span_st[k] + ij_patch[k], k );
-
-                            value += ctrl;
-                        }
-                        res_dev(i) = value;
+                        value += ctrl;
                     }
+                    res_dev(i) = value;
+                }
                 );
                 Kokkos::Profiling::pushRegion("copyBack");
                 Kokkos::deep_copy(res_h, res_dev);
@@ -670,27 +702,26 @@ namespace mfa
             Kokkos::Profiling::popRegion(); // "DecodeAtRes"
 
 
-#else
+#else       // serial version
 
-            // compute basis functions for points to be decoded
+#ifndef MFA_TMESH   // original version for one tensor product
+
+            // precompute basis functions for points to be decoded
             vector<MatrixX<T>>  NN(mfa_data.dom_dim);
             for (int k = 0; k < mfa_data.dom_dim; k++)
                 NN[k] = MatrixX<T>::Zero(ndom_pts(k), nctrl_pts(k));
 
-            for (int k = 0; k < mfa_data.dom_dim; k++) {
+            for (int k = 0; k < mfa_data.dom_dim; k++)
+            {
                 for (int i = 0; i < ndom_pts(k); i++)
                 {
                     int span = mfa_data.tmesh.FindSpan(k, params[k][i], nctrl_pts(k));
-#ifndef MFA_TMESH   // original version for one tensor product
                     mfa_data.OrigBasisFuns(k, params[k][i], span, NN[k], i);
-#else               // tmesh version
-
-                    // TODO: TBD
-
-#endif              // tmesh version
                 }
             }
-#endif
+#endif              // end one tensor product
+
+#endif              // end serial version
 
             VectorXi    derivs;                             // do not use derivatives yet, pass size 0
             VolIterator vol_it(ndom_pts);
@@ -711,9 +742,12 @@ namespace mfa
                 }
 
             }
-#endif
+#endif              // end debug
 
-#ifdef MFA_SERIAL
+#ifdef MFA_SERIAL   // serial version
+
+            fmt::print(stderr, "DecodeGrid: serial version\n");
+
             DecodeInfo<T>   decode_info(mfa_data, derivs);  // reusable decode point info for calling VolPt repeatedly
             VectorX<T>      cpt(mfa_data.tmesh.tensor_prods[0].ctrl_pts.cols());                      // evaluated point
             VectorX<T>      param(mfa_data.dom_dim);       // parameters for one point
@@ -727,6 +761,7 @@ namespace mfa
                     ijk[i] = vol_it.idx_dim(i);             // index along direction i in grid
                     param(i) = params[i][ijk[i]];
                 }
+
 #ifdef PRINT_DEBUG2
                 printf(" %d (%d, %d) ", j, ijk[0], ijk[1]);
 #endif
@@ -737,16 +772,18 @@ namespace mfa
 
 #else               // tmesh version
 
-                    // TODO: TBD
+                VolPt_tmesh(param, cpt, false);
 
-#endif              // tmesh version
+#endif              // end tmesh version
 
                 vol_it.incr_iter();
-                //counter_grid++;
                 result.block(j, min_dim, 1, max_dim - min_dim + 1) = cpt.transpose();
             }
-            // end serial
-#endif
+
+            // debug
+//             decode_times.print();
+
+#endif      // end serial version
 
 #ifdef MFA_TBB      // TBB version
 
@@ -769,49 +806,79 @@ namespace mfa
 
 #else           // tmesh version
 
-                // TODO: TBD
+                VolPt_tmesh(thread_param.local(), thread_cpt.local());
 
-#endif          // tmesh version
+#endif          // end tmesh version
 
                 result.block(j, min_dim, 1, max_dim - min_dim + 1) = thread_cpt.local().transpose();
             });
 
-#endif      // TBB version
+#endif      // end TBB version
 
         }
 
         // decode a point in the t-mesh
-        // TODO: serial implementation, no threading
         // TODO: no derivatives as yet
         // TODO: weighs all dims, whereas other versions of VolPt have a choice of all dims or only last dim
         // TODO: need a tensor product locating structure to quickly locate the tensor product containing param
         void VolPt_tmesh(const VectorX<T>&      param,      // parameters of point to decode
-                         VectorX<T>&            out_pt)     // (output) point, allocated by caller
+                         VectorX<T>&            out_pt,     // (output) point, allocated by caller
+                         bool                   timing = false) // collect timing data for debugging
         {
+            // debug
+            double t0, t1, t2;
+            if (timing)
+                t0 = MPI_Wtime();
+
+            // typing shortcuts
+            auto& dom_dim   = mfa_data.dom_dim;
+            auto& tmesh     = mfa_data.tmesh;
+            auto& all_knots = tmesh.all_knots;
+            auto& p         = mfa_data.p;
+
             // init
             out_pt = VectorX<T>::Zero(out_pt.size());
             T B_sum = 0.0;                                                          // sum of multidim basis function products
             T w_sum = 0.0;                                                          // sum of control point weights
-
+                                                                                    //
             // compute range of anchors covering decoded point
             // TODO: need a tensor product locating structure to quickly locate the tensor product containing param
             // current passing tensor 0 as a seed for the search
-            vector<vector<KnotIdx>> anchors(mfa_data.dom_dim);
-            TensorIdx found_idx = mfa_data.tmesh.anchors(param, 0, anchors);        // 0 is the seed for searching for the correct tensor TODO
+            vector<vector<KnotIdx>> anchors(dom_dim);                               // (global) anchors of local support of param point
+            TensorIdx found_idx = tmesh.anchors(param, 0, anchors);                 // 0 is the seed for searching for the correct tensor TODO
 
-            // extents of original anchors expanded for adjacent tensors
-            vector<vector<KnotIdx>> anchor_extents(mfa_data.dom_dim);
-            bool changed = mfa_data.tmesh.expand_anchors(anchors, found_idx, anchor_extents);
+            // (global) extents of original anchors expanded for adjacent tensors
+            vector<vector<KnotIdx>> anchor_extents(dom_dim);
+            bool changed = tmesh.expand_anchors(anchors, found_idx, anchor_extents);
 
-            for (auto k = 0; k < mfa_data.tmesh.tensor_prods.size(); k++)           // for all tensor products
+            // check anchor extents for global edges
+            for (auto i = 0; i < dom_dim; i++)
             {
-                const TensorProduct<T>& t = mfa_data.tmesh.tensor_prods[k];
+                if (anchor_extents[i][0] < (p(i) + 1) / 2)
+                    anchor_extents[i][0] = (p(i) + 1) / 2;
+
+                if (anchor_extents[i][1] >= all_knots[i].size() - (p(i) + 1) / 2)
+                    anchor_extents[i][1] = all_knots[i].size() - (p(i) + 1) / 2 - 1;
+            }
+
+            // debug
+            if (timing)
+            {
+                decode_times.anchors_extents += (MPI_Wtime() - t0);
+                t1 = MPI_Wtime();
+            }
+
+            for (auto k = 0; k < tmesh.tensor_prods.size(); k++)                    // for all tensor products
+            {
+                const TensorProduct<T>& t = tmesh.tensor_prods[k];
 
                 // skip entire tensor if knot mins, maxs are too far away from decoded point
                 bool skip = false;
-                for (auto j = 0; j < mfa_data.dom_dim; j++)
+                for (auto j = 0; j < dom_dim; j++)
                 {
-                    if (t.knot_maxs[j] < anchor_extents[j].front() || t.knot_mins[j] > anchor_extents[j].back())
+                    if (p(j) % 2 == 0 && t.knot_maxs[j] <= anchor_extents[j].front() ||
+                        p(j) % 2 == 1 && t.knot_maxs[j] <  anchor_extents[j].front() ||
+                        t.knot_mins[j] > anchor_extents[j].back())
                     {
                         skip = true;
                         break;
@@ -820,83 +887,104 @@ namespace mfa
                 if (skip)
                     continue;
 
-                // iterate over the control points in the tensor
-                VolIterator         vol_iterator(t.nctrl_pts);                      // iterator over control points in the current tensor
-                vector<KnotIdx>     ctrl_anchor(mfa_data.dom_dim);                  // anchor of control point in (global, ie, over all tensors) index space
-                VectorXi            ijk(mfa_data.dom_dim);                          // multidim index of current control point
+                // debug
+                if (timing)
+                    t2 = MPI_Wtime();
 
-                while (!vol_iterator.done())                                        // for all control points in the tensor
+                // iterate over only the relevant control points
+
+                vector<KnotIdx> min_anchor(dom_dim);                                // in global index space
+                vector<KnotIdx> max_anchor(dom_dim);                                // in global index space
+                VectorXi        sub_starts(dom_dim);
+                VectorXi        sub_ends(dom_dim);
+                VectorXi        sub_sizes(dom_dim);
+                VectorXi        ijk(dom_dim);                                       // multidim index of current control point
+                for (auto i = 0; i < dom_dim; i++)
+                {
+                    // min_anchor
+                    min_anchor[i]   = t.knot_mins[i] > anchor_extents[i][0] ? t.knot_mins[i] : anchor_extents[i][0];
+                    if (t.knot_mins[i] == 0 && min_anchor[i] < (p(i) + 1) / 2)
+                        min_anchor[i] = (p(i) + 1) / 2;
+
+                    // max_anchor
+                    if (p(i) % 2 == 0)
+                    {
+                        max_anchor[i] = t.knot_maxs[i] - 1 < anchor_extents[i][1] ? t.knot_maxs[i] - 1 : anchor_extents[i][1];
+                        if (t.knot_maxs[i] == all_knots[i].size() - 1 && max_anchor[i] >= all_knots[i].size() - (p(i) + 1) / 2 - 1)
+                            max_anchor[i] = all_knots[i].size() - (p(i) + 1) / 2 - 2;
+                    }
+                    else
+                    {
+                        max_anchor[i] = t.knot_maxs[i] < anchor_extents[i][1] ? t.knot_maxs[i] : anchor_extents[i][1];
+                        if (t.knot_maxs[i] == all_knots[i].size() - 1 && max_anchor[i] >= all_knots[i].size() - (p(i) + 1) / 2)
+                            max_anchor[i] = all_knots[i].size() - (p(i) + 1) / 2 - 1;
+                    }
+                }
+
+                sub_starts  = tmesh.anchor_ctrl_pt_ijk(t, min_anchor, false);        // local to the tensor
+                sub_ends    = tmesh.anchor_ctrl_pt_ijk(t, max_anchor, false);        // local to the tensor
+                for (auto i = 0; i < dom_dim; i++)
+                {
+                    // it's possible to ask for an anchor not in the tensor, in which case clamp the sub_ends
+                    if (sub_ends(i) >= t.nctrl_pts(i))
+                        sub_ends(i) = t.nctrl_pts(i) - 1;
+                    sub_sizes(i) = sub_ends(i) - sub_starts(i) + 1;
+                }
+
+                // debug
+//                 if (sub_starts(1) + sub_sizes(1) > t.nctrl_pts(1))
+//                 {
+//                     fmt::print(stderr, "VolPt_tmesh: min_anchor [{}] max_anchor [{}] anchor_extents [{}] x [{}]\n",
+//                             fmt::join(min_anchor, ","), fmt::join(max_anchor, ","), fmt::join(anchor_extents[0], ","), fmt::join(anchor_extents[1], ","));
+//                     fmt::print(stderr, "VolPt_tmesh: sub_sizes [{}] sub_starts [{}] nctrl_pts [{}]\n",
+//                             sub_sizes.transpose(), sub_starts.transpose(), t.nctrl_pts.transpose());
+//                 }
+
+                VolIterator vol_iterator1(sub_sizes, sub_starts, t.nctrl_pts);      // iterator over control points in the current tensor
+                vector<KnotIdx> ctrl_anchor(dom_dim);                               // anchor of control point in (global, ie, over all tensors) index space
+                vector<vector<KnotIdx>> local_knot_idxs(dom_dim);                   // local knot vectors in index space
+
+                while (!vol_iterator1.done())                                       // for all control points in the tensor
                 {
                     // get anchor of the current control point
-                    vol_iterator.idx_ijk(vol_iterator.cur_iter(), ijk);
-                    mfa_data.tmesh.ctrl_pt_anchor(t, ijk, ctrl_anchor);
+                    vol_iterator1.idx_ijk(vol_iterator1.cur_iter(), ijk);
+                    tmesh.ctrl_pt_anchor(t, ijk, ctrl_anchor);
+                    size_t idx = vol_iterator1.ijk_idx(ijk);
 
                     // skip odd degree duplicated control points, indicated by invalid weight
-                    if (t.weights(vol_iterator.cur_iter()) == MFA_NAW)
+                    if (t.weights(idx) == MFA_NAW)
                     {
-                        vol_iterator.incr_iter();
-                        continue;
-                    }
-
-                    // debug
-                    bool skip1 = false;
-
-                    // skip control points too far away from the decoded point
-                    if (!mfa_data.tmesh.in_anchors(ctrl_anchor, anchor_extents))
-                    {
-                        // debug
-                        skip1 = true;
-
-                        vol_iterator.incr_iter();
+                        vol_iterator1.incr_iter();
                         continue;
                     }
 
                     // intersect tmesh lines to get local knot indices in all directions
-                    vector<vector<KnotIdx>> local_knot_idxs(mfa_data.dom_dim);          // local knot vectors in index space
-                    mfa_data.tmesh.knot_intersections(ctrl_anchor, k, local_knot_idxs);
+                    tmesh.knot_intersections(ctrl_anchor, k, local_knot_idxs);
 
                     // compute product of basis functions in each dimension
-                    T B = 1.0;                                                          // product of basis function values in each dimension
-                    for (auto i = 0; i < mfa_data.dom_dim; i++)
+                    T B = 1.0;                                                      // product of basis function values in each dimension
+                    for (auto i = 0; i < dom_dim; i++)
                     {
-                        vector<T> local_knots(mfa_data.p(i) + 2);                       // local knot vector for current dim in parameter space
+                        vector<T> local_knots(p(i) + 2);                            // local knot vector for current dim in parameter space
                         for (auto n = 0; n < local_knot_idxs[i].size(); n++)
-                            local_knots[n] = mfa_data.tmesh.all_knots[i][local_knot_idxs[i][n]];
+                            local_knots[n] = tmesh.all_knots[i][local_knot_idxs[i][n]];
 
                         B *= mfa_data.OneBasisFun(i, param(i), local_knots);
                     }
 
                     // compute the point
-                    out_pt += B * t.ctrl_pts.row(vol_iterator.cur_iter()) * t.weights(vol_iterator.cur_iter());
+                    out_pt += B * t.ctrl_pts.row(idx) * t.weights(idx);
+                    B_sum  += B * t.weights(idx);
 
-                    // debug
-//                     T eps = 1e-8;
-//                     if ((skip || skip1) && B > eps)
-//                     {
-//                         vector<KnotIdx> param_anchor(mfa_data.dom_dim);
-//                         mfa_data.tmesh.param_anchor(param, found_idx, param_anchor);
-//                         fmt::print(stderr, "\nVolPt_tmesh(): Error: incorrect skip. decoding point with param [{}] anchor [{}] found in tensor {}\n",
-//                                 param.transpose(), fmt::join(param_anchor, ","), found_idx);
-// 
-//                         vector<vector<KnotIdx>> loc_knots(mfa_data.dom_dim);
-//                         mfa_data.tmesh.knot_intersections(param_anchor, found_idx, loc_knots);
-//                         for (auto i = 0; i < mfa_data.dom_dim; i++)
-//                             fmt::print(stderr, "loc_knots[dim {}] = [{}]\n", i, fmt::join(loc_knots[i], ","));
-// 
-//                         fmt::print(stderr, "tensor {} skipping ctrl pt at ctrl_anchor [{}]\n", k, fmt::join(ctrl_anchor, ","));
-//                         fmt::print(stderr, "B {}\n", B);
-//                         for (auto i = 0; i < mfa_data.dom_dim; i++)
-//                             fmt::print(stderr, "anchors[dim {}] =  [{}] adj_anchors[dim {}] = [{}]\n",
-//                                     i, fmt::join(anchors[i], ","), i, fmt::join(anchor_extents[i], ","));
-//                         fmt::print(stderr, "\n Current T-mesh:\n");
-//                         mfa_data.tmesh.print(true, true);
-//                         abort();
-//                     }
+                    vol_iterator1.incr_iter();                                      // must increment volume iterator at the bottom of the loop
 
-                    B_sum += B * t.weights(vol_iterator.cur_iter());
 
-                    vol_iterator.incr_iter();                                           // must increment volume iterator at the bottom of the loop
                 }       // control points in the tensor
+
+                // debug
+                if (timing)
+                    decode_times.ctrl_pts += (MPI_Wtime() - t2);
+
             }       // tensors
 
             // divide by sum of weighted basis functions to make a partition of unity
@@ -904,6 +992,13 @@ namespace mfa
                 out_pt /= B_sum;
             else
                 fmt::print(stderr, "Warning: VolPt_tmesh(): B_sum = 0 when decoding param: [{}]\n", param.transpose());
+
+            // debug
+            if (timing)
+            {
+                decode_times.tensors += (MPI_Wtime() - t1);
+                decode_times.volpt_tmesh += (MPI_Wtime() - t0);
+            }
         }
 
         // compute a point from a NURBS n-d volume at a given parameter value
