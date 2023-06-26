@@ -226,7 +226,7 @@ struct Block : public BlockBase<T>
         return args.s[0] * (a1 + b1);
     }
 
-    // evaluate n-d poly-sinc function version 2
+    // evaluate n-d poly-sinc function version 3
     T polysinc3(VectorX<T>& domain_pt,
                 DomainArgs& args)
     {
@@ -259,6 +259,46 @@ struct Block : public BlockBase<T>
         T b1 = (b == 0.0 ? 1.0 : sin(b) / b);
 
         return args.s[0] * (a1 + b1);
+    }
+
+    // evaluate n-d poly-sinc function version 4
+    T polysinc4(VectorX<T>& domain_pt,
+                DomainArgs& args)
+    {
+        // derived from polysinc3
+        // a = sqrt(x^2 + y^2 + z^2 + ...)
+        // b = 2(x - 2)^2 + (y + 2)^2 + (z - 2)^2 + ...
+        // c = (0.1 + x^2 + y^2 + z^2 + ...)^1/2
+        T a = 0.0;
+        T b = 0.0;
+        T c = 0.1;
+        for (auto i = 0; i < this->dom_dim; i++)
+        {
+            T s, r;
+            s = domain_pt(i);
+            if (i % 2 == 0)
+            {
+                r = domain_pt(i) - 2.0;
+            }
+            else
+            {
+                r = domain_pt(i) + 2.0;
+            }
+            a += (s * s);
+            if (i == 0)
+                b += (2.0 * r * r);
+            else
+                b += (r * r);
+            c += domain_pt(i) * domain_pt(i);
+        }
+        a = sqrt(a);
+        c = pow(c, 0.5);
+
+        // a1 = sinc(a); b1 = sinc(b)
+        T a1 = (a == 0.0 ? 1.0 : sin(a) / a);
+        T b1 = (b == 0.0 ? 1.0 : sin(b) / b);
+
+        return args.s[0] * (a1 + b1) / c;
     }
 
     // evaluate Marschner-Lobb function [Marschner and Lobb, IEEE VIS, 1994]
@@ -649,6 +689,8 @@ struct Block : public BlockBase<T>
                     retval = polysinc2(dom_pt, args);
                 if (fun == "psinc3")
                     retval = polysinc3(dom_pt, args);
+                if (fun == "psinc4")
+                    retval = polysinc4(dom_pt, args);
                 if (fun == "ml")
                 {
                     if (this->dom_dim != 3)

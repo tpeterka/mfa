@@ -1785,6 +1785,7 @@ namespace mfa
             // following was found empirically to be best: even p: pad = p + 1; odd p: pad = p + 2
             // only tested p=2 and p=3, however
             int pad         = p(0) % 2 == 0 ? p(0) + 1 : p(0) + 2;
+//             int pad         = p(0) % 2 == 0 ? p(0) + 0 : p(0) + 1;
 
             // extra padding for tensor at global edge
             int edge_pad    = (p(0) / 2) + 2;
@@ -3409,8 +3410,8 @@ namespace mfa
                 }                                                           // domain dimensions
 
                 // debug
-                for (auto i = 0; i < mfa_data.dom_dim; i++)
-                    fmt::print(stderr, "new_knots in dim {}: [{}]\n", i, fmt::join(new_knots[i], ","));
+//                 for (auto i = 0; i < mfa_data.dom_dim; i++)
+//                     fmt::print(stderr, "new_knots in dim {}: [{}]\n", i, fmt::join(new_knots[i], ","));
 
                 // insert the new knots
                 mfa::NewKnots<T> nk(mfa_data, input);

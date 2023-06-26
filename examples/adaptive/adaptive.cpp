@@ -216,7 +216,7 @@ int main(int argc, char** argv)
     }
 
     // polysinc functions
-    if (input == "psinc1" || input == "psinc2" || input == "psinc3")
+    if (input == "psinc1" || input == "psinc2" || input == "psinc3" || input == "psinc4")
     {
         for (int i = 0; i < dom_dim; i++)
         {
@@ -310,6 +310,33 @@ int main(int argc, char** argv)
         else
         {
             fprintf(stderr, "S3D data only available in 1, 2, or 3d domain\n");
+            exit(0);
+        }
+    }
+
+    // small 3d subset of S3D dataset
+    if (input == "sub_s3d")
+    {
+        d_args.ndom_pts.resize(3);
+        d_args.full_dom_pts.resize(3);
+        d_args.starts.resize(3);
+        d_args.starts[0]        = 252;
+        d_args.starts[1]        = 170;
+        d_args.starts[2]        = 175;
+        d_args.full_dom_pts[0]  = 704;
+        d_args.full_dom_pts[1]  = 540;
+        d_args.full_dom_pts[2]  = 550;
+        d_args.ndom_pts[0]      = 200;
+        d_args.ndom_pts[1]      = 200;
+        d_args.ndom_pts[2]      = 200;
+        d_args.infile           = infile;
+//         d_args.infile       = "/Users/tpeterka/datasets/flame/6_small.xyz";
+        if (dom_dim == 3)
+            master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
+                    { b->read_3d_subset_3d_vector_data(cp, d_args); });
+        else
+        {
+            fprintf(stderr, "subset of S3D data only available in 3d domain\n");
             exit(0);
         }
     }
