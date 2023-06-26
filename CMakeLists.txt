@@ -145,7 +145,7 @@ set                         (libraries
 enable_testing              ()
 include                     (CTest)
 add_subdirectory            (examples)
-# add_subdirectory            (tests)
+add_subdirectory            (tests)
 
 # Python
 if                          (mfa_python)
