@@ -41,7 +41,7 @@ namespace mfa
 
         // General constructor for creating unspecified  params with an optional grid structure
         Param(  int                 dom_dim_,                       // domain dimensionality
-                const VectorXi&     ndom_pts_ = VectorX<T>()) :     // number of input data points in each dim (optional)
+                const VectorXi&     ndom_pts_ = VectorXi()) :     // number of input data points in each dim (optional)
 
             dom_dim(dom_dim_),
             ndom_pts(ndom_pts_),

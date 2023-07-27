@@ -271,7 +271,7 @@ struct BlockBase
     {
         for (auto k = 0; k < mfa->nvars(); k++)
         {
-            mfa->DefiniteIntegral(mfa->var(k), output, lim_a, lim_b);
+            mfa->DefiniteIntegral(k, output, lim_a, lim_b);
         }
 
         T scale = (core_maxs - core_mins).prod();
@@ -1333,8 +1333,11 @@ namespace mfa
             // load mfa
             diy::load(bb, b->mfa);
 
-            if (b->pt_dim != b->mfa->pt_dim)
-                cerr << "WARNING: Block::pt_dim and MFA::pt_dim do not match!" << endl;
+            if (b->mfa != nullptr)
+            {
+                if (b->pt_dim != b->mfa->pt_dim)
+                    cerr << "WARNING: Block::pt_dim and MFA::pt_dim do not match!" << endl;
+            }
 
             // output for blending
             diy::load(bb, b->ndom_outpts);

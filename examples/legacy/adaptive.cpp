@@ -1,6 +1,6 @@
 //--------------------------------------------------------------
-// example of encoding / decoding higher dimensional data w/ fixed number of control points and a
-// single block in a split model w/ one model containing geometry and other model science variables
+// example of encoding / decoding higher dimensional data w/ adaptive number of control points
+// and a single block in a split model w/ one model containing geometry and other model science variables
 //
 // Tom Peterka
 // Argonne National Laboratory
@@ -23,39 +23,87 @@
 
 #include "opts.h"
 
-#include "block.hpp"
-#include "parser.hpp"
 #include "example-setup.hpp"
+#include "block.hpp"
 
 using namespace std;
 
 int main(int argc, char** argv)
 {
+    diy::create_logger("trace");
+
     // initialize MPI
-    diy::mpi::environment  env(argc, argv);     // equivalent of MPI_Init(argc, argv)/MPI_Finalize()
-    diy::mpi::communicator world;               // equivalent of MPI_COMM_WORLD
+    diy::mpi::environment  env(argc, argv);           // equivalent of MPI_Init(argc, argv)/MPI_Finalize()
+    diy::mpi::communicator world;                     // equivalent of MPI_COMM_WORLD
 
+    int nblocks     = 1;                              // number of local blocks
+    int tot_blocks  = nblocks * world.size();
+    int mem_blocks  = -1;                             // everything in core for now
+    int num_threads = 1;                              // needed in order to do timing
 
-    MFAParser opts;
-    bool proceed = opts.parse_input(argc, argv);
-    if (!proceed)
+    // default command line arguments
+    real_t norm_err_limit = 1.0;                      // maximum normalized error limit
+    int    pt_dim         = 3;                        // dimension of input points
+    int    dom_dim        = 2;                        // dimension of domain (<= pt_dim)
+    int    scalar         = 1;                        // flag for scalar or vector-valued science variables (0 == multiple scalar vars)
+    int    geom_degree    = 1;                        // degree for geometry (same for all dims)
+    int    vars_degree    = 4;                        // degree for science variables (same for all dims)
+    int    ndomp          = 100;                      // input number of domain points (same for all dims)
+    int    ntest          = 0;                        // number of input test points in each dim for analytical error tests
+    int    geom_nctrl     = -1;                       // input number of control points for geometry (same for all dims)
+    vector<int> vars_nctrl= {-1};                     // input number of control points for all science variables (same for all dims)
+    string input          = "sinc";                   // input dataset
+    int    max_rounds     = 0;                        // max. number of rounds (0 = no maximum)
+    int    weighted       = 1;                        // solve for and use weights (bool 0 or 1)
+    real_t rot            = 0.0;                      // rotation angle in degrees
+    real_t twist          = 0.0;                      // twist (waviness) of domain (0.0-1.0)
+    real_t noise          = 0.0;                      // fraction of noise
+    int    error          = 1;                        // decode all input points and check error (bool 0 or 1)
+    string infile;                                    // input file name
+    int    verbose      = 1;                          // MFA verbosity (0 = no extra output)
+    bool   help;                                      // show help
+
+    // Constants for this example
+    const bool    adaptive        = true;
+    const int     reg1and2        = 0;
+    const int     structured      = 1;
+    const int     rand_seed       = -1;
+    const real_t  regularization  = 0;
+
+    // get command line arguments
+    opts::Options ops;
+    ops >> opts::Option('e', "error",       norm_err_limit, " maximum normalized error limit");
+    ops >> opts::Option('d', "pt_dim",      pt_dim,         " dimension of points");
+    ops >> opts::Option('m', "dom_dim",     dom_dim,        " dimension of domain");
+    ops >> opts::Option('l', "scalar",      scalar,         " flag for scalar or vector-valued science variables");
+    ops >> opts::Option('p', "geom_degree", geom_degree,    " degree in each dimension of geometry");
+    ops >> opts::Option('q', "vars_degree", vars_degree,    " degree in each dimension of science variables");
+    ops >> opts::Option('n', "ndomp",       ndomp,          " number of input points in each dimension of domain");
+    ops >> opts::Option('g', "geom_nctrl",  geom_nctrl,     " starting number of control points in each dimension of geometry");
+    ops >> opts::Option('v', "vars_nctrl",  vars_nctrl,     " starting number of control points of all science variables");
+    ops >> opts::Option('a', "ntest",       ntest,          " number of test points in each dimension of domain (for analytical error calculation)");
+    ops >> opts::Option('i', "input",       input,          " input dataset");
+    ops >> opts::Option('u', "rounds",      max_rounds,     " maximum number of iterations");
+    ops >> opts::Option('w', "weights",     weighted,       " solve for and use weights");
+    ops >> opts::Option('r', "rotate",      rot,            " rotation angle of domain in degrees");
+    ops >> opts::Option('t', "twist",       twist,          " twist (waviness) of domain (0.0-1.0)");
+    ops >> opts::Option('s', "noise",       noise,          " fraction of noise (0.0 - 1.0)");
+    ops >> opts::Option('c', "error",       error,          " decode entire error field (default=true)");
+    ops >> opts::Option('f', "infile",      infile,         " input file name");
+    ops >> opts::Option('h', "help",        help,           " show help");
+
+    if (!ops.parse(argc, argv) || help)
     {
         if (world.rank() == 0)
-            std::cout << opts.ops;
+            std::cout << ops;
         return 1;
     }
 
-    int tot_blocks = opts.tot_blocks;
-    int mem_blocks  = -1;                       // everything in core for now
-    int num_threads = 1;                        // needed in order to do timing
-
-    int dom_dim = opts.dom_dim;
-    int pt_dim = opts.pt_dim;
-    string input = opts.input;
-
     // print input arguments
-    opts.echo_mfa_settings("fixed example");
-    opts.echo_all_data_settings();
+    echo_mfa_settings("adaptive example", pt_dim, dom_dim, scalar, geom_degree, geom_nctrl, vars_degree, vars_nctrl,
+                        regularization, reg1and2, true, norm_err_limit, max_rounds);
+    echo_data_settings(input, infile, ndomp, ntest);
+    echo_data_mod_settings(structured, rand_seed, rot, twist, noise);
 
     // initialize DIY
     diy::FileStorage          storage("./DIY.XXXXXX"); // used for blocks to be moved out of core
@@ -72,7 +120,6 @@ int main(int argc, char** argv)
     // set global domain bounds and decompose
     Bounds<real_t> dom_bounds(dom_dim);
     set_dom_bounds(dom_bounds, input);
-    
     Decomposer<real_t> decomposer(dom_dim, dom_bounds, tot_blocks);
     decomposer.decompose(world.rank(),
                          assigner,
@@ -83,7 +130,7 @@ int main(int argc, char** argv)
     // We assume that dom_dim == geom_dim
     // Different examples can reset this below
     vector<int> model_dims;
-    if (opts.scalar) // Set up (pt_dim - dom_dim) separate scalar variables
+    if (scalar) // Set up (pt_dim - dom_dim) separate scalar variables
     {
         model_dims.assign(pt_dim - dom_dim + 1, 1);
         model_dims[0] = dom_dim;                        // index 0 == geometry
@@ -93,12 +140,16 @@ int main(int argc, char** argv)
         model_dims = {dom_dim, pt_dim - dom_dim};
     }
 
-    // set up parameters for examples
-    MFAInfo     mfa_info(dom_dim, opts.verbose);
+    // Create empty info classes
+    MFAInfo     mfa_info(dom_dim, verbose);
     DomainArgs  d_args(dom_dim, model_dims);
-    opts.setup_args(model_dims, mfa_info, d_args);
+    
+    // set up parameters for examples
+    setup_args(dom_dim, pt_dim, model_dims, geom_degree, geom_nctrl, vars_degree, vars_nctrl,
+                input, infile, ndomp, structured, rand_seed, rot, twist, noise,
+                reg1and2, regularization, adaptive, verbose, mfa_info, d_args);
 
-    // Create data set for modeling. Input keywords are defined in example-setup.hpp
+    // Create data set for modeling
     if (analytical_signals.count(input) == 1)
     {
         master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
@@ -151,37 +202,26 @@ int main(int argc, char** argv)
     }
 
     // compute the MFA
-    fprintf(stderr, "\nStarting fixed encoding...\n\n");
+
+    fprintf(stderr, "\nStarting adaptive encoding...\n\n");
     double encode_time = MPI_Wtime();
     master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-            { b->fixed_encode_block(cp, mfa_info); });
+            { b->adaptive_encode_block(cp, norm_err_limit, max_rounds, mfa_info); });
     encode_time = MPI_Wtime() - encode_time;
-    fprintf(stderr, "\n\nFixed encoding done.\n\n");
+    fprintf(stderr, "\nAdaptive encoding done.\n");
 
     // debug: compute error field for visualization and max error to verify that it is below the threshold
     double decode_time = MPI_Wtime();
-    if (opts.error)
+    if (error)
     {
         fprintf(stderr, "\nFinal decoding and computing max. error...\n");
 #ifdef CURVE_PARAMS     // normal distance
         master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
                 { b->error(cp, 1, true); });
 #else                   // range coordinate difference
-        bool saved_basis = opts.structured; // TODO: basis functions are currently only saved during encoding of structured data
         master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-        { 
-            b->range_error(cp, true, saved_basis);
-        });
+                { b->range_error(cp, true, true); });   // saved_basis =  true, re-use basis functions if possible (tmesh will override to false)
 #endif
-        decode_time = MPI_Wtime() - decode_time;
-    }
-    else if (opts.decode_grid.size() == dom_dim)
-    {
-        fprintf(stderr, "\nDecoding on regular grid of size %s\n", mfa::print_vec(opts.decode_grid).c_str());
-        master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-        {
-            b->decode_block_grid(cp, opts.decode_grid);
-        });
         decode_time = MPI_Wtime() - decode_time;
     }
 
@@ -190,17 +230,16 @@ int main(int argc, char** argv)
 //     master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
 //             { b->write_raw(cp); });
 
-    // debug: save knot span domains for comparing error with location in knot span
+//     // debug: save knot span domains for comparing error with location in knot span
 //     master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
 //             { b->knot_span_domains(cp); });
 
     // compute the norms of analytical errors synthetic function w/o noise at different domain points than the input
-    if (opts.ntest > 0)
+    if (ntest > 0)
     {
-        cerr << "Computing analytical error" << endl;
         int nvars = model_dims.size() - 1;
-        vector<real_t> L1(nvars), L2(nvars), Linf(nvars);                                // L-1, 2, infinity norms
-        vector<int> grid_size(dom_dim, opts.ntest);
+        vector<real_t> L1(nvars), L2(nvars), Linf(nvars);
+        vector<int> grid_size(dom_dim, ntest);
         mfa::PointSet<real_t>* temp_in = nullptr;
         master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
                 { b->analytical_error_field(cp, grid_size, input, L1, L2, Linf, d_args, temp_in, b->approx, b->errs); });
@@ -219,9 +258,9 @@ int main(int argc, char** argv)
     // print results
     fprintf(stderr, "\n------- Final block results --------\n");
     master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-            { b->print_block(cp, opts.error); });
+            { b->print_block(cp, error); });
     fprintf(stderr, "encoding time         = %.3lf s.\n", encode_time);
-    if (opts.error)
+    if (error)
         fprintf(stderr, "decoding time         = %.3lf s.\n", decode_time);
     fprintf(stderr, "-------------------------------------\n\n");
 

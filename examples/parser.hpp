@@ -47,7 +47,7 @@ struct MFAParser
     bool        help            = false;    // show help
 
     // Constants for this example
-    const bool adaptive = false;
+    bool adaptive = false;
     real_t e_threshold = 0;
     int rounds = 0;
 
@@ -501,16 +501,6 @@ struct MFAParser
             d_args.min[2] = -5; d_args.max[2] = -4;
 
             d_args.tot_ndom_pts = 55365;
-        }
-
-        // XGC Fusion Data set
-        if (input == "xgc")
-        {
-            if (dom_dim != 2)
-            {
-                cerr << "dom_dim must be 2 to run xgc example" << endl;
-                exit(1);
-            }
         }
 
         set_mfa_info(model_dims, mfa_info);

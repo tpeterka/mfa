@@ -51,14 +51,8 @@ int main(int argc, char** argv)
     vector<int> vars_nctrl      = {11};     // initial # control points for all science variables (default same for all dims)
     real_t      ghost           = 0.0;      // fraction of block to take as ghost layer
     string      input           = "sinc";   // input dataset
-    int         weighted        = 1;        // solve for and use weights (bool 0/1)
-    real_t      rot             = 0.0;      // rotation angle in degrees
-    real_t      twist           = 0.0;      // twist (waviness) of domain (0.0-1.0)
-    real_t      noise           = 0.0;      // fraction of noise
     int         error           = 1;        // decode all input points and check error (bool 0/1)
     string      infile;                     // input file name
-    int         structured      = 0;        // input data format (bool 0/1)
-    int         rand_seed       = -1;       // seed to use for random data generation (-1 == no randomization)
     real_t      regularization  = 0;        // smoothing parameter for models with non-uniform input density (0 == no smoothing)
     int         reg1and2        = 0;        // flag for regularizer: 0 = regularize only 2nd derivs. 1 = regularize 1st and 2nd
     int         verbose         = 1;        // MFA verbosity (0 = no extra output)
@@ -87,15 +81,11 @@ int main(int argc, char** argv)
     ops >> opts::Option('v', "vars_nctrl",  vars_nctrl, " number of control points in each dimension of all science variables");
     ops >> opts::Option('o', "overlap",     ghost,      " relative ghost zone overlap (0.0 - 1.0)");
     ops >> opts::Option('i', "input",       input,      " input dataset");
-    ops >> opts::Option('w', "weights",     weighted,   " solve for and use weights");
     ops >> opts::Option('c', "error",       error,      " decode entire error field (default=true)");
     ops >> opts::Option('f', "infile",      infile,     " input file name");
     ops >> opts::Option('h', "help",        help,       " show help");
-    ops >> opts::Option('x', "structured",  structured, " input data format (default=structured=true)");
-    ops >> opts::Option('y', "rand_seed",   rand_seed,  " seed for random point generation (-1 = no randomization, default)");
     ops >> opts::Option('b', "regularization", regularization, "smoothing parameter for models with non-uniform input density");
     ops >> opts::Option('k', "reg1and2",    reg1and2,   " regularize both 1st and 2nd derivatives (if =1) or just 2nd (if =0)");
-
     ops >> opts::Option('z', "id", subdomain_id, "index of subdomain file to read");
     ops >> opts::Option('z', "ts", time_step, "index of time step to read");
     ops >> opts::Option('z', "ts_pre", time_step_pre, "prefix of the directory to search for the given time step");
@@ -116,8 +106,8 @@ int main(int argc, char** argv)
     int mem_blocks  = -1;                       // everything in core for now
     int num_threads = 1;                        // needed in order to do timing
 
-    echo_mfa_settings("nasa retropropulsion example", pt_dim, dom_dim, scalar, geom_degree, geom_nctrl, vars_degree, vars_nctrl, regularization, reg1and2, weighted, adaptive, 0, 0, log);
-    echo_data_settings(ndomp, 0, input, infile, noise, rot, twist, structured, rand_seed, log);
+    echo_mfa_settings("nasa retropropulsion example", pt_dim, dom_dim, scalar, geom_degree, geom_nctrl, vars_degree, vars_nctrl, regularization, reg1and2, 0, adaptive, 0, 0, log);
+    echo_data_settings(ndomp, 0, input, infile, 0, 0, 0, 0, -1, log);
 
     // initialize DIY
     diy::FileStorage          storage("./DIY.XXXXXX"); // used for blocks to be moved out of core
@@ -169,8 +159,8 @@ int main(int argc, char** argv)
     
     // set up parameters for examples
     setup_args(dom_dim, pt_dim, model_dims, geom_degree, geom_nctrl, vars_degree, vars_nctrl,
-                input, infile, ndomp, structured, rand_seed, rot, twist, noise,
-                weighted, reg1and2, regularization, adaptive, verbose, mfa_info, d_args);
+                input, infile, ndomp, structured, rand_seed, 0, 0, 0,
+                0, reg1and2, regularization, adaptive, verbose, mfa_info, d_args);
 
     echo_multiblock_settings(mfa_info, d_args, world.size(), tot_blocks, divs, false, ghost, log);
 
@@ -185,6 +175,7 @@ int main(int argc, char** argv)
                                        false);  // contiguous = true: distance doubling
                                                 // contiguous = false: distance halving
 
+    // Sort points into respective blocks using swap-reduce
     diy::reduce(master,                         // Master object
                 assigner,                       // Assigner object
                 partners,                       // RegularSwapPartners object
@@ -193,6 +184,7 @@ int main(int argc, char** argv)
     if (world.rank() == 0) cerr << "Done with swap-reduce" << endl;
     world.barrier();
 
+    // Write all points belonging to each block to a file
     master.foreach([&](NASABlock<real_t>* b, const diy::Master::ProxyWithLink& cp)
     {
         string out_filename = var_name + "_" + to_string(time_step) + "_out_" + to_string(cp.gid()) + ".txt";

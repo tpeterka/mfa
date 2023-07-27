@@ -103,6 +103,6 @@ int main(int argc, char** argv)
     // evaluate point
     VectorX<real_t> int_val(pt_dim - dom_dim);
     master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-            { b->definite_integral(cp, 1, int_val, lim_a, lim_b); });
+            { b->definite_integral(cp, int_val, lim_a, lim_b); });
     cerr << "Integrated value: [ " << int_val.transpose() << " ]" << endl;
 }

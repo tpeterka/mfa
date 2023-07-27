@@ -59,7 +59,6 @@ int main(int argc, char** argv)
 
     const int verbose = 1;
     const int scalar = 1;
-    const string infile2 = "";
 
     // get command line arguments
     opts::Options ops;
@@ -78,13 +77,13 @@ int main(int argc, char** argv)
     ops >> opts::Option('b', "regularization", regularization, "smoothing parameter for models with non-uniform input density");
     ops >> opts::Option('k', "reg1and2",    reg1and2,   " regularize both 1st and 2nd derivatives (if =1) or just 2nd (if =0)");
 
-    int n_alpha = 0;
-    int n_rho = 0;
-    int n_samples = 0;
-    int v_alpha = 0;
-    int v_rho = 0;
-    int v_samples = 0;
-    int num_ints = 0;
+    int n_alpha = 120;
+    int n_rho = 120;
+    int n_samples = 120;
+    int v_alpha = 100;
+    int v_rho = 100;
+    int v_samples = 100;
+    int num_ints = 10000;
     ops >> opts::Option('z', "n_alpha", n_alpha, " number of rotational samples for line integration");
     ops >> opts::Option('z', "n_rho", n_rho, " number of samples in offset direction for line integration");
     ops >> opts::Option('z', "n_samples", n_samples, " number of samples along ray for line integration");
@@ -103,8 +102,8 @@ int main(int argc, char** argv)
 
     // print input arguments
     echo_mfa_settings("line int example", pt_dim, dom_dim, 1, geom_degree, geom_nctrl, vars_degree, vars_nctrl,
-                        regularization, reg1and2, weighted, false, 0, 0);
-    echo_data_settings(ndomp, 0, input, infile, 0, 0, 0, structured, rand_seed);
+                        regularization, reg1and2, false, 0, 0);
+    echo_data_settings(input, infile, ndomp, 0);
 
     // initialize DIY
     diy::FileStorage          storage("./DIY.XXXXXX"); // used for blocks to be moved out of core
@@ -131,15 +130,11 @@ int main(int argc, char** argv)
     // If scalar == true, assume all science vars are scalar. Else one vector-valued var
     // We assume that dom_dim == geom_dim
     // Different examples can reset this below
-    vector<int> model_dims;
+    vector<int> model_dims = {dom_dim, pt_dim - dom_dim};
     if (scalar) // Set up (pt_dim - dom_dim) separate scalar variables
     {
         model_dims.assign(pt_dim - dom_dim + 1, 1);
         model_dims[0] = dom_dim;                        // index 0 == geometry
-    }
-    else    // Set up a single vector-valued variable
-    {   
-        model_dims = {dom_dim, pt_dim - dom_dim};
     }
 
     // Create empty info classes
@@ -148,8 +143,8 @@ int main(int argc, char** argv)
 
     // set up parameters for examples
     setup_args(dom_dim, pt_dim, model_dims, geom_degree, geom_nctrl, vars_degree, vars_nctrl,
-                input, infile, infile2, ndomp, structured, rand_seed, 0, 0, 0,
-                weighted, reg1and2, regularization, false, verbose, mfa_info, d_args);
+                input, infile, ndomp, structured, rand_seed, 0, 0, 0,
+                reg1and2, regularization, false, verbose, mfa_info, d_args);
 
     // Create data set for modeling. Input keywords are defined in example-setup.hpp
     if (analytical_signals.count(input) == 1)

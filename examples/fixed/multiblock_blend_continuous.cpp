@@ -24,67 +24,59 @@
 #include <diy/io/block.hpp>
 
 #include "block.hpp"
-#include <diy/../../examples/opts.h>
+#include "opts.h"
+#include "example-setup.hpp"
 
 using namespace std;
 
 int main(int argc, char **argv) {
     // initialize MPI
-    diy::mpi::environment env(argc, argv); // equivalent of MPI_Init(argc, argv)/MPI_Finalize()
-    diy::mpi::communicator world;               // equivalent of MPI_COMM_WORLD
+    diy::mpi::environment env(argc, argv);  // equivalent of MPI_Init(argc, argv)/MPI_Finalize()
+    diy::mpi::communicator world;           // equivalent of MPI_COMM_WORLD
 
-    int tot_blocks = world.size();            // default number of global blocks
-    int mem_blocks = -1;                       // everything in core for now
-    int num_threads = 1;                        // needed in order to do timing
+    int tot_blocks = world.size();          // default number of global blocks
+    int mem_blocks = -1;                    // everything in core for now
+    int num_threads = 1;                    // needed in order to do timing
 
     // default command line arguments
-    int pt_dim = 3;                    // dimension of input points
-    int dom_dim = 2;                    // dimension of domain (<= pt_dim)
-    int geom_degree = 1;              // degree for geometry (same for all dims)
-    int vars_degree = 4;     // degree for science variables (same for all dims)
-    int ndomp = 100;        // input number of domain points (same for all dims)
-    std::vector<int> resolutions;            // output points resolution
-    resolutions.push_back(120);
-    int geom_nctrl = -1; // input number of control points for geometry (same for all dims)
-    std::vector<int> vars_nctrl_v;
-    vars_nctrl_v.push_back(11);
-    //int vars_nctrl = 11; // input number of control points for all science variables (same for all dims)
-    string input = "sine";               // input dataset
-    int weighted = 0;                 // solve for and use weights (bool 0 or 1)
-    int strong_sc = 0;         // strong scaling (bool 0 or 1, 0 = weak scaling)
-    real_t ghost = 0.1; // amount of ghost zone overlap as a factor of block size (0.0 - 1.0)
-    bool write_output = false;
-    bool help;                                // show help
-    int error = 1;      // decode all input points and check error (bool 0 or 1)
-    double noise = 0;
+    int pt_dim              = 3;        // dimension of input points
+    int dom_dim             = 2;        // dimension of domain (<= pt_dim)
+    int geom_degree         = 1;        // degree for geometry (same for all dims)
+    int vars_degree         = 4;        // degree for science variables (same for all dims)
+    int ndomp               = 100;      // input number of domain points (same for all dims)
+    vector<int> resolutions = {120};    // output points resolution
+    int geom_nctrl          = -1;       // input number of control points for geometry (same for all dims)
+    vector<int> vars_nctrl  = {11};     // input number of control points for all science variables
+    string input            = "sine";   // input dataset
+    int weighted            = 0;        // solve for and use weights (bool 0 or 1)
+    int strong_sc           = 0;        // strong scaling (bool 0 or 1, 0 = weak scaling)
+    real_t ghost            = 0.1;      // amount of ghost zone overlap as a factor of block size (0.0 - 1.0)
+    bool write_output       = false;
+    int error               = 1;        // decode all input points and check error (bool 0 or 1)
+    double noise            = 0;
+    bool help               = false;    // show help
+
+    const int structured = 1;
+    const int rand_seed = -1;
 
     // get command line arguments
     opts::Options ops;
-    ops >> opts::Option('d', "pt_dim", pt_dim, " dimension of points");
-    ops >> opts::Option('m', "dom_dim", dom_dim, " dimension of domain");
-    ops >> opts::Option('p', "geom_degree", geom_degree,
-                    " degree in each dimension of geometry");
-    ops >> opts::Option('q', "vars_degree", vars_degree,
-                    " degree in each dimension of science variables");
-    ops >> opts::Option('n', "ndomp", ndomp,
-                    " number of input points in each dimension of domain");
-    ops >> opts::Option('r', "resolution", resolutions,
-                    " number of output points in each dimension of domain");
-    ops >> opts::Option('g', "geom_nctrl", geom_nctrl,
-                    " number of control points in each dimension of geometry");
-    ops >> opts::Option('v', "vars_nctrl", vars_nctrl_v,
-                    " number of control points in each dimension of all science variables");
-    ops >> opts::Option('i', "input", input, " input dataset");
-    ops >> opts::Option('w', "weights", weighted, " solve for and use weights");
-    ops >> opts::Option('b', "tot_blocks", tot_blocks,
-                    " total number of blocks");
-    ops >> opts::Option('s', "noise", noise, " fraction of noise (0.0 - 1.0)");
-    ops >> opts::Option('t', "strong_sc", strong_sc,
-                    " strong scaling (1 = strong, 0 = weak)");
-    ops >> opts::Option('o', "overlap", ghost,
-                    " relative ghost zone overlap (0.0 - 1.0)");
-    ops >> opts::Option('W', "write", write_output, " write output file");
-    ops >> opts::Option('h', "help", help, " show help");
+    ops >> opts::Option('d', "pt_dim",      pt_dim,         " dimension of points");
+    ops >> opts::Option('m', "dom_dim",     dom_dim,        " dimension of domain");
+    ops >> opts::Option('p', "geom_degree", geom_degree,    " degree in each dimension of geometry");
+    ops >> opts::Option('q', "vars_degree", vars_degree,    " degree in each dimension of science variables");
+    ops >> opts::Option('n', "ndomp",       ndomp,          " number of input points in each dimension of domain");
+    ops >> opts::Option('r', "resolution",  resolutions,    " number of output points in each dimension of domain");
+    ops >> opts::Option('g', "geom_nctrl",  geom_nctrl,     " number of control points in each dimension of geometry");
+    ops >> opts::Option('v', "vars_nctrl",  vars_nctrl,   " number of control points in each dimension of all science variables");
+    ops >> opts::Option('i', "input",       input,          " input dataset");
+    ops >> opts::Option('w', "weights",     weighted,       " solve for and use weights");
+    ops >> opts::Option('b', "tot_blocks",  tot_blocks,     " total number of blocks");
+    ops >> opts::Option('s', "noise",       noise,          " fraction of noise (0.0 - 1.0)");
+    ops >> opts::Option('t', "strong_sc",   strong_sc,      " strong scaling (1 = strong, 0 = weak)");
+    ops >> opts::Option('o', "overlap",     ghost,          " relative ghost zone overlap (0.0 - 1.0)");
+    ops >> opts::Option('W', "write",       write_output,   " write output file");
+    ops >> opts::Option('h', "help",        help,           " show help");
 
     if (!ops.parse(argc, argv) || help) {
         if (world.rank() == 0)
@@ -92,45 +84,14 @@ int main(int argc, char **argv) {
         return 1;
     }
 
-    // minimal number of geometry control points if not specified
-    if (geom_nctrl == -1)
-        geom_nctrl = geom_degree + 1;
-
-    // echo args
-    if (world.rank() == 0) {
-        fprintf(stderr, "\n--------- Input arguments ----------\n");
-        cerr << "pt_dim = " << pt_dim << " dom_dim = " << dom_dim
-                << "\ngeom_degree = " << geom_degree << " vars_degree = "
-                << vars_degree << "\ninput pts = " << ndomp
-                << " geom_ctrl pts = " << geom_nctrl << "\nvars_ctrl_pts = "
-                << vars_nctrl_v[0] << " input = " << input << " tot_blocks = "
-                << tot_blocks << " strong scaling = " << strong_sc
-                << " ghost overlap = " << ghost << endl;
-#ifdef CURVE_PARAMS
-        cerr << "parameterization method = curve" << endl;
-#else
-        cerr << "parameterization method = domain" << endl;
-#endif
-#ifdef MFA_TBB
-    cerr << "threading: TBB" << endl;
-#endif
-#ifdef MFA_KOKKOS
-    cerr << "threading: Kokkos" << endl;
-#endif
-#ifdef MFA_SYCL
-    cerr << "threading: SYCL" << endl;
-#endif
-#ifdef MFA_SERIAL
-    cerr << "threading: serial" << endl;
-#endif
-#ifdef MFA_NO_WEIGHTS
-    weighted = 0;
-    cerr << "weighted = 0" << endl;
-#else
-    cerr << "weighted = " << weighted << endl;
-#endif
-        fprintf(stderr, "-------------------------------------\n\n");
+    if (world.rank() == 0)
+    {
+        echo_mfa_settings("multiblock blend continuous", dom_dim, pt_dim, 1, geom_degree, geom_nctrl, vars_degree, vars_nctrl,
+                            0, 0, 0, 0, 0);
+        echo_data_settings(input, "", ndomp, resolutions);
+        echo_data_mod_settings(structured, rand_seed, 0, 0, noise);
     }
+
     // initialize Kokkos if needed
 #ifdef MFA_KOKKOS
     Kokkos::initialize( argc, argv );
@@ -159,106 +120,83 @@ int main(int argc, char **argv) {
                 Block<real_t>::add(gid, core, bounds, domain, link, master,
                         dom_dim, pt_dim, ghost);
             });
-
     vector<int> divs(dom_dim);             // number of blocks in each dimension
     decomposer.fill_divisions(divs);
 
-    DomainArgs d_args(dom_dim, pt_dim);
+    int         verbose = 0;
+    vector<int> model_dims(pt_dim - dom_dim + 1, 1);    // set each variable to be scalar
+    model_dims[0] = dom_dim;                            // dimension of geometry model
+    DomainArgs  d_args(dom_dim, model_dims);
+    MFAInfo     mfa_info(dom_dim, verbose);
 
-    // set default args for diy foreach callback functions
-    d_args.pt_dim = pt_dim;
-    d_args.dom_dim = dom_dim;
-    d_args.weighted = weighted;
-    d_args.multiblock = true;
-    d_args.n = noise;
-    d_args.verbose = 0;
-    d_args.r = 0.0;
-    d_args.t = 0.0;
-    d_args.structured   = true; // multiblock not tested for unstructured data yet
-    // fill with the last value for nb ctrl points
-    if (dom_dim > vars_nctrl_v.size())
+    setup_args( dom_dim, pt_dim, model_dims, geom_degree, geom_nctrl, vars_degree, vars_nctrl,
+                        input, "", ndomp, structured, rand_seed, 0, 0, noise, 0, 0, 0, verbose,
+                        mfa_info, d_args);
+
+    // Set multiblock options
+    d_args.multiblock   = true;
+    if (strong_sc) 
     {
-        int  sz = vars_nctrl_v.size();
-        int fill=vars_nctrl_v[sz-1];
-        for (int i=sz; i<dom_dim; i++)
-            vars_nctrl_v.push_back(fill);
-    }
-    // fill with the last value for nb resolution points
-    if (dom_dim > resolutions.size())
-    {
-        int  sz = resolutions.size();
-        int fill=resolutions[sz-1];
-        for (int i=sz; i<dom_dim; i++)
-            resolutions.push_back(fill);
-    }
-    for (int i = 0; i < dom_dim; i++) {
-        d_args.geom_p[i] = geom_degree;
-        d_args.vars_p[0][i] = vars_degree;
-        if (strong_sc)     // strong scaling, reduced number of points per block
+        mfa_info.splitStrongScaling(divs);
+        for (int i = 0; i < dom_dim; i++)
         {
-            d_args.ndom_pts[i] = ndomp / divs[i];
-            d_args.geom_nctrl_pts[i] =
-                    geom_nctrl / divs[i] > geom_degree ?
-                            geom_nctrl / divs[i] : geom_degree + 1;
-            d_args.vars_nctrl_pts[0][i] = vars_nctrl_v[0] / divs[i];
-        } else                  // weak scaling, same number of points per block
-        {
-            d_args.ndom_pts[i] = ndomp;
-            d_args.geom_nctrl_pts[i] = geom_nctrl;
-            d_args.vars_nctrl_pts[0][i] = vars_nctrl_v[i]; // should have enough per direction ! otherwise will crash
+            d_args.ndom_pts[i] /= divs[i];
         }
     }
-    for (int i = 0; i < pt_dim - dom_dim; i++)
-        d_args.f[i] = 1.0;
+
+    // Print block layout and scaling info
+    if (world.rank() == 0)
+    {
+        echo_multiblock_settings(mfa_info, d_args, world.size(), tot_blocks, divs, strong_sc, ghost);
+    }
+
+
+    // If only one value for resolutions was parsed, assume it applies to all dims
+    if (resolutions.size() == 1)
+    {
+        resolutions = vector<int>(dom_dim, resolutions[0]);
+    }
+
 
     // initialize input data
-
-    // sine function f(x) = sin(x), f(x,y) = sin(x)sin(y), ...
     if (input == "sine") {
-        for (int i = 0; i < pt_dim - dom_dim; i++)  // for all science variables
+        for (int i = 0; i < pt_dim - dom_dim; i++)
             d_args.s[i] = i + 1;                      // scaling factor on range
-        master.foreach(
-                [&](Block<real_t> *b, const diy::Master::ProxyWithLink &cp) {
-                    b->generate_analytical_data(cp, input, d_args);
-                });
     }
-
-    // sinc function f(x) = sin(x)/x, f(x,y) = sinc(x)sinc(y), ...
-    if (input == "sinc") {
-        for (int i = 0; i < pt_dim - dom_dim; i++)  // for all science variables
+    else if (input == "sinc") {
+        for (int i = 0; i < pt_dim - dom_dim; i++)
             d_args.s[i] = 10.0 * (i + 1);             // scaling factor on range
-        master.foreach(
-                [&](Block<real_t> *b, const diy::Master::ProxyWithLink &cp) {
-                    b->generate_analytical_data(cp, input, d_args);
-                });
     }
+    master.foreach([&](Block<real_t> *b, const diy::Master::ProxyWithLink &cp) 
+    {
+        b->generate_analytical_data(cp, input, mfa_info, d_args);
+    });
+
 #ifdef MFA_KOKKOS
     Kokkos::Profiling::pushRegion("Encode");
 #endif
     double start_encode = MPI_Wtime();
+
     // compute the MFA
     if (world.rank() == 0)
         fprintf(stderr, "\nStarting fixed encoding...\n\n");
     world.barrier();                     // to synchronize timing
 
     master.foreach([&](Block<real_t> *b, const diy::Master::ProxyWithLink &cp) {
-        b->fixed_encode_block(cp, d_args);
+        b->fixed_encode_block(cp, mfa_info);
     });
     world.barrier();                     // to synchronize timing
     double end_encode = MPI_Wtime();
-    //encode_time = MPI_Wtime() - encode_time;
     if (world.rank() == 0)
         fprintf(stderr, "\n\nFixed encoding done.\n\n");
+
 #ifdef MFA_KOKKOS
     Kokkos::Profiling::popRegion(); // "Encode"
-#endif
-#ifdef MFA_KOKKOS
     Kokkos::Profiling::pushRegion("InitialDecode");
 #endif
-    // debug: compute error field for visualization and max error to verify that it is below the threshold
+
     if (world.rank() == 0)
         fprintf(stderr, "\nFinal decoding and computing max. error...\n");
-
 #ifdef CURVE_PARAMS     // normal distance
     master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
             { b->error(cp, 0, true); });
@@ -269,16 +207,15 @@ int main(int argc, char **argv) {
 #endif
     world.barrier();
     double end_decode = MPI_Wtime();
-#ifdef MFA_KOKKOS
-    Kokkos::Profiling::popRegion(); // "InitialDecode"
-#endif
 
 #ifdef MFA_KOKKOS
+    Kokkos::Profiling::popRegion(); // "InitialDecode"
     Kokkos::Profiling::pushRegion("RefinedDecode");
 #endif
     master.foreach([&](Block<real_t> *b, const diy::Master::ProxyWithLink &cp) {
         b->decode_core_ures(cp, resolutions);
     });
+
 #ifdef MFA_KOKKOS
     Kokkos::Profiling::popRegion(); // "RefinedDecode"
 #endif
@@ -307,12 +244,10 @@ int main(int argc, char **argv) {
     double final_blend_end = MPI_Wtime(); // merge-based reduction: create the partners that determine how groups are formed
     // in each round and then execute the reduction
 
-    int k = 2;                          // the radix of the k-ary reduction tree
-
     bool contiguous = true;
     // partners for merge over regular block grid
     diy::RegularMergePartners partners(decomposer,  // domain decomposition
-            k,                                      // radix of k-ary reduction
+            2,                                      // radix of k-ary reduction
             contiguous);                            // contiguous = true: distance doubling
                                                     // contiguous = false: distance halving
 
@@ -336,81 +271,79 @@ int main(int argc, char **argv) {
     if (world.rank() == 0) {
         // print block results
         fprintf(stderr, "\n------- Final block results --------\n");
-        master.foreach(
-                [&](Block<real_t> *b, const diy::Master::ProxyWithLink &cp) {
-                    b->print_block(cp, error);
-                });
+        master.foreach([&](Block<real_t> *b, const diy::Master::ProxyWithLink &cp) 
+        {
+            b->print_block(cp, error);
+        });
 
-        fprintf(stderr, "encoding time                = %.3lf s.\n",
-                end_encode - start_encode);
-        fprintf(stderr, "decoding time                = %.3lf s.\n",
-                end_decode - end_encode);
-        fprintf(stderr, "decode at resolution         = %.3lf s.\n",
-                end_resolution_decode - end_decode);
-        fprintf(stderr, "decode patches         = %.3lf s.\n",
-                decode_patches_end - end_resolution_decode );
-        fprintf(stderr, "exchange time         = %.3lf s.\n",
-                exchange_end - decode_patches_end);
-        fprintf(stderr, "blend time                   = %.3lf s.\n",
-                final_blend_end - exchange_end);
-        fprintf(stderr, "blend total                  = %.3lf s.\n",
-                final_blend_end - end_decode);
+        fprintf(stderr, "encoding time                = %.3lf s.\n", end_encode - start_encode);
+        fprintf(stderr, "decoding time                = %.3lf s.\n", end_decode - end_encode);
+        fprintf(stderr, "decode at resolution         = %.3lf s.\n", end_resolution_decode - end_decode);
+        fprintf(stderr, "decode patches               = %.3lf s.\n", decode_patches_end - end_resolution_decode );
+        fprintf(stderr, "exchange time                = %.3lf s.\n", exchange_end - decode_patches_end);
+        fprintf(stderr, "blend time                   = %.3lf s.\n", final_blend_end - exchange_end);
+        fprintf(stderr, "blend total                  = %.3lf s.\n", final_blend_end - end_decode);
         if (write_output)
-            fprintf(stderr, "write time                   = %.3lf s.\n",
-                    write_time - final_blend_end);
+            fprintf(stderr, "write time                   = %.3lf s.\n", write_time - final_blend_end);
         fprintf(stderr, "-------------------------------------\n\n");
     }
     // add simple tests for multi_bc test cases
     // test 1: -b 2 -d 2 -m 1 -i sinc -o 0.11
     // tot_blocks == 2, dom_dim == 1
-    if (world.size() == 1 && tot_blocks == 2 && dom_dim == 1 && fabs(0.11 - ghost) <1.e-10 ) {
-            Block<real_t> *b = static_cast<Block<real_t>*>(master.block(0));
-            real_t max_red_err = b->max_errs_reduce[0];
-            if ( fabs(max_red_err - 0.00564167 ) > 1.e-8) {
-                std::cout << " expected max_red_err == 0.00564167 got : "
-                        << max_red_err << "\n";
-                abort();
-            }
+    if (world.size() == 1 && tot_blocks == 2 && dom_dim == 1 && fabs(0.11 - ghost) <1.e-10 ) 
+    {
+        Block<real_t> *b = static_cast<Block<real_t>*>(master.block(0));
+        real_t max_red_err = b->max_errs_reduce[0];
+        if ( fabs(max_red_err - 0.00564167 ) > 1.e-8) 
+        {
+            std::cout << " expected max_red_err == 0.00564167 got : "
+                    << max_red_err << "\n";
+            abort();
+        }
     }
     // test 2:  -i sinc -d 3 -m 2 -b 2 -o 0.11
-    if (world.size() == 1 && tot_blocks == 2 && dom_dim == 2 && fabs(0.11 - ghost) <1.e-10 ) {
-            Block<real_t> *b = static_cast<Block<real_t>*>(master.block(0));
-            real_t max_red_err = b->max_errs_reduce[0];
-            if ( fabs(max_red_err - 0.163644 ) > 1.e-6) {
-                std::cout   << " expected max_red_err == 0.163644 got : "
-                        << max_red_err << "\n";
-                abort();
-            }
+    if (world.size() == 1 && tot_blocks == 2 && dom_dim == 2 && fabs(0.11 - ghost) <1.e-10 ) 
+    {
+        Block<real_t> *b = static_cast<Block<real_t>*>(master.block(0));
+        real_t max_red_err = b->max_errs_reduce[0];
+        if ( fabs(max_red_err - 0.163644 ) > 1.e-6) 
+        {
+            std::cout   << " expected max_red_err == 0.163644 got : "
+                    << max_red_err << "\n";
+            abort();
+        }
     }
     // test3: -i sinc -d 3 -m 2 -b 6
-    if (world.size() == 1 && tot_blocks == 6 && dom_dim == 2 && fabs(0.1 - ghost) <1.e-10 ) {
-            Block<real_t> *b = static_cast<Block<real_t>*>(master.block(0));
-            real_t max_red_err = b->max_errs_reduce[0];
-            if ( fabs(max_red_err - 0.0054730281208712  ) > 1.e-10) {
-                std::cout  << std::setprecision(14) << " expected max_red_err == 0.0054730281208712 got : "
-                        << max_red_err << "\n";
-                abort();
-            }
-            else
-            {
-                std::cout << std::setprecision(14) <<  "passed max_red_err == " << max_red_err << "\n";
-            }
-            Block<real_t> *blendBlock1 = static_cast<Block<real_t>*>(master.block(1));
-            MatrixX<real_t> &bl = blendBlock1->blend->domain;
-            //std::cout<<bl(0,2) << "\n";
-            if  ( (fabs(bl(0, 2) - 0.031224744068286) > 1.e-10 ) ||
-                  (fabs(bl(1, 2) - 0.022554418713158) > 1.e-10 ) )
-            {
-                std::cout << std::setprecision(14)
-                          <<  "expected blend(0,2) = 0.031224744068286  got "  << bl(0, 2) << "\n";
-                std::cout <<  "expected blend(1,2) = 0.022554418713158  got "  << bl(1, 2) << "\n";
-                abort();
-            }
-            else
-            {
-                std::cout << std::setprecision(14) <<  "passed test blend(0, 2) == "
-                        << bl(0, 2) << "  blend->domain(1, 2) == " << bl(1, 2)<< "\n";
-            }
+    if (world.size() == 1 && tot_blocks == 6 && dom_dim == 2 && fabs(0.1 - ghost) <1.e-10 ) 
+    {
+        Block<real_t> *b = static_cast<Block<real_t>*>(master.block(0));
+        real_t max_red_err = b->max_errs_reduce[0];
+        if ( fabs(max_red_err - 0.0054730281208712  ) > 1.e-10) 
+        {
+            std::cout  << std::setprecision(14) << " expected max_red_err == 0.0054730281208712 got : "
+                    << max_red_err << "\n";
+            abort();
+        }
+        else
+        {
+            std::cout << std::setprecision(14) <<  "passed max_red_err == " << max_red_err << "\n";
+        }
+        Block<real_t> *blendBlock1 = static_cast<Block<real_t>*>(master.block(1));
+        MatrixX<real_t> &bl = blendBlock1->blend->domain;
+        //std::cout<<bl(0,2) << "\n";
+        if  ( (fabs(bl(0, 2) - 0.031224744068286) > 1.e-10 ) ||
+                (fabs(bl(1, 2) - 0.022554418713158) > 1.e-10 ) )
+        {
+            std::cout << std::setprecision(14)
+                        <<  "expected blend(0,2) = 0.031224744068286  got "  << bl(0, 2) << "\n";
+            std::cout <<  "expected blend(1,2) = 0.022554418713158  got "  << bl(1, 2) << "\n";
+            abort();
+        }
+        else
+        {
+            std::cout << std::setprecision(14) <<  "passed test blend(0, 2) == "
+                    << bl(0, 2) << "  blend->domain(1, 2) == " << bl(1, 2)<< "\n";
+        }
     }
 #ifdef MFA_KOKKOS
     Kokkos::finalize();
