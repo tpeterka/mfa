@@ -552,10 +552,10 @@ namespace mfa
                                 const VectorX<T>&       b,          // end limit of integration (parameter)
                                 VectorX<T>&             output)
         {
+            const TensorProduct<T>& tensor = mfa_data.tmesh.tensor_prods[0]; // TODO hard-coded
             assert(tensor.ctrl_pts.cols() == mfa_data.dim());
             assert(a.size() == b.size() && a.size() == dom_dim);
             assert(output.size() == mfa_data.dim());
-            const TensorProduct<T>& tensor = mfa_data.tmesh.tensor_prods[0]; // TODO hard-coded
 
             int      local_pt_dim = mfa_data.dim();
             VectorXi spana(dom_dim);

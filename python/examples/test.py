@@ -53,19 +53,32 @@ ghost_factor      = 0.0
 w = diy.mpi.MPIComm()           # world
 m = diy.Master(w)               # master
 nblocks = w.size                # hard-code 1 block per MPI rank
+print(nblocks)
+
+def add_block(gid, core, bounds, domain_, link):
+    #print(gid, core, bounds, domain)
+    mfa.Block.add(gid, core, bounds, domain_, link, m, dom_dim, pt_dim, ghost_factor)
+    # m.add(gid, Block(core), link)
+
 
 print("Pre domain decomposition")
-
+print(dmin, dmax)
 # decompose domain using double precision bounds
-domain = diy.DoubleContinuousBounds(dmin, dmax)
+domain = diy.DoubleContinuousBounds([-4, -4], [4, 4])
+# domain = diy.DoubleContinuousBounds(dmin, dmax)
+
+print(dom_dim, nblocks)
+print(domain)
 
 print("domain")
 d = diy.DoubleContinuousDecomposer(dom_dim, domain, nblocks)
 print("decomposer")
 a = diy.ContiguousAssigner(w.size, nblocks)
+gidvec = a.local_gids(w.rank)
+print(gidvec)
 print("assigner")
-d.decompose(w.rank, a, lambda gid, core, bounds, domain_, link: mfa.Block.add(gid, core, bounds, domain_, link, m, dom_dim, pt_dim, ghost_factor))
-
+# d.decompose(w.rank, a, lambda gid, core, bounds, domain_, link: mfa.Block.add(gid, core, bounds, domain_, link, m, dom_dim, pt_dim, ghost_factor))
+d.decompose(w.rank, a, add_block)
 
 print("Generating data")
 

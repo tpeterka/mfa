@@ -115,7 +115,7 @@ void init_block(py::module& m, std::string name)
         .def(py::init<>())
         .def("generate_analytical_data",&Block<T>::generate_analytical_data)
         .def("print_block",             &Block<T>::print_block)
-        .def("add",                     &Block<T>::add)
+        .def_static("add",                     &Block<T>::add)
         // .def("add",                     [](
         //                                 int                 gid,
         //                                 const Bounds&       core,
@@ -137,8 +137,8 @@ void init_block(py::module& m, std::string name)
         .def("adaptive_encode_block",   &Block<T>::adaptive_encode_block)
         .def("decode_point",            &Block<T>::decode_point)
         .def("range_error",             &Block<T>::range_error)
-        .def("save",                    &Block<T>::save)
-        .def("load",                    &Block<T>::load)
+        .def_static("save",                    &Block<T>::save)
+        .def_static("load",                    &Block<T>::load)
         ;
 
     m.def("save_block", [](const py::object* b, diy::BinaryBuffer* bb)
