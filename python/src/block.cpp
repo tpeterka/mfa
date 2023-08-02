@@ -98,7 +98,9 @@ void init_block(py::module& m, std::string name)
     //todo vector of ints for intializer 
         .def(py::init<int, std::vector<int>>())
         .def_readwrite("starts",        &DomainArgs::starts)
+        .def_readwrite("ndom_pts",      &DomainArgs::ndom_pts)
         .def_readwrite("full_dom_pts",  &DomainArgs::full_dom_pts)
+        .def_readwrite("tot_ndom_pts",  &DomainArgs::tot_ndom_pts)
         .def_readwrite("min",           &DomainArgs::min)
         .def_readwrite("max",           &DomainArgs::max)
         .def_readwrite("s",             &DomainArgs::s)
@@ -116,7 +118,7 @@ void init_block(py::module& m, std::string name)
         .def(py::init<>())
         .def("generate_analytical_data",&Block<T>::generate_analytical_data)
         .def("print_block",             &Block<T>::print_block)
-        // .def_static("add",                     &Block<T>::add)
+        // .def("add",                     &Block<T>::add)
         .def("add",                     [](
                                         int                 gid,
                                         const Bounds&       core,
@@ -128,7 +130,6 @@ void init_block(py::module& m, std::string name)
                                         int                 pt_dim,
                                         T                   ghost_factor)
             {
-                std::cerr << core.min.dimension() << std::endl;
                 Block<T>*       b   = new Block<T>;
                 RCLink*         l   = new RCLink(link);
                 master.add(gid, new py::object(py::cast(b)), l);
