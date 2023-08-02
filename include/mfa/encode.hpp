@@ -473,7 +473,7 @@ namespace mfa
                 if (deriv == 1 && n_sum > 0)
                     str = 0;
                 else
-                    str = max((c_target - n_sum)/c_sum, 0.);
+                    str = max((c_target - n_sum)/c_sum, (T)0);
 
                 reg_strengths(i) = str; // nb. for debug below only
 
