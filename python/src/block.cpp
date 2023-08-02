@@ -91,6 +91,7 @@ void init_block(py::module& m, std::string name)
 
     py::class_<BlockBase<T>>(m, "BlockBase")
         .def(py::init<>())
+        .def("init_block",  &BlockBase<T>::init_block)
     ;
 
     py::class_<DomainArgs>(m, "DomainArgs")
@@ -115,24 +116,25 @@ void init_block(py::module& m, std::string name)
         .def(py::init<>())
         .def("generate_analytical_data",&Block<T>::generate_analytical_data)
         .def("print_block",             &Block<T>::print_block)
-        .def_static("add",                     &Block<T>::add)
-        // .def("add",                     [](
-        //                                 int                 gid,
-        //                                 const Bounds&       core,
-        //                                 const Bounds&       bounds,
-        //                                 const Bounds&       domain,
-        //                                 const RCLink&       link,
-        //                                 Master&             master,
-        //                                 int                 dom_dim,
-        //                                 int                 pt_dim,
-        //                                 T                   ghost_factor)
-        //     {
-        //         Block<T>*       b   = new Block<T>;
-        //         RCLink*         l   = new RCLink(link);
-        //         master.add(gid, new py::object(py::cast(b)), l);
-        //         b->init_block(core, domain, dom_dim, pt_dim);
-        //     }, "core"_a, "bounds"_a, "domain"_a, "link"_a, "master"_a, "dom_dim"_a, "pt_dim"_a,
-        //     "ghost_factor"_a = 0.0)
+        // .def_static("add",                     &Block<T>::add)
+        .def("add",                     [](
+                                        int                 gid,
+                                        const Bounds&       core,
+                                        const Bounds&       bounds,
+                                        const Bounds&       domain,
+                                        const RCLink&       link,
+                                        Master&             master,
+                                        int                 dom_dim,
+                                        int                 pt_dim,
+                                        T                   ghost_factor)
+            {
+                std::cerr << core.min.dimension() << std::endl;
+                Block<T>*       b   = new Block<T>;
+                RCLink*         l   = new RCLink(link);
+                master.add(gid, new py::object(py::cast(b)), l);
+                b->init_block(core, domain, dom_dim, pt_dim);
+            }, "core"_a, "bounds"_a, "domain"_a, "link"_a, "master"_a, "dom_dim"_a, "pt_dim"_a,
+            "ghost_factor"_a = 0.0)
         .def("fixed_encode_block",      &Block<T>::fixed_encode_block)
         .def("adaptive_encode_block",   &Block<T>::adaptive_encode_block)
         .def("decode_point",            &Block<T>::decode_point)
@@ -140,6 +142,32 @@ void init_block(py::module& m, std::string name)
         .def_static("save",                    &Block<T>::save)
         .def_static("load",                    &Block<T>::load)
         ;
+
+    m.def("add_block", [](
+                                        int                 gid,
+                                        const Bounds&       core,
+                                        const Bounds&       bounds,
+                                        const Bounds&       domain,
+                                        const RCLink&       link,
+                                        Master&             master,
+                                        int                 dom_dim,
+                                        int                 pt_dim,
+                                        T                   ghost_factor)
+        {
+            // std::cerr << core.min << std::endl;
+            std::cerr << "received gid " << gid << std::endl;
+            std::cerr << ">> " << core.min.dimension() << std::endl;
+            Block<T>*       b   = new Block<T>;
+            RCLink*         l   = new RCLink(link);
+            master.add(gid, new py::object(py::cast(b)), l);
+            b->init_block(core, domain, dom_dim, pt_dim);
+        });
+
+    m.def("get_bound", [](const Bounds&  bound)
+        {
+            std::cerr << "dimension for min bound = " << bound.min.dimension() << std::endl;
+            std::cerr << "dimension for max bound = " << bound.max.dimension() << std::endl;
+        });
 
     m.def("save_block", [](const py::object* b, diy::BinaryBuffer* bb)
         {
