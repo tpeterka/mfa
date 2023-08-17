@@ -71,8 +71,13 @@ namespace mfa
             // Fill dim_mins/maxs
             dim_mins.resize(nvars());
             dim_maxs.resize(nvars());
-            dim_mins[0] = geom_dim();
-            dim_maxs[0] = dim_mins[0] + var_dim(0) - 1;
+
+            if (nvars() > 0)
+            {
+                dim_mins[0] = geom_dim();
+                dim_maxs[0] = dim_mins[0] + var_dim(0) - 1;
+            }
+
             for (int k = 1; k < nvars(); k++)
             {
                 dim_mins[k] = dim_maxs[k-1] + 1;
@@ -295,7 +300,7 @@ namespace mfa
         { 
             bool is_valid =     (dom_dim > 0)
                             &&  (geom_dim() > 0)
-                            &&  (pt_dim > dom_dim)
+                            &&  (pt_dim >= dom_dim)
                             &&  (pt_dim == domain.cols())
                             &&  (npts == domain.rows())
                             &&  (is_structured() ? ndom_pts().size() == dom_dim : true)
@@ -307,7 +312,11 @@ namespace mfa
                 is_valid = is_valid && (mdims[k+1] > 0);
                 is_valid = is_valid && (dim_maxs[k] - dim_mins[k] + 1 == mdims[k+1]);
             }
-            is_valid = is_valid && (dim_mins[0] == geom_dim()) && (dim_maxs[nvars()-1] == pt_dim-1);
+
+            if (nvars() > 0)
+            {
+                is_valid = is_valid && (dim_mins[0] == geom_dim()) && (dim_maxs[nvars()-1] == pt_dim-1);
+            }
 
             if (is_valid) return is_valid;
             else 
