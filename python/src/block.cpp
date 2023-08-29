@@ -23,6 +23,59 @@ void init_block(py::module& m, std::string name)
     using namespace pybind11::literals;
     using namespace mfa;
 
+    py::class_<PointSet<T>>(m, "PointSet")
+        .def(py::init<int, const Eigen::VectorXi, int, const Eigen::VectorXi>(), 
+            "dom_dim"_a, "mdims"_a, "npts"_a, "ndom_pts"_a=Eigen::VectorXi())
+        .def("set_bounds",      &PointSet<T>::set_bounds)
+        .def("mins", (Eigen::VectorX<T> (PointSet<T>::*)() const) &PointSet<T>::mins)
+        .def("mins", (T (PointSet<T>::*)(int) const) &PointSet<T>::mins)
+        .def("maxs", (Eigen::VectorX<T> (PointSet<T>::*)() const) &PointSet<T>::maxs)
+        .def("maxs", (T (PointSet<T>::*)(int) const) &PointSet<T>::maxs)
+        .def("set_domain_params", (void (PointSet<T>::*)()) &PointSet<T>::set_domain_params)
+        .def("set_domain_params", (void (PointSet<T>::*)(const Eigen::VectorX<T>&, const Eigen::VectorX<T>&)) &PointSet<T>::set_domain_params)
+        .def("set_grid_params", (void (PointSet<T>::*)()) &PointSet<T>::set_grid_params)
+        .def("is_structured", &PointSet<T>::is_structured)
+        .def("model_dims", &PointSet<T>::model_dims)
+        .def_readwrite("dom_dim",   &PointSet<T>::dom_dim)
+        .def_readwrite("pt_dim",    &PointSet<T>::pt_dim)
+        .def_readwrite("npts",      &PointSet<T>::npts)
+        .def_readwrite("domain",    &PointSet<T>::domain)
+        .def("set_domain", [](PointSet<T>& ps, MatrixX<T> domain_)
+            {
+                ps.domain = domain_;
+            }
+        )
+        .def("set_from_params", [](PointSet<T>& ps, const PointSet<T>& other)
+            {
+                ps.dom_dim = other.dom_dim;
+                ps.pt_dim = other.pt_dim;
+                ps.npts = other.npts;
+                ps.mdims = other.mdims;
+                ps.params = other.params;
+
+                ps.domain.resize(ps.npts, ps.pt_dim);
+
+                // Fill dim_mins/maxs
+                ps.dim_mins.resize(ps.nvars());
+                ps.dim_maxs.resize(ps.nvars());
+
+                if (ps.nvars() > 0)
+                {
+                    ps.dim_mins[0] = ps.geom_dim();
+                    ps.dim_maxs[0] = ps.dim_mins[0] + ps.var_dim(0) - 1;
+                }
+                for (int k = 1; k < ps.nvars(); k++)
+                {
+                    ps.dim_mins[k] = ps.dim_maxs[k-1] + 1;
+                    ps.dim_maxs[k] = ps.dim_mins[k] + ps.var_dim(k) - 1;
+                }
+
+                if (other.params->structured)
+                    ps.add_grid(other.params->ndom_pts);
+            }
+        )
+    ;
+
     py::class_<ModelInfo>(m,"ModelInfo")
         .def(py::init<int, int, int, int>())
         .def(py::init<int, int, std::vector<int>, std::vector<int>>()) // both vectors of ints
@@ -34,8 +87,8 @@ void init_block(py::module& m, std::string name)
 
     py::class_<MFAInfo> (m, "MFAInfo")
         //.def(py::init<int, int, ModelInfo, std::vector<ModelInfo>>())       // vector of model info
-        .def(py::init<int, int, ModelInfo, ModelInfo>())        
-        .def(py::init<int, int>()) 
+        .def(py::init<int, int, ModelInfo, ModelInfo>())
+        .def(py::init<int, int>())
         .def_readwrite("dom_dim",           &MFAInfo::dom_dim)
         .def_readwrite("verbose",           &MFAInfo::verbose)
         .def_readwrite("geom_model_info",   &MFAInfo::geom_model_info)
@@ -59,6 +112,10 @@ void init_block(py::module& m, std::string name)
         .def("geom",                    &mfa::MFA<T>::geom, py::return_value_policy::reference)// empty, returns mfa::MFA_DATA)
         .def("var",                     &mfa::MFA<T>::var, py::return_value_policy::reference)    
         .def("FixedEncode",             &mfa::MFA<T>::FixedEncode, "input"_a, "regularization"_a, "regland2"_a, "weighted"_a, "force_unified"_a) //pointset, regularization, bool, bool, bool (reference output)
+        .def("Decode", (void (mfa::MFA<T>::*)(PointSet<T>&, bool, const Eigen::VectorXi&) const) &mfa::MFA<T>::Decode, "output"_a, "saved_basis"_a, "derivs"_a=Eigen::VectorXi())
+        .def("AddGeometry", (void (mfa::MFA<T>::*)(int)) &mfa::MFA<T>::AddGeometry)
+        .def("AddVariable", (void (mfa::MFA<T>::*)(const Eigen::VectorXi&, const Eigen::VectorXi&, int)) &mfa::MFA<T>::AddVariable)
+        .def("AddVariable", (void (mfa::MFA<T>::*)(int, const Eigen::VectorXi&, int)) &mfa::MFA<T>::AddVariable)
     ;
      
      // todo overload problems .def("AddGeometry",             &mfa::MFA<T>::AddGeometry, "mi"_a) // ModelInfo, return Void (inplace)
@@ -162,12 +219,6 @@ void init_block(py::module& m, std::string name)
             RCLink*         l   = new RCLink(link);
             master.add(gid, new py::object(py::cast(b)), l);
             b->init_block(core, domain, dom_dim, pt_dim);
-        });
-
-    m.def("get_bound", [](const Bounds&  bound)
-        {
-            std::cerr << "dimension for min bound = " << bound.min.dimension() << std::endl;
-            std::cerr << "dimension for max bound = " << bound.max.dimension() << std::endl;
         });
 
     m.def("save_block", [](const py::object* b, diy::BinaryBuffer* bb)
