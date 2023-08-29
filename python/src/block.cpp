@@ -2,6 +2,7 @@
 #include    <pybind11/stl.h>
 #include    <pybind11/eigen.h>
 #include    <pybind11/functional.h>
+#include    <pybind11/numpy.h>
 namespace py = pybind11;
 
 #include <vector>
@@ -25,7 +26,7 @@ void init_block(py::module& m, std::string name)
 
     py::class_<ModelInfo>(m,"ModelInfo")
         .def(py::init<int, int, int, int>())
-        .def(py::init<int, int, std::vector<int>, std::vector<int>>()) // both vectors of ints
+        .def(py::init<int, int, std::vector<int>, std::vector<int>>()) 
         .def_readwrite("dom_dim",       &ModelInfo::dom_dim)
         .def_readwrite("var_dim",       &ModelInfo::var_dim)
         .def_readwrite("p",             &ModelInfo::p)
@@ -33,7 +34,6 @@ void init_block(py::module& m, std::string name)
     ;
 
     py::class_<MFAInfo> (m, "MFAInfo")
-        //.def(py::init<int, int, ModelInfo, std::vector<ModelInfo>>())       // vector of model info
         .def(py::init<int, int, ModelInfo, ModelInfo>())        
         .def(py::init<int, int>()) 
         .def_readwrite("dom_dim",           &MFAInfo::dom_dim)
@@ -92,6 +92,7 @@ void init_block(py::module& m, std::string name)
     py::class_<BlockBase<T>>(m, "BlockBase")
         .def(py::init<>())
         .def("init_block",  &BlockBase<T>::init_block)
+        .def("setup_MFA",   &BlockBase<T>::setup_MFA)
     ;
 
     py::class_<DomainArgs>(m, "DomainArgs")
@@ -111,6 +112,37 @@ void init_block(py::module& m, std::string name)
         .def_readwrite("infile",        &DomainArgs::infile)
         .def_readwrite("multiblock",    &DomainArgs::multiblock)
     ;
+
+    /* Bind MatrixXd to Python */
+    typedef Eigen::MatrixXd Matrix;
+
+    typedef Matrix::Scalar Scalar;
+    constexpr bool rowMajor = Matrix::Flags & Eigen::RowMajorBit;
+
+    py::class_<Matrix>(m, "Matrix", py::buffer_protocol())
+        .def(py::init([](py::buffer b) {
+            typedef Eigen::Stride<Eigen::Dynamic, Eigen::Dynamic> Strides;
+
+            /* Request a buffer descriptor from Python */
+            py::buffer_info info = b.request();
+
+            /* Some basic validation checks ... */
+            if (info.format != py::format_descriptor<Scalar>::format())
+                throw std::runtime_error("Incompatible format: expected a double array!");
+
+            if (info.ndim != 2)
+                throw std::runtime_error("Incompatible buffer dimension!");
+
+            auto strides = Strides(
+                info.strides[rowMajor ? 0 : 1] / (py::ssize_t)sizeof(Scalar),
+                info.strides[rowMajor ? 1 : 0] / (py::ssize_t)sizeof(Scalar));
+
+            auto map = Eigen::Map<Matrix, 0, Strides>(
+                static_cast<Scalar *>(info.ptr), info.shape[0], info.shape[1], strides);
+
+            return Matrix(map);
+        }));
+
 
     using namespace py::literals;
 
@@ -136,12 +168,13 @@ void init_block(py::module& m, std::string name)
                 b->init_block(core, domain, dom_dim, pt_dim);
             }, "core"_a, "bounds"_a, "domain"_a, "link"_a, "master"_a, "dom_dim"_a, "pt_dim"_a,
             "ghost_factor"_a = 0.0)
-        .def("fixed_encode_block",      &Block<T>::fixed_encode_block)
-        .def("adaptive_encode_block",   &Block<T>::adaptive_encode_block)
-        .def("decode_point",            &Block<T>::decode_point)
-        .def("range_error",             &Block<T>::range_error)
-        .def_static("save",                    &Block<T>::save)
-        .def_static("load",                    &Block<T>::load)
+        .def("read_unstructured_data_from_python",  &Block<T>::read_unstructured_data_from_python)
+        .def("fixed_encode_block",                  &Block<T>::fixed_encode_block)
+        .def("adaptive_encode_block",               &Block<T>::adaptive_encode_block)
+        .def("decode_point",                        &Block<T>::decode_point)
+        .def("range_error",                         &Block<T>::range_error)
+        .def_static("save",                         &Block<T>::save)
+        .def_static("load",                         &Block<T>::load)
         ;
 
     m.def("add_block", [](

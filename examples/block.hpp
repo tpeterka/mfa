@@ -13,6 +13,11 @@
 #include    <mfa/types.hpp>
 #include    <mfa/mfa.hpp>
 #include    <mfa/block_base.hpp>
+
+// todo had to add these dependencies
+#include    <pybind11/pybind11.h>
+#include    <pybind11/numpy.h>
+
 #include    <diy/master.hpp>
 #include    <diy/reduce-operations.hpp>
 #include    <diy/decomposition.hpp>
@@ -246,6 +251,7 @@ struct Block : public BlockBase<T>
             }  
         }
 
+        // todo we can't do this because the input is a subset
         bounds_mins = input->domain.colwise().minCoeff();
         bounds_maxs = input->domain.colwise().maxCoeff();
 
@@ -1326,6 +1332,24 @@ struct Block : public BlockBase<T>
         cerr << "domain extent:\n min\n" << bounds_mins << "\nmax\n" << bounds_maxs << endl;
     }
 
+    void read_unstructured_data_from_python(
+            const       diy::Master::ProxyWithLink& cp,
+            MFAInfo&    mfa_info,
+            DomainArgs& args,
+            py::array_t<double> python_input,
+            VectorX<T> mins,
+            VectorX<T> maxs)
+    {
+        const int nvars         = mfa_info.nvars();
+        const int gdim          = mfa_info.geom_dim();
+        const VectorXi mdims    = mfa_info.model_dims();
+
+        input = new mfa::PointSet<T>(dom_dim, mdims, args.tot_ndom_pts);
+
+        input->domain = py::Matrix(&python_input);
+
+        input->set_domain_params(core_mins, core_maxs);
+    }
 
     // TODO: Is this restricted to 3D data only at this point? It has been revised multiple times
     // since it was first named. It could also be extended to multiple science variables easily.
