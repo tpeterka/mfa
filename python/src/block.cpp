@@ -78,7 +78,7 @@ void init_block(py::module& m, std::string name)
 
     py::class_<ModelInfo>(m,"ModelInfo")
         .def(py::init<int, int, int, int>())
-        .def(py::init<int, int, std::vector<int>, std::vector<int>>()) // both vectors of ints
+        .def(py::init<int, int, std::vector<int>, std::vector<int>>()) 
         .def_readwrite("dom_dim",       &ModelInfo::dom_dim)
         .def_readwrite("var_dim",       &ModelInfo::var_dim)
         .def_readwrite("p",             &ModelInfo::p)
@@ -86,9 +86,8 @@ void init_block(py::module& m, std::string name)
     ;
 
     py::class_<MFAInfo> (m, "MFAInfo")
-        //.def(py::init<int, int, ModelInfo, std::vector<ModelInfo>>())       // vector of model info
-        .def(py::init<int, int, ModelInfo, ModelInfo>())
-        .def(py::init<int, int>())
+        .def(py::init<int, int, ModelInfo, ModelInfo>())        
+        .def(py::init<int, int>()) 
         .def_readwrite("dom_dim",           &MFAInfo::dom_dim)
         .def_readwrite("verbose",           &MFAInfo::verbose)
         .def_readwrite("geom_model_info",   &MFAInfo::geom_model_info)
@@ -149,6 +148,7 @@ void init_block(py::module& m, std::string name)
     py::class_<BlockBase<T>>(m, "BlockBase")
         .def(py::init<>())
         .def("init_block",  &BlockBase<T>::init_block)
+        .def("setup_MFA",   &BlockBase<T>::setup_MFA)
     ;
 
     py::class_<DomainArgs>(m, "DomainArgs")
@@ -193,12 +193,12 @@ void init_block(py::module& m, std::string name)
                 b->init_block(core, domain, dom_dim, pt_dim);
             }, "core"_a, "bounds"_a, "domain"_a, "link"_a, "master"_a, "dom_dim"_a, "pt_dim"_a,
             "ghost_factor"_a = 0.0)
-        .def("fixed_encode_block",      &Block<T>::fixed_encode_block)
-        .def("adaptive_encode_block",   &Block<T>::adaptive_encode_block)
-        .def("decode_point",            &Block<T>::decode_point)
-        .def("range_error",             &Block<T>::range_error)
-        .def_static("save",                    &Block<T>::save)
-        .def_static("load",                    &Block<T>::load)
+        .def("fixed_encode_block",                  &Block<T>::fixed_encode_block)
+        .def("adaptive_encode_block",               &Block<T>::adaptive_encode_block)
+        .def("decode_point",                        &Block<T>::decode_point)
+        .def("range_error",                         &Block<T>::range_error)
+        .def_static("save",                         &Block<T>::save)
+        .def_static("load",                         &Block<T>::load)
         ;
 
     m.def("add_block", [](
