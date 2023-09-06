@@ -13,12 +13,18 @@ struct DomainArgs
         // set up per-science variable data: model_dims, s, and f
         updateModelDims(mdims);
 
-        tot_ndom_pts = 0;
-        starts.resize(dom_dim);
-        ndom_pts.resize(dom_dim);
-        full_dom_pts.resize(dom_dim);
-        min.resize(dom_dim);
-        max.resize(dom_dim);
+        starts.assign(dom_dim, 0);
+        ndom_pts.assign(dom_dim, 100);
+        full_dom_pts.assign(dom_dim, 100);
+
+        tot_ndom_pts = 1;
+        for (int i = 0; i < dom_dim; i++)
+        {
+            tot_ndom_pts *= ndom_pts[i];
+        }
+        
+        min.assign(dom_dim, 0);
+        max.assign(dom_dim, 1);
         r = 0;
         t = 0;
         n = 0;

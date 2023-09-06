@@ -425,10 +425,8 @@ struct Block : public BlockBase<T>
 
         // extents
         cerr << "gid = " << cp.gid() << endl;
-        cerr << "core_mins: " << core_mins.transpose() << endl;
-        cerr << "core_maxs: " << core_maxs.transpose() << endl;
-        cerr << "bounds_mins: " << bounds_mins.transpose() << endl;
-        cerr << "bounds_maxs: " << bounds_maxs.transpose() << endl;
+        mfa::print_bbox(core_mins, core_maxs, "Core");
+        mfa::print_bbox(bounds_mins, bounds_maxs, "Bounds");
     }
 
     // read a floating point 3d vector dataset and take one 1-d curve out of the middle of it
