@@ -315,17 +315,16 @@ struct MFAInfo
         return;
     }
 
-    // TODO this is a python binding problem - have to figure out overloading
     // Add a vector of ModelInfo's all at once
-    // void addVarInfo(vector<ModelInfo> vmis)
-    // {
-    //     for (int k = 0; k < vmis.size(); k++)
-    //     {
-    //         addVarInfo(vmis[k]);
-    //     }
+    void addVarInfo(vector<ModelInfo> vmis)
+    {
+        for (int k = 0; k < vmis.size(); k++)
+        {
+            addVarInfo(vmis[k]);
+        }
 
-    //     return;
-    // }
+        return;
+    }
 
     // Reduce the number of control points of each model for a strong scaling study
     void splitStrongScaling(vector<int> divs)
