@@ -16,7 +16,6 @@
 #include    <diy/assigner.hpp>
 #include    <diy/io/block.hpp>
 #include    <diy/pick.hpp>
-#include    <diy/thirdparty/fmt/format.h>
 #include    <diy/reduce.hpp>
 #include    <diy/partners/merge.hpp>
 
@@ -1305,7 +1304,8 @@ namespace mfa
 
             // output for blending
             diy::save(bb, b->ndom_outpts);
-            diy::save(bb, b->blend);
+            if (b->ndom_outpts.rows())
+                diy::save(bb, b->blend);
         }
 
     template<typename B, typename T>                // B = block object, T = float or double
@@ -1341,7 +1341,8 @@ namespace mfa
 
             // output for blending
             diy::load(bb, b->ndom_outpts);
-            diy::load(bb, b->blend);
+            if (b->ndom_outpts.rows())
+                diy::load(bb, b->blend);
         }
 }                       // namespace
 
@@ -1484,7 +1485,7 @@ namespace diy
                             diy::save(bb, true);
                             diy::save(bb, *(ps->params));
                         }
-                        
+
                         diy::save(bb, ps->dom_mins);
                         diy::save(bb, ps->dom_maxs);
 
@@ -1528,7 +1529,7 @@ namespace diy
 
                         // Point info
                         diy::load(bb, ps->domain);
-                    }   
+                    }
                 }
         };
 

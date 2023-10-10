@@ -12,7 +12,7 @@ m = diy.Master(w)               # master
 # load the results and print them out
 print("\n\nLoading blocks and printing them out\n")
 a = diy.ContiguousAssigner(w.size, -1)
-diy.read_blocks("approx.out", a, m, load = mfa.load_block)
+diy.read_blocks("approx.mfa", a, m, load = mfa.load_block)
 m.foreach(lambda b,cp: b.print_block(cp, False))
 
 # evaluate a point

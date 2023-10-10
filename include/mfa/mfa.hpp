@@ -36,15 +36,15 @@
 // comment out the following line to encode local with unified dims
 #define MFA_ENCODE_LOCAL_SEPARABLE
 
+// unified dims solve use dense solver
+// #define MFA_DENSE
+
 // for debugging, can turn off constraints in local solve
 // #define MFA_NO_CONSTRAINTS
 
-// the following lines control the extent of merging small tensors into larger ones
-#define MFA_TMESH_MERGE_MAX
-// #define MFA_TMESH_MERGE_SOME
-// #define MFA_TMESH_MERGE_NONE
-
-
+#include    <Eigen/Dense>
+#include    <Eigen/Sparse>
+#include    <Eigen/OrderingMethods>
 #include    <vector>
 #include    <list>
 #include    <iostream>
@@ -932,8 +932,11 @@ namespace mfa
                     }
                 }
             }
+
 #endif // MFA_SERIAL || KOKKOS
+
 #ifdef MFA_TBB
+
             parallel_for (size_t(0), (size_t)error.npts, [&] (size_t i)
                 {
                     for (auto j = 0; j < geom_dim(); j++)
@@ -956,6 +959,7 @@ namespace mfa
                     }
                 }
                 });
+
 #endif // MFA_TBB
         }
 

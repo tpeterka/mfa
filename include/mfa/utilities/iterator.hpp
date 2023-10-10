@@ -106,6 +106,7 @@ namespace mfa
                     cur_iter_(idx),
                     done_dim_(sub_npts.size())                 { init(idx); }
 
+        // full volume version
         VolIterator(const   VectorXi& npts,                 // size of volume in each dimension
                             size_t idx = 0) :               // linear iteration count within volume
                     dom_dim_(npts.size()),
@@ -404,6 +405,9 @@ namespace mfa
         // return missing dimension (i.e. the dimension perpendicular to the slice)
         int missing_dim() const         { return missing_dim_; }
 
+        // return total number of iterations in the slice (not in original volume)
+        size_t tot_iters() const        { return tot_iters_; }
+
     };  // SliceIterator
 
     // a one-dimension curve of a VolIterator
@@ -418,7 +422,7 @@ namespace mfa
         size_t                  cur_iter_;          // current flattened iteration number
         VectorXi                idx_dim_;           // current index in each dimension in original volume
         int                     curve_dim_;         // dimension of curve
-        size_t                  tot_iters_;         // total number of iterations in curve (not original volume)
+        size_t                  tot_iters_;         // total number of iterations in curve (not original slice)
 
         public:
 
@@ -518,6 +522,9 @@ namespace mfa
 
         // return number of points on the curve
         int tot_iters() const       { return tot_iters_; }
+
+        // return total number of iterations in the curve (not in original slice)
+        size_t tot_iters() const        { return tot_iters_; }
 
     };  // CurveIterator
 }   // namespace mfa

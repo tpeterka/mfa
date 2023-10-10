@@ -37,6 +37,8 @@
 #  include "mpitypes.hpp" // only configured in library mode
 #else // ifdef DIY_MPI_AS_LIB
 
+#include <utility>
+
 namespace diy
 {
 namespace mpi

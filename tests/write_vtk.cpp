@@ -333,7 +333,7 @@ void write_vtk_files(
         vardims[i]      = 1;                                // TODO; treating each variable as a scalar (for now)
         varnames[i]     = new char[256];
         centerings[i]   = 1;
-        sprintf(varnames[i], "var%d", i);
+        snprintf(varnames[i], 256, "var%d", i);
     }
 
     // write geometry control points
@@ -369,9 +369,9 @@ void write_vtk_files(
     char input_filename[256];
     char approx_filename[256];
     char errs_filename[256];
-    sprintf(input_filename, "initial_points_gid_%d.vtk", cp.gid());
-    sprintf(approx_filename, "approx_points_gid_%d.vtk", cp.gid());
-    sprintf(errs_filename, "error_gid_%d.vtk", cp.gid());
+    snprintf(input_filename, 256, "initial_points_gid_%d.vtk", cp.gid());
+    snprintf(approx_filename, 256, "approx_points_gid_%d.vtk", cp.gid());
+    snprintf(errs_filename, 256, "error_gid_%d.vtk", cp.gid());
     write_pointset_vtk(b->input, input_filename);
     write_pointset_vtk(b->approx, approx_filename);
     write_pointset_vtk(b->errs, errs_filename);

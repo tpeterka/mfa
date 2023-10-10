@@ -6,12 +6,38 @@ namespace py = pybind11;
 
 #include <vector>
 
-#include    <../examples/block.hpp>
 #include    <../examples/domain_args.hpp>
 #include    <mfa/tmesh.hpp>
 #include    <mfa/mfa_data.hpp>
 #include    <mfa/encode.hpp>
+#include    "../../examples/block.hpp"
 
+#if defined(MFA_MPI4PY)
+#include "mpi-comm.h"
+#endif
+
+#include "mpi-capsule.h"
+
+// C++ object representing a python or numpy array
+// array can be 1-d (vector) or 2-d (matrix)
+// ref: https://github.com/pybind/pybind11/issues/3126
+template<typename T>
+struct PyArray
+{
+    py::buffer_info info;
+    T *data;
+    size_t size;
+
+    PyArray(py::array_t<T> arr) :
+        info { arr.request() },
+        data { static_cast<T*>(info.ptr) },
+        size { static_cast<size_t>(info.shape[0]) * (info.ndim > 1 ? static_cast<size_t>(info.shape[1]) : 1)}
+    {}
+
+    PyArray(const PyArray &) = delete;
+    PyArray &operator=(const PyArray &) = delete;
+    PyArray(PyArray&&) = default;
+};
 
 template <typename T>
 void init_block(py::module& m, std::string name)
@@ -100,9 +126,6 @@ void init_block(py::module& m, std::string name)
         .def("addVarInfo",                  &MFAInfo::addVarInfo, "vmi"_a)
     ;
 
-// todo what to do about the overloaded functions
-// todo what to do about non-python return objects
-
     py::class_<mfa::MFA<T>>(m, "MFA")
         .def(py::init<int, int>())
         .def(py::init<const MFAInfo>())
@@ -135,9 +158,6 @@ void init_block(py::module& m, std::string name)
         .def_readwrite("p",             &MFA_Data<T>::p)
         .def_readwrite("tmesh",         &MFA_Data<T>::tmesh)
     ;
-    //.def("set_knots")
-
-    // .def_readwrite("dom_dim",           &Tmesh<T>::dom_dim)
 
     py::class_<TensorProduct<T>>(m, "TensorProduct")
         .def(py::init<int>())
@@ -167,6 +187,7 @@ void init_block(py::module& m, std::string name)
         .def_readwrite("n",             &DomainArgs::n)
         .def_readwrite("infile",        &DomainArgs::infile)
         .def_readwrite("multiblock",    &DomainArgs::multiblock)
+        .def_readwrite("structured",    &DomainArgs::structured)
     ;
 
     using namespace py::literals;
@@ -175,7 +196,6 @@ void init_block(py::module& m, std::string name)
         .def(py::init<>())
         .def("generate_analytical_data",&Block<T>::generate_analytical_data)
         .def("print_block",             &Block<T>::print_block)
-        // .def("add",                     &Block<T>::add)
         .def("add",                     [](
                                         int                 gid,
                                         const Bounds&       core,
@@ -199,6 +219,22 @@ void init_block(py::module& m, std::string name)
         .def("range_error",                         &Block<T>::range_error)
         .def_static("save",                         &Block<T>::save)
         .def_static("load",                         &Block<T>::load)
+        .def("input_data",              [](
+                                        const py::object*                   py_b,
+                                        const diy::Master::ProxyWithLink&   cp,
+                                        const py::array_t<T>&               arr,    // input data
+                                        DomainArgs&                         d_args)
+        {
+            PyArray<T> pyarray(arr);
+
+            // debug
+//             fmt::print(stderr, "PyArray size {}\n", pyarray.size);
+//             for (auto i = 0; i < pyarray.size; i++)
+//                 fmt::print(stderr, "data[{}] = {}\n", i, pyarray.data[i]);
+
+            Block<T>* b = py_b->cast<Block<T>*>();
+            b->input_1d_data(pyarray.data, d_args);
+        })
         ;
 
     m.def("add_block", [](

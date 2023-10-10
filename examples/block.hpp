@@ -429,6 +429,73 @@ struct Block : public BlockBase<T>
         mfa::print_bbox(bounds_mins, bounds_maxs, "Bounds");
     }
 
+    // input a given data buffer into the correct format for encoding
+    void input_1d_data(
+            T*                  data,
+            DomainArgs&         args)
+    {
+        DomainArgs* a = &args;
+        int tot_ndom_pts = 1;
+        this->geometry.min_dim = 0;
+        this->geometry.max_dim = this->dom_dim - 1;
+        int nvars = 1;
+        this->vars.resize(nvars);
+        this->max_errs.resize(nvars);
+        this->sum_sq_errs.resize(nvars);
+        this->vars[0].min_dim = this->dom_dim;
+        this->vars[0].max_dim = this->vars[0].min_dim;
+        VectorXi ndom_pts(this->dom_dim);
+        this->bounds_mins.resize(this->pt_dim);
+        this->bounds_maxs.resize(this->pt_dim);
+        for (int i = 0; i < this->dom_dim; i++)
+        {
+            ndom_pts(i)                     =  a->ndom_pts[i];
+            tot_ndom_pts                    *= ndom_pts(i);
+        }
+
+        // construct point set to contain input
+        if (args.structured)
+            input = new mfa::PointSet<T>(dom_dim, pt_dim, tot_ndom_pts, ndom_pts);
+        else
+            input = new mfa::PointSet<T>(dom_dim, pt_dim, tot_ndom_pts);
+
+        // rest is hard-coded for 1d
+
+        size_t n = 0;
+        for (size_t i = 0; i < tot_ndom_pts; i++)
+        {
+            input->domain(i, 0) = data[n++];
+            input->domain(i, 1) = data[n++];
+        }
+
+        // find extents
+        for (size_t i = 0; i < (size_t)input->domain.rows(); i++)
+        {
+            if (i == 0 || input->domain(i, 0) < bounds_mins(0))
+                bounds_mins(0) = input->domain(i, 0);
+            if (i == 0 || input->domain(i, 1) < bounds_mins(1))
+                bounds_mins(1) = input->domain(i, 1);
+            if (i == 0 || input->domain(i, 0) > bounds_maxs(0))
+                bounds_maxs(0) = input->domain(i, 0);
+            if (i == 0 || input->domain(i, 1) > bounds_maxs(1))
+                bounds_maxs(1) = input->domain(i, 1);
+        }
+        core_mins.resize(dom_dim);
+        core_maxs.resize(dom_dim);
+        for (int i = 0; i < dom_dim; i++)
+        {
+            core_mins(i) = bounds_mins(i);
+            core_maxs(i) = bounds_maxs(i);
+        }
+
+        // create the model
+        input->init_params();
+        this->mfa = new mfa::MFA<T>(dom_dim);
+
+        // debug
+        cerr << "domain extent:\n min\n" << bounds_mins << "\nmax\n" << bounds_maxs << endl;
+    }
+
     // read a floating point 3d vector dataset and take one 1-d curve out of the middle of it
     // f = (x, velocity magnitude)
     void read_1d_slice_3d_vector_data(
