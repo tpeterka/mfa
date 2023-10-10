@@ -334,6 +334,14 @@ public:
 #endif
 };
 
+inline void set_error(const handle &type, const char *message) {
+    PyErr_SetString(type.ptr(), message);
+}
+
+inline void set_error(const handle &type, const handle &value) {
+    PyErr_SetObject(type.ptr(), value.ptr());
+}
+
 /** \rst
     Holds a reference to a Python object (with reference counting)
 
@@ -1612,7 +1620,15 @@ inline namespace literals {
 /** \rst
     String literal version of `str`
  \endrst */
-inline str operator"" _s(const char *s, size_t size) { return {s, size}; }
+inline str
+#if !defined(__clang__) && defined(__GNUC__) && __GNUC__ < 5
+operator"" _s // gcc 4.8.5 insists on having a space (hard error).
+#else
+operator""_s // clang 17 generates a deprecation warning if there is a space.
+#endif
+    (const char *s, size_t size) {
+    return {s, size};
+}
 } // namespace literals
 
 /// \addtogroup pytypes

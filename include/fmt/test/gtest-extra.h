@@ -12,12 +12,7 @@
 
 #include <string>
 
-#ifdef FMT_MODULE_TEST
-import fmt;
-#else
-#  include "fmt/os.h"
-#endif  // FMG_MODULE_TEST
-
+#include "fmt/os.h"
 #include "gmock/gmock.h"
 
 #define FMT_TEST_THROW_(statement, expected_exception, expected_message, fail) \
@@ -83,7 +78,7 @@ class output_redirect {
 
  public:
   explicit output_redirect(FILE* file);
-  ~output_redirect() FMT_NOEXCEPT;
+  ~output_redirect() noexcept;
 
   output_redirect(const output_redirect&) = delete;
   void operator=(const output_redirect&) = delete;
