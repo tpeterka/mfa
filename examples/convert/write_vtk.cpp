@@ -39,7 +39,6 @@ void write_pointset_vtk(mfa::PointSet<T>* ps, char* filename, int sci_var = -1)
     }
 
     int dom_dim = ps->dom_dim;
-    int pt_dim  = ps->pt_dim;
     int geom_dim = ps->geom_dim();
     int nvars = ps->nvars();
     bool include_var = true;        // Include the specified science variable in the geometry coordinates
@@ -106,7 +105,6 @@ void write_pointset_vtk(mfa::PointSet<T>* ps, char* filename, int sci_var = -1)
 
         // Add science variable data
         int offset_idx = 0;
-        int all_vars_dim = pt_dim - geom_dim;
         for (int k = 0; k < nvars; k++)
         {
             int vd = ps->var_dim(k);
@@ -171,7 +169,7 @@ void write_pointset_vtk(mfa::PointSet<T>* ps, char* filename, int sci_var = -1)
 
 // make combinations of min, max corner vertices in index and real space
 void CellVertices(
-        int             ndom_dims,                      // number of domain dimensions
+        int             dom_dim,                      // number of domain dimensions
         vec3d&          min,                            // min corner
         vec3d&          max,                            // max corner
         vector<vec3d>&  tensor_pts)                     // (output) vertices
@@ -186,7 +184,7 @@ void CellVertices(
     p.x = max.x;
     tensor_pts.push_back(p);
 
-    if (ndom_dims > 1)
+    if (dom_dim > 1)
     {
         p.y = max.y;
         tensor_pts.push_back(p);
@@ -194,7 +192,7 @@ void CellVertices(
         p.x = min.x;
         tensor_pts.push_back(p);
 
-        if (ndom_dims > 2)
+        if (dom_dim > 2)
         {
             p.x = min.x;
             p.y = min.y;
@@ -215,12 +213,18 @@ void CellVertices(
 
 // prep tmesh tensor extents
 void PrepTmeshTensorExtents(
-        int             ndom_dims,                          // number of domain dimensions
         vector<vec3d>&  tensor_pts_real,                    // (output) points in real space
         vector<vec3d>&  tensor_pts_index,                   // (output) points in index space
+        vector<int>&    ntensor_pts,
         Block<real_t>*  block)                              // curent block
 {
+    int dom_dim = block->mfa->dom_dim;
     int nvars = block->mfa->nvars();
+
+    // tmesh tensor extents
+    ntensor_pts.resize(3);
+    for (auto i = 0; i < 3; i++)
+        ntensor_pts[i] = (i >= dom_dim ? 1 : 2);
 
     for (auto j = 0; j < nvars; j++)
     {
@@ -237,7 +241,7 @@ void PrepTmeshTensorExtents(
             min_index.x = tensor_prods[k].knot_mins[0];
             min_real.x  = block->core_mins[0] + all_knots[0][tensor_prods[k].knot_mins[0]] *
                 (block->core_maxs[0] - block->core_mins[0]);
-            if (ndom_dims > 1)
+            if (dom_dim > 1)
             {
                 min_index.y = tensor_prods[k].knot_mins[1];
                 min_real.y  = block->core_mins[1] + all_knots[1][tensor_prods[k].knot_mins[1]] *
@@ -248,7 +252,7 @@ void PrepTmeshTensorExtents(
                 min_index.y = 0.0;
                 min_real.y  = 0.0;
             }
-            if (ndom_dims > 2)
+            if (dom_dim > 2)
             {
                 min_index.z = tensor_prods[k].knot_mins[2];
                 min_real.z  = block->core_mins[2] + all_knots[2][tensor_prods[k].knot_mins[2]] *
@@ -263,7 +267,7 @@ void PrepTmeshTensorExtents(
             max_index.x = tensor_prods[k].knot_maxs[0];
             max_real.x  = block->core_mins[0] + all_knots[0][tensor_prods[k].knot_maxs[0]] *
                 (block->core_maxs[0] - block->core_mins[0]);
-            if (ndom_dims > 1)
+            if (dom_dim > 1)
             {
                 max_index.y = tensor_prods[k].knot_maxs[1];
                 max_real.y  = block->core_mins[1] + all_knots[1][tensor_prods[k].knot_maxs[1]] *
@@ -274,7 +278,7 @@ void PrepTmeshTensorExtents(
                 max_index.y = 0.0;
                 max_real.y  = 0.0;
             }
-            if (ndom_dims > 2)
+            if (dom_dim > 2)
             {
                 max_index.z = tensor_prods[k].knot_maxs[2];
                 max_real.z  = block->core_mins[2] + all_knots[2][tensor_prods[k].knot_maxs[2]] *
@@ -287,8 +291,8 @@ void PrepTmeshTensorExtents(
             }
 
             // make vertex points for cells
-            CellVertices(ndom_dims, min_index, max_index, tensor_pts_index);
-            CellVertices(ndom_dims, min_real, max_real, tensor_pts_real);
+            CellVertices(dom_dim, min_index, max_index, tensor_pts_index);
+            CellVertices(dom_dim, min_real, max_real, tensor_pts_real);
 
             // debug
 //             fmt::print(stderr, "tensor {} extents: index [{} {} {} : {} {} {}] real [{} {} {} : {} {} {}]\n",
@@ -308,14 +312,13 @@ void oldPrepGeomCtrlPts(
 {
     // typing shortcuts
     const auto& mfa_data          = block->mfa->geom();
-    const auto& tmesh             = mfa_data->tmesh;
+    const auto& tmesh             = mfa_data.tmesh;
     const auto& tensor_prods      = tmesh.tensor_prods;
     const auto& all_knots         = tmesh.all_knots;
     const auto& all_knot_levels   = tmesh.all_knot_levels;
 
     int dom_dim     = block->mfa->dom_dim;
     int geom_dim    = block->mfa->geom_dim();                                                 // number of geometry dims
-    int pt_dim      = block->mfa->pt_dim;                     // dimensionality of point
     vec3d p;
 
 
@@ -406,7 +409,7 @@ void PrepGeomCtrlPts(
 {
     // typing shortcuts
     const auto& mfa_data        = block->mfa->geom();
-    const auto& tmesh           = mfa_data->tmesh;
+    const auto& tmesh           = mfa_data.tmesh;
     const auto& tensor_prods    = tmesh.tensor_prods;
     const auto& all_knots       = tmesh.all_knots;
     const auto& all_knot_levels = tmesh.all_knot_levels;
@@ -427,7 +430,7 @@ void PrepGeomCtrlPts(
             {
                 KnotIdx knot_min, idx;
                 if (tc.knot_mins[k] == 0)
-                    knot_min = (mfa_data->p(k) + 1) / 2;
+                    knot_min = (mfa_data.p(k) + 1) / 2;
                 else
                     knot_min = tc.knot_mins[k];
                 if (!tmesh.knot_idx_ofst(tc, knot_min, j, k, false, idx))
@@ -436,8 +439,8 @@ void PrepGeomCtrlPts(
                 float tsum = all_knots[k][idx];                         // odd degree, tsum is on the knot
 
                 // odd degree, second control point from global edge is an average
-                if ((mfa_data->p(k) % 2 == 1 && tc.knot_mins[k] == 0 && j == 1) ||
-                        (mfa_data->p(k) % 2 == 1 && tc.knot_maxs[k] == all_knots[k].size() - 1 && j == tc.nctrl_pts(k) - 2))
+                if ((mfa_data.p(k) % 2 == 1 && tc.knot_mins[k] == 0 && j == 1) ||
+                        (mfa_data.p(k) % 2 == 1 && tc.knot_maxs[k] == all_knots[k].size() - 1 && j == tc.nctrl_pts(k) - 2))
                 {
                     KnotIdx idx1;
                     if (tc.knot_mins[k] == 0 && j == 1)
@@ -454,7 +457,7 @@ void PrepGeomCtrlPts(
                     tsum /= 2.0;
                 }
 
-                if (mfa_data->p(k) % 2 == 0)                            // even degree, find center of knot span
+                if (mfa_data.p(k) % 2 == 0)                            // even degree, find center of knot span
                 {
                     KnotIdx idx1;
                     if (!tmesh.knot_idx_ofst(tc, idx, 1, k, false, idx1))
@@ -520,7 +523,7 @@ void oldPrepSciCtrlPts(
         Block<real_t>*              block)
 {
     int dom_dim     = block->mfa->dom_dim;
-    int geom_dim    = block->mfa->geom()->dim();          // number of geometry dims
+    int geom_dim    = block->mfa->geom_dim();          // number of geometry dims
     int nvars           = block->mfa->nvars();                       // number of science variables
     vec3d p;
 
@@ -530,7 +533,7 @@ void oldPrepSciCtrlPts(
     {
         // typing shortcuts
         // auto& mfa_data          = block->vars[i].mfa_data;
-        const auto& tmesh             = block->mfa->var(i).tmesh
+        const auto& tmesh             = block->mfa->var(i).tmesh;
         const auto& tensor_prods      = tmesh.tensor_prods;
         const auto& all_knots         = tmesh.all_knots;
         const auto& all_knot_levels   = tmesh.all_knot_levels;
@@ -601,7 +604,7 @@ void oldPrepSciCtrlPts(
         VectorXi ofst = VectorXi::Zero(3);                              // offset of indices for current tensor
         for (auto t = 0; t < tensor_prods.size(); t++)                  // tensor products
         {
-            TensorProduct<real_t>& tc = tensor_prods[t];
+            const TensorProduct<real_t>& tc = tensor_prods[t];
             mfa::VolIterator vol_iter(tc.nctrl_pts);
             VectorXi ijk(dom_dim);
             while (!vol_iter.done())                                        // control points
@@ -653,7 +656,8 @@ void PrepSciCtrlPts(
         float**&                    vars_ctrl_data,
         Block<real_t>*              block)
 {
-    int nvars = block->mfa->nvars();
+    int dom_dim = block->mfa->dom_dim;
+    int nvars   = block->mfa->nvars();
     vars_ctrl_pts.resize(nvars);
     vars_ctrl_data = new float*[nvars];
     vec3d p;
@@ -662,7 +666,7 @@ void PrepSciCtrlPts(
     {
         // typing shortcuts
         const auto& mfa_data        = block->mfa->var(i);
-        const auto& tmesh           = mfa_data->tmesh;
+        const auto& tmesh           = mfa_data.tmesh;
         const auto& tensor_prods    = tmesh.tensor_prods;
         const auto& all_knots       = tmesh.all_knots;
         const auto& all_knot_levels = tmesh.all_knot_levels;
@@ -672,7 +676,7 @@ void PrepSciCtrlPts(
         for (auto t = 0; t < tensor_prods.size(); t++)                      // tensor products
         {
             size_t prod = 1;
-            for (auto k = 0; k < ndom_dims; k++)
+            for (auto k = 0; k < dom_dim; k++)
                 prod *= tensor_prods[t].nctrl_pts(k);
             nctrl_pts += prod;
         }
@@ -701,7 +705,7 @@ void PrepSciCtrlPts(
                     // offset the knot to the correct control point
                     KnotIdx knot_min, idx;
                     if (tc.knot_mins[k] == 0)
-                        knot_min = (mfa_data->p(k) + 1) / 2;
+                        knot_min = (mfa_data.p(k) + 1) / 2;
                     else
                         knot_min = tc.knot_mins[k];
                     if (!tmesh.knot_idx_ofst(tc, knot_min, j, k, false, idx))
@@ -710,8 +714,8 @@ void PrepSciCtrlPts(
                     float tsum = all_knots[k][idx];                         // odd degree, tsum is on the knot
 
                     // odd degree, second control point from global edge is an average
-                    if ((mfa_data->p(k) % 2 == 1 && tc.knot_mins[k] == 0 && j == 1) ||
-                        (mfa_data->p(k) % 2 == 1 && tc.knot_maxs[k] == all_knots[k].size() - 1 && j == tc.nctrl_pts(k) - 2))
+                    if ((mfa_data.p(k) % 2 == 1 && tc.knot_mins[k] == 0 && j == 1) ||
+                        (mfa_data.p(k) % 2 == 1 && tc.knot_maxs[k] == all_knots[k].size() - 1 && j == tc.nctrl_pts(k) - 2))
                     {
                         KnotIdx idx1;
                         if (tc.knot_mins[k] == 0 && j == 1)
@@ -728,7 +732,7 @@ void PrepSciCtrlPts(
                         tsum /= 2.0;
                     }
 
-                    if (mfa_data->p(k) % 2 == 0)                            // even degree, find center of knot span
+                    if (mfa_data.p(k) % 2 == 0)                            // even degree, find center of knot span
                     {
                         KnotIdx idx1;
                         if (!tmesh.knot_idx_ofst(tc, idx, 1, k, false, idx1))
@@ -822,7 +826,7 @@ void PrepInsCtrlPts(
     {
         // typing shortcuts
         const auto& mfa_data    = block->mfa->var(i);
-        const auto& tmesh             = mfa_data->tmesh;
+        const auto& tmesh             = mfa_data.tmesh;
         const auto& tensor_prods      = tmesh.tensor_prods;
         const auto& all_knots         = tmesh.all_knots;
         const auto& all_knot_levels   = tmesh.all_knot_levels;
@@ -860,7 +864,7 @@ void PrepInsCtrlPts(
                 // offset the knot to the correct control point
                 KnotIdx knot_min, idx;
                 if (tc.knot_mins[k] == 0)
-                    knot_min = (mfa_data->p(k) + 1) / 2;
+                    knot_min = (mfa_data.p(k) + 1) / 2;
                 else
                     knot_min = tc.knot_mins[k];
                 if (!tmesh.knot_idx_ofst(tc, knot_min, j, k, false, idx))
@@ -869,8 +873,8 @@ void PrepInsCtrlPts(
                 float tsum = all_knots[k][idx];                         // odd degree, tsum is on the knot
 
                 // odd degree, second control point from global edge is an average
-                if ((mfa_data->p(k) % 2 == 1 && tc.knot_mins[k] == 0 && j == 1) ||
-                        (mfa_data->p(k) % 2 == 1 && tc.knot_maxs[k] == all_knots[k].size() - 1 && j == tc.nctrl_pts(k) - 2))
+                if ((mfa_data.p(k) % 2 == 1 && tc.knot_mins[k] == 0 && j == 1) ||
+                        (mfa_data.p(k) % 2 == 1 && tc.knot_maxs[k] == all_knots[k].size() - 1 && j == tc.nctrl_pts(k) - 2))
                 {
                     KnotIdx idx1;
                     if (tc.knot_mins[k] == 0 && j == 1)
@@ -887,7 +891,7 @@ void PrepInsCtrlPts(
                     tsum /= 2.0;
                 }
 
-                if (mfa_data->p(k) % 2 == 0)                            // even degree, find center of knot span
+                if (mfa_data.p(k) % 2 == 0)                            // even degree, find center of knot span
                 {
                     KnotIdx idx1;
                     if (!tmesh.knot_idx_ofst(tc, idx, 1, k, false, idx1))
@@ -963,31 +967,14 @@ void PrepRenderingData(
         float**&                    ins_ctrl_data,
 
 #endif
-
-        vector<int> &               nblend_pts,
-        vector<vec3d>&              blend_pts,
-        float**&                    blend_data,
         vector<vec3d>&              tensor_pts_real,
         vector<vec3d>&              tensor_pts_index,
         vector<int>&                ntensor_pts,
         Block<real_t>*              block,
-        int                         sci_var,                // science variable to render geometrically for 1d and 2d domains
-        int&                        pt_dim)                 // (output) dimensionality of point
+        int                         sci_var)                // science variable to render geometrically for 1d and 2d domains
 {
-    vec3d p;
-
-    // number of geometry dimensions and science variables
-    int ndom_dims   = block->geometry.mfa_data->tmesh.tensor_prods[0].ctrl_pts.cols();          // number of geometry dims
-    pt_dim          = block->input->pt_dim;                     // dimensionality of point
-
-    // number of output points for blend
-    for (size_t j = 0; j < (size_t)(block->ndom_outpts.size()); j++)
-        nblend_pts.push_back(block->ndom_outpts(j));
-
-    // geometry control points
+    // prep control points
     PrepGeomCtrlPts(geom_ctrl_pts, block);
-
-    // science variable control points
     PrepSciCtrlPts(vars_ctrl_pts, vars_ctrl_data, block);
 
 #ifdef MFA_DEBUG_KNOT_INSERTION
@@ -995,12 +982,8 @@ void PrepRenderingData(
     PrepInsCtrlPts(ins_ctrl_pts, ins_ctrl_data, block);
 
 #endif
-
-    // tmesh tensor extents
-    ntensor_pts.resize(3);
-    for (auto i = 0; i < 3; i++)
-        ntensor_pts[i] = (i >= dom_dim ? 1 : 2);
-    PrepTmeshTensorExtents(dom_dim, tensor_pts_real, tensor_pts_index, block);
+    // prep tmesh extents
+    PrepTmeshTensorExtents(tensor_pts_real, tensor_pts_index, ntensor_pts, block);
 }
 
 // write vtk files for initial, approximated, control points
@@ -1034,13 +1017,11 @@ void write_vtk_files(
                       tensor_pts_index,
                       ntensor_pts,
                       b,
-                      sci_var,
-                      pt_dim);
+                      sci_var);
 
     // pad dimensions up to 3
 
     int dom_dim = b->mfa->dom_dim;
-    int pt_dim  = b->mfa->pt_dim;
     int nvars   = b->mfa->nvars();
 
     // science variable settings
@@ -1195,7 +1176,6 @@ int main(int argc, char ** argv)
     int                         ntest  = 0;             // number of input test points in each dim for analytical error tests
     string                      infile = "approx.mfa";  // diy input file
     bool                        help;                   // show help
-    int                         dom_dim, pt_dim;        // domain and point dimensionality, respectively
     int                         sci_var = 0;            // science variable to render geometrically for 1d and 2d domains
 
     // get command line arguments
@@ -1246,5 +1226,5 @@ int main(int argc, char ** argv)
 
     // write vtk files for initial and approximated points
     master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-            { write_vtk_files(b, cp, sci_var, dom_dim, pt_dim); });
+            { write_vtk_files(b, cp, sci_var); });
 }
