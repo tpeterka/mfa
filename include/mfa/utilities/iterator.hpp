@@ -399,9 +399,6 @@ namespace mfa
         // return current iteration count
         size_t cur_iter() const         { return cur_iter_; }
 
-        // return total number of elements in slice
-        size_t tot_iters() const        { return tot_iters_; }
-
         // return missing dimension (i.e. the dimension perpendicular to the slice)
         int missing_dim() const         { return missing_dim_; }
 
@@ -519,9 +516,6 @@ namespace mfa
 
         // return curve dimension
         int curve_dim() const       { return curve_dim_; }
-
-        // return number of points on the curve
-        int tot_iters() const       { return tot_iters_; }
 
         // return total number of iterations in the curve (not in original slice)
         size_t tot_iters() const        { return tot_iters_; }

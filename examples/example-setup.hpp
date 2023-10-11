@@ -146,7 +146,7 @@ using namespace std;
             dom_bounds.min = {-0.95, -0.95, -0.95, -0.95};
             dom_bounds.max = { 0.95,  0.95,  0.95,  0.95};
         }
-        else if (datasets_3d.count(input) || datasets_2d.count(input) || datasets_unstructured.count(input))
+        else if (datasets_4d.count(input) || datasets_3d.count(input) || datasets_2d.count(input) || datasets_unstructured.count(input))
         {
             for (int i = 0; i < dom_bounds.min.dimension(); i++)
             {
@@ -395,6 +395,19 @@ using namespace std;
                 if (dom_dim >= 1) vars_nctrl[0] = 100;
                 if (dom_dim >= 2) vars_nctrl[1] = 100;
                 if (dom_dim >= 3) vars_nctrl[2] = 100;
+            }
+        }
+
+        // time series tornado dataset
+        if (input == "tornado4d")
+        {
+            d_args.full_dom_pts = {128, 128, 128, 49};
+            d_args.ndom_pts = d_args.full_dom_pts;
+
+            // number of control points in space dimensions
+            if (!adaptive)
+            {
+                vars_nctrl = {100, 100, 100, 35};
             }
         }
 

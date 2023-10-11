@@ -1010,7 +1010,7 @@ struct Block : public BlockBase<T>
                     sqrt(   vel[3 * i    ] * vel[3 * i    ] +
                             vel[3 * i + 1] * vel[3 * i + 1] +
                             vel[3 * i + 2] * vel[3 * i + 2] );
-                input->domain(i, 4) *= a->s[0];
+                input->domain(ofst + i, 4) *= a->s[0];
                 // debug: print the first few velocities
 //                 if (i < 5)
 //                     fprintf(stderr, "vel [%.3f %.3f %.3f]\n", vel[3 * i], vel[3 * i + 1], vel[3 * i + 2]);

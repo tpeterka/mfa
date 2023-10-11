@@ -11,6 +11,7 @@
 
 #include    <mfa/mfa_data.hpp>
 #include    <mfa/mfa.hpp>
+#include    <mpi.h>     // for MPI_Wtime() only
 
 typedef Eigen::MatrixXi MatrixXi;
 

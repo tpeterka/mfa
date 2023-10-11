@@ -77,7 +77,7 @@ namespace mfa
             // get input domain points covered by the tensor
             vector<size_t> start_idxs(dom_dim);
             vector<size_t> end_idxs(dom_dim);
-            tmesh.domain_pts(t_idx, input.params->param_grid, true, start_idxs, end_idxs);
+            tmesh.domain_pts(t_idx, input.params->param_grid, true, 0, start_idxs, end_idxs);
 
             // Number and offset for points in tensor
             VectorXi ndom_pts(dom_dim);

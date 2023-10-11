@@ -52,7 +52,7 @@ int main(int argc, char** argv)
     string      infile          = "";       // input file name
     int         verbose         = 1;        // MFA verbosity (0 = no extra output)
     int         weighted        = 0;        // Use NURBS weights (0/1)
-    int         adaptive        = 0;        // do analytical encode (0/1)
+    int         adaptive        = 0;        // do adaptive encode (0/1)
     real_t      e_threshold     = 1e-1;     // error threshold for adaptive encoding
     int         rounds          = 0;        // max number of rounds for adaptive encoding
     bool        help            = false;    // show help
@@ -159,6 +159,7 @@ int main(int argc, char** argv)
         b->range_error(cp, true, false);
     });
     decode_time = MPI_Wtime() - decode_time;
+    fprintf(stderr, "Decoding done.\n");
 
     // print results
     fprintf(stderr, "\n------- Final block results --------\n");
