@@ -56,8 +56,8 @@ int main(int argc, char **argv) {
     int num_threads = 1;                        // needed in order to do timing
 
     // default command line arguments
-    int pt_dim              = 3;        // dimension of input points
-    int dom_dim             = 2;        // dimension of domain (<= pt_dim)
+    int pt_dim              = 4;        // dimension of input points
+    int dom_dim             = 3;        // dimension of domain (<= pt_dim)
     int geom_degree         = 1;        // degree for geometry (same for all dims)
     int vars_degree         = 4;        // degree for science variables (same for all dims)
     int geom_nctrl          = -1;       // input number of control points for geometry (same for all dims)
