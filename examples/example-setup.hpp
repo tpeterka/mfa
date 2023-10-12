@@ -220,6 +220,25 @@ using namespace std;
         return;
     }
 
+    // version with overlaps provided as a vector of ints
+    void echo_multiblock_settings(MFAInfo& mfa_info, DomainArgs& d_args, int nproc, int tot_blocks, vector<int>& divs, int strong_sc, vector<int> overlaps, ostream& os = std::cerr)
+    {
+        os << "------- Multiblock Settings ---------" << endl;
+        os << "Total MPI processes  =  " << nproc << "\t" << "Total blocks = " << tot_blocks << endl;
+        os << "Blocks per dimension = " << mfa::print_vec(divs) << endl;
+        os << "Ghost overlap  = " << mfa::print_vec(overlaps) << endl;
+        os << "Strong scaling = " << boolalpha << (bool)strong_sc << endl;
+        os << "Per-block settings:" << endl;
+        os << "    Input pts (each dim):      " << mfa::print_vec(d_args.ndom_pts) << endl;
+        os << "    Geom ctrl pts (each dim):  " << mfa::print_vec(mfa_info.geom_model_info.nctrl_pts) << endl;
+        for (int k = 0; k < mfa_info.nvars(); k++)
+        {
+            os << "    Var " << k << " ctrl pts (each dim): " << mfa::print_vec(mfa_info.var_model_infos[k].nctrl_pts) << endl;
+        }
+
+        return;
+    }
+
     // Currently for single block examples only
     // void setup_args(vector<int> model_dims, MFAInfo& mfa_info, DomainArgs& d_args)
     void setup_args( int dom_dim, int pt_dim, vector<int> model_dims,

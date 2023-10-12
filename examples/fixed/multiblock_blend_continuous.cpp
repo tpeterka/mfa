@@ -68,7 +68,7 @@ int main(int argc, char **argv) {
     ops >> opts::Option('n', "ndomp",       ndomp,          " number of input points in each dimension of domain");
     ops >> opts::Option('r', "resolution",  resolutions,    " number of output points in each dimension of domain");
     ops >> opts::Option('g', "geom_nctrl",  geom_nctrl,     " number of control points in each dimension of geometry");
-    ops >> opts::Option('v', "vars_nctrl",  vars_nctrl,   " number of control points in each dimension of all science variables");
+    ops >> opts::Option('v', "vars_nctrl",  vars_nctrl,     " number of control points in each dimension of all science variables");
     ops >> opts::Option('i', "input",       input,          " input dataset");
     ops >> opts::Option('w', "weights",     weighted,       " solve for and use weights");
     ops >> opts::Option('b', "tot_blocks",  tot_blocks,     " total number of blocks");
