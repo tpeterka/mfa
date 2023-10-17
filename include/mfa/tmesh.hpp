@@ -65,6 +65,13 @@ struct TensorProduct
 
 namespace mfa
 {
+    // TODO all_knot_param_idxs assumes that knot value <= params[dim][idx] < next knot value for
+    //      each input point. However, this is only true if:
+    //       1. The input data is structured
+    //       2. Every knot span contains at least one input point
+    //       3. The last input point has parameter value equal to 1.0
+    //      If these conditions are not satisfied, all_knot_params_idxs will behave unpredicatbly, 
+    //      which may cause the Tmesh to fail.
     template <typename T>
     struct Tmesh
     {

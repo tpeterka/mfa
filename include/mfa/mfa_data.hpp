@@ -105,6 +105,7 @@ namespace mfa
                                                  // for all input points (matrix rows) and control points (matrix cols)
         Tmesh<T>                  tmesh;         // t-mesh of knots, control points, weights
         T                         max_err;       // unnormalized absolute value of maximum error
+        bool                      verbose{false};
 
         // constructor for creating an mfa from input points
         MFA_Data(
@@ -183,7 +184,7 @@ namespace mfa
             return tmesh.tensor_prods.size();
         }
 
-        void set_knots(const PointSet<T>& input, int verbose = 0)
+        void set_knots(const PointSet<T>& input, const vector<vector<T>>& knots = vector<vector<T>>())
         {
             // TODO move this elsewhere (to encode method?), wrapped in "structured==true" block
             // allocate basis functions
@@ -204,16 +205,17 @@ namespace mfa
             }
             tmesh.append_tensor(knot_mins, knot_maxs, 0);
 
-#ifdef CURVE_PARAMS
-            if (!input.is_structured())
+            // Initialize knot data structures
+            if (knots.size() != 0)
             {
-                cerr << "ERROR: Cannot set curve knots from unstructured input" << endl;
-                exit(1);
+                // Set from user-specified knots
+                CustomKnots(input, knots);
             }
-            Knots(input, tmesh, verbose);       // knots spaced according to parameters (per P&T)
-#else
-            UniformKnots(input, tmesh, verbose);                    // knots spaced uniformly
-#endif
+            else 
+            {
+                // Set uniformly spaced knots
+                UniformKnots(input);
+            }
         }
 
         // original version of basis functions from algorithm 2.2 of P&T, p. 70
@@ -1715,6 +1717,84 @@ namespace mfa
             }
         }
 
+        // Set knot vector from user-supplied input
+        void CustomKnots(const  PointSet<T>&        input,
+                         const  vector<vector<T>>&  knots)
+        {
+            for (size_t k = 0; k < dom_dim; k++)
+            {
+                int last = knots[k].size() - 1;
+                bool pinned = true;
+
+                // Check that custom knot vector matches existing tmesh
+                // The size of the tmesh is determined previously by the
+                // number of control points
+                if (tmesh.all_knots[k].size() != knots[k].size())
+                {
+                    cerr << "ERROR: Custom knot distribution has incorrect size in dimesion " << k << endl;
+                    cerr << "       Found " << knots[k].size() << " knots, expected " << tmesh.all_knots[k].size() << endl;
+                    cerr << "Exiting." << endl;
+                    exit(1);
+                }
+
+                // Check that knots are pinned
+                for (int i = 0; i < p(k) + 1; i++)
+                {
+                    if (knots[k][i] != 0 || knots[k][last - i] != 1)
+                    {
+                        cerr << "ERROR: Custom knot distribution does not have pinned knots in dimension " << k << endl;
+                        cerr << "Exiting." << endl;
+                        exit(1);
+                    }
+                }
+
+                // Set up all_knot_param_idxs for structured data
+                if (input.is_structured())
+                {
+                    // all_knot_param_idxs[k][j] gives the index of the first data point param that 
+                    // is greater than or equal to knot[k][j].
+                    // NOTE: This data point may not be in the knot span [t_j, t_{j+1}]. All we know
+                    //       is that it is the first point greater than t_j.
+                    // 
+                    // If consecutive entries of all_knot_param_idxs have the same value, then the span
+                    // between those two knots must be missing an input point. In this case we issue a 
+                    // warning and continue.
+                    auto& params = input.params->param_grid;
+                    int knot_idx = 0;
+                    for (int i = 0; i < params[k].size(); i++)
+                    {
+                        while (tmesh.all_knots[k][knot_idx] <= params[k][i] && knot_idx <= last)
+                        {
+                            tmesh.all_knot_param_idxs[k][knot_idx] = i;
+
+                            // Warn if it looks like an interior knot span is missing an input point.
+                            if (knot_idx > p(k) + 1 && knot_idx < last - p(k))
+                            {
+                                if (tmesh.all_knot_param_idxs[k][knot_idx] == tmesh.all_knot_param_idxs[k][knot_idx-1])
+                                {
+                                    cerr << "WARNING: Missing input point between knots " << knot_idx-1 << " and " << knot_idx << " in dimension " << k << endl;
+                                }
+                            }
+                            knot_idx++;
+                        }
+                    }
+                    
+                    // If the largest input parameter is not equal to 1.0, then all_knot_param_idxs will 
+                    // not be set up properly. The Tmesh code assumes that every knot (including the last) must 
+                    // have at least one input point >= that knot value. If this is not true, then we should 
+                    // abort the code. Otherwise, the logic will be incorrect.
+                    if (knot_idx < last)
+                    {
+                        cerr << "ERROR: all_knot_param_idxs set incorrectly in MFAData::set_knots(). Exiting." << endl;
+                        exit(1);
+                    }
+                }
+
+                // Copy knots to tmesh
+                tmesh.all_knots[k] = knots[k];
+            }
+        }
+
         // compute knots
         // n-d version of uniform spacing
         // tmesh version
@@ -1729,31 +1809,30 @@ namespace mfa
         // resulting knots are same for all curves and stored once for each dimension (1st dim knots, 2nd dim, ...)
         // total number of knots is the sum of number of knots over the dimensions, much less than the product
         // assumes knots were allocated by caller
-        void UniformKnots( const    PointSet<T>&    input,
-                                    Tmesh<T>&       tmesh,
-                                    int             verbose)
+        void UniformKnots(const PointSet<T>& input)
         {
             if (input.is_structured())
             {
                 if (verbose)
                     cerr << "Using uniform knots (structured input)" << endl;
 
-                uniform_knots_impl_structured(input.params->param_grid, tmesh);
+                uniform_knots_impl_structured(input);
             }
             else
             {
                 if (verbose)
                     cerr << "Using uniform knots (unstructured input)" << endl;
 
-                uniform_knots_impl_unstructured(tmesh);
+                uniform_knots_impl_unstructured();
             }
         }
 
-        void uniform_knots_impl_structured(
-                const vector<vector<T>>&    params,             // parameters for input points[dimension][index]
-                Tmesh<T>&                   tmesh) const        // (output) tmesh
+        void uniform_knots_impl_structured(const PointSet<T>& input)
         {
-            for (size_t k = 0; k < dom_dim; k++)                // for all domain dimensions
+            // Grid of parameter values for input data set
+            auto& params = input.params->param_grid;
+            
+            for (size_t k = 0; k < dom_dim; k++)
             {
                 // TODO: hard-coded for first tensor product of the tmesh
                 int nctrl_pts = tmesh.tensor_prods[0].nctrl_pts(k);
@@ -1783,7 +1862,7 @@ namespace mfa
             }
         }
 
-        void uniform_knots_impl_unstructured(Tmesh<T>& tmesh)
+        void uniform_knots_impl_unstructured()
         {
             if (tmesh.tensor_prods.size() > 1)
             {
@@ -1817,7 +1896,6 @@ namespace mfa
                 }
             }
         }
-
     };
 }
 #endif
