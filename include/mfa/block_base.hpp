@@ -167,7 +167,7 @@ struct BlockBase
             const       diy::Master::ProxyWithLink& cp,
             MFAInfo&  info)
     {
-        mfa->FixedEncode(*input, info.regularization, info.reg1and2, info.weighted, false);
+        mfa->FixedEncode(*input, info.regularization, info.reg1and2, info.weighted);
     }
 
     // adaptively encode block to desired error limit

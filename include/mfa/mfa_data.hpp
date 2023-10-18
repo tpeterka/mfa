@@ -208,7 +208,7 @@ namespace mfa
             // Initialize knot data structures
             if (knots.size() != 0)
             {
-                // Set from user-specified knots
+                // Set from user-specified knots (with checks)
                 CustomKnots(input, knots);
             }
             else 

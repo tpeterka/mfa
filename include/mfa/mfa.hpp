@@ -635,10 +635,7 @@ namespace mfa
                 const PointSet<T>&  input,                  // input points
                 T                   regularization,
                 bool                reg1and2,
-                bool                weighted,               // solve for and use weights (default = true)
-                bool                force_unified = false) const         
-        {
-            mfa_data.set_knots(input);
+                bool                weighted)               // solve for and use weights (default = true)
 
             // fixed encode assumes the tmesh has only one tensor product
             TensorProduct<T>&t = mfa_data.tmesh.tensor_prods[0];
@@ -646,7 +643,7 @@ namespace mfa
             t.weights = VectorX<T>::Ones(t.nctrl_pts.prod());
             Encoder<T> encoder(mfa_data, input, verbose);
 
-            if (input.is_structured() && !force_unified)
+            if (input.is_structured())
                 encoder.Encode(t.nctrl_pts, t.ctrl_pts, t.weights, weighted);
             else
                 encoder.EncodeUnified(0, regularization, reg1and2, weighted);  // Assumes only one tensor product
@@ -986,18 +983,18 @@ namespace mfa
 
         // Fixed encode geometry model only
         // Useful if input arguments vary between models, or different models are encoded by different threads
-        void FixedEncodeGeom(const PointSet<T>& input, bool weighted, bool force_unified = false)
+        void FixedEncodeGeom(const PointSet<T>& input, bool weighted)
         {
             if (verbose)
                 cout << "MFA: Encoding geometry model (fixed)" << endl;
 
             T regularization = 0;
-            FixedEncodeImpl(*geometry, input, regularization, false, weighted, force_unified);
+            FixedEncodeImpl(*geometry, input, regularization, false, weighted);
         }
 
         // Fixed encode single variable model only
         // Useful if input arguments vary between models, or different models are encoded by different threads 
-        void FixedEncodeVar(int i, const PointSet<T>& input, T regularization, bool reg1and2, bool weighted, bool force_unified = false)
+        void FixedEncodeVar(int i, const PointSet<T>& input, T regularization, bool reg1and2, bool weighted)
         {
             if (i < 0 || i >= nvars())
             {
@@ -1008,17 +1005,17 @@ namespace mfa
             if (verbose)
                 cout << "MFA: Encoding variable model " << i << " (fixed)" << endl;
 
-            FixedEncodeImpl(*(vars[i]), input, regularization, reg1and2, weighted, force_unified);
+            FixedEncodeImpl(*(vars[i]), input, regularization, reg1and2, weighted);
         }
 
         // Fixed encode all models simultaneously
-        void FixedEncode(const PointSet<T>& input, T regularization, bool reg1and2, bool weighted, bool force_unified)
+        void FixedEncode(const PointSet<T>& input, T regularization, bool reg1and2, bool weighted)
         {
-            FixedEncodeGeom(input, weighted, force_unified);
+            FixedEncodeGeom(input, weighted);
 
             for (int i = 0; i < nvars(); i++)
             {
-                FixedEncodeVar(i, input, regularization, reg1and2, weighted, force_unified);
+                FixedEncodeVar(i, input, regularization, reg1and2, weighted);
             }
         }
 
