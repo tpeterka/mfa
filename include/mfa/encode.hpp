@@ -114,6 +114,7 @@ namespace mfa
             weights.resize(ctrl_pts.rows());
 
             // resize basis function matrices and initialize to 0; will only fill nonzeros later
+            mfa_data.N.resize(dom_dim);
             for (auto k = 0; k < ndims; k++)
                     mfa_data.N[k] = MatrixX<T>::Zero(input.ndom_pts(k), nctrl_pts(k));
 

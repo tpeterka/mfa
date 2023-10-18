@@ -629,6 +629,48 @@ namespace mfa
             recompute_pt_dim();
         }
 
+        // Update knot vector for geometry model.
+        // This method should rarely be called by the user, except when the 
+        // data are sampled from a manifold with complex shape and special knots
+        // are needed.
+        // The geometry model is set up with uniformly spaced knots during 
+        // the construction of the MFA_Data object
+        void setGeomKnots(const vector<vector<T>>& knots = vector<vector<T>>())
+        {
+            if (verbose)
+                cout << "MFA: Setting custom knot distribution for geometry model" << endl;
+
+            geometry->set_knots(knots);
+        }
+
+        // Update knot vector for variable i. 
+        // The variable models are set up with uniformly spaced knots during 
+        // the construction of the MFA_Data object
+        void setKnots(int i, const vector<vector<T>>& knots = vector<vector<T>>())
+        {
+            if (verbose)
+                cout << "MFA: Setting custom knot distribution for variable model " << i << endl;
+
+            if (i < 0 || i >= nvars())
+            {
+                cerr << "ERROR: var index out of range in MFA::setKnots()" << endl;
+                exit(1);
+            }
+           vars[i]->set_knots(knots);
+        }
+
+        // Sets the same knot vector for all variables
+        // Does not affect knots for geometry model, which are uniform in almost all cases
+        // NOTE: This method can only work properly if every variable model has the same
+        //       number of control points. Otherwise, it will cause an error and exit.
+        void setKnots(const vector<vector<T>>& knots = vector<vector<T>>())
+        {
+            for (int i = 0; i < nvars(); i++)
+            {
+                setKnots(i, knots);
+            }
+        }
+
         // fixed number of control points encode
         void FixedEncodeImpl(
                 MFA_Data<T>&        mfa_data,               // mfa data model
@@ -636,7 +678,7 @@ namespace mfa
                 T                   regularization,
                 bool                reg1and2,
                 bool                weighted)               // solve for and use weights (default = true)
-
+        {
             // fixed encode assumes the tmesh has only one tensor product
             TensorProduct<T>&t = mfa_data.tmesh.tensor_prods[0];
 
@@ -656,8 +698,6 @@ namespace mfa
             if (verbose)
                 cout << "MFA: Starting Ray Encoding" << endl;
                 
-            vars[i]->set_knots(input);
-
             RayEncoder<T> encoder(*vars[i], input, true);
             encoder.encode();
         }
@@ -669,15 +709,14 @@ namespace mfa
                 T                   err_limit,              // maximum allowable normalized error
                 bool                weighted,               // solve for and use weights (default = true)
                 const VectorX<T>&   extents,                // extents in each dimension, for normalizing error (size 0 means do not normalize)
-                int                 max_rounds) const       // maximum number of rounds
+                int                 max_rounds)             // maximum number of rounds
         {
-            mfa_data.set_knots(input);
-            
+#ifndef MFA_TMESH
             Encoder<T> encoder(mfa_data, input, verbose);
-
-#ifndef MFA_TMESH           // original adaptive encode for one tensor product
             encoder.OrigAdaptiveEncode(err_limit, weighted, extents, max_rounds);
-#else                       // adaptive encode for tmesh
+#else
+            mfa_data.set_param_idxs(input);
+            Encoder<T> encoder(mfa_data, input, verbose);
             encoder.AdaptiveEncode(err_limit, weighted, extents, max_rounds);
 #endif
         }
