@@ -31,7 +31,7 @@
 // #define WEIGH_ALL_DIMS
 
 // comment out the following line for original single tensor product version
-// #define MFA_TMESH
+#define MFA_TMESH
 
 // comment out the following line to encode local with unified dims
 #define MFA_ENCODE_LOCAL_SEPARABLE

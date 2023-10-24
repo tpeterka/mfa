@@ -683,12 +683,12 @@ namespace mfa
                 {
                     bool error = false;
                     T sum = Nfree.row(i).sum();
-                    if (cons_type != ConsType::MFA_NO_CONSTRAINT)
+                    if (cons_type != ConsType::MFA_NO_CONSTRAINT && Ncons.rows() > i)
                         sum += Ncons.row(i).sum();
                     if (sum > 0.0)
                     {
                         Nfree.row(i) /= sum;
-                        if (cons_type != ConsType::MFA_NO_CONSTRAINT)
+                        if (cons_type != ConsType::MFA_NO_CONSTRAINT && Ncons.rows() > i)
                             Ncons.row(i) /= sum;
                     }
                     else
