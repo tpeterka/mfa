@@ -1236,7 +1236,9 @@ struct BlockBase
 
         for (auto i = 0; i < mfa->nvars(); i++) {
             cerr << "block gid = " << cp.gid() << " var: " << i
-                    << " max error: " << max_errs[i] << "\n";
+                    << " max error: " << max_errs[i] << "\n"
+                    << " rms error: " << sqrt(sum_sq_errs[i] / (input->npts)) << endl;
+                    
         }
 
         if (0 == cp.gid()) {

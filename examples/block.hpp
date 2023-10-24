@@ -1755,21 +1755,22 @@ struct Block : public BlockBase<T>
         Block<T> *b = new Block<T>;
         RCLink<int> *l = new RCLink<int>(link);
         diy::Master & m = const_cast<diy::Master&>(master);
-        // write core and bounds only for first block
-        if (0 == gid) {
-            std::cout << "block:" << gid << "\n  core \t\t  bounds \n";
-            for (int j = 0; j < 3; j++)
-                std::cout << " " << core.min[j] << ":" << core.max[j] << "\t\t"
-                    << " " << bounds.min[j] << ":" << bounds.max[j] << "\n";
-        }
         m.add(gid, b, l);
 
         b->dom_dim = (int) mapDimension.size();
+        // write core and bounds only for first block
+        // if (0 == gid) {
+            std::cout << "block:" << gid << "\n  core \t\t  bounds \n";
+            for (int j = 0; j < b->dom_dim; j++)
+                std::cout << " " << core.min[j] << ":" << core.max[j] << "\t\t"
+                    << " " << bounds.min[j] << ":" << bounds.max[j] << "\n";
+        // }
+
         diy::mpi::io::file in(master.communicator(), s3dfile, diy::mpi::io::file::rdonly);
         diy::io::BOV reader(in, shape);
 
         int size_data_read = 1;
-        for (int j = 0; j < 3; j++)  // we know how the s3d data is organized
+        for (int j = 0; j < b->dom_dim; j++)  // we know how the s3d data is organized
             size_data_read *= (bounds.max[j] - bounds.min[j] + 1);
         std::vector<float> data;
         data.resize(size_data_read * chunk);
@@ -1875,8 +1876,8 @@ struct Block : public BlockBase<T>
                         b->input->domain(n, 1) = bounds.min[dir1] + j;
                         b->input->domain(n, 0) = bounds.min[dir0] + i;
                         float val = 0;
-                        for (int k = 0; k < chunk; k++)
-                            val += data[idx + k] * data[idx + k];
+                        for (int l = 0; l < chunk; l++)
+                            val += data[idx + l] * data[idx + l];
                         b->input->domain(n, 2) = sqrt(val);
                         n++;
                         idx += 3;
@@ -1905,8 +1906,8 @@ struct Block : public BlockBase<T>
                             b->input->domain(n, 1) = bounds.min[1] + j;
                             b->input->domain(n, 2) = bounds.min[2] + k;
                             float val = 0;
-                            for (int k = 0; k < chunk; k++)
-                                val += data[idx + k] * data[idx + k];
+                            for (int l = 0; l < chunk; l++)
+                                val += data[idx + l] * data[idx + l];
                             val = sqrt(val);
                             b->input->domain(n, 3) = val;
                             idx += 3;
@@ -1926,8 +1927,8 @@ struct Block : public BlockBase<T>
                             b->input->domain(n, 1) = bounds.min[1] + j;
                             b->input->domain(n, 0) = bounds.min[2] + i; // this now corresponds to x
                             float val = 0;
-                            for (int k = 0; k < chunk; k++)
-                                val += data[idx + k] * data[idx + k];
+                            for (int l = 0; l < chunk; l++)
+                                val += data[idx + l] * data[idx + l];
                             b->input->domain(n, 3) = sqrt(val);
                             n++;
                             idx += 3;

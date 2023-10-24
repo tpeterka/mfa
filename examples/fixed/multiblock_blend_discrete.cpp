@@ -56,13 +56,13 @@ int main(int argc, char **argv) {
     int num_threads = 1;                        // needed in order to do timing
 
     // default command line arguments
-    int pt_dim              = 4;        // dimension of input points
+    // int pt_dim              = 4;        // dimension of input points
     int dom_dim             = 3;        // dimension of domain (<= pt_dim)
     int geom_degree         = 1;        // degree for geometry (same for all dims)
     int vars_degree         = 4;        // degree for science variables (same for all dims)
     int geom_nctrl          = -1;       // input number of control points for geometry (same for all dims)
     vector<int> vars_nctrl  = {11};     // input number of control points for all science variables
-    string infile = "/media/iulian/ExtraDrive1/MFAData/S3D/6_small.xyz"; // input file for s3d data
+    string infile           = "";       // input file for s3d data
     // vector<int> resolutions = {120};    // output points resolution
     int weighted            = 0;        // solve for and use weights (bool 0 or 1)
     int strong_sc           = 0;        // strong scaling (bool 0 or 1, 0 = weak scaling)
@@ -86,7 +86,6 @@ int main(int argc, char **argv) {
     // int shp[3] = { 550, 540, 704 }; // shape of the global block
     int chunk = 3;
     int transpose = 0; // if 1, transpose data
-
 
     // default command line arguments
     // int dom_dim         = 3;                    // dimension of domain (<= pt_dim)
@@ -153,6 +152,8 @@ int main(int argc, char **argv) {
     ops >> opts::Option('e', "errorbound",  e_threshold," error threshold for adaptive encoding");
     ops >> opts::Option('z', "rounds",      rounds,     " max number of rounds for adaptive encoding");
 
+    int pt_dim = dom_dim + 1;
+
     if (!ops.parse(argc, argv) || help) {
         if (world.rank() == 0)
             std::cout << ops;
@@ -176,7 +177,7 @@ int main(int argc, char **argv) {
         tot_blocks *= nblocks[j];
 
         npts[j] = ends[j] - starts[j] + 1;
-        shape[j] = ends[j] - starts[j] + 1;
+        // shape[j] = ends[j] - starts[j] + 1;
 
         dom_bounds.min[j] = starts[j];
         dom_bounds.max[j] = ends[j];
@@ -200,9 +201,12 @@ int main(int argc, char **argv) {
     shape[dom_dim - 1] *= chunk;
 
     // print input arguments
-    echo_mfa_settings("multiblock blend discrete example", dom_dim, pt_dim, 1, geom_degree, geom_nctrl, vars_degree, vars_nctrl,
-                        0, 0, adaptive, e_threshold, rounds);
-    echo_data_settings("s3d_blend", infile, 0, 0);
+    if (world.rank() == 0)
+    {
+        echo_mfa_settings("multiblock blend discrete example", dom_dim, pt_dim, 1, geom_degree, geom_nctrl, vars_degree, vars_nctrl,
+                            0, 0, adaptive, e_threshold, rounds);
+        echo_data_settings("s3d_blend", infile, 0, 0);
+    }
 
 //     // minimal number of geometry control points if not specified
 //     if (geom_nctrl == -1)
@@ -337,7 +341,7 @@ int main(int argc, char **argv) {
     MFAInfo     mfa_info(dom_dim, verbose);
     DomainArgs  d_args(dom_dim, model_dims);
     setup_args(dom_dim, pt_dim, model_dims, geom_degree, geom_nctrl, vars_degree, vars_nctrl,
-                        "s3d_blend", infile, 0, 1, 0, 0, 0, 0, 0, 0, adaptive, verbose,
+                        "s3d", infile, 0, 1, 0, 0, 0, 0, 0, 0, adaptive, verbose,
                         mfa_info, d_args);
 
     // Set multiblock options
@@ -371,7 +375,6 @@ int main(int argc, char **argv) {
         [&](int gid, const Bounds<int> &core, const Bounds<int> &bounds, const Bounds<int> &domain, const RCLink<int> &link) 
         { Block<real_t>::readfile(gid, core, bounds, link, master, mapDim, infile, shape, chunk, transpose, mfa_info); });
 
-
     // compute the MFA
     if (world.rank() == 0)
         fprintf(stderr, "\nStarting fixed encoding...\n\n");
@@ -395,6 +398,7 @@ int main(int argc, char **argv) {
     master.foreach([&](Block<real_t> *b, const diy::Master::ProxyWithLink &cp)
     {
         b->range_error(cp, true, false);
+        b->print_brief_block(cp, true);
     });
     world.barrier();
     double end_decode = MPI_Wtime();
@@ -406,61 +410,52 @@ int main(int argc, char **argv) {
     double end_resolution_decode = MPI_Wtime();
     
     if (world.rank() == 0) {
+
         fprintf(stderr, "decomposing and reading time = %.3lf s.\n", start_encode - start_reading);
         fprintf(stderr, "encoding time                = %.3lf s.\n", end_encode - start_encode);
         fprintf(stderr, "decoding time                = %.3lf s.\n", end_decode - end_encode);
         fprintf(stderr, "decode at resolution         = %.3lf s.\n", end_resolution_decode - end_decode);
     }
 
-    if (write_output) {
-        diy::io::write_blocks("approx.mfa", world, master);
-    }
     if (overlaps[0] == 0 && overlaps[1] == 0 && overlaps[2] == 0) // no overlap, stop
     {
+        if (write_output) {
+            diy::io::write_blocks("approx.mfa", world, master);
+        }
         return 0;
     }
 
     // compute the neighbors encroachment
-    master.foreach([&](Block<real_t> *b, const diy::Master::ProxyWithLink &cp) {
+    master.foreach([&](Block<real_t> *b, const diy::Master::ProxyWithLink &cp)
+    {
         b->compute_neighbor_overlaps(cp);
     });
 
-    master.foreach([&](Block<real_t> *b, const diy::Master::ProxyWithLink &cp) {
+    master.foreach([&](Block<real_t> *b, const diy::Master::ProxyWithLink &cp)
+    {
         b->decode_patches_discrete(cp, resolutions);
     });
     world.barrier();
     double end_decode_patches = MPI_Wtime();
+
     // do the actual data transmission, to send the computed values to the requesters
     master.exchange();
     world.barrier();
-
     double exchange_end = MPI_Wtime();
+
     // now receive the requested values and do blending
     master.foreach(&Block<real_t>::recv_and_blend);
     world.barrier();
     double recv_blend_end = MPI_Wtime();
 
     // compute maximum errors over all blocks; (a reduce operation)
+    //   merge-based reduction: create the partners that determine how groups are formed
+    //   in each round and then execute the reduction
+    diy::RegularMergePartners partners(decomposer, 2, true);
+    diy::reduce(master, assigner, partners, &max_err_cb);
 
-    // merge-based reduction: create the partners that determine how groups are formed
-    // in each round and then execute the reduction
-
-    int k = 2;                          // the radix of the k-ary reduction tree
-
-    bool contiguous = true;
-    // partners for merge over regular block grid
-    diy::RegularMergePartners partners(decomposer,  // domain decomposition
-            k,           // radix of k-ary reduction
-            contiguous); // contiguous = true: distance doubling
-                         // contiguous = false: distance halving
-
-    // reduction
-    diy::reduce(master,                              // Master object
-            assigner,                            // Assigner object
-            partners,                            // RegularMergePartners object
-            &max_err_cb);                    // merge operator callback function
-
-    master.foreach([&](Block<real_t> *b, const diy::Master::ProxyWithLink &cp) {
+    master.foreach([&](Block<real_t> *b, const diy::Master::ProxyWithLink &cp) 
+    {
         b->print_brief_block(cp, true);
     });
     world.barrier();
@@ -474,23 +469,29 @@ int main(int argc, char **argv) {
     }
     if (world.rank() == 0) {
         fprintf(stderr, "\n------- Final block results --------\n");
-        master.foreach(
-                [&](Block<real_t> *b, const diy::Master::ProxyWithLink &cp) {
-                    b->print_block(cp, true);
-                }); // only blocks on master
+        master.foreach([&](Block<real_t> *b, const diy::Master::ProxyWithLink &cp)
+        {
+            b->print_block(cp, true);
+        }); // only blocks on master
 
-        fprintf(stderr, "decode requests time         = %.3lf s.\n",
-                end_decode_patches - end_resolution_decode);
-        fprintf(stderr, " exchange time         = %.3lf s.\n",
-                exchange_end - end_decode_patches);
-        fprintf(stderr, "blend time                   = %.3lf s.\n",
-                recv_blend_end - exchange_end);
-        fprintf(stderr, "blend total                  = %.3lf s.\n",
-                recv_blend_end - end_decode);
+        fprintf(stderr, "decode requests time   = %.3lf s.\n", end_decode_patches - end_resolution_decode);
+        fprintf(stderr, "exchange time          = %.3lf s.\n", exchange_end - end_decode_patches);
+        fprintf(stderr, "blend time             = %.3lf s.\n", recv_blend_end - exchange_end);
+        fprintf(stderr, "blend total            = %.3lf s.\n", recv_blend_end - end_decode);
         if (write_output)
-            fprintf(stderr, "write time                   = %.3lf s.\n",
-                    write_time - recv_blend_end);
+            fprintf(stderr, "write time             = %.3lf s.\n", write_time - recv_blend_end);
+    }
 
+    if (world.rank() == 0 && mapDim.size() == 3) {
+        Block<real_t> *b = static_cast<Block<real_t>*>(master.block(0));
+        int blockMax = (int) b->max_errs_reduce[1];
+        real_t max_red_err = b->max_errs_reduce[0];
+        if (blockMax != 5 || fabs(max_red_err - 0.591496) > 1.e-5) {
+            std::cout << "expected blockMax == 5 got " << blockMax
+                    << " expected max_red_err == 0.591496 got : " << max_red_err
+                    << "\n";
+            abort();
+        }
     }
 #ifdef MFA_KOKKOS
     Kokkos::finalize();

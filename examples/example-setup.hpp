@@ -360,12 +360,12 @@ using namespace std;
             d_args.full_dom_pts = {704, 540, 550};  // Hard-coded to full data set size
             d_args.ndom_pts = d_args.full_dom_pts;
 
-            if (!adaptive)
-            {
-                if (dom_dim >= 1) vars_nctrl[0] = 140;
-                if (dom_dim >= 2) vars_nctrl[1] = 108;
-                if (dom_dim >= 3) vars_nctrl[2] = 110;
-            }
+            // if (!adaptive)
+            // {
+            //     if (dom_dim >= 1) vars_nctrl[0] = 140;
+            //     if (dom_dim >= 2) vars_nctrl[1] = 108;
+            //     if (dom_dim >= 3) vars_nctrl[2] = 110;
+            // }
 
             // for testing, hard-code a subset of a 3d domain, 1/2 the size in each dim and centered
             // in this case, actual size is just under 1/2 size in each dim to satisfy DIY's (MPI's)
