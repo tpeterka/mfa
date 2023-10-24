@@ -30,16 +30,7 @@
 #include "opts.h"
 #include "example-setup.hpp"
 
-
 using namespace std;
-
-// call back for max error call back
-// callback function for merge operator, called in each round of the reduction
-// one block is the root of the group
-// link is the neighborhood of blocks in the group
-// root block of the group receives data from other blocks in the group and reduces the data
-// nonroot blocks send data to the root
-//
 
 int main(int argc, char **argv) {
     // initialize MPI
@@ -51,10 +42,6 @@ int main(int argc, char **argv) {
     Kokkos::initialize( argc, argv );
 #endif
 
-    // Parallelization 
-    int mem_blocks  = -1;                       // everything in core for now
-    int num_threads = 1;                        // needed in order to do timing
-
     // default command line arguments
     // int pt_dim              = 4;        // dimension of input points
     int dom_dim             = 3;        // dimension of domain (<= pt_dim)
@@ -63,13 +50,9 @@ int main(int argc, char **argv) {
     int geom_nctrl          = -1;       // input number of control points for geometry (same for all dims)
     vector<int> vars_nctrl  = {11};     // input number of control points for all science variables
     string infile           = "";       // input file for s3d data
-    // vector<int> resolutions = {120};    // output points resolution
     int weighted            = 0;        // solve for and use weights (bool 0 or 1)
     int strong_sc           = 0;        // strong scaling (bool 0 or 1, 0 = weak scaling)
-    // real_t ghost            = 0.1;      // amount of ghost zone overlap as a factor of block size (0.0 - 1.0)
     bool write_output       = false;
-    // int error               = 1;        // decode all input points and check error (bool 0 or 1)
-    // double noise            = 0;
     int         verbose = 0;
     bool help               = false;    // show help
 
@@ -78,51 +61,15 @@ int main(int argc, char **argv) {
     int         rounds          = 0;
 
     std::vector<int> overlaps = {2, 2, 2};        // ghosting in 3 directions; default is 2, 2, 2
-    // int nb[3] = { 2, 2, 3 };                  // nb blocks in x, y, z directions
     vector<int> resolutions = {20, 20, 20};
 
-    // int starts[3] = { 0, 0, 0 };
-    // int ends[3] = { 549, 539, 703 }; // maximum possible
-    // int shp[3] = { 550, 540, 704 }; // shape of the global block
+
     int chunk = 3;
     int transpose = 0; // if 1, transpose data
-
-    // default command line arguments
-    // int dom_dim         = 3;                    // dimension of domain (<= pt_dim)
-    // int geom_degree     = 1;              // degree for geometry (same for all dims)
-    // int vars_degree     = 4;            // degree for science variables (same for all dims)
-    // int geom_nctrl      = -1;       // input number of control points for geometry (same for all dims)
-    // int vars_nctrl      = 11;       // input number of control points for all science variables (same for all dims)
-    //real_t ghost        = 0.1;                  // amount of ghost zone overlap as a factor of block size (0.0 - 1.0)
-    // int nb[3] = { 2, 2, 3 };                  // nb blocks in x, y, z directions
-    // std::vector<int> overlaps = {2, 2, 2};        // ghosting in 3 directions; default is 2, 2, 2
-    // ovs.push_back(2);
-    // ovs.push_back(2);
-    // ovs.push_back(2);
-    // string inputfile = "/media/iulian/ExtraDrive1/MFAData/S3D/6_small.xyz"; // input file for s3d data
-    // std::vector<int> resolutions;
-    // resolutions.push_back(20);
-    // resolutions.push_back(20);
-    // resolutions.push_back(20);
-    // int starts[3] = { 0, 0, 0 };
-    // int ends[3] = { 549, 539, 703 }; // maximum possible
-    // int shp[3] = { 550, 540, 704 }; // shape of the global block
-    // bool write_output = false;
-    // int chunk = 3; // 3 values per point, in this case a velocity
-    // bool help;                                // show help
-    // double strong_scaling = 0.0; // vary number of control points per direction, based on
-    // a fraction of a total number
-    // if the number is > 0, then number of control points is based on a fraction of number of input points
-    // 0.2 means a compression of 20% per direction !!
-    // int error = 1;      // decode all input points and check error (bool 0 or 1)
-
-    // int transpose = 0; // if 1, transpose data
-
     vector<int> nblocks = {2, 2, 3};
     vector<int> starts = {0, 0, 0};
     vector<int> ends = {549, 539, 703};
-    vector<unsigned> shape = {550, 540, 704};
-    vector<int> npts = {550, 540, 704};      // number of data points in each dimension 
+    vector<int> shape = {550, 540, 704};
     vector<int> model_dims = {3, 1};
 
     // get command line arguments
@@ -136,18 +83,13 @@ int main(int argc, char **argv) {
     ops >> opts::Option('b', "nblocks",     nblocks,        " number of blocks in each direction");
     ops >> opts::Option('x', "starts", starts, " start of block in each direction");
     ops >> opts::Option('y', "ends", ends, " end of block in second direction");
-    // ops >> opts::Option('s', "shape", shape, " shape of block in each direction");
     ops >> opts::Option('D', "chunk", chunk, " number of values per geometric point");
-
-    // need to explain better
     ops >> opts::Option('T', "transpose", transpose, " transpose input data ");
-    // this does not work as expected yet; use some default values
     ops >> opts::Option('o', "overlap", overlaps, " overlaps in 3 directions ");
     ops >> opts::Option('u', "resolutions", resolutions, " number of output points in each dimension of domain");
     ops >> opts::Option('t', "strong_sc",   strong_sc,      " strong scaling (1 = strong, 0 = weak)");
     ops >> opts::Option('W', "write", write_output, " write output file");
     ops >> opts::Option('h', "help", help, " show help");
-
     ops >> opts::Option('z', "adaptive",    adaptive,   " do adaptive encode (0/1)");
     ops >> opts::Option('e', "errorbound",  e_threshold," error threshold for adaptive encoding");
     ops >> opts::Option('z', "rounds",      rounds,     " max number of rounds for adaptive encoding");
@@ -169,16 +111,14 @@ int main(int argc, char **argv) {
     }
 
     // Set up global domain information for DIY decomposition
+    const int mem_blocks  = -1;     // Keep all blocks in memory
+    const int num_threads = 1;      // Number of threads for DIY (serial for timing purposes)
     int tot_blocks = 1;
     vector<bool> share_face(dom_dim, true);
     vector<bool> wrap(dom_dim, false);
     Bounds<int> dom_bounds(3);
     for (int j = 0; j < 3; j++) {
         tot_blocks *= nblocks[j];
-
-        npts[j] = ends[j] - starts[j] + 1;
-        // shape[j] = ends[j] - starts[j] + 1;
-
         dom_bounds.min[j] = starts[j];
         dom_bounds.max[j] = ends[j];
 
@@ -208,50 +148,6 @@ int main(int argc, char **argv) {
         echo_data_settings("s3d_blend", infile, 0, 0);
     }
 
-//     // minimal number of geometry control points if not specified
-//     if (geom_nctrl == -1)
-//         geom_nctrl = geom_degree + 1;
-
-//     if (world.rank() == 0) {
-//         cerr << "\n--------- Input arguments ----------\n";
-//         cerr << "Number of MPI tasks: " << world.size()
-//                 << "\nNumber of blocks: " << tot_blocks << "\n";
-//         cerr << " dom_dim = " << dom_dim << "\ngeom_degree = " << geom_degree
-//                 << " vars_degree = " << vars_degree << " tot_blocks = "
-//                 << tot_blocks << endl;
-//         cerr << " file location: " << inputfile << "\n";
-//         cerr << " start block: " << starts[0] << "\t " << starts[1] << "\t"
-//                 << starts[2] << endl;
-//         cerr << " end block:   " << ends[0] << "\t" << ends[1] << "\t"
-//                 << ends[2] << endl;
-//         cerr << " divisions : " << nb[0] << ":" << nb[1] << ":" << nb[2]
-//                 << endl;
-// #ifdef CURVE_PARAMS
-//         cerr << "parameterization method = curve" << endl;
-// #else
-//         cerr << "parameterization method = domain" << endl;
-// #endif
-// #ifdef MFA_TBB
-//     cerr << "threading: TBB" << endl;
-// #endif
-// #ifdef MFA_KOKKOS
-//     cerr << "threading: Kokkos" << endl;
-// #endif
-// #ifdef MFA_SYCL
-//     cerr << "threading: SYCL" << endl;
-// #endif
-// #ifdef MFA_SERIAL
-//     cerr << "threading: serial" << endl;
-// #endif
-// #ifdef MFA_NO_WEIGHTS
-//     cerr << "weighted = 0" << endl;
-// #else
-//     cerr << "weighted = " << weighted << endl;
-// #endif
-
-//         fprintf(stderr, "-------------------------------------\n\n");
-//     }
-
     // decide the actual dimension of the problem, looking at the starts and ends
     std::vector<int> mapDim;
     for (int i = 0; i < dom_dim; i++) {
@@ -273,70 +169,6 @@ int main(int argc, char **argv) {
             &Block<real_t>::load);
     diy::ContiguousAssigner assigner(world.size(), tot_blocks);
 
-    // set global domain bounds of the interested block ; depends on global shape and what kind
-    // of problem we solve; for 1d block, we could select any direction, and start1, start2
-    // for 2d, we could select a plane and one start point
-    // in general, the block of interest has a min and max
-    // when min and max are the same in one direction, one dimension is effectively lost
-    // the file still needs the whole shape
-
-    // diy::RegularDecomposer<Bounds<int>>::BoolVector share_face;
-
-    // diy::RegularDecomposer<Bounds<int>>::BoolVector wrap;
-
-    // diy::RegularDecomposer<Bounds<int>>::CoordinateVector ghosts;
-    // diy::RegularDecomposer<Bounds<int>>::DivisionsVector divs;
-
-    // for (int k = 0; k < dom_dim; k++) {
-    //     share_face.push_back(true);
-    //     wrap.push_back(false);
-    //     ghosts.push_back(ovs[k]);
-    //     divs.push_back(nb[k]);
-    // }
-
-    // start copy from multiblock req example
-    // DomainArgs d_args(dom_dim, dom_dim + 1);
-
-    // set default args for diy foreach callback functions
-
-    // /*d_args.dom_dim      = (int)mapDim.size();
-    //  d_args.pt_dim       = d_args.dom_dim+1;*/
-    // d_args.weighted = 0;
-    // d_args.multiblock = true;
-    // d_args.verbose = 0;
-    // d_args.r = 0.0;
-    // d_args.t = 0.0;
-    // d_args.structured   = true; // multiblock not tested for unstructured data yet
-    // //d_args.vars_p[0]    = vars_degree; // we know we have exactly one science var
-    // //dom_dim = mapDim.size();
-    // for (int i = 0; i < dom_dim; i++) {
-    //     d_args.geom_p[i] = geom_degree;
-    //     d_args.vars_p[0][i] = vars_degree;
-
-    //     //d_args.ndom_pts[i]          = ndomp;
-    //     d_args.geom_nctrl_pts[i] = geom_nctrl;
-    //     if ((strong_scaling > 0.0001) && (3 == d_args.dom_dim)) {
-    //         // in this case the number of control point per direction is decided by a factor
-    //         // from the number of input points per direction
-    //         // number of input points per direction is interval length per number of blocks per direction
-    //         // we also reverse the order, this is why we do 2-i, for dom_dim 3
-    //         d_args.vars_nctrl_pts[0][2 - i] = floor(
-    //                 ((ends[i] - starts[i] + 1) / nb[i]) * strong_scaling) + 1;
-    //     } else {
-    //         d_args.vars_nctrl_pts[0][i] = vars_nctrl;
-    //     }
-
-    // }
-    // if (world.rank() == 0) {
-    //     cerr << " number of control points per direction: \n";
-    //     for (int k = 0; k < d_args.dom_dim; k++)
-    //         cerr << " " << d_args.vars_nctrl_pts[0][k];
-    //     cerr << "\n ratio : " << strong_scaling << "\n";
-
-    // }
-    // d_args.f[0] = 1.0;
-
-
     // set up parameters for examples
     MFAInfo     mfa_info(dom_dim, verbose);
     DomainArgs  d_args(dom_dim, model_dims);
@@ -349,10 +181,6 @@ int main(int argc, char **argv) {
     if (strong_sc) 
     {
         mfa_info.splitStrongScaling(nblocks);
-        // for (int i = 0; i < dom_dim; i++)
-        // {
-        //     d_args.ndom_pts[i] /= nblocks[i];
-        // }
     }
 
     // Print block layout and scaling info
@@ -362,18 +190,10 @@ int main(int argc, char **argv) {
     }
 
     double start_reading = MPI_Wtime();
-    // decompose the domain into blocks
-    // diy::decompose(dom_dim, world.rank(), dom_bounds, assigner, 
-    //                 [&](int gid, const Bounds<int> &core, const Bounds<int> &bounds, const Bounds<int> &domain, const RCLink<int> &link)
-    //                 { Block<real_t>::readfile(gid, core, bounds, link, master, mapDim, infile, shape, chunk, transpose, d_args); },
-    //                 share_face,
-    //                 wrap,
-    //                 overlaps,
-    //                 nblocks);
     Decomposer<int> decomposer(dom_dim, dom_bounds, tot_blocks, share_face, wrap, overlaps, nblocks);
     decomposer.decompose(world.rank(), assigner,
         [&](int gid, const Bounds<int> &core, const Bounds<int> &bounds, const Bounds<int> &domain, const RCLink<int> &link) 
-        { Block<real_t>::readfile(gid, core, bounds, link, master, mapDim, infile, shape, chunk, transpose, mfa_info); });
+        { Block<real_t>::readfile(gid, dom_dim, pt_dim, core, bounds, link, master, mapDim, infile, shape, chunk, transpose, mfa_info); });
 
     // compute the MFA
     if (world.rank() == 0)

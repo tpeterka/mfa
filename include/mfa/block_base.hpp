@@ -94,6 +94,36 @@ struct BlockBase
         delete blend;
     }
 
+    void init_block_int_bounds(
+        const Bounds<int>&  core,
+        const Bounds<int>&  bounds,
+        int                 dom_dim_,
+        int                 pt_dim_)    
+    {
+        dom_dim = dom_dim_;
+        pt_dim  = pt_dim_;
+
+        // NB: using bounds to hold full point dimensionality, but using core to hold only domain dimensionality
+        bounds_mins.resize(pt_dim); 
+        bounds_mins.setZero();
+        bounds_maxs.resize(pt_dim);
+        bounds_maxs.setZero();
+        core_mins.resize(dom_dim);
+        core_mins.setZero();
+        core_maxs.resize(dom_dim);
+        core_maxs.setZero();
+        overlaps.resize(dom_dim);
+        overlaps.setZero();  
+
+        for (int i = 0; i < dom_dim; i++)
+        {
+            core_mins(i) = core.min[i];
+            core_maxs(i) = core.max[i];
+            bounds_mins(i) = bounds.min[i];
+            bounds_maxs(i) = bounds.max[i];
+        }      
+    }
+
     // initialize an empty block that was previously added
     void init_block(
             const Bounds<T>&    core,               // block bounds without any ghost added
@@ -1257,7 +1287,7 @@ namespace mfa
         void* create()          { return new B; }
 
     template<typename B>                        // B = block object
-    void destroy(void* b)       { delete static_cast<B*>(b); }
+        void destroy(void* b)       { delete static_cast<B*>(b); }
 
     template<typename B, typename T>                // B = block object,  T = float or double
         void add(                                       // add the block to the decomposition
