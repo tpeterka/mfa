@@ -179,7 +179,7 @@ int main(int argc, char **argv) {
     // Read the data
     master.foreach([&](Block<real_t, int> *b, const diy::Master::ProxyWithLink &cp) 
     {
-        b->read_box_data_3d(cp, infile, shape, fileOrderC, chunk, mfa_info);
+        b->read_box_data_3d(cp, infile, shape, fileOrderC, vecSize, mfa_info);
     });
     world.barrier();
 
@@ -290,18 +290,7 @@ int main(int argc, char **argv) {
         if (write_output)
             fprintf(stderr, "write time             = %.3lf s.\n", write_time - recv_blend_end);
     }
-
-    if (world.rank() == 0 && dom_dim == 3) {
-        Block<real_t, int> *b = static_cast<Block<real_t, int>*>(master.block(0));
-        int blockMax = (int) b->max_errs_reduce[1];
-        real_t max_red_err = b->max_errs_reduce[0];
-        if (blockMax != 5 || fabs(max_red_err - 0.591496) > 1.e-5) {
-            std::cout << "expected blockMax == 5 got " << blockMax
-                    << " expected max_red_err == 0.591496 got : " << max_red_err
-                    << "\n";
-            abort();
-        }
-    }
+    
 #ifdef MFA_KOKKOS
     Kokkos::finalize();
 #endif

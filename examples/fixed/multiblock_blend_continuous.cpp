@@ -255,10 +255,10 @@ int main(int argc, char **argv) {
     diy::reduce(master,               // Master object
             assigner,                 // Assigner object
             partners,                 // RegularMergePartners object
-            &max_err_cb);             // merge operator callback function
+            &max_err_cb<real_t>);             // merge operator callback function
 
     master.foreach([&](Block<real_t> *b, const diy::Master::ProxyWithLink &cp) {
-        b->print_brief_block(cp, error);
+        b->print_brief_block(cp);
     });
 
     // save the results in diy format

@@ -396,7 +396,7 @@ struct RayBlock : public Block<T>
         }
 
         // Encode ray model. 
-        ray_mfa->FixedEncodeGeom(*ray_input, 0, false);
+        ray_mfa->FixedEncodeGeom(*ray_input, false);
         ray_mfa->RayEncode(0, *ray_input);
 
         // --------- Decode and compute errors --------- //
