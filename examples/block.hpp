@@ -41,12 +41,15 @@ struct vec3d
 
 
 // block
-template <typename T>
-struct Block : public BlockBase<T>
+template <typename T, typename U=T>
+struct Block : public BlockBase<T, U>
 {
-    using Base = BlockBase<T>;
+    using Base = BlockBase<T, U>;
     using Base::dom_dim;
     using Base::pt_dim;
+    using Base::core;
+    using Base::bounds;
+    using Base::domain;
     using Base::core_mins;
     using Base::core_maxs;
     using Base::bounds_mins;
@@ -76,6 +79,20 @@ struct Block : public BlockBase<T>
             T                   ghost_factor = 0.0) // amount of ghost zone overlap as a factor of block size (0.0 - 1.0)
     {
         mfa::add<Block, T>(gid, core, bounds, domain, link, master, dom_dim, pt_dim, ghost_factor);
+    }
+
+    static
+        void add_int(                                   // add the block to the decomposition
+            int                 gid,                // block global id
+            const Bounds<int>&  core,               // block bounds without any ghost added
+            const Bounds<int>&  bounds,             // block bounds including any ghost region added
+            const Bounds<int>&  domain,             // global data bounds
+            const RCLink<int>&  link,               // neighborhood
+            diy::Master&        master,             // diy master
+            int                 dom_dim,            // domain dimensionality
+            int                 pt_dim)             // point dimensionality
+    {
+        mfa::add_int<Block, T>(gid, core, bounds, domain, link, master, dom_dim, pt_dim);
     }
 
     static
@@ -1738,69 +1755,89 @@ struct Block : public BlockBase<T>
     //     reader.read(extBounds, &data[0], collective);
     // }
 
-    void read_grid_data_p(   
-              int                           gid,
-              diy::Master&                  master,     
-        // const diy::Master::ProxyWithLink&   cp,
-              string                        infile,
-        const vector<int>&                  shape,
-              int                           vecSize,
-        const Bounds<int>&                  bounds,
-        const vector<int>&                  mapDimension
-        )
+    void readBOV(
+        const diy::Master::ProxyWithLink& cp,
+              string         filename,
+        const vector<int>&   shape,
+              int            vecSize,
+              vector<float>& data,
+              bool           fileOrderC = false)
     {
-        const bool transpose = false;
-        // int gid = cp.gid();
-        diy::mpi::io::file in(master.communicator(), infile, diy::mpi::io::file::rdonly);
-        diy::io::BOV reader(in, shape);
+        vector<int> readShape(3);
+        Bounds<int> readBounds(3);
 
-        // Specify subvolume for reading
-        int dataSize = 1;
-        for (int j = 0; j < 3; j++)
-            dataSize *= (bounds.max[j] - bounds.min[j] + 1);
-        std::vector<float> data;
-        data.resize(dataSize * vecSize);
-        // read bounds will be multiplied by 3 in first direction
-        Bounds<int> readBounds = bounds;
+        // Switch domain shape to C-ordering for parallel read
+        if (fileOrderC)
+        {
+            readShape = shape;
+            readBounds = bounds;
+        }
+        else 
+        {
+            for (int i = 0; i < 3; i++)
+            {
+                readShape[i] = shape[2-i];
+                readBounds.min[i] = bounds.min[2-i];
+                readBounds.max[i] = bounds.max[2-i];
+            }
+        }
+        
         readBounds.min[2] *= vecSize;
         readBounds.max[2] *= vecSize;
-        readBounds.max[2] += vecSize - 1; // the last coordinate is larger
-        bool collective = true; //
-        reader.read(readBounds, &data[0], collective);
+        readBounds.max[2] += vecSize - 1;
+        readShape[2] *= vecSize;
 
+        int dataSize = 1;
+        for (int i = 0; i < 3; i++)
+        {
+            dataSize *= (readBounds.max[i] - readBounds.min[i] + 1);
+        }
+
+        // int gid = cp.gid();
+        diy::mpi::io::file in(cp.master()->communicator(), filename, diy::mpi::io::file::rdonly);
+        diy::io::BOV reader(in, readShape);
+
+        data.clear();
+        data.resize(dataSize);
+        reader.read(readBounds, &data[0], true);
+    }
+
+    void read_box_data_3d(   
+        const diy::Master::ProxyWithLink&   cp,
+              string                        infile,
+        const vector<int>&                  shape,
+              bool                          fileOrderC,
+              int                           vecSize,
+              MFAInfo&                      mfa_info)
+    {
         // assumes one scalar science variable
-        // b->pt_dim = b->dom_dim + 1;
         int nvars = 1;
         this->max_errs.resize(nvars);
         this->sum_sq_errs.resize(nvars);
 
+        // decide the actual dimension of the problem, looking at the starts and ends
+        std::vector<int> mapDim;
+        for (int i = 0; i < 3; i++) {
+            if (core.min[i] < core.max[i]) {
+                mapDim.push_back(i);
+            }
+        }
+        if (mapDim.size() != dom_dim)
+        {
+            if (cp.gid() == 0)
+            {
+                cerr << "ERROR: Number of nontrivial dimensions does not match dom_dim. Exiting." << endl;
+            }
+            exit(1);
+        }
+
         VectorXi ndom_pts(dom_dim);  // this will be local now, and used in def of mfa
         int tot_ndom_pts = 1;
         for (size_t j = 0; j < dom_dim; j++) {
-            int dir = mapDimension[j];
+            int dir = mapDim[j];
             int size_in_dir = -bounds.min[dir] + bounds.max[dir] + 1;
             tot_ndom_pts *= size_in_dir;
             ndom_pts(j) = size_in_dir;
-            if (0 == gid)
-                cerr << "  dimension " << j << " " << size_in_dir << endl;
-        }
-        if (0 == gid)
-            cerr << " total local size : " << tot_ndom_pts << endl;
-
-        if (!transpose && dom_dim > 1)
-        {
-            if (dom_dim == 2)
-            {
-                int tmp = ndom_pts(0);
-                ndom_pts(0) = ndom_pts(1);
-                ndom_pts(1) = tmp;
-            }
-            else if (dom_dim == 3)
-            {
-                int tmp = ndom_pts(2);
-                ndom_pts(2) = ndom_pts(0);
-                ndom_pts(0) = tmp; // reverse counting
-            }
         }
 
         // Construct point set to contain input
@@ -1809,10 +1846,12 @@ struct Block : public BlockBase<T>
         model_dims(1) = pt_dim - dom_dim;
         input = new mfa::PointSet<T>(dom_dim, model_dims, tot_ndom_pts, ndom_pts);
 
+        vector<float> data;
+        readBOV(cp, infile, shape, vecSize, data, fileOrderC);
 
         if (dom_dim == 1) // 1d problem, the dimension would be x direction
         {
-            int dir0 = mapDimension[0];
+            int dir0 = mapDim[0];
             this->map_dir.push_back(dir0); // only one dimension, rest are not varying
             for (int i = 0; i < tot_ndom_pts; i++) {
                 input->domain(i, 0) = bounds.min[dir0] + i;
@@ -1823,14 +1862,14 @@ struct Block : public BlockBase<T>
                 val = sqrt(val);
                 input->domain(i, 1) = val;
             }
-            // mfa_info.var_model_infos[0].nctrl_pts[0] = mfa_info.var_model_infos[0].nctrl_pts[dir0]; // only one direction that matters
-        } else if (dom_dim == 2) // 2d problem, second direction would be x, first would be y
+        } 
+        else if (dom_dim == 2) // 2d problem, second direction would be x, first would be y
         {
-            if (transpose) {
+            if (!fileOrderC) {
                 int n = 0;
                 int idx = 0;
-                int dir0 = mapDimension[0]; // so now y would vary to 704 in 2d 1 block similar case for s3d (transpose)
-                int dir1 = mapDimension[1];
+                int dir0 = mapDim[0]; // so now y would vary to 704 in 2d 1 block similar case for s3d (transpose)
+                int dir1 = mapDim[1];
                 // we do not transpose anymore
                 this->map_dir.push_back(dir0);
                 this->map_dir.push_back(dir1);
@@ -1847,13 +1886,15 @@ struct Block : public BlockBase<T>
                         idx += vecSize;
                     }
                 }
-            } else {
+            } 
+            else 
+            {
                 // keep the order as Paraview, x would be the first that varies
                 // corresponds to original implementation, which needs to transpose dimensions
                 int n = 0;
                 int idx = 0;
-                int dir0 = mapDimension[1]; // so x would vary to 704 in 2d 1 block similar case
-                int dir1 = mapDimension[0];
+                int dir0 = mapDim[1]; // so x would vary to 704 in 2d 1 block similar case
+                int dir1 = mapDim[0];
                 this->map_dir.push_back(dir0);
                 this->map_dir.push_back(dir1);
                 for (int j = 0; j < ndom_pts(1); j++) {
@@ -1870,22 +1911,18 @@ struct Block : public BlockBase<T>
                 }
             }
         }
-        else if (dom_dim == 3) {
-            if (transpose) {
+        else if (dom_dim == 3) 
+        {
+            if (!fileOrderC) {
                 int n = 0;
                 int idx = 0;
-                this->map_dir.push_back(mapDimension[0]);
-                this->map_dir.push_back(mapDimension[1]);
-                this->map_dir.push_back(mapDimension[2]);
+                this->map_dir.push_back(mapDim[0]);
+                this->map_dir.push_back(mapDim[1]);
+                this->map_dir.push_back(mapDim[2]);
                 // last dimension would correspond to x, as in the 2d example
-                for (int i = 0; i < ndom_pts(0); i++)
-                    for (int j = 0; j < ndom_pts(1); j++)
-                        for (int k = 0; k < ndom_pts(2); k++) {
-                            // max is ndom_pts(0)*ndom_pts(1)*(ndom_pts(2)-1)+ ndom_pts(0)*(ndom_pts(1)-1)+(ndom_pts(0)-1)
-                            //  = ndom_pts(0)*ndom_pts(1)*ndom_pts(2) -ndom_pts(0)*ndom_pts(1) + ndom_pts(0)*ndom_pts(1)
-                            //             -ndom_pts(0) + ndom_pts(0)-1 =   ndom_pts(0)*ndom_pts(1)*ndom_pts(2) - 1;
-                            n = k * ndom_pts(0) * ndom_pts(1) + j * ndom_pts(0)
-                                + i;
+                for (int k = 0; k < ndom_pts(2); k++) {
+                    for (int j = 0; j < ndom_pts(1); j++) {
+                        for (int i = 0; i < ndom_pts(0); i++) {
                             input->domain(n, 0) = bounds.min[0] + i;
                             input->domain(n, 1) = bounds.min[1] + j;
                             input->domain(n, 2) = bounds.min[2] + k;
@@ -1894,109 +1931,63 @@ struct Block : public BlockBase<T>
                                 val += data[idx + l] * data[idx + l];
                             val = sqrt(val);
                             input->domain(n, 3) = val;
+                            n++;
                             idx += vecSize;
                         }
-            } else // visualization order
+                    }
+                }
+            } 
+            else
             {
                 int n = 0;
                 int idx = 0;
-                this->map_dir.push_back(mapDimension[2]); // reverse
-                this->map_dir.push_back(mapDimension[1]);
-                this->map_dir.push_back(mapDimension[0]);
+                this->map_dir.push_back(mapDim[0]);
+                this->map_dir.push_back(mapDim[1]);
+                this->map_dir.push_back(mapDim[2]);
                 // last dimension would correspond to x, as in the 2d example
-                for (int k = 0; k < ndom_pts(2); k++)
-                    for (int j = 0; j < ndom_pts(1); j++)
-                        for (int i = 0; i < ndom_pts(0); i++) {
-                            input->domain(n, 0) = bounds.min[2] + i; // this now corresponds to x
+                for (int i = 0; i < ndom_pts(0); i++) {
+                    for (int j = 0; j < ndom_pts(1); j++) {
+                        for (int k = 0; k < ndom_pts(2); k++) {
+                            n = k * ndom_pts(0) * ndom_pts(1) + j * ndom_pts(0) + i;
+                            input->domain(n, 0) = bounds.min[0] + i; // this now corresponds to x
                             input->domain(n, 1) = bounds.min[1] + j;
-                            input->domain(n, 2) = bounds.min[0] + k;
+                            input->domain(n, 2) = bounds.min[2] + k;
                             float val = 0;
                             for (int l = 0; l < vecSize; l++)
                                 val += data[idx + l] * data[idx + l];
                             input->domain(n, 3) = sqrt(val);
-                            n++;
                             idx += vecSize;
                         }
+                    }
+                }
             }
         }
-    }
-
-    static
-    void readfile(                          // add the block to the decomposition
-            int gid,                        // block global id
-            int dom_dim,
-            int pt_dim,
-            const Bounds<int> &core,        // block bounds without any ghost added
-            const Bounds<int> &bounds,      // block bounds including any ghost region added
-            const RCLink<int> &link,        // neighborhood
-            diy::Master &master,            // diy master
-            std::vector<int> &mapDimension, // domain dimensionality map;
-            std::string infile,           // input file with data
-            std::vector<int> &shape,        // important, shape of the block
-            int chunk,                      // vector dimension for data input (usually 2 or 3)
-            int transpose,                  // diy is MPI_C_ORDER always; offer option to transpose
-            MFAInfo& mfa_info)              // info class describing the MFA
-    {
-        // Construct and add block
-        Block<T> *b = new Block<T>;
-        RCLink<int> *l = new RCLink<int>(link);
-        diy::Master & m = const_cast<diy::Master&>(master);
-        m.add(gid, b, l);
-
-        b->init_block_int_bounds(core, bounds, dom_dim, pt_dim);
-
-        // b->dom_dim = (int) mapDimension.size();
-        // // write core and bounds only for first block
-        // // if (0 == gid) {
-        //     std::cout << "block:" << gid << "\n  core \t\t  bounds \n";
-        //     for (int j = 0; j < b->dom_dim; j++)
-        //         std::cout << " " << core.min[j] << ":" << core.max[j] << "\t\t"
-        //             << " " << bounds.min[j] << ":" << bounds.max[j] << "\n";
-        // // }
-
-        // b->core_mins.resize(b->dom_dim);
-        // b->core_maxs.resize(b->dom_dim);
-        // b->overlaps.resize(b->dom_dim);
-
-
-        // Read data
-        int vecSize = 3;
-        b->read_grid_data_p(gid, master, infile, shape, vecSize, bounds, mapDimension);
-
+        input->set_domain_params();
 
         // Finalize block for encoding
-        for (int i = 0; i < b->dom_dim; i++) {
-            //int index = b->dom_dim-1-i;
-            int index = i;
-            if (!transpose)
-                index = b->dom_dim - 1 - i;
-            b->bounds_mins(i) = bounds.min[mapDimension[index]];
-            b->bounds_maxs(i) = bounds.max[mapDimension[index]];
-            b->core_mins(i) = core.min[mapDimension[index]];
-            b->core_maxs(i) = core.max[mapDimension[index]];
+        for (int i = 0; i < dom_dim; i++) {
+            bounds_mins(i) = bounds.min[mapDim[i]];
+            bounds_maxs(i) = bounds.max[mapDim[i]];
+            core_mins(i) = core.min[mapDim[i]];
+            core_maxs(i) = core.max[mapDim[i]];
             // decide overlap in each direction; they should be symmetric for neighbors
             // so if block a overlaps block b, block b overlaps a the same area
-            b->overlaps(i) = fabs(b->core_mins(i) - b->bounds_mins(i));
-            T m2 = fabs(b->bounds_maxs(i) - b->core_maxs(i));
-            if (m2 > b->overlaps(i))
-                b->overlaps(i) = m2;
+            overlaps(i) = fabs(core_mins(i) - bounds_mins(i));
+            T m2 = fabs(bounds_maxs(i) - core_maxs(i));
+            if (m2 > overlaps(i))
+                overlaps(i) = m2;
         }
 
         // set bounds_min/max for science variable (last coordinate)
-        b->bounds_mins(b->dom_dim) = b->input->domain.col(b->dom_dim).minCoeff();
-        b->bounds_maxs(b->dom_dim) = b->input->domain.col(b->dom_dim).maxCoeff();
+        bounds_mins(dom_dim) = input->domain.col(dom_dim).minCoeff();
+        bounds_maxs(dom_dim) = input->domain.col(dom_dim).maxCoeff();
 
-        b->input->set_domain_params();
-
-        // TODO: check that this construction of ProxyWithLink is valid
-        // b->setup_models(diy::Master::ProxyWithLink(diy::Master::Proxy(&m, gid), b, l), nvars, args);     // adds models to MFA
-        b->setup_MFA(m.proxy(m.lid(gid)), mfa_info);
+        this->setup_MFA(cp, mfa_info);
     }
-
 };
 
-
-void max_err_cb(Block<real_t> *b,                  // local block
+template<typename U>
+void max_err_cb(Block<real_t, U> *b,                  // local block
         const diy::ReduceProxy &rp,                // communication proxy
         const diy::RegularMergePartners &partners) // partners of the current block
 {

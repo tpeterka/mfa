@@ -258,7 +258,6 @@ using namespace std;
 
         // Set basic info for DomainArgs
         d_args.updateModelDims(model_dims);
-        d_args.multiblock   = false;
         d_args.r            = rot * M_PI / 180;
         d_args.t            = twist;
         d_args.n            = noise;

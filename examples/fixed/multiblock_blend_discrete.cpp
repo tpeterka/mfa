@@ -42,72 +42,68 @@ int main(int argc, char **argv) {
     Kokkos::initialize( argc, argv );
 #endif
 
-    // default command line arguments
-    // int pt_dim              = 4;        // dimension of input points
-    int dom_dim             = 3;        // dimension of domain (<= pt_dim)
-    int geom_degree         = 1;        // degree for geometry (same for all dims)
-    int vars_degree         = 4;        // degree for science variables (same for all dims)
-    int geom_nctrl          = -1;       // input number of control points for geometry (same for all dims)
-    vector<int> vars_nctrl  = {11};     // input number of control points for all science variables
-    string infile           = "";       // input file for s3d data
-    int weighted            = 0;        // solve for and use weights (bool 0 or 1)
-    int strong_sc           = 0;        // strong scaling (bool 0 or 1, 0 = weak scaling)
-    bool write_output       = false;
-    int         verbose = 0;
-    bool help               = false;    // show help
+    // command line arguments with default values
+    int         dom_dim         = 3;                // dimension of domain (<= pt_dim)
+    int         vars_degree     = 4;                // degree for science variables (same for all dims)
+    vector<int> vars_nctrl      = {11};             // input number of control points for all science variables
+    string      infile          = "";               // input file for s3d data
+    int         strong_sc       = 0;                // strong scaling (bool 0 or 1, 0 = weak scaling)
+    int         adaptive        = 0;                // do analytical encode (0/1)
+    real_t      e_threshold     = 1e-1;             // error threshold for adaptive fitting
+    int         rounds          = 0;                // number of adaptive fitting rounds
+    vector<int> nblocks         = {2, 2, 3};        // number of DIY blocks
+    vector<int> starts          = {0, 0, 0};        // starting indices for data read
+    vector<int> ends            = {703, 539, 549};  // ending indices for data read (inclusive)
+    vector<int> overlaps        = {2, 2, 2};        // number of ghost points in each direction
+    vector<int> resolutions     = {20, 20, 20};     // custom grid resolution for decoding
+    bool        write_output    = true;             // flag whether to write a .mfa file
+    int         verbose         = 0;                // enable verbose output on Block 0
+    bool        help            = false;            // show help
+    
+    // These values do not need to change for this example
+    int         geom_degree         = 1;        // degree for geometry (same for all dims)
+    int         geom_nctrl          = -1;       // input number of control points for geometry (same for all dims)
+    int         weighted            = 0;        // solve for and use weights (bool 0 or 1)
 
-    int         adaptive        = 0;        // do analytical encode (0/1)
-    real_t      e_threshold     = 1e-1;     // error threshold for adaptive fitting
-    int         rounds          = 0;
-
-    std::vector<int> overlaps = {2, 2, 2};        // ghosting in 3 directions; default is 2, 2, 2
-    vector<int> resolutions = {20, 20, 20};
-
-
-    int chunk = 3;
-    int transpose = 0; // if 1, transpose data
-    vector<int> nblocks = {2, 2, 3};
-    vector<int> starts = {0, 0, 0};
-    vector<int> ends = {549, 539, 703};
-    vector<int> shape = {550, 540, 704};
+    // These values are known ahead of time for the sample S3D data
+    int         vecSize = 3;
+    bool        fileOrderC = false;
+    vector<int> shape = {704, 540, 550};
     vector<int> model_dims = {3, 1};
 
-    // get command line arguments
+    // set up command line arguments
     opts::Options ops;
     ops >> opts::Option('m', "dom_dim",     dom_dim,        " dimension of domain");
-    ops >> opts::Option('p', "geom_degree", geom_degree,    " degree in each dimension of geometry");
     ops >> opts::Option('q', "vars_degree", vars_degree,    " degree in each dimension of science variables");
-    ops >> opts::Option('g', "geom_nctrl",  geom_nctrl,     " number of control points in each dimension of geometry");
     ops >> opts::Option('v', "vars_nctrl",  vars_nctrl,     " number of control points in each dimension of all science variables");
-    ops >> opts::Option('f', "data_file",   infile,         " s3d data file location");
-    ops >> opts::Option('b', "nblocks",     nblocks,        " number of blocks in each direction");
-    ops >> opts::Option('x', "starts", starts, " start of block in each direction");
-    ops >> opts::Option('y', "ends", ends, " end of block in second direction");
-    ops >> opts::Option('D', "chunk", chunk, " number of values per geometric point");
-    ops >> opts::Option('T', "transpose", transpose, " transpose input data ");
-    ops >> opts::Option('o', "overlap", overlaps, " overlaps in 3 directions ");
-    ops >> opts::Option('u', "resolutions", resolutions, " number of output points in each dimension of domain");
+    ops >> opts::Option('f', "infile",      infile,         " s3d data file location");
     ops >> opts::Option('t', "strong_sc",   strong_sc,      " strong scaling (1 = strong, 0 = weak)");
-    ops >> opts::Option('W', "write", write_output, " write output file");
-    ops >> opts::Option('h', "help", help, " show help");
-    ops >> opts::Option('z', "adaptive",    adaptive,   " do adaptive encode (0/1)");
-    ops >> opts::Option('e', "errorbound",  e_threshold," error threshold for adaptive encoding");
-    ops >> opts::Option('z', "rounds",      rounds,     " max number of rounds for adaptive encoding");
-
-    int pt_dim = dom_dim + 1;
+    ops >> opts::Option('z', "adaptive",    adaptive,       " do adaptive encode (0/1)");
+    ops >> opts::Option('z', "errorbound",  e_threshold,    " error threshold for adaptive encoding");
+    ops >> opts::Option('z', "rounds",      rounds,         " max number of rounds for adaptive encoding");
+    ops >> opts::Option('b', "nblocks",     nblocks,        " number of blocks in each direction");
+    ops >> opts::Option('x', "starts",      starts,         " start of block in each direction");
+    ops >> opts::Option('y', "ends",        ends,           " end of block in second direction");
+    ops >> opts::Option('o', "overlap",     overlaps,       " overlaps in 3 directions ");
+    ops >> opts::Option('u', "resolutions", resolutions,    " number of output points in each dimension of domain");
+    ops >> opts::Option('T', "fileOrderC",  fileOrderC,     " flag for if input data file was written in C ordering or not");
+    ops >> opts::Option('W', "write",       write_output,   " write output file");
+    ops >> opts::Option('z', "verbose",     verbose,        " allow verbose output");
+    ops >> opts::Option('h', "help",        help,           " show help");
 
     if (!ops.parse(argc, argv) || help) {
         if (world.rank() == 0)
             std::cout << ops;
         return 1;
     }
+    int pt_dim = dom_dim + 1;   
 
-    if (starts.size() != 3 || ends.size() != 3 || shape.size() != 3)
+    // print input arguments
+    if (world.rank() == 0)
     {
-        if (world.rank() == 0)
-            cerr << "ERROR: Incorrect size of starts, ends, or shape vector. Exiting" << endl;
-        
-        exit(1);
+        echo_mfa_settings("multiblock blend discrete example", dom_dim, pt_dim, 1, geom_degree, geom_nctrl, vars_degree, vars_nctrl,
+                            0, 0, adaptive, e_threshold, rounds);
+        echo_data_settings("s3d_blend", infile, 0, 0);
     }
 
     // Set up global domain information for DIY decomposition
@@ -117,6 +113,13 @@ int main(int argc, char **argv) {
     vector<bool> share_face(dom_dim, true);
     vector<bool> wrap(dom_dim, false);
     Bounds<int> dom_bounds(3);
+    if (starts.size() != 3 || ends.size() != 3 || shape.size() != 3)
+    {
+        if (world.rank() == 0)
+            cerr << "ERROR: Incorrect size of starts, ends, or shape vector. Exiting" << endl;
+        
+        exit(1);
+    }
     for (int j = 0; j < 3; j++) {
         tot_blocks *= nblocks[j];
         dom_bounds.min[j] = starts[j];
@@ -137,47 +140,31 @@ int main(int argc, char **argv) {
         }
     }
 
-    // There are 3 components to every point, so we scale the "shape" of the last dimension by 3
-    shape[dom_dim - 1] *= chunk;
-
-    // print input arguments
-    if (world.rank() == 0)
-    {
-        echo_mfa_settings("multiblock blend discrete example", dom_dim, pt_dim, 1, geom_degree, geom_nctrl, vars_degree, vars_nctrl,
-                            0, 0, adaptive, e_threshold, rounds);
-        echo_data_settings("s3d_blend", infile, 0, 0);
-    }
-
-    // decide the actual dimension of the problem, looking at the starts and ends
-    std::vector<int> mapDim;
-    for (int i = 0; i < dom_dim; i++) {
-        if (starts[i] < ends[i]) {
-            mapDim.push_back(i);
-        } else {
-            if (world.rank() == 0)
-                cerr << " direction " << i << " has no extension\n";
-        }
-    }
-    if (world.rank() == 0) {
-        cerr << " actual dimension of domain " << mapDim.size() << endl;
-    }
-
     // initialize DIY
     diy::FileStorage storage("./DIY.XXXXXX"); // used for blocks to be moved out of core
-    diy::Master master(world, num_threads, mem_blocks, &Block<real_t>::create,
-            &Block<real_t>::destroy, &storage, &Block<real_t>::save,
-            &Block<real_t>::load);
+    diy::Master master(world, num_threads, mem_blocks, &Block<real_t, int>::create,
+            &Block<real_t, int>::destroy, &storage, &Block<real_t, int>::save,
+            &Block<real_t, int>::load);
     diy::ContiguousAssigner assigner(world.size(), tot_blocks);
+
+    // Create domain decomposition with DIY
+    double start_reading = MPI_Wtime();
+    Decomposer<int> decomposer(3, dom_bounds, tot_blocks, share_face, wrap, overlaps, nblocks);
+    decomposer.decompose(world.rank(), assigner,
+        [&](int gid, const Bounds<int> &core, const Bounds<int> &bounds, const Bounds<int> &domain, const RCLink<int> &link) 
+        { 
+            Block<real_t, int>::add_int(gid, core, bounds, domain, link, master, dom_dim, pt_dim);
+        });
 
     // set up parameters for examples
     MFAInfo     mfa_info(dom_dim, verbose);
     DomainArgs  d_args(dom_dim, model_dims);
+    d_args.multiblock   = true;
     setup_args(dom_dim, pt_dim, model_dims, geom_degree, geom_nctrl, vars_degree, vars_nctrl,
                         "s3d", infile, 0, 1, 0, 0, 0, 0, 0, 0, adaptive, verbose,
                         mfa_info, d_args);
 
     // Set multiblock options
-    d_args.multiblock   = true;
     if (strong_sc) 
     {
         mfa_info.splitStrongScaling(nblocks);
@@ -189,48 +176,50 @@ int main(int argc, char **argv) {
         echo_multiblock_settings(mfa_info, d_args, world.size(), tot_blocks, nblocks, strong_sc, overlaps);
     }
 
-    double start_reading = MPI_Wtime();
-    Decomposer<int> decomposer(dom_dim, dom_bounds, tot_blocks, share_face, wrap, overlaps, nblocks);
-    decomposer.decompose(world.rank(), assigner,
-        [&](int gid, const Bounds<int> &core, const Bounds<int> &bounds, const Bounds<int> &domain, const RCLink<int> &link) 
-        { Block<real_t>::readfile(gid, dom_dim, pt_dim, core, bounds, link, master, mapDim, infile, shape, chunk, transpose, mfa_info); });
+    // Read the data
+    master.foreach([&](Block<real_t, int> *b, const diy::Master::ProxyWithLink &cp) 
+    {
+        b->read_box_data_3d(cp, infile, shape, fileOrderC, chunk, mfa_info);
+    });
+    world.barrier();
 
-    // compute the MFA
-    if (world.rank() == 0)
-        fprintf(stderr, "\nStarting fixed encoding...\n\n");
-    world.barrier();                     // to synchronize timing
-    
+    // Compute the MFA
     double start_encode = MPI_Wtime();
-    master.foreach([&](Block<real_t> *b, const diy::Master::ProxyWithLink &cp) 
+    if (world.rank() == 0)
+        fprintf(stderr, "Starting fixed encoding...\n");
+
+    master.foreach([&](Block<real_t, int> *b, const diy::Master::ProxyWithLink &cp) 
     {
         b->fixed_encode_block(cp, mfa_info);
     });
-    world.barrier();                     // to synchronize timing
-    double end_encode = MPI_Wtime();
-
+    world.barrier();
     if (world.rank() == 0)
-        fprintf(stderr, "\n\nFixed encoding done.\n\n");
+        fprintf(stderr, "Fixed encoding done.\n");
+    double end_encode = MPI_Wtime();
 
     // debug: compute error field for visualization and max error to verify that it is below the threshold
     if (world.rank() == 0)
-        fprintf(stderr, "\nFinal decoding and computing max. error...\n");
+        fprintf(stderr, "Final decoding and computing max. error...\n");
 
-    master.foreach([&](Block<real_t> *b, const diy::Master::ProxyWithLink &cp)
+    master.foreach([&](Block<real_t, int> *b, const diy::Master::ProxyWithLink &cp)
     {
         b->range_error(cp, true, false);
-        b->print_brief_block(cp, true);
+    });
+    master.foreach([&](Block<real_t, int> *b, const diy::Master::ProxyWithLink &cp)
+    {
+        b->print_brief_block(cp);
     });
     world.barrier();
     double end_decode = MPI_Wtime();
 
-    master.foreach([&](Block<real_t> *b, const diy::Master::ProxyWithLink &cp) {
+    master.foreach([&](Block<real_t, int> *b, const diy::Master::ProxyWithLink &cp) {
         b->decode_core_ures(cp, resolutions);
     });
     world.barrier();
     double end_resolution_decode = MPI_Wtime();
     
-    if (world.rank() == 0) {
-
+    if (world.rank() == 0)
+    {
         fprintf(stderr, "decomposing and reading time = %.3lf s.\n", start_encode - start_reading);
         fprintf(stderr, "encoding time                = %.3lf s.\n", end_encode - start_encode);
         fprintf(stderr, "decoding time                = %.3lf s.\n", end_decode - end_encode);
@@ -246,12 +235,12 @@ int main(int argc, char **argv) {
     }
 
     // compute the neighbors encroachment
-    master.foreach([&](Block<real_t> *b, const diy::Master::ProxyWithLink &cp)
+    master.foreach([&](Block<real_t, int> *b, const diy::Master::ProxyWithLink &cp)
     {
         b->compute_neighbor_overlaps(cp);
     });
 
-    master.foreach([&](Block<real_t> *b, const diy::Master::ProxyWithLink &cp)
+    master.foreach([&](Block<real_t, int> *b, const diy::Master::ProxyWithLink &cp)
     {
         b->decode_patches_discrete(cp, resolutions);
     });
@@ -264,7 +253,7 @@ int main(int argc, char **argv) {
     double exchange_end = MPI_Wtime();
 
     // now receive the requested values and do blending
-    master.foreach(&Block<real_t>::recv_and_blend);
+    master.foreach(&Block<real_t, int>::recv_and_blend);
     world.barrier();
     double recv_blend_end = MPI_Wtime();
 
@@ -272,11 +261,11 @@ int main(int argc, char **argv) {
     //   merge-based reduction: create the partners that determine how groups are formed
     //   in each round and then execute the reduction
     diy::RegularMergePartners partners(decomposer, 2, true);
-    diy::reduce(master, assigner, partners, &max_err_cb);
+    diy::reduce(master, assigner, partners, &max_err_cb<int>);
 
-    master.foreach([&](Block<real_t> *b, const diy::Master::ProxyWithLink &cp) 
+    master.foreach([&](Block<real_t, int> *b, const diy::Master::ProxyWithLink &cp) 
     {
-        b->print_brief_block(cp, true);
+        b->print_brief_block(cp);
     });
     world.barrier();
 
@@ -289,7 +278,7 @@ int main(int argc, char **argv) {
     }
     if (world.rank() == 0) {
         fprintf(stderr, "\n------- Final block results --------\n");
-        master.foreach([&](Block<real_t> *b, const diy::Master::ProxyWithLink &cp)
+        master.foreach([&](Block<real_t, int> *b, const diy::Master::ProxyWithLink &cp)
         {
             b->print_block(cp, true);
         }); // only blocks on master
@@ -302,8 +291,8 @@ int main(int argc, char **argv) {
             fprintf(stderr, "write time             = %.3lf s.\n", write_time - recv_blend_end);
     }
 
-    if (world.rank() == 0 && mapDim.size() == 3) {
-        Block<real_t> *b = static_cast<Block<real_t>*>(master.block(0));
+    if (world.rank() == 0 && dom_dim == 3) {
+        Block<real_t, int> *b = static_cast<Block<real_t, int>*>(master.block(0));
         int blockMax = (int) b->max_errs_reduce[1];
         real_t max_red_err = b->max_errs_reduce[0];
         if (blockMax != 5 || fabs(max_red_err - 0.591496) > 1.e-5) {

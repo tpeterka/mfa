@@ -39,10 +39,13 @@ using Decomposer = diy::RegularDecomposer<Bounds<T>>;
 
 
 // block
-template <typename T>
+template <typename T, typename U=T>
 struct BlockBase
 {
     // info for DIY
+    Bounds<U>           core;
+    Bounds<U>           bounds;
+    Bounds<U>           domain;
     int                 dom_dim;                // dimensionality of domain (geometry)
     int                 pt_dim;                 // dimensionality of full point (geometry + science vars)
     VectorX<T>          bounds_mins;            // local domain minimum corner
@@ -79,6 +82,9 @@ struct BlockBase
 
     // zero-initialize pointers during default construction
     BlockBase() : 
+        core(0),
+        bounds(0),
+        domain(0),
         mfa(nullptr), 
         input(nullptr), 
         approx(nullptr), 
@@ -95,13 +101,18 @@ struct BlockBase
     }
 
     void init_block_int_bounds(
-        const Bounds<int>&  core,
-        const Bounds<int>&  bounds,
+        const Bounds<int>&  core_,
+        const Bounds<int>&  bounds_,
+        const Bounds<int>&  domain_,
         int                 dom_dim_,
         int                 pt_dim_)    
     {
         dom_dim = dom_dim_;
         pt_dim  = pt_dim_;
+
+        core = core_;
+        bounds = bounds_;
+        domain = domain_;
 
         // NB: using bounds to hold full point dimensionality, but using core to hold only domain dimensionality
         bounds_mins.resize(pt_dim); 
@@ -176,7 +187,7 @@ struct BlockBase
 
     void setup_MFA(
             const       diy::Master::ProxyWithLink& cp,
-            MFAInfo&    info)
+            MFAInfo     info)   // nb. pass by value so as to not overwrite info.verbose elsewhere
     {
         if (mfa != nullptr)
         {
@@ -184,8 +195,8 @@ struct BlockBase
             delete mfa;
         }
 
-        // Silence verbose output if not on rank 0
-        info.verbose = info.verbose && cp.master()->communicator().rank() == 0; 
+        // Silence verbose output if not in block 0
+        info.verbose = info.verbose && cp.gid() == 0; 
 
         // Construct MFA from MFAInfo
         this->mfa = new mfa::MFA<T>(info);
@@ -1261,7 +1272,7 @@ struct BlockBase
         }
 
     }
-    void print_brief_block(const diy::Master::ProxyWithLink &cp, bool error) // error was computed
+    void print_brief_block(const diy::Master::ProxyWithLink &cp) // error was computed
             {
 
         for (auto i = 0; i < mfa->nvars(); i++) {
@@ -1273,7 +1284,7 @@ struct BlockBase
 
         if (0 == cp.gid()) {
             for (auto i = 0; i < mfa->nvars(); i++) {
-                cerr << " \n Maximum error:" << max_errs_reduce[2 * i]
+                cerr << " Maximum error:" << max_errs_reduce[2 * i]
                         << " at block id::" << max_errs_reduce[2 * i + 1]
                         << "\n";
             }
@@ -1307,6 +1318,27 @@ namespace mfa
             m.add(gid, b, l);
 
             b->init_block(core, domain, dom_dim, pt_dim, ghost_factor);
+        }
+
+    // Add a block defined with integer bounds
+    template<typename B, typename T>
+        void add_int(
+                int                 gid,                // block global id
+                const Bounds<int>&  core,               // block bounds without any ghost added
+                const Bounds<int>&  bounds,             // block bounds including any ghost region added
+                const Bounds<int>&  domain,             // global data bounds
+                const RCLink<int>&  link,               // neighborhood
+                diy::Master&        master,             // diy master
+                int                 dom_dim,            // domain dimensionality
+                int                 pt_dim)             // point dimensionality
+        {
+            // Create and add block
+            B*              b = new B;
+            RCLink<int>*    l = new RCLink<int>(link);
+            diy::Master&    m = const_cast<diy::Master&>(master);
+            m.add(gid, b, l);
+
+            b->init_block_int_bounds(core, bounds, domain, dom_dim, pt_dim);
         }
 
     template<typename B, typename T>                // B = block object,  T = float or double

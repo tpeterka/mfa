@@ -374,22 +374,22 @@ namespace mfa
                         VolPt_saved_basis(ijk, param, cpt, thread_decode_info.local(), mfa_data.tmesh.tensor_prods[0]);
 
                         // debug
-                        if (pt_it.idx() == 0)
-                            fmt::print(stderr, "DecodePointSet: Using VolPt_saved_basis w/ TBB over points\n");
+                        if (pt_it.idx() == 0 && verbose)
+                            fmt::print(stderr, " ->DecodePointSet: Using VolPt_saved_basis w/ TBB over points\n");
                     }
                     else
                     {
                         VolPt(param, cpt, thread_decode_info.local(), mfa_data.tmesh.tensor_prods[0], derivs);
 
                         // debug
-                        if (pt_it.idx() == 0)
-                            fmt::print(stderr, "DecodePointSet: Using VolPt w/ TBB over points\n");
+                        if (pt_it.idx() == 0 && verbose)
+                            fmt::print(stderr, " ->DecodePointSet: Using VolPt w/ TBB over points\n");
                     }
 
 #else           // tmesh version
 
-                    if (pt_it.idx() == 0)
-                        fmt::print(stderr, "DecodePointSet: Using VolPt_tmesh w/ TBB over points\n");
+                    if (pt_it.idx() == 0 && verbose)
+                        fmt::print(stderr, " ->DecodePointSet: Using VolPt_tmesh w/ TBB over points\n");
                     VolPt_tmesh(param, cpt, false);
 
 #endif          // end tmesh version
@@ -420,7 +420,8 @@ namespace mfa
                 //
                 //      This was added because DecodeGrid has a KOKKOS implementation. Need to find another
                 //      place to put this, or simply extend the KOKKOS to arbitrary structured grids
-                fmt::print(stderr, "DecodePointSet: Using DecodeGrid w/o TBB (serial or kokkos)\n");
+                if (verbose)
+                    fmt::print(stderr, " ->DecodePointSet: Using DecodeGrid w/o TBB (serial or kokkos)\n");
                 DecodeGrid(ps.domain, min_dim, max_dim, min_params, max_params, ps.g.ndom_pts );
             }
             else
@@ -442,24 +443,24 @@ namespace mfa
 #ifndef MFA_TMESH   // original version for one tensor product
                     if (saved_basis && ps.is_structured())
                     {
-                        if (pt_it.idx() == 0)
-                            fprintf(stderr, "DecodePointSet: Using VolPt_saved_basis w/o TBB (serial or kokkos)\n");
+                        if (pt_it.idx() == 0 && verbose)
+                            fprintf(stderr, " ->DecodePointSet: Using VolPt_saved_basis w/o TBB (serial or kokkos)\n");
 
                         pt_it.ijk(ijk);
                         VolPt_saved_basis(ijk, param, cpt, decode_info, mfa_data.tmesh.tensor_prods[0]);
                     }
                     else
                     {
-                        if (pt_it.idx() == 0)
-                            fprintf(stderr, "DecodePointSet: Using VolPt w/o TBB (serial or kokkos)\n");
+                        if (pt_it.idx() == 0 && verbose)
+                            fprintf(stderr, " ->DecodePointSet: Using VolPt w/o TBB (serial or kokkos)\n");
 
                         VolPt(param, cpt, decode_info, mfa_data.tmesh.tensor_prods[0], derivs);
                     }
 
                     
 #else   // tmesh version
-                    if (pt_it.idx() == 0)
-                        fprintf(stderr, "DecodePointSet: Using VolPt_tmesh w/o TBB (serial or kokkos)\n");
+                    if (pt_it.idx() == 0 && verbose)
+                        fprintf(stderr, " ->DecodePointSet: Using VolPt_tmesh w/o TBB (serial or kokkos)\n");
 
                     VolPt_tmesh(param, cpt);
 #endif  // end tmesh
@@ -953,7 +954,8 @@ namespace mfa
 
 #ifdef MFA_SERIAL   // serial version
 
-            fmt::print(stderr, "DecodeGrid: serial version\n");
+            if (verbose)
+                fmt::print(stderr, " ->DecodeGrid: serial version\n");
 
             DecodeInfo<T>   decode_info(mfa_data, derivs);  // reusable decode point info for calling VolPt repeatedly
             VectorX<T>      cpt(mfa_data.tmesh.tensor_prods[0].ctrl_pts.cols());                      // evaluated point
