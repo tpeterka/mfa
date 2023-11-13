@@ -116,7 +116,7 @@ namespace mfa
             // resize basis function matrices and initialize to 0; will only fill nonzeros later
             mfa_data.N.resize(dom_dim);
             for (auto k = 0; k < ndims; k++)
-                    mfa_data.N[k] = MatrixX<T>::Zero(input.ndom_pts(k), nctrl_pts(k));
+                mfa_data.N[k] = MatrixX<T>::Zero(input.ndom_pts(k), nctrl_pts(k));
 
             // 2 buffers of temporary control points
             // double buffer needed to write output curves of current dim without changing its input pts

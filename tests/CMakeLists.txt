@@ -69,7 +69,7 @@ add_test                    (NAME fixed-s3d-2d-unstructured-test
                             )
 
 add_test                    (NAME decode-grid1
-                             COMMAND decode-grid-test -a 10 -b 0 -c 0 -r 10 -s 30 -t 25 -x 1 -y 1 -z 1 -v 6 -W -f ${s3d_infile} -u 20 -u 20 -u 20
+                             COMMAND decode-grid-test -m 2 -x 10 -x 0 -x 0 -y 10 -y 30 -y 25 -b 1 -b 1 -b 1 -v 6 -W -f ${s3d_infile} -u 20 -u 20 -u 20
                             )
 
 add_test                    (NAME integrate-1d-test
@@ -100,16 +100,16 @@ add_test                    (NAME vol-iterator-test
 foreach                     (p 1 3 4)
     foreach                 (b 4 16)
         add_test            (NAME fixed-multiblock-test-strong-no-exchange-p${p}-b${b}
-                            COMMAND ${MPIEXEC} -np ${p} $<TARGET_FILE:fixed-multiblock-test> -i sinc -d 3 -m 2 -p 1 -q 5 -n 500 -v 50 -b ${b} -t 1 -o 0.0 -w 0
+                            COMMAND ${MPIEXEC} -np ${p} $<TARGET_FILE:fixed-multiblock-test> -i sinc -d 3 -m 2 -p 1 -q 5 -n 500 -v 50 --tot_blocks ${b} --strong_sc 1 -o 0.0 -w 0
                             )
         add_test            (NAME fixed-multiblock-test-strong-exchange-p${p}-b${b}
-                            COMMAND ${MPIEXEC} -np ${p} $<TARGET_FILE:fixed-multiblock-test> -i sinc -d 3 -m 2 -p 1 -q 5 -n 500 -v 50 -b ${b} -t 1 -o 0.1 -w 0
+                            COMMAND ${MPIEXEC} -np ${p} $<TARGET_FILE:fixed-multiblock-test> -i sinc -d 3 -m 2 -p 1 -q 5 -n 500 -v 50 --tot_blocks ${b} --strong_sc 1 -o 0.1 -w 0
                             )
         add_test            (NAME fixed-multiblock-test-weak-no-exchange-p${p}-b${b}
-                            COMMAND ${MPIEXEC} -np ${p} $<TARGET_FILE:fixed-multiblock-test> -i sinc -d 3 -m 2 -p 1 -q 5 -n 100 -v 10 -b ${b} -t 0 -o 0.0 -w 0
+                            COMMAND ${MPIEXEC} -np ${p} $<TARGET_FILE:fixed-multiblock-test> -i sinc -d 3 -m 2 -p 1 -q 5 -n 100 -v 10 --tot_blocks ${b} --strong_sc 0 -o 0.0 -w 0
                             )
         add_test            (NAME fixed-multiblock-test-weak-exchange-p${p}-b${b}
-                            COMMAND ${MPIEXEC} -np ${p} $<TARGET_FILE:fixed-multiblock-test> -i sinc -d 3 -m 2 -p 1 -q 5 -n 100 -v 10 -b ${b} -t 0 -o 0.1 -w 0
+                            COMMAND ${MPIEXEC} -np ${p} $<TARGET_FILE:fixed-multiblock-test> -i sinc -d 3 -m 2 -p 1 -q 5 -n 100 -v 10 --tot_blocks ${b} --strong_sc 0 -o 0.1 -w 0
                             )
     endforeach              (b)
 endforeach                  (p)
@@ -120,26 +120,25 @@ add_test                    (NAME write-vtk-multiblock-fixed-test
 
 foreach                     (p 1 2 3 6)
     add_test                (NAME s3d-blend-p${p}
-                            COMMAND ${MPIEXEC} -np ${p} $<TARGET_FILE:fixed-s3d-blend> -a 10 -b 0 -c 0 -r 10 -s 100 -t 60 -x 1 -y 2 -z 3 -v 6 -u 30 -u 30 -u 30 -f ${s3d_infile}
+                            COMMAND ${MPIEXEC} -np ${p} $<TARGET_FILE:fixed-s3d-blend> -m 2 -x 0 -x 0 -x 10 -y 60 -y 100 -y 10 -b 3 -b 2 -b 1 -v 6 -u 30 -u 30 -u 30 -f ${s3d_infile}
                             )
 endforeach                  (p)
 
 foreach                     (p 1 2 3 6)
     add_test                (NAME s3d-blend-t-p${p}
-                            COMMAND ${MPIEXEC} -np ${p} $<TARGET_FILE:fixed-s3d-blend> -a 10 -b 0 -c 0 -r 10 -s 100 -t 60 -x 1 -y 2 -z 3 -v 6 -u 30 -u 30 -u 30 -T 1 -f ${s3d_infile}
+                            COMMAND ${MPIEXEC} -np ${p} $<TARGET_FILE:fixed-s3d-blend> -m 2 -x 10 -x 0 -x 0 -y 10 -y 100 -y 60 -b 1 -b 2 -b 3 -v 6 -u 30 -u 30 -u 30 -T -f ${s3d_infile}
                             )
 endforeach                  (p)
 
-
 foreach                     (p 1 2 3 6)
     add_test                (NAME s3d-blend-3d-p${p}
-                            COMMAND ${MPIEXEC} -np ${p} $<TARGET_FILE:fixed-s3d-blend> -a 10 -b 0 -c 0 -r 40 -s 50 -t 60 -x 1 -y 2 -z 3 -v 6 -u 30 -u 30 -u 30 -T 0 -f ${s3d_infile}
+                            COMMAND ${MPIEXEC} -np ${p} $<TARGET_FILE:fixed-s3d-blend> -x 0 -x 0 -x 10 -y 60 -y 50 -y 40 -b 3 -b 2 -b 1 -v 6 -u 30 -u 30 -u 30 -f ${s3d_infile}
                             )
 endforeach                  (p)
 
 foreach                     (p 1 2 3 6)
     add_test                (NAME s3d-blend-3d-t-p${p}
-                            COMMAND ${MPIEXEC} -np ${p} $<TARGET_FILE:fixed-s3d-blend> -a 10 -b 0 -c 0 -r 40 -s 50 -t 60 -x 1 -y 2 -z 3 -v 6 -u 30 -u 30 -u 30 -T 1 -f ${s3d_infile}
+                            COMMAND ${MPIEXEC} -np ${p} $<TARGET_FILE:fixed-s3d-blend> -x 10 -x 0 -x 0 -y 40 -y 50 -y 60 -b 1 -b 2 -b 3 -v 6 -u 30 -u 30 -u 30 -T -f ${s3d_infile}
                             )
 endforeach                  (p)
 

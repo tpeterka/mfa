@@ -412,7 +412,7 @@ void test_and_write(Block<real_t>*                      b,
     int nvars = b->mfa->nvars();
     vector<real_t> L1(nvars), L2(nvars), Linf(nvars);                                // L-1, 2, infinity norms
     mfa::PointSet<real_t> *exact_pts = nullptr, *approx_pts = nullptr, *error_pts = nullptr;
-    b->analytical_error_field(cp, input, L1, L2, Linf, args, exact_pts, approx_pts, error_pts);
+    b->analytical_error_field(cp, args.ndom_pts, input, L1, L2, Linf, args, exact_pts, approx_pts, error_pts);
 
     // print analytical errors
     fprintf(stderr, "\n------ Analytical error norms -------\n");

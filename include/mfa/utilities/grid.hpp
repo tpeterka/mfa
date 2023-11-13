@@ -34,7 +34,7 @@ namespace mfa
             swap(first.co, second.co);
         }
 
-        void init(int dom_dim_, VectorXi& ndom_pts_ ) 
+        void init(int dom_dim_, const VectorXi& ndom_pts_ ) 
         {
             initialized = true;
             dom_dim = dom_dim_;

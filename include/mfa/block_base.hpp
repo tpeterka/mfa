@@ -101,6 +101,7 @@ struct BlockBase
     }
 
     void init_block_int_bounds(
+        int                 gid,
         const Bounds<int>&  core_,
         const Bounds<int>&  bounds_,
         const Bounds<int>&  domain_,
@@ -115,28 +116,58 @@ struct BlockBase
         domain = domain_;
 
         // NB: using bounds to hold full point dimensionality, but using core to hold only domain dimensionality
-        bounds_mins.resize(pt_dim); 
-        bounds_mins.setZero();
-        bounds_maxs.resize(pt_dim);
-        bounds_maxs.setZero();
-        core_mins.resize(dom_dim);
-        core_mins.setZero();
-        core_maxs.resize(dom_dim);
-        core_maxs.setZero();
-        overlaps.resize(dom_dim);
-        overlaps.setZero();  
+        bounds_mins = VectorX<T>::Zero(pt_dim);
+        bounds_maxs = VectorX<T>::Zero(pt_dim);
+        core_mins   = VectorX<T>::Zero(dom_dim);
+        core_maxs   = VectorX<T>::Zero(dom_dim);
+        overlaps    = VectorX<T>::Zero(dom_dim);
 
-        for (int i = 0; i < dom_dim; i++)
+        // decide the actual dimension of the problem, looking at the starts and ends
+        int gdim = core.min.dimension();
+        for (int i = 0; i < gdim; i++) {
+            if (core.min[i] < core.max[i]) {
+                map_dir.push_back(i);
+            }
+        }
+        if (map_dir.size() != dom_dim)
         {
-            core_mins(i) = core.min[i];
-            core_maxs(i) = core.max[i];
-            bounds_mins(i) = bounds.min[i];
-            bounds_maxs(i) = bounds.max[i];
-        }      
+            if (gid == 0)
+            {
+                cerr << "ERROR: Number of nontrivial dimensions does not match dom_dim. Exiting." << endl;
+            }
+            exit(1);
+        }
+
+        // Set core/bounds 
+        for (int i = 0; i < dom_dim; i++) {
+            bounds_mins(i) = bounds.min[map_dir[i]];
+            bounds_maxs(i) = bounds.max[map_dir[i]];
+            core_mins(i) = core.min[map_dir[i]];
+            core_maxs(i) = core.max[map_dir[i]];
+
+            // decide overlap in each direction; they should be symmetric for neighbors
+            // so if block a overlaps block b, block b overlaps a the same area
+            T o1 = bounds_maxs(i) - core_maxs(i);
+            T o2 = core_mins(i) - bounds_mins(i);
+            overlaps(i) = std::max(o1, o2);
+        }
+
+        // for (int i = 0; i < dom_dim; i++)
+        // {
+        //     core_mins(i) = core.min[i];
+        //     core_maxs(i) = core.max[i];
+        //     bounds_mins(i) = bounds.min[i];
+        //     bounds_maxs(i) = bounds.max[i];
+
+        //     T o1 = bounds_maxs(i) - core_maxs(i);
+        //     T o2 = core_mins(i) - bounds_mins(i);
+        //     overlaps(i) = std::max(o1, o2);
+        // }      
     }
 
     // initialize an empty block that was previously added
     void init_block(
+            int                 gid,                // block gid (for IO or debugging)
             const Bounds<T>&    core,               // block bounds without any ghost added
             const Bounds<T>&    domain,             // global data bounds
             int                 dom_dim_,           // domain dimensionality
@@ -851,24 +882,27 @@ struct BlockBase
         // assign values to the domain (geometry)
         blend = new mfa::PointSet<T>(dom_dim, mfa->model_dims(), ndom_outpts.prod(), ndom_outpts);
         // in case of structured points, actual bounds are not bounds_mins, bounds_maxs
-        VectorXi ndpts = input->ndom_pts();
+        
+        
+        // VectorXi ndpts = input->ndom_pts();
 
-        VectorX<T> min_bd(dom_dim);
-        VectorX<T> max_bd(dom_dim);
-        size_t cs = 1;
-        for (int i = 0; i < dom_dim; i++) {
-            min_bd(i) = input->domain(0, i);
-            max_bd(i) = input->domain(cs * (ndpts(i) - 1), i);
-            cs *= ndpts(i);
-        }
+        // VectorX<T> min_bd(dom_dim);
+        // VectorX<T> max_bd(dom_dim);
+        // size_t cs = 1;
+        // for (int i = 0; i < dom_dim; i++) {
+        //     min_bd(i) = input->domain(0, i);
+        //     max_bd(i) = input->domain(cs * (ndpts(i) - 1), i);
+        //     cs *= ndpts(i);
+        // }
 
+        // Compute subset of parameter space corresponding to core bounds
         VectorX<T>   param_mins, param_maxs;
         param_mins.resize(dom_dim);
         param_maxs.resize(dom_dim);
-        for (int i=0; i<dom_dim; i++)
+        for (int i = 0; i < dom_dim; i++)
         {
-            param_mins[i] = (core_mins(i) - min_bd(i))/(max_bd(i) - min_bd(i));
-            param_maxs[i] = (core_maxs(i) - min_bd(i))/(max_bd(i) - min_bd(i));
+            param_mins[i] = (core_mins(i) - bounds_mins(i))/(bounds_maxs(i) - bounds_mins(i));
+            param_maxs[i] = (core_maxs(i) - bounds_mins(i))/(bounds_maxs(i) - bounds_mins(i));
         }
         // mfa::Param<T>   param1(ndom_outpts, param_mins, param_maxs);
         // blend->set_params( make_shared<mfa::Param<T>>(param1) );
@@ -879,7 +913,11 @@ struct BlockBase
         Kokkos::Profiling::popRegion(); // "calc_pos"
 #endif
         // now decode at resolution
-        this->DecodeRequestGrid(0, blend->domain); // so just compute the value, without any further blending
+        for (int j = 0; j < mfa->nvars(); j++) {
+            mfa->DecodeAtGrid(mfa->var(j), param_mins, param_maxs, ndom_outpts, blend->domain);
+        }
+
+        // this->DecodeRequestGrid(0, blend->domain); // so just compute the value, without any further blending
 #ifdef BLEND_VERBOSE
        cerr << " block: " << cp.gid() << " decode no blend:" << blend << "\n";
 #endif
@@ -984,7 +1022,7 @@ struct BlockBase
             diy::BlockID bid = l->target(k);
 
             // alternatively, build local block for neighbor k using its core, global resolutions and overlap over core
-            MatrixX<T> localBlockOverCoreK;
+            // MatrixX<T> localBlockOverCoreK;
             Bounds<T>  domainK = overNeighCore[k]; //
             auto  coreK = l->core(k);
             dirc = l->direction(k);
@@ -992,9 +1030,15 @@ struct BlockBase
             int  sizeBlock = 1;
             Bounds<T> resol(dom_dim);
             VectorX<T> d(dom_dim);                 // step in domain points in each dimension
+
+            VectorX<T> param_mins(dom_dim);
+            VectorX<T> param_maxs(dom_dim);
             for (int j = 0; j < dom_dim; j++)
             {
                 int dirGlob = map_dir[j];
+
+                // Need to work in terms of nbr core domain because block sizes might not be the
+                // same, but we need to send the patch that the nbr block expects.
                 T deltaCore = coreK.max[dirGlob] - coreK.min[dirGlob];
                 d(j) = deltaCore / ( resolutions[j] - 1 );
                 T deltaOver = domainK.max[j] - domainK.min[j];
@@ -1002,16 +1046,28 @@ struct BlockBase
 
                 if (dirc[dirGlob] < 0 )
                 {
+                    // david's edit
+                    param_mins(j) = (core_mins(j) - (counts[j] - 1) * d(j) - bounds_mins(j)) / (bounds_maxs(j) - bounds_mins(j));
+                    param_maxs(j) = (core_mins(j) - bounds_mins(j)) / (bounds_maxs(j) - bounds_mins(j));
+
                     resol.min[j] = coreK.max[dirGlob] - (counts[j] - 1) * d(j);
                     resol.max[j] = coreK.max[dirGlob];
                 }
                 else if (dirc[dirGlob] > 0 )
                 {
+                    // david's edit
+                    param_mins(j) = (core_maxs(j) - bounds_mins(j)) / (bounds_maxs(j) - bounds_mins(j));
+                    param_maxs(j) = (core_maxs(j) + (counts[j] - 1) * d(j) - bounds_mins(j)) / (bounds_maxs(j) - bounds_mins(j));
+
                     resol.min[j] = coreK.min[dirGlob];
                     resol.max[j] = coreK.min[dirGlob] + (counts[j] - 1) * d(j);
                 }
                 else // dirc[dirGlob] == 0
                 {
+                    // david's edit
+                    param_mins(j) = (core_mins(j) - bounds_mins(j)) / (bounds_maxs(j) - bounds_mins(j));
+                    param_maxs(j) = (core_maxs(j) - bounds_mins(j)) / (bounds_maxs(j) - bounds_mins(j));
+
                     resol.min[j] = coreK.min[dirGlob]; // full extents
                     resol.max[j] = coreK.max[dirGlob];
                     counts[j] = resolutions[j]; // there should be no question about it
@@ -1019,28 +1075,39 @@ struct BlockBase
                 sizeBlock *= counts[j];
             }
 
+            mfa::PointSet<T> localBlockOverCoreK(dom_dim, mfa->model_dims(), sizeBlock, counts);
+            localBlockOverCoreK.set_grid_params(param_mins, param_maxs);
+            mfa->DecodeVar(0, localBlockOverCoreK, false);  // Decode only science variable 0 (don't need to decode geometry)
 
-            localBlockOverCoreK.resize(sizeBlock, dom_dim + 1);
-            //assert(sizeBlock == num_points_received);
-            // we know the bounds (resol) and counts, we can form the grid
-            // assign values to the domain (geometry)
-            mfa::VolIterator vol_it(counts);
-            // current index of domain point in each dim, initialized to 0s
-            // flattened loop over all the points in a domain
-            while (!vol_it.done())
-            {
-                int j = (int)vol_it.cur_iter();
-                // compute geometry coordinates of domain point
-                for (auto i = 0; i < dom_dim; i++)
-                    localBlockOverCoreK(j, i) = resol.min[i] + vol_it.idx_dim(i) * d(i);
-
-                vol_it.incr_iter();
-            }
-            this->DecodeRequestGrid(0, localBlockOverCoreK);
             vector<T> computed_values(sizeBlock);
-            for (int k = 0; k < sizeBlock; k++) {
-                computed_values[k] = localBlockOverCoreK(k, dom_dim); // just last dimension
+            for (int k = 0; k < sizeBlock; k++)
+            {
+                computed_values[k] = localBlockOverCoreK.domain(k, mfa->geom_dim()); // TODO assumes one scalar variable              
             }
+
+            // localBlockOverCoreK.resize(sizeBlock, dom_dim + 1);
+
+            // //assert(sizeBlock == num_points_received);
+            // // we know the bounds (resol) and counts, we can form the grid
+            // // assign values to the domain (geometry)
+            // mfa::VolIterator vol_it(counts);
+            // // current index of domain point in each dim, initialized to 0s
+            // // flattened loop over all the points in a domain
+            // while (!vol_it.done())
+            // {
+            //     int j = (int)vol_it.cur_iter();
+            //     // compute geometry coordinates of domain point
+            //     for (auto i = 0; i < dom_dim; i++)
+            //         localBlockOverCoreK(j, i) = resol.min[i] + vol_it.idx_dim(i) * d(i);
+
+            //     vol_it.incr_iter();
+            // }
+            // this->DecodeRequestGrid(0, localBlockOverCoreK);
+            // vector<T> computed_values(sizeBlock);
+            // for (int k = 0; k < sizeBlock; k++) {
+            //     computed_values[k] = localBlockOverCoreK(k, dom_dim); // just last dimension
+            // }
+
 #ifdef BLEND_VERBOSE
         cerr << "   block gid " << cp.gid() << " for block " << bid.gid << "\n" << localBlockOverCoreK << endl;
 #endif
@@ -1061,7 +1128,7 @@ struct BlockBase
             diy::BlockID bid = l->target(k);
 
             // alternatively, build local block for neighbor k using its core, global resolutions and overlap over core
-            MatrixX<T> localBlockOverCoreK;
+            // MatrixX<T> localBlockOverCoreK;
             Bounds<T>  domainK = overNeighCore[k]; //
             auto  coreK = l->core(k);
             dirc = l->direction(k);
@@ -1069,9 +1136,15 @@ struct BlockBase
             int  sizeBlock = 1;
             Bounds<T> resol(dom_dim);
             VectorX<T> d(dom_dim);                 // step in domain points in each dimension
+
+            VectorX<T> param_mins(dom_dim);
+            VectorX<T> param_maxs(dom_dim);
             for (int j = 0; j < dom_dim; j++)
             {
                 int dirGlob = map_dir[j];
+
+                // Need to work in terms of nbr core domain because block sizes might not be the
+                // same, but we need to send the patch that the nbr block expects.
                 T deltaCore = coreK.max[dirGlob] - coreK.min[dirGlob];
                 d(j) = deltaCore / ( resolutions[j] - 1 );
                 T deltaOver = domainK.max[j] - domainK.min[j];
@@ -1079,16 +1152,28 @@ struct BlockBase
 
                 if (dirc[dirGlob] < 0 )
                 {
+                    // david's edit
+                    param_mins(j) = (core_mins(j) - (counts[j] - 1) * d(j) - bounds_mins(j)) / (bounds_maxs(j) - bounds_mins(j));
+                    param_maxs(j) = (core_mins(j) - bounds_mins(j)) / (bounds_maxs(j) - bounds_mins(j));
+
                     resol.min[j] = coreK.max[dirGlob] - (counts[j] - 1) * d(j);
                     resol.max[j] = coreK.max[dirGlob];
                 }
                 else if (dirc[dirGlob] > 0 )
                 {
+                    // david's edit
+                    param_mins(j) = (core_maxs(j) - bounds_mins(j)) / (bounds_maxs(j) - bounds_mins(j));
+                    param_maxs(j) = (core_maxs(j) + (counts[j] - 1) * d(j) - bounds_mins(j)) / (bounds_maxs(j) - bounds_mins(j));
+
                     resol.min[j] = coreK.min[dirGlob];
                     resol.max[j] = coreK.min[dirGlob] + (counts[j] - 1) * d(j);
                 }
                 else // dirc[dirGlob] == 0
                 {
+                    // david's edit
+                    param_mins(j) = (core_mins(j) - bounds_mins(j)) / (bounds_maxs(j) - bounds_mins(j));
+                    param_maxs(j) = (core_maxs(j) - bounds_mins(j)) / (bounds_maxs(j) - bounds_mins(j));
+
                     resol.min[j] = coreK.min[dirGlob]; // full extents
                     resol.max[j] = coreK.max[dirGlob];
                     counts[j] = resolutions[j]; // there should be no question about it
@@ -1096,29 +1181,40 @@ struct BlockBase
                 sizeBlock *= counts[j];
             }
 
+            mfa::PointSet<T> localBlockOverCoreK(dom_dim, mfa->model_dims(), sizeBlock, counts);
+            localBlockOverCoreK.set_grid_params(param_mins, param_maxs);
+            mfa->DecodeVar(0, localBlockOverCoreK, false);  // Decode only science variable 0 (don't need to decode geometry)
 
-            localBlockOverCoreK.resize(sizeBlock, dom_dim + 1);
-            //assert(sizeBlock == num_points_received);
-            // we know the bounds (resol) and counts, we can form the grid
-            // assign values to the domain (geometry)
-            mfa::VolIterator vol_it(counts);
-            // current index of domain point in each dim, initialized to 0s
-            // flattened loop over all the points in a domain
-            while (!vol_it.done())
-            {
-                int j = (int)vol_it.cur_iter();
-                // compute geometry coordinates of domain point
-                for (auto i = 0; i < dom_dim; i++)
-                    localBlockOverCoreK(j, i) = resol.min[i] + vol_it.idx_dim(i) * d(i);
-
-                vol_it.incr_iter();
-            }
-
-            this->DecodeRequestGrid(0, localBlockOverCoreK);
             vector<T> computed_values(sizeBlock);
-            for (int k = 0; k < sizeBlock; k++) {
-                computed_values[k] = localBlockOverCoreK(k, dom_dim); // just last dimension
+            for (int k = 0; k < sizeBlock; k++)
+            {
+                computed_values[k] = localBlockOverCoreK.domain(k, mfa->geom_dim()); // TODO assumes one scalar variable              
             }
+
+            // localBlockOverCoreK.resize(sizeBlock, dom_dim + 1);
+
+            // //assert(sizeBlock == num_points_received);
+            // // we know the bounds (resol) and counts, we can form the grid
+            // // assign values to the domain (geometry)
+            // mfa::VolIterator vol_it(counts);
+            // // current index of domain point in each dim, initialized to 0s
+            // // flattened loop over all the points in a domain
+            // while (!vol_it.done())
+            // {
+            //     int j = (int)vol_it.cur_iter();
+            //     // compute geometry coordinates of domain point
+            //     for (auto i = 0; i < dom_dim; i++)
+            //         localBlockOverCoreK.domain(j, i) = resol.min[i] + vol_it.idx_dim(i) * d(i);
+
+            //     vol_it.incr_iter();
+            // }
+
+            // this->DecodeRequestGrid(0, localBlockOverCoreK);
+            // vector<T> computed_values(sizeBlock);
+            // for (int k = 0; k < sizeBlock; k++) {
+            //     computed_values[k] = localBlockOverCoreK(k, dom_dim); // just last dimension
+            // }
+
 #ifdef BLEND_VERBOSE
         cerr << "   block gid " << cp.gid() << " for block " << bid.gid << "\n" << localBlockOverCoreK << endl;
 #endif
@@ -1188,7 +1284,9 @@ struct BlockBase
         for (auto i = 0; i < (size_t) blend->domain.rows(); i++) {
             vector<int> dests;               // link neighbor targets (not gids)
             for (int j = 0; j < dom_dim; j++)
-                dom_pt[j] = blend->domain(i, j);
+            {
+                dom_pt[j] = blend->domain(i, map_dir[j]);
+            }
             // decide if a point is inside a neighbor domain;
             // return a list of destinations , similar to diy::near(*l, dom_pt, eps, insert_it, decomposer.domain);
             // this logic will be used at decoding too
@@ -1228,7 +1326,7 @@ struct BlockBase
 
             // current point value, assume 1 variable
             // this needs to be blended
-            T val = blend->domain(i, dom_dim);
+            T val = blend->domain(i, mfa->geom_dim());
 #ifdef BLEND_VERBOSE
         cerr << " blend point " << dom_pt[0] << " " << dom_pt[1] << " val:" << val << " factors: " << myBlend(0) <<
             " " << myBlend(1) << "\n";
@@ -1264,7 +1362,7 @@ struct BlockBase
                 val = val + incomingValue * factor;
             }
             // finally, new corrected value for ptc:
-            blend->domain(i, dom_dim) = val;
+            blend->domain(i, mfa->geom_dim()) = val;
 #ifdef BLEND_VERBOSE
         cerr << "     general direction: " << genDir << " border: " << border.transpose() <<
                          "  blending: "<< myBlend.transpose() << " new val:" << val << endl;
@@ -1317,7 +1415,7 @@ namespace mfa
             diy::Master&    m   = const_cast<diy::Master&>(master);
             m.add(gid, b, l);
 
-            b->init_block(core, domain, dom_dim, pt_dim, ghost_factor);
+            b->init_block(gid, core, domain, dom_dim, pt_dim, ghost_factor);
         }
 
     // Add a block defined with integer bounds
@@ -1338,7 +1436,7 @@ namespace mfa
             diy::Master&    m = const_cast<diy::Master&>(master);
             m.add(gid, b, l);
 
-            b->init_block_int_bounds(core, bounds, domain, dom_dim, pt_dim);
+            b->init_block_int_bounds(gid, core, bounds, domain, dom_dim, pt_dim);
         }
 
     template<typename B, typename T>                // B = block object,  T = float or double

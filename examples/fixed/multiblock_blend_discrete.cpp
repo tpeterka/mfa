@@ -110,8 +110,8 @@ int main(int argc, char **argv) {
     const int mem_blocks  = -1;     // Keep all blocks in memory
     const int num_threads = 1;      // Number of threads for DIY (serial for timing purposes)
     int tot_blocks = 1;
-    vector<bool> share_face(dom_dim, true);
-    vector<bool> wrap(dom_dim, false);
+    vector<bool> share_face(3, true);
+    vector<bool> wrap(3, false);
     Bounds<int> dom_bounds(3);
     if (starts.size() != 3 || ends.size() != 3 || shape.size() != 3)
     {

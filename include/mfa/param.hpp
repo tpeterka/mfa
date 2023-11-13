@@ -25,6 +25,126 @@ using namespace std;
 
 namespace mfa
 {
+    template <typename T>
+    struct AffMap
+    {
+        // Defines an affine transformation from parameter space to physical space
+        // x = tMat*u + tVec
+        // u = tMat^-1*(x-tVec)
+        int                     dom_dim;    // dimension of parameter space
+        int                     geom_dim;   // dimension of physical space
+        MatrixX<T>              mat;   // Affine transform matrix mapping parameters to physical coords
+        VectorX<T>              vec;   // Affine tranform vector mapping parameters to physical coords
+        bool                    init{false};   // flag that transformation has been initialized
+
+        Eigen::ColPivHouseholderQR<MatrixX<T>> qr;
+
+        AffMap(int dom_dim_, int geom_dim_, const MatrixX<T>& domain, const VectorXi& ndom_pts) :
+            dom_dim(dom_dim_),
+            geom_dim(geom_dim_)
+        {
+           // Helper class to manage grid indices
+            GridInfo grid;
+            grid.init(dom_dim, ndom_pts);
+
+            // Set translation vector for affine transform
+            vec = domain.row(0).head(geom_dim);
+
+            // Set linear operator for affine transform
+            mat.resize(geom_dim, dom_dim);
+            for (int i = 0; i < dom_dim; i++)
+            {
+                // Get cardinal direction vectors; e.g. (1,0,0), (0,1,0), (0,0,1)
+                VectorXi ijk = VectorXi::Zero(dom_dim);
+                ijk(i) = ndom_pts(i) - 1;
+
+                // Get physical point at this vector
+                int idx = grid.ijk2idx(ijk);
+                VectorX<T> edge = domain.row(idx).head(geom_dim);
+
+                mat.col(i) = edge - vec;
+            }
+
+            qr = mat.colPivHouseholderQr();
+
+            // Mark transformation as initialized
+            init = true;
+        }
+
+        AffMap(int dom_dim_, int geom_dim_, const VectorX<T>& vec_, const MatrixX<T>& mat_) :
+            dom_dim(dom_dim_),
+            geom_dim(geom_dim_),
+            vec(vec_),
+            mat(mat_)
+        {
+            qr = mat.colPivHouseholderQr();
+            init = true;
+        }
+
+        // Computes the parameter u corresponding to point x
+        // 
+        // Note: In cases where the physical space has higher dimension than paramter space
+        //       (e.g., a 2D surface embedded in 3D space), we should only attempt to 
+        //       compute parameter values for points that lie on the affine surface.
+        //       However, this method ALWAYS produces an answer, even for points not on
+        //       the surface. For efficiency, we only check if our answer is valid with
+        //       an assert (that is, in a Debug build). So, this method assumes that the 
+        //       user is passing in a valid value for x.
+        void transform(const VectorX<T>& x, VectorX<T>& u)
+        {
+            assert(init);
+            u = qr.solve(x-vec);
+            assert(x.isApprox(mat*u + vec));
+        }
+
+        // We want to create a whole new function here (not overload the transform function)
+        // because a Vector and a RowVector can both be interpreted as a Matrix. However, 
+        // it is likely that a user may extract a row vector from a matrix and pass it 
+        // to transform().  In this case, we want to treat it as a (column) Vector.
+        // If we had a function overload with Matrix inputs, Eigen could interpret that 
+        // row vector as a 1xN matrix, which would cause undefined behavior as we expect
+        // x to have 'geom_dim' rows.
+        void transformSet(const MatrixX<T>& x, MatrixX<T>& u)
+        {
+            assert(init);
+            
+            // Subtract vec from every row of x
+            MatrixX<T> y = x;
+            for (int i = 0; i < y.cols(); i++)
+            {
+                y.col(i) = x.col(i) - vec;
+            }
+
+            u = qr.solve(y);
+            assert(y.isApprox(mat*u));            
+        }
+
+        // Convenience function to transpose matrices before computing parameters
+        // No deep copy is made in order to transform
+        // 
+        // transformSet expects x to be (geom_dim x N) and u to be (dom_dim x N)
+        // However, we often store coordinates in matrices of size (N x geom_dim)
+        void transformTransposeSet(const MatrixX<T>& x, MatrixX<T>& u)
+        {
+            assert(init);
+
+            // create transpose views for solving
+            Eigen::Transpose<MatrixX<T>> uT = u.transpose();
+            Eigen::Transpose<const MatrixX<T>> xT = x.transpose();
+
+            // Subtract vec from every row of xT
+            MatrixX<T> yT = xT;
+            for (int i = 0; i < yT.cols(); i++)
+            {
+                yT.col(i) = xT.col(i) - vec;
+            }
+
+            uT = qr.solve(yT);
+            assert(yT.isApprox(mat*uT));
+        }
+    };
+
+
     template <typename T>                           // float or double
     struct Param
     {
@@ -230,10 +350,12 @@ namespace mfa
         // of the grid.
         // If the data is structured, we always use the grid bounds to 
         // define the extents.
-        void make_domain_params(const MatrixX<T>&   domain,
+        void make_domain_params(      int           geom_dim,
+                                const MatrixX<T>&   domain,
                                 const VectorX<T>&   dom_mins = VectorX<T>(),
                                 const VectorX<T>&   dom_maxs = VectorX<T>())
         {
+
             if (structured)
             {
                 if (dom_mins != VectorX<T>() || dom_maxs != VectorX<T>())
@@ -241,11 +363,11 @@ namespace mfa
                     cerr << "Warning: dom_mins/maxs variables are unused in a structured domain parametrization." << endl;
                     cerr << "         Domain bounds will be determine from grid structure." << endl;
                 }
-                make_domain_params_structured(domain);
+                make_domain_params_structured(geom_dim, domain);
             }
             else
             {
-                make_domain_params_unstructured(domain, dom_mins, dom_maxs);
+                make_domain_params_unstructured(geom_dim, domain, dom_mins, dom_maxs);
             }
         }
 
@@ -257,30 +379,60 @@ namespace mfa
         // params are only stored once for each dimension (1st dim params, 2nd dim params, ...)
         // total number of params is the sum of ndom_pts over the dimensions, much less than the total
         // number of data points (which would be the product)
-        void make_domain_params_structured(const MatrixX<T>& domain)     // input data points (1st dim changes fastest)
+        // void make_domain_params_structured(const MatrixX<T>& domain)     // input data points (1st dim changes fastest)
+        // {
+        //     int cs = 1;                                      // stride for domain points in current dim.
+        //     for (int k = 0; k < dom_dim; k++)                // for all domain dimensions
+        //     {
+        //         T width_recip = 1 / (domain(cs * (ndom_pts(k) - 1), k) - domain(0, k));
+
+        //         for (int i = 0; i < ndom_pts(k); i++)
+        //             param_grid[k][i]= (domain(cs * i, k) - domain(0, k)) * width_recip;
+
+        //         cs *= ndom_pts(k);
+        //     }
+
+        //     check_param_bounds();
+        // }
+
+        void make_domain_params_structured(int geom_dim, const MatrixX<T>& domain)
         {
-            int cs = 1;                                      // stride for domain points in current dim.
-            for (int k = 0; k < dom_dim; k++)                // for all domain dimensions
+            AffMap<T> map(dom_dim, geom_dim, domain, ndom_pts);
+
+            // Helper class to manage grid indices
+            GridInfo grid;
+            grid.init(dom_dim, ndom_pts);
+
+            VectorX<T> x(geom_dim);
+            VectorX<T> u(dom_dim);
+            VectorXi ijk(dom_dim);
+            int idx = 0;
+            for (int i = 0; i < dom_dim; i++)
             {
-                T width_recip = 1 / (domain(cs * (ndom_pts(k) - 1), k) - domain(0, k));
+                for (int j = 0; j < ndom_pts(i); j++)
+                {
+                    ijk.setZero();
+                    ijk(i) = j;
+                    idx = grid.ijk2idx(ijk);
+                    x = domain.row(idx).head(geom_dim);
 
-                for (int i = 0; i < ndom_pts(k); i++)
-                    param_grid[k][i]= (domain(cs * i, k) - domain(0, k)) * width_recip;
-
-                cs *= ndom_pts(k);
+                    map.transform(x, u);
+                    param_grid[i][j] = u(i);
+                }
             }
-
+            
+            truncateRoundoff();
             check_param_bounds();
         }
 
-        // TODO: Does not properly support geom_dim!
-        // This only works if the first dom_dim dimensions of the 
-        // geometric coordinates should be used for the parametrization
         void make_domain_params_unstructured(
+                  int           geom_dim,
             const MatrixX<T>&   domain,
             const VectorX<T>&   dom_mins,
             const VectorX<T>&   dom_maxs)
         {
+            // First, determine if dom_mins/maxs were set manually or if
+            // they need to be computed from the domain
             VectorX<T> mins;
             VectorX<T> maxs;
 
@@ -302,25 +454,119 @@ namespace mfa
                 maxs = dom_maxs;
             }
 
-            int npts = domain.rows();
-            param_list.resize(npts, dom_dim);
-
-            VectorX<T> diff = maxs - mins;
-
-            // Rescale domain values to the interval [0,1], column-by-column
-            for (size_t k = 0; k < dom_dim; k++)
+            // Create the affine map for the special case of an axis-aligned bounding box
+            VectorX<T> edge(geom_dim);
+            VectorX<T> translation = mins;
+            MatrixX<T> linear(geom_dim, dom_dim);
+            for (int i = 0; i < dom_dim; i++)
             {
-                param_list.col(k) = (domain.col(k).array() - mins(k)) * (1/diff(k));
+                edge.setZero();
+                edge(i) = maxs(i) - mins(i);
+                linear.col(i) = edge;
             }
+            AffMap<T> map(dom_dim, geom_dim, translation, linear);
 
-            // truncate floating-point roundoffs to [0,1]
+            // Resize the parameter list and fill
+            param_list.resize(domain.rows(), dom_dim);
+            map.transformTransposeSet(domain.leftCols(geom_dim), param_list);
+
+            truncateRoundoff();
+            check_param_bounds();
+        }
+
+        // // TODO: Does not properly support geom_dim!
+        // // This only works if the first dom_dim dimensions of the 
+        // // geometric coordinates should be used for the parametrization
+        // void make_domain_params_unstructured(
+        //     const MatrixX<T>&   domain,
+        //     const VectorX<T>&   dom_mins,
+        //     const VectorX<T>&   dom_maxs)
+        // {
+        //     VectorX<T> mins;
+        //     VectorX<T> maxs;
+
+        //     // dom mins/maxs should either be empty or of size dom_dim
+        //     if (dom_mins.size() > 0 && dom_mins.size() != dom_dim)
+        //         cerr << "Warning: Invalid size of dom_mins in Param construction" << endl;
+        //     if (dom_maxs.size() > 0 && dom_maxs.size() != dom_dim)
+        //         cerr << "Warning: Invalid size of dom_maxs in Param construction" << endl;
+
+        //     // Set min/max extents in each domain dimension
+        //     if (dom_mins.size() != dom_dim || dom_maxs.size() != dom_dim)
+        //     {
+        //         mins = domain.leftCols(dom_dim).colwise().minCoeff();
+        //         maxs = domain.leftCols(dom_dim).colwise().maxCoeff();
+        //     }
+        //     else    // Use domain bounds provided by block (input data need not extend to bounds)
+        //     {
+        //         mins = dom_mins;
+        //         maxs = dom_maxs;
+        //     }
+
+        //     int npts = domain.rows();
+        //     param_list.resize(npts, dom_dim);
+
+        //     VectorX<T> diff = maxs - mins;
+
+        //     // Rescale domain values to the interval [0,1], column-by-column
+        //     for (size_t k = 0; k < dom_dim; k++)
+        //     {
+        //         param_list.col(k) = (domain.col(k).array() - mins(k)) * (1/diff(k));
+        //     }
+
+        //     // truncate floating-point roundoffs to [0,1]
+        //     for (int i = 0; i < param_list.rows(); i++)
+        //     {
+        //         for (int j = 0; j < param_list.cols(); j++)
+        //         {
+        //             if (param_list(i,j) > 1.0)
+        //             {
+        //                 if (param_list(i,j) - 1.0 < 1e-12)
+        //                 {
+        //                     param_list(i,j) = 1.0;
+        //                     // cerr << "Debug: truncated a parameter value" << endl;
+        //                 }
+        //                 else
+        //                 {
+        //                     cerr << "ERROR: Construction of Param object contains out-of-bounds entries" << endl;
+        //                     cerr << "       Bad Value: " << setprecision(9) << scientific << param_list(i,j) << endl;
+        //                     cerr << "       Out of Tolerance: " << scientific << param_list(i,j) - 1.0 << endl;
+        //                     cerr << i << " " << j << endl;
+        //                     cerr << domain(i,j) << endl;
+        //                     exit(1);
+        //                 }
+        //             }
+        //             if (param_list(i,j) < 0.0)
+        //             {
+        //                 if (0.0 - param_list(i,j) < 1e-12)
+        //                 {
+        //                     param_list(i,j) = 0.0;
+        //                     // cerr << "Debug: truncated a parameter value" << endl;
+        //                 }
+        //                 else
+        //                 {
+        //                     cerr << "ERROR: Construction of Param object contains out-of-bounds entries" << endl;
+        //                     cerr << "       Bad Value: " << setprecision(9) << scientific << param_list(i,j) << endl;
+        //                     cerr << "       Out of Tolerance: " << scientific << 0.0 - param_list(i,j) << endl;
+        //                     exit(1);
+        //                 }
+        //             }
+        //         }
+        //     }
+        
+        //     check_param_bounds();
+        // }
+
+        // truncate floating-point roundoffs to [0,1]
+        void truncateRoundoff(double prec = 1e-12)
+        {
             for (int i = 0; i < param_list.rows(); i++)
             {
                 for (int j = 0; j < param_list.cols(); j++)
                 {
                     if (param_list(i,j) > 1.0)
                     {
-                        if (param_list(i,j) - 1.0 < 1e-12)
+                        if (param_list(i,j) - 1.0 < prec)
                         {
                             param_list(i,j) = 1.0;
                             // cerr << "Debug: truncated a parameter value" << endl;
@@ -330,14 +576,13 @@ namespace mfa
                             cerr << "ERROR: Construction of Param object contains out-of-bounds entries" << endl;
                             cerr << "       Bad Value: " << setprecision(9) << scientific << param_list(i,j) << endl;
                             cerr << "       Out of Tolerance: " << scientific << param_list(i,j) - 1.0 << endl;
-                            cerr << i << " " << j << endl;
-                            cerr << domain(i,j) << endl;
+                            cerr << "       Index: " << i << " " << j << endl;
                             exit(1);
                         }
                     }
                     if (param_list(i,j) < 0.0)
                     {
-                        if (0.0 - param_list(i,j) < 1e-12)
+                        if (0.0 - param_list(i,j) < prec)
                         {
                             param_list(i,j) = 0.0;
                             // cerr << "Debug: truncated a parameter value" << endl;
@@ -347,13 +592,12 @@ namespace mfa
                             cerr << "ERROR: Construction of Param object contains out-of-bounds entries" << endl;
                             cerr << "       Bad Value: " << setprecision(9) << scientific << param_list(i,j) << endl;
                             cerr << "       Out of Tolerance: " << scientific << 0.0 - param_list(i,j) << endl;
+                            cerr << "       Index: " << i << " " << j << endl;
                             exit(1);
                         }
                     }
                 }
             }
-        
-            check_param_bounds();
         }
 
         // Checks for any parameter values outside the range [0,1].
@@ -377,7 +621,7 @@ namespace mfa
                     {
                         for (int j = 0; j < ndom_pts(k); j++)
                         {
-                            if (param_grid[k][j] < 0.0 || param_grid[k][j] > 1.0)
+                            if (param_grid[k][j] < 0.0 || param_grid[k][j] > 1.0 || std::isnan(param_grid[k][j]))
                             {
                                 valid = false;
                                 badval = param_grid[k][j];
@@ -392,7 +636,7 @@ namespace mfa
                 for (int k = 0; k < dom_dim; k++)
                 {
                     minp = param_list.col(k).minCoeff();
-                    if (minp < 0.0)
+                    if (minp < 0.0 || std::isnan(minp))
                     {
                         valid = false;
                         badval = minp;
@@ -400,7 +644,7 @@ namespace mfa
                     }
 
                     maxp = param_list.col(k).maxCoeff();
-                    if (maxp > 1.0)
+                    if (maxp > 1.0 || std::isnan(maxp))
                     {
                         valid = false;
                         badval = maxp;

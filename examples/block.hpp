@@ -1815,35 +1815,42 @@ struct Block : public BlockBase<T, U>
         this->max_errs.resize(nvars);
         this->sum_sq_errs.resize(nvars);
 
-        // decide the actual dimension of the problem, looking at the starts and ends
-        std::vector<int> mapDim;
-        for (int i = 0; i < 3; i++) {
-            if (core.min[i] < core.max[i]) {
-                mapDim.push_back(i);
-            }
-        }
-        if (mapDim.size() != dom_dim)
-        {
-            if (cp.gid() == 0)
-            {
-                cerr << "ERROR: Number of nontrivial dimensions does not match dom_dim. Exiting." << endl;
-            }
-            exit(1);
-        }
+        // // TODO: mapDim == this->map_dir now, so we can write into that immediately
+        // // decide the actual dimension of the problem, looking at the starts and ends
+        // // std::vector<int> mapDim;
+        // for (int i = 0; i < 3; i++) {
+        //     if (core.min[i] < core.max[i]) {
+        //         this->map_dir.push_back(i);
+        //     }
+        // }
+        // if (this->map_dir.size() != dom_dim)
+        // {
+        //     if (cp.gid() == 0)
+        //     {
+        //         cerr << "ERROR: Number of nontrivial dimensions does not match dom_dim. Exiting." << endl;
+        //     }
+        //     exit(1);
+        // }
+
+        VectorXi dirSizes(3);
+        dirSizes(0) = bounds.max[0] - bounds.min[0] + 1;
+        dirSizes(1) = bounds.max[1] - bounds.min[1] + 1;
+        dirSizes(2) = bounds.max[2] - bounds.min[2] + 1;
 
         VectorXi ndom_pts(dom_dim);  // this will be local now, and used in def of mfa
         int tot_ndom_pts = 1;
         for (size_t j = 0; j < dom_dim; j++) {
-            int dir = mapDim[j];
+            int dir = this->map_dir[j];
             int size_in_dir = -bounds.min[dir] + bounds.max[dir] + 1;
             tot_ndom_pts *= size_in_dir;
             ndom_pts(j) = size_in_dir;
         }
 
-        // Construct point set to contain input
         VectorXi model_dims(2);
-        model_dims(0) = dom_dim;
-        model_dims(1) = pt_dim - dom_dim;
+        model_dims(0) = 3;      // 3d points
+        model_dims(1) = 1;      // scalar variable
+
+        // Construct point set to contain input
         input = new mfa::PointSet<T>(dom_dim, model_dims, tot_ndom_pts, ndom_pts);
 
         vector<float> data;
@@ -1851,8 +1858,8 @@ struct Block : public BlockBase<T, U>
 
         if (dom_dim == 1) // 1d problem, the dimension would be x direction
         {
-            int dir0 = mapDim[0];
-            this->map_dir.push_back(dir0); // only one dimension, rest are not varying
+            int dir0 = this->map_dir[0];
+            // this->map_dir.push_back(dir0); // only one dimension, rest are not varying
             for (int i = 0; i < tot_ndom_pts; i++) {
                 input->domain(i, 0) = bounds.min[dir0] + i;
                 int idx = vecSize * i;
@@ -1868,22 +1875,25 @@ struct Block : public BlockBase<T, U>
             if (!fileOrderC) {
                 int n = 0;
                 int idx = 0;
-                int dir0 = mapDim[0]; // so now y would vary to 704 in 2d 1 block similar case for s3d (transpose)
-                int dir1 = mapDim[1];
+                // int dir0 = this->map_dir[0]; // so now y would vary to 704 in 2d 1 block similar case for s3d (transpose)
+                // int dir1 = this->map_dir[1];
                 // we do not transpose anymore
-                this->map_dir.push_back(dir0);
-                this->map_dir.push_back(dir1);
-                for (int i = 0; i < ndom_pts(0); i++) {
-                    for (int j = 0; j < ndom_pts(1); j++) {
-                        n = j * ndom_pts(0) + i;
-                        input->domain(n, 0) = bounds.min[dir0] + i; //
-                        input->domain(n, 1) = bounds.min[dir1] + j;
-                        float val = 0;
-                        for (int k = 0; k < vecSize; k++)
-                            val += data[idx + k] * data[idx + k];
-                        val = sqrt(val);
-                        input->domain(n, 2) = val;
-                        idx += vecSize;
+                // this->map_dir.push_back(dir0);
+                // this->map_dir.push_back(dir1);
+                for (int k = 0; k < dirSizes(2); k++) {
+                    for (int j = 0; j < dirSizes(1); j++) {
+                        for (int i = 0; i < dirSizes(0); i++) {
+                            input->domain(n, 0) = bounds.min[0] + i;
+                            input->domain(n, 1) = bounds.min[1] + j;
+                            input->domain(n, 2) = bounds.min[2] + k;
+                            float val = 0;
+                            for (int l = 0; l < vecSize; l++)
+                                val += data[idx + l] * data[idx + l];
+                            val = sqrt(val);
+                            input->domain(n, 3) = val;
+                            n++;
+                            idx += vecSize;
+                        }
                     }
                 }
             } 
@@ -1893,20 +1903,23 @@ struct Block : public BlockBase<T, U>
                 // corresponds to original implementation, which needs to transpose dimensions
                 int n = 0;
                 int idx = 0;
-                int dir0 = mapDim[1]; // so x would vary to 704 in 2d 1 block similar case
-                int dir1 = mapDim[0];
-                this->map_dir.push_back(dir0);
-                this->map_dir.push_back(dir1);
-                for (int j = 0; j < ndom_pts(1); j++) {
-                    for (int i = 0; i < ndom_pts(0); i++) {
-                        input->domain(n, 1) = bounds.min[dir1] + j;
-                        input->domain(n, 0) = bounds.min[dir0] + i;
-                        float val = 0;
-                        for (int l = 0; l < vecSize; l++)
-                            val += data[idx + l] * data[idx + l];
-                        input->domain(n, 2) = sqrt(val);
-                        n++;
-                        idx += vecSize;
+                // int dir0 = this->map_dir[0]; // so x would vary to 704 in 2d 1 block similar case
+                // int dir1 = this->map_dir[1];
+                // this->map_dir.push_back(dir0);
+                // this->map_dir.push_back(dir1);
+                for (int i = 0; i < dirSizes(0); i++) {
+                    for (int j = 0; j < dirSizes(1); j++) {
+                        for (int k = 0; k < dirSizes(2); k++) {
+                            n = k * dirSizes(0) * dirSizes(1) + j * dirSizes(0) + i;
+                            input->domain(n, 0) = bounds.min[0] + i; // this now corresponds to x
+                            input->domain(n, 1) = bounds.min[1] + j;
+                            input->domain(n, 2) = bounds.min[2] + k;
+                            float val = 0;
+                            for (int l = 0; l < vecSize; l++)
+                                val += data[idx + l] * data[idx + l];
+                            input->domain(n, 3) = sqrt(val);
+                            idx += vecSize;
+                        }
                     }
                 }
             }
@@ -1916,13 +1929,13 @@ struct Block : public BlockBase<T, U>
             if (!fileOrderC) {
                 int n = 0;
                 int idx = 0;
-                this->map_dir.push_back(mapDim[0]);
-                this->map_dir.push_back(mapDim[1]);
-                this->map_dir.push_back(mapDim[2]);
+                // this->map_dir.push_back(mapDim[0]);
+                // this->map_dir.push_back(mapDim[1]);
+                // this->map_dir.push_back(mapDim[2]);
                 // last dimension would correspond to x, as in the 2d example
-                for (int k = 0; k < ndom_pts(2); k++) {
-                    for (int j = 0; j < ndom_pts(1); j++) {
-                        for (int i = 0; i < ndom_pts(0); i++) {
+                for (int k = 0; k < dirSizes(2); k++) {
+                    for (int j = 0; j < dirSizes(1); j++) {
+                        for (int i = 0; i < dirSizes(0); i++) {
                             input->domain(n, 0) = bounds.min[0] + i;
                             input->domain(n, 1) = bounds.min[1] + j;
                             input->domain(n, 2) = bounds.min[2] + k;
@@ -1941,14 +1954,14 @@ struct Block : public BlockBase<T, U>
             {
                 int n = 0;
                 int idx = 0;
-                this->map_dir.push_back(mapDim[0]);
-                this->map_dir.push_back(mapDim[1]);
-                this->map_dir.push_back(mapDim[2]);
+                // this->map_dir.push_back(mapDim[0]);
+                // this->map_dir.push_back(mapDim[1]);
+                // this->map_dir.push_back(mapDim[2]);
                 // last dimension would correspond to x, as in the 2d example
-                for (int i = 0; i < ndom_pts(0); i++) {
-                    for (int j = 0; j < ndom_pts(1); j++) {
-                        for (int k = 0; k < ndom_pts(2); k++) {
-                            n = k * ndom_pts(0) * ndom_pts(1) + j * ndom_pts(0) + i;
+                for (int i = 0; i < dirSizes(0); i++) {
+                    for (int j = 0; j < dirSizes(1); j++) {
+                        for (int k = 0; k < dirSizes(2); k++) {
+                            n = k * dirSizes(0) * dirSizes(1) + j * dirSizes(0) + i;
                             input->domain(n, 0) = bounds.min[0] + i; // this now corresponds to x
                             input->domain(n, 1) = bounds.min[1] + j;
                             input->domain(n, 2) = bounds.min[2] + k;
@@ -1964,19 +1977,19 @@ struct Block : public BlockBase<T, U>
         }
         input->set_domain_params();
 
-        // Finalize block for encoding
-        for (int i = 0; i < dom_dim; i++) {
-            bounds_mins(i) = bounds.min[mapDim[i]];
-            bounds_maxs(i) = bounds.max[mapDim[i]];
-            core_mins(i) = core.min[mapDim[i]];
-            core_maxs(i) = core.max[mapDim[i]];
-            // decide overlap in each direction; they should be symmetric for neighbors
-            // so if block a overlaps block b, block b overlaps a the same area
-            overlaps(i) = fabs(core_mins(i) - bounds_mins(i));
-            T m2 = fabs(bounds_maxs(i) - core_maxs(i));
-            if (m2 > overlaps(i))
-                overlaps(i) = m2;
-        }
+        // // Finalize block for encoding
+        // for (int i = 0; i < dom_dim; i++) {
+        //     bounds_mins(i) = bounds.min[this->map_dir[i]];
+        //     bounds_maxs(i) = bounds.max[this->map_dir[i]];
+        //     core_mins(i) = core.min[this->map_dir[i]];
+        //     core_maxs(i) = core.max[this->map_dir[i]];
+        //     // decide overlap in each direction; they should be symmetric for neighbors
+        //     // so if block a overlaps block b, block b overlaps a the same area
+        //     overlaps(i) = fabs(core_mins(i) - bounds_mins(i));
+        //     T m2 = fabs(bounds_maxs(i) - core_maxs(i));
+        //     if (m2 > overlaps(i))
+        //         overlaps(i) = m2;
+        // }
 
         // set bounds_min/max for science variable (last coordinate)
         bounds_mins(dom_dim) = input->domain.col(dom_dim).minCoeff();

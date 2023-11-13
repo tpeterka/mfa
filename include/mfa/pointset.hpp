@@ -212,7 +212,7 @@ namespace mfa
             // n.b. A structured grid which has been rotated will still have its parameters computed correctly.
             //      dom mins/maxs are not used in the computation of structured parameters, so the parameters
             //      are computed to be the correct "rotated" grid
-            params->make_domain_params(domain);
+            params->make_domain_params(geom_dim(), domain);
         }
 
         // Create Param object with a domain parametrization, with a bounding
@@ -221,7 +221,7 @@ namespace mfa
         {
             set_bounds(domain_mins, domain_maxs);
 
-            params->make_domain_params(domain, domain_mins, domain_maxs);
+            params->make_domain_params(geom_dim(), domain, domain_mins, domain_maxs);
         }
 
         // Create Param object that is equispaced over all parameter space
@@ -394,10 +394,6 @@ namespace mfa
                 exit(1);
             }
 
-#ifdef MFA_SERIAL
-            diff.domain.leftCols(geom_dim()) = this->domain.leftCols(geom_dim());
-            diff.domain.rightCols(pt_dim-geom_dim()) = (this->domain.rightCols(pt_dim-geom_dim()) - other.domain.rightCols(pt_dim-geom_dim())).cwiseAbs();
-#endif // MFA_SERIAL
 #ifdef MFA_TBB
             parallel_for (size_t(0), (size_t)diff.npts, [&] (size_t i)
                 {
@@ -414,7 +410,10 @@ namespace mfa
                         diff.domain(i,j) = fabs(this->domain(i,j) - other.domain(i,j)); // compute distance between each science value
                     }
                 });
-#endif // MFA_TBB
+#else
+            diff.domain.leftCols(geom_dim()) = this->domain.leftCols(geom_dim());
+            diff.domain.rightCols(pt_dim-geom_dim()) = (this->domain.rightCols(pt_dim-geom_dim()) - other.domain.rightCols(pt_dim-geom_dim())).cwiseAbs();
+#endif
         }
 
         PointSet(const PointSet&) = delete;
