@@ -103,8 +103,9 @@ int main(int argc, char** argv)
 
     // print input arguments
     echo_mfa_settings("adaptive test", pt_dim, dom_dim, scalar, geom_degree, geom_nctrl, vars_degree, vars_nctrl,
-                        regularization, reg1and2, weighted, true, norm_err_limit, max_rounds);
-    echo_data_settings(ndomp, ntest, input, infile, noise, rot, twist, structured, rand_seed);
+                        regularization, reg1and2, true, norm_err_limit, max_rounds);
+    echo_data_settings(input, infile, ndomp, ntest);
+    echo_data_mod_settings(structured, rand_seed, rot, twist, noise);
 
     // initialize DIY
     diy::FileStorage          storage("./DIY.XXXXXX"); // used for blocks to be moved out of core
@@ -149,7 +150,7 @@ int main(int argc, char** argv)
     // set up parameters for examples
     setup_args(dom_dim, pt_dim, model_dims, geom_degree, geom_nctrl, vars_degree, vars_nctrl,
                 input, infile, ndomp, structured, rand_seed, rot, twist, noise,
-                weighted, reg1and2, regularization, adaptive, verbose, mfa_info, d_args);
+                reg1and2, regularization, adaptive, verbose, mfa_info, d_args);
 
 
     // Create data set for modeling

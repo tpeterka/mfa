@@ -72,7 +72,7 @@ namespace mfa
             verbose(verbose_),
             input(input_),
             max_num_curves(1.0e5)                           // max num. curves to check in one dimension of curve version
-        {}
+        { }
 
         ~Encoder() {}
 
@@ -115,7 +115,7 @@ namespace mfa
 
             // resize basis function matrices and initialize to 0; will only fill nonzeros later
             mfa_data.N.resize(dom_dim);
-            for (auto k = 0; k < ndims; k++)
+            for (auto k = 0; k < dom_dim; k++)
                 mfa_data.N[k] = MatrixX<T>::Zero(input.ndom_pts(k), nctrl_pts(k));
 
             // 2 buffers of temporary control points
@@ -3789,7 +3789,6 @@ namespace mfa
                 for (auto k = 0; k < dom_dim; k++)
                 {
                     t.nctrl_pts(k) += new_knots[k].size();
-                    mfa_data.N[k] = MatrixX<T>::Zero(mfa_data.N[k].rows(), t.nctrl_pts(k));
                 }
                 auto tot_nctrl_pts = t.nctrl_pts.prod();
                 t.ctrl_pts.resize(tot_nctrl_pts, t.ctrl_pts.cols());
