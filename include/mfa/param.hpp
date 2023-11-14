@@ -33,9 +33,9 @@ namespace mfa
         // u = tMat^-1*(x-tVec)
         int                     dom_dim;    // dimension of parameter space
         int                     geom_dim;   // dimension of physical space
-        MatrixX<T>              mat;   // Affine transform matrix mapping parameters to physical coords
-        VectorX<T>              vec;   // Affine tranform vector mapping parameters to physical coords
-        bool                    init{false};   // flag that transformation has been initialized
+        MatrixX<T>              mat;        // Affine transform matrix mapping parameters to physical coords
+        VectorX<T>              vec;        // Affine tranform vector mapping parameters to physical coords
+        bool                    init{false};// flag that transformation has been initialized
 
         Eigen::ColPivHouseholderQR<MatrixX<T>> qr;
 
@@ -43,7 +43,7 @@ namespace mfa
             dom_dim(dom_dim_),
             geom_dim(geom_dim_)
         {
-           // Helper class to manage grid indices
+            // Helper class to manage grid indices
             GridInfo grid;
             grid.init(dom_dim, ndom_pts);
 

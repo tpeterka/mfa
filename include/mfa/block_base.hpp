@@ -867,56 +867,65 @@ struct BlockBase
     //       input data, NOT the bounds_mins/max. 
     void compute_neighbor_overlaps(const diy::Master::ProxyWithLink &cp) {
         RCLink<T> *l = static_cast<RCLink<T>*>(cp.link());
-        // compute the overlaps of the neighbors outside main loop, and keep them in a vector
-        Bounds<T> neigh_overlaps(dom_dim); // neighbor overlaps have the same dimension as domain , core
-        Bounds<T> overNeigh(dom_dim); // over neigh core have the same dimension as domain , core
-                                      // these bounds are symmetric to neigh overlaps
-                                      // these cover the core of neigh [k] , and will be decoded and sent for blending
-                                      // local grid is decided by that core [k] and resolutions
-        diy::Direction dirc(dom_dim, 0); // neighbor direction
-        diy::BlockID bid;  // this is stored for debugging purposes
-        // if negative direction, correct min, if positive, correct max
+        Bounds<T> nbrOverBlock(dom_dim);  // part of this block's core that is covered by neighbor
+        Bounds<T> blockOverNbr(dom_dim);       // part of neighbor's core that is covered by this block
+        diy::Direction dirc(dom_dim, 0);    // neighbor's direction
+        
+        // compute the overlaps of each neighbor and store in a vector
         for (auto k = 0; k < l->size(); k++) 
         {
-            // start from current core, and restrict it
             dirc = l->direction(k);
-            bid = l->target(k);
             for (int di = 0; di < dom_dim; di++) {
                 int gdir = map_dir[di];
-                // start with full core, then restrict it based on direction
-                neigh_overlaps.max[di] = core_maxs[di];
-                neigh_overlaps.min[di] = core_mins[di];
-                // start with full bounds, then restrict to neigh core, based on direction
-                overNeigh.max[di] = bounds_maxs[di];
-                if (bounds_maxs[di] > core_maxs[di])
-                    overNeigh.max[di] = core_maxs[di] + overlaps[di];
-                overNeigh.min[di] = bounds_mins[di];
-                if (bounds_mins[di] < core_mins[di])
-                    overNeigh.min[di] = core_mins[di] - overlaps[di];
-                if (dirc[gdir] < 0) {
-                    // it is reciprocity; if my bounds extended, neighbor bounds extended too in opposite direction
-                    neigh_overlaps.max[di] = core_mins[di] + overlaps[di];
-                    overNeigh.max[di] = core_mins[di];
-                }
-                else if (dirc[gdir] > 0) {
-                    neigh_overlaps.min[di] = core_maxs[di] - overlaps[di];
-                    overNeigh.min[di] = core_maxs[di];
-                }
-                else // if (dirc[gdir] == 0 )
+                if (dirc[gdir] < 0) // neighbor is in the negative direction of this dimension
                 {
-                    overNeigh.max[di] = core_maxs[di];
-                    overNeigh.min[di] = core_mins[di];
+                    nbrOverBlock.min[di] = core_mins[di];
+                    nbrOverBlock.max[di] = core_mins[di] + overlaps[di];
+                    blockOverNbr.min[di] = core_mins[di] - overlaps[di];
+                    blockOverNbr.max[di] = core_mins[di];
 
+                    // This should not happen since dirc < 0 (the neighbor is 
+                    // in the negative direction, so there should always be ghost)
+                    // Writing this to fail loudly just in case
+                    if (bounds_mins[di] == core_mins[di])
+                    {
+                        fmt::print("ERROR: Unexpected bounds in compute_neighbor_overlaps\n\n");
+                        exit(1);
+                    }
+                }
+                else if (dirc[gdir] > 0) // neighbor is in the positive direction of this dimension
+                {
+                    nbrOverBlock.min[di] = core_maxs[di] - overlaps[di];
+                    nbrOverBlock.max[di] = core_maxs[di];
+                    blockOverNbr.min[di] = core_maxs[di];
+                    blockOverNbr.max[di] = core_maxs[di] + overlaps[di];
+
+                    // This should not happen since dirc > 0 (the neighbor is 
+                    // in the positive direction, so there should always be ghost)
+                    // Writing this to fail loudly just in case
+                    if (bounds_maxs[di] == core_maxs[di])
+                    {
+                        fmt::print("WARNING: Unexpected bounds in compute_neighbor_overlaps\n\n");
+                        exit(1);
+                    }                    
+                }
+                else // this dimension is not parallel to the link direction
+                {
+                    nbrOverBlock.min[di] = core_mins[di];
+                    nbrOverBlock.max[di] = core_maxs[di];
+                    blockOverNbr.min[di] = core_mins[di];
+                    blockOverNbr.max[di] = core_maxs[di];
                 }
 #ifdef BLEND_VERBOSE
-                  cerr << "neighOverlaps " << cp.gid() << " nb: " << bid.gid  <<
-                      " min:" << neigh_overlaps.min[di] << " max:"<< neigh_overlaps.max[di] <<"\n";
-                  cerr << "overNeighCore " << cp.gid() << " nb: " << bid.gid  <<
-                      " min:" <<  overNeigh.min[di] << " max:"<< overNeigh.max[di] <<"\n";
+                diy::BlockID bid = l->target(k); 
+                cerr << "nbrOverBlock " << cp.gid() << " nb: " << bid.gid  <<
+                    " min:" << nbrOverBlock.min[di] << " max:"<< nbrOverBlock.max[di] <<"\n";
+                cerr << "blockOverNbr " << cp.gid() << " nb: " << bid.gid  <<
+                    " min:" <<  blockOverNbr.min[di] << " max:"<< blockOverNbr.max[di] <<"\n";
 #endif
             }
-            neighOverlaps.push_back(neigh_overlaps);
-            overNeighCore.push_back(overNeigh);
+            neighOverlaps.push_back(nbrOverBlock);
+            overNeighCore.push_back(blockOverNbr);
         }
     }
 

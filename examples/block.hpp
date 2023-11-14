@@ -1819,13 +1819,13 @@ struct Block : public BlockBase<T, U>
         dirSizes(1) = bounds.max[1] - bounds.min[1] + 1;
         dirSizes(2) = bounds.max[2] - bounds.min[2] + 1;
 
-        VectorXi ndom_pts(dom_dim);  // this will be local now, and used in def of mfa
+        // Compute number of points in each parameter space direction
+        VectorXi ndom_pts(dom_dim);
         int tot_ndom_pts = 1;
-        for (size_t j = 0; j < dom_dim; j++) {
-            int dir = this->map_dir[j];
-            int size_in_dir = -bounds.min[dir] + bounds.max[dir] + 1;
-            tot_ndom_pts *= size_in_dir;
-            ndom_pts(j) = size_in_dir;
+        for (size_t j = 0; j < dom_dim; j++) 
+        {
+            tot_ndom_pts *= dirSizes(this->map_dir[j]);
+            ndom_pts(j) = dirSizes(this->map_dir[j]);
         }
 
         VectorXi model_dims(2);
@@ -1838,101 +1838,49 @@ struct Block : public BlockBase<T, U>
         vector<float> data;
         readBOV(cp, infile, shape, vecSize, data, fileOrderC);
 
-        if (dom_dim == 1) // 1d problem, the dimension would be x direction
+        if (!fileOrderC) 
         {
-            int dir0 = this->map_dir[0];
-            for (int i = 0; i < tot_ndom_pts; i++) {
-                input->domain(i, 0) = bounds.min[dir0] + i;
-                int idx = vecSize * i;
-                float val = 0;
-                for (int k = 0; k < vecSize; k++)
-                    val += data[idx + k] * data[idx + k];
-                val = sqrt(val);
-                input->domain(i, 1) = val;
-            }
-        } 
-        else if (dom_dim == 2)
-        {
-            if (!fileOrderC) {
-                int n = 0;
-                int idx = 0;
-                for (int k = 0; k < dirSizes(2); k++) {
-                    for (int j = 0; j < dirSizes(1); j++) {
-                        for (int i = 0; i < dirSizes(0); i++) {
-                            input->domain(n, 0) = bounds.min[0] + i;
-                            input->domain(n, 1) = bounds.min[1] + j;
-                            input->domain(n, 2) = bounds.min[2] + k;
-                            float val = 0;
-                            for (int l = 0; l < vecSize; l++)
-                                val += data[idx + l] * data[idx + l];
-                            val = sqrt(val);
-                            input->domain(n, 3) = val;
-                            n++;
-                            idx += vecSize;
-                        }
-                    }
-                }
-            } 
-            else 
+            int n = 0;
+            int idx = 0;
+            for (int k = 0; k < dirSizes(2); k++) 
             {
-                int n = 0;
-                int idx = 0;
-                for (int i = 0; i < dirSizes(0); i++) {
-                    for (int j = 0; j < dirSizes(1); j++) {
-                        for (int k = 0; k < dirSizes(2); k++) {
-                            n = k * dirSizes(0) * dirSizes(1) + j * dirSizes(0) + i;
-                            input->domain(n, 0) = bounds.min[0] + i;
-                            input->domain(n, 1) = bounds.min[1] + j;
-                            input->domain(n, 2) = bounds.min[2] + k;
-                            float val = 0;
-                            for (int l = 0; l < vecSize; l++)
-                                val += data[idx + l] * data[idx + l];
-                            input->domain(n, 3) = sqrt(val);
-                            idx += vecSize;
-                        }
+                for (int j = 0; j < dirSizes(1); j++) 
+                {
+                    for (int i = 0; i < dirSizes(0); i++) 
+                    {
+                        input->domain(n, 0) = bounds.min[0] + i;
+                        input->domain(n, 1) = bounds.min[1] + j;
+                        input->domain(n, 2) = bounds.min[2] + k;
+                        float val = 0;
+                        for (int l = 0; l < vecSize; l++)
+                            val += data[idx + l] * data[idx + l];
+                        val = sqrt(val);
+                        input->domain(n, 3) = val;
+                        n++;
+                        idx += vecSize;
                     }
                 }
             }
-        }
-        else if (dom_dim == 3) 
+        } 
+        else 
         {
-            if (!fileOrderC) {
-                int n = 0;
-                int idx = 0;
-                for (int k = 0; k < dirSizes(2); k++) {
-                    for (int j = 0; j < dirSizes(1); j++) {
-                        for (int i = 0; i < dirSizes(0); i++) {
-                            input->domain(n, 0) = bounds.min[0] + i;
-                            input->domain(n, 1) = bounds.min[1] + j;
-                            input->domain(n, 2) = bounds.min[2] + k;
-                            float val = 0;
-                            for (int l = 0; l < vecSize; l++)
-                                val += data[idx + l] * data[idx + l];
-                            val = sqrt(val);
-                            input->domain(n, 3) = val;
-                            n++;
-                            idx += vecSize;
-                        }
-                    }
-                }
-            } 
-            else
+            int n = 0;
+            int idx = 0;
+            for (int i = 0; i < dirSizes(0); i++) 
             {
-                int n = 0;
-                int idx = 0;
-                for (int i = 0; i < dirSizes(0); i++) {
-                    for (int j = 0; j < dirSizes(1); j++) {
-                        for (int k = 0; k < dirSizes(2); k++) {
-                            n = k * dirSizes(0) * dirSizes(1) + j * dirSizes(0) + i;
-                            input->domain(n, 0) = bounds.min[0] + i;
-                            input->domain(n, 1) = bounds.min[1] + j;
-                            input->domain(n, 2) = bounds.min[2] + k;
-                            float val = 0;
-                            for (int l = 0; l < vecSize; l++)
-                                val += data[idx + l] * data[idx + l];
-                            input->domain(n, 3) = sqrt(val);
-                            idx += vecSize;
-                        }
+                for (int j = 0; j < dirSizes(1); j++) 
+                {
+                    for (int k = 0; k < dirSizes(2); k++) 
+                    {
+                        n = k * dirSizes(0) * dirSizes(1) + j * dirSizes(0) + i;
+                        input->domain(n, 0) = bounds.min[0] + i;
+                        input->domain(n, 1) = bounds.min[1] + j;
+                        input->domain(n, 2) = bounds.min[2] + k;
+                        float val = 0;
+                        for (int l = 0; l < vecSize; l++)
+                            val += data[idx + l] * data[idx + l];
+                        input->domain(n, 3) = sqrt(val);
+                        idx += vecSize;
                     }
                 }
             }
@@ -1940,8 +1888,8 @@ struct Block : public BlockBase<T, U>
         input->set_domain_params();
 
         // set bounds_min/max for science variable (last coordinate)
-        bounds_mins(dom_dim) = input->domain.col(dom_dim).minCoeff();
-        bounds_maxs(dom_dim) = input->domain.col(dom_dim).maxCoeff();
+        bounds_mins(dom_dim) = input->domain.col(3).minCoeff();
+        bounds_maxs(dom_dim) = input->domain.col(3).maxCoeff();
 
         this->setup_MFA(cp, mfa_info);
     }
