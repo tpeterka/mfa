@@ -242,7 +242,7 @@ int main(int argc, char **argv) {
 
     master.foreach([&](Block<real_t, int> *b, const diy::Master::ProxyWithLink &cp)
     {
-        b->decode_patches_discrete(cp, resolutions);
+        b->decode_patches(cp, resolutions);
     });
     world.barrier();
     double end_decode_patches = MPI_Wtime();

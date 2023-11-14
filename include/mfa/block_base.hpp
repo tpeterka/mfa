@@ -774,7 +774,7 @@ struct BlockBase
         // dom_dim  actual geo dimension for output points
         int tot_core_pts = 1;
 
-        VectorX<T> ndom_outpts(dom_dim);
+        VectorXi ndom_outpts(dom_dim);
         for (int i = 0; i < dom_dim; i++) {
             ndom_outpts[i] = resolutions[map_dir[i]];
             tot_core_pts *= resolutions[map_dir[i]];
@@ -957,7 +957,7 @@ struct BlockBase
             data_maxs(i) = input->domain.col(map_dir[i]).maxCoeff();
         }
 
-        RCLink<T> *l = static_cast<RCLink<T>*>(cp.link());
+        RCLink<U> *l = static_cast<RCLink<U>*>(cp.link());
         for (auto k = 0; k < l->size(); k++) 
         {
             diy::BlockID bid = l->target(k);
@@ -1019,85 +1019,7 @@ struct BlockBase
             cp.enqueue(bid, computed_values);
         }
     }
-    // receive requests, decode, and send back to the requester only the decoded value
-    // entire block was already encoded, we just need to decode at a grid of points
-    void decode_patches_discrete(const diy::Master::ProxyWithLink &cp,
-                            std::vector<int> &resolutions)
-    {
-        T eps = 1.0e-10;
-        int verbose = 0;
-        diy::Direction dirc(dom_dim, 0); // neighbor direction
 
-        // Compute the extent of the input data, which defines parameter space
-        VectorX<T> data_mins(dom_dim), data_maxs(dom_dim);
-        for (int i = 0; i < dom_dim; i++)
-        {
-            data_mins(i) = input->domain.col(map_dir[i]).minCoeff();
-            data_maxs(i) = input->domain.col(map_dir[i]).maxCoeff();
-        }
-
-        RCLink<int> *l = static_cast<RCLink<int>*>(cp.link());
-        for (auto k = 0; k < l->size(); k++) 
-        {
-            diy::BlockID bid = l->target(k);
-
-            // alternatively, build local block for neighbor k using its core, global resolutions and overlap over core
-            Bounds<T>  domainK = overNeighCore[k]; //
-            auto  coreK = l->core(k);
-            dirc = l->direction(k);
-            VectorXi counts(dom_dim);      // how many core points in overNeigh, per direction
-            int  sizeBlock = 1;
-            Bounds<T> resol(dom_dim);
-            VectorX<T> d(dom_dim);                 // step in domain points in each dimension
-
-            VectorX<T> param_mins(dom_dim);
-            VectorX<T> param_maxs(dom_dim);
-            for (int j = 0; j < dom_dim; j++)
-            {
-                int dirGlob = map_dir[j];
-
-                // Need to work in terms of nbr core domain because block sizes might not be the
-                // same, but we need to send the patch that the nbr block expects.
-                T deltaCore = coreK.max[dirGlob] - coreK.min[dirGlob];
-                d(j) = deltaCore / ( resolutions[j] - 1 );
-                T deltaOver = domainK.max[j] - domainK.min[j];
-                counts[j]  = (int)( (deltaOver + 2 * eps) / d(j) ) + 1; // to account for some roundoff errors at the boundaries
-
-                if (dirc[dirGlob] < 0)
-                {
-                    param_mins(j) = (core_mins(j) - (counts[j] - 1) * d(j) - data_mins(j)) / (data_maxs(j) - data_mins(j));
-                    param_maxs(j) = (core_mins(j) - data_mins(j)) / (data_maxs(j) - data_mins(j));
-                }
-                else if (dirc[dirGlob] > 0)
-                {
-                    param_mins(j) = (core_maxs(j) - data_mins(j)) / (data_maxs(j) - data_mins(j));
-                    param_maxs(j) = (core_maxs(j) + (counts[j] - 1) * d(j) - data_mins(j)) / (data_maxs(j) - data_mins(j));
-                }
-                else // dirc[dirGlob] == 0
-                {
-                    param_mins(j) = (core_mins(j) - data_mins(j)) / (data_maxs(j) - data_mins(j));
-                    param_maxs(j) = (core_maxs(j) - data_mins(j)) / (data_maxs(j) - data_mins(j));
-                    counts[j] = resolutions[j]; // there should be no question about it
-                }
-                sizeBlock *= counts[j];
-            }
-
-            mfa::PointSet<T> localBlockOverCoreK(dom_dim, mfa->model_dims(), sizeBlock, counts);
-            localBlockOverCoreK.set_grid_params(param_mins, param_maxs);
-            mfa->DecodeVar(0, localBlockOverCoreK, false);  // Decode only science variable 0 (don't need to decode geometry)
-
-            vector<T> computed_values(sizeBlock);
-            for (int k = 0; k < sizeBlock; k++)
-            {
-                computed_values[k] = localBlockOverCoreK.domain(k, mfa->geom_dim()); // TODO assumes one scalar variable              
-            }
-
-#ifdef BLEND_VERBOSE
-        cerr << "   block gid " << cp.gid() << " for block " << bid.gid << "\n" << localBlockOverCoreK.domain << endl;
-#endif
-            cp.enqueue(bid, computed_values);
-        }
-    }
     // receive requests , decode, and send back
     // blending in 1d, on interval -inf, [a , b] +inf, -inf < a < b < +inf
     T blend_1d(T t, T a, T b) {
@@ -1338,14 +1260,10 @@ namespace mfa
             diy::save(bb, b->input);
             diy::save(bb, b->approx);
             diy::save(bb, b->errs);
+            diy::save(bb, b->blend);
 
             // save mfa
             diy::save(bb, b->mfa);
-
-            // output for blending
-            diy::save(bb, b->ndom_outpts);
-            if (b->ndom_outpts.rows())
-                diy::save(bb, b->blend);
         }
 
     template<typename B, typename T>                // B = block object, T = float or double
@@ -1369,6 +1287,7 @@ namespace mfa
             diy::load(bb, b->input);
             diy::load(bb, b->approx);
             diy::load(bb, b->errs);
+            diy::load(bb, b->blend);
 
             // load mfa
             diy::load(bb, b->mfa);
@@ -1378,11 +1297,6 @@ namespace mfa
                 if (b->pt_dim != b->mfa->pt_dim)
                     cerr << "WARNING: Block::pt_dim and MFA::pt_dim do not match!" << endl;
             }
-
-            // output for blending
-            diy::load(bb, b->ndom_outpts);
-            if (b->ndom_outpts.rows())
-                diy::load(bb, b->blend);
         }
 }                       // namespace
 
