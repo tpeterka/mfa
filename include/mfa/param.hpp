@@ -107,7 +107,7 @@ namespace mfa
         void transformSet(const MatrixX<T>& x, MatrixX<T>& u)
         {
             assert(init);
-            
+
             // Subtract vec from every row of x
             MatrixX<T> y = x;
             for (int i = 0; i < y.cols(); i++)
@@ -344,12 +344,13 @@ namespace mfa
             check_param_bounds();
         }
 
+        // Create a parametrization based on physical coordinates of the data.
         // If dom_mins/maxs are passed, they define an axis-aligned bounding
         // box with which to compute the domain parametrization. If they are
         // not passed, we assume the bounding box is defined by the extents
-        // of the grid.
-        // If the data is structured, we always use the grid bounds to 
-        // define the extents.
+        // of the grid. 
+        // Note: the dom bounds are only used for unstructured data sets, 
+        //       since domain bounds can be inferred from structured data.
         void make_domain_params(      int           geom_dim,
                                 const MatrixX<T>&   domain,
                                 const VectorX<T>&   dom_mins = VectorX<T>(),
@@ -371,30 +372,10 @@ namespace mfa
             }
         }
 
-        // TODO: Does not properly support geom_dim!
-        // This only works if the first dom_dim dimensions of the 
-        // geometric coordinates should be used for the parametrization
-        // 
-        // precompute parameters for input data points using domain spacing only (not length along curve)
-        // params are only stored once for each dimension (1st dim params, 2nd dim params, ...)
-        // total number of params is the sum of ndom_pts over the dimensions, much less than the total
-        // number of data points (which would be the product)
-        // void make_domain_params_structured(const MatrixX<T>& domain)     // input data points (1st dim changes fastest)
-        // {
-        //     int cs = 1;                                      // stride for domain points in current dim.
-        //     for (int k = 0; k < dom_dim; k++)                // for all domain dimensions
-        //     {
-        //         T width_recip = 1 / (domain(cs * (ndom_pts(k) - 1), k) - domain(0, k));
 
-        //         for (int i = 0; i < ndom_pts(k); i++)
-        //             param_grid[k][i]= (domain(cs * i, k) - domain(0, k)) * width_recip;
-
-        //         cs *= ndom_pts(k);
-        //     }
-
-        //     check_param_bounds();
-        // }
-
+        // If the data is structured, we always use the grid bounds to 
+        // define the extents (so the grid can lie on a skew plane, or parallelogram
+        // for instance). See AffMap constructor.
         void make_domain_params_structured(int geom_dim, const MatrixX<T>& domain)
         {
             AffMap<T> map(dom_dim, geom_dim, domain, ndom_pts);
@@ -473,89 +454,6 @@ namespace mfa
             truncateRoundoff();
             check_param_bounds();
         }
-
-        // // TODO: Does not properly support geom_dim!
-        // // This only works if the first dom_dim dimensions of the 
-        // // geometric coordinates should be used for the parametrization
-        // void make_domain_params_unstructured(
-        //     const MatrixX<T>&   domain,
-        //     const VectorX<T>&   dom_mins,
-        //     const VectorX<T>&   dom_maxs)
-        // {
-        //     VectorX<T> mins;
-        //     VectorX<T> maxs;
-
-        //     // dom mins/maxs should either be empty or of size dom_dim
-        //     if (dom_mins.size() > 0 && dom_mins.size() != dom_dim)
-        //         cerr << "Warning: Invalid size of dom_mins in Param construction" << endl;
-        //     if (dom_maxs.size() > 0 && dom_maxs.size() != dom_dim)
-        //         cerr << "Warning: Invalid size of dom_maxs in Param construction" << endl;
-
-        //     // Set min/max extents in each domain dimension
-        //     if (dom_mins.size() != dom_dim || dom_maxs.size() != dom_dim)
-        //     {
-        //         mins = domain.leftCols(dom_dim).colwise().minCoeff();
-        //         maxs = domain.leftCols(dom_dim).colwise().maxCoeff();
-        //     }
-        //     else    // Use domain bounds provided by block (input data need not extend to bounds)
-        //     {
-        //         mins = dom_mins;
-        //         maxs = dom_maxs;
-        //     }
-
-        //     int npts = domain.rows();
-        //     param_list.resize(npts, dom_dim);
-
-        //     VectorX<T> diff = maxs - mins;
-
-        //     // Rescale domain values to the interval [0,1], column-by-column
-        //     for (size_t k = 0; k < dom_dim; k++)
-        //     {
-        //         param_list.col(k) = (domain.col(k).array() - mins(k)) * (1/diff(k));
-        //     }
-
-        //     // truncate floating-point roundoffs to [0,1]
-        //     for (int i = 0; i < param_list.rows(); i++)
-        //     {
-        //         for (int j = 0; j < param_list.cols(); j++)
-        //         {
-        //             if (param_list(i,j) > 1.0)
-        //             {
-        //                 if (param_list(i,j) - 1.0 < 1e-12)
-        //                 {
-        //                     param_list(i,j) = 1.0;
-        //                     // cerr << "Debug: truncated a parameter value" << endl;
-        //                 }
-        //                 else
-        //                 {
-        //                     cerr << "ERROR: Construction of Param object contains out-of-bounds entries" << endl;
-        //                     cerr << "       Bad Value: " << setprecision(9) << scientific << param_list(i,j) << endl;
-        //                     cerr << "       Out of Tolerance: " << scientific << param_list(i,j) - 1.0 << endl;
-        //                     cerr << i << " " << j << endl;
-        //                     cerr << domain(i,j) << endl;
-        //                     exit(1);
-        //                 }
-        //             }
-        //             if (param_list(i,j) < 0.0)
-        //             {
-        //                 if (0.0 - param_list(i,j) < 1e-12)
-        //                 {
-        //                     param_list(i,j) = 0.0;
-        //                     // cerr << "Debug: truncated a parameter value" << endl;
-        //                 }
-        //                 else
-        //                 {
-        //                     cerr << "ERROR: Construction of Param object contains out-of-bounds entries" << endl;
-        //                     cerr << "       Bad Value: " << setprecision(9) << scientific << param_list(i,j) << endl;
-        //                     cerr << "       Out of Tolerance: " << scientific << 0.0 - param_list(i,j) << endl;
-        //                     exit(1);
-        //                 }
-        //             }
-        //         }
-        //     }
-        
-        //     check_param_bounds();
-        // }
 
         // truncate floating-point roundoffs to [0,1]
         void truncateRoundoff(double prec = 1e-12)

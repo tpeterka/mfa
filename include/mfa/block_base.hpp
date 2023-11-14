@@ -65,12 +65,10 @@ struct BlockBase
     vector<T>           max_errs;               // maximum (abs value) distance from input points to curve
     vector<T>           sum_sq_errs;            // sum of squared errors
 
-    VectorX<T>          overlaps;               // local domain overlaps in each direction
-
     // blending output
     // will be computed only in core, for each block, using neighboring approximations if necessary
     //  needed only at decoding stage
-    VectorXi            ndom_outpts;            // number of output points in each dimension
+    VectorX<T>          overlaps;               // local domain overlaps in each direction
     mfa::PointSet<T>    *blend;                 // output result of blending (lexicographic order)
     vector<Bounds<T>>   neighOverlaps;          // only the overlapping part of the neighbors to current core is important
                                                 // will store the actual overlap of neighbors
@@ -138,7 +136,8 @@ struct BlockBase
             exit(1);
         }
 
-        // Set core/bounds 
+        // Set core/bounds and overlaps (overlaps can be inferred from
+        // bounds in the discrete case)
         for (int i = 0; i < dom_dim; i++) {
             bounds_mins(i) = bounds.min[map_dir[i]];
             bounds_maxs(i) = bounds.max[map_dir[i]];
@@ -150,19 +149,7 @@ struct BlockBase
             T o1 = bounds_maxs(i) - core_maxs(i);
             T o2 = core_mins(i) - bounds_mins(i);
             overlaps(i) = std::max(o1, o2);
-        }
-
-        // for (int i = 0; i < dom_dim; i++)
-        // {
-        //     core_mins(i) = core.min[i];
-        //     core_maxs(i) = core.max[i];
-        //     bounds_mins(i) = bounds.min[i];
-        //     bounds_maxs(i) = bounds.max[i];
-
-        //     T o1 = bounds_maxs(i) - core_maxs(i);
-        //     T o2 = core_mins(i) - bounds_mins(i);
-        //     overlaps(i) = std::max(o1, o2);
-        // }      
+        }   
     }
 
     // initialize an empty block that was previously added
@@ -776,88 +763,6 @@ struct BlockBase
 #endif
     }
 
-//#define BLEND_VERBOSE
-
-    void DecodeRequestGrid(int verbose,
-                           MatrixX<T> &localBlock) // local block is in a grid, in lexicographic order
-    {
-        VectorXi ndpts = input->ndom_pts();
-#ifdef MFA_KOKKOS
-        Kokkos::Profiling::pushRegion("start_decode_req");
-#endif
-
-        VectorX<T> min_bd(dom_dim);
-        VectorX<T> max_bd(dom_dim);
-        size_t cs = 1;
-        for (int i = 0; i < dom_dim; i++) {
-            min_bd(i) = input->domain(0, i);
-            max_bd(i) = input->domain(cs * (ndpts(i) - 1), i);
-            cs *= ndpts(i);
-        }
-        if (verbose) {
-            std::cerr << " actual bounds, for full local decoded domain:\n";
-            for (int i = 0; i < dom_dim; i++) {
-                std::cerr << "   " << min_bd(i) << " " << max_bd(i) << "\n";
-            }
-
-            std:: cout << localBlock << "\n";
-        }
-
-        // determine the max and min extension of localBlock, and dimensions of localBlock
-        // it is an inverse problem, from the block extensions, find out the maximum and index
-        // because of increasing lexicographic ordering, each grid dimension is computed
-        //
-        VectorXi grid_counts(dom_dim);
-        VectorX<T> min_block(dom_dim);
-        VectorX<T> max_block(dom_dim);
-        VectorXi index_max(dom_dim);
-        for (int i = 0; i < dom_dim; i++)
-        {
-            min_block[i] = localBlock(0, i);
-            max_block[i] = localBlock(0, i); // this will be modified in the next loop
-        }
-        cs = 1;
-        int num_rows = (int) localBlock.rows();
-        for (int i=0; i < dom_dim; i++)
-        {
-            // see up to what value is the domain increasing in direction i, with current stride cs
-            grid_counts[i] = 1;
-            int index_on_dir = 0;
-            while ( index_on_dir + cs < num_rows &&  localBlock(index_on_dir + cs, i) > localBlock(index_on_dir, i) )
-            {
-                index_on_dir += cs;
-                grid_counts[i]++;
-            }
-            max_block[i] = localBlock(index_on_dir, i);
-            cs *= grid_counts[i];
-        }
-        //use domain parametrization logic to compute actual par for block within bounds,
-        // to be able to use DecodeAtGrid
-        VectorX<T> p_min(dom_dim); // initially, these are for the whole decoded domain
-        VectorX<T> p_max(dom_dim);
-#ifdef CURVE_PARAMS
-                 // it is not possible
-#else
-        // use same logic as DomainParams(domain_, params);          // params spaced according to domain spacing
-        // compute the par min and par max from bounds and core (core is embedded in bounds)
-
-        for (int i = 0; i < dom_dim; i++) {
-            T diff = max_bd[i] - min_bd[i];
-            p_min[i] = (min_block[i] - min_bd[i]) / diff;
-            p_min[i] = ( p_min[i] < 0.) ? 0. : p_min[i];
-            p_max[i] = (max_block[i] - min_bd[i]) / diff;
-            p_max[i] = ( p_max[i] > 1.) ? 1. : p_max[i];
-        }
-#endif
-#ifdef MFA_KOKKOS
-        Kokkos::Profiling::popRegion(); //"start_decode_req"
-#endif
-        /*mfa->DecodeAtGrid(*geometry.mfa_data, 0, dom_dim - 1, p_min, p_max,
-                grid_counts, griddom); */
-        for (size_t j = 0; j < mfa->nvars(); j++) {
-            mfa->DecodeAtGrid(mfa->var(j), p_min, p_max, grid_counts, localBlock);
-        }
-    }
     
 //#define BLEND_VERBOSE
     void decode_core_ures(const diy::Master::ProxyWithLink &cp,
@@ -869,7 +774,7 @@ struct BlockBase
         // dom_dim  actual geo dimension for output points
         int tot_core_pts = 1;
 
-        ndom_outpts.resize(dom_dim);
+        VectorX<T> ndom_outpts(dom_dim);
         for (int i = 0; i < dom_dim; i++) {
             ndom_outpts[i] = resolutions[map_dir[i]];
             tot_core_pts *= resolutions[map_dir[i]];
@@ -879,21 +784,51 @@ struct BlockBase
         Kokkos::Profiling::popRegion(); // "init_decode"
         Kokkos::Profiling::pushRegion("calc_pos");
 #endif
-        // assign values to the domain (geometry)
-        blend = new mfa::PointSet<T>(dom_dim, mfa->model_dims(), ndom_outpts.prod(), ndom_outpts);
-        // in case of structured points, actual bounds are not bounds_mins, bounds_maxs
-        
-        
-        // VectorXi ndpts = input->ndom_pts();
+        // TODO: In some places in the code, parameter space is defined by the extents
+        //       of the structured grid, in other places it is defined in terms of
+        //       `core` and `bounds`. Need to standardize this.
+        // More info (11/14/23): when generating analytical data on a structured grid with multiple 
+        // blocks and nontrivial ghost regions, the equispaced points are defined in terms
+        // of the core bounds. This way, the global distribution of generated points is the
+        // same no matter the size of the ghost region. However, this means that the first
+        // point in a block is not necessarily aligned with the bounds_mins/maxs. 
+        // Nevertheless, when we create the parameter values for a structured grid, we always
+        // assume that the first grid point in a direction has parameter value 0. In effect,
+        // this means that the box defining paramter space [0,1]^d might be slightly smaller 
+        // than the box defined by bounds_mins/maxs. 
+        // However, when reading discrete data in a multiblock setting with ghost, the ghost
+        // region is an integer width and is perfectly aligned with points. So in this case, 
+        // the parameter space box is actually aligned with bounds_mins/maxs.
+        // Finally, when we generated unstructured analytical data, the parameter space box
+        // is EITHER defined by the min/max values of the points generated or is given by
+        // the user. So this case is more ambiguous, and the overlaps regions is probably not
+        // computed correctly. However, unstructured data is not supported in multiblock 
+        // scenarios at the moment, so the point is moot (for now). When we extend blending to
+        // handle unstructured data, we will probably need to go back and address this.
+        // As of 11/14/23, this seems to be working since each scenario is handled differently
+        // for blending. But the code seems fragile since this logic is spread between several
+        // files.
+        // I (David) think the best way forward is change the code so that in ALL scenarios,
+        // bounds_mins/maxs is exactly equal to the box defining paramter space. In the future,
+        // we should also separate out the variable containg min/max values for each variable 
+        // (which is currently on use of bounds_mins/maxs), and maintain the core and core+ghost
+        // bounds separately.
 
-        // VectorX<T> min_bd(dom_dim);
-        // VectorX<T> max_bd(dom_dim);
-        // size_t cs = 1;
-        // for (int i = 0; i < dom_dim; i++) {
-        //     min_bd(i) = input->domain(0, i);
-        //     max_bd(i) = input->domain(cs * (ndpts(i) - 1), i);
-        //     cs *= ndpts(i);
-        // }
+        // Create pointset that will hold blended output
+        blend = new mfa::PointSet<T>(dom_dim, mfa->model_dims(), ndom_outpts.prod(), ndom_outpts);
+
+        // Find min/max values in each direction. This function is used both by discrete and
+        // continuous blending; in continuous blending, the parameter space is defined by the
+        // extents of the grid, not bounds_mins/maxs, so we need to use that here to compute
+        // param_mins/maxs. (For discrete blending, the extents of the grid coincide with 
+        // bounds_mins/maxs, so this also works for discrete blending). See large comment above
+        // for more info.
+        VectorX<T> data_mins(dom_dim), data_maxs(dom_dim);
+        for (int i = 0; i < dom_dim; i++)
+        {
+            data_mins(i) = input->domain.col(map_dir[i]).minCoeff();
+            data_maxs(i) = input->domain.col(map_dir[i]).maxCoeff();
+        }
 
         // Compute subset of parameter space corresponding to core bounds
         VectorX<T>   param_mins, param_maxs;
@@ -901,11 +836,9 @@ struct BlockBase
         param_maxs.resize(dom_dim);
         for (int i = 0; i < dom_dim; i++)
         {
-            param_mins[i] = (core_mins(i) - bounds_mins(i))/(bounds_maxs(i) - bounds_mins(i));
-            param_maxs[i] = (core_maxs(i) - bounds_mins(i))/(bounds_maxs(i) - bounds_mins(i));
+            param_mins[i] = (core_mins(i) - data_mins(i))/(data_maxs(i) - data_mins(i));
+            param_maxs[i] = (core_maxs(i) - data_mins(i))/(data_maxs(i) - data_mins(i));
         }
-        // mfa::Param<T>   param1(ndom_outpts, param_mins, param_maxs);
-        // blend->set_params( make_shared<mfa::Param<T>>(param1) );
         blend->set_grid_params(param_mins, param_maxs);
         mfa->DecodeGeom(*blend, false);
 
@@ -913,11 +846,11 @@ struct BlockBase
         Kokkos::Profiling::popRegion(); // "calc_pos"
 #endif
         // now decode at resolution
-        for (int j = 0; j < mfa->nvars(); j++) {
+        for (int j = 0; j < mfa->nvars(); j++) 
+        {
             mfa->DecodeAtGrid(mfa->var(j), param_mins, param_maxs, ndom_outpts, blend->domain);
         }
 
-        // this->DecodeRequestGrid(0, blend->domain); // so just compute the value, without any further blending
 #ifdef BLEND_VERBOSE
        cerr << " block: " << cp.gid() << " decode no blend:" << blend << "\n";
 #endif
@@ -927,6 +860,11 @@ struct BlockBase
     // each block will store the relevant neighbors' encroachment in its core domain
     // will be used to see if a point should be decoded by the neighbor block
     // we can also compute the bounds of the patch that will be sent to each neighbor
+    // Note: By using the `overlaps` variable, this method ensures that
+    //       overNeighCore never contains a region that extends outside of the block's
+    //       input data bounds. This is important, because during continuous blending,
+    //       we assume that parameter space is aligned to the bounds of the block's
+    //       input data, NOT the bounds_mins/max. 
     void compute_neighbor_overlaps(const diy::Master::ProxyWithLink &cp) {
         RCLink<T> *l = static_cast<RCLink<T>*>(cp.link());
         // compute the overlaps of the neighbors outside main loop, and keep them in a vector
@@ -938,13 +876,11 @@ struct BlockBase
         diy::Direction dirc(dom_dim, 0); // neighbor direction
         diy::BlockID bid;  // this is stored for debugging purposes
         // if negative direction, correct min, if positive, correct max
-        for (auto k = 0; k < l->size(); k++) {
+        for (auto k = 0; k < l->size(); k++) 
+        {
             // start from current core, and restrict it
-            //neigh_overlaps = l->bounds(k);
             dirc = l->direction(k);
             bid = l->target(k);
-            //Bounds<T> boundsk = l->bounds(k);
-            //Bounds<T> corek = l->core(k);
             for (int di = 0; di < dom_dim; di++) {
                 int gdir = map_dir[di];
                 // start with full core, then restrict it based on direction
@@ -977,15 +913,11 @@ struct BlockBase
                       " min:" << neigh_overlaps.min[di] << " max:"<< neigh_overlaps.max[di] <<"\n";
                   cerr << "overNeighCore " << cp.gid() << " nb: " << bid.gid  <<
                       " min:" <<  overNeigh.min[di] << " max:"<< overNeigh.max[di] <<"\n";
-
 #endif
-
             }
             neighOverlaps.push_back(neigh_overlaps);
             overNeighCore.push_back(overNeigh);
-
         }
-
     }
 
     void affected_neighbors(vector<T> &dom_pt, T &eps, vector<int> &dests) {
@@ -1017,13 +949,21 @@ struct BlockBase
         int verbose = 0;
         diy::Direction dirc(dom_dim, 0); // neighbor direction
 
+        // Compute the extent of the input data, which defines parameter space
+        VectorX<T> data_mins(dom_dim), data_maxs(dom_dim);
+        for (int i = 0; i < dom_dim; i++)
+        {
+            data_mins(i) = input->domain.col(map_dir[i]).minCoeff();
+            data_maxs(i) = input->domain.col(map_dir[i]).maxCoeff();
+        }
+
         RCLink<T> *l = static_cast<RCLink<T>*>(cp.link());
-        for (auto k = 0; k < l->size(); k++) {
+        for (auto k = 0; k < l->size(); k++) 
+        {
             diy::BlockID bid = l->target(k);
 
             // alternatively, build local block for neighbor k using its core, global resolutions and overlap over core
-            // MatrixX<T> localBlockOverCoreK;
-            Bounds<T>  domainK = overNeighCore[k]; //
+            Bounds<T>  domainK = overNeighCore[k];
             auto  coreK = l->core(k);
             dirc = l->direction(k);
             VectorXi counts(dom_dim);      // how many core points in overNeigh, per direction
@@ -1044,32 +984,20 @@ struct BlockBase
                 T deltaOver = domainK.max[j] - domainK.min[j];
                 counts[j]  = (int)( (deltaOver + 2 * eps) / d(j) ) + 1; // to account for some roundoff errors at the boundaries
 
-                if (dirc[dirGlob] < 0 )
+                if (dirc[dirGlob] < 0)
                 {
-                    // david's edit
-                    param_mins(j) = (core_mins(j) - (counts[j] - 1) * d(j) - bounds_mins(j)) / (bounds_maxs(j) - bounds_mins(j));
-                    param_maxs(j) = (core_mins(j) - bounds_mins(j)) / (bounds_maxs(j) - bounds_mins(j));
-
-                    resol.min[j] = coreK.max[dirGlob] - (counts[j] - 1) * d(j);
-                    resol.max[j] = coreK.max[dirGlob];
+                    param_mins(j) = (core_mins(j) - (counts[j] - 1) * d(j) - data_mins(j)) / (data_maxs(j) - data_mins(j));
+                    param_maxs(j) = (core_mins(j) - data_mins(j)) / (data_maxs(j) - data_mins(j));
                 }
-                else if (dirc[dirGlob] > 0 )
+                else if (dirc[dirGlob] > 0)
                 {
-                    // david's edit
-                    param_mins(j) = (core_maxs(j) - bounds_mins(j)) / (bounds_maxs(j) - bounds_mins(j));
-                    param_maxs(j) = (core_maxs(j) + (counts[j] - 1) * d(j) - bounds_mins(j)) / (bounds_maxs(j) - bounds_mins(j));
-
-                    resol.min[j] = coreK.min[dirGlob];
-                    resol.max[j] = coreK.min[dirGlob] + (counts[j] - 1) * d(j);
+                    param_mins(j) = (core_maxs(j) - data_mins(j)) / (data_maxs(j) - data_mins(j));
+                    param_maxs(j) = (core_maxs(j) + (counts[j] - 1) * d(j) - data_mins(j)) / (data_maxs(j) - data_mins(j));
                 }
                 else // dirc[dirGlob] == 0
                 {
-                    // david's edit
-                    param_mins(j) = (core_mins(j) - bounds_mins(j)) / (bounds_maxs(j) - bounds_mins(j));
-                    param_maxs(j) = (core_maxs(j) - bounds_mins(j)) / (bounds_maxs(j) - bounds_mins(j));
-
-                    resol.min[j] = coreK.min[dirGlob]; // full extents
-                    resol.max[j] = coreK.max[dirGlob];
+                    param_mins(j) = (core_mins(j) - data_mins(j)) / (data_maxs(j) - data_mins(j));
+                    param_maxs(j) = (core_maxs(j) - data_mins(j)) / (data_maxs(j) - data_mins(j));
                     counts[j] = resolutions[j]; // there should be no question about it
                 }
                 sizeBlock *= counts[j];
@@ -1085,36 +1013,13 @@ struct BlockBase
                 computed_values[k] = localBlockOverCoreK.domain(k, mfa->geom_dim()); // TODO assumes one scalar variable              
             }
 
-            // localBlockOverCoreK.resize(sizeBlock, dom_dim + 1);
-
-            // //assert(sizeBlock == num_points_received);
-            // // we know the bounds (resol) and counts, we can form the grid
-            // // assign values to the domain (geometry)
-            // mfa::VolIterator vol_it(counts);
-            // // current index of domain point in each dim, initialized to 0s
-            // // flattened loop over all the points in a domain
-            // while (!vol_it.done())
-            // {
-            //     int j = (int)vol_it.cur_iter();
-            //     // compute geometry coordinates of domain point
-            //     for (auto i = 0; i < dom_dim; i++)
-            //         localBlockOverCoreK(j, i) = resol.min[i] + vol_it.idx_dim(i) * d(i);
-
-            //     vol_it.incr_iter();
-            // }
-            // this->DecodeRequestGrid(0, localBlockOverCoreK);
-            // vector<T> computed_values(sizeBlock);
-            // for (int k = 0; k < sizeBlock; k++) {
-            //     computed_values[k] = localBlockOverCoreK(k, dom_dim); // just last dimension
-            // }
-
 #ifdef BLEND_VERBOSE
-        cerr << "   block gid " << cp.gid() << " for block " << bid.gid << "\n" << localBlockOverCoreK << endl;
+        cerr << "   block gid " << cp.gid() << " for block " << bid.gid << "\n" << localBlockOverCoreK.domain << endl;
 #endif
             cp.enqueue(bid, computed_values);
         }
     }
-    // receive requests , decode, and send back to the requester only the decoded value
+    // receive requests, decode, and send back to the requester only the decoded value
     // entire block was already encoded, we just need to decode at a grid of points
     void decode_patches_discrete(const diy::Master::ProxyWithLink &cp,
                             std::vector<int> &resolutions)
@@ -1123,12 +1028,20 @@ struct BlockBase
         int verbose = 0;
         diy::Direction dirc(dom_dim, 0); // neighbor direction
 
+        // Compute the extent of the input data, which defines parameter space
+        VectorX<T> data_mins(dom_dim), data_maxs(dom_dim);
+        for (int i = 0; i < dom_dim; i++)
+        {
+            data_mins(i) = input->domain.col(map_dir[i]).minCoeff();
+            data_maxs(i) = input->domain.col(map_dir[i]).maxCoeff();
+        }
+
         RCLink<int> *l = static_cast<RCLink<int>*>(cp.link());
-        for (auto k = 0; k < l->size(); k++) {
+        for (auto k = 0; k < l->size(); k++) 
+        {
             diy::BlockID bid = l->target(k);
 
             // alternatively, build local block for neighbor k using its core, global resolutions and overlap over core
-            // MatrixX<T> localBlockOverCoreK;
             Bounds<T>  domainK = overNeighCore[k]; //
             auto  coreK = l->core(k);
             dirc = l->direction(k);
@@ -1150,32 +1063,20 @@ struct BlockBase
                 T deltaOver = domainK.max[j] - domainK.min[j];
                 counts[j]  = (int)( (deltaOver + 2 * eps) / d(j) ) + 1; // to account for some roundoff errors at the boundaries
 
-                if (dirc[dirGlob] < 0 )
+                if (dirc[dirGlob] < 0)
                 {
-                    // david's edit
-                    param_mins(j) = (core_mins(j) - (counts[j] - 1) * d(j) - bounds_mins(j)) / (bounds_maxs(j) - bounds_mins(j));
-                    param_maxs(j) = (core_mins(j) - bounds_mins(j)) / (bounds_maxs(j) - bounds_mins(j));
-
-                    resol.min[j] = coreK.max[dirGlob] - (counts[j] - 1) * d(j);
-                    resol.max[j] = coreK.max[dirGlob];
+                    param_mins(j) = (core_mins(j) - (counts[j] - 1) * d(j) - data_mins(j)) / (data_maxs(j) - data_mins(j));
+                    param_maxs(j) = (core_mins(j) - data_mins(j)) / (data_maxs(j) - data_mins(j));
                 }
-                else if (dirc[dirGlob] > 0 )
+                else if (dirc[dirGlob] > 0)
                 {
-                    // david's edit
-                    param_mins(j) = (core_maxs(j) - bounds_mins(j)) / (bounds_maxs(j) - bounds_mins(j));
-                    param_maxs(j) = (core_maxs(j) + (counts[j] - 1) * d(j) - bounds_mins(j)) / (bounds_maxs(j) - bounds_mins(j));
-
-                    resol.min[j] = coreK.min[dirGlob];
-                    resol.max[j] = coreK.min[dirGlob] + (counts[j] - 1) * d(j);
+                    param_mins(j) = (core_maxs(j) - data_mins(j)) / (data_maxs(j) - data_mins(j));
+                    param_maxs(j) = (core_maxs(j) + (counts[j] - 1) * d(j) - data_mins(j)) / (data_maxs(j) - data_mins(j));
                 }
                 else // dirc[dirGlob] == 0
                 {
-                    // david's edit
-                    param_mins(j) = (core_mins(j) - bounds_mins(j)) / (bounds_maxs(j) - bounds_mins(j));
-                    param_maxs(j) = (core_maxs(j) - bounds_mins(j)) / (bounds_maxs(j) - bounds_mins(j));
-
-                    resol.min[j] = coreK.min[dirGlob]; // full extents
-                    resol.max[j] = coreK.max[dirGlob];
+                    param_mins(j) = (core_mins(j) - data_mins(j)) / (data_maxs(j) - data_mins(j));
+                    param_maxs(j) = (core_maxs(j) - data_mins(j)) / (data_maxs(j) - data_mins(j));
                     counts[j] = resolutions[j]; // there should be no question about it
                 }
                 sizeBlock *= counts[j];
@@ -1191,32 +1092,8 @@ struct BlockBase
                 computed_values[k] = localBlockOverCoreK.domain(k, mfa->geom_dim()); // TODO assumes one scalar variable              
             }
 
-            // localBlockOverCoreK.resize(sizeBlock, dom_dim + 1);
-
-            // //assert(sizeBlock == num_points_received);
-            // // we know the bounds (resol) and counts, we can form the grid
-            // // assign values to the domain (geometry)
-            // mfa::VolIterator vol_it(counts);
-            // // current index of domain point in each dim, initialized to 0s
-            // // flattened loop over all the points in a domain
-            // while (!vol_it.done())
-            // {
-            //     int j = (int)vol_it.cur_iter();
-            //     // compute geometry coordinates of domain point
-            //     for (auto i = 0; i < dom_dim; i++)
-            //         localBlockOverCoreK.domain(j, i) = resol.min[i] + vol_it.idx_dim(i) * d(i);
-
-            //     vol_it.incr_iter();
-            // }
-
-            // this->DecodeRequestGrid(0, localBlockOverCoreK);
-            // vector<T> computed_values(sizeBlock);
-            // for (int k = 0; k < sizeBlock; k++) {
-            //     computed_values[k] = localBlockOverCoreK(k, dom_dim); // just last dimension
-            // }
-
 #ifdef BLEND_VERBOSE
-        cerr << "   block gid " << cp.gid() << " for block " << bid.gid << "\n" << localBlockOverCoreK << endl;
+        cerr << "   block gid " << cp.gid() << " for block " << bid.gid << "\n" << localBlockOverCoreK.domain << endl;
 #endif
             cp.enqueue(bid, computed_values);
         }
@@ -1246,8 +1123,8 @@ struct BlockBase
     }
 
     // now we know we need to receive requested values decoded by neighbors
-    void recv_and_blend(const diy::Master::ProxyWithLink &cp) {
-
+    void recv_and_blend(const diy::Master::ProxyWithLink &cp) 
+    {
         T eps = 1.0e-10;
         RCLink<T> *l = static_cast<RCLink<T>*>(cp.link());
         vector<T> dom_pt(dom_dim);   // only domain coords of point
@@ -1265,23 +1142,24 @@ struct BlockBase
             pointer_in_incoming[bid.gid] = 0;
         }
 #ifdef BLEND_VERBOSE
-      for (typename std::map<int, std::vector<T>>::iterator mit= incoming_values.begin(); mit!=incoming_values.end(); mit++)
-      {
-        int from_gid = mit->first;
-        std::vector<T> & vectVals = mit->second;
-        cerr << "on block" << cp.gid() << " receive from block " << from_gid << " values: \n";
-        for (size_t j=0; j<vectVals.size(); j++)
+        for (typename std::map<int, std::vector<T>>::iterator mit= incoming_values.begin(); mit!=incoming_values.end(); mit++)
         {
-          cerr << " " << vectVals[j] ;
+            int from_gid = mit->first;
+            std::vector<T> & vectVals = mit->second;
+            cerr << "on block" << cp.gid() << " receive from block " << from_gid << " values: \n";
+            for (size_t j=0; j<vectVals.size(); j++)
+            {
+            cerr << " " << vectVals[j] ;
+            }
+            cerr << "\n";
         }
-        cerr << "\n";
-      }
 #endif
 
         Bounds<T> neigh_bounds(dom_dim); // neighbor block bounds
         diy::Direction dirc(dom_dim, 0); // neighbor direction
 
-        for (auto i = 0; i < (size_t) blend->domain.rows(); i++) {
+        for (auto i = 0; i < (size_t) blend->domain.rows(); i++) 
+        {
             vector<int> dests;               // link neighbor targets (not gids)
             for (int j = 0; j < dom_dim; j++)
             {
@@ -1356,8 +1234,8 @@ struct BlockBase
                 T incomingValue = incoming_values[bid.gid][index];
                 pointer_in_incoming[bid.gid]++;
 #ifdef BLEND_VERBOSE
-          cerr << "  incoming value " << incomingValue << " from block: " << bid.gid << " index: " <<index <<
-             " factor: " << factor << endl;
+            cerr << "  incoming value " << incomingValue << " from block: " << bid.gid << " index: " <<index <<
+                " factor: " << factor << endl;
 #endif
                 val = val + incomingValue * factor;
             }
