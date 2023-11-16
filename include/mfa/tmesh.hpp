@@ -122,6 +122,25 @@ namespace mfa
                 all_knot_levels[i].resize(nctrl_pts(i) + p_(i) + 1);
                 all_knot_param_idxs[i].resize(nctrl_pts(i) + p_(i) + 1);
             }
+
+            // initialize first tensor product
+            vector<size_t> knot_mins(dom_dim_);
+            vector<size_t> knot_maxs(dom_dim_);
+            for (auto i = 0; i < dom_dim_; i++)
+            {
+                knot_mins[i] = 0;
+                knot_maxs[i] = all_knots[i].size() - 1;
+            }
+            int id = append_tensor(knot_mins, knot_maxs, 0);
+            assert(id == 0);
+        }
+
+        // resize the first tensor (used when the knot distribution
+        // is manually overriden by user)
+        void reinit_knots(VectorXi& nctrl_pts)
+        {
+            tensor_prods.clear();
+            init_knots(nctrl_pts);
         }
 
         // checks if a knot can be inserted in a given position

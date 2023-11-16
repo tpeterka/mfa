@@ -187,16 +187,6 @@ namespace mfa
 
         void set_knots(const vector<vector<T>>& knots = vector<vector<T>>())
         {
-            // initialize first tensor product
-            vector<size_t> knot_mins(dom_dim);
-            vector<size_t> knot_maxs(dom_dim);
-            for (auto i = 0; i < dom_dim; i++)
-            {
-                knot_mins[i] = 0;
-                knot_maxs[i] = tmesh.all_knots[i].size() - 1;
-            }
-            tmesh.append_tensor(knot_mins, knot_maxs, 0);
-
             // Initialize knot data structures
             if (knots.size() != 0)
             {
@@ -1766,21 +1756,11 @@ namespace mfa
         // Set knot vector from user-supplied input
         void customKnots(const vector<vector<T>>& knots)
         {
+            // Check that knot vectors are pinned
             for (size_t k = 0; k < dom_dim; k++)
             {
                 int last = knots[k].size() - 1;
                 bool pinned = true;
-
-                // Check that custom knot vector matches existing tmesh
-                // The size of the tmesh is determined previously by the
-                // number of control points
-                if (tmesh.all_knots[k].size() != knots[k].size())
-                {
-                    cerr << "ERROR: Custom knot distribution has incorrect size in dimesion " << k << endl;
-                    cerr << "       Found " << knots[k].size() << " knots, expected " << tmesh.all_knots[k].size() << endl;
-                    cerr << "Exiting." << endl;
-                    exit(1);
-                }
 
                 // Check that knots are pinned
                 for (int i = 0; i < p(k) + 1; i++)
@@ -1792,10 +1772,18 @@ namespace mfa
                         exit(1);
                     }
                 }
-
-                // Copy knots to tmesh
-                tmesh.all_knots[k] = knots[k];
             }
+
+            // Resize (and clear) global knot data structures
+            VectorXi new_nctrl(dom_dim);
+            for (int i = 0; i < dom_dim; i++)
+            {
+                new_nctrl(i) = knots[i].size() - p(i) - 1;
+            }
+            tmesh.reinit_knots(new_nctrl);
+            
+            // Copy knots to tmesh
+            tmesh.all_knots = knots;
         }
 
         // compute knots

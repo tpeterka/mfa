@@ -456,7 +456,9 @@ namespace mfa
         }
 
         // truncate floating-point roundoffs to [0,1]
-        void truncateRoundoff(double prec = 1e-12)
+        // unclear what this precision value should be in general
+        // have observed cases where floating point error exceeds 1e-12
+        void truncateRoundoff(double prec = 1e-10)
         {
             for (int i = 0; i < param_list.rows(); i++)
             {
