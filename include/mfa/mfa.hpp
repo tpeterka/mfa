@@ -1109,6 +1109,61 @@ namespace mfa
                 AdaptiveEncodeVar(i, input, err_limit, weighted, extents, max_rounds);
             }
         }
+
+        // Helper function that takes a knot span with or without repeated knots and returns
+        // the same distribution with properly pinned knots
+        vector<T> pinKnots(const vector<T>& knots, int degree)
+        {
+            assert(degree >= 0);
+            assert(knots.size() > 0);
+
+            int idx = 0;
+            int count0 = 0;
+            int count1 = 0;
+            int extra0 = 0; // number of repeated knots at 0 to add
+            int extra1 = 0; // number of repeated knots at 1 to add
+            int last = knots.size() - 1; // index of final entry
+
+            // Count number of knots previously pinned at 0
+            idx = 0;
+            while (idx < knots.size() && knots[idx] == 0)
+            {
+                count0++;
+            }
+
+            // Count number of knots previously pinned at 1
+            idx = 0;
+            while (idx < knots.size() && knots[last - idx] == 1)
+            {
+                count1++;
+            }
+
+            // Warn if there are already more pinned knots than we need, but continue
+            if (count0 > degree + 1)
+            {
+                fmt::print("WARNING: Tried to add pinned knots, but the knot vector already contained more than {} knots at 0", count0);
+                extra0 = 0;
+            }
+            if (count1 > degree + 1)
+            {
+                fmt::print("WARNING: Tried to add pinned knots, but the knot vector already contained more than {} knots at 1", count1);
+                extra1 = 0;
+            }
+
+            // Create lists of extra knots to add
+            extra0 = degree + 1 - count0;
+            extra1 = degree + 1 - count1;
+            vector<T> addKnots0(extra0, 0.0);
+            vector<T> addKnots1(extra1, 1.0);
+            
+            // Concatenate into final vector with pinned knots
+            vector<T> pinnedKnots;
+            pinnedKnots.insert(pinnedKnots.end(), addKnots0.begin(), addKnots0.end());
+            pinnedKnots.insert(pinnedKnots.end(), knots.begin(), knots.end());
+            pinnedKnots.insert(pinnedKnots.end(), addKnots1.begin(), addKnots1.end());
+
+            return pinnedKnots;
+        }
     };      // class MFA
 }       // namespace mfa
 
