@@ -1,6 +1,6 @@
 add_subdirectory            (convert)
 add_subdirectory            (eval)
-add_subdirectory            (fixed)
-add_subdirectory            (legacy)
+add_subdirectory            (encode)
+add_subdirectory            (old)
 # add_subdirectory            (misc)
 add_subdirectory            (vol_iterator)
