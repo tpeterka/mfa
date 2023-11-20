@@ -33,15 +33,15 @@ add_test                    (NAME fixed-sinc-2d-test
                             )
                             
 add_test                    (NAME multi-bc-test1
-                             COMMAND multiblock_blend_continuous -b 2 -d 2 -m 1 -i sinc -o 0.11
+                             COMMAND analytical_multiblock_blend -b 2 -d 2 -m 1 -i sinc -o 0.11
                             )
                             
 add_test                    (NAME multi-bc-test2
-                             COMMAND multiblock_blend_continuous -i sinc -d 3 -m 2 -b 2 -o 0.11
+                             COMMAND analytical_multiblock_blend -i sinc -d 3 -m 2 -b 2 -o 0.11
                             )       
                             
 add_test                    (NAME multi-bc-test3
-                             COMMAND multiblock_blend_continuous -i sinc -d 3 -m 2 -b 6
+                             COMMAND analytical_multiblock_blend -i sinc -d 3 -m 2 -b 6
                             )                     
 
 add_test                    (NAME fixed-sinc-2d-test-grid
