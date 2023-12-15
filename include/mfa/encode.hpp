@@ -2756,7 +2756,7 @@ namespace mfa
                 if (!new_candidate)
                     continue;
 
-                // make a candidate tensor of some size, eg., p+1 or p+2 control points
+                // make a candidate tensor with the new knot plus the pad
                 TensorProduct<T> c(dom_dim);
                 for (auto j = 0; j < dom_dim; j++)
                 {
@@ -2774,49 +2774,14 @@ namespace mfa
 
                 TensorProduct<T>& pt = tensor_prods[parent_tensor_idxs[i]];             // parent tensor of the candidate tensor
 
-                // debug
-//                 fmt::print(stderr, "before adjust: pt idx {}: pt mins [{}] maxs [{}] c mins [{}] maxs [{}] pad {} edge_pad {}\n",
-//                         parent_tensor_idxs[i], fmt::join(pt.knot_mins, ","), fmt::join(pt.knot_maxs, ","),
-//                         fmt::join(c.knot_mins, ","), fmt::join(c.knot_maxs,  ","), pad, edge_pad);
-
                 // adjust candidate to be no larger than parent in any dimension
                 // also don't leave parent with a small remainder anywhere
                 tmesh.adjust_candidate(c, pt, pad, edge_pad);
 
                 // debug
-//                 if (child_level == 10)
-//                     fmt::print(stderr, "Refine 1: c.parent {}: c.parent mins [{}] maxs [{}] c mins [{}] maxs [{}] pad {} edge_pad {}\n",
-//                             c.parent, fmt::join(tensor_prods[c.parent].knot_mins, ","), fmt::join(tensor_prods[c.parent].knot_maxs, ","),
-//                             fmt::join(c.knot_mins, ","), fmt::join(c.knot_maxs,  ","), pad, edge_pad);
-
-                // DEPRECATE
-                // force knots at candidate tensor bounds to be at level no deeper than previous level
-                // however do not allow candidate tensor bounds to be beyond those of parent tensor
-//                 int level = (parent_level ? parent_level - 1 : 0);
-//                 for (auto j = 0; j < dom_dim; j++)
-//                 {
-//                     while (all_knot_levels[j][c.knot_mins[j]] > level && c.knot_mins[j] > pt.knot_mins[j])
-//                     {
-//                         // debug
-//                         fmt::print(stderr, "Refine 1: c.knot_mins level = {} parent_level {} desired level {}\n",
-//                                 all_knot_levels[j][c.knot_mins[j]], parent_level, level);
-// 
-//                         c.knot_mins[j]--;
-//                     }
-//                     while (all_knot_levels[j][c.knot_maxs[j]] > level && c.knot_maxs[j] < pt.knot_maxs[j])
-//                     {
-//                         // debug
-//                         fmt::print(stderr, "Refine 2: c.knot_maxs level = {} parent_level {} desired level {}\n",
-//                                 all_knot_levels[j][c.knot_maxs[j]], parent_level, level);
-// 
-//                         c.knot_maxs[j]++;
-//                     }
-//                 }
-
-                // debug
-//                 fmt::print(stderr, "1: pt idx {}: pt mins [{}] maxs [{}] c mins [{}] maxs [{}] c.parent {}\n",
-//                         parent_tensor_idxs[i], fmt::join(pt.knot_mins, ","), fmt::join(pt.knot_maxs, ","),
-//                         fmt::join(c.knot_mins, ","), fmt::join(c.knot_maxs,  ","), c.parent);
+//                 fmt::print(stderr, "1: pt idx {}: parent mins [{}] maxs [{}] level {} c mins [{}] maxs [{}] c.parent {} c.level {}\n",
+//                         parent_tensor_idxs[i], fmt::join(pt.knot_mins, ","), fmt::join(pt.knot_maxs, ","), pt.level,
+//                         fmt::join(c.knot_mins, ","), fmt::join(c.knot_maxs,  ","), c.parent, c.level);
 
                 // adjust knot mins, maxs of tensors to be added so far because of inserted knots
                 for (auto tidx = 0; tidx < new_tensors.size(); tidx++)          // for all tensors scheduled to be added so far
@@ -2872,7 +2837,8 @@ namespace mfa
 
                         // candidate intersects an already scheduled tensor, to within some proximity
                         // merge c into t, update and keep t, invalidate c
-                        else if (tmesh.intersect(c, t, pad))
+                        // pad - 1 allows remainders of size pad, which is what we want
+                        else if (tmesh.intersect(c, t, pad - 1))
                         {
                             if (c.parent == t.parent)                           // only merge tensors refined from the same parent
                             {
@@ -2887,15 +2853,7 @@ namespace mfa
 
                     // schedule the tensor to be added
                     if (add)
-                    {
                         new_tensors.push_back(c);
-
-                        // debug
-//                         if (child_level == 10)
-//                             fmt::print(stderr, "Refine 2: c.parent {}: c.parent mins [{}] maxs [{}] c mins [{}] maxs [{}]\n",
-//                                     c.parent, fmt::join(tensor_prods[c.parent].knot_mins, ","), fmt::join(tensor_prods[c.parent].knot_maxs, ","),
-//                                     fmt::join(c.knot_mins, ","), fmt::join(c.knot_maxs,  ","));
-                    }
 
                     if (!changed_new_tensors)
                         break;
@@ -2958,7 +2916,8 @@ namespace mfa
 
                         // candidate intersects an already scheduled tensor, to within some proximity
                         // merge c into to t, update and keep t, invalidate c
-                        else if (tmesh.intersect(c, t, pad))
+                        // pad - 1 allows remainders of size pad, which is what we want
+                        else if (tmesh.intersect(c, t, pad - 1))
                         {
                             if (c.parent == t.parent)                           // only merge tensors refined from the same parent
                             {
@@ -3003,6 +2962,11 @@ namespace mfa
                 {
                     auto& e = tensor_prods[j];                  // existing tensor
 
+                    // debug
+//                     fmt::print(stderr, "AddNewTensors(): pt idx {}: parent mins [{}] maxs [{}] level {} t mins [{}] maxs [{}] t.level {}\n",
+//                             t.parent, fmt::join(tensor_prods[t.parent].knot_mins, ","), fmt::join(tensor_prods[t.parent].knot_maxs, ","), tensor_prods[t.parent].level,
+//                             fmt::join(t.knot_mins, ","), fmt::join(t.knot_maxs,  ","), t.level);
+
                     // outright intersection that is too near to edge of existing tensor
                     // can't handle this case at this point in the algorithm
                     // need to invalidate the candidate, mark intersected existing tensor as not done
@@ -3015,11 +2979,6 @@ namespace mfa
                     std::vector<KnotIdx> inter_maxs(t.knot_maxs.size());
                     if (tmesh.intersects(t.knot_mins, t.knot_maxs, e.knot_mins, e.knot_maxs, inter_mins, inter_maxs))
                     {
-                        // check levels, should not differ by more than one (existing tensor should be at same level as parent)
-                        if (e.level < t.level - 1)
-                            throw MFAError(fmt::format("AddNewTensors(): Error: tensor to be added (level {}) intersects existing tensor {} (level {}), which differ by > 1 level.\n",
-                                        t.level, j, e.level));
-
                         // check intersection amount in each dimension
                         // since the candidate is the deepest level, consider all knot indices using a simple subtraction (not Tmesh::knot_idx_dist()
                         bool found_inter = false;
@@ -3048,8 +3007,8 @@ namespace mfa
                         if (found_inter)
                         {
                             // debug
-                            fmt::print(stderr, "\nAddNewTensors() 1: t: knot_mins [{}] knot_maxs [{}] level {} intersects existing tensor e: knot_mins [{}] knot_maxs [{}] level {} with small distance\n",
-                                    fmt::join(t.knot_mins, ","), fmt::join(t.knot_maxs, ","), t.level, fmt::join(e.knot_mins, ","), fmt::join(e.knot_maxs, ","), e.level);
+//                             fmt::print(stderr, "\nAddNewTensors() 1: t: knot_mins [{}] knot_maxs [{}] level {} intersects existing tensor e: knot_mins [{}] knot_maxs [{}] level {} with small distance\n",
+//                                     fmt::join(t.knot_mins, ","), fmt::join(t.knot_maxs, ","), t.level, fmt::join(e.knot_mins, ","), fmt::join(e.knot_maxs, ","), e.level);
 
                             // invalidate this tensor
                             t.level = -1;
@@ -3062,15 +3021,16 @@ namespace mfa
 
                     // check for nearness to existing tensor without actually intersecting
                     // in this case, merge e and t, enlarging to cover e
-                    if (!tmesh.intersect(t, e, 0, true, false) && tmesh.intersect(t, e, pad, true, false))
+                    // pad - 1 allows remainders of size pad to remain unmerged, which is what we want
+                    if (!tmesh.intersect(t, e, 0, true, false) && tmesh.intersect(t, e, pad - 1, true, false))
                     {
                         // merge e (existing tensor) into t (tensor to be added)
                         // ie, enlarge t to cover e
                         tmesh.merge_tensors(t, e, -1, 0);
 
                         // debug
-                        fmt::print(stderr, "AddNewTensors() 2: e was merged into t: possibly expanded knot_mins [{}] knot_maxs [{}] level {}\n\n",
-                                fmt::join(t.knot_mins, ","), fmt::join(t.knot_maxs, ","), t.level);
+//                         fmt::print(stderr, "AddNewTensors() 2: e was merged into t: possibly expanding t with new knot_mins [{}] knot_maxs [{}] level {}\n\n",
+//                                 fmt::join(t.knot_mins, ","), fmt::join(t.knot_maxs, ","), t.level);
                     }
                 }
 
