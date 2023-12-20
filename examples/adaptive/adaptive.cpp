@@ -329,6 +329,13 @@ int main(int argc, char** argv)
         d_args.ndom_pts[0]      = 200;
         d_args.ndom_pts[1]      = 200;
         d_args.ndom_pts[2]      = 200;
+        // for small 100^3 subset
+//         d_args.starts[0]        = 302;
+//         d_args.starts[1]        = 220;
+//         d_args.starts[2]        = 225;
+//         d_args.ndom_pts[0]      = 100;
+//         d_args.ndom_pts[1]      = 100;
+//         d_args.ndom_pts[2]      = 100;
         d_args.infile           = infile;
 //         d_args.infile       = "/Users/tpeterka/datasets/flame/6_small.xyz";
         if (dom_dim == 3)
