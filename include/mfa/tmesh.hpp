@@ -2773,15 +2773,52 @@ namespace mfa
             return true;
         }
 
-        // adjust candidate to another tensor
+        // check edge knots of tensor product to ensure they don't exceed a given level
+        // returns: true if ok
+        bool check_knot_edge_level(TensorProduct<T>&    t,
+                                   int                  level)
+        {
+            for (auto i = 0; i < dom_dim_; i++)
+            {
+                if (all_knot_levels[i][t.knot_mins[i]] > level)
+                {
+                    fmt::print(stderr, "check_knot_edge_level(): knot_mins in dim {} is at level {} which is > allowed level {}\n",
+                            i, all_knot_levels[i][t.knot_mins[i]], level);
+                    return false;
+                }
+                if (all_knot_levels[i][t.knot_maxs[i]] > level)
+                {
+                    fmt::print(stderr, "check_knot_edge_level(): knot_maxs in dim {} is at level {} which is > allowed level {}\n",
+                            i, all_knot_levels[i][t.knot_maxs[i]], level);
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        // make candidate tensor constrained to another tensor (e.g., parent)
         // candidate can be no larger in any dimension than the other tensor and also doesn't leave the other tensor with a small remainder anywhere
         // candidate tensor knot_mins and knot_maxs will be adjusted accordingly
-        void adjust_candidate(
+        void make_candidate(
+                std::vector<KnotIdx>    inserted_knot_idx,      // inserted knot
                 TensorProduct<T>&       c,                      // candidate tensor being constrained
                 const TensorProduct<T>& t,                      // other tensor providing the constraints
                 int                     pad,                    // padding per side for interior tensor (not at global edge)
                 int                     edge_pad)               // extra padding per side for tensor at the global edge
         {
+            // make initial set of knot mins and maxs
+            for (auto j = 0; j < dom_dim_; j++)
+            {
+                // min side
+                knot_idx_ofst(t, inserted_knot_idx[j], -(pad / 2 + 1), j, true, c.knot_mins[j]);
+
+                // max side
+                if (p_(j) % 2)      // odd degree
+                    knot_idx_ofst(t, inserted_knot_idx[j], pad / 2 + 1, j, true, c.knot_maxs[j]);
+                else                // even degree
+                    knot_idx_ofst(t, inserted_knot_idx[j], pad / 2 + 2, j, true, c.knot_maxs[j]);
+            }
+
             for (auto j = 0; j < dom_dim_; j++)
             {
                 int min_ofst  = (t.knot_mins[j] == 0) ? pad + edge_pad : pad;
@@ -2791,7 +2828,7 @@ namespace mfa
 
                 // sanity
                 if (c.knot_mins[j] > t.knot_maxs[j])
-                    throw MFAError(fmt::format("adjust_candidate: c.knot_mins[{}] {} > t.knot_maxs[{}] {}\n",
+                    throw MFAError(fmt::format("make_candidate: c.knot_mins[{}] {} > t.knot_maxs[{}] {}\n",
                                 j, c.knot_mins[j], j, t.knot_maxs[j]));
 
                 // check/adjust min edge of c against max edge of t
@@ -2806,7 +2843,7 @@ namespace mfa
 
                 // sanity
                 if (c.knot_maxs[j] < t.knot_mins[j])
-                    throw MFAError(fmt::format("adjust_candidate: c.knot_maxs[{}] {} < t.knot_mins[{}] {}\n",
+                    throw MFAError(fmt::format("make_candidate: c.knot_maxs[{}] {} < t.knot_mins[{}] {}\n",
                                 j, c.knot_maxs[j], j, t.knot_mins[j]));
 
                 // check/adjust max edge of c against min edge of t
