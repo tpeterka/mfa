@@ -111,7 +111,7 @@ int main(int argc, char** argv)
     {
         if (dom_dim > 3)
         {
-            fprintf(stderr, "\'%s\' data only available with dimension <= 3\n", input);
+            fprintf(stderr, "\'%s\' data only available with dimension <= 3\n", input.c_str());
             exit(0);
         }
 

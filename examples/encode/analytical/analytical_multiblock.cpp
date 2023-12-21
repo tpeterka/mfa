@@ -171,11 +171,11 @@ int main(int argc, char** argv)
                 { b->analytical_error_field(cp, grid_size, input, L1, L2, Linf, d_args, temp_in, b->approx, b->errs); });
 
         // print analytical errors
-        fprintf(stderr, "\n------ Analytical error norms -------\n");
-        fprintf(stderr, "L-1        norm = %e\n", L1);
-        fprintf(stderr, "L-2        norm = %e\n", L2);
-        fprintf(stderr, "L-infinity norm = %e\n", Linf);
-        fprintf(stderr, "-------------------------------------\n\n");
+        fmt::print(stderr, "\n------ Analytical error norms -------\n");
+        fmt::print(stderr, "L-1        norms[vars] = {:e}\n", fmt::join(L1, ","));
+        fmt::print(stderr, "L-2        norms[vars] = {:e}\n", fmt::join(L2, ","));
+        fmt::print(stderr, "L-infinity norms[vars] = {:e}\n", fmt::join(Linf, ","));
+        fmt::print(stderr, "-------------------------------------\n\n");
     }
 
     // print block results

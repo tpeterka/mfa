@@ -125,7 +125,7 @@ void write_pointset_vtk(mfa::PointSet<T>* ps, char* filename, int sci_var = -1)
         vardims[k]      = ps->var_dim(k);
         varnames[k]     = new char[256];
         centerings[k]   = 1;
-        sprintf(varnames[k], "var%d", k);
+        snprintf(varnames[k], 256, "var%d", k);
     }
 
     // write raw original points
@@ -1093,10 +1093,10 @@ void write_vtk_files(
     char approx_filename[256];
     char errs_filename[256];
     char blend_filename[256];
-    sprintf(input_filename, "initial_points_gid_%d.vtk", cp.gid());
-    sprintf(approx_filename, "approx_points_gid_%d.vtk", cp.gid());
-    sprintf(errs_filename, "error_gid_%d.vtk", cp.gid());
-    sprintf(blend_filename, "blend_gid_%d.vtk", cp.gid());
+    snprintf(input_filename, 256, "initial_points_gid_%d.vtk", cp.gid());
+    snprintf(approx_filename, 256, "approx_points_gid_%d.vtk", cp.gid());
+    snprintf(errs_filename, 256, "error_gid_%d.vtk", cp.gid());
+    snprintf(blend_filename, 256, "blend_gid_%d.vtk", cp.gid());
     write_pointset_vtk(b->input, input_filename, sci_var);
     write_pointset_vtk(b->approx, approx_filename, sci_var);
     write_pointset_vtk(b->errs, errs_filename, sci_var);

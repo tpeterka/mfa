@@ -13,7 +13,7 @@
 template <typename T>
 struct RayBlock : public Block<T>
 {
-    using Base = typename Block<T>::BlockBase<T>;
+    using Base = typename Block<T>::template BlockBase<T>;
     using Base::dom_dim;
     using Base::pt_dim;
     using Base::core_mins;

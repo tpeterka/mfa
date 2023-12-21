@@ -7,7 +7,7 @@ imports:
 
 git module pybind11:
     url: https://github.com/pybind/pybind11
-    rev: da8c730a62a7f9654433f5e2206bd1135a8b57d8
+    rev: eeac2f45728633d7ee6fe792bea2890345697119
 
 git module cppoptlib:
     url: https://github.com/PatWie/CppNumericalSolvers
@@ -15,12 +15,12 @@ git module cppoptlib:
 
 git module diy:
     url: https://github.com/diatomic/diy
-    rev: ef460f828c36e8f533ccec1f551024f4da896165
+    rev: 72643ee400130c35a0e662560ee09a479a913333
     drop: include/diy/thirdparty/fmt
 
 git module eigen3:
     url: https://gitlab.com/libeigen/eigen
-    rev: be0574e2159ce3d6a1748ba6060bea5dedccdbc9
+    rev: 9697d481c8439ee49f028d74eed445d0a7d565a2
 
 git module fmt:
     url: https://github.com/fmtlib/fmt

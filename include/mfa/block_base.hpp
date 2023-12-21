@@ -635,7 +635,7 @@ struct BlockBase
         //  debug: print approximated points
 //         cerr << approx->npts << " approximated points\n" << approx->domain << endl;
 
-        fprintf(stderr, "# input points        = %ld\n", input->npts);
+        fprintf(stderr, "# input points        = %d\n", input->npts);
         fprintf(stderr, "compression ratio     = %.2f\n", compute_compression());
     }
 

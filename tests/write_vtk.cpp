@@ -127,7 +127,7 @@ void write_pointset_vtk(mfa::PointSet<T>* ps, char* filename, int sci_var = -1)
         vardims[k]      = ps->var_dim(k);
         varnames[k]     = new char[256];
         centerings[k]   = 1;
-        sprintf(varnames[k], "var%d", k);
+        snprintf(varnames[k], 256, "var%d", k);
     }
 
     // write raw original points
@@ -338,7 +338,7 @@ void write_vtk_files(
 
     // write geometry control points
     char filename[256];
-    sprintf(filename, "geom_control_points_gid_%d.vtk", cp.gid());
+    snprintf(filename, 256, "geom_control_points_gid_%d.vtk", cp.gid());
     if (geom_ctrl_pts.size())
         write_point_mesh(
             /* const char *filename */                      filename,
@@ -353,7 +353,7 @@ void write_vtk_files(
     // write science variables control points
     for (auto i = 0; i < nvars; i++)
     {
-        sprintf(filename, "var%d_control_points_gid_%d.vtk", i, cp.gid());
+        snprintf(filename, 256, "var%d_control_points_gid_%d.vtk", i, cp.gid());
         if (vars_ctrl_pts[i].size())
             write_point_mesh(
             /* const char *filename */                      filename,
@@ -415,16 +415,16 @@ void test_and_write(Block<real_t>*                      b,
     b->analytical_error_field(cp, args.ndom_pts, input, L1, L2, Linf, args, exact_pts, approx_pts, error_pts);
 
     // print analytical errors
-    fprintf(stderr, "\n------ Analytical error norms -------\n");
-    fprintf(stderr, "L-1        norm = %e\n", L1);
-    fprintf(stderr, "L-2        norm = %e\n", L2);
-    fprintf(stderr, "L-infinity norm = %e\n", Linf);
-    fprintf(stderr, "-------------------------------------\n\n");
+    fmt::print(stderr, "\n------ Analytical error norms -------\n");
+    fmt::print(stderr, "L-1        norms[vars] = {:e}\n", fmt::join(L1, ","));
+    fmt::print(stderr, "L-2        norms[vars] = {:e}\n", fmt::join(L2, ","));
+    fmt::print(stderr, "L-infinity norms[vars] = {:e}\n", fmt::join(Linf, ","));
+    fmt::print(stderr, "-------------------------------------\n\n");
 
     char exact_filename[256], approx_filename[256], error_filename[256];
-    sprintf(exact_filename, "test_exact_pts_gid_%d.vtk", cp.gid());
-    sprintf(approx_filename, "test_approx_pts_gid_%d.vtk", cp.gid());
-    sprintf(error_filename, "test_error_pts_gid_%d.vtk", cp.gid());
+    snprintf(exact_filename, 256, "test_exact_pts_gid_%d.vtk", cp.gid());
+    snprintf(approx_filename, 256, "test_approx_pts_gid_%d.vtk", cp.gid());
+    snprintf(error_filename, 256, "test_error_pts_gid_%d.vtk", cp.gid());
     write_pointset_vtk(exact_pts, exact_filename, sci_var);
     write_pointset_vtk(approx_pts, approx_filename, sci_var);
     write_pointset_vtk(error_pts, error_filename, sci_var);
