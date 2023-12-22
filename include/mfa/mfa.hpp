@@ -711,11 +711,11 @@ namespace mfa
                 const VectorX<T>&   extents,                // extents in each dimension, for normalizing error (size 0 means do not normalize)
                 int                 max_rounds)             // maximum number of rounds
         {
+            mfa_data.set_param_idxs(input);                 // needed for the single tensor tmesh even when MFA_TMESH is not defined
 #ifndef MFA_TMESH
             Encoder<T> encoder(mfa_data, input, verbose);
             encoder.OrigAdaptiveEncode(err_limit, weighted, extents, max_rounds);
 #else
-            mfa_data.set_param_idxs(input);
             Encoder<T> encoder(mfa_data, input, verbose);
             encoder.AdaptiveEncode(err_limit, weighted, extents, max_rounds);
 #endif
