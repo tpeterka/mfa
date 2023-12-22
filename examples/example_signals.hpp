@@ -6,7 +6,7 @@
 #include "domain_args.hpp"
 
 // Define list of example keywords
-set<string> analytical_signals = {"sine", "cosine", "sinc", "psinc1", "psinc2", "psinc3", "ml", "f16", "f17", "f18"};
+set<string> analytical_signals = {"sine", "cosine", "sinc", "psinc1", "psinc2", "psinc3", "psinc4", "ml", "f16", "f17", "f18"};
 set<string> datasets_4d = {"tornado4d"};
 set<string> datasets_3d = {"s3d", "nek", "rti", "miranda", "tornado"};
 set<string> datasets_2d = {"cesm"};
@@ -238,6 +238,52 @@ void polysinc3(const VectorX<T>& domain_pt, VectorX<T>& output_pt, DomainArgs&  
     return;
 }
 
+// evaluate n-d poly-sinc function version 4 (differs from version 3 in suppresion of signal at larger radii)
+template<typename T>
+void polysinc4(const VectorX<T>& domain_pt, VectorX<T>& output_pt, DomainArgs&  args, int k)
+{
+    int dim = output_pt.size();
+
+    // a = sqrt(x^2 + y^2 + z^2 + ...)
+    // b = 2(x - 2)^2 + (y + 2)^2 + (z - 2)^2 + ...
+    // c = (0.1 + x^2 + y^2 + z^2 + ...)^1/2
+    T a = 0.0;
+    T b = 0.0;
+    T c = 0.1;
+    for (auto i = 0; i < domain_pt.size(); i++)
+    {
+        T s, r;
+        s = domain_pt(i);
+        if (i % 2 == 0)
+        {
+            r = domain_pt(i) - 2.0;
+        }
+        else
+        {
+            r = domain_pt(i) + 2.0;
+        }
+        a += (s * s);
+        if (i == 0)
+            b += (2.0 * r * r);
+        else
+            b += (r * r);
+        c += domain_pt(i) * domain_pt(i);
+    }
+    a = sqrt(a);
+    c = pow(c, 0.5);
+
+    // Modulate sinc shape for each output coordinate if science variable is vector-valued
+    for (int l = 0; l < dim; l++)
+    {
+        // a1 = sinc(a); b1 = sinc(b)
+        T a1 = (a == 0.0 ? 1.0 : sin(a) / a);
+        T b1 = (b == 0.0 ? 1.0 : sin(b) / b);
+        output_pt(l) = args.s[k] * (a1 + b1) / c;       // scale entire science variable by s[k]
+    }
+
+    return;
+}
+
 // evaluate Marschner-Lobb function [Marschner and Lobb, IEEE VIS, 1994]
 // only for a 3d domain
 // using args f[0] and s[0] for f_M and alpha, respectively, in the paper
@@ -339,6 +385,7 @@ void evaluate_function(string fun, const VectorX<T>& domain_pt, VectorX<T>& outp
     else if (fun == "psinc1")   return polysinc1(   domain_pt, output_pt, args, k);
     else if (fun == "psinc2")   return polysinc2(   domain_pt, output_pt, args, k);
     else if (fun == "psinc3")   return polysinc3(   domain_pt, output_pt, args, k);
+    else if (fun == "psinc4")   return polysinc4(   domain_pt, output_pt, args, k);
     else if (fun == "ml")       return ml(          domain_pt, output_pt, args, k);
     else if (fun == "f16")      return f16(         domain_pt, output_pt, args, k);
     else if (fun == "f17")      return f17(         domain_pt, output_pt, args, k);

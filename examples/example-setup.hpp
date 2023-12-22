@@ -115,7 +115,7 @@ using namespace std;
     void set_dom_bounds(Bounds<real_t>& dom_bounds, string input)
     {
         if (input == "sine" || input == "cosine" || input == "sinc" ||
-            input == "psinc1" || input == "psinc2" || input == "psinc3")
+            input == "psinc1" || input == "psinc2" || input == "psinc3" || input == "psinc4")
         {
             for (int i = 0; i < dom_bounds.min.dimension(); i++)
             {
@@ -290,7 +290,7 @@ using namespace std;
         }
 
         // sinc, polysinc functions
-        if (input == "sinc" || input == "psinc1" || input == "psinc2" || input == "psinc3")
+        if (input == "sinc" || input == "psinc1" || input == "psinc2" || input == "psinc3" || input == "psinc4")
         {
             d_args.min.assign(dom_dim, -4.0 * M_PI);
             d_args.max.assign(dom_dim,  4.0 * M_PI);
