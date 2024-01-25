@@ -4,6 +4,8 @@ cmake_minimum_required      (VERSION 3.15)
 option                      (wrapped_mpi    "MPI compiler wrapper requires no further MPI libs, true/false (default false)" OFF     )
 option                      (mfa_thread     "tbb, kokkos, sycl, or serial (default serial)"                                 serial  )
 option                      (s3d_infile     "Path/filename of s3d dataset (for unit testing)"                                       )
+option                      (mfa_build_examples "Build MFA examples (default true)"                                         ON      )
+option                      (mfa_build_tests "Build MFA tests (default true)"                                               ON      )
 option                      (mfa_python     "Build Python bindings, true/false (default false)"                             OFF     )
 option                      (eigen_thread   "Use OpenMP for Eigen threading, true/false (default false)"                    OFF     )
 option                      (KOKKOS_INCLUDE_DIRS    "Path of include directories for Kokkos (optional)"                             )
@@ -137,12 +139,18 @@ set                         (libraries
                              ${KK_LIB} )
 
 
-# Testing
+
+if                          (mfa_build_examples)
+    add_subdirectory        (examples)
+endif                       (mfa_build_examples)
+
+# Build Tests
 # NB testing must be enabled before adding tests subdirectory, otherwise no tests will be found
-enable_testing              ()
-include                     (CTest)
-add_subdirectory            (examples)
-add_subdirectory            (tests)
+if                          (mfa_build_tests)
+    enable_testing          ()
+    include                 (CTest)
+    add_subdirectory        (tests)
+endif                       (mfa_build_tests)
 
 # Python
 if                          (mfa_python)
