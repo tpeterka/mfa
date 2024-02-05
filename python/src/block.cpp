@@ -4,12 +4,7 @@
 #include    <pybind11/functional.h>
 namespace py = pybind11;
 
-#include <vector>
-
-#include    <../examples/domain_args.hpp>
-#include    <mfa/tmesh.hpp>
-#include    <mfa/mfa_data.hpp>
-#include    <mfa/encode.hpp>
+#include    <mfa/mfa.hpp>
 #include    "../../examples/block.hpp"
 
 #if defined(MFA_MPI4PY)
@@ -123,7 +118,7 @@ void init_block(py::module& m, std::string name)
         .def_readwrite("reg1and2",          &MFAInfo::reg1and2)
         .def_readwrite("regularization",    &MFAInfo::regularization)
         .def("addGeomInfo",                 &MFAInfo::addGeomInfo, "gmi"_a)
-        .def("addVarInfo",                  &MFAInfo::addVarInfo, "vmi"_a)
+        .def("addVarInfo",                  (void (mfa::MFAInfo::*)(mfa::ModelInfo)) &MFAInfo::addVarInfo, "vmi"_a)
     ;
 
     py::class_<mfa::MFA<T>>(m, "MFA")
@@ -133,7 +128,7 @@ void init_block(py::module& m, std::string name)
         .def_readwrite("pt_dim",        &mfa::MFA<T>::pt_dim)
         .def("geom",                    &mfa::MFA<T>::geom, py::return_value_policy::reference)// empty, returns mfa::MFA_DATA)
         .def("var",                     &mfa::MFA<T>::var, py::return_value_policy::reference)    
-        .def("FixedEncode",             &mfa::MFA<T>::FixedEncode, "input"_a, "regularization"_a, "regland2"_a, "weighted"_a, "force_unified"_a) //pointset, regularization, bool, bool, bool (reference output)
+        .def("FixedEncode",             &mfa::MFA<T>::FixedEncode, "input"_a, "regularization"_a, "regland2"_a, "weighted"_a) //pointset, regularization, bool, bool (reference output)
         .def("Decode", (void (mfa::MFA<T>::*)(PointSet<T>&, bool, const Eigen::VectorXi&) const) &mfa::MFA<T>::Decode, "output"_a, "saved_basis"_a, "derivs"_a=Eigen::VectorXi())
         .def("AddGeometry", (void (mfa::MFA<T>::*)(int)) &mfa::MFA<T>::AddGeometry)
         .def("AddVariable", (void (mfa::MFA<T>::*)(const Eigen::VectorXi&, const Eigen::VectorXi&, int)) &mfa::MFA<T>::AddVariable)
@@ -210,7 +205,7 @@ void init_block(py::module& m, std::string name)
                 Block<T>*       b   = new Block<T>;
                 RCLink*         l   = new RCLink(link);
                 master.add(gid, new py::object(py::cast(b)), l);
-                b->init_block(core, domain, dom_dim, pt_dim);
+                b->init_block(gid, core, domain, dom_dim, pt_dim);
             }, "core"_a, "bounds"_a, "domain"_a, "link"_a, "master"_a, "dom_dim"_a, "pt_dim"_a,
             "ghost_factor"_a = 0.0)
         .def("fixed_encode_block",                  &Block<T>::fixed_encode_block)
@@ -223,6 +218,7 @@ void init_block(py::module& m, std::string name)
                                         const py::object*                   py_b,
                                         const diy::Master::ProxyWithLink&   cp,
                                         const py::array_t<T>&               arr,    // input data
+                                        MFAInfo&                            mfa_info,
                                         DomainArgs&                         d_args)
         {
             PyArray<T> pyarray(arr);
@@ -233,7 +229,7 @@ void init_block(py::module& m, std::string name)
 //                 fmt::print(stderr, "data[{}] = {}\n", i, pyarray.data[i]);
 
             Block<T>* b = py_b->cast<Block<T>*>();
-            b->input_1d_data(pyarray.data, d_args);
+            b->input_1d_data(cp, pyarray.data, mfa_info, d_args);
         })
         ;
 
@@ -254,7 +250,7 @@ void init_block(py::module& m, std::string name)
             Block<T>*       b   = new Block<T>;
             RCLink*         l   = new RCLink(link);
             master.add(gid, new py::object(py::cast(b)), l);
-            b->init_block(core, domain, dom_dim, pt_dim);
+            b->init_block(gid, core, domain, dom_dim, pt_dim);
         });
 
     m.def("save_block", [](const py::object* b, diy::BinaryBuffer* bb)
