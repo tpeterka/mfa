@@ -243,7 +243,7 @@ struct RayBlock : public Block<T>
     // precondition: Block already contains a fully encoded MFA
     void create_ray_model(
         const       diy::Master::ProxyWithLink& cp,
-        MFAInfo& mfa_info,
+        mfa::MFAInfo& mfa_info,
         DomainArgs& args,
         int n_samples,
         int n_rho,

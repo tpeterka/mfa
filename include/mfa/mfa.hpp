@@ -68,6 +68,9 @@ using namespace tbb;
 #include    <mfa/encode.hpp>
 #include    <mfa/ray_encode.hpp>
 
+namespace mfa
+{ 
+
 /*  The ModelInfo struct contains all of the information necessary to set up a MFA_Data object.
     This struct can be used to construct both geometry and science variable MFA_Data's. The 
     "control point dimensionality" (or the number of dimensions in the output space) is given
@@ -354,7 +357,7 @@ struct MFAInfo
         return;
     }
 };
-
+} // namespace mfa
 
 // forward-declare diy::Serialization so that it can be declared as a friend by MFA
 namespace diy

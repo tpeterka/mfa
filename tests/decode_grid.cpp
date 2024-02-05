@@ -158,8 +158,8 @@ int main(int argc, char **argv) {
         });
 
     // set up parameters for examples
-    MFAInfo     mfa_info(dom_dim, verbose);
-    DomainArgs  d_args(dom_dim, model_dims);
+    mfa::MFAInfo    mfa_info(dom_dim, verbose);
+    DomainArgs      d_args(dom_dim, model_dims);
     d_args.multiblock   = true;
     setup_args(dom_dim, pt_dim, model_dims, geom_degree, geom_nctrl, vars_degree, vars_nctrl,
                         "s3d", infile, 0, 1, 0, 0, 0, 0, 0, 0, adaptive, verbose,

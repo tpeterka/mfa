@@ -138,8 +138,8 @@ int main(int argc, char** argv)
     }
 
     // set up parameters for examples
-    MFAInfo     mfa_info(dom_dim, verbose);
-    DomainArgs  d_args(dom_dim, model_dims);
+    mfa::MFAInfo    mfa_info(dom_dim, verbose);
+    DomainArgs      d_args(dom_dim, model_dims);
     setup_args(dom_dim, pt_dim, model_dims, geom_degree, geom_nctrl, vars_degree, vars_nctrl,
                 input, "", ndomp, structured, rand_seed, rot, twist, noise,
                 reg1and2, regularization, adaptive, verbose, mfa_info, d_args);

@@ -94,8 +94,8 @@ int main(int argc, char** argv)
     }
 
     // set up parameters for examples
-    MFAInfo     mfa_info(dom_dim, opts.verbose);
-    DomainArgs  d_args(dom_dim, model_dims);
+    mfa::MFAInfo    mfa_info(dom_dim, opts.verbose);
+    DomainArgs      d_args(dom_dim, model_dims);
     opts.setup_args(model_dims, mfa_info, d_args);
 
     // Create data set for modeling. Input keywords are defined in example-setup.hpp

@@ -205,7 +205,7 @@ struct BlockBase
 
     void setup_MFA(
             const       diy::Master::ProxyWithLink& cp,
-            MFAInfo     info)   // nb. pass by value so as to not overwrite info.verbose elsewhere
+            mfa::MFAInfo     info)   // nb. pass by value so as to not overwrite info.verbose elsewhere
     {
         if (mfa != nullptr)
         {
@@ -224,7 +224,7 @@ struct BlockBase
     // fixed number of control points encode block
     void fixed_encode_block(
             const       diy::Master::ProxyWithLink& cp,
-            MFAInfo&  info)
+            mfa::MFAInfo&  info)
     {
         mfa->FixedEncode(*input, info.regularization, info.reg1and2, info.weighted);
     }
@@ -234,7 +234,7 @@ struct BlockBase
             const diy::Master::ProxyWithLink& cp,
             T                                 err_limit,
             int                               max_rounds,
-            MFAInfo&                          info)
+            mfa::MFAInfo&                          info)
     {
         if (!input->is_structured())
         {

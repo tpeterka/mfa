@@ -25,10 +25,6 @@
 #include    "domain_args.hpp"
 #include    "example_signals.hpp"
 
-using namespace std;
-
-
-
 // 3d point or vector
 struct vec3d
 {
@@ -108,7 +104,7 @@ struct Block : public BlockBase<T, U>
     void generate_analytical_data(
             const diy::Master::ProxyWithLink&   cp,
             string&                             fun,
-            MFAInfo&                            mfa_info,
+            mfa::MFAInfo&                            mfa_info,
             DomainArgs&                         args)
     {
         if (args.rand_seed >= 0)  // random point cloud
@@ -148,7 +144,7 @@ struct Block : public BlockBase<T, U>
     void generate_random_analytical_data(
             const diy::Master::ProxyWithLink&   cp,
             string&                             fun,
-            MFAInfo&                            mfa_info,
+            mfa::MFAInfo&                            mfa_info,
             DomainArgs&                         args,
             unsigned int                        seed)
     {
@@ -283,7 +279,7 @@ struct Block : public BlockBase<T, U>
     void generate_rectilinear_analytical_data(
             const diy::Master::ProxyWithLink&   cp,
             string&                             fun,        // function to evaluate
-            MFAInfo&                            mfa_info,
+            mfa::MFAInfo&                            mfa_info,
             DomainArgs&                         args)
     {
         DomainArgs* a   = &args;
@@ -517,7 +513,7 @@ struct Block : public BlockBase<T, U>
     // f = (x, velocity magnitude)
     void read_1d_slice_3d_vector_data(
             const       diy::Master::ProxyWithLink& cp,
-            MFAInfo&    mfa_info,
+            mfa::MFAInfo&    mfa_info,
             DomainArgs& args)
     {
         assert(mfa_info.dom_dim == dom_dim);
@@ -616,7 +612,7 @@ struct Block : public BlockBase<T, U>
     // f = (x, y, velocity magnitude)
     void read_2d_slice_3d_vector_data(
             const       diy::Master::ProxyWithLink& cp,
-            MFAInfo&    mfa_info,
+            mfa::MFAInfo&    mfa_info,
             DomainArgs& args)
     {
         assert(mfa_info.dom_dim == dom_dim);
@@ -719,7 +715,7 @@ struct Block : public BlockBase<T, U>
     // f = (x, y, velocity magnitude)
     void read_2d_subset_3d_vector_data(
             const       diy::Master::ProxyWithLink& cp,
-            MFAInfo&    mfa_info,
+            mfa::MFAInfo&    mfa_info,
             DomainArgs& args)
     {
         assert(mfa_info.dom_dim == dom_dim);
@@ -844,7 +840,7 @@ struct Block : public BlockBase<T, U>
     // f = (x, y, z, velocity magnitude)
     void read_3d_vector_data(
             const       diy::Master::ProxyWithLink& cp,
-            MFAInfo&    mfa_info,
+            mfa::MFAInfo&    mfa_info,
             DomainArgs& args)
     {
         assert(mfa_info.dom_dim == dom_dim);
@@ -950,7 +946,7 @@ struct Block : public BlockBase<T, U>
     // f = (x, y, z, t, velocity magnitude)
     void read_4d_vector_data(
             const       diy::Master::ProxyWithLink& cp,
-            MFAInfo&    mfa_info,
+            mfa::MFAInfo&    mfa_info,
             DomainArgs& args)
     {
         assert(mfa_info.dom_dim == dom_dim);
@@ -1092,7 +1088,7 @@ struct Block : public BlockBase<T, U>
     // f = (x, y, z, velocity magnitude)
     void read_3d_subset_3d_vector_data(
             const       diy::Master::ProxyWithLink& cp,
-            MFAInfo&    mfa_info,
+            mfa::MFAInfo&    mfa_info,
             DomainArgs& args)
     {
         assert(mfa_info.dom_dim == dom_dim);
@@ -1221,7 +1217,7 @@ struct Block : public BlockBase<T, U>
     // f = (x, y, value)
     void read_2d_scalar_data(
             const       diy::Master::ProxyWithLink& cp,
-            MFAInfo&    mfa_info,
+            mfa::MFAInfo&    mfa_info,
             DomainArgs& args)
     {
         assert(mfa_info.dom_dim == dom_dim);
@@ -1316,7 +1312,7 @@ struct Block : public BlockBase<T, U>
     template <typename P>                   // input file precision (e.g., float or double)
     void read_3d_scalar_data(
             const       diy::Master::ProxyWithLink& cp,
-            MFAInfo&    mfa_info,
+            mfa::MFAInfo&    mfa_info,
             DomainArgs& args)
     {
         assert(mfa_info.dom_dim == dom_dim);
@@ -1416,7 +1412,7 @@ struct Block : public BlockBase<T, U>
     // There is some support for geom_dim, but it is a bit fragile --David
     void read_3d_unstructured_data(
             const       diy::Master::ProxyWithLink& cp,
-            MFAInfo&    mfa_info,
+            mfa::MFAInfo&    mfa_info,
             DomainArgs& args)
     {
         assert(mfa_info.dom_dim == dom_dim);
@@ -1723,7 +1719,7 @@ struct Block : public BlockBase<T, U>
     //         std::vector<unsigned> &shape,   // important, shape of the block
     //         int chunk,                      // vector dimension for data input (usually 2 or 3)
     //         int transpose,                  // diy is MPI_C_ORDER always; offer option to transpose
-    //         MFAInfo& mfa_info)              // info class describing the MFA
+    //         mfa::MFAInfo& mfa_info)              // info class describing the MFA
     // {
     //     Block<T> *b = new Block<T>;
     //     RCLink<int> *l = new RCLink<int>(link);
@@ -1807,7 +1803,7 @@ struct Block : public BlockBase<T, U>
         const vector<int>&                  shape,
               bool                          fileOrderC,
               int                           vecSize,
-              MFAInfo&                      mfa_info)
+              mfa::MFAInfo&                      mfa_info)
     {
         // assumes one scalar science variable
         int nvars = 1;

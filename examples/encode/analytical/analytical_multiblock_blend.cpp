@@ -126,8 +126,8 @@ int main(int argc, char **argv) {
     int         verbose = 0;
     vector<int> model_dims(pt_dim - dom_dim + 1, 1);    // set each variable to be scalar
     model_dims[0] = dom_dim;                            // dimension of geometry model
-    DomainArgs  d_args(dom_dim, model_dims);
-    MFAInfo     mfa_info(dom_dim, verbose);
+    DomainArgs      d_args(dom_dim, model_dims);
+    mfa::MFAInfo    mfa_info(dom_dim, verbose);
 
     setup_args( dom_dim, pt_dim, model_dims, geom_degree, geom_nctrl, vars_degree, vars_nctrl,
                         input, "", ndomp, structured, rand_seed, 0, 0, noise, 0, 0, 0, verbose,

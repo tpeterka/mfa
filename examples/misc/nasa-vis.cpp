@@ -153,8 +153,8 @@ int main(int argc, char** argv)
     }
 
     // Create empty info classes
-    MFAInfo     mfa_info(dom_dim, verbose);
-    DomainArgs  d_args(dom_dim, model_dims);
+    mfa::MFAInfo    mfa_info(dom_dim, verbose);
+    DomainArgs      d_args(dom_dim, model_dims);
     
     
     // set up parameters for examples

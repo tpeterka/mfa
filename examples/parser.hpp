@@ -158,7 +158,7 @@ struct MFAParser
         return;
     }
 
-    void echo_multiblock_settings(MFAInfo& mfa_info, DomainArgs& d_args, int nproc, int tot_blocks, vector<int>& divs, int strong_sc, real_t ghost, ostream& os = std::cerr)
+    void echo_multiblock_settings(mfa::MFAInfo& mfa_info, DomainArgs& d_args, int nproc, int tot_blocks, vector<int>& divs, int strong_sc, real_t ghost, ostream& os = std::cerr)
     {
         os << "------- Multiblock Settings ---------" << endl;
         os << "Total MPI processes  =  " << nproc << "\t" << "Total blocks = " << tot_blocks << endl;
@@ -180,7 +180,7 @@ struct MFAParser
     // For geom and each var, degree is same in each domain dimension
     // For geom, # ctrl points is the same in each domain dimension
     // For each var, # ctrl points varies per domain dimension, but is the same for all of the vars
-    void set_mfa_info(vector<int> model_dims, MFAInfo& mfa_info)
+    void set_mfa_info(vector<int> model_dims, mfa::MFAInfo& mfa_info)
     // void set_mfa_info(int dom_dim, vector<int> model_dims, 
     //                     int geom_degree, int geom_nctrl,
     //                     int vars_degree, vector<int> vars_nctrl,
@@ -205,18 +205,18 @@ struct MFAParser
             if (vars_nctrl[i] == -1) vars_nctrl[i] = vars_degree + 1;
         }
 
-        ModelInfo geom_info(dom_dim, geom_dim, geom_degree, geom_nctrl);
+        mfa::ModelInfo geom_info(dom_dim, geom_dim, geom_degree, geom_nctrl);
         mfa_info.addGeomInfo(geom_info);
 
         for (int k = 0; k < nvars; k++)
         {
-            ModelInfo var_info(dom_dim, model_dims[k+1], vars_degree, vars_nctrl);
+            mfa::ModelInfo var_info(dom_dim, model_dims[k+1], vars_degree, vars_nctrl);
             mfa_info.addVarInfo(var_info);
         }
     }
 
     // Currently for single block examples only
-    void setup_args(vector<int> model_dims, MFAInfo& mfa_info, DomainArgs& d_args)
+    void setup_args(vector<int> model_dims, mfa::MFAInfo& mfa_info, DomainArgs& d_args)
     // void setup_args( int dom_dim, int pt_dim, vector<int> model_dims,
     //                     int geom_degree, int geom_nctrl, int vars_degree, vector<int> vars_nctrl,
     //                     string input, string infile, string infile2, int ndomp,

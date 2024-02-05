@@ -171,7 +171,7 @@ using namespace std;
     void set_mfa_info(int dom_dim, vector<int> model_dims, 
                         int geom_degree, int geom_nctrl,
                         int vars_degree, vector<int> vars_nctrl,
-                        MFAInfo& mfa_info)
+                        mfa::MFAInfo& mfa_info)
     {
         // Clear any existing data in mfa_info
         mfa_info.reset();
@@ -192,17 +192,17 @@ using namespace std;
             if (vars_nctrl[i] == -1) vars_nctrl[i] = vars_degree + 1;
         }
 
-        ModelInfo geom_info(dom_dim, geom_dim, geom_degree, geom_nctrl);
+        mfa::ModelInfo geom_info(dom_dim, geom_dim, geom_degree, geom_nctrl);
         mfa_info.addGeomInfo(geom_info);
 
         for (int k = 0; k < nvars; k++)
         {
-            ModelInfo var_info(dom_dim, model_dims[k+1], vars_degree, vars_nctrl);
+            mfa::ModelInfo var_info(dom_dim, model_dims[k+1], vars_degree, vars_nctrl);
             mfa_info.addVarInfo(var_info);
         }
     }
 
-    void echo_multiblock_settings(MFAInfo& mfa_info, DomainArgs& d_args, int nproc, int tot_blocks, vector<int>& divs, int strong_sc, real_t ghost, ostream& os = std::cerr)
+    void echo_multiblock_settings(mfa::MFAInfo& mfa_info, DomainArgs& d_args, int nproc, int tot_blocks, vector<int>& divs, int strong_sc, real_t ghost, ostream& os = std::cerr)
     {
         os << "------- Multiblock Settings ---------" << endl;
         os << "Total MPI processes  =  " << nproc << "\t" << "Total blocks = " << tot_blocks << endl;
@@ -221,7 +221,7 @@ using namespace std;
     }
 
     // version with overlaps provided as a vector of ints
-    void echo_multiblock_settings(MFAInfo& mfa_info, DomainArgs& d_args, int nproc, int tot_blocks, vector<int>& divs, int strong_sc, vector<int> overlaps, ostream& os = std::cerr)
+    void echo_multiblock_settings(mfa::MFAInfo& mfa_info, DomainArgs& d_args, int nproc, int tot_blocks, vector<int>& divs, int strong_sc, vector<int> overlaps, ostream& os = std::cerr)
     {
         os << "------- Multiblock Settings ---------" << endl;
         os << "Total MPI processes  =  " << nproc << "\t" << "Total blocks = " << tot_blocks << endl;
@@ -246,7 +246,7 @@ using namespace std;
                         string input, string infile, int ndomp,
                         int structured, int rand_seed, real_t rot, real_t twist, real_t noise,
                         int reg1and2, real_t regularization, bool adaptive, int verbose,
-                        MFAInfo& mfa_info, DomainArgs& d_args)
+                        mfa::MFAInfo& mfa_info, DomainArgs& d_args)
     {
         int weighted = 0;
 
