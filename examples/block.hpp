@@ -444,35 +444,32 @@ struct Block : public BlockBase<T, U>
 
     // input a given data buffer into the correct format for encoding
     void input_1d_data(
-            T*                  data,
-            DomainArgs&         args)
+            const       diy::Master::ProxyWithLink& cp,
+            T*              data,
+            mfa::MFAInfo&   mfa_info,
+            DomainArgs&     args)
     {
-        DomainArgs* a = &args;
-        int tot_ndom_pts = 1;
-        this->geometry.min_dim = 0;
-        this->geometry.max_dim = this->dom_dim - 1;
-        int nvars = 1;
-        this->vars.resize(nvars);
+        assert(mfa_info.dom_dim == dom_dim);
+        assert(mfa_info.dom_dim == 1);
+        assert(mfa_info.pt_dim() == pt_dim);
+        assert(mfa_info.nvars() == 1);
+        assert(mfa_info.geom_dim() == 1);
+        assert(mfa_info.var_dim(0) == 1);
+
+        const int nvars         = mfa_info.nvars();
+        const int gdim          = mfa_info.geom_dim();
+        const VectorXi mdims    = mfa_info.model_dims();
+
+        VectorXi ndom_pts(1);
+        ndom_pts(0) = args.ndom_pts[0];
+        int tot_ndom_pts = args.ndom_pts[0];
+
         this->max_errs.resize(nvars);
         this->sum_sq_errs.resize(nvars);
-        this->vars[0].min_dim = this->dom_dim;
-        this->vars[0].max_dim = this->vars[0].min_dim;
-        VectorXi ndom_pts(this->dom_dim);
-        this->bounds_mins.resize(this->pt_dim);
-        this->bounds_maxs.resize(this->pt_dim);
-        for (int i = 0; i < this->dom_dim; i++)
-        {
-            ndom_pts(i)                     =  a->ndom_pts[i];
-            tot_ndom_pts                    *= ndom_pts(i);
-        }
+        this->bounds_mins.resize(pt_dim);
+        this->bounds_maxs.resize(pt_dim);
 
-        // construct point set to contain input
-        if (args.structured)
-            input = new mfa::PointSet<T>(dom_dim, pt_dim, tot_ndom_pts, ndom_pts);
-        else
-            input = new mfa::PointSet<T>(dom_dim, pt_dim, tot_ndom_pts);
-
-        // rest is hard-coded for 1d
+        input = new mfa::PointSet<T>(dom_dim, mdims, tot_ndom_pts, ndom_pts);
 
         size_t n = 0;
         for (size_t i = 0; i < tot_ndom_pts; i++)
@@ -482,31 +479,19 @@ struct Block : public BlockBase<T, U>
         }
 
         // find extents
-        for (size_t i = 0; i < (size_t)input->domain.rows(); i++)
-        {
-            if (i == 0 || input->domain(i, 0) < bounds_mins(0))
-                bounds_mins(0) = input->domain(i, 0);
-            if (i == 0 || input->domain(i, 1) < bounds_mins(1))
-                bounds_mins(1) = input->domain(i, 1);
-            if (i == 0 || input->domain(i, 0) > bounds_maxs(0))
-                bounds_maxs(0) = input->domain(i, 0);
-            if (i == 0 || input->domain(i, 1) > bounds_maxs(1))
-                bounds_maxs(1) = input->domain(i, 1);
-        }
-        core_mins.resize(dom_dim);
-        core_maxs.resize(dom_dim);
-        for (int i = 0; i < dom_dim; i++)
-        {
-            core_mins(i) = bounds_mins(i);
-            core_maxs(i) = bounds_maxs(i);
-        }
+        bounds_maxs = input->domain.colwise().maxCoeff();
+        bounds_mins = input->domain.colwise().minCoeff();
+        core_mins = bounds_mins.head(gdim);
+        core_maxs = bounds_maxs.head(gdim);
 
         // create the model
-        input->init_params();
-        this->mfa = new mfa::MFA<T>(dom_dim);
+        input->set_domain_params();
+        this->setup_MFA(cp, mfa_info);
 
-        // debug
-        cerr << "domain extent:\n min\n" << bounds_mins << "\nmax\n" << bounds_maxs << endl;
+        // extents
+        cerr << "gid = " << cp.gid() << endl;
+        mfa::print_bbox(core_mins, core_maxs, "Core");
+        mfa::print_bbox(bounds_mins, bounds_maxs, "Bounds");
     }
 
     // read a floating point 3d vector dataset and take one 1-d curve out of the middle of it
