@@ -29,7 +29,7 @@ class Mfa(CMakePackage):
                 '-DCMAKE_CXX_COMPILER=%s' % self.spec['mpich'].mpicxx,
                 self.define_from_variant('mfa_build_examples', 'examples'),
                 self.define_from_variant('mfa_build_tests', 'tests'),
-                '-Dmfa_thread=%s' % self.spec.variants['thread']]
+                '-Dmfa_thread=%s' % self.spec.variants['thread'].value]
 
         # thread = str(self.spec.variants['thread'].value)
         print('MFA build type: ', self.spec.variants['build_type'].value)
