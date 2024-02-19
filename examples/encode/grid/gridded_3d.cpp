@@ -100,7 +100,7 @@ int main(int argc, char** argv)
     // set global domain bounds and decompose
     Bounds<real_t> dom_bounds(dom_dim);
     set_dom_bounds(dom_bounds, input);
-    
+
     Decomposer<real_t> decomposer(dom_dim, dom_bounds, tot_blocks);
     decomposer.decompose(world.rank(),
                          assigner,
@@ -128,7 +128,7 @@ int main(int argc, char** argv)
     if (datasets_3d.count(input) == 1)
     {
         master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-        { 
+        {
             b->read_3d_vector_data(cp, mfa_info, d_args);
         });
     }

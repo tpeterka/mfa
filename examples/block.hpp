@@ -585,7 +585,7 @@ struct Block : public BlockBase<T, U>
         }
 
         input->set_domain_params();
-        
+
         // initialize MFA models (geometry, vars, etc)
         this->setup_MFA(cp, mfa_info);
 

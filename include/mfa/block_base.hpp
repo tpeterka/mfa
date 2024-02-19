@@ -191,7 +191,7 @@ struct BlockBase
                 bounds_maxs(i) = core.max[i] + ghost_amount;
             else
                 bounds_maxs(i) = domain.max[i];
-                
+
             core_mins(i) = core.min[i];
             core_maxs(i) = core.max[i];
         }

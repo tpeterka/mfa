@@ -413,7 +413,7 @@ namespace mfa
 
 
         SliceIterator*          slice_iter_;        // the slice iterator containing the start of this curve
-        
+
         private:
         size_t                  dom_dim_;           // number of domain dimensions in original volume
         size_t                  cur_iter_;          // current flattened iteration number

@@ -409,9 +409,9 @@ namespace mfa
 
                 VolIterator span_iter(sub_npts, sub_starts, all_npts);
 
-#if 0            // debug: turn off TBB for reproducible results, fast but not reproducible when TBB is on
+// #if 0            // debug: turn off TBB for reproducible results, fast but not reproducible when TBB is on
 
-// #ifdef MFA_TBB      // TBB version
+#ifdef MFA_TBB      // TBB version
 
                 // thread-local objects
                 // ref: https://www.threadingbuildingblocks.org/tutorial-intel-tbb-thread-local-storage
@@ -492,7 +492,7 @@ namespace mfa
                                 decoder.VolPt_saved_basis(param_ijk, param, cpt, decode_info, t);
                             else
                                 decoder.VolPt(param, cpt, decode_info, t);
-#endif
+#endif      // MFA_MESH
 
                             // error between decoded point and input point
                             size_t dom_idx = dom_iter.ijk_idx(param_ijk);
@@ -627,7 +627,7 @@ namespace mfa
                             decoder.VolPt_saved_basis(param_ijk, param, cpt, decode_info, t);
                         else
                             decoder.VolPt(param, cpt, decode_info, t);
-#endif
+#endif      // MFA_TMESH
 
                         // error between decoded point and input point
                         size_t dom_idx = dom_iter.ijk_idx(param_ijk);
