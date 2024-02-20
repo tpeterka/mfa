@@ -155,7 +155,7 @@ int main(int argc, char** argv)
     fprintf(stderr, "\nStarting encoding...\n");
     double encode_time = MPI_Wtime();
     master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-    { 
+    {
         if (!adaptive)
             b->fixed_encode_block(cp, mfa_info);
         else
@@ -168,7 +168,7 @@ int main(int argc, char** argv)
     double decode_time = MPI_Wtime();
     fprintf(stderr, "\nFinal decoding and computing max. error...\n");
     master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-    { 
+    {
         b->range_error(cp, true, false);
     });
     decode_time = MPI_Wtime() - decode_time;
