@@ -174,7 +174,7 @@ namespace mfa
                     cerr << "ERROR: Dimension mismatch in Param constructor.\nExiting." << endl;
                     exit(1);
                 }
-                
+
                 param_grid.resize(dom_dim);
                 for (int i = 0; i < dom_dim; i++)
                 {
