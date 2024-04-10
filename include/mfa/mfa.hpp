@@ -701,6 +701,7 @@ namespace mfa
             if (verbose)
                 cout << "MFA: Starting Ray Encoding" << endl;
                 
+            vars[i]->set_param_idxs(input);
             RayEncoder<T> encoder(*vars[i], input, true);
             encoder.encode();
         }

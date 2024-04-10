@@ -55,6 +55,8 @@ int main(int argc, char** argv)
     int    rand_seed    = -1;                   // seed to use for random data generation (-1 == no randomization)
     float  regularization = 0;                  // smoothing parameter for models with non-uniform input density (0 == no smoothing)
     int    reg1and2     = 0;                       // flag for regularizer: 0 --> regularize only 2nd derivs. 1 --> regularize 1st and 2nd
+    int    seed         = 0;                    // seed for random number generation. seed == 0 --> Choose seed randomly
+    bool   disc_int     = false;                // Compute integrals using a discrete algorithm (trapezoid rule)
     bool   help         = false;                // show help
 
     const int verbose = 1;
@@ -76,6 +78,8 @@ int main(int argc, char** argv)
     ops >> opts::Option('y', "rand_seed",   rand_seed,  " seed for random point generation (-1 = no randomization, default)");
     ops >> opts::Option('b', "regularization", regularization, "smoothing parameter for models with non-uniform input density");
     ops >> opts::Option('k', "reg1and2",    reg1and2,   " regularize both 1st and 2nd derivatives (if =1) or just 2nd (if =0)");
+    ops >> opts::Option('c', "disc_int",    disc_int,   " compute integrals using a discrete algorithm (trapezoid rule)");
+    ops >> opts::Option('s', "seed",        seed,       " seed for random number generation. seed == 0 --> Choose seed randomly");
 
     int n_alpha = 120;
     int n_rho = 120;
@@ -168,26 +172,66 @@ int main(int argc, char** argv)
     encode_time = MPI_Wtime() - encode_time;
     fprintf(stderr, "\n\nFixed encoding done.\n\n");
 
+    double ray_encode_time = 0;
+    double ray_decode_time = 0;
+    double trap_decode_time = 0;
     double decode_time = MPI_Wtime();
-    master.foreach([&](RayBlock<real_t>* b, const diy::Master::ProxyWithLink& cp)
-    { 
-        // Compute errors for original MFA
-        // b->range_error(cp, true, false);
-        // b->print_block(cp, true);
+    if (!disc_int)
+    {
+        master.foreach([&](RayBlock<real_t>* b, const diy::Master::ProxyWithLink& cp)
+        { 
+            // Compute errors for original MFA
+            // b->range_error(cp, true, false);
+            // b->print_block(cp, true);
 
-        b->create_ray_model(cp, mfa_info, d_args, n_samples, n_rho, n_alpha, v_samples, v_rho, v_alpha);
-        b->compute_random_ints(cp, d_args, num_ints);
-        b->compute_sinogram(cp);
-    });
+            ray_encode_time = MPI_Wtime();
+            b->create_ray_model(cp, mfa_info, d_args, n_samples, n_rho, n_alpha, v_samples, v_rho, v_alpha);
+            ray_encode_time = MPI_Wtime() - ray_encode_time;
+
+            ray_decode_time = MPI_Wtime();
+            b->compute_random_ints(cp, d_args, num_ints, disc_int, seed);
+            ray_decode_time = MPI_Wtime() - ray_decode_time;
+
+            // b->compute_sinogram(cp);
+        });
+    }
+    else
+    {
+        master.foreach([&](RayBlock<real_t>* b, const diy::Master::ProxyWithLink& cp)
+        { 
+            b->trap_samples = n_samples;    // Set number of sample points to be used in trapezoid rule
+
+            trap_decode_time = MPI_Wtime();
+            b->compute_random_ints(cp, d_args, num_ints, disc_int, seed);
+            trap_decode_time = MPI_Wtime() - trap_decode_time;
+        });
+    }
     decode_time = MPI_Wtime() - decode_time;
 
     // print results
     fprintf(stderr, "\n------- Final block results --------\n");
     master.foreach([&](RayBlock<real_t>* b, const diy::Master::ProxyWithLink& cp)
             { b->print_ray_model(cp); });
-    fprintf(stderr, "encoding time         = %.3lf s.\n", encode_time);
-    fprintf(stderr, "decoding time         = %.3lf s.\n", decode_time);
+    fprintf(stderr, "first encoding time         = %.3lf s.\n", encode_time);
+    fprintf(stderr, "ray encoding time           = %.3lf s.\n", ray_encode_time);
+    fprintf(stderr, "ray decoding time           = %.3lf s.\n", ray_decode_time);
+    fprintf(stderr, "discrete decoding time      = %.3lf s.\n", trap_decode_time);
+    fprintf(stderr, "total decoding time         = %.3lf s.\n", decode_time);
     fprintf(stderr, "-------------------------------------\n\n");
+
+    // // Hack to move pointsets for write_vtk program
+    // master.foreach([&](RayBlock<real_t>* b, const diy::Master::ProxyWithLink& cp)
+    // {
+    //     delete b->input;
+    //     delete b->approx;
+    //     delete b->errs;
+    //     b->input = b->ray_input;
+    //     b->approx = b->ray_approx;
+    //     b->errs = b->ray_errs;
+    //     b->ray_input = nullptr;
+    //     b->ray_approx = nullptr;
+    //     b->ray_errs = nullptr;
+    // });
 
     // save the results in diy format
     diy::io::write_blocks("approx.mfa", world, master);

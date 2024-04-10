@@ -53,6 +53,7 @@ namespace mfa
         int linf_rel_max_var;
 
         PrintStyle style;
+        bool initialized{false};
 
     public:
         Stats(bool log_ = false) :
@@ -87,6 +88,8 @@ namespace mfa
                 VectorX<T> mins = input->domain.middleCols(dim_min, var_dim).colwise().minCoeff();
                 extent(k) = (maxs - mins).norm();
             }
+
+            initialized = true;
         }
 
         T l1(int k) const { return sum[k] / npts[k]; }

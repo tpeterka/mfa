@@ -83,6 +83,8 @@ struct RayBlock : public Block<T>
 
     T r_lim{0};
 
+    int trap_samples{0};        // number of samples used in trapezoid rule (used for testing)
+
     void get_box_intersections(
         T alpha,
         T rho,
@@ -399,22 +401,12 @@ struct RayBlock : public Block<T>
         ray_mfa->FixedEncodeGeom(*ray_input, false);
         ray_mfa->RayEncode(0, *ray_input);
 
-        // --------- Decode and compute errors --------- //
-        fmt::print("Computing errors on uniform grid...\n");
-        mfa::PointSet<T>* unused = nullptr;
-        VectorXi grid_size{{n_samples, n_rho, n_alpha}};
-        analytical_ray_error_field(cp, ray_mfa, grid_size, "sine", args, unused, ray_approx, ray_errs);
-        fmt::print("done.\n");
-
-        // delete input;
-        // delete approx;
-        // delete errs;
-        // input = ray_input;
-        // approx = ray_approx;
-        // errs = ray_errs;
-        // ray_input = nullptr;
-        // ray_approx = nullptr;
-        // ray_errs = nullptr;
+        // // --------- Decode and compute errors --------- //
+        // fmt::print("Computing errors on uniform grid...\n");
+        // mfa::PointSet<T>* unused = nullptr;
+        // VectorXi grid_size{{n_samples, n_rho, n_alpha}};
+        // analytical_ray_error_field(cp, ray_mfa, grid_size, "sine", args, unused, ray_approx, ray_errs);
+        // fmt::print("done.\n");
     }
 
     // Convert (t, rho, theta) to (x, y) and return true if the x,y coords are in the original domain
@@ -584,6 +576,48 @@ struct RayBlock : public Block<T>
         return make_pair(alpha, rho);
     }
 
+    T trapezoid(
+        const   diy::Master::ProxyWithLink& cp,
+        const   DomainArgs& d_args,
+        const   VectorX<T>& a,
+        const   VectorX<T>& b) const
+    {
+        mfa::Decoder<T> decoder(mfa->var(0), 0);     // nb. turning off verbose output when decoding single points
+
+        T result = 0;
+        VectorX<T> au(2);
+        VectorX<T> bu(2);
+        VectorX<T> du(2);
+        VectorX<T> param1(2);
+        VectorX<T> param2(2);
+        VectorX<T> outpt1(2);
+        VectorX<T> outpt2(2);
+
+        // Compute parametrization of start and end points
+        for (int j = 0; j < dom_dim; j++)
+        {
+            au(j) = (a(j) - d_args.min[j]) / (d_args.max[j] - d_args.min[j]);
+            bu(j) = (b(j) - d_args.min[j]) / (d_args.max[j] - d_args.min[j]);
+            du(j) = (bu(j) - au(j)) / (trap_samples-1);
+        }
+
+        T step = (b-a).norm() / (trap_samples-1);
+
+        // Sample base MFA and compute trapezoid rule approximation of integral
+        for (int i = 0; i < trap_samples - 1; i++)
+        {
+            param1 = au + i*du;
+            param2 = au + (i+1)*du;
+
+            decoder.VolPt(param1, outpt1, mfa->var(0).tmesh.tensor_prods[0]);
+            decoder.VolPt(param2, outpt2, mfa->var(0).tmesh.tensor_prods[0]);
+            
+            result += (outpt1(0) + outpt2(0))/2 * step;
+        }
+
+        return result;
+    }
+
     T integrate_ray(
         const   diy::Master::ProxyWithLink& cp,
         const   VectorX<T>& a,
@@ -728,16 +762,22 @@ struct RayBlock : public Block<T>
     void compute_random_ints(
         const   diy::Master::ProxyWithLink& cp,
         const   DomainArgs& d_args,
-        int     num_ints)
+        int     num_ints,
+        bool    discrete = false,
+        int     seed = 0)
     {
         // Error summary
         mfa::Stats<T> stats(true);
         stats.init(input);
 
         // Randomness generation
-        std::uniform_real_distribution<double> dist(0,1); 
         std::random_device dev;
-        std::mt19937 rng(dev());
+        if (seed == 0)
+        {
+            seed = dev();
+        }
+        std::mt19937 rng(seed);
+        std::uniform_real_distribution<double> dist(0,1); 
 
         real_t result = 0, actual = 0, len = 0, err = 0;
         VectorX<real_t> start_pt(dom_dim), end_pt(dom_dim);
@@ -750,7 +790,14 @@ struct RayBlock : public Block<T>
             }
             len = (end_pt - start_pt).norm();
 
-            result = integrate_ray(cp, start_pt, end_pt) / len;   // normalize by segment length
+            if (!discrete)  // Use RayModel integration
+            {
+                result = integrate_ray(cp, start_pt, end_pt) / len;   // normalize by segment length
+            }
+            else    // Use trapezoid rule
+            {
+                result = trapezoid(cp, d_args, start_pt, end_pt) / len; 
+            }
             actual = sintest(start_pt, end_pt) / len;                        // normalize by segment length
             err = abs(result - actual);
             stats.update(0, err);
@@ -807,12 +854,18 @@ struct RayBlock : public Block<T>
             fmt::print("-------------------- var {} --------------------\n", i);
             print_knots_ctrl(ray_mfa->var(i));
             fmt::print("------------------------------------------------\n");
-            ray_stats.print_var(i);
-            fmt::print("------------------------------------------------\n");
+            if (ray_stats.initialized)
+            {
+                ray_stats.print_var(i);
+                fmt::print("------------------------------------------------\n");
+            }
         }
         
-        ray_stats.print_max();
-        fmt::print("------------------------------------------------\n");
+        if (ray_stats.initialized)
+        {
+            ray_stats.print_max();
+            fmt::print("------------------------------------------------\n");
+        }
         fmt::print("# input points        = {}\n", ray_input->npts);
         fmt::print("compression ratio     = {:.2f}\n", compute_ray_compression());
     }
