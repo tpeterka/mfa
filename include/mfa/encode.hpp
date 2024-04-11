@@ -241,7 +241,7 @@ namespace mfa
                 for (size_t j = 0; j < ncurves; j++)
                 {
                     // print progress
-                    if (verbose)
+                    if (verbose >= 2)
                     {
                         if (j > 0 && j > 100 && j % (ncurves / 100) == 0)
                             fprintf(stderr, "\r dimension %ld: %.0f %% encoded (%ld out of %ld curves)",
@@ -259,7 +259,7 @@ namespace mfa
                 cs *= ntemp_ctrl(k);
 
                 // print progress
-                if (verbose)
+                if (verbose >= 2)
                     fprintf(stderr, "\r dimension %ld: 100%% encoded                                       \n", k);
             }  // domain dimensions
 
@@ -280,7 +280,7 @@ namespace mfa
                             SparseMatrixX<T>&       Ct)
         {
             clock_t fill_time = clock();
-            if (verbose)
+            if (verbose >= 2)
                 cerr << "Adjusting matrix for regularization..." << endl;
 
             const int num_points = N.rows();
@@ -405,7 +405,7 @@ namespace mfa
             write_reg_strength(t, deriv, reg_strengths, anchor_pts);            
 
             fill_time = clock() - fill_time;
-            if (verbose)
+            if (verbose >= 2)
                 cerr << "Regularization Total Time: " << setprecision(3) << ((double)fill_time)/CLOCKS_PER_SEC << "s." << endl;
         }
 
@@ -741,7 +741,7 @@ namespace mfa
             }
 
             fill_time = clock() - fill_time;
-            if (verbose)
+            if (verbose >= 2)
                 cerr << "Matrix Construction Time: " << setprecision(3) << ((double)fill_time)/CLOCKS_PER_SEC << "s." << endl;
         }
 
@@ -841,15 +841,18 @@ namespace mfa
                             bool        reg1and2=false,
                             bool        weighted=true)                   // solve for and use weights 
         {
-            if (verbose)
+            if (verbose >= 2)
             {
-                cerr << "EncodeTensor (Unified Dimensions)" << endl;
-                cerr << "  => NOTE: Only valid for single tensor product!" << endl;
+                fmt::print("Encoding dimensions all at once\n");
+            }
+            if (verbose >= 3)
+            {
+                fmt::print("  => NOTE: Unified encode only valid for single tensor product!\n");
             }
             
             if (weighted)  // We want weighted encoding to be default behavior eventually. However, not currently implemented.
             {
-                cerr << "Warning: NURBS (nonuniform weights) are not implemented for unified-dimensional encoding!" << endl;
+                fmt::print("ERROR: NURBS (nonuniform weights) are not implemented for unified-dimensional encoding!\n");
                 exit(1);
             }
 
@@ -881,16 +884,14 @@ namespace mfa
 
             if (regularization > 0)
             {
-                if (verbose)
-                    cerr << "Applying model regularization with strength r=" << regularization << endl;
+                if (verbose >= 2)
+                    fmt::print("Applying model regularization with strength r={}\n", regularization);
 
                 int num_reg_conds = t.nctrl_pts.prod();
                 SparseMatrixX<T> Ct(Nt.rows(), num_reg_conds * dom_dim);
                 SparseMatrixX<T> Ct1(Nt.rows(), num_reg_conds * dom_dim);
                 SparseMatrixX<T> Ct2(Nt.rows(), num_reg_conds * dom_dim);
 
-
-                
                 if (reg1and2)   // constrain 1st and 2nd derivs
                 {
                     ConsMatrix(t_idx, 1, regularization, N, Nt, input.mins(), input.maxs(), Ct1);
@@ -936,21 +937,21 @@ namespace mfa
 
             solver.compute(Mat);
             if (solver.info() != Eigen::Success) 
-                cerr << "WARNING: Matrix decomposition failed in EncodeTensor" << endl;
-            else if (verbose)
-                cerr << "Sparse matrix factorization successful" << endl;
+                fmt::print("WARNING: Matrix decomposition failed in EncodeTensor\n");
+            else if (verbose >= 2)
+                fmt::print("Sparse matrix factorization successful\n");
 
             t.ctrl_pts = solver.solve(R); 
             if (solver.info() != Eigen::Success)
             {
-                cerr << "WARNING: Least-squares solve failed in EncodeTensor" << endl;
-                cerr << "  error: " << solver.error() << " (tolerance = " << solver.tolerance() << ")" << endl;
-                cerr << "  # iterations: " << solver.iterations() << " (max iterations = " << solver.maxIterations() << ")" << endl;
+                fmt::print("WARNING: Least-squares solve failed in EncodeTensor\n");
+                fmt::print("  error: {} (tolerance = {})\n", solver.error(), solver.tolerance());
+                fmt::print("  # iterations: {} (max iterations = {})\n", solver.iterations(), solver.maxIterations());
             }
-            else if (verbose)
+            else if (verbose >= 2)
             {
-                cerr << "Sparse matrix solve successful" << endl;
-                cerr << "  # iterations: " << solver.iterations() << endl;
+                fmt::print("Sparse matrix solve successful\n");
+                fmt::print("  # iterations: {}\n", solver.iterations());
             }
         }
 
@@ -1962,12 +1963,19 @@ namespace mfa
             vector<vector<T>> new_knots;                               // new knots in each dim.
 
             // debug
-            fmt::print(stderr, "Using OrigAdaptiveEncode() w/ 1-d curve knot splitting\n");
+            if (verbose >= 2)
+            {
+                fmt::print(stderr, "Using OrigAdaptiveEncode() w/ 1-d curve knot splitting\n");
+            }
+            if (verbose >= 3)
+            {
 #ifdef MFA_CHECK_ALL_CURVES
-            fmt::print(stderr, "Checking all curves (slower but more accurate)\n");
+                fmt::print(stderr, "Checking all curves (slower but more accurate)\n");
 #else
-            fmt::print(stderr, "Checking a sampling of curves (faster but less accurate)\n");
+                fmt::print(stderr, "Checking a sampling of curves (faster but less accurate)\n");
 #endif
+            }
+
 
             // TODO: use weights for knot insertion
             // for now, weights are only used for final full encode
@@ -1977,13 +1985,13 @@ namespace mfa
             {
                 if (max_rounds > 0 && iter >= max_rounds)               // optional cap on number of rounds
                 {
-                    if (verbose)
+                    if (verbose >= 2)
                         fprintf(stderr, "\nDone; max iterations reached.\n\n");
                     break;
                 }
 
-                if (verbose)
-                    fprintf(stderr, "\n--- Iteration %d ---\n", iter);
+                if (verbose >= 2)
+                    fprintf(stderr, "--- Iteration %d ---\n", iter);
 
                 // low-d w/ splitting spans in the middle
                 bool done = OrigNewKnots_curve(new_knots, err_limit, extents, iter);
@@ -1991,7 +1999,7 @@ namespace mfa
                 // no new knots to be added
                 if (done)
                 {
-                    if (verbose)
+                    if (verbose >= 2)
                         fprintf(stderr, "\nDone; no new knots added.\n\n");
                     break;
                 }
@@ -2007,7 +2015,7 @@ namespace mfa
                     }
                 if (done)
                 {
-                    if (verbose)
+                    if (verbose >= 2)
                         fprintf(stderr, "\nDone; control points would outnumber input points.\n\n");
                     break;
                 }
@@ -2017,8 +2025,8 @@ namespace mfa
             }
 
             // final full encoding needed after last knot insertion above
-            if (verbose)
-                fprintf(stderr, "Encoding in full %ldD\n", mfa_data.p.size());
+            if (verbose >= 2)
+                fmt::print("Performing final encoding\n");
             TensorProduct<T>&t = mfa_data.tmesh.tensor_prods[0];        // fixed encode assumes the tmesh has only one tensor product
             Encode(t.nctrl_pts, t.ctrl_pts, t.weights, weighted);
         }

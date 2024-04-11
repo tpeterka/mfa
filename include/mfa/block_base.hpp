@@ -52,6 +52,11 @@ struct BlockBase
     VectorX<T>          bounds_maxs;            // local domain maximum corner
     VectorX<T>          core_mins;              // local domain minimum corner w/o ghost
     VectorX<T>          core_maxs;              // local domain maximum corner w/o ghost
+    int                 verbose{2};             // block verbosity 
+                                                //   0 = warnings and errors only
+                                                //   1 = basic info
+                                                //   2 = detailed info
+                                                //   3 = debug
 
     // data sets
     mfa::PointSet<T>    *input;                 // input data
@@ -204,27 +209,27 @@ struct BlockBase
     }
 
     void setup_MFA(
-            const       diy::Master::ProxyWithLink& cp,
-            mfa::MFAInfo     info)   // nb. pass by value so as to not overwrite info.verbose elsewhere
+            const diy::Master::ProxyWithLink& cp,
+            mfa::MFAInfo                      info)   // nb. pass by value so as to not overwrite info.verbose elsewhere
     {
         if (mfa != nullptr)
         {
-            cerr << "\nWarning: Overwriting existing MFA in setup_MFA!\n" << endl;
+            fmt::print("\nWarning: Overwriting existing MFA in setup_MFA!\n\n");
             delete mfa;
         }
 
         // Silence verbose output if not in block 0
-        info.verbose = info.verbose && cp.gid() == 0; 
+        info.verbose = cp.gid() == 0 ? info.verbose : 0; 
 
         // Construct MFA from MFAInfo
-        this->mfa = new mfa::MFA<T>(info);
+        mfa = new mfa::MFA<T>(info);
     }
 
 
     // fixed number of control points encode block
     void fixed_encode_block(
-            const       diy::Master::ProxyWithLink& cp,
-            mfa::MFAInfo&  info)
+            const diy::Master::ProxyWithLink& cp,
+            mfa::MFAInfo&                     info)
     {
         mfa->FixedEncode(*input, info.regularization, info.reg1and2, info.weighted);
     }
@@ -234,7 +239,7 @@ struct BlockBase
             const diy::Master::ProxyWithLink& cp,
             T                                 err_limit,
             int                               max_rounds,
-            mfa::MFAInfo&                          info)
+            mfa::MFAInfo&                     info)
     {
         if (!input->is_structured())
         {

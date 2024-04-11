@@ -12,6 +12,9 @@ target_link_libraries       (integrate                  ${libraries})
 add_executable              (decode_speed               decode_speed.cpp)
 target_link_libraries       (decode_speed               ${libraries})
 
+add_executable              (encode_speed               encode_speed.cpp)
+target_link_libraries       (encode_speed               ${libraries})
+
 add_executable              (line_integral              line_integral.cpp)
 target_link_libraries       (line_integral              ${libraries})
 

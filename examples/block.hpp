@@ -55,6 +55,7 @@ struct Block : public BlockBase<T, U>
     using Base::approx;
     using Base::errs;
     using Base::mfa;
+    using Base::verbose;
 
     static
         void* create()              { return mfa::create<Block>(); }
@@ -104,12 +105,12 @@ struct Block : public BlockBase<T, U>
     void generate_analytical_data(
             const diy::Master::ProxyWithLink&   cp,
             string&                             fun,
-            mfa::MFAInfo&                            mfa_info,
+            mfa::MFAInfo&                       mfa_info,
             DomainArgs&                         args)
     {
         if (args.rand_seed >= 0)  // random point cloud
         {
-            if (cp.gid() == 0)
+            if (cp.gid() == 0 && verbose >= 1)
                 cout << "Generating data on random point cloud for function: " << fun << endl;
 
             if (args.structured)
@@ -132,7 +133,7 @@ struct Block : public BlockBase<T, U>
         }
         else    // structured grid of points
         {
-            if (cp.gid() == 0)
+            if (cp.gid() == 0 && verbose >= 1)
                 cout << "Generating data on structured grid for function: " << fun << endl;
             
             generate_rectilinear_analytical_data(cp, fun, mfa_info, args);
@@ -144,7 +145,7 @@ struct Block : public BlockBase<T, U>
     void generate_random_analytical_data(
             const diy::Master::ProxyWithLink&   cp,
             string&                             fun,
-            mfa::MFAInfo&                            mfa_info,
+            mfa::MFAInfo&                       mfa_info,
             DomainArgs&                         args,
             unsigned int                        seed)
     {
@@ -204,10 +205,10 @@ struct Block : public BlockBase<T, U>
         double keep_frac = 1;
         if (sparsity < 0 || sparsity > 1)
         {
-            cerr << "Invalid value of void density" << endl;
+            cerr << "ERROR: Invalid value of void density" << endl;
             exit(1);
         }
-        if (cp.gid() == 0)
+        if (cp.gid() == 0 && verbose >= 2)
             cout << "Void Sparsity: " << (sparsity)*100 << "%" << endl;
 
         const size_t nvoids = 4;
@@ -268,9 +269,13 @@ struct Block : public BlockBase<T, U>
         this->setup_MFA(cp, mfa_info);
 
         // extents
-        cerr << "gid = " << cp.gid() << endl;
-        mfa::print_bbox(core_mins, core_maxs, "Core");
-        mfa::print_bbox(bounds_mins, bounds_maxs, "Bounds");
+        if (verbose >= 2)
+        {
+            fmt::print("gid = {}\n", cp.gid());
+            mfa::print_bbox(core_mins, core_maxs, "Core");
+            mfa::print_bbox(bounds_mins, bounds_maxs, "Bounds");
+        }
+
     }
 
     // Creates a synthetic dataset on a rectilinear grid of points
@@ -437,9 +442,13 @@ struct Block : public BlockBase<T, U>
         this->setup_MFA(cp, mfa_info);
 
         // extents
-        cerr << "gid = " << cp.gid() << endl;
-        mfa::print_bbox(core_mins, core_maxs, "Core");
-        mfa::print_bbox(bounds_mins, bounds_maxs, "Bounds");
+        if (verbose >= 2)
+        {
+            fmt::print("gid = {}\n", cp.gid());
+            mfa::print_bbox(core_mins, core_maxs, "Core");
+            mfa::print_bbox(bounds_mins, bounds_maxs, "Bounds");
+        }
+
     }
 
     // input a given data buffer into the correct format for encoding
@@ -489,9 +498,13 @@ struct Block : public BlockBase<T, U>
         this->setup_MFA(cp, mfa_info);
 
         // extents
-        cerr << "gid = " << cp.gid() << endl;
-        mfa::print_bbox(core_mins, core_maxs, "Core");
-        mfa::print_bbox(bounds_mins, bounds_maxs, "Bounds");
+        if (verbose >= 2)
+        {
+            fmt::print("gid = {}\n", cp.gid());
+            mfa::print_bbox(core_mins, core_maxs, "Core");
+            mfa::print_bbox(bounds_mins, bounds_maxs, "Bounds");
+        }
+
     }
 
     // read a floating point 3d vector dataset and take one 1-d curve out of the middle of it
