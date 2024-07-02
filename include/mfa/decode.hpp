@@ -374,7 +374,7 @@ namespace mfa
                         VolPt_saved_basis(ijk, param, cpt, thread_decode_info.local(), mfa_data.tmesh.tensor_prods[0]);
 
                         // debug
-                        if (pt_it.idx() == 0 && verbose)
+                        if (pt_it.idx() == 0 && verbose >= 2)
                             fmt::print(stderr, " ->DecodePointSet: Using VolPt_saved_basis w/ TBB over points\n");
                     }
                     else
@@ -382,13 +382,13 @@ namespace mfa
                         VolPt(param, cpt, thread_decode_info.local(), mfa_data.tmesh.tensor_prods[0], derivs);
 
                         // debug
-                        if (pt_it.idx() == 0 && verbose)
+                        if (pt_it.idx() == 0 && verbose >= 2)
                             fmt::print(stderr, " ->DecodePointSet: Using VolPt w/ TBB over points\n");
                     }
 
 #else           // tmesh version
 
-                    if (pt_it.idx() == 0 && verbose)
+                    if (pt_it.idx() == 0 && verbose >= 2)
                         fmt::print(stderr, " ->DecodePointSet: Using VolPt_tmesh w/ TBB over points\n");
                     VolPt_tmesh(param, cpt, false);
 
@@ -397,9 +397,9 @@ namespace mfa
                     ps.domain.block(pt_it.idx(), min_dim, 1, mfa_data.dim()) = cpt.transpose();
                 }
             }, ap);
-            if (verbose)
+            if (verbose >= 2)
             {
-                fmt::print(stderr, "100 % decoded\n");
+                fmt::print(stderr, "   ->100 % decoded\n");
 //                 decode_times.print();
             }
 
@@ -420,7 +420,7 @@ namespace mfa
                 //
                 //      This was added because DecodeGrid has a KOKKOS implementation. Need to find another
                 //      place to put this, or simply extend the KOKKOS to arbitrary structured grids
-                if (verbose)
+                if (verbose >= 2)
                     fmt::print(stderr, " ->DecodePointSet: Using DecodeGrid w/o TBB (serial or kokkos)\n");
                 DecodeGrid(ps.domain, min_dim, max_dim, min_params, max_params, ps.g.ndom_pts );
             }
@@ -443,24 +443,24 @@ namespace mfa
 #ifndef MFA_TMESH   // original version for one tensor product
                     if (saved_basis && ps.is_structured())
                     {
-                        if (pt_it.idx() == 0 && verbose)
-                            fprintf(stderr, " ->DecodePointSet: Using VolPt_saved_basis w/o TBB (serial or kokkos)\n");
+                        if (pt_it.idx() == 0 && verbose >= 2)
+                            fmt::print(stderr, " ->DecodePointSet: Using VolPt_saved_basis w/o TBB (serial or kokkos)\n");
 
                         pt_it.ijk(ijk);
                         VolPt_saved_basis(ijk, param, cpt, decode_info, mfa_data.tmesh.tensor_prods[0]);
                     }
                     else
                     {
-                        if (pt_it.idx() == 0 && verbose)
-                            fprintf(stderr, " ->DecodePointSet: Using VolPt w/o TBB (serial or kokkos)\n");
+                        if (pt_it.idx() == 0 && verbose >= 2)
+                            fmt::print(stderr, " ->DecodePointSet: Using VolPt w/o TBB (serial or kokkos)\n");
 
                         VolPt(param, cpt, decode_info, mfa_data.tmesh.tensor_prods[0], derivs);
                     }
 
                     
 #else   // tmesh version
-                    if (pt_it.idx() == 0 && verbose)
-                        fprintf(stderr, " ->DecodePointSet: Using VolPt_tmesh w/o TBB (serial or kokkos)\n");
+                    if (pt_it.idx() == 0 && verbose >= 2)
+                        fmt::print(stderr, " ->DecodePointSet: Using VolPt_tmesh w/o TBB (serial or kokkos)\n");
 
                     VolPt_tmesh(param, cpt);
 #endif  // end tmesh
@@ -468,10 +468,15 @@ namespace mfa
                     ps.domain.block(pt_it.idx(), min_dim, 1, mfa_data.dim()) = cpt.transpose();
 
                     // print progress
-                    if (verbose)
+                    if (verbose >= 2)
                         if (pt_it.idx() > 0 && ps.npts >= 100 && pt_it.idx() % (ps.npts / 100) == 0)
-                            fprintf(stderr, "\r%.0f %% decoded", (T)pt_it.idx() / (T)(ps.npts) * 100);
+                            fmt::print(stderr, "\r   ->{:.0} % decoded", (T)pt_it.idx() / (T)(ps.npts) * 100);
                }
+                if (verbose >= 2)
+                {
+                    fmt::print(stderr, "\r   ->100 % decoded\n");
+    //                 decode_times.print();
+                }
             }
 #endif  // end serial/kokkos version
         }
