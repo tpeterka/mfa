@@ -229,6 +229,42 @@ struct MFAInfo
         MFAInfo(dom_dim_, verbose_, geom_model_info_, vector<ModelInfo>(1,var_model_info_))
     { }
 
+    // Constructor from STL containers
+    MFAInfo(int dom_dim_, int verbose_,
+            vector<int> model_dims,
+            int geom_degree,
+            int geom_nctrl,
+            int vars_degree,
+            vector<int> vars_nctrl) :
+        dom_dim(dom_dim_),
+        verbose(verbose_)
+    {
+        int nvars       = model_dims.size() - 1;
+        int geom_dim    = model_dims[0];
+
+        // If only one value for vars_nctrl was parsed, assume it applies to all dims
+        if (vars_nctrl.size() == 1 & dom_dim > 1)
+        {
+            vars_nctrl = vector<int>(dom_dim, vars_nctrl[0]);
+        }
+
+        // Minimal necessary control points
+        if (geom_nctrl == -1) geom_nctrl = geom_degree + 1;
+        for (int i = 0; i < vars_nctrl.size(); i++)
+        {
+            if (vars_nctrl[i] == -1) vars_nctrl[i] = vars_degree + 1;
+        }
+
+        ModelInfo geom_info(dom_dim, geom_dim, geom_degree, geom_nctrl);
+        addGeomInfo(geom_info);
+
+        for (int k = 0; k < nvars; k++)
+        {
+            ModelInfo var_info(dom_dim, model_dims[k+1], vars_degree, vars_nctrl);
+            addVarInfo(var_info);
+        }
+    }
+
     int nvars() const {return var_model_infos.size();}
 
     int geom_dim() const
