@@ -1983,6 +1983,89 @@ exit(1);
             out_pt /= denom;
         }
 
+    public:
+        // Writes collocation matrix N to a file in triplet format (row-major order)
+        void dumpCollocationMatrix(PointSet<T>& ps, string name = "")
+        {
+            if (ps.is_structured())
+            {
+                fmt::printf("dumpCollocationMatrix is not yet supported for structured PointSets.\n");
+                return;
+            }
+
+            std::ofstream os;
+            string filename = "N_decode" + name + ".txt";
+            os.open(filename);
+
+            const TensorProduct<T>& t = mfa_data.tmesh.tensor_prods[0];
+
+            // control point strides
+            VectorXi cps = VectorXi::Ones(dom_dim); 
+            for (int k = 1; k < dom_dim; k++)
+            {
+                cps(k) = cps(k-1) * t.nctrl_pts(k-1);
+            }
+
+            // Prep for evaluating basis functions
+            VectorXi            q = mfa_data.p + VectorXi::Ones(dom_dim);  // order of basis funs
+            BasisFunInfo<T>     bfi(q);                                             // buffers for basis fun evaluation
+            vector<vector<T>>  lB(dom_dim);                               // stores value of basis funs
+            for (int k = 0; k < dom_dim; k++)
+            {
+                lB[k].resize(q[k]);
+            }
+
+            VectorXi ctrl_starts(dom_dim);                                 // subvolume ctrl pt indices in each dimension
+            VectorXi spans(dom_dim);                                       // current knot span in each dimension
+
+            // Iterate thru every point in subvolume given by tensor
+            VectorX<T> param(ps.dom_dim);
+            for (auto ps_it = ps.begin(), ps_end = ps.end(); ps_it != ps_end; ++ps_it)
+            {
+                ps_it.params(param);
+
+                // Compute basis functions at point
+                for (auto k = 0; k < dom_dim; k++)
+                {
+                    int p   = mfa_data.p(k);
+                    T   u   = param(k);
+
+                    spans[k] = mfa_data.tmesh.FindSpan(k, u);
+
+                    ctrl_starts(k) = spans[k] - p - t.knot_mins[k];
+
+                    mfa_data.FastBasisFuns(k, u, spans[k], lB[k], bfi);
+                }
+
+                // Compute matrix value and insert into Nt
+                VolIterator ctrl_vol_iter(q);
+                while (!ctrl_vol_iter.done())
+                {
+                    int ctrl_idx_full = 0;
+                    T coeff_prod = 1;
+                    for (int k = 0; k < dom_dim; k++)
+                    {
+                        int idx = ctrl_vol_iter.idx_dim(k);
+                        ctrl_idx_full += (idx + ctrl_starts(k)) * cps(k);
+                        coeff_prod *= lB[k][idx];
+                    }
+
+                    if (coeff_prod != 0)
+                    {
+                        // Rows correspond to data, columns to control points
+                        int row = ps_it.idx();
+                        int col = ctrl_idx_full;
+                        fmt::print(os, "{} {} {}\n", row, col, coeff_prod);
+                    }
+
+                    ctrl_vol_iter.incr_iter();
+                }
+            }
+
+            os.close();
+
+            return;
+        }
     };
 }
 

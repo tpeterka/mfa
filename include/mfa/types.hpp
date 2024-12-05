@@ -5,6 +5,7 @@
 #include    <Eigen/Sparse>
 #include    <Eigen/OrderingMethods>
 #include    <diy/thirdparty/fmt/format.h>
+#include    <diy/thirdparty/fmt/printf.h>
 
 // set input and ouptut precision here, float or double
 #if 0
