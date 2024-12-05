@@ -12,8 +12,6 @@
 #ifndef _MFA_LOGGING_HPP
 #define _MFA_LOGGING_HPP
 
-#include <string>
-#include <iostream>
 #include <mfa/types.hpp>
 
 namespace mfa

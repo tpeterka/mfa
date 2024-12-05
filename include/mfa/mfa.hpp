@@ -1196,6 +1196,18 @@ namespace mfa
 
             return pinnedKnots;
         }
+
+        void dumpCollocationMatrixEncode(int i, PointSet<T>* ps)
+        {
+            Encoder<T> encoder(*vars[i], *ps, verbose);
+            encoder.dumpCollocationMatrix();
+        }
+
+        void dumpCollocationMatrixDecode(int i, PointSet<T>* ps)
+        {
+            Decoder<T> decoder(*vars[i], verbose);
+            decoder.dumpCollocationMatrix(*ps);
+        }
     };      // class MFA
 }       // namespace mfa
 

@@ -1984,14 +1984,20 @@ exit(1);
         // Writes collocation matrix N to a file in triplet format (row-major order)
         void dumpCollocationMatrix(PointSet<T>& ps, string name = "")
         {
+            string filename = "N_decode" + name + ".txt";
+
+            if (verbose >= 2)
+            {
+                fmt::print(" * Decoder: Dumping collocation matrix to {}\n", filename);
+            }
+
             if (ps.is_structured())
             {
-                fmt::printf("dumpCollocationMatrix is not yet supported for structured PointSets.\n");
+                fmt::print("dumpCollocationMatrix is not yet supported for structured PointSets.\n");
                 return;
             }
 
             std::ofstream os;
-            string filename = "N_decode" + name + ".txt";
             os.open(filename);
 
             const TensorProduct<T>& t = mfa_data.tmesh.tensor_prods[0];

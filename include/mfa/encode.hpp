@@ -3845,14 +3845,20 @@ namespace mfa
         // Writes collocation matrix N to a file in triplet format (row-major order)
         void dumpCollocationMatrix(string name = "")
         {
+            string filename = "N_encode" + name + ".txt";
+
+            if (verbose >= 2)
+            {
+                fmt::print(" * Encoder: Dumping collocation matrix to {}\n", filename);
+            }
+
             if (input.is_structured())
             {
-                fmt::printf("dumpCollocationMatrix is not yet supported for structured input.\n");
+                fmt::print("dumpCollocationMatrix is not yet supported for structured input.\n");
                 return;
             }
 
             std::ofstream os;
-            string filename = "N_encode" + name + ".txt";
             os.open(filename);
 
             TensorProduct<T>& t = mfa_data.tmesh.tensor_prods[0];
