@@ -14,17 +14,12 @@
 #include    <mfa/decode.hpp>
 #include    <mfa/new_knots.hpp>
 
-#include    <vector>
 #include    <set>
-#include    <iostream>
 #include    <algorithm>
 
 // temporary utilities for testing
 #include    <ctime>
 #include    <chrono>
-#include    <iomanip>
-#include    <fstream>
-#include    <sstream>
 #include    <mpi.h>     // for MPI_Wtime() only
 
 #ifndef      MFA_NO_WEIGHTS

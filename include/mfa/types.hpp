@@ -1,9 +1,22 @@
 #ifndef _MFA_TYPES
 #define _MFA_TYPES
 
+// Basic includes so we don't need to add them elsewhere
+#include    <string>
+#include    <vector>
+#include    <list>
+#include    <cstdio>
+#include    <iostream>
+#include    <fstream>
+#include    <iomanip>
+#include    <sstream>
+
+// Eigen
 #include    <Eigen/Dense>
 #include    <Eigen/Sparse>
 #include    <Eigen/OrderingMethods>
+
+// fmt
 #include    <diy/thirdparty/fmt/format.h>
 #include    <diy/thirdparty/fmt/printf.h>
 
@@ -17,13 +30,14 @@ typedef double                         real_t;
 using namespace std;
 
 // Eigen typedefs
-using MatrixXf = Eigen::MatrixXf;
-using VectorXf = Eigen::VectorXf;
-using MatrixXd = Eigen::MatrixXd;
-using VectorXd = Eigen::VectorXd;
-using VectorXi = Eigen::VectorXi;
-using ArrayXXf = Eigen::ArrayXXf;
-using ArrayXXd = Eigen::ArrayXXd;
+using Eigen::MatrixXf;
+using Eigen::MatrixXd;
+using Eigen::MatrixXi;
+using Eigen::VectorXf;
+using Eigen::VectorXd;
+using Eigen::VectorXi;
+using Eigen::ArrayXXf;
+using Eigen::ArrayXXd;
 using Eigen::ArrayXi;
 
 // NB, storing matrices and arrays in col-major order

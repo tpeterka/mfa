@@ -12,9 +12,6 @@
 #ifndef _MFA_ITER_HPP
 #define _MFA_ITER_HPP
 
-#include <vector>
-#include <iostream>
-#include <cstdio>
 #include <mfa/types.hpp>
 
 namespace mfa

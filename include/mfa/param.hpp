@@ -10,18 +10,10 @@
 
 #include    <mfa/utilities/util.hpp>
 
-#include    <Eigen/Dense>
-#include    <vector>
-#include    <list>
-#include    <iostream>
-#include    <iomanip>
-
 #ifdef MFA_TBB
 #include    <tbb/tbb.h>
 using namespace tbb;
 #endif
-
-using namespace std;
 
 namespace mfa
 {

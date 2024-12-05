@@ -8,6 +8,8 @@
 #ifndef _TMESH_HPP
 #define _TMESH_HPP
 
+#include <mfa/types.hpp>
+
 using KnotIdx   = size_t;
 using TensorIdx = size_t;
 using ParamIdx  = size_t;

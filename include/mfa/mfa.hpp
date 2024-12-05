@@ -42,13 +42,6 @@
 // for debugging, can turn off constraints in local solve
 // #define MFA_NO_CONSTRAINTS
 
-#include    <Eigen/Dense>
-#include    <Eigen/Sparse>
-#include    <Eigen/OrderingMethods>
-#include    <vector>
-#include    <list>
-#include    <iostream>
-
 #ifdef MFA_KOKKOS
 #include <Kokkos_Core.hpp>
 #endif
@@ -59,11 +52,10 @@
 using namespace tbb;
 #endif
 
+#include    <mfa/types.hpp>
 #include    <mfa/utilities/util.hpp>
-#include    <mfa/param.hpp>
-#include    <mfa/pointset.hpp>
-#include    <mfa/tmesh.hpp>
 #include    <mfa/mfa_data.hpp>
+#include    <mfa/pointset.hpp>
 #include    <mfa/decode.hpp>
 #include    <mfa/encode.hpp>
 #include    <mfa/ray_encode.hpp>

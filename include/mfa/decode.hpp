@@ -9,11 +9,8 @@
 #ifndef _DECODE_HPP
 #define _DECODE_HPP
 
-#include    <mfa/mfa_data.hpp>
 #include    <mfa/mfa.hpp>
 #include    <mpi.h>     // for MPI_Wtime() only
-
-typedef Eigen::MatrixXi MatrixXi;
 
 #ifdef MFA_KOKKOS
     using ExecutionSpace = Kokkos::DefaultExecutionSpace;

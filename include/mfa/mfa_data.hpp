@@ -8,6 +8,8 @@
 #ifndef _DATA_MODEL_HPP
 #define _DATA_MODEL_HPP
 
+#include    <mfa/tmesh.hpp>
+
 // --- data model ---
 //
 // using Eigen dense MartrixX to represent vectors of n-dimensional points
