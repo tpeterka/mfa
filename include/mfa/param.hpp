@@ -398,6 +398,10 @@ namespace mfa
             check_param_bounds();
         }
 
+        // NOTE: In the case where geom_dim > dom_dim, this function parametrizes the
+        //       data based on the first dom_dim coordinates. For example, for a 2D
+        //       plane embedded in 3D, this will parametrize the dataset based on the
+        //       x and y coordinates, regardless of the orientation of the plane.
         void make_domain_params_unstructured(
                   int           geom_dim,
             const MatrixX<T>&   domain,
@@ -409,17 +413,17 @@ namespace mfa
             VectorX<T> mins;
             VectorX<T> maxs;
 
-            // dom mins/maxs should either be empty or of size dom_dim
-            if (dom_mins.size() > 0 && dom_mins.size() != dom_dim)
+            // dom mins/maxs should either be empty or of size geom_dim
+            if (dom_mins.size() > 0 && dom_mins.size() != geom_dim)
                 cerr << "Warning: Invalid size of dom_mins in Param construction" << endl;
-            if (dom_maxs.size() > 0 && dom_maxs.size() != dom_dim)
+            if (dom_maxs.size() > 0 && dom_maxs.size() != geom_dim)
                 cerr << "Warning: Invalid size of dom_maxs in Param construction" << endl;
 
             // Set min/max extents in each domain dimension
-            if (dom_mins.size() != dom_dim || dom_maxs.size() != dom_dim)
+            if (dom_mins.size() != geom_dim || dom_maxs.size() != geom_dim)
             {
-                mins = domain.leftCols(dom_dim).colwise().minCoeff();
-                maxs = domain.leftCols(dom_dim).colwise().maxCoeff();
+                mins = domain.leftCols(geom_dim).colwise().minCoeff();
+                maxs = domain.leftCols(geom_dim).colwise().maxCoeff();
             }
             else    // Use domain bounds provided by block (input data need not extend to bounds)
             {
