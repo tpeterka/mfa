@@ -16,6 +16,11 @@
 
 namespace mfa
 {
+    struct MFAError: public std::runtime_error
+    {
+        using std::runtime_error::runtime_error;
+    };
+
     // Not designed for efficiency, should not be used in large loops
     template<typename T>
     string print_vec(const vector<T>& vec)
