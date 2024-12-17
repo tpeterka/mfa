@@ -32,16 +32,24 @@ namespace mfa
     }
 
     // Not designed for efficiency, should not be used in large loops
-    template<typename T>
-    string print_vec(const VectorX<T>& vec)
+    template<typename Derived>
+    string print_vec(const Eigen::DenseBase<Derived>& vec)
     {
+        bool transpose = false;
+        if (vec.cols() == 1) transpose = true;
+
         stringstream ss;
         ss << "{";
-        for (int i = 0; i < vec.size() - 1; i++)
+        
+        if (transpose)
         {
-            ss << vec(i) << " ";
+            ss << vec.transpose();
         }
-        ss << vec.tail(1) << "}";
+        else
+        {
+            ss << vec;
+        }
+        ss << "}";
 
         return ss.str();
     }

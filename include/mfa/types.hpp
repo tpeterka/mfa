@@ -10,6 +10,7 @@
 #include    <fstream>
 #include    <iomanip>
 #include    <sstream>
+#include    <random>
 
 // Eigen
 #include    <Eigen/Dense>
@@ -41,6 +42,10 @@ using Eigen::ArrayXXd;
 using Eigen::ArrayXi;
 
 // NB, storing matrices and arrays in col-major order
+template <typename T>
+using Vector3 = Eigen::Matrix<T, 3, 1>;
+template <typename T>
+using Vector2 = Eigen::Matrix<T, 2, 1>;
 template <typename T>
 using MatrixX = Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic, Eigen::ColMajor>;
 template <typename T>
