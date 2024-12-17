@@ -129,7 +129,7 @@ namespace mfa
         // for the min/max coordinates in each domain dimension.
         void set_bounds(const VectorX<T>& mins_, const VectorX<T>& maxs_)
         {
-            if ( (mins_.size() != dom_dim) || (mins_.size() != maxs_.size()) )
+            if ( (mins_.size() != geom_dim()) || (mins_.size() != maxs_.size()) )
             {
                 cerr << "ERROR: Invalid bounds passed to PointSet" << endl;
                 cerr << "  mins: " << mins_.transpose() << endl;
@@ -146,8 +146,8 @@ namespace mfa
         {
             if (!bounds_cached)
             {
-                dom_mins = domain.leftCols(dom_dim).colwise().minCoeff();
-                dom_maxs = domain.leftCols(dom_dim).colwise().maxCoeff();
+                dom_mins = domain.leftCols(geom_dim()).colwise().minCoeff();
+                dom_maxs = domain.leftCols(geom_dim()).colwise().maxCoeff();
                 bounds_cached = true;
             }
 
@@ -158,8 +158,8 @@ namespace mfa
         {
             if (!bounds_cached)
             {
-                dom_mins = domain.leftCols(dom_dim).colwise().minCoeff();
-                dom_maxs = domain.leftCols(dom_dim).colwise().maxCoeff();
+                dom_mins = domain.leftCols(geom_dim()).colwise().minCoeff();
+                dom_maxs = domain.leftCols(geom_dim()).colwise().maxCoeff();
                 bounds_cached = true;
             }
 
