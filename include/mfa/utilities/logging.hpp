@@ -59,6 +59,28 @@ namespace mfa
         return ss.str();
     }
 
+        // Not designed for efficiency, should not be used in large loops
+    template<typename Derived>
+    string print_mat(const Eigen::DenseBase<Derived>& mat)
+    {
+        stringstream ss;
+        ss << "{ ";
+        for (int i = 0; i < mat.rows(); i++)
+        {
+            if (i > 0) 
+                ss << "  ";             // add additional padding
+
+            ss << print_vec(mat.row(i));           // row text
+
+            if (i == mat.rows() - 1)    // Final brace for last row
+                ss << " }";
+
+            ss << "\n";
+        }
+
+        return ss.str();
+    }
+
     template<typename T>
     void print_bbox(const VectorX<T>& mins, const VectorX<T>& maxs, string label="Bounding")
     {

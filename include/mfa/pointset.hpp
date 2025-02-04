@@ -49,6 +49,7 @@ namespace mfa
         mutable VectorX<T>      dom_mins;
         mutable VectorX<T>      dom_maxs;
         mutable bool            bounds_cached{false};   // Flag if existing domain bounds are valid
+        Bbox<T>                 bbox;
 
         // Optional grid data
         GridInfo    g;
@@ -222,6 +223,12 @@ namespace mfa
             set_bounds(domain_mins, domain_maxs);
 
             params->make_domain_params(geom_dim(), domain, domain_mins, domain_maxs);
+        }
+
+        // Define parametrizations directly from a bounding box which may be rotated (not axis-aligned)
+        void set_domain_params(const Bbox<T>& box)
+        {
+            params->make_domain_params(box, domain);
         }
 
         // Create Param object that is equispaced over all parameter space

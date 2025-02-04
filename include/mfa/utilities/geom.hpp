@@ -8,6 +8,7 @@
 #ifndef _MFA_GEOM_HPP
 #define _MFA_GEOM_HPP
 
+#include <mfa/pointset.hpp>
 #include <mfa/utilities/util.hpp>
 #include <mfa/types.hpp>
 
@@ -16,6 +17,221 @@
 
 namespace mfa
 {
+    template <typename T>
+    struct PointSet;
+
+    template <typename T>
+    struct Bbox
+    {
+        int         geomDim;
+        VectorX<T>  mins;       // Minimal corner of bounding box
+        VectorX<T>  maxs;       // Maximal corner of bounding box
+        VectorX<T>  rotatedMins;
+        VectorX<T>  rotatedMaxs;
+        MatrixX<T>  basis;      // Orthonormal vectors defining the reference frame (each column is a vector)
+    
+    public:
+        // Default constructor
+        Bbox() :
+            geomDim(0)
+        { }
+
+        // Construct with minimum corner, maximum corner, and orientation
+        Bbox(const VectorX<T>& mins_, const VectorX<T>& maxs_, const MatrixX<T>& basis_) :
+            geomDim(mins_.size()),
+            mins(mins_),
+            maxs(maxs_),
+            basis(basis_)
+        { 
+            makeOrthonormal();
+
+            // compute quantities in rotation space
+            toRotatedSpace(mins, rotatedMins);
+            toRotatedSpace(maxs, rotatedMaxs);
+        }
+
+        // Construct with orientation and a dataset
+        // Computes the min/max corners from the data
+        Bbox(const MatrixX<T>& basis_, const PointSet<T>& ps) :
+            geomDim(basis_.rows()),
+            basis(basis_)
+        {
+            makeOrthonormal();                  // ensure orthonormal system
+            setBounds(ps);                      // compute min/max corners from data
+        }
+
+        // Convenience constructor if basis is specified from a list of vectors
+        Bbox(std::initializer_list<VectorX<T>> basis_, const PointSet<T>& ps) :
+            geomDim(basis_.size())
+        {
+            if (geomDim != basis_.begin()->size()) throw MFAError("Bbox dimension mismatch\n");
+
+            basis.resize(geomDim, geomDim);
+
+            int i = 0;
+            for (auto vec : basis_)
+            {
+                basis.col(i) = vec;
+                i++;
+            }
+            makeOrthonormal();                  // ensure orthonormal system
+            setBounds(ps);                      // compute min/max corners from data
+        }
+
+        // Rescales a set of basis vectors to be orthonormal
+        // If rescaling takes place, an info message is printed
+        // If vectors are not orthogonal to begin with, a runtime error is raised
+        void makeOrthonormal()
+        {
+            bool adjusted = false;
+
+            for (int i = 0; i < basis.cols(); i++)
+            {
+                if (!Eigen::internal::isApprox(basis.col(i).squaredNorm(), 1.0))
+                {
+                    basis.col(i).normalize();
+                    adjusted = true;
+                }
+
+                for (int j = 0; j < i; j++)
+                {
+                    if (!basis.col(i).isOrthogonal(basis.col(j))) 
+                    {
+                        throw MFAError("Bbox basis cannot be made orthonormal by rescaling");
+                    }
+                }
+            }
+
+            if (adjusted)
+            {
+                fmt::print("MFA (info): Bbox basis adjusted by makeOrthonormal\n");
+            }
+        }
+
+        // Solves basis*w = x for w
+        // 
+        // Note: We assume the basis is orthonormal. So, basis^-1 = basis^T
+        //
+        // Templated with Eigen-speak to allow matrices/submatrices to be passed in addition to vectors.
+        // w is passed as a const-reference, and then the constness is cast away. If we pass
+        // w by non-const reference, and then use an expression as input like:
+        //   changeBasis(x, a+b)
+        // then the compiler will have to evaluate the addition expression into a temporary, which is
+        // not always ideal. (Again, this evaluation to a temporary only occurs when passing by non-const
+        // reference). See https://eigen.tuxfamily.org/dox/TopicFunctionTakingEigenTypes.html
+        template <typename Derived, typename OtherDerived>
+        void toRotatedSpace(const Eigen::MatrixBase<Derived>& x, const Eigen::MatrixBase<OtherDerived>& w_) const
+        {
+            if (!basis.isUnitary()) throw MFAError("Bbox basis is not unitary, cannot change basis");
+
+            Eigen::MatrixBase<OtherDerived>& w = const_cast<Eigen::MatrixBase<OtherDerived>&>(w_);
+            w.resize(x.rows(), x.cols());
+            w = basis.transpose()*(x.colwise() - mins);
+        }
+
+        // Given a set of rotated coordinates, convert them to Cartesian (xyz) coordinates.
+        // This is the inverse of changeBasis()
+        template <typename Derived, typename OtherDerived>
+        void toCartesian(const Eigen::MatrixBase<Derived>& w, const Eigen::MatrixBase<OtherDerived>& x_) const
+        {
+            if (!basis.isUnitary()) throw MFAError("Bbox basis is not unitary, cannot change basis");
+
+            Eigen::MatrixBase<OtherDerived>& x = const_cast<Eigen::MatrixBase<OtherDerived>&>(x_);
+            x.resize(w.rows(), w.cols());
+            x = (basis*w).colwise() + mins;
+        }
+
+        void setBounds(const PointSet<T>& ps)
+        {
+            VectorX<T> anchor = ps.domain.row(0).head(geomDim);
+            MatrixX<T> skewCoords = basis.transpose() * (ps.domain.leftCols(geomDim).transpose().colwise() - anchor);
+            // toRotatedSpace(ps.domain.leftCols(geomDim).transpose(), skewCoords);
+
+            // Compute corners in rotated coordinates
+            rotatedMins = skewCoords.rowwise().minCoeff();
+            rotatedMaxs = skewCoords.rowwise().maxCoeff();
+
+            // Compute corners in Cartesian coordinates
+            mins = basis*rotatedMins + anchor;
+            maxs = basis*rotatedMaxs + anchor;
+            // toCartesian(rotatedMins, mins);
+            // mins += anchor;
+            // toCartesian(rotatedMaxs, maxs);
+            // maxs += anchor;
+
+            // Finally, shift the 'anchor' reference point to be mins. So in rotation space,
+            // 'mins' corresponds to 0.
+            rotatedMaxs -= rotatedMins;
+            rotatedMins = VectorX<T>::Zero(geomDim);
+        }
+
+        // Tests if the bounding box contains every point in a PointSet
+        bool doesContain(const PointSet<T>& ps, int verbose = 0, T prec = 1e-12) const
+        {
+            MatrixX<T> skewCoords;
+            toRotatedSpace(ps.domain.leftCols(geomDim).transpose(), skewCoords);
+
+            VectorX<T> dataMins = skewCoords.rowwise().minCoeff();
+            VectorX<T> dataMaxs = skewCoords.rowwise().maxCoeff();
+
+            // Component wise comparison between dataMins/Maxs and box mins/maxs
+            // If any component test fails, there is some point not contained in the box
+            if ((dataMins.array() < rotatedMins.array() - prec).any() || 
+                    (dataMaxs.array() > rotatedMaxs.array() + prec).any())
+            {
+                if (verbose >= 2)
+                {
+                    fmt::print("Bbox::doesContain failed: \n");
+                    fmt::print("  rotated data mins: {}\n", dataMins.transpose());
+                    fmt::print("  rotated box mins:  {}\n", rotatedMins.transpose());
+                    fmt::print("  rotated data maxs: {}\n", dataMaxs.transpose());
+                    fmt::print("  rotated box maxs:  {}\n", rotatedMaxs.transpose());
+                }
+
+                return false;
+            }
+
+            return true;
+        }
+
+        Bbox<T> merge(const Bbox<T>& other) const
+        {
+            if (!basis.isApprox(other.basis))
+            {
+                throw MFAError("Bounding box orientations do not match in Bbox::merge");
+            }
+
+            // We have to take care here because *this and other have the same orientation
+            // but different minimum corners. (n.b. the min corner defines the translation
+            // inside the affine map). So, we start by mapping other's corners
+            // into *this's rotation space.
+            VectorX<T> otherRotatedMins, otherRotatedMaxs;
+            toRotatedSpace(other.mins, otherRotatedMins);
+            toRotatedSpace(other.maxs, otherRotatedMaxs);
+
+            // Next, compute the superset in rotated space
+            VectorX<T> mergeRotatedMins = rotatedMins.cwiseMin(otherRotatedMins);
+            VectorX<T> mergeRotatedMaxs = rotatedMaxs.cwiseMax(otherRotatedMaxs);
+
+            // Finally, transform these new points back into Cartesian coords
+            // taking care to use *this's mapping, like before
+            VectorX<T> mergeMins, mergeMaxs;
+            toCartesian(mergeRotatedMins, mergeMins);
+            toCartesian(mergeRotatedMaxs, mergeMaxs);
+
+            // Construct the new bounding box
+            return Bbox<T>(mergeMins, mergeMaxs, basis); ///TEST THIS CODE
+        }
+
+        void print(string title = "box") const
+        {
+            fmt::print("{} minimum corner: {}\n", title, print_vec(mins));
+            fmt::print("{} maximum corner: {}\n", title, print_vec(maxs));
+            fmt::print("{} orientation:\n", title);
+            fmt::print("{}\n", print_mat(basis));
+        }
+    };
+
     // In the case where the data define a 2D surface embedded in 3D space, it is common
     // that the normal to this surface is not aligned with a cardinal direction (x, y, or z).
     // However, an easy way to parametrize data on a "loosely" planar surface is to project

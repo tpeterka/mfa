@@ -8,6 +8,7 @@
 #ifndef _PARAMS_HPP
 #define _PARAMS_HPP
 
+#include    <mfa/utilities/geom.hpp>
 #include    <mfa/utilities/util.hpp>
 
 #ifdef MFA_TBB
@@ -17,6 +18,79 @@ using namespace tbb;
 
 namespace mfa
 {
+    // Parametrization function representing a rotated rectangle. Essentially, this is a
+    // affine transformation with no shearing.
+    template <typename T>
+    struct BoxMap
+    {
+        const int dom_dim;
+        const int geom_dim;
+        const Bbox<T> box;
+        const VectorX<T> extentsRecip;
+
+        BoxMap(int dom_dim_, const Bbox<T>& box_) :
+            dom_dim(dom_dim_),
+            geom_dim(box_.geomDim),
+            box(box_),
+            extentsRecip(box_.rotatedMaxs.cwiseInverse())
+        { }
+
+        void transform(const VectorX<T>& x, VectorX<T>& u)
+        {
+            box.toRotatedSpace(x, u);
+            u = extentsRecip.asDiagonal() * u;
+        }
+
+        // Each column is a different point
+        // Thus 'x' is geomDim x nPoints
+        void transformSet(const MatrixX<T>& x, MatrixX<T>& u)
+        {
+            box.toRotatedSpace(x, u);
+            u = extentsRecip.asDiagonal() * u;
+        }
+
+        // Can probably make this method unnecessary if we write this in terms of MatrixBase templates.
+        // We only use this function because calling transformSet(x.transpose(), u.transpose()) would
+        // require deep copies to be made
+        void transformTransposeSet(const MatrixX<T>& x, MatrixX<T>& u)
+        {
+            // create transpose views for solving
+            Eigen::Transpose<MatrixX<T>> uT = u.transpose();
+            Eigen::Transpose<const MatrixX<T>> xT = x.transpose();
+
+            box.toRotatedSpace(xT, uT);
+            uT = extentsRecip.asDiagonal() * uT;
+        }
+    };
+
+    // Parameterization where a coordinates are mapped to a skew box and then the final dimension is ignored
+    template <typename T>
+    struct BoxMapProjected : public BoxMap<T>
+    {
+        using Base = BoxMap<T>;
+        using Base::dom_dim;
+        using Base::geom_dim;
+        using Base::box;
+        using Base::extentsRecip;
+        
+        const int flattenDim;
+
+        BoxMapProjected(int dom_dim_, const Bbox<T>& box_, int flattenDim_) :
+            BoxMap<T>(dom_dim_, box_),
+            flattenDim(flattenDim_)
+        { 
+            if (box.geomDim != dom_dim + 1) throw MFAError("Incorrect dimensions in BoxMapProjected");
+        }
+
+        // Convenience overload for squashing the final dimension
+        BoxMapProjected(int dom_dim_, const Bbox<T>& box_) :
+            BoxMapProjected(dom_dim_, box_, dom_dim_)
+        { }
+
+
+    };
+
+    // Parametrization function representing a general affine transformation
     template <typename T>
     struct AffMap
     {
@@ -362,6 +436,71 @@ namespace mfa
             {
                 make_domain_params_unstructured(geom_dim, domain, dom_mins, dom_maxs);
             }
+        }
+
+        void make_domain_params(const Bbox<T>& box, const MatrixX<T>& domain)
+        {
+            if (structured)
+            {
+                make_domain_params_structured(box, domain);
+            }
+            else
+            {
+                make_domain_params_unstructured(box, domain);
+            }
+        }
+
+        void make_domain_params_structured(const Bbox<T>& box, const MatrixX<T>& domain)
+        {
+            BoxMap<T> map(dom_dim, box);
+
+            // Helper class to manage grid indices
+            GridInfo grid;
+            grid.init(dom_dim, ndom_pts);
+
+            VectorX<T> x(box.geomDim);
+            VectorX<T> u(dom_dim);
+            VectorXi ijk(dom_dim);
+            int idx = 0;
+
+            // Loop through dimensions, computing parameters
+            //   nb. this can be made more efficient by using Eigen::Map objects (strided access to domain).
+            //       Would need to ensure that all calls to map.transform() operate on
+            //       MatrixBase (or maybe DenseBase?)
+            for (int i = 0; i < dom_dim; i++)
+            {
+                for (int j = 0; j < ndom_pts(i); j++)
+                {
+                    // Starting from grid origin, step in the ith direction
+                    ijk.setZero();
+                    ijk(i) = j;
+                    idx = grid.ijk2idx(ijk);
+
+                    // Get coordinates of point
+                    x = domain.row(idx).head(box.geomDim);
+
+                    // Compute paramters and store the ith value
+                    //   nb. this is not the absolute fastest way to do this, but
+                    //       it is unlikely to be a computational bottleneck
+                    map.transform(x, u);
+                    param_grid[i][j] = u(i);
+                }
+            }
+
+            truncateRoundoff();
+            check_param_bounds();
+        }
+
+        void make_domain_params_unstructured(const Bbox<T>& box, const MatrixX<T>& domain)
+        {
+            BoxMap<T> map(dom_dim, box);
+
+            // Resize the parameter list and fill
+            param_list.resize(domain.rows(), dom_dim);
+            map.transformTransposeSet(domain.leftCols(box.geomDim), param_list);    // warning: this could resize param_list!
+
+            truncateRoundoff();
+            check_param_bounds();
         }
 
 
