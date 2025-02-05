@@ -59,7 +59,7 @@ namespace mfa
         return ss.str();
     }
 
-        // Not designed for efficiency, should not be used in large loops
+    // Not designed for efficiency, should not be used in large loops
     template<typename Derived>
     string print_mat(const Eigen::DenseBase<Derived>& mat)
     {

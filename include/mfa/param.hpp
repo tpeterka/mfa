@@ -32,13 +32,13 @@ namespace mfa
             dom_dim(dom_dim_),
             geom_dim(box_.geomDim),
             box(box_),
-            extentsRecip(box_.rotatedMaxs.cwiseInverse())
+            extentsRecip((box_.rotatedMaxs-box_.rotatedMins).cwiseInverse())
         { }
 
         void transform(const VectorX<T>& x, VectorX<T>& u)
         {
             box.toRotatedSpace(x, u);
-            u = extentsRecip.asDiagonal() * u;
+            u = extentsRecip.asDiagonal() * (u - box.rotatedMins);
         }
 
         // Each column is a different point
@@ -46,7 +46,7 @@ namespace mfa
         void transformSet(const MatrixX<T>& x, MatrixX<T>& u)
         {
             box.toRotatedSpace(x, u);
-            u = extentsRecip.asDiagonal() * u;
+            u = extentsRecip.asDiagonal() * (u.colwise() - box.rotatedMins);
         }
 
         // Can probably make this method unnecessary if we write this in terms of MatrixBase templates.
@@ -59,7 +59,7 @@ namespace mfa
             Eigen::Transpose<const MatrixX<T>> xT = x.transpose();
 
             box.toRotatedSpace(xT, uT);
-            uT = extentsRecip.asDiagonal() * uT;
+            uT = extentsRecip.asDiagonal() * (uT.colwise() - box.rotatedMins);
         }
     };
 

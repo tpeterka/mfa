@@ -126,7 +126,7 @@ namespace mfa
 
             Eigen::MatrixBase<OtherDerived>& w = const_cast<Eigen::MatrixBase<OtherDerived>&>(w_);
             w.resize(x.rows(), x.cols());
-            w = basis.transpose()*(x.colwise() - mins);
+            w = basis.transpose()*x;
         }
 
         // Given a set of rotated coordinates, convert them to Cartesian (xyz) coordinates.
@@ -138,31 +138,22 @@ namespace mfa
 
             Eigen::MatrixBase<OtherDerived>& x = const_cast<Eigen::MatrixBase<OtherDerived>&>(x_);
             x.resize(w.rows(), w.cols());
-            x = (basis*w).colwise() + mins;
+            x = basis*w;
         }
 
         void setBounds(const PointSet<T>& ps)
         {
-            VectorX<T> anchor = ps.domain.row(0).head(geomDim);
-            MatrixX<T> skewCoords = basis.transpose() * (ps.domain.leftCols(geomDim).transpose().colwise() - anchor);
-            // toRotatedSpace(ps.domain.leftCols(geomDim).transpose(), skewCoords);
+            // Compute point locations in rotated basis
+            MatrixX<T> skewCoords;
+            toRotatedSpace(ps.domain.leftCols(geomDim).transpose(), skewCoords);
 
             // Compute corners in rotated coordinates
             rotatedMins = skewCoords.rowwise().minCoeff();
             rotatedMaxs = skewCoords.rowwise().maxCoeff();
 
-            // Compute corners in Cartesian coordinates
-            mins = basis*rotatedMins + anchor;
-            maxs = basis*rotatedMaxs + anchor;
-            // toCartesian(rotatedMins, mins);
-            // mins += anchor;
-            // toCartesian(rotatedMaxs, maxs);
-            // maxs += anchor;
-
-            // Finally, shift the 'anchor' reference point to be mins. So in rotation space,
-            // 'mins' corresponds to 0.
-            rotatedMaxs -= rotatedMins;
-            rotatedMins = VectorX<T>::Zero(geomDim);
+            // Transform corners back to Cartesian coordinates
+            toCartesian(rotatedMins, mins);
+            toCartesian(rotatedMaxs, maxs);
         }
 
         // Tests if the bounding box contains every point in a PointSet
@@ -220,7 +211,7 @@ namespace mfa
             toCartesian(mergeRotatedMaxs, mergeMaxs);
 
             // Construct the new bounding box
-            return Bbox<T>(mergeMins, mergeMaxs, basis); ///TEST THIS CODE
+            return Bbox<T>(mergeMins, mergeMaxs, basis);
         }
 
         void print(string title = "box") const
