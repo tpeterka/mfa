@@ -289,21 +289,29 @@ namespace mfa
         // vector to be the azimuthal direction. Then choose the second vector
         // accordingly.
         T nx = n(0), ny = n(1), nz = n(2);
-        T phi = asin(nz);
-        // T theta = acos(nx/cos(phi)); // do not use theta, see below
+        if (nz < 0.95)  // n is not close to being z-aligned, compute the azimuthal direction
+        {
+            T phi = asin(nz);
 
-        // In the spherical coordinate system,
-        // n = [cos(theta)*cos(phi), sin(theta)*cos(phi), sin(phi)]
-        // a = [-1*cos(theta)*sin(phi), -1*sin(theta)*sin(phi), cos(phi)]
-        //   = [-1*(nx/cos(phi))*sin(phi), -1*(ny/cos(phi))*sin(phi), cos(phi)]
-        //   = [-1*nx*tan(phi), -1*ny*tan(phi), cos(phi)]
-        //
-        // NOTE: We intentionally do NOT use arccos() in the definition of vector a, because
-        //       the range of arccos() is [0, pi], but we need to consider angles in the full
-        //       circle [0, 2pi]
-        a << -1*nx*tan(phi), -1*ny*tan(phi), cos(phi); 
-        a.normalize();
-
+            // In the spherical coordinate system,
+            // n = [cos(theta)*cos(phi), sin(theta)*cos(phi), sin(phi)]
+            // a = [-1*cos(theta)*sin(phi), -1*sin(theta)*sin(phi), cos(phi)]
+            //   = [-1*(nx/cos(phi))*sin(phi), -1*(ny/cos(phi))*sin(phi), cos(phi)]
+            //   = [-1*nx*tan(phi), -1*ny*tan(phi), cos(phi)]
+            //
+            // NOTE: We intentionally do NOT use arccos() in the definition of vector a, because
+            //       the range of arccos() is [0, pi], but we need to consider angles in the full
+            //       circle [0, 2pi]
+            a << -1*nx*tan(phi), -1*ny*tan(phi), cos(phi); 
+            a.normalize();
+        }
+        else        // Gram-Schmidt orthogonalization starting with (1,0,0)
+        {
+            a << 1, 0, 0;
+            a -= nx*n;
+            a.normalize();
+        }
+       
         b = n.cross(a);
 
         // debug
