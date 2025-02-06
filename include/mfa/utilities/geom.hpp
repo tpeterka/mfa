@@ -123,6 +123,7 @@ namespace mfa
         void toRotatedSpace(const Eigen::MatrixBase<Derived>& x, const Eigen::MatrixBase<OtherDerived>& w_) const
         {
             if (!basis.isUnitary()) throw MFAError("Bbox basis is not unitary, cannot change basis");
+            if (basis.rows() != x.rows()) throw MFAError("Incompatible matrix dimensions in Bbox::toRotatedSpace");
 
             Eigen::MatrixBase<OtherDerived>& w = const_cast<Eigen::MatrixBase<OtherDerived>&>(w_);
             w.resize(x.rows(), x.cols());
@@ -135,6 +136,7 @@ namespace mfa
         void toCartesian(const Eigen::MatrixBase<Derived>& w, const Eigen::MatrixBase<OtherDerived>& x_) const
         {
             if (!basis.isUnitary()) throw MFAError("Bbox basis is not unitary, cannot change basis");
+            if (basis.cols() != w.rows()) throw MFAError("Incompatible matrix dimensions in Bbox::toRotatedSpace");
 
             Eigen::MatrixBase<OtherDerived>& x = const_cast<Eigen::MatrixBase<OtherDerived>&>(x_);
             x.resize(w.rows(), w.cols());

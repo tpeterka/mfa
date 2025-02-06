@@ -23,71 +23,111 @@ namespace mfa
     template <typename T>
     struct BoxMap
     {
-        const int dom_dim;
-        const int geom_dim;
+        const int domDim;
+        const int geomDim;
         const Bbox<T> box;
         const VectorX<T> extentsRecip;
 
-        BoxMap(int dom_dim_, const Bbox<T>& box_) :
-            dom_dim(dom_dim_),
-            geom_dim(box_.geomDim),
+        BoxMap(int domDim_, const Bbox<T>& box_) :
+            domDim(domDim_),
+            geomDim(box_.geomDim),
             box(box_),
             extentsRecip((box_.rotatedMaxs-box_.rotatedMins).cwiseInverse())
-        { }
-
-        void transform(const VectorX<T>& x, VectorX<T>& u)
         {
-            box.toRotatedSpace(x, u);
-            u = extentsRecip.asDiagonal() * (u - box.rotatedMins);
+            if (geomDim != domDim) throw MFAError("Incorrect dimensions in BoxMap");
         }
 
-        // Each column is a different point
-        // Thus 'x' is geomDim x nPoints
-        void transformSet(const MatrixX<T>& x, MatrixX<T>& u)
+        // Compute the parameterizations for a collection of points.
+        // 
+        // If transpose==false, x is a matrix where each column is the geometric coordinates of a point to be parameterized
+        //                      x is geom_dim-by-N, where N is the number of points
+        //                      u is returned as a dom_dim-by-N matrix
+        // If transpose==true, x is a matrix where each row is the geometric coordinates of a point to be parameterized
+        //                     x is N-by-geom_dim
+        //                     u is returned as an N-by-dom_dim matrix
+        template <typename Derived, typename OtherDerived>
+        void transform(const Eigen::MatrixBase<Derived>& x, const Eigen::MatrixBase<OtherDerived>& u_, bool transpose = false) const
         {
-            box.toRotatedSpace(x, u);
-            u = extentsRecip.asDiagonal() * (u.colwise() - box.rotatedMins);
-        }
+            Eigen::MatrixBase<OtherDerived>& u = const_cast<Eigen::MatrixBase<OtherDerived>&>(u_);
 
-        // Can probably make this method unnecessary if we write this in terms of MatrixBase templates.
-        // We only use this function because calling transformSet(x.transpose(), u.transpose()) would
-        // require deep copies to be made
-        void transformTransposeSet(const MatrixX<T>& x, MatrixX<T>& u)
-        {
-            // create transpose views for solving
-            Eigen::Transpose<MatrixX<T>> uT = u.transpose();
-            Eigen::Transpose<const MatrixX<T>> xT = x.transpose();
+            // create transpose views for solving (n.b. these are views, so no data movement)
+            auto uT = u.transpose();
+            auto xT = x.transpose();
 
-            box.toRotatedSpace(xT, uT);
-            uT = extentsRecip.asDiagonal() * (uT.colwise() - box.rotatedMins);
+            if (transpose)
+            {
+                box.toRotatedSpace(xT, uT);
+                uT = extentsRecip.asDiagonal() * (uT.colwise() - box.rotatedMins);
+            }
+            else
+            {
+                box.toRotatedSpace(x, u);
+                u = extentsRecip.asDiagonal() * (u.colwise() - box.rotatedMins);
+            }
         }
     };
 
-    // Parameterization where a coordinates are mapped to a skew box and then the final dimension is ignored
+    // Parameterization where coordinates are mapped to a skew box and then a dimension (usually the final dimension) is ignored
     template <typename T>
-    struct BoxMapProjected : public BoxMap<T>
+    struct BoxMapProjected
     {
-        using Base = BoxMap<T>;
-        using Base::dom_dim;
-        using Base::geom_dim;
-        using Base::box;
-        using Base::extentsRecip;
-        
+        const int domDim;
+        const int geomDim;
         const int flattenDim;
+        BoxMap<T> boxmap;
+        std::vector<int> indices;
 
-        BoxMapProjected(int dom_dim_, const Bbox<T>& box_, int flattenDim_) :
-            BoxMap<T>(dom_dim_, box_),
+        BoxMapProjected(int domDim_, const Bbox<T>& box_, int flattenDim_) :
+            domDim(domDim_),
+            geomDim(box_.geomDim),
+            boxmap(domDim_ + 1, box_),
             flattenDim(flattenDim_)
         { 
-            if (box.geomDim != dom_dim + 1) throw MFAError("Incorrect dimensions in BoxMapProjected");
+            if (geomDim != domDim + 1) throw MFAError("Incorrect dimensions in BoxMapProjected");
+
+            // indices[i] describes which dimensions to keep when flattening
+            indices.resize(domDim);
+            for (int i = 0; i < domDim; i++)
+            {
+                if (i < flattenDim) indices[i] = i;
+                if (i >= flattenDim) indices[i] = i+1;
+            }
         }
 
         // Convenience overload for squashing the final dimension
-        BoxMapProjected(int dom_dim_, const Bbox<T>& box_) :
-            BoxMapProjected(dom_dim_, box_, dom_dim_)
+        BoxMapProjected(int domDim_, const Bbox<T>& box_) :
+            BoxMapProjected(domDim_, box_, domDim_)
         { }
 
+        // Parameterize x with a box parameterization, and then delete a dimension
+        //
+        // This could be faster by only computing the desired dimensions in the first place,
+        // but it is likely not worth the speedup
+        template <typename Derived, typename OtherDerived>
+        void transform(const Eigen::MatrixBase<Derived>& x, const Eigen::MatrixBase<OtherDerived>& u_, bool transpose = false) const
+        {
+            // Temporary matrix to store parameters before removing a dimension
+            MatrixX<T> temp;
 
+            // Cast const-ness off of u_
+            Eigen::MatrixBase<OtherDerived>& u = const_cast<Eigen::MatrixBase<OtherDerived>&>(u_);
+
+            // Compute transpose views before calling boxmap.transform()
+            auto uT = u.transpose();
+            auto xT = x.transpose();
+            auto tempT = temp.transpose();
+
+            if (transpose)
+            {
+                boxmap.transform(xT, tempT, false);     // Don't do any further transpose
+                uT = tempT(indices, Eigen::all);        // Copy over a subset of columns
+            }
+            else
+            {
+                boxmap.transform(x, temp, false);       // Don't do any further transpose
+                u = temp(indices, Eigen::all);          // Copy over a subset of columns
+            }
+        }
     };
 
     // Parametrization function representing a general affine transformation
@@ -493,11 +533,11 @@ namespace mfa
 
         void make_domain_params_unstructured(const Bbox<T>& box, const MatrixX<T>& domain)
         {
-            BoxMap<T> map(dom_dim, box);
+            BoxMapProjected<T> map(dom_dim, box);
 
             // Resize the parameter list and fill
             param_list.resize(domain.rows(), dom_dim);
-            map.transformTransposeSet(domain.leftCols(box.geomDim), param_list);    // warning: this could resize param_list!
+            map.transform(domain.leftCols(box.geomDim), param_list, true);    // warning: this could resize param_list!
 
             truncateRoundoff();
             check_param_bounds();
@@ -668,6 +708,8 @@ namespace mfa
             }
             else
             {
+                if (param_list.cols() != dom_dim) throw MFAError("Incorrect column number in param_list");
+
                 for (int k = 0; k < dom_dim; k++)
                 {
                     minp = param_list.col(k).minCoeff();
