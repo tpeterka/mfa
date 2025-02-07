@@ -368,7 +368,7 @@ namespace mfa
                 }
             }
 
-            check_param_bounds();
+            checkParamBounds();
         }
 
         // precompute curve parameters for input data points using the chord-length method
@@ -447,7 +447,7 @@ namespace mfa
             }                                                    // domain dimensions
             // debug
             // print();
-            check_param_bounds();
+            checkParamBounds();
         }
 
         // Create a parametrization based on physical coordinates of the data.
@@ -465,6 +465,7 @@ namespace mfa
 
             if (structured)
             {
+                // Warn that bounds are unused when parameterizing structured data
                 if (dom_mins != VectorX<T>() || dom_maxs != VectorX<T>())
                 {
                     cerr << "Warning: dom_mins/maxs variables are unused in a structured domain parametrization." << endl;
@@ -476,8 +477,12 @@ namespace mfa
             {
                 make_domain_params_unstructured(geom_dim, domain, dom_mins, dom_maxs);
             }
+
+            truncateRoundoff();
+            checkParamBounds();
         }
 
+        // Create domain parameterization where the domain is given by `box`
         void make_domain_params(const Bbox<T>& box, const MatrixX<T>& domain)
         {
             if (structured)
@@ -488,93 +493,41 @@ namespace mfa
             {
                 make_domain_params_unstructured(box, domain);
             }
+
+            truncateRoundoff();
+            checkParamBounds();
         }
 
+        // Structured data; domain is inferred from the grid
+        void make_domain_params_structured(int geom_dim, const MatrixX<T>& domain)
+        {
+            AffMap<T> map(dom_dim, geom_dim, domain, ndom_pts);
+            make_domain_params_structured_impl(map, domain);
+        }
+
+        // Structured data; domain is defined by the given bounding box
         void make_domain_params_structured(const Bbox<T>& box, const MatrixX<T>& domain)
         {
             BoxMap<T> map(dom_dim, box);
-
-            // Helper class to manage grid indices
-            GridInfo grid;
-            grid.init(dom_dim, ndom_pts);
-
-            VectorX<T> x(box.geomDim);
-            VectorX<T> u(dom_dim);
-            VectorXi ijk(dom_dim);
-            int idx = 0;
-
-            // Loop through dimensions, computing parameters
-            //   nb. this can be made more efficient by using Eigen::Map objects (strided access to domain).
-            //       Would need to ensure that all calls to map.transform() operate on
-            //       MatrixBase (or maybe DenseBase?)
-            for (int i = 0; i < dom_dim; i++)
-            {
-                for (int j = 0; j < ndom_pts(i); j++)
-                {
-                    // Starting from grid origin, step in the ith direction
-                    ijk.setZero();
-                    ijk(i) = j;
-                    idx = grid.ijk2idx(ijk);
-
-                    // Get coordinates of point
-                    x = domain.row(idx).head(box.geomDim);
-
-                    // Compute paramters and store the ith value
-                    //   nb. this is not the absolute fastest way to do this, but
-                    //       it is unlikely to be a computational bottleneck
-                    map.transform(x, u);
-                    param_grid[i][j] = u(i);
-                }
-            }
-
-            truncateRoundoff();
-            check_param_bounds();
+            make_domain_params_structured_impl(map, domain);
         }
 
         void make_domain_params_unstructured(const Bbox<T>& box, const MatrixX<T>& domain)
         {
-            BoxMapProjected<T> map(dom_dim, box);
-
-            // Resize the parameter list and fill
-            param_list.resize(domain.rows(), dom_dim);
-            map.transform(domain.leftCols(box.geomDim), param_list, true);    // warning: this could resize param_list!
-
-            truncateRoundoff();
-            check_param_bounds();
-        }
-
-
-        // If the data is structured, we always use the grid bounds to 
-        // define the extents (so the grid can lie on a skew plane, or parallelogram
-        // for instance). See AffMap constructor.
-        void make_domain_params_structured(int geom_dim, const MatrixX<T>& domain)
-        {
-            AffMap<T> map(dom_dim, geom_dim, domain, ndom_pts);
-
-            // Helper class to manage grid indices
-            GridInfo grid;
-            grid.init(dom_dim, ndom_pts);
-
-            VectorX<T> x(geom_dim);
-            VectorX<T> u(dom_dim);
-            VectorXi ijk(dom_dim);
-            int idx = 0;
-            for (int i = 0; i < dom_dim; i++)
+            if (dom_dim == box.geomDim)
             {
-                for (int j = 0; j < ndom_pts(i); j++)
-                {
-                    ijk.setZero();
-                    ijk(i) = j;
-                    idx = grid.ijk2idx(ijk);
-                    x = domain.row(idx).head(geom_dim);
-
-                    map.transform(x, u);
-                    param_grid[i][j] = u(i);
-                }
+                BoxMap<T> map(dom_dim, box);
+                make_domain_params_unstructured_impl(map, domain);
             }
-            
-            truncateRoundoff();
-            check_param_bounds();
+            else if (dom_dim + 1 == box.geomDim)
+            {
+                BoxMapProjected<T> map(dom_dim, box);
+                make_domain_params_unstructured_impl(map, domain);
+            }
+            else
+            {
+                throw MFAError("Dimension error in make_domain_params_unstructured");
+            }
         }
 
         // NOTE: In the case where geom_dim > dom_dim, this function parametrizes the
@@ -622,12 +575,42 @@ namespace mfa
             }
             AffMap<T> map(dom_dim, geom_dim, translation, linear);
 
+            make_domain_params_unstructured_impl(map, domain);
+        }
+
+        // Implementation for structured points. P is the type of the parameterization function
+        template <typename P>
+        void make_domain_params_structured_impl(const P& map, const MatrixX<T>& domain)
+        {
+            // Helper class to manage grid indices
+            GridInfo grid;
+            grid.init(dom_dim, ndom_pts);
+
+            VectorX<T> x(map.geomDim);
+            VectorX<T> u(dom_dim);
+            VectorXi ijk(dom_dim);
+            int idx = 0;
+            for (int i = 0; i < dom_dim; i++)
+            {
+                for (int j = 0; j < ndom_pts(i); j++)
+                {
+                    ijk.setZero();
+                    ijk(i) = j;
+                    idx = grid.ijk2idx(ijk);
+                    x = domain.row(idx).head(map.geomDim);
+
+                    map.transform(x, u);
+                    param_grid[i][j] = u(i);
+                }
+            }
+        }
+
+        template <typename P>
+        void make_domain_params_unstructured_impl(const P& map, const MatrixX<T>& domain)
+        {
             // Resize the parameter list and fill
             param_list.resize(domain.rows(), dom_dim);
-            map.transformTransposeSet(domain.leftCols(geom_dim), param_list);
-
-            truncateRoundoff();
-            check_param_bounds();
+            map.transform(domain.leftCols(map.geomDim), param_list, true);    // warning: this could resize param_list!
         }
 
         // truncate floating-point roundoffs to [0,1]
@@ -677,7 +660,7 @@ namespace mfa
 
         // Checks for any parameter values outside the range [0,1].
         // If found, prints an error message and quits the program.
-        bool check_param_bounds()
+        bool checkParamBounds()
         {
             bool valid = true;
             T minp = 0, maxp = 0;
