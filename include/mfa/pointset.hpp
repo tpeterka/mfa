@@ -213,7 +213,8 @@ namespace mfa
             // n.b. A structured grid which has been rotated will still have its parameters computed correctly.
             //      dom mins/maxs are not used in the computation of structured parameters, so the parameters
             //      are computed to be the correct "rotated" grid
-            params->make_domain_params(geom_dim(), domain);
+            // params->make_domain_params(geom_dim(), domain);
+            params->makeDomainParams(geom_dim(), domain);
         }
 
         // Create Param object with a domain parametrization, with a bounding
@@ -222,13 +223,14 @@ namespace mfa
         {
             set_bounds(domain_mins, domain_maxs);
 
-            params->make_domain_params(geom_dim(), domain, domain_mins, domain_maxs);
+            // params->make_domain_params(geom_dim(), domain, domain_mins, domain_maxs);
+            params->makeDomainParams(domain_mins, domain_maxs, domain);
         }
 
         // Define parametrizations directly from a bounding box which may be rotated (not axis-aligned)
         void set_domain_params(const Bbox<T>& box)
         {
-            params->make_domain_params(box, domain);
+            params->makeDomainParams(box, domain);
         }
 
         // Create Param object that is equispaced over all parameter space

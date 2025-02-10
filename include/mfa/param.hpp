@@ -450,40 +450,62 @@ namespace mfa
             checkParamBounds();
         }
 
-        // Create a parametrization based on physical coordinates of the data.
-        // If dom_mins/maxs are passed, they define an axis-aligned bounding
-        // box with which to compute the domain parametrization. If they are
-        // not passed, we assume the bounding box is defined by the extents
-        // of the grid. 
-        // Note: the dom bounds are only used for unstructured data sets, 
-        //       since domain bounds can be inferred from structured data.
-        void make_domain_params(      int           geom_dim,
-                                const MatrixX<T>&   domain,
-                                const VectorX<T>&   dom_mins = VectorX<T>(),
-                                const VectorX<T>&   dom_maxs = VectorX<T>())
-        {
+        // // Create a parametrization based on physical coordinates of the data.
+        // // If dom_mins/maxs are passed, they define an axis-aligned bounding
+        // // box with which to compute the domain parametrization. If they are
+        // // not passed, we assume the bounding box is defined by the extents
+        // // of the grid. 
+        // // Note: the dom bounds are only used for unstructured data sets, 
+        // //       since domain bounds can be inferred from structured data.
+        // void make_domain_params(      int           geom_dim,
+        //                         const MatrixX<T>&   domain,
+        //                         const VectorX<T>&   dom_mins = VectorX<T>(),
+        //                         const VectorX<T>&   dom_maxs = VectorX<T>())
+        // {
+        //     if (structured)
+        //     {
+        //         // Warn that bounds are unused when parameterizing structured data
+        //         if (dom_mins != VectorX<T>() || dom_maxs != VectorX<T>())
+        //         {
+        //             cerr << "Warning: dom_mins/maxs variables are unused in a structured domain parametrization." << endl;
+        //             cerr << "         Domain bounds will be determine from grid structure." << endl;
+        //         }
+        //         make_domain_params_structured(geom_dim, domain);
+        //     }
+        //     else
+        //     {
+        //         make_domain_params_unstructured(geom_dim, domain, dom_mins, dom_maxs);
+        //     }
 
+        //     truncateRoundoff();
+        //     checkParamBounds();
+        // }
+
+        // Make domain parameterization, domain bounds are computed from the data
+        void makeDomainParams(int geomDim, const MatrixX<T>& domain)
+        {
             if (structured)
             {
-                // Warn that bounds are unused when parameterizing structured data
-                if (dom_mins != VectorX<T>() || dom_maxs != VectorX<T>())
-                {
-                    cerr << "Warning: dom_mins/maxs variables are unused in a structured domain parametrization." << endl;
-                    cerr << "         Domain bounds will be determine from grid structure." << endl;
-                }
-                make_domain_params_structured(geom_dim, domain);
+                make_domain_params_structured(geomDim, domain);
             }
             else
             {
-                make_domain_params_unstructured(geom_dim, domain, dom_mins, dom_maxs);
+                make_domain_params_unstructured(geomDim, domain);
             }
 
             truncateRoundoff();
             checkParamBounds();
         }
 
-        // Create domain parameterization where the domain is given by `box`
-        void make_domain_params(const Bbox<T>& box, const MatrixX<T>& domain)
+        // Structured data; domain is inferred from the grid
+        void make_domain_params_structured(int geom_dim, const MatrixX<T>& domain)
+        {
+            AffMap<T> map(dom_dim, geom_dim, domain, ndom_pts);
+            make_domain_params_structured_impl(map, domain);
+        }
+
+        // Make domain parameterization, where the domain is given by `box`
+        void makeDomainParams(const Bbox<T>& box, const MatrixX<T>& domain)
         {
             if (structured)
             {
@@ -498,11 +520,17 @@ namespace mfa
             checkParamBounds();
         }
 
-        // Structured data; domain is inferred from the grid
-        void make_domain_params_structured(int geom_dim, const MatrixX<T>& domain)
+        // Convenience operator for min/max vectors. In this case, dom_dim must match the
+        // dimensionality of the bounding box. This is to catch errors quickly when a user 
+        // doesn't know what they are doing. 
+        //  
+        // For cases when dom_dim < geom_dim is intended, the user can define a Bbox ahead of 
+        // time and pass that in instead.
+        void makeDomainParams(const VectorX<T>& mins, const VectorX<T>& maxs, const MatrixX<T>& domain)
         {
-            AffMap<T> map(dom_dim, geom_dim, domain, ndom_pts);
-            make_domain_params_structured_impl(map, domain);
+            if (dom_dim != mins.size()) throw MFAError("Incorrect dimensions in makeDomainParams");
+
+            makeDomainParams(Bbox<T>(mins, maxs), domain);
         }
 
         // Structured data; domain is defined by the given bounding box
@@ -519,7 +547,7 @@ namespace mfa
                 BoxMap<T> map(dom_dim, box);
                 make_domain_params_unstructured_impl(map, domain);
             }
-            else if (dom_dim + 1 == box.geomDim)
+            else if (dom_dim + 1 == box.geomDim) 
             {
                 BoxMapProjected<T> map(dom_dim, box);
                 make_domain_params_unstructured_impl(map, domain);
@@ -530,52 +558,79 @@ namespace mfa
             }
         }
 
-        // NOTE: In the case where geom_dim > dom_dim, this function parametrizes the
-        //       data based on the first dom_dim coordinates. For example, for a 2D
-        //       plane embedded in 3D, this will parametrize the dataset based on the
-        //       x and y coordinates, regardless of the orientation of the plane.
+        // Parameterize unstructured data, inferring bounds from the data
+        // When dom_dim==geom_dim, assume data is oriented to the cardinal axes
+        // When dom_dim==geom_dim-1, assume data is planar, approximate the plane, 
+        //     and then compute bounds within that plane.
         void make_domain_params_unstructured(
                   int           geom_dim,
-            const MatrixX<T>&   domain,
-            const VectorX<T>&   dom_mins,
-            const VectorX<T>&   dom_maxs)
+            const MatrixX<T>&   domain)
         {
-            // First, determine if dom_mins/maxs were set manually or if
-            // they need to be computed from the domain
-            VectorX<T> mins;
-            VectorX<T> maxs;
-
-            // dom mins/maxs should either be empty or of size geom_dim
-            if (dom_mins.size() > 0 && dom_mins.size() != geom_dim)
-                cerr << "Warning: Invalid size of dom_mins in Param construction" << endl;
-            if (dom_maxs.size() > 0 && dom_maxs.size() != geom_dim)
-                cerr << "Warning: Invalid size of dom_maxs in Param construction" << endl;
-
-            // Set min/max extents in each domain dimension
-            if (dom_mins.size() != geom_dim || dom_maxs.size() != geom_dim)
+            if (dom_dim == geom_dim)
             {
-                mins = domain.leftCols(geom_dim).colwise().minCoeff();
-                maxs = domain.leftCols(geom_dim).colwise().maxCoeff();
+                Bbox<T> box(MatrixX<T>::Identity(geom_dim), domain);
+                make_domain_params_unstructured(box, domain);
+                // BoxMap<T> map(dom_dim, box);    // TODO since this is the identity, replace with a simpler map that does no linear transformation
+                // make_domain_params_unstructured_impl(map, domain);
             }
-            else    // Use domain bounds provided by block (input data need not extend to bounds)
+            else if (dom_dim + 1 == geom_dim)
             {
-                mins = dom_mins;
-                maxs = dom_maxs;
-            }
+                // Assume the 2D data is roughly planar, and estimate the normal to this plane
+                VectorX<T> n, a, b;
+                n = estimateSurfaceNormal<T>(domain.leftCols(geom_dim));
+                auto vecs = getPlaneVectors<T>(n);
+                a = vecs.first;
+                b = vecs.second;
 
-            // Create the affine map for the special case of an axis-aligned bounding box
-            VectorX<T> edge(geom_dim);
-            VectorX<T> translation = mins;
-            MatrixX<T> linear(geom_dim, dom_dim);
-            for (int i = 0; i < dom_dim; i++)
+                // Create a box oriented to the plane
+                Bbox<T> box({a, b, n}, domain);
+
+                make_domain_params_unstructured(box, domain);
+                // Parameterize data relative to the plane computed above
+                // BoxMapProjected<T> map(dom_dim, box);
+                // make_domain_params_unstructured_impl(map, domain);
+            }
+            else
             {
-                edge.setZero();
-                edge(i) = maxs(i) - mins(i);
-                linear.col(i) = edge;
+                throw MFAError("Dimension error in make_domain_params_unstructured");
             }
-            AffMap<T> map(dom_dim, geom_dim, translation, linear);
+            
+            // // First, determine if dom_mins/maxs were set manually or if
+            // // they need to be computed from the domain
+            // VectorX<T> mins;
+            // VectorX<T> maxs;
 
-            make_domain_params_unstructured_impl(map, domain);
+            // // dom mins/maxs should either be empty or of size geom_dim
+            // if (dom_mins.size() > 0 && dom_mins.size() != geom_dim)
+            //     cerr << "Warning: Invalid size of dom_mins in Param construction" << endl;
+            // if (dom_maxs.size() > 0 && dom_maxs.size() != geom_dim)
+            //     cerr << "Warning: Invalid size of dom_maxs in Param construction" << endl;
+
+            // // Set min/max extents in each domain dimension
+            // if (dom_mins.size() != geom_dim || dom_maxs.size() != geom_dim)
+            // {
+            //     mins = domain.leftCols(geom_dim).colwise().minCoeff();
+            //     maxs = domain.leftCols(geom_dim).colwise().maxCoeff();
+            // }
+            // else    // Use domain bounds provided by block (input data need not extend to bounds)
+            // {
+            //     mins = dom_mins;
+            //     maxs = dom_maxs;
+            // }
+
+            // // Create the affine map for the special case of an axis-aligned bounding box
+            // VectorX<T> edge(geom_dim);
+            // VectorX<T> translation = mins;
+            // MatrixX<T> linear(geom_dim, dom_dim);
+            // for (int i = 0; i < dom_dim; i++)
+            // {
+            //     edge.setZero();
+            //     edge(i) = maxs(i) - mins(i);
+            //     linear.col(i) = edge;
+            // }
+            // AffMap<T> map(dom_dim, geom_dim, translation, linear);
+
+            // make_domain_params_unstructured_impl(map, domain);
         }
 
         // Implementation for structured points. P is the type of the parameterization function

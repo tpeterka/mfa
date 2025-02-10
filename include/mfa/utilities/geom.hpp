@@ -36,6 +36,14 @@ namespace mfa
             geomDim(0)
         { }
 
+        // Constructor for box with no rotation
+        // TODO: Eventually this case should be handled by a new class for efficiency.
+        //       Since the rotation matrix is the identity, toRotatedSpace/toCartesian
+        //       should do nothing and we have mins==rotatedMins, maxs==rotatedMaxs
+        Bbox(const VectorX<T>& mins_, const VectorX<T>& maxs_) :
+            Bbox(mins_, maxs_, MatrixX<T>::Identity(mins_.size()))
+        { }
+
         // Construct with minimum corner, maximum corner, and orientation
         Bbox(const VectorX<T>& mins_, const VectorX<T>& maxs_, const MatrixX<T>& basis_) :
             geomDim(mins_.size()),
@@ -43,6 +51,8 @@ namespace mfa
             maxs(maxs_),
             basis(basis_)
         { 
+            if (mins.size() != maxs.size()) throw MFAError("min/max dimension mismatch in Bbox ctor");
+            
             makeOrthonormal();
 
             // compute quantities in rotation space
@@ -53,15 +63,27 @@ namespace mfa
         // Construct with orientation and a dataset
         // Computes the min/max corners from the data
         Bbox(const MatrixX<T>& basis_, const PointSet<T>& ps) :
+            Bbox(basis_, ps.domain)
+        { }
+
+        // Construct from orientation and list of points to bound
+        Bbox(const MatrixX<T>& basis_, const MatrixX<T>& points) :
             geomDim(basis_.rows()),
             basis(basis_)
         {
-            makeOrthonormal();                  // ensure orthonormal system
-            setBounds(ps);                      // compute min/max corners from data
+            if (basis.rows() != basis.cols()) throw MFAError("Incorrect basis size in Bbox constructor");
+
+            makeOrthonormal();
+            setBounds(points);
         }
 
-        // Convenience constructor if basis is specified from a list of vectors
+        // Construct when basis is given by list of vectors
         Bbox(std::initializer_list<VectorX<T>> basis_, const PointSet<T>& ps) :
+            Bbox(basis_, ps.domain)
+        { }
+
+        // Convenience constructor if basis is specified from a list of vectors
+        Bbox(std::initializer_list<VectorX<T>> basis_, const MatrixX<T>& points) :
             geomDim(basis_.size())
         {
             if (geomDim != basis_.begin()->size()) throw MFAError("Bbox dimension mismatch\n");
@@ -75,7 +97,7 @@ namespace mfa
                 i++;
             }
             makeOrthonormal();                  // ensure orthonormal system
-            setBounds(ps);                      // compute min/max corners from data
+            setBounds(points);                      // compute min/max corners from data
         }
 
         // Rescales a set of basis vectors to be orthonormal
@@ -143,11 +165,11 @@ namespace mfa
             x = basis*w;
         }
 
-        void setBounds(const PointSet<T>& ps)
+        void setBounds(const MatrixX<T>& points)
         {
             // Compute point locations in rotated basis
             MatrixX<T> skewCoords;
-            toRotatedSpace(ps.domain.leftCols(geomDim).transpose(), skewCoords);
+            toRotatedSpace(points.leftCols(geomDim).transpose(), skewCoords);
 
             // Compute corners in rotated coordinates
             rotatedMins = skewCoords.rowwise().minCoeff();
