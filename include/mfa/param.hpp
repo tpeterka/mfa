@@ -317,7 +317,7 @@ namespace mfa
         {
             if (dom_dim == geomDim)
             {
-                Bbox<T> box(MatrixX<T>::Identity(geomDim), domain);
+                Bbox<T> box(MatrixX<T>::Identity(geomDim, geomDim), domain);
                 makeDomainParamsUnstructured(box, domain);
             }
             else if (dom_dim + 1 == geomDim)

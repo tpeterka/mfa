@@ -41,12 +41,12 @@ namespace mfa
 
         // Constructor for box with no rotation
         Bbox(const VectorX<T>& mins_, const VectorX<T>& maxs_) :
-            Bbox(mins_, maxs_, MatrixX<T>::Identity(mins_.size()))
+            Bbox(mins_, maxs_, MatrixX<T>::Identity(mins_.size(), mins_.size()))
         { }
 
         // Constructor for box with no rotation, bounds inferred from data
         Bbox(const PointSet<T>& ps) :
-            Bbox(MatrixX<T>::Identity(ps.geom_dim()), ps)
+            Bbox(MatrixX<T>::Identity(ps.geom_dim(), ps.geom_dim()), ps)
         { }
 
         // Construct with minimum corner, maximum corner, and orientation
