@@ -51,12 +51,12 @@ namespace mfa {
             if (transpose)
             {
                 box.toRotatedSpace(xT, uT);
-                uT = extentsRecip.asDiagonal() * (uT.colwise() - box.rotatedMins);
+                uT.noalias() = extentsRecip.asDiagonal() * (uT.colwise() - box.rotatedMins);
             }
             else
             {
                 box.toRotatedSpace(x, u);
-                u = extentsRecip.asDiagonal() * (u.colwise() - box.rotatedMins);
+                u.noalias() = extentsRecip.asDiagonal() * (u.colwise() - box.rotatedMins);
             }
         }
     };
