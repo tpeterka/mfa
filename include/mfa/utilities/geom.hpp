@@ -12,9 +12,6 @@
 #include <mfa/utilities/util.hpp>
 #include <mfa/types.hpp>
 
-
-    #include <bitset>
-
 namespace mfa
 {
     template <typename T>
