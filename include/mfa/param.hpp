@@ -117,10 +117,7 @@ namespace mfa
         void make_grid_params(  const VectorX<T>&   param_mins,   // Minimum param in each dimension
                                 const VectorX<T>&   param_maxs)   // Maximum param in each dimension
         {
-            if (!structured)
-            {
-                cerr << "\nWarning: Setting grid params to unstructured Param object\n" << endl;
-            }
+            if (!structured) throw MFAError("Tried to set grid parameters to unstructured Param object");
 
             T step = 0;
 
@@ -152,11 +149,7 @@ namespace mfa
         // number of data points (which would be the product)
         void make_curve_params(const MatrixX<T>&   domain)           // input data points (1st dim changes fastest)
         {
-            if (!structured)
-            {
-                cerr << "Error: Cannot set curve parametrization to unstructured data. Aborting" << endl;
-                exit(1);
-            }
+            if (!structured) throw MFAError("Cannot set curve parametrization to unstructured data.");
 
             T          tot_dist;                          // total chord length
             VectorX<T> dists(ndom_pts.maxCoeff() - 1);    // chord lengths of data point spans for any dim
@@ -238,13 +231,6 @@ namespace mfa
             checkParamBounds();
         }
 
-        // Structured data; domain is inferred from the grid
-        void makeDomainParamsStructured(int geomDim, const MatrixX<T>& domain)
-        {
-            AffMap<T> map(dom_dim, geomDim, domain, ndom_pts);
-            makeDomainParamsStructuredImpl(map, domain);
-        }
-
         // Make domain parameterization, where the domain is given by `box`
         void makeDomainParams(const Bbox<T>& box, const MatrixX<T>& domain)
         {
@@ -274,64 +260,27 @@ namespace mfa
             makeDomainParams(Bbox<T>(mins, maxs), domain);
         }
 
-        // Structured data; domain is defined by the given bounding box
+        // Parameterize structured data; domain is inferred from the grid
+        void makeDomainParamsStructured(int geomDim, const MatrixX<T>& domain)
+        {
+            AffMap<T> map(dom_dim, geomDim, domain, ndom_pts);
+            makeDomainParamsStructuredImpl(map, domain);
+        }
+
+        // Parameterize structured data; domain is defined by the given bounding box
         void makeDomainParamsStructured(const Bbox<T>& box, const MatrixX<T>& domain)
         {
             BoxMap<T> map(dom_dim, box);
             makeDomainParamsStructuredImpl(map, domain);
         }
 
-        void makeDomainParamsUnstructured(const Bbox<T>& box, const MatrixX<T>& domain)
-        {
-            if (dom_dim == box.geomDim)
-            {
-                BoxMap<T> map(dom_dim, box);
-                makeDomainParamsUnstructuredImpl(map, domain);
-            }
-            else if (dom_dim + 1 == box.geomDim) 
-            {
-                BoxMapProjected<T> map(dom_dim, box);
-                makeDomainParamsUnstructuredImpl(map, domain);
-            }
-            else
-            {
-                throw MFAError("Dimension error in make_domain_params_unstructured");
-            }
-        }
-
-        // Parameterize unstructured data, inferring bounds from the data
-        // When dom_dim==geom_dim, assume data is oriented to the cardinal axes
-        // When dom_dim==geom_dim-1, assume data is planar, approximate the plane, 
-        //     and then compute bounds within that plane.
-        void makeDomainParamsUnstructured(
-                  int           geomDim,
-            const MatrixX<T>&   domain)
-        {
-            if (dom_dim == geomDim)
-            {
-                Bbox<T> box(MatrixX<T>::Identity(geomDim), domain);
-                make_domain_params_unstructured(box, domain);
-                // BoxMap<T> map(dom_dim, box);    // TODO since this is the identity, replace with a simpler map that does no linear transformation
-                // make_domain_params_unstructured_impl(map, domain);
-            }
-            else if (dom_dim + 1 == geomDim)
-            {
-                // Assume the 2D data is roughly planar, and estimate the normal to this plane
-                VectorX<T> n = estimateSurfaceNormal<T>(domain.leftCols(geomDim));
-                auto [a, b] = getPlaneVectors<T>(n);
-
-                // Create a box oriented to the plane
-                Bbox<T> box({a, b, n}, domain);
-
-                make_domain_params_unstructured(box, domain);
-            }
-            else
-            {
-                throw MFAError("Dimension error in make_domain_params_unstructured");
-            }
-        }
-
-        // Implementation for structured points. P is the type of the parameterization function
+        // Implementation for structured inputs. P is the type of the parameterization function.
+        // For each dimension, loop through the minimial edges":
+        //   (0, 0, 0), (1, 0, 0), (2, 0, 0), (3, 0, 0), ...
+        //   (0, 0, 0), (0, 1, 0), (0, 2, 0), (0, 3, 0), ...
+        //   (0, 0, 0), (0, 0, 1), (0, 0, 2), (0, 0, 3), ...
+        // and then for each point, get its physical coordinates, convert them to params,
+        // then save ith param value (where i is the dimension index)
         template <typename P>
         void makeDomainParamsStructuredImpl(const P& map, const MatrixX<T>& domain)
         {
@@ -358,6 +307,59 @@ namespace mfa
             }
         }
 
+        // Parameterize unstructured data; domain is inferred from the data.
+        // When dom_dim==geomDim, assume data is oriented to the cardinal axes
+        // When dom_dim==geomDim-1, assume data is planar, approximate the plane, 
+        //     and then compute bounds within that plane.
+        void makeDomainParamsUnstructured(
+            int                 geomDim,
+            const MatrixX<T>&   domain)
+        {
+            if (dom_dim == geomDim)
+            {
+                Bbox<T> box(MatrixX<T>::Identity(geomDim), domain);
+                makeDomainParamsUnstructured(box, domain);
+            }
+            else if (dom_dim + 1 == geomDim)
+            {
+                // Assume the 2D data is roughly planar, and estimate the normal to this plane
+                VectorX<T> n = estimateSurfaceNormal<T>(domain.leftCols(geomDim));
+                auto [a, b] = getPlaneVectors<T>(n);
+
+                // Create a box oriented to the plane
+                Bbox<T> box({a, b, n}, domain);
+
+                makeDomainParamsUnstructured(box, domain);
+            }
+            else
+            {
+                throw MFAError("Dimension error in makeDomainParamsUnstructured");
+            }
+        }
+
+        // Parameterize unstructured data; domain is defined by the given bounding box
+        // When dom_dim==geomDim-1, assume data is planar, project away the last dimenion
+        // of the bounding box.
+        void makeDomainParamsUnstructured(const Bbox<T>& box, const MatrixX<T>& domain)
+        {
+            if (dom_dim == box.geomDim)
+            {
+                BoxMap<T> map(dom_dim, box);
+                makeDomainParamsUnstructuredImpl(map, domain);
+            }
+            else if (dom_dim + 1 == box.geomDim) 
+            {
+                BoxMapProjected<T> map(dom_dim, box);
+                makeDomainParamsUnstructuredImpl(map, domain);
+            }
+            else
+            {
+                throw MFAError("Dimension error in makeDomainParamsUnstructured");
+            }
+        }
+
+        // Implementation for unstructured inputs. P is the type of the parameterization function.
+        // Apply the map function to every point in the domain.
         template <typename P>
         void makeDomainParamsUnstructuredImpl(const P& map, const MatrixX<T>& domain)
         {
