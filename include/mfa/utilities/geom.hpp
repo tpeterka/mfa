@@ -17,6 +17,10 @@ namespace mfa
     template <typename T>
     struct PointSet;
 
+    // Object representing a bounding box that may be rotated and translated in space.
+    // This object can apply the rotation transformation to a given set of points
+    // (it can also apply the inverse transformation). When there is no rotation of the
+    // box, both of these transformations avoid multiplying by the rotation matrix.
     template <typename T>
     struct Bbox
     {
@@ -26,17 +30,16 @@ namespace mfa
         VectorX<T>  rotatedMins;
         VectorX<T>  rotatedMaxs;
         MatrixX<T>  basis;      // Orthonormal vectors defining the reference frame (each column is a vector)
+        const bool  aligned;    // Flag if box is aligned to cardinal axes
     
     public:
         // Default constructor
         Bbox() :
-            geomDim(0)
+            geomDim(0),
+            aligned(true)
         { }
 
         // Constructor for box with no rotation
-        // TODO: Eventually this case should be handled by a new class for efficiency.
-        //       Since the rotation matrix is the identity, toRotatedSpace/toCartesian
-        //       should do nothing and we have mins==rotatedMins, maxs==rotatedMaxs
         Bbox(const VectorX<T>& mins_, const VectorX<T>& maxs_) :
             Bbox(mins_, maxs_, MatrixX<T>::Identity(mins_.size()))
         { }
@@ -46,7 +49,8 @@ namespace mfa
             geomDim(mins_.size()),
             mins(mins_),
             maxs(maxs_),
-            basis(basis_)
+            basis(basis_),
+            aligned(basis_.isIdentity())
         { 
             if (mins.size() != maxs.size()) throw MFAError("min/max dimension mismatch in Bbox ctor");
             
@@ -66,7 +70,8 @@ namespace mfa
         // Construct from orientation and list of points to bound
         Bbox(const MatrixX<T>& basis_, const MatrixX<T>& points) :
             geomDim(basis_.rows()),
-            basis(basis_)
+            basis(basis_),
+            aligned(basis_.isIdentity())
         {
             if (basis.rows() != basis.cols()) throw MFAError("Incorrect basis size in Bbox constructor");
 
@@ -93,6 +98,10 @@ namespace mfa
                 basis.col(i) = vec;
                 i++;
             }
+
+            // Check if box is axis-aligned
+            aligned = basis.isIdentity();
+
             makeOrthonormal();                  // ensure orthonormal system
             setBounds(points);                      // compute min/max corners from data
         }
@@ -144,9 +153,19 @@ namespace mfa
             if (!basis.isUnitary()) throw MFAError("Bbox basis is not unitary, cannot change basis");
             if (basis.rows() != x.rows()) throw MFAError("Incompatible matrix dimensions in Bbox::toRotatedSpace");
 
+            // Remove const-ness and resize (we explicityly resize w because it is a MatrixBase<> object,
+            // which does not get automatically resized during assignment)
             Eigen::MatrixBase<OtherDerived>& w = const_cast<Eigen::MatrixBase<OtherDerived>&>(w_);
-            w.resize(x.rows(), x.cols());
-            w = basis.transpose()*x;
+            w.derived().resize(x.rows(), x.cols());
+            
+            if (aligned) // case where basis is the identity
+            {
+                w = x;
+            }
+            else
+            {
+                w = basis.transpose()*x;
+            }
         }
 
         // Given a set of rotated coordinates, convert them to Cartesian (xyz) coordinates.
@@ -157,35 +176,70 @@ namespace mfa
             if (!basis.isUnitary()) throw MFAError("Bbox basis is not unitary, cannot change basis");
             if (basis.cols() != w.rows()) throw MFAError("Incompatible matrix dimensions in Bbox::toRotatedSpace");
 
+            // Remove const-ness and resize (we explicityly resize w because it is a MatrixBase<> object,
+            // which does not get automatically resized during assignment)
             Eigen::MatrixBase<OtherDerived>& x = const_cast<Eigen::MatrixBase<OtherDerived>&>(x_);
-            x.resize(w.rows(), w.cols());
-            x = basis*w;
+            x.derived().resize(w.rows(), w.cols());
+
+            if (aligned)
+            {
+                x = w;
+            }
+            else
+            {
+                x = basis*w;
+            }
         }
 
+        // Compute box bounds from a set of points.
+        // We assume that points is a NxD matrix, where D >= geomDim 
+        // and each row represents a different point. The first geomDim 
+        // columns are assumed to contain the point coordinates. This is the
+        // exact structure given by the matrix PointSet::domain.
         void setBounds(const MatrixX<T>& points)
         {
-            // Compute point locations in rotated basis
-            MatrixX<T> skewCoords;
-            toRotatedSpace(points.leftCols(geomDim).transpose(), skewCoords);
+            if (aligned)    // if basis==I, there is no rotation
+            {
+                rotatedMins = points.leftCols(geomDim).transpose().rowwise().minCoeff();
+                rotatedMaxs = points.leftCols(geomDim).transpose().rowwise().maxCoeff();
+                mins = rotatedMins;
+                maxs = rotatedMaxs;
+            }
+            else
+            {
+                // Compute point locations in rotated basis
+                MatrixX<T> skewCoords;
+                toRotatedSpace(points.leftCols(geomDim).transpose(), skewCoords);
 
-            // Compute corners in rotated coordinates
-            rotatedMins = skewCoords.rowwise().minCoeff();
-            rotatedMaxs = skewCoords.rowwise().maxCoeff();
+                // Compute corners in rotated coordinates
+                rotatedMins = skewCoords.rowwise().minCoeff();
+                rotatedMaxs = skewCoords.rowwise().maxCoeff();
 
-            // Transform corners back to Cartesian coordinates
-            toCartesian(rotatedMins, mins);
-            toCartesian(rotatedMaxs, maxs);
+                // Transform corners back to Cartesian coordinates
+                toCartesian(rotatedMins, mins);
+                toCartesian(rotatedMaxs, maxs);
+            }
+
         }
 
         // Tests if the bounding box contains every point in a PointSet
         bool doesContain(const PointSet<T>& ps, int verbose = 0, T prec = 1e-12) const
         {
-            MatrixX<T> skewCoords;
-            toRotatedSpace(ps.domain.leftCols(geomDim).transpose(), skewCoords);
-
-            VectorX<T> dataMins = skewCoords.rowwise().minCoeff();
-            VectorX<T> dataMaxs = skewCoords.rowwise().maxCoeff();
-
+            VectorX<T> dataMins, dataMaxs;
+            if (aligned)
+            {
+                dataMins = ps.domain.leftCols(geomDim).transpose().rowwise().minCoeff();
+                dataMaxs = ps.domain.leftCols(geomDim).transpose().rowwise().maxCoeff();
+            }
+            else
+            {
+                MatrixX<T> skewCoords;
+                toRotatedSpace(ps.domain.leftCols(geomDim).transpose(), skewCoords);
+    
+                dataMins = skewCoords.rowwise().minCoeff();
+                dataMaxs = skewCoords.rowwise().maxCoeff();
+            }
+            
             // Component wise comparison between dataMins/Maxs and box mins/maxs
             // If any component test fails, there is some point not contained in the box
             if ((dataMins.array() < rotatedMins.array() - prec).any() || 
@@ -206,6 +260,8 @@ namespace mfa
             return true;
         }
 
+        // Given another box with the same orientation, returns the smallest bounding box
+        // with the same orientation that contains both boxes.
         Bbox<T> merge(const Bbox<T>& other) const
         {
             if (!basis.isApprox(other.basis))
@@ -235,6 +291,7 @@ namespace mfa
             return Bbox<T>(mergeMins, mergeMaxs, basis);
         }
 
+        // Print basic information
         void print(string title = "box") const
         {
             fmt::print("{} minimum corner: {}\n", title, print_vec(mins));
