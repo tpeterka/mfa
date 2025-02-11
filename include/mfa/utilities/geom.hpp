@@ -30,7 +30,7 @@ namespace mfa
         VectorX<T>  rotatedMins;
         VectorX<T>  rotatedMaxs;
         MatrixX<T>  basis;      // Orthonormal vectors defining the reference frame (each column is a vector)
-        const bool  aligned;    // Flag if box is aligned to cardinal axes
+        bool        aligned;    // Flag if box is aligned to cardinal axes
     
     public:
         // Default constructor
