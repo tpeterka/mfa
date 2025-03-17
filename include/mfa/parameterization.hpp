@@ -34,11 +34,11 @@ namespace mfa {
         // Compute the parameterizations for a collection of points.
         // 
         // If transpose==false, x is a matrix where each column is the geometric coordinates of a point to be parameterized
-        //                      x is geom_dim-by-N, where N is the number of points
-        //                      u is returned as a dom_dim-by-N matrix
+        //                      x is geomDim-by-N, where N is the number of points
+        //                      u is returned as a domDim-by-N matrix
         // If transpose==true, x is a matrix where each row is the geometric coordinates of a point to be parameterized
-        //                     x is N-by-geom_dim
-        //                     u is returned as an N-by-dom_dim matrix
+        //                     x is N-by-geomDim
+        //                     u is returned as an N-by-domDim matrix
         template <typename Derived, typename OtherDerived>
         void transform(const Eigen::MatrixBase<Derived>& x, const Eigen::MatrixBase<OtherDerived>& u_, bool transpose = false) const
         {
@@ -131,36 +131,36 @@ namespace mfa {
         // Defines an affine transformation from parameter space to physical space
         // x = tMat*u + tVec
         // u = tMat^-1*(x-tVec)
-        int                     dom_dim;    // dimension of parameter space
-        int                     geom_dim;   // dimension of physical space
+        int                     domDim;    // dimension of parameter space
+        int                     geomDim;   // dimension of physical space
         MatrixX<T>              mat;        // Affine transform matrix mapping parameters to physical coords
         VectorX<T>              vec;        // Affine tranform vector mapping parameters to physical coords
         bool                    init{false};// flag that transformation has been initialized
 
         Eigen::ColPivHouseholderQR<MatrixX<T>> qr;
 
-        AffMap(int dom_dim_, int geom_dim_, const MatrixX<T>& domain, const VectorXi& ndom_pts) :
-            dom_dim(dom_dim_),
-            geom_dim(geom_dim_)
+        AffMap(int domDim_, int geomDim_, const MatrixX<T>& domain, const VectorXi& ndom_pts) :
+            domDim(domDim_),
+            geomDim(geomDim_)
         {
             // Helper class to manage grid indices
             GridInfo grid;
-            grid.init(dom_dim, ndom_pts);
+            grid.init(domDim, ndom_pts);
 
             // Set translation vector for affine transform
-            vec = domain.row(0).head(geom_dim);
+            vec = domain.row(0).head(geomDim);
 
             // Set linear operator for affine transform
-            mat.resize(geom_dim, dom_dim);
-            for (int i = 0; i < dom_dim; i++)
+            mat.resize(geomDim, domDim);
+            for (int i = 0; i < domDim; i++)
             {
                 // Get cardinal direction vectors; e.g. (1,0,0), (0,1,0), (0,0,1)
-                VectorXi ijk = VectorXi::Zero(dom_dim);
+                VectorXi ijk = VectorXi::Zero(domDim);
                 ijk(i) = ndom_pts(i) - 1;
 
                 // Get physical point at this vector
                 int idx = grid.ijk2idx(ijk);
-                VectorX<T> edge = domain.row(idx).head(geom_dim);
+                VectorX<T> edge = domain.row(idx).head(geomDim);
 
                 mat.col(i) = edge - vec;
             }
@@ -171,9 +171,9 @@ namespace mfa {
             init = true;
         }
 
-        AffMap(int dom_dim_, int geom_dim_, const VectorX<T>& vec_, const MatrixX<T>& mat_) :
-            dom_dim(dom_dim_),
-            geom_dim(geom_dim_),
+        AffMap(int domDim_, int geomDim_, const VectorX<T>& vec_, const MatrixX<T>& mat_) :
+            domDim(domDim_),
+            geomDim(geomDim_),
             vec(vec_),
             mat(mat_)
         {
@@ -190,7 +190,7 @@ namespace mfa {
         //       the surface. For efficiency, we only check if our answer is valid with
         //       an assert (that is, in a Debug build). So, this method assumes that the 
         //       user is passing in a valid value for x.
-        void transform(const VectorX<T>& x, VectorX<T>& u)
+        void transform(const VectorX<T>& x, VectorX<T>& u) const
         {
             assert(init);
             u = qr.solve(x-vec);
@@ -203,8 +203,8 @@ namespace mfa {
         // to transform().  In this case, we want to treat it as a (column) Vector.
         // If we had a function overload with Matrix inputs, Eigen could interpret that 
         // row vector as a 1xN matrix, which would cause undefined behavior as we expect
-        // x to have 'geom_dim' rows.
-        void transformSet(const MatrixX<T>& x, MatrixX<T>& u)
+        // x to have 'geomDim' rows.
+        void transformSet(const MatrixX<T>& x, MatrixX<T>& u) const
         {
             assert(init);
 
@@ -222,9 +222,9 @@ namespace mfa {
         // Convenience function to transpose matrices before computing parameters
         // No deep copy is made in order to transform
         // 
-        // transformSet expects x to be (geom_dim x N) and u to be (dom_dim x N)
-        // However, we often store coordinates in matrices of size (N x geom_dim)
-        void transformTransposeSet(const MatrixX<T>& x, MatrixX<T>& u)
+        // transformSet expects x to be (geomDim x N) and u to be (domDim x N)
+        // However, we often store coordinates in matrices of size (N x geomDim)
+        void transformTransposeSet(const MatrixX<T>& x, MatrixX<T>& u) const
         {
             assert(init);
 
