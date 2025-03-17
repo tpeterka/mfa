@@ -152,6 +152,36 @@ namespace mfa
             std::swap(first.done_dim_, second.done_dim_);
         }
 
+        // Move the iterator to the given linear index within the subvolume
+        void seek(int idx)
+        {
+            // Set linear index
+            cur_iter_ = idx;
+
+            // Set vol indices
+            idx_dim_.setZero();
+            prev_idx_dim_.setZero();
+            idx_ijk(idx, idx_dim_);
+            prev_idx_dim_ = idx_dim_;
+
+            // Set done_dim_ for dims which have been traversed up to this point
+            std::fill(done_dim_.begin(), done_dim_.end(), false);
+            for (size_t i = 0; i < dom_dim_ && ds_(i) <= idx; i++)
+            {
+                if (idx_dim_(i) == starts_dim_(i))
+                    done_dim_[i] = true;
+            }
+
+            // If seeking past the end, we will still compute the linear and vol indices
+            // correctly, but we set done==true for all dims. 
+            // DL: Is it better to just throw an exception here to prohibit this behavior?
+            if (idx >= tot_iters_)
+            {
+                fmt::print("MFA Warning: Seeking VolIterator past end\n");
+                std::fill(done_dim_.begin(), done_dim_.end(), true);
+            }
+        }
+
         // reset the iterator, possibly to a given iteration count
         void reset(size_t idx = 0)      { init(idx); }
 
@@ -297,7 +327,7 @@ namespace mfa
 
         private:
 
-        VolIterator*        vol_iter_;          // the original full-dim vol iterator from which this slice derives
+        const VolIterator*  vol_iter_;          // the original full-dim vol iterator from which this slice derives
         int                 missing_dim_;       // the dimension missing in the slice
         size_t              dom_dim_;           // number of domain dimensions in original volume
         size_t              cur_iter_;          // current flattened iteration number
@@ -307,7 +337,7 @@ namespace mfa
 
         public:
 
-        SliceIterator(VolIterator& vol_iter, int missing_dim) :
+        SliceIterator(const VolIterator& vol_iter, int missing_dim) :
             vol_iter_(&vol_iter),
             missing_dim_(missing_dim),
             cur_iter_(0),
@@ -354,7 +384,14 @@ namespace mfa
         }
 
         ~SliceIterator()
+        { }
+
+        // Move the iterator to the given linear index
+        void seek(int idx)
         {
+            cur_iter_ = idx;
+            sub_vol_iter_.seek(idx);
+            idx_dim_ = sub_vol_iter_.idx_dim();
         }
 
         // reset the iterator

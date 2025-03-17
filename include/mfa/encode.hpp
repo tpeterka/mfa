@@ -71,11 +71,26 @@ namespace mfa
 
         ~Encoder() {}
 
+        void Encode(const VectorXi& nctrl_pts,              // number of control points in each dim.
+            MatrixX<T>&     ctrl_pts,                       // (output) control points
+            VectorX<T>&     weights,                        // (output) weights
+            bool            weighted = true)                // solve for and use weights
+        {
+            if (weighted)
+            {
+                encodeNURBS(nctrl_pts, ctrl_pts, weights, true);
+            }
+            else
+            {
+                encodeBSpline(nctrl_pts, ctrl_pts);
+            }
+        }
+
         // approximate a NURBS hypervolume of arbitrary dimension for a given input data set
         // n-d version of algorithm 9.7, Piegl & Tiller (P&T) p. 422
         // output control points can be specified by caller, does not have to be those in the tmesh
         // the output ctrl_pts are resized by this function;  caller need not resize them
-        void Encode(const VectorXi& nctrl_pts,              // number of control points in each dim.
+        void encodeNURBS(const VectorXi& nctrl_pts,              // number of control points in each dim.
                     MatrixX<T>&     ctrl_pts,               // (output) control points
                     VectorX<T>&     weights,                // (output) weights
                     bool            weighted = true)        // solve for and use weights
@@ -263,7 +278,179 @@ namespace mfa
 //             cerr << "Encode() weights:\n" << weights << endl;
         }
 
+        void encodeBSpline(
+            const VectorXi& nctrl_pts,                          // number of control points in each dim.
+            MatrixX<T>&     ctrl_pts)                           // (output) control points)
+        {
+            // check quantities
+            if (mfa_data.p.size() != input.ndom_pts().size())
+            {
+                fprintf(stderr, "Error: encodeBSpline() size of p must equal size of ndom_pts\n");
+                exit(1);
+            }
+            for (size_t i = 0; i < mfa_data.p.size(); i++)
+            {
+                if (nctrl_pts(i) <= mfa_data.p(i))
+                {
+                    fprintf(stderr, "Error: encodeBSpline() number of control points in dimension %ld "
+                            "must be at least p + 1 for dimension %ld\n", i, i);
+                    exit(1);
+                }
+                if (nctrl_pts(i) > input.ndom_pts(i))
+                {
+                    fprintf(stderr, "Warning: Encode() number of control points (%d) in dimension %ld "
+                            "exceeds number of input data points (%d) in dimension %ld.\n", nctrl_pts(i), i, input.ndom_pts(i), i);
+                }
+            }
 
+            int      pt_dim = mfa_data.dim();               // control point dimensonality
+            
+            // resize matrices in case number of control points changed
+            ctrl_pts.resize(nctrl_pts.prod(), pt_dim);
+
+            // resize basis function matrices and initialize to 0; will only fill nonzeros later
+            // TODO: N should be a member of Encoder, since it is data dependent
+            mfa_data.N.resize(dom_dim);
+            for (auto k = 0; k < dom_dim; k++)
+                mfa_data.N[k] = MatrixX<T>::Zero(input.ndom_pts(k), nctrl_pts(k));
+
+            // 2 buffers of temporary control points
+            // double buffer needed to write output curves of current dim without changing its input pts
+            // temporary control points need to begin with size as many as the input domain points
+            // except for the first dimension, which can be the correct number of control points
+            // because the input domain points are converted to control points one dimension at a time
+            // TODO: need to find a more space-efficient way
+            size_t tot_ntemp_ctrl = 1;
+            for (size_t k = 0; k < dom_dim; k++)
+                tot_ntemp_ctrl *= (k == 0 ? nctrl_pts(k) : input.ndom_pts(k));
+            MatrixX<T> temp_ctrl0 = input.domain.middleCols(mfa_data.min_dim, mfa_data.dim());
+            MatrixX<T> temp_ctrl1 = MatrixX<T>::Zero(tot_ntemp_ctrl, pt_dim);
+
+            // Define sizes of volumes before and after encoding each dimension
+            VectorXi    inputSize = input.ndom_pts();
+            VectorXi    outputSize = input.ndom_pts();
+
+            // Encode each dimension independently (separably)
+            for (size_t k = 0; k < dom_dim; k++)
+            {
+                // Update volume sizes
+                inputSize = outputSize;
+                outputSize(k) = nctrl_pts(k);
+
+                // Iterators for each volume
+                VolIterator inputVolumeIter(inputSize);
+                VolIterator outputVolumeIter(outputSize);
+
+                // number of curves in this dimension
+                int ncurves = inputSize.prod() / inputSize(k);
+
+                // N is a matrix of m (# input points) x n (# control points) basis function coefficients
+                //  _                              _
+                // |  N_0(u[0])   ... N_n-1(u[0])   |
+                // |     ...      ...      ...      |
+                // |  N_0(u[m-1]) ... N_n-1(u[m-1]) |
+                //  -                              -
+                // TODO: N is going to be very sparse when it is large: switch to sparse representation
+                // N has semibandwidth < p  nonzero entries across diagonal
+                for (int i = 0; i < mfa_data.N[k].rows(); i++)
+                {
+                    int span = mfa_data.tmesh.FindSpan(k, input.params->param_grid[k][i], nctrl_pts(k));
+
+#ifndef MFA_TMESH
+                    // original version for one tensor product
+                    mfa_data.OrigBasisFuns(k, input.params->param_grid[k][i], span, mfa_data.N[k], i);
+#else
+                    mfa_data.BasisFuns(k, input.params->param_grid[k][i], span, mfa_data.N[k], i);
+#endif
+                }
+
+                // Compute system matrix
+                MatrixX<T> NtN  = mfa_data.N[k].transpose() * mfa_data.N[k];
+                Eigen::LLT<MatrixX<T>> ntnLLT(NtN);
+
+#ifdef MFA_TBB  // TBB version
+                enumerable_thread_specific<SliceIterator> inputSliceIter(inputVolumeIter, k);
+                enumerable_thread_specific<SliceIterator> outputSliceIter(outputVolumeIter, k);
+                static affinity_partitioner ap;
+                parallel_for (blocked_range<size_t>(0, ncurves), [&] (blocked_range<size_t>& r)
+                {
+                    // R is the right hand side needed for solving NtN * P = Nt*R
+                    // P are the unknown control points and the solution to NtN * P = R
+                    MatrixX<T> R(inputSize(k), pt_dim);
+                    MatrixX<T> P(outputSize(k), pt_dim);
+                    
+                    for (auto j = r.begin(); j < r.end(); j++)        // for all the curves in this dimension
+                    {
+                        inputSliceIter.local().seek(j);
+                        outputSliceIter.local().seek(j);
+                        CurveIterator   inputCurveIter(inputSliceIter.local());       // one curve of the input points in the current dim
+                        CurveIterator   outputCurveIter(outputSliceIter.local());      // one curve of the output points in the current dim
+
+                        // compute the one curve of control points
+                        ctrlCurveBSpline(inputCurveIter, R, temp_ctrl0, temp_ctrl1, mfa_data.N[k].transpose(), ntnLLT, P);
+
+                        // Copy P to the intermediate volumes, temp_ctrl0 or temp_ctrl1
+                        copyCtrl(outputCurveIter, P, temp_ctrl0, temp_ctrl1);
+
+                        inputSliceIter.local().incr_iter();
+                        outputSliceIter.local().incr_iter();
+                    }   // curves in this dimension
+                }, ap);
+
+#endif              // end TBB version
+
+#if defined(MFA_SERIAL) || defined(MFA_KOKKOS)
+                // R is the right hand side needed for solving NtN * P = Nt*R
+                MatrixX<T> R(inputSize(k), pt_dim);
+
+                // P are the unknown control points and the solution to NtN * P = R
+                MatrixX<T> P(outputSize(k), pt_dim);
+
+                // encode curves in this dimension
+                SliceIterator inputSliceIter(inputVolumeIter, k);
+                SliceIterator outputSliceIter(outputVolumeIter, k);
+                while (!inputSliceIter.done())
+                {
+                    // print progress
+                    if (verbose >= 2)
+                    {
+                        int j = inputSliceIter.cur_iter();
+                        if (j > 0 && j > 100 && j % (ncurves / 100) == 0)
+                            fprintf(stderr, "\r dimension %ld: %.0f %% encoded (%ld out of %ld curves)",
+                                    k, (T)j / (T)ncurves * 100, j, ncurves);
+                    }
+
+                    // TODO: check if we can move this out of inner loop (may need to reset iterators inside loop)
+                    CurveIterator   inputCurveIter(inputSliceIter);       // one curve of the input points in the current dim
+                    CurveIterator   outputCurveIter(outputSliceIter);      // one curve of the output points in the current dim
+
+                    // compute the one curve of control points
+                    ctrlCurveBSpline(inputCurveIter, R, temp_ctrl0, temp_ctrl1, mfa_data.N[k].transpose(), ntnLLT, P);
+
+                    // Copy P to the intermediate volumes, temp_ctrl0 or temp_ctrl1
+                    copyCtrl(outputCurveIter, P, temp_ctrl0, temp_ctrl1);
+
+                    inputSliceIter.incr_iter();
+                    outputSliceIter.incr_iter();
+                }
+
+#endif          // end serial version
+
+                // copy final result back to tensor product
+                if (dom_dim % 2 == 0)
+                    ctrl_pts = temp_ctrl0.block(0, 0, nctrl_pts.prod(), pt_dim);    // TODO: change to Q0.topRows(t.nctrl_pts.prod());
+                else
+                    ctrl_pts = temp_ctrl1.block(0, 0, nctrl_pts.prod(), pt_dim);
+
+                // // adjust offsets and strides for next dimension
+                // ntemp_ctrl(k) = nctrl_pts(k);
+                // cs *= ntemp_ctrl(k);
+
+                // print progress
+                if (verbose >= 2)
+                    fprintf(stderr, "\r dimension %ld: 100%% encoded                                       \n", k);
+            }        
+        }
 
         void ConsMatrix(    TensorIdx               t_idx,
                             int                     deriv,
@@ -2716,6 +2903,38 @@ namespace mfa
             }
         }
 
+        // solves for one curve of control points -- no weights (B-Spline encode only)
+        // outputs go to specified control points and weights matrix and vector rather than default mfa
+        void ctrlCurveBSpline(
+            CurveIterator&          in_curve_iter,                  // current curve
+            MatrixX<T>&             R,                              // right hand side, allocated by caller
+            MatrixX<T>&             Q0,                             // first matrix of input points, allocated by caller
+            MatrixX<T>&             Q1,                             // second matrix of input points, allocated by caller
+            const MatrixX<T>&       Nt,                             // transpose of collocation matrix
+            Eigen::LLT<MatrixX<T>>& llt,                            // LLT factorization of Nt*N
+            MatrixX<T>&             P)                              // (output) control points
+        {
+            int dim = in_curve_iter.curve_dim();
+
+            // copy one curve of input points to right hand side
+            // add zero entries for rows that will correspond to deriv constraints
+            while (!in_curve_iter.done())
+            {
+                int curve_idx = in_curve_iter.cur_iter();
+                int vol_idx = in_curve_iter.cur_iter_full();    // point index. One for each grid point on this curve
+                
+                if (dim % 2 == 0)
+                    R.row(curve_idx) = Q0.row(vol_idx);
+                else
+                    R.row(curve_idx) = Q1.row(vol_idx);
+                
+                in_curve_iter.incr_iter();
+            }
+            in_curve_iter.reset();
+
+            P = llt.solve(Nt * R);
+        }
+
         // solves for one curve of control points
         // outputs go to specified control points and weights matrix and vector rather than default mfa
         void CtrlCurve(
@@ -2802,6 +3021,25 @@ namespace mfa
             {
                 for (auto i = 0; i < temp_weights.size(); i++)
                     weights(to + i * cs) = temp_weights(i);
+            }
+        }
+
+        // Copy individual curve of control points to intermediate volumes
+        // For use with dimension-separable encode
+        void copyCtrl(
+            CurveIterator&          outputCurveIter,                // curve in output volume
+            const MatrixX<T>&       P,                              // control points to copy
+            MatrixX<T>&             Q0,                             // first matrix of output points
+            MatrixX<T>&             Q1)                             // second matrix of output points
+        {
+            MatrixX<T>& output = outputCurveIter.curve_dim() % 2 == 0 ? Q1 : Q0;
+            while (!outputCurveIter.done())
+            {
+                // Copy control point in P to corresponding output row
+                output.row(outputCurveIter.cur_iter_full()) = P.row(outputCurveIter.cur_iter());
+                
+                // Move along the curve
+                outputCurveIter.incr_iter();
             }
         }
 

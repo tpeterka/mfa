@@ -708,8 +708,14 @@ namespace mfa
                 const PointSet<T>&  input,                  // input points
                 T                   regularization,
                 bool                reg1and2,
-                bool                weighted)               // solve for and use weights (default = true)
+                bool                weighted)               // solve for and use weights
         {
+            if (weighted && verbose > 0)
+            {
+                fmt::print("**MFA Warning: NURBS weights enabled during model encoding. This feature is not actively developed.\n");
+                fmt::print("               Are you sure this is what you want?\n");
+            }
+
             // fixed encode assumes the tmesh has only one tensor product
             TensorProduct<T>&t = mfa_data.tmesh.tensor_prods[0];
 
