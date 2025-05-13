@@ -266,7 +266,6 @@ namespace mfa
         vector<int>         q;
 
         int                 verbose;                    // output level
-        bool                saved_basis;                // flag to use saved basis functions within mfa_data
 
         DecodeTimes         decode_times;               // debug
 
@@ -274,14 +273,12 @@ namespace mfa
 
         Decoder(
                 const MFA_Data<T>&  mfa_data_,              // MFA data model
-                int                 verbose_,               // debug level
-                bool                saved_basis_=false) :   // flag to reuse saved basis functions   
+                int                 verbose_) :             // debug level
             mfa_data(mfa_data_),
             dom_dim(mfa_data_.dom_dim),
             tot_iters((mfa_data.p + VectorXi::Ones(dom_dim)).prod()),
             q0(mfa_data_.p(0)+1),
-            verbose(verbose_),
-            saved_basis(saved_basis_)
+            verbose(verbose_)
         {
             // ensure that encoding was already done
             if (!mfa_data.p.size()                               ||
@@ -341,9 +338,6 @@ namespace mfa
                 const   VectorXi&       derivs = VectorXi())    // derivative to take in each domain dim. (0 = value, 1 = 1st deriv, 2 = 2nd deriv, ...)
                                                                 // pass size-0 vector if unused
         {
-            if (saved_basis && !ps.is_structured())
-                cerr << "Warning: Saved basis decoding not implemented with unstructured input. Proceeding with standard decoding" << endl;
-
 #ifdef MFA_TBB                                          // TBB version, faster (~3X) than serial
             // thread-local DecodeInfo
             // ref: https://www.threadingbuildingblocks.org/tutorial-intel-tbb-thread-local-storage
@@ -365,23 +359,11 @@ namespace mfa
 
 #ifndef MFA_TMESH   // original version for one tensor product
 
-                    if (saved_basis && ps.is_structured())
-                    {
-                        pt_it.ijk(ijk);
-                        VolPt_saved_basis(ijk, param, cpt, thread_decode_info.local(), mfa_data.tmesh.tensor_prods[0]);
+                    VolPt(param, cpt, thread_decode_info.local(), mfa_data.tmesh.tensor_prods[0], derivs);
 
-                        // debug
-                        if (pt_it.idx() == 0 && verbose >= 2)
-                            fmt::print(stderr, " ->DecodePointSet: Using VolPt_saved_basis w/ TBB over points\n");
-                    }
-                    else
-                    {
-                        VolPt(param, cpt, thread_decode_info.local(), mfa_data.tmesh.tensor_prods[0], derivs);
-
-                        // debug
-                        if (pt_it.idx() == 0 && verbose >= 2)
-                            fmt::print(stderr, " ->DecodePointSet: Using VolPt w/ TBB over points\n");
-                    }
+                    // debug
+                    if (pt_it.idx() == 0 && verbose >= 2)
+                        fmt::print(stderr, " ->DecodePointSet: Using VolPt w/ TBB over points\n");
 
 #else           // tmesh version
 
@@ -438,22 +420,11 @@ namespace mfa
                     // compute approximated point for this parameter vector
 
 #ifndef MFA_TMESH   // original version for one tensor product
-                    if (saved_basis && ps.is_structured())
-                    {
-                        if (pt_it.idx() == 0 && verbose >= 2)
-                            fmt::print(stderr, " ->DecodePointSet: Using VolPt_saved_basis w/o TBB (serial or kokkos)\n");
 
-                        pt_it.ijk(ijk);
-                        VolPt_saved_basis(ijk, param, cpt, decode_info, mfa_data.tmesh.tensor_prods[0]);
-                    }
-                    else
-                    {
-                        if (pt_it.idx() == 0 && verbose >= 2)
-                            fmt::print(stderr, " ->DecodePointSet: Using VolPt w/o TBB (serial or kokkos)\n");
+                    if (pt_it.idx() == 0 && verbose >= 2)
+                        fmt::print(stderr, " ->DecodePointSet: Using VolPt w/o TBB (serial or kokkos)\n");
 
-                        VolPt(param, cpt, decode_info, mfa_data.tmesh.tensor_prods[0], derivs);
-                    }
-
+                    VolPt(param, cpt, decode_info, mfa_data.tmesh.tensor_prods[0], derivs);
                     
 #else   // tmesh version
                     if (pt_it.idx() == 0 && verbose >= 2)
@@ -1441,79 +1412,6 @@ namespace mfa
 
         }
 
-        // compute a point from a NURBS n-d volume at a given parameter value
-        // fastest version for multiple points, reuses saved basis functions
-        // only values, no derivatives, because basis functions were not saved for derivatives
-        // algorithm 4.3, Piegl & Tiller (P&T) p.134
-        void VolPt_saved_basis(
-                const VectorXi&             ijk,        // ijk index of input domain point being decoded
-                const VectorX<T>&           param,      // parameter value in each dim. of desired point
-                VectorX<T>&                 out_pt,     // (output) point, allocated by caller
-                DecodeInfo<T>&              di,         // reusable decode info allocated by caller (more efficient when calling VolPt multiple times)
-                const TensorProduct<T>&     tensor)     // tensor product to use for decoding
-        {
-            int last = tensor.ctrl_pts.cols() - 1;
-
-            di.Reset_saved_basis(mfa_data);
-
-            // set up the volume iterator
-            VectorXi npts = mfa_data.p + VectorXi::Ones(mfa_data.dom_dim);      // local support is p + 1 in each dim.
-            VolIterator vol_iter(npts);                                         // for iterating in a flat loop over n dimensions
-
-            // linear index of first control point
-            di.ctrl_idx = 0;
-            for (int j = 0; j < mfa_data.dom_dim; j++)
-            {
-                di.span[j]    = mfa_data.tmesh.FindSpan(j, param(j), tensor);
-                di.ctrl_idx += (di.span[j] - mfa_data.p(j) + ct(0, j)) * cs[j];
-            }
-            size_t start_ctrl_idx = di.ctrl_idx;
-
-            while (!vol_iter.done())
-            {
-                // always compute the point in the first dimension
-                di.ctrl_pt  = tensor.ctrl_pts.row(di.ctrl_idx);
-                T w         = tensor.weights(di.ctrl_idx);
-
-#ifdef WEIGH_ALL_DIMS                                                           // weigh all dimensions
-                di.temp[0] += (mfa_data.N[0])(ijk(0), vol_iter.idx_dim(0) + di.span[0] - mfa_data.p(0)) * di.ctrl_pt * w;
-#else                                                                           // weigh only range dimension
-                for (auto j = 0; j < last; j++)
-                    (di.temp[0])(j) += (mfa_data.N[0])(ijk(0), vol_iter.idx_dim(0) + di.span[0] - mfa_data.p(0)) * di.ctrl_pt(j);
-                (di.temp[0])(last) += (mfa_data.N[0])(ijk(0), vol_iter.idx_dim(0) + di.span[0] - mfa_data.p(0)) * di.ctrl_pt(last) * w;
-#endif
-
-                di.temp_denom(0) += w * mfa_data.N[0](ijk(0), vol_iter.idx_dim(0) + di.span[0] - mfa_data.p(0));
-
-                vol_iter.incr_iter();                                           // must call near bottom of loop, but before checking for done span below
-
-                // for all dimensions except last, check if span is finished
-                di.ctrl_idx = start_ctrl_idx;
-                for (size_t k = 0; k < mfa_data.dom_dim; k++)
-                {
-                    if (vol_iter.cur_iter() < vol_iter.tot_iters())
-                        di.ctrl_idx += ct(vol_iter.cur_iter(), k) * cs[k];      // ctrl_idx for the next iteration
-                    if (k < mfa_data.dom_dim - 1 && vol_iter.done(k))
-                    {
-                        // compute point in next higher dimension and reset computation for current dim
-                        // use prev_idx_dim because iterator was already incremented above
-                        di.temp[k + 1]        += (mfa_data.N[k + 1])(ijk(k + 1), vol_iter.prev_idx_dim(k + 1) + di.span[k + 1] - mfa_data.p(k + 1)) * di.temp[k];
-                        di.temp_denom(k + 1)  += di.temp_denom(k) * mfa_data.N[k + 1](ijk(k + 1), vol_iter.prev_idx_dim(k + 1) + di.span[k + 1] - mfa_data.p(k + 1));
-                        di.temp_denom(k)       = 0.0;
-                        di.temp[k].setZero();
-                    }
-                }
-            }
-
-            T denom = di.temp_denom(mfa_data.dom_dim - 1);                      // rational denominator
-
-#ifdef WEIGH_ALL_DIMS                                                           // weigh all dimensions
-            out_pt = di.temp[mfa_data.dom_dim - 1] / denom;
-#else                                                                           // weigh only range dimension
-            out_pt   = di.temp[mfa_data.dom_dim - 1];
-            out_pt(last) /= denom;
-#endif
-        }
 
         // compute a point from a NURBS n-d volume at a given parameter value
         // fastest version for multiple points, reuses computed basis functions

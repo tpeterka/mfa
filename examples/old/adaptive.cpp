@@ -220,7 +220,7 @@ int main(int argc, char** argv)
                 { b->error(cp, 1, true); });
 #else                   // range coordinate difference
         master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-                { b->range_error(cp, true, true); });   // saved_basis =  true, re-use basis functions if possible (tmesh will override to false)
+                { b->range_error(cp, true); });
 #endif
         decode_time = MPI_Wtime() - decode_time;
     }

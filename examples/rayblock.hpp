@@ -476,7 +476,7 @@ struct RayBlock : public Block<T>
         approx_pts->set_grid_params();
 
         // Decode on above-specified grid
-        models->Decode(*approx_pts, false);
+        models->Decode(*approx_pts);
 
         // Copy geometric point coordinates into error and exact PointSets
         exact_pts->domain.leftCols(exact_pts->geom_dim()) = approx_pts->domain.leftCols(approx_pts->geom_dim());
@@ -542,7 +542,7 @@ struct RayBlock : public Block<T>
         }
         ray_approx = new mfa::PointSet<T>(ray_input->params, ray_input->model_dims());  // Set decode params from ray_input params
 
-        ray_mfa->Decode(*ray_approx, false);
+        ray_mfa->Decode(*ray_approx);
     }
 
     pair<T,T> dualCoords(const VectorX<T>& a, const VectorX<T>& b) const

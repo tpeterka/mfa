@@ -1636,7 +1636,7 @@ struct Block : public BlockBase<T, U>
         approx_pts->set_grid_params();
 
         // Decode on above-specified grid
-        mfa->Decode(*approx_pts, false);
+        mfa->Decode(*approx_pts);
 
         // Copy geometric point coordinates into error and exact PointSets
         exact_pts->domain.leftCols(exact_pts->geom_dim()) = approx_pts->domain.leftCols(approx_pts->geom_dim());

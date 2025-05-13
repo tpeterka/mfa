@@ -124,9 +124,9 @@ namespace mfa
             weights.resize(ctrl_pts.rows());
 
             // resize basis function matrices and initialize to 0; will only fill nonzeros later
-            mfa_data.N.resize(dom_dim);
+            vector<MatrixX<T>> N(dom_dim);
             for (auto k = 0; k < dom_dim; k++)
-                mfa_data.N[k] = MatrixX<T>::Zero(input.ndom_pts(k), nctrl_pts(k));
+                N[k] = MatrixX<T>::Zero(input.ndom_pts(k), nctrl_pts(k));
 
             // 2 buffers of temporary control points
             // double buffer needed to write output curves of current dim without changing its input pts
@@ -190,30 +190,30 @@ namespace mfa
                 // TODO: N is going to be very sparse when it is large: switch to sparse representation
                 // N has semibandwidth < p  nonzero entries across diagonal
 
-                for (int i = 0; i < mfa_data.N[k].rows(); i++)
+                for (int i = 0; i < N[k].rows(); i++)
                 {
                     int span = mfa_data.tmesh.FindSpan(k, input.params->param_grid[k][i], nctrl_pts(k));
 
 #ifndef MFA_TMESH   // original version for one tensor product
 
-                    mfa_data.OrigBasisFuns(k, input.params->param_grid[k][i], span, mfa_data.N[k], i);
+                    mfa_data.OrigBasisFuns(k, input.params->param_grid[k][i], span, N[k], i);
 
 #else               // tmesh version
 
-                    mfa_data.BasisFuns(k, input.params->param_grid[k][i], span, mfa_data.N[k], i);
+                    mfa_data.BasisFuns(k, input.params->param_grid[k][i], span, N[k], i);
 
 #endif
                 }
 
                 // debug
-//                 fmt::print(stderr, "N[{}]:\n {}\n", k, mfa_data.N[k]);
+//                 fmt::print(stderr, "N[{}]:\n {}\n", k, N[k]);
 
                 // TODO: NtN is going to be very sparse when it is large: switch to sparse representation
                 // NtN has semibandwidth < p + 1 nonzero entries across diagonal
-                MatrixX<T> NtN  = mfa_data.N[k].transpose() * mfa_data.N[k];
+                MatrixX<T> NtN  = N[k].transpose() * N[k];
 
                 // debug
-//                 cerr << "N[k]:\n" << mfa_data.N[k] << endl;
+//                 cerr << "N[k]:\n" << N[k] << endl;
 //                 cerr << "NtN:\n" << NtN << endl;
 
 #ifdef MFA_TBB  // TBB version
@@ -226,13 +226,13 @@ namespace mfa
                         // fprintf(stderr, "j=%ld curve\n", j);
 
                         // R is the right hand side needed for solving NtN * P = R
-                        MatrixX<T> R(mfa_data.N[k].cols(), pt_dim);
+                        MatrixX<T> R(N[k].cols(), pt_dim);
                         // P are the unknown control points and the solution to NtN * P = R
                         // NtN is positive definite -> do not need pivoting
                         // TODO: use a common representation for P and ctrl_pts to avoid copying
-                        MatrixX<T> P(mfa_data.N[k].cols(), pt_dim);
+                        MatrixX<T> P(N[k].cols(), pt_dim);
                         // compute the one curve of control points
-                        CtrlCurve(mfa_data.N[k], NtN, R, P, k, co[j], cs, to[j], temp_ctrl0, temp_ctrl1, -1, ctrl_pts, weights, weighted);
+                        CtrlCurve(N[k], NtN, R, P, k, co[j], cs, to[j], temp_ctrl0, temp_ctrl1, -1, ctrl_pts, weights, weighted);
                     }   // curves in this dimension
                 }, ap);
 
@@ -240,12 +240,12 @@ namespace mfa
 
 #if defined(MFA_SERIAL) || defined(MFA_KOKKOS)
                 // R is the right hand side needed for solving NtN * P = R
-                MatrixX<T> R(mfa_data.N[k].cols(), pt_dim);
+                MatrixX<T> R(N[k].cols(), pt_dim);
 
                 // P are the unknown control points and the solution to NtN * P = R
                 // NtN is positive definite -> do not need pivoting
                 // TODO: use a common representation for P and ctrl_pts to avoid copying
-                MatrixX<T> P(mfa_data.N[k].cols(), pt_dim);
+                MatrixX<T> P(N[k].cols(), pt_dim);
 
                 // encode curves in this dimension
                 for (size_t j = 0; j < ncurves; j++)
@@ -259,7 +259,7 @@ namespace mfa
                     }
 
                     // compute the one curve of control points
-                    CtrlCurve(mfa_data.N[k], NtN, R, P, k, co[j], cs, to[j], temp_ctrl0, temp_ctrl1, j, ctrl_pts, weights, weighted);
+                    CtrlCurve(N[k], NtN, R, P, k, co[j], cs, to[j], temp_ctrl0, temp_ctrl1, j, ctrl_pts, weights, weighted);
                 }
 
 #endif          // end serial version
@@ -278,7 +278,7 @@ namespace mfa
 //             cerr << "Encode() weights:\n" << weights << endl;
         }
 
-        void encodeBSpline(
+        void encodeBSpline( 
             const VectorXi& nctrl_pts,                          // number of control points in each dim.
             MatrixX<T>&     ctrl_pts)                           // (output) control points)
         {
@@ -309,10 +309,9 @@ namespace mfa
             ctrl_pts.resize(nctrl_pts.prod(), pt_dim);
 
             // resize basis function matrices and initialize to 0; will only fill nonzeros later
-            // TODO: N should be a member of Encoder, since it is data dependent
-            mfa_data.N.resize(dom_dim);
+            vector<MatrixX<T>> N(dom_dim);
             for (auto k = 0; k < dom_dim; k++)
-                mfa_data.N[k] = MatrixX<T>::Zero(input.ndom_pts(k), nctrl_pts(k));
+                N[k] = MatrixX<T>::Zero(input.ndom_pts(k), nctrl_pts(k));
 
             // 2 buffers of temporary control points
             // double buffer needed to write output curves of current dim without changing its input pts
@@ -352,20 +351,20 @@ namespace mfa
                 //  -                              -
                 // TODO: N is going to be very sparse when it is large: switch to sparse representation
                 // N has semibandwidth < p  nonzero entries across diagonal
-                for (int i = 0; i < mfa_data.N[k].rows(); i++)
+                for (int i = 0; i < N[k].rows(); i++)
                 {
                     int span = mfa_data.tmesh.FindSpan(k, input.params->param_grid[k][i], nctrl_pts(k));
 
 #ifndef MFA_TMESH
                     // original version for one tensor product
-                    mfa_data.OrigBasisFuns(k, input.params->param_grid[k][i], span, mfa_data.N[k], i);
+                    mfa_data.OrigBasisFuns(k, input.params->param_grid[k][i], span, N[k], i);
 #else
-                    mfa_data.BasisFuns(k, input.params->param_grid[k][i], span, mfa_data.N[k], i);
+                    mfa_data.BasisFuns(k, input.params->param_grid[k][i], span, N[k], i);
 #endif
                 }
 
                 // Compute system matrix
-                MatrixX<T> NtN  = mfa_data.N[k].transpose() * mfa_data.N[k];
+                MatrixX<T> NtN  = N[k].transpose() * N[k];
                 Eigen::LLT<MatrixX<T>> ntnLLT(NtN);
 
 #ifdef MFA_TBB  // TBB version
@@ -387,7 +386,7 @@ namespace mfa
                         CurveIterator   outputCurveIter(outputSliceIter.local());      // one curve of the output points in the current dim
 
                         // compute the one curve of control points
-                        ctrlCurveBSpline(inputCurveIter, R, temp_ctrl0, temp_ctrl1, mfa_data.N[k].transpose(), ntnLLT, P);
+                        ctrlCurveBSpline(inputCurveIter, R, temp_ctrl0, temp_ctrl1, N[k].transpose(), ntnLLT, P);
 
                         // Copy P to the intermediate volumes, temp_ctrl0 or temp_ctrl1
                         copyCtrl(outputCurveIter, P, temp_ctrl0, temp_ctrl1);
@@ -425,7 +424,7 @@ namespace mfa
                     CurveIterator   outputCurveIter(outputSliceIter);      // one curve of the output points in the current dim
 
                     // compute the one curve of control points
-                    ctrlCurveBSpline(inputCurveIter, R, temp_ctrl0, temp_ctrl1, mfa_data.N[k].transpose(), ntnLLT, P);
+                    ctrlCurveBSpline(inputCurveIter, R, temp_ctrl0, temp_ctrl1, N[k].transpose(), ntnLLT, P);
 
                     // Copy P to the intermediate volumes, temp_ctrl0 or temp_ctrl1
                     copyCtrl(outputCurveIter, P, temp_ctrl0, temp_ctrl1);
@@ -441,10 +440,6 @@ namespace mfa
                     ctrl_pts = temp_ctrl0.block(0, 0, nctrl_pts.prod(), pt_dim);    // TODO: change to Q0.topRows(t.nctrl_pts.prod());
                 else
                     ctrl_pts = temp_ctrl1.block(0, 0, nctrl_pts.prod(), pt_dim);
-
-                // // adjust offsets and strides for next dimension
-                // ntemp_ctrl(k) = nctrl_pts(k);
-                // cs *= ntemp_ctrl(k);
 
                 // print progress
                 if (verbose >= 2)

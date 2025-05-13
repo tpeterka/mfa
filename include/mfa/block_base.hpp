@@ -255,9 +255,7 @@ struct BlockBase
     }
 
     // decode entire block at the same parameter locations as 'input'
-    void decode_block(
-            const   diy::Master::ProxyWithLink& cp,
-            bool                                saved_basis)    // whether basis functions were saved and can be reused
+    void decode_block(const diy::Master::ProxyWithLink& cp)
     {
         if (approx)
         {
@@ -266,7 +264,7 @@ struct BlockBase
         }
         approx = new mfa::PointSet<T>(input->params, input->model_dims());  // Set decode params from input params
 
-        mfa->Decode(*approx, saved_basis);
+        mfa->Decode(*approx);
     }
 
     // decode entire block over a regular grid
@@ -284,7 +282,7 @@ struct BlockBase
         }
         approx = new mfa::PointSet<T>(grid_params, input->model_dims());
 
-        mfa->Decode(*approx, false);
+        mfa->Decode(*approx);
     }
 
     // decode one point
@@ -392,13 +390,13 @@ struct BlockBase
         }
 
         // N.B. We do not differentiate geometry
-        mfa->DecodeGeom(*approx, false);
+        mfa->DecodeGeom(*approx);
         for (int k = 0; k < approx->nvars(); k++)
         {
             if (var < 0 || k == var)
-                mfa->DecodeVar(k, *approx, false, derivs);
+                mfa->DecodeVar(k, *approx, derivs);
             else
-                mfa->DecodeVar(k, *approx, false);
+                mfa->DecodeVar(k, *approx);
         }
 
         // the derivative is a vector of same dimensionality as domain
@@ -422,8 +420,7 @@ struct BlockBase
     // uses coordinate-wise difference between values
     void range_error(
             const   diy::Master::ProxyWithLink& cp,
-            bool    decode_block_,                          // decode entire block first
-            bool    saved_basis)                            // whether basis functions were saved and can be reused
+            bool    decode_block_)                          // decode entire block first
     {
         if (input == nullptr)
         {
@@ -437,14 +434,10 @@ struct BlockBase
         }
         errs = new mfa::PointSet<T>(input->params, input->model_dims());
 
-        // saved_basis only applies when not using tmesh
-#ifdef MFA_TMESH
-        saved_basis = false;
-#endif
         // Decode entire block and then compare to input
         if (decode_block_)
         {
-            decode_block(cp, saved_basis);
+            decode_block(cp);
 
             input->abs_diff(*approx, *errs);
         }
@@ -845,7 +838,7 @@ struct BlockBase
             param_maxs[i] = (core_maxs(i) - data_mins(i))/(data_maxs(i) - data_mins(i));
         }
         blend->set_grid_params(param_mins, param_maxs);
-        mfa->DecodeGeom(*blend, false);
+        mfa->DecodeGeom(*blend);
 
 #ifdef MFA_KOKKOS
         Kokkos::Profiling::popRegion(); // "calc_pos"
@@ -1019,7 +1012,7 @@ struct BlockBase
 
             mfa::PointSet<T> localBlockOverCoreK(dom_dim, mfa->model_dims(), sizeBlock, counts);
             localBlockOverCoreK.set_grid_params(param_mins, param_maxs);
-            mfa->DecodeVar(0, localBlockOverCoreK, false);  // Decode only science variable 0 (don't need to decode geometry)
+            mfa->DecodeVar(0, localBlockOverCoreK);  // Decode only science variable 0 (don't need to decode geometry)
 
             vector<T> computed_values(sizeBlock);
             for (int k = 0; k < sizeBlock; k++)

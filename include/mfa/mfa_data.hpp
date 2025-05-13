@@ -103,8 +103,6 @@ namespace mfa
         int                       min_dim;       // starting coordinate of this model in full-dimensional data
         int                       max_dim;       // ending coordinate of this model in full-dimensional data
         VectorXi                  p;             // polynomial degree in each domain dimension
-        vector<MatrixX<T>>        N;             // vector of basis functions for each dimension
-                                                 // for all input points (matrix rows) and control points (matrix cols)
         Tmesh<T>                  tmesh;         // t-mesh of knots, control points, weights
         T                         max_err;       // unnormalized absolute value of maximum error
         bool                      verbose{false};

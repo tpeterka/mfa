@@ -156,7 +156,7 @@ int main(int argc, char** argv)
     fprintf(stderr, "\nFinal decoding and computing max. error...\n");
     master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
     { 
-        b->range_error(cp, true, false);
+        b->range_error(cp, true);
     });
     decode_time = MPI_Wtime() - decode_time;
     fprintf(stderr, "Decoding done.\n");

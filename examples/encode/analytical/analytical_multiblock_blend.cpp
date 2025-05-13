@@ -202,7 +202,7 @@ int main(int argc, char **argv) {
             { b->error(cp, 0, true); });
 #else                   // range coordinate difference
     master.foreach([&](Block<real_t> *b, const diy::Master::ProxyWithLink &cp) {
-        b->range_error(cp, true, true);
+        b->range_error(cp, true);
     });
 #endif
     world.barrier();

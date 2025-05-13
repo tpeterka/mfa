@@ -203,7 +203,7 @@ int main(int argc, char **argv) {
 
     master.foreach([&](Block<real_t, int> *b, const diy::Master::ProxyWithLink &cp)
     {
-        b->range_error(cp, true, false);
+        b->range_error(cp, true);
     });
     master.foreach([&](Block<real_t, int> *b, const diy::Master::ProxyWithLink &cp)
     {

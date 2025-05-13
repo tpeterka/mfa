@@ -762,13 +762,12 @@ namespace mfa
         // Decode geometry model at set of points
         void DecodeGeom(
                 PointSet<T>&        output,
-                bool                saved_basis,
                 const VectorXi&     derivs = VectorXi()) const
         {
             if (verbose)
                 fmt::print("MFA: Decoding geometry\n");
 
-            mfa::Decoder<T> decoder(geom(), verbose, saved_basis);
+            mfa::Decoder<T> decoder(geom(), verbose);
             decoder.DecodePointSet(output, geometry->min_dim, geometry->max_dim, derivs);
         }
 
@@ -794,7 +793,6 @@ namespace mfa
         void DecodeVar(
                 int                 i,
                 PointSet<T>&        output,
-                bool                saved_basis,
                 const VectorXi&     derivs = VectorXi()) const
         {
             if (verbose)
@@ -806,7 +804,7 @@ namespace mfa
                 exit(1);
             }
 
-            mfa::Decoder<T> decoder(*(vars[i]), verbose, saved_basis);
+            mfa::Decoder<T> decoder(*(vars[i]), verbose);
             decoder.DecodePointSet(output, vars[i]->min_dim, vars[i]->max_dim, derivs);
         }
 
@@ -838,13 +836,12 @@ namespace mfa
         // Decode all models at set of points
         void Decode(
                 PointSet<T>&        output,
-                bool                saved_basis,
                 const VectorXi&     derivs = VectorXi()) const
         {
-            DecodeGeom(output, saved_basis, derivs);
+            DecodeGeom(output, derivs);
             for (int i = 0; i < nvars(); i++)
             {
-                DecodeVar(i, output, saved_basis, derivs);
+                DecodeVar(i, output, derivs);
             }
         }
 
@@ -902,7 +899,7 @@ namespace mfa
                 exit(1);
             }
 
-            mfa::Decoder<T> decoder(*(vars[k]), false, false);  // no verbose output for single points
+            mfa::Decoder<T> decoder(*(vars[k]), 0);  // no verbose output for single points
             decoder.AxisIntegral(dim, u0, u1, params, output);
         }
 
@@ -918,7 +915,7 @@ namespace mfa
                 exit(1);
             }
 
-            mfa::Decoder<T> decoder(*(vars[k]), verbose, false);
+            mfa::Decoder<T> decoder(*(vars[k]), verbose);
             decoder.DefiniteIntegral(a, b, output);
         }
 
@@ -931,7 +928,7 @@ namespace mfa
         {
             const TensorProduct<T>&t = mfa_data.tmesh.tensor_prods[0];
 
-            mfa::Decoder<T> decoder(mfa_data, verbose, false);
+            mfa::Decoder<T> decoder(mfa_data, verbose);
             decoder.IntegratePointSet(output, int_dim, t, mfa_data.min_dim, mfa_data.max_dim);
         }
 
