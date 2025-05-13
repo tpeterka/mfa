@@ -661,7 +661,7 @@ public:
     }
 
     static constexpr auto name
-        = const_name("tuple[") + concat(make_caster<Ts>::name...) + const_name("]");
+        = const_name("Tuple[") + concat(make_caster<Ts>::name...) + const_name("]");
 
     template <typename T>
     using cast_op_type = type;
@@ -882,10 +882,6 @@ struct handle_type_name<bytes> {
     static constexpr auto name = const_name(PYBIND11_BYTES_NAME);
 };
 template <>
-struct handle_type_name<buffer> {
-    static constexpr auto name = const_name("Buffer");
-};
-template <>
 struct handle_type_name<int_> {
     static constexpr auto name = const_name("int");
 };
@@ -902,20 +898,8 @@ struct handle_type_name<float_> {
     static constexpr auto name = const_name("float");
 };
 template <>
-struct handle_type_name<function> {
-    static constexpr auto name = const_name("Callable");
-};
-template <>
-struct handle_type_name<handle> {
-    static constexpr auto name = handle_type_name<object>::name;
-};
-template <>
 struct handle_type_name<none> {
     static constexpr auto name = const_name("None");
-};
-template <>
-struct handle_type_name<sequence> {
-    static constexpr auto name = const_name("Sequence");
 };
 template <>
 struct handle_type_name<args> {
@@ -1393,15 +1377,7 @@ inline namespace literals {
 /** \rst
     String literal version of `arg`
  \endrst */
-constexpr arg
-#if !defined(__clang__) && defined(__GNUC__) && __GNUC__ < 5
-operator"" _a // gcc 4.8.5 insists on having a space (hard error).
-#else
-operator""_a // clang 17 generates a deprecation warning if there is a space.
-#endif
-    (const char *name, size_t) {
-    return arg(name);
-}
+constexpr arg operator"" _a(const char *name, size_t) { return arg(name); }
 } // namespace literals
 
 PYBIND11_NAMESPACE_BEGIN(detail)

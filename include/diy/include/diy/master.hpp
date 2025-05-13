@@ -11,6 +11,7 @@
 #include <memory>
 #include <chrono>
 #include <climits>
+#include <random>
 
 #include "link.hpp"
 #include "collection.hpp"
@@ -21,6 +22,9 @@
 #include "time.hpp"
 
 #include "thread.hpp"
+
+#include "coroutine.hpp"
+#include "utils.hpp"
 
 #include "detail/block_traits.hpp"
 
@@ -85,6 +89,10 @@ namespace diy
       // foreach callback
       template<class Block>
       using Callback = std::function<void(Block*, const ProxyWithLink&)>;
+
+      // foreach_exchange callback
+      template<class Block>
+      using CoroutineCallback = std::function<void(Block* const&, const ProxyWithLink&)>;
 
       // iexchange callback
       template<class Block>
@@ -199,6 +207,10 @@ namespace diy
       inline void*  block(int i) const                  { return blocks_.find(i); }
       template<class Block>
       Block*        block(int i) const                  { return static_cast<Block*>(block(i)); }
+
+      const Collection&
+                    blocks() const                      { return blocks_; }
+
       //! return the `i`-th block, loading it if necessary
       void*         get(int i)                          { return blocks_.get(i); }
       template<class Block>
@@ -289,6 +301,18 @@ namespace diy
       bool          immediate() const                   { return immediate_; }
       void          set_immediate(bool i)               { if (i && !immediate_) execute(); immediate_ = i; }
 
+      /** foreach_exchange **/
+      struct CoroutineArg;
+
+      inline static
+      void          launch_process_block_coroutine();
+
+      template<class Block>
+      void          foreach_exchange_(const CoroutineCallback<Block>& f, bool remote, unsigned int stack_size);
+
+      template<class F>
+      void          foreach_exchange(const F& f, bool remote = false, unsigned int stack_size = 16*1024*1024);
+
     public:
       // Communicator functionality
       IncomingQueues&   incoming(int gid__)             { return incoming_[exchange_round_].map[gid__]; }
@@ -367,6 +391,7 @@ namespace diy
       std::shared_ptr<spd::logger>  log = get_logger();
       stats::Profiler               prof;
       stats::Annotation             exchange_round_annotation { "diy.exchange-round" };
+      std::mt19937 mt_gen;          // mersenne_twister random number generator
   };
 
   struct Master::SkipNoIncoming
@@ -379,6 +404,7 @@ namespace diy
 #include "detail/master/commands.hpp"
 #include "proxy.hpp"
 #include "detail/master/execution.hpp"
+#include "detail/master/foreach_exchange.hpp"
 
 diy::Master::
 Master(mpi::communicator    comm,
@@ -408,6 +434,13 @@ Master(mpi::communicator    comm,
   (void) threads__;
 #endif
     comm_.duplicate(comm);
+
+    // seed random number generator, broadcast seed, offset by rank
+    std::random_device rd;                      // seed source for the random number engine
+    unsigned int s = rd();
+    diy::mpi::broadcast(communicator(), s, 0);
+    std::mt19937 gen(s + communicator().rank());          // mersenne_twister random number generator
+    mt_gen = gen;
 }
 
 diy::Master::
@@ -591,8 +624,18 @@ diy::Master::
 release(int i)
 {
   void* b = blocks_.release(i);
+
+  expected_ -= links_[i]->size_unique();
   delete link(i);   links_[i] = 0;
+  std::swap(links_[i], links_.back());
+  links_.pop_back();
+
   lids_.erase(gid(i));
+
+  std::swap(gids_[i], gids_.back());
+  gids_.pop_back();
+  lids_[gid(i)] = i;
+
   return b;
 }
 
@@ -728,6 +771,7 @@ iexchange_(const ICallback<Block>& f, MemoryManagement mem)
     do
     {
         size_t work_done = 0;
+        DIY_UNUSED(work_done);
         for (int i = 0; i < static_cast<int>(size()); i++)     // for all blocks
         {
             int gid = this->gid(i);
@@ -890,7 +934,7 @@ order_gids()
         order.limit = order.size();
     else
         // average number of queues per block * in-memory block limit
-        order.limit = std::max((size_t) 1, order.size() / size() * limit_);
+        order.limit = (std::max)((size_t) 1, order.size() / size() * limit_);
 
     return order;
 }
@@ -1121,7 +1165,7 @@ send_different_rank(int from, int to, int proc, QueueRecord& qr, bool remote, IE
         {
             detail::VectorWindow<char> window;
             window.begin = &buffer->buffer[msg_buff_idx];
-            window.count = std::min(MAX_MPI_MESSAGE_COUNT, buffer->size() - msg_buff_idx);
+            window.count = (std::min)(MAX_MPI_MESSAGE_COUNT, buffer->size() - msg_buff_idx);
 
             inflight_sends().emplace_back();
             auto& inflight_send = inflight_sends().back();

@@ -27,7 +27,7 @@ stages:
 # Additionally, jobs may also contain:
 #
 #   - artifacts
-#   - dependency/needs jobs for required jobs
+#   - needs jobs for required jobs
 ################################################################################
 
 # CI strategy for DIY.
@@ -45,6 +45,29 @@ stages:
 # - Checkers
 #   - clang-tidy?
 
+.linux_builder_tags:
+  tags:
+    - diy
+    - build
+    - docker
+    - linux-x86_64
+
+.linux_tester_priv_tags:
+  tags:
+    - diy
+    - docker
+    - linux-x86_64
+    - privileged
+
+.windows_tags:
+  tags:
+    - diy
+    - nonconcurrent
+    - windows-x86_64
+    - shell
+    - vs2022
+    - msvc-19.33
+
 build:fedora36-mpich:
   extends:
     - .fedora36_mpich
@@ -58,9 +81,8 @@ test:fedora36-mpich:
     - .fedora36_mpich
     - .cmake_test_linux
     - .linux_builder_tags
+    - .cmake_annotation_artifacts
     - .run_automatically
-  dependencies:
-    - build:fedora36-mpich
   needs:
     - build:fedora36-mpich
 
@@ -77,9 +99,8 @@ test:fedora36-mpich-nothreads:
     - .fedora36_mpich_nothreads
     - .cmake_test_linux
     - .linux_builder_tags
+    - .cmake_annotation_artifacts
     - .run_automatically
-  dependencies:
-    - build:fedora36-mpich-nothreads
   needs:
     - build:fedora36-mpich-nothreads
 
@@ -96,10 +117,8 @@ test:fedora36-openmpi:
     - .fedora36_openmpi
     - .cmake_test_linux
     - .linux_builder_tags
-    - .cmake_build_artifacts
+    - .cmake_annotation_artifacts
     - .run_automatically
-  dependencies:
-    - build:fedora36-openmpi
   needs:
     - build:fedora36-openmpi
 
@@ -116,10 +135,8 @@ test:fedora36-asan:
     - .fedora36_asan
     - .cmake_memcheck_linux
     - .linux_tester_priv_tags
-    - .cmake_build_artifacts
+    - .cmake_annotation_artifacts
     - .run_automatically
-  dependencies:
-    - build:fedora36-asan
   needs:
     - build:fedora36-asan
 
@@ -136,10 +153,8 @@ test:fedora36-ubsan:
     - .fedora36_ubsan
     - .cmake_memcheck_linux
     - .linux_tester_priv_tags
-    - .cmake_build_artifacts
+    - .cmake_annotation_artifacts
     - .run_automatically
-  dependencies:
-    - build:fedora36-ubsan
   needs:
     - build:fedora36-ubsan
 
@@ -148,6 +163,7 @@ build:windows_vs2022_debug:
     - .windows_debug
     - .windows_tags
     - .cmake_build_windows
+    - .cmake_build_artifacts
     - .run_automatically
 
 test:windows_vs2022_debug:
@@ -155,9 +171,8 @@ test:windows_vs2022_debug:
     - .windows_debug
     - .windows_tags
     - .cmake_test_windows
+    - .cmake_annotation_artifacts
     - .run_automatically
-  dependencies:
-    - build:windows_vs2022_debug
   needs:
     - build:windows_vs2022_debug
 
@@ -166,6 +181,7 @@ build:windows_vs2022_release:
     - .windows_release
     - .windows_tags
     - .cmake_build_windows
+    - .cmake_build_artifacts
     - .run_automatically
 
 test:windows_vs2022_release:
@@ -173,8 +189,7 @@ test:windows_vs2022_release:
     - .windows_release
     - .windows_tags
     - .cmake_test_windows
+    - .cmake_annotation_artifacts
     - .run_automatically
-  dependencies:
-    - build:windows_vs2022_release
   needs:
     - build:windows_vs2022_release
