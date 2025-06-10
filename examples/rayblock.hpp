@@ -81,6 +81,7 @@ struct RayBlock : public Block<T>
     mfa::Stats<T>       stats;
     mfa::Stats<T>       ray_stats;
 
+    const double pi = 3.14159265358979;
     T r_lim{0};
 
     int trap_samples{0};        // number of samples used in trapezoid rule (used for testing)
@@ -241,42 +242,27 @@ struct RayBlock : public Block<T>
         }
     }
 
-    // ONLY 2d AT THE MOMENT
-    // precondition: Block already contains a fully encoded MFA
-    void create_ray_model(
-        const       diy::Master::ProxyWithLink& cp,
-        mfa::MFAInfo& mfa_info,
-        DomainArgs& args,
-        int n_samples,
-        int n_rho,
-        int n_alpha,
-        int v_samples,
-        int v_rho,
-        int v_alpha)
+    // Check if a point p is in the original domain of the data
+    bool in_domain2d(const VectorX<T> p)
     {
-        const double pi = 3.14159265358979;
-        if (n_samples == 0 || n_rho == 0 || n_alpha == 0)
-        {
-            cerr << "ERROR: Did not set n_samples, n_rho, or n_alpha before creating a ray model. See command line help" << endl;
-            exit(1);
-        }
-        if (v_samples == 0 || v_rho == 0 || v_alpha == 0)
-        {
-            cerr << "ERROR: Did not set v_samples, v_rho, or v_alpha before creating a ray model. See command line help" << endl;
-            exit(1);
-        }
+        return (p(0) > bounds_mins(0)) && (p(0) < bounds_maxs(0)) && (p(1) > bounds_mins(1)) && (p(1) < bounds_maxs(1));
+    }
 
-        // Update dimensionality
-        ray_dom_dim = dom_dim + 1;
-        VectorXi new_mdims = mfa->model_dims();
-        new_mdims[0] += 1;  
+    bool in_domain2d(T x, T y)
+    {
+        return (x > bounds_mins(0)) && (x < bounds_maxs(0)) && (y > bounds_mins(1)) && (y < bounds_maxs(1));
+    }
 
-        VectorXi ndom_pts{{n_samples, n_rho, n_alpha}};
-        ray_input = new mfa::PointSet<T>(ray_dom_dim, new_mdims, ndom_pts.prod(), ndom_pts);
+    void compute_bounds()
+    {
+        if (dom_dim == 2) compute_bounds2d();
+        else if (dom_dim == 3) compute_bounds3d();
+        else throw mfa::MFAError("Unsupported dimension in RayBlock::compute_bounds()");
+    }
 
-        // extents of domain in physical space
-        VectorX<T> param(dom_dim);
-        VectorX<T> outpt(pt_dim);
+    // extents of domain in physical space
+    void compute_bounds2d()
+    {
         const T xl = bounds_mins(0);
         const T xh = bounds_maxs(0);
         const T yl = bounds_mins(1);
@@ -285,10 +271,6 @@ struct RayBlock : public Block<T>
         // TODO: make this generic
         double max_radius = max(max(abs(xl),abs(xh)), max(abs(yl),abs(yh)));
         r_lim = max_radius * 1.5;
-
-        // Increments of rho and alpha
-        double dr = r_lim * 2 / (n_rho-1);
-        double da = pi / (n_alpha-1);
 
         // Set extents of rotated model
         ray_bounds_mins.resize(pt_dim + 1);
@@ -306,6 +288,25 @@ struct RayBlock : public Block<T>
         }
         ray_core_mins = ray_bounds_mins.head(dom_dim+1);
         ray_core_maxs = ray_bounds_maxs.head(dom_dim+1);
+    }
+
+    void compute_bounds3d()
+    {
+    }
+
+    // rotation samples = {n_samples, n_rho, n_alpha}
+    void sample_rotations2d(mfa::PointSet<T>& rotation_space, const vector<int>& rotation_samples)
+    {
+
+        int n_samples = rotation_samples[0];
+        int n_rho = rotation_samples[1];
+        int n_alpha = rotation_samples[2];
+        VectorX<T> param(dom_dim);
+        VectorX<T> outpt(pt_dim);
+
+        // Increments of rho and alpha
+        double dr = r_lim * 2 / (n_rho-1);
+        double da = pi / (n_alpha-1);
 
         // fill ray data set
         double alpha    = 0;   // angle of rotation
@@ -344,15 +345,15 @@ struct RayBlock : public Block<T>
                     T y = y0 - is * dy;
 
                     // If this point is not in the original domain
-                    if (x < xl + 1e-8 || x > xh - 1e-8 || y < yl + 1e-8 || y > yh - 1e-8)
+                    if (!in_domain2d(x, y))
                     {
                         // add dummy value, which will never be queried
                         ray_input->domain(idx, ray_dom_dim) = 0;
                     }
                     else    // point is in domain, decode value from existing MFA
                     {
-                        param(0) = (x - xl) / (xh - xl);
-                        param(1) = (y - yl) / (yh - yl);
+                        param(0) = (x - bounds_mins(0)) / (bounds_maxs(0) - bounds_mins(0));
+                        param(1) = (y - bounds_mins(1)) / (bounds_maxs(1) - bounds_mins(1));
 
                         // Truncate to [0,1] in the presence of small round-off errors
                         param(0) = param(0) < 0 ? 0 : param(0);
@@ -360,13 +361,75 @@ struct RayBlock : public Block<T>
                         param(0) = param(0) > 1 ? 1 : param(0);
                         param(1) = param(1) > 1 ? 1 : param(1);
 
+                        // Todo assemble Param object and then Decode once per angular setup
                         mfa->Decode(param, outpt);
                         ray_input->domain.block(idx, ray_dom_dim, 1, pt_dim - dom_dim) = outpt.tail(pt_dim - dom_dim).transpose();
                     }
+
+                    // fmt::print("{} {} {}\n", ia, ir, is);
+                    // fmt::print("  {} {}\n", x, y);
+                    // fmt::print("  in domain: {}\n", in_domain2d(x,y));
+                    // fmt::print("  {}\n", idx);
+                    // fmt::print("  {} {}\n", param(0), param(1));
+                    // fmt::print("  {}\n", outpt(0));
+                    // fmt::print("  {}\n", ray_input->domain.block(idx, ray_dom_dim, 1, pt_dim - dom_dim));
                 }
             }
         }
+    }
 
+    // ONLY 2d AT THE MOMENT
+    // precondition: Block already contains a fully encoded MFA
+    void create_ray_model(
+        const       diy::Master::ProxyWithLink& cp,
+        mfa::MFAInfo& mfa_info,
+        DomainArgs& args,
+        const vector<int>& ray_samples,
+        const vector<int>& ray_nctrl)
+        // int n_samples,
+        // int n_rho,
+        // int n_alpha,
+        // int v_samples,
+        // int v_rho,
+        // int v_alpha)
+    {
+        // const double pi = 3.14159265358979;
+
+        // Update dimensionality
+        ray_dom_dim = dom_dim + 1;
+        VectorXi new_mdims = mfa->model_dims();
+        new_mdims[0] += 1;  
+
+        // Sanity checks for input
+        if (ray_samples.size() != ray_dom_dim)
+        {
+            throw mfa::MFAError(fmt::format("Incorrect dimension for ray_samples"));
+        }
+        if (ray_nctrl.size() != ray_dom_dim)
+        {
+            throw mfa::MFAError(fmt::format("Incorrect dimension for ray_nctrl"));
+        }
+        for (int i = 0; i < ray_dom_dim; i++)
+        {
+            if (ray_samples[i] == 0)
+            {
+                throw mfa::MFAError(fmt::format("Did not set ray_samples[{}].", i));
+            }
+            if (ray_nctrl[i] == 0)
+            {
+                throw mfa::MFAError(fmt::format("Did not set ray_nctrl[{}].", i));
+            }
+        }
+
+        VectorXi ndom_pts(ray_dom_dim);
+        for (int i = 0; i < ray_dom_dim; i++)
+        {
+            ndom_pts(i) = ray_samples[i];
+        }
+        ray_input = new mfa::PointSet<T>(ray_dom_dim, new_mdims, ndom_pts.prod(), ndom_pts);
+
+        compute_bounds();                               // set r_lim, ray_core, and ray_bounds
+        sample_rotations2d(*ray_input, ray_samples);     // fill ray_input
         ray_input->set_bounds(ray_core_mins, ray_core_maxs);
         ray_input->set_domain_params();
 
@@ -378,18 +441,24 @@ struct RayBlock : public Block<T>
         ray_mfa->AddGeometry(ray_dom_dim);
 
         // Set nctrl_pts, degree for variables
-        VectorXi nctrl_pts(ray_dom_dim);
         VectorXi p(ray_dom_dim);
+        VectorXi nctrl_pts(ray_dom_dim);
+        for (int i = 0; i < ray_dom_dim; i++)
+        {
+            nctrl_pts(i) = ray_nctrl[i];
+        }
+
         for (auto i = 0; i< mfa->nvars(); i++)
         {
             int min_p = mfa->var(i).p.minCoeff();
-            int max_nctrl = mfa->var(i).tmesh.tensor_prods[0].nctrl_pts.maxCoeff();
+            // int max_nctrl = mfa->var(i).tmesh.tensor_prods[0].nctrl_pts.maxCoeff();
 
             // set ray model degree to minimum degree of original model
             p = min_p * VectorXi::Ones(ray_dom_dim);
-            nctrl_pts(0) = v_samples;
-            nctrl_pts(1) = v_rho;
-            nctrl_pts(2) = v_alpha;
+
+            // nctrl_pts(0) = v_samples;
+            // nctrl_pts(1) = v_rho;
+            // nctrl_pts(2) = v_alpha;
             // p(0) = 2;
             // p(1) = 2;
             // p(2) = 2;
@@ -401,11 +470,11 @@ struct RayBlock : public Block<T>
         ray_mfa->FixedEncodeGeom(*ray_input, false);
         ray_mfa->RayEncode(0, *ray_input);
 
-        // // --------- Decode and compute errors --------- //
+        // // // --------- Decode and compute errors --------- //
         // fmt::print("Computing errors on uniform grid...\n");
         // mfa::PointSet<T>* unused = nullptr;
-        // VectorXi grid_size{{n_samples, n_rho, n_alpha}};
-        // analytical_ray_error_field(cp, ray_mfa, grid_size, "sine", args, unused, ray_approx, ray_errs);
+        // // VectorXi grid_size{{n_samples, n_rho, n_alpha}};
+        // analytical_ray_error_field(cp, ray_mfa, ndom_pts, "sine", args, unused, ray_approx, ray_errs);
         // fmt::print("done.\n");
     }
 
@@ -570,7 +639,13 @@ struct RayBlock : public Block<T>
         {
             T m = (b_y-a_y)/(b_x-a_x);
             alpha = pi/2 - atan(-m);            // acot(x) = pi/2 - atan(x)
-            rho = (a_y - m*a_x)/(sqrt(1+m*m));  // cos(atan(x)) = 1/sqrt(1+m*m), sin(pi/2-x) = cos(x)
+
+            // to compute rho, use the fact that rho = x*cos(alpha) + y*sin(alpha),
+            // then plug in the point (0, y_int), where y_int is the y-intercept of the line.
+            // Thus, rho = y_int*sin(alpha).
+            // Finally, the line equation can be written as y = y_int + m*x, so
+            // y_int = a_y - m*a_x.
+            rho = (a_y - m*a_x)/(sqrt(1+m*m));  // cos(atan(m)) = 1/sqrt(1+m*m), sin(pi/2-x) = cos(x)
         }
 
         return make_pair(alpha, rho);
@@ -620,6 +695,7 @@ struct RayBlock : public Block<T>
 
     T integrate_ray(
         const   diy::Master::ProxyWithLink& cp,
+        // mfa::Decoder<T>& integralDecoder,
         const   VectorX<T>& a,
         const   VectorX<T>& b) const
     {
@@ -678,7 +754,7 @@ struct RayBlock : public Block<T>
 
         if (verbose)
         {
-            cerr << "RAY: (" << a(0) << ", " << a(1) << ") ---- (" << b(0) << ", " << b(1) << ")" << endl;
+            cerr << "RAY: " << mfa::print_vec(a) << " ---- " << mfa::print_vec(b) << endl;
             cerr << "|  m: " << ((a_x==b_x) ? "inf" : to_string((b_y-a_y)/(b_x-a_x)).c_str()) << endl;
             cerr << "|  alpha:  " << alpha << ",   rho: " << rho << endl;
             cerr << "|  length: " << length << endl;
@@ -693,6 +769,9 @@ struct RayBlock : public Block<T>
         params(2) = (alpha - ray_bounds_mins(2)) / (ray_bounds_maxs(2) - ray_bounds_mins(2));
 
         ray_mfa->Integrate1D(0, 0, u0, u1, params, output);
+         
+        // integralDecoder.AxisIntegral(0, u0, u1, params, output);
+
         output *= length;
 
         return output(0);
@@ -701,6 +780,9 @@ struct RayBlock : public Block<T>
     // Compute segment errors in a RayMFA
     void compute_sinogram(const   diy::Master::ProxyWithLink& cp) const
     {
+        // Initialize decoder
+        mfa::Decoder<T> integralDecoder(ray_mfa->var(0), 0);  // no verbose output for single points
+
         real_t extent = input->domain.col(dom_dim).maxCoeff() - input->domain.col(dom_dim).minCoeff();
 
         ofstream sinotruefile;
@@ -739,7 +821,7 @@ struct RayBlock : public Block<T>
                     end_pt(0) = x1;
                     end_pt(1) = y1;
 
-                    T test_result = integrate_ray(cp, start_pt, end_pt) / length;   // normalize by segment length
+                    T test_result = integrate_ray(cp, integralDecoder, start_pt, end_pt) / length;   // normalize by segment length
                     T test_actual = sintest(start_pt, end_pt) / length;
 
                     T e_abs = abs(test_result - test_actual);
@@ -778,6 +860,9 @@ struct RayBlock : public Block<T>
         }
         std::mt19937 rng(seed);
         std::uniform_real_distribution<double> dist(0,1); 
+
+        // // Initialize decoder
+        // mfa::Decoder<T> integralDecoder(ray_mfa->var(0), 0);  // no verbose output for single points
 
         real_t result = 0, actual = 0, len = 0, err = 0;
         VectorX<real_t> start_pt(dom_dim), end_pt(dom_dim);

@@ -47,7 +47,9 @@ int main(int argc, char** argv)
     int    vars_degree  = 4;                    // degree for science variables (same for all dims)
     int    ndomp        = 100;                  // input number of domain points (same for all dims)
     int    geom_nctrl   = -1;                   // input number of control points for geometry (same for all dims)
-    vector<int>    vars_nctrl   = {11};                   // input number of control points for all science variables (same for all dims)
+    vector<int>    vars_nctrl   = {11};                   // input number of control points for all science variables
+    vector<int>     ray_nctrl = {11};           // number of control points in each dimension of ray model
+    vector<int>     ray_samples = {50};         // number of samples in each ray dimension for construction ray model
     string input        = "sinc";               // input dataset
     int    weighted     = 0;                    // solve for and use weights (bool 0/1)
     string infile;                              // input file name
@@ -81,20 +83,23 @@ int main(int argc, char** argv)
     ops >> opts::Option('c', "disc_int",    disc_int,   " compute integrals using a discrete algorithm (trapezoid rule)");
     ops >> opts::Option('s', "seed",        seed,       " seed for random number generation. seed == 0 --> Choose seed randomly");
 
-    int n_alpha = 120;
-    int n_rho = 120;
-    int n_samples = 120;
-    int v_alpha = 100;
-    int v_rho = 100;
-    int v_samples = 100;
+    ops >> opts::Option('z', "rv",           ray_nctrl, "number of control points in each dimension of ray model");
+    ops >> opts::Option('z', "rn",          ray_samples, "number of samples in each ray dimension for construction ray model");
+
+    // int n_alpha = 120;
+    // int n_rho = 120;
+    // int n_samples = 120;
+    // int v_alpha = 100;
+    // int v_rho = 100;
+    // int v_samples = 100;
     int num_ints = 10000;
-    ops >> opts::Option('z', "n_alpha", n_alpha, " number of rotational samples for line integration");
-    ops >> opts::Option('z', "n_rho", n_rho, " number of samples in offset direction for line integration");
-    ops >> opts::Option('z', "n_samples", n_samples, " number of samples along ray for line integration");
-    ops >> opts::Option('z', "v_alpha", v_alpha, " number of rotational control points for line integration");
-    ops >> opts::Option('z', "v_rho", v_rho, " number of control points in offset direction for line integration");
-    ops >> opts::Option('z', "v_samples", v_samples, " number of control points along ray for line integration");
-    ops >> opts::Option('z', "num_ints", num_ints, " number of random line integrals to compute");
+    // ops >> opts::Option('z', "n_alpha", n_alpha, " number of rotational samples for line integration");
+    // ops >> opts::Option('z', "n_rho", n_rho, " number of samples in offset direction for line integration");
+    // ops >> opts::Option('z', "n_samples", n_samples, " number of samples along ray for line integration");
+    // ops >> opts::Option('z', "v_alpha", v_alpha, " number of rotational control points for line integration");
+    // ops >> opts::Option('z', "v_rho", v_rho, " number of control points in offset direction for line integration");
+    // ops >> opts::Option('z', "v_samples", v_samples, " number of control points along ray for line integration");
+    // ops >> opts::Option('z', "num_ints", num_ints, " number of random line integrals to compute");
 
 
     if (!ops.parse(argc, argv) || help)
@@ -185,7 +190,7 @@ int main(int argc, char** argv)
             // b->print_block(cp, true);
 
             ray_encode_time = MPI_Wtime();
-            b->create_ray_model(cp, mfa_info, d_args, n_samples, n_rho, n_alpha, v_samples, v_rho, v_alpha);
+            b->create_ray_model(cp, mfa_info, d_args, ray_samples, ray_nctrl);
             ray_encode_time = MPI_Wtime() - ray_encode_time;
 
             ray_decode_time = MPI_Wtime();
@@ -199,7 +204,7 @@ int main(int argc, char** argv)
     {
         master.foreach([&](RayBlock<real_t>* b, const diy::Master::ProxyWithLink& cp)
         { 
-            b->trap_samples = n_samples;    // Set number of sample points to be used in trapezoid rule
+            b->trap_samples = ray_samples[0];    // Set number of sample points to be used in trapezoid rule
 
             trap_decode_time = MPI_Wtime();
             b->compute_random_ints(cp, d_args, num_ints, disc_int, seed);
