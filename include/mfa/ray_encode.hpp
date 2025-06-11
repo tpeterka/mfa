@@ -222,8 +222,8 @@ namespace mfa
             T u_rho   = input.params->param_grid[1][ijk(1)];
             T u_alpha = input.params->param_grid[2][ijk(2)];
 
-            T x = (2*u_rho-1)*cos(u_alpha*M_PI) + (2*u_t-1)*sin(u_alpha*M_PI);
-            T y = -1*(2*u_rho-1)*sin(u_alpha*M_PI) + (2*u_t-1)*cos(u_alpha*M_PI);
+            T x = (2*u_rho-1)*cos(u_alpha*M_PI) - (2*u_t-1)*sin(u_alpha*M_PI);
+            T y = (2*u_rho-1)*sin(u_alpha*M_PI) + (2*u_t-1)*cos(u_alpha*M_PI);
             
             // limits of the (square) domain in parameter space
             // This comes from the fact that we defined r_lim = 1.5 * max_bound,

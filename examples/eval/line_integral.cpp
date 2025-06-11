@@ -197,7 +197,7 @@ int main(int argc, char** argv)
             b->compute_random_ints(cp, d_args, num_ints, disc_int, seed);
             ray_decode_time = MPI_Wtime() - ray_decode_time;
 
-            // b->compute_sinogram(cp);
+            b->compute_sinogram(cp);
         });
     }
     else
@@ -224,19 +224,19 @@ int main(int argc, char** argv)
     fprintf(stderr, "total decoding time         = %.3lf s.\n", decode_time);
     fprintf(stderr, "-------------------------------------\n\n");
 
-    // // Hack to move pointsets for write_vtk program
-    // master.foreach([&](RayBlock<real_t>* b, const diy::Master::ProxyWithLink& cp)
-    // {
-    //     delete b->input;
-    //     delete b->approx;
-    //     delete b->errs;
-    //     b->input = b->ray_input;
-    //     b->approx = b->ray_approx;
-    //     b->errs = b->ray_errs;
-    //     b->ray_input = nullptr;
-    //     b->ray_approx = nullptr;
-    //     b->ray_errs = nullptr;
-    // });
+    // Hack to move pointsets for write_vtk program
+    master.foreach([&](RayBlock<real_t>* b, const diy::Master::ProxyWithLink& cp)
+    {
+        delete b->input;
+        delete b->approx;
+        delete b->errs;
+        b->input = b->ray_input;
+        b->approx = b->ray_approx;
+        b->errs = b->ray_errs;
+        b->ray_input = nullptr;
+        b->ray_approx = nullptr;
+        b->ray_errs = nullptr;
+    });
 
     // save the results in diy format
     diy::io::write_blocks("approx.mfa", world, master);

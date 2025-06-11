@@ -243,7 +243,7 @@ struct RayBlock : public Block<T>
     }
 
     // Check if a point p is in the original domain of the data
-    bool in_domain2d(const VectorX<T> p)
+    bool in_domain2d(const VectorX<T>& p)
     {
         return (p(0) > bounds_mins(0)) && (p(0) < bounds_maxs(0)) && (p(1) > bounds_mins(1)) && (p(1) < bounds_maxs(1));
     }
@@ -307,53 +307,64 @@ struct RayBlock : public Block<T>
         // Increments of rho and alpha
         double dr = r_lim * 2 / (n_rho-1);
         double da = pi / (n_alpha-1);
+        double dt = 1.0 / (n_samples-1);
 
         // fill ray data set
         double alpha    = 0;   // angle of rotation
         double rho      = -r_lim;
+        double t        = 0;
+        VectorX<T> s0(2);
+        VectorX<T> s1(2);
+        VectorX<T> p(2);
         for (int ia = 0; ia < n_alpha; ia++)
         {
             alpha = ia * da;
+            s0 << cos(alpha), sin(alpha);
+            s1 << -1*sin(alpha), cos(alpha);
 
             for (int ir = 0; ir < n_rho; ir++)
             {
                 rho = -r_lim + ir * dr;
 
-                T x0, y0, x1, y1, span_x, span_y;
+                // T x0, y0, x1, y1, span_x, span_y;
 
-                // "parallel-plate setup"
-                // start/end coordinates of the ray (alpha, rho)
-                // In this setup the length of every segment (x0,y0)--(x1,y1) is constant
-                span_x = 2 * r_lim * sin(alpha);
-                span_y = 2 * r_lim * cos(alpha);
-                x0 = rho * cos(alpha) - r_lim * sin(alpha);
-                x1 = rho * cos(alpha) + r_lim * sin(alpha);
-                y0 = rho * sin(alpha) + r_lim * cos(alpha);
-                y1 = rho * sin(alpha) - r_lim * cos(alpha);
+                // // "parallel-plate setup"
+                // // start/end coordinates of the ray (alpha, rho)
+                // // In this setup the length of every segment (x0,y0)--(x1,y1) is constant
+                // span_x = 2 * r_lim * sin(alpha);
+                // span_y = 2 * r_lim * cos(alpha);
+                // x0 = rho * cos(alpha) - r_lim * sin(alpha);
+                // x1 = rho * cos(alpha) + r_lim * sin(alpha);
+                // y0 = rho * sin(alpha) + r_lim * cos(alpha);
+                // y1 = rho * sin(alpha) - r_lim * cos(alpha);
 
-                T dx = span_x / (n_samples-1);
-                T dy = span_y / (n_samples-1);
+                // T dx = span_x / (n_samples-1);
+                // T dy = span_y / (n_samples-1);
 
                 for (int is = 0; is < n_samples; is++)
                 {
+                    t = is * dt;
+
                     int idx = ia*n_rho*n_samples + ir*n_samples + is;
-                    ray_input->domain(idx, 0) = (double)is / (n_samples-1);
+                    ray_input->domain(idx, 0) = t;
                     ray_input->domain(idx, 1) = rho;
                     ray_input->domain(idx, 2) = alpha;
 
-                    T x = x0 + is * dx;
-                    T y = y0 - is * dy;
+                    p = rho*s0 + 2*r_lim*(t-0.5)*s1;
+
+                    // T x = x0 + is * dx;
+                    // T y = y0 - is * dy;
 
                     // If this point is not in the original domain
-                    if (!in_domain2d(x, y))
+                    if (!in_domain2d(p))
                     {
                         // add dummy value, which will never be queried
                         ray_input->domain(idx, ray_dom_dim) = 0;
                     }
                     else    // point is in domain, decode value from existing MFA
                     {
-                        param(0) = (x - bounds_mins(0)) / (bounds_maxs(0) - bounds_mins(0));
-                        param(1) = (y - bounds_mins(1)) / (bounds_maxs(1) - bounds_mins(1));
+                        param(0) = (p(0) - bounds_mins(0)) / (bounds_maxs(0) - bounds_mins(0));
+                        param(1) = (p(1) - bounds_mins(1)) / (bounds_maxs(1) - bounds_mins(1));
 
                         // Truncate to [0,1] in the presence of small round-off errors
                         param(0) = param(0) < 0 ? 0 : param(0);
@@ -470,12 +481,12 @@ struct RayBlock : public Block<T>
         ray_mfa->FixedEncodeGeom(*ray_input, false);
         ray_mfa->RayEncode(0, *ray_input);
 
-        // // // --------- Decode and compute errors --------- //
-        // fmt::print("Computing errors on uniform grid...\n");
-        // mfa::PointSet<T>* unused = nullptr;
-        // // VectorXi grid_size{{n_samples, n_rho, n_alpha}};
-        // analytical_ray_error_field(cp, ray_mfa, ndom_pts, "sine", args, unused, ray_approx, ray_errs);
-        // fmt::print("done.\n");
+        // // --------- Decode and compute errors --------- //
+        fmt::print("Computing errors on uniform grid...\n");
+        mfa::PointSet<T>* unused = nullptr;
+        // VectorXi grid_size{{n_samples, n_rho, n_alpha}};
+        analytical_ray_error_field(cp, ray_mfa, ndom_pts, "sine", args, unused, ray_approx, ray_errs);
+        fmt::print("done.\n");
     }
 
     // Convert (t, rho, theta) to (x, y) and return true if the x,y coords are in the original domain
@@ -491,19 +502,28 @@ struct RayBlock : public Block<T>
         T rho = radon_coords(1);
         T alpha = radon_coords(2);
 
-        T x0, y0, span_x, span_y;
-        T SA = sin(alpha);
-        T CA = cos(alpha);
-        span_x = 2 * r_lim * SA;
-        span_y = 2 * r_lim * CA;
-        x0 = rho * CA - r_lim * SA;
-        y0 = rho * SA + r_lim * CA;
+        // TODO: remove allocation for basis vectors
+        VectorX<T> s0(2);
+        VectorX<T> s1(2);
+        s0 << cos(alpha), sin(alpha);
+        s1 << -1*sin(alpha), cos(alpha);
+        cart_coords = rho*s0 + 2*r_lim*(t-0.5)*s1;
+        T x = cart_coords(0);
+        T y = cart_coords(1);
 
-        T x = x0 + t*span_x;
-        T y = y0 - t*span_y;
+        // T x0, y0, span_x, span_y;
+        // T SA = sin(alpha);
+        // T CA = cos(alpha);
+        // span_x = 2 * r_lim * SA;
+        // span_y = 2 * r_lim * CA;
+        // x0 = rho * CA - r_lim * SA;
+        // y0 = rho * SA + r_lim * CA;
 
-        cart_coords(0) = x;
-        cart_coords(1) = y;
+        // T x = x0 + t*span_x;
+        // T y = y0 - t*span_y;
+
+        // cart_coords(0) = x;
+        // cart_coords(1) = y;
 
         T xl = core_mins(0);
         T xh = core_maxs(0);
@@ -709,9 +729,9 @@ struct RayBlock : public Block<T>
             exit(1);
         }
 
-        auto ar_coords = dualCoords(a, b);
-        T alpha = ar_coords.first;
-        T rho   = ar_coords.second;
+        auto [alpha, rho] = dualCoords(a, b);
+        // T alpha = ar_coords.first;
+        // T rho   = ar_coords.second;
 
         T a_x = a(0);
         T a_y = a(1);
@@ -720,28 +740,41 @@ struct RayBlock : public Block<T>
 
         T x0, x1, y0, y1;   // end points of full line
         T u0 = 0, u1 = 0;
-        T length = 2*r_lim;
-        x0 = rho * cos(alpha) - r_lim * sin(alpha);
-        x1 = rho * cos(alpha) + r_lim * sin(alpha);
-        y0 = rho * sin(alpha) + r_lim * cos(alpha);
-        y1 = rho * sin(alpha) - r_lim * cos(alpha);
-
-        // parameter values along ray for 'start' and 'end'
-        // compute in terms of Euclidean distance to avoid weird cases
-        //   when line is nearly horizontal or vertical
-        T x_sep = abs(x1 - x0);
-        T y_sep = abs(y1 - y0);
         
-        if (x_sep > y_sep)  // want to avoid dividing by near-epsilon numbers
+        // x = rho*cos(alpha) + 2R(u-0.5)(-sin(alpha))
+        // y = rho*sin(alpha) + 2R(u-0.5)(cos(alpha))
+        if (alpha > 0.1 && alpha < 3.0)
         {
-            u0 = abs(a_x - x0) / x_sep;
-            u1 = abs(b_x - x0) / x_sep;
+            u0 = (a_x - rho*cos(alpha)) / (-2*r_lim*sin(alpha)) + 0.5;
+            u1 = (b_x - rho*cos(alpha)) / (-2*r_lim*sin(alpha)) + 0.5;
         }
         else
         {
-            u0 = abs(a_y - y0) / y_sep;
-            u1 = abs(b_y - y0) / y_sep;
+            u0 = (a_y - rho*sin(alpha)) / (2*r_lim*cos(alpha)) + 0.5;
+            u1 = (b_y - rho*sin(alpha)) / (2*r_lim*cos(alpha)) + 0.5;
         }
+        T length = 2*r_lim;
+        // x0 = rho * cos(alpha) - r_lim * sin(alpha);
+        // x1 = rho * cos(alpha) + r_lim * sin(alpha);
+        // y0 = rho * sin(alpha) + r_lim * cos(alpha);
+        // y1 = rho * sin(alpha) - r_lim * cos(alpha);
+
+        // // parameter values along ray for 'start' and 'end'
+        // // compute in terms of Euclidean distance to avoid weird cases
+        // //   when line is nearly horizontal or vertical
+        // T x_sep = abs(x1 - x0);
+        // T y_sep = abs(y1 - y0);
+        
+        // if (x_sep > y_sep)  // want to avoid dividing by near-epsilon numbers
+        // {
+        //     u0 = abs(a_x - x0) / x_sep;
+        //     u1 = abs(b_x - x0) / x_sep;
+        // }
+        // else
+        // {
+        //     u0 = abs(a_y - y0) / y_sep;
+        //     u1 = abs(b_y - y0) / y_sep;
+        // }
 
         // Scalar valued path integrals do not have an orientation, so we always
         // want the limits of integration to go from smaller to larger.
@@ -821,7 +854,7 @@ struct RayBlock : public Block<T>
                     end_pt(0) = x1;
                     end_pt(1) = y1;
 
-                    T test_result = integrate_ray(cp, integralDecoder, start_pt, end_pt) / length;   // normalize by segment length
+                    T test_result = integrate_ray(cp, start_pt, end_pt) / length;   // normalize by segment length
                     T test_actual = sintest(start_pt, end_pt) / length;
 
                     T e_abs = abs(test_result - test_actual);
