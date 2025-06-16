@@ -220,7 +220,7 @@ namespace mfa
                     int knot_idx = 0;
                     for (int i = 0; i < params[k].size(); i++)
                     {
-                        while (tmesh.all_knots[k][knot_idx] <= params[k][i] && knot_idx <= last)
+                        while (knot_idx <= last && tmesh.all_knots[k][knot_idx] <= params[k][i])
                         {
                             tmesh.all_knot_param_idxs[k][knot_idx] = i;
 
