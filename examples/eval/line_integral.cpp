@@ -110,7 +110,7 @@ int main(int argc, char** argv)
     }
 
     // print input arguments
-    echo_mfa_settings("line int example", pt_dim, dom_dim, 1, geom_degree, geom_nctrl, vars_degree, vars_nctrl,
+    echo_mfa_settings("line int example", dom_dim, pt_dim, 1, geom_degree, geom_nctrl, vars_degree, vars_nctrl,
                         regularization, reg1and2, false, 0, 0);
     echo_data_settings(input, infile, ndomp, 0);
 
@@ -193,11 +193,11 @@ int main(int argc, char** argv)
             b->create_ray_model(cp, mfa_info, d_args, ray_samples, ray_nctrl);
             ray_encode_time = MPI_Wtime() - ray_encode_time;
 
-            ray_decode_time = MPI_Wtime();
-            b->compute_random_ints(cp, d_args, num_ints, disc_int, seed);
-            ray_decode_time = MPI_Wtime() - ray_decode_time;
+            // ray_decode_time = MPI_Wtime();
+            // b->compute_random_ints(cp, d_args, num_ints, disc_int, seed);
+            // ray_decode_time = MPI_Wtime() - ray_decode_time;
 
-            b->compute_sinogram(cp);
+            // b->compute_sinogram(cp);
         });
     }
     else

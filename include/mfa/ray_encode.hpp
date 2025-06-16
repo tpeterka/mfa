@@ -214,9 +214,18 @@ namespace mfa
             return;
         }
 
+        bool in_domain(const VectorXi& ijk)
+        {
+            if (dom_dim == 3) return in_domain2d(ijk);
+            else if (dom_dim == 5) return in_domain3d(ijk);
+            else throw MFAError("Incorrect dom_dim passed to RayEncoder::in_domain");
+
+            return false;
+        }
+
         // Test if input point with index ijk is in domain
         // TODO does not support tensor subvolumes
-        bool in_domain(const VectorXi& ijk)
+        bool in_domain2d(const VectorXi& ijk)
         {
             T u_t     = input.params->param_grid[0][ijk(0)];
             T u_rho   = input.params->param_grid[1][ijk(1)];
@@ -232,6 +241,37 @@ namespace mfa
             // 
             // n.b. For rectangular (non-square) domains, we can define a
             // different bound in each +/- direction
+            T bb = 1/1.5;
+
+            if (x > bb || x < -1*bb || y > bb || y < -1*bb)
+            {
+                return false;
+            }
+            else
+            {
+                return true;
+            }
+        }
+
+        bool in_domain3d(const VectorXi& ijk)
+        {
+            T u_t = input.params->param_grid[0][ijk(0)];
+            T u_rho = input.params->param_grid[1][ijk(1)];
+            T u_nu = input.params->param_grid[2][ijk(2)];
+            T u_theta = input.params->param_grid[3][ijk(3)];
+            T u_phi = input.params->param_grid[4][ijk(4)];
+
+            T theta = u_theta * M_PI;
+            T phi = u_phi * M_PI;
+            T ST = sin(theta);
+            T CT = cos(theta);
+            T SP = sin(phi);
+            T CP = cos(phi);
+
+            T x = (2*u_rho-1)*CT*SP - (2*u_nu-1)*ST + (2*u_t-1)*CT*CP;
+            T y = (2*u_rho-1)*ST*SP + (2*u_nu-1)*CT + (2*u_t-1)*ST*CP;
+            T z = (2*u_rho-1)*CP - (2*u_t-1)*SP;
+
             T bb = 1/1.5;
 
             if (x > bb || x < -1*bb || y > bb || y < -1*bb)

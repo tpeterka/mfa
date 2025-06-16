@@ -236,21 +236,26 @@ struct RayBlock : public Block<T>
             y0 = 0;
             x1 = 0;
             y1 = 0;
-            // cerr << "ERROR: invalid state 5" << endl;
             // cerr << "ia = " << ia << ", ir = " << ir << endl;
-            // exit(1);
         }
     }
 
     // Check if a point p is in the original domain of the data
     bool in_domain2d(const VectorX<T>& p)
     {
-        return (p(0) > bounds_mins(0)) && (p(0) < bounds_maxs(0)) && (p(1) > bounds_mins(1)) && (p(1) < bounds_maxs(1));
+        return (p(0) >= bounds_mins(0)) && (p(0) <= bounds_maxs(0)) && (p(1) >= bounds_mins(1)) && (p(1) <= bounds_maxs(1));
     }
 
     bool in_domain2d(T x, T y)
     {
-        return (x > bounds_mins(0)) && (x < bounds_maxs(0)) && (y > bounds_mins(1)) && (y < bounds_maxs(1));
+        return (x >= bounds_mins(0)) && (x <= bounds_maxs(0)) && (y >= bounds_mins(1)) && (y <= bounds_maxs(1));
+    }
+
+    bool in_domain3d(const VectorX<T>& p)
+    {
+          return (p(0) >= bounds_mins(0) && p(0) <= bounds_maxs(0) &&
+                p(1) >= bounds_mins(1) && p(1) <= bounds_maxs(1) &&
+                p(2) >= bounds_mins(2) && p(2) <= bounds_maxs(2));
     }
 
     void compute_bounds()
@@ -263,13 +268,9 @@ struct RayBlock : public Block<T>
     // extents of domain in physical space
     void compute_bounds2d()
     {
-        const T xl = bounds_mins(0);
-        const T xh = bounds_maxs(0);
-        const T yl = bounds_mins(1);
-        const T yh = bounds_maxs(1);
-
-        // TODO: make this generic
-        double max_radius = max(max(abs(xl),abs(xh)), max(abs(yl),abs(yh)));
+        // Get maximal distance of domain edge from origin
+        // WARNING: we are assuming the domain is (rougly) centered at the origin!
+        double max_radius = max(bounds_mins.cwiseAbs().maxCoeff(), bounds_maxs.cwiseAbs().maxCoeff());
         r_lim = max_radius * 1.5;
 
         // Set extents of rotated model
@@ -283,8 +284,8 @@ struct RayBlock : public Block<T>
         ray_bounds_maxs(2) = pi;
         for (int i = dom_dim; i < pt_dim; i++)
         {
-            ray_bounds_mins(i+1) = bounds_mins(i);
-            ray_bounds_maxs(i+1) = bounds_maxs(i);
+            ray_bounds_mins(i+ray_dom_dim-dom_dim) = bounds_mins(i);
+            ray_bounds_maxs(i+ray_dom_dim-dom_dim) = bounds_maxs(i);
         }
         ray_core_mins = ray_bounds_mins.head(dom_dim+1);
         ray_core_maxs = ray_bounds_maxs.head(dom_dim+1);
@@ -292,12 +293,42 @@ struct RayBlock : public Block<T>
 
     void compute_bounds3d()
     {
+        // Get maximal distance of domain edge from origin
+        // WARNING: we are assuming the domain is (rougly) centered at the origin!
+        double max_radius = max(bounds_mins.cwiseAbs().maxCoeff(), bounds_maxs.cwiseAbs().maxCoeff());
+        r_lim = max_radius * 1.5;
+
+        // Set extents of rotated model
+        ray_bounds_mins.resize(pt_dim + ray_dom_dim-dom_dim);
+        ray_bounds_maxs.resize(pt_dim + ray_dom_dim-dom_dim);
+        ray_bounds_mins(0) = 0;
+        ray_bounds_maxs(0) = 1;
+        ray_bounds_mins(1) = -r_lim;
+        ray_bounds_maxs(1) = r_lim;
+        ray_bounds_mins(2) = -r_lim;
+        ray_bounds_maxs(2) = r_lim;
+        ray_bounds_mins(3) = 0;
+        ray_bounds_maxs(3) = pi;
+        ray_bounds_mins(4) = 0;
+        ray_bounds_maxs(4) = pi;
+        for (int i = dom_dim; i < pt_dim; i++)
+        {
+            ray_bounds_mins(i+ray_dom_dim-dom_dim) = bounds_mins(i);
+            ray_bounds_maxs(i+ray_dom_dim-dom_dim) = bounds_maxs(i);
+        }
+        ray_core_mins = ray_bounds_mins.head(ray_dom_dim);
+        ray_core_maxs = ray_bounds_maxs.head(ray_dom_dim);
+    }
+
+    void sample_rotations(mfa::PointSet<T>& rotation_space, const vector<int>& rotation_samples)
+    {
+        if (dom_dim == 2) sample_rotations2d(rotation_space, rotation_samples);
+        else if (dom_dim == 3) sample_rotations3d(rotation_space, rotation_samples);
     }
 
     // rotation samples = {n_samples, n_rho, n_alpha}
     void sample_rotations2d(mfa::PointSet<T>& rotation_space, const vector<int>& rotation_samples)
     {
-
         int n_samples = rotation_samples[0];
         int n_rho = rotation_samples[1];
         int n_alpha = rotation_samples[2];
@@ -326,21 +357,6 @@ struct RayBlock : public Block<T>
             {
                 rho = -r_lim + ir * dr;
 
-                // T x0, y0, x1, y1, span_x, span_y;
-
-                // // "parallel-plate setup"
-                // // start/end coordinates of the ray (alpha, rho)
-                // // In this setup the length of every segment (x0,y0)--(x1,y1) is constant
-                // span_x = 2 * r_lim * sin(alpha);
-                // span_y = 2 * r_lim * cos(alpha);
-                // x0 = rho * cos(alpha) - r_lim * sin(alpha);
-                // x1 = rho * cos(alpha) + r_lim * sin(alpha);
-                // y0 = rho * sin(alpha) + r_lim * cos(alpha);
-                // y1 = rho * sin(alpha) - r_lim * cos(alpha);
-
-                // T dx = span_x / (n_samples-1);
-                // T dy = span_y / (n_samples-1);
-
                 for (int is = 0; is < n_samples; is++)
                 {
                     t = is * dt;
@@ -351,9 +367,6 @@ struct RayBlock : public Block<T>
                     ray_input->domain(idx, 2) = alpha;
 
                     p = rho*s0 + 2*r_lim*(t-0.5)*s1;
-
-                    // T x = x0 + is * dx;
-                    // T y = y0 - is * dy;
 
                     // If this point is not in the original domain
                     if (!in_domain2d(p))
@@ -373,17 +386,103 @@ struct RayBlock : public Block<T>
                         param(1) = param(1) > 1 ? 1 : param(1);
 
                         // Todo assemble Param object and then Decode once per angular setup
-                        mfa->Decode(param, outpt);
+                        mfa->Decode(param, outpt); // TODO change this fast decode and change the size of outpt!
                         ray_input->domain.block(idx, ray_dom_dim, 1, pt_dim - dom_dim) = outpt.tail(pt_dim - dom_dim).transpose();
                     }
+                }
+            }
+        }
+    }
 
-                    // fmt::print("{} {} {}\n", ia, ir, is);
-                    // fmt::print("  {} {}\n", x, y);
-                    // fmt::print("  in domain: {}\n", in_domain2d(x,y));
-                    // fmt::print("  {}\n", idx);
-                    // fmt::print("  {} {}\n", param(0), param(1));
-                    // fmt::print("  {}\n", outpt(0));
-                    // fmt::print("  {}\n", ray_input->domain.block(idx, ray_dom_dim, 1, pt_dim - dom_dim));
+    // rotation samples = {n_samples, n_rho, n_nu, n_theta, n_phi}
+    void sample_rotations3d(mfa::PointSet<T>& rotation_space, const vector<int>& rotation_samples)
+    {
+        int n_samples = rotation_samples[0];
+        int n_rho = rotation_samples[1];
+        int n_nu = rotation_samples[2];
+        int n_theta = rotation_samples[3];
+        int n_phi = rotation_samples[4];
+        VectorX<T> param(dom_dim);
+        VectorX<T> outpt(pt_dim-dom_dim);
+
+        // Increments of rho and alpha
+        double dt = 1.0 / (n_samples-1);
+        double drho = r_lim * 2 / (n_rho-1);
+        double dnu = r_lim * 2 / (n_nu-1);
+        double dtheta = pi / (n_theta-1);
+        double dphi = pi / (n_phi-1);
+
+        // spherical unit vectors
+        VectorX<T> s0(3);
+        VectorX<T> s1(3);
+        VectorX<T> s2(3);
+
+        // fill ray data set
+        double t        = 0;
+        double rho      = -r_lim;
+        double nu       = -r_lim;
+        double theta    = 0;    // azimuthal angle
+        double phi      = 0;    // polar angle
+        VectorX<T> extentsRecip = (core_maxs - core_mins).cwiseInverse(); // performance optimization
+        VectorX<T> p(3);
+
+        mfa::Decoder<T> decoder(mfa->var(0), 0);
+        mfa::FastDecodeInfo<T> di(decoder);
+        for (int iphi = 0; iphi < n_phi; iphi++)
+        {
+            for (int itheta = 0; itheta < n_theta; itheta++)
+            {
+                phi = iphi * dphi;
+                theta = itheta * dtheta;
+
+                // Compute spherical basis for this orientation
+                s0 << cos(theta)*sin(phi), sin(theta)*sin(phi), cos(phi);
+                s1 << -1*sin(theta), cos(theta), 0;
+                s2 << cos(theta)*cos(phi), sin(theta)*cos(phi), -1*sin(phi);
+
+                for (int inu = 0; inu < n_nu; inu++)
+                {
+                    for (int irho = 0; irho < n_rho; irho++)
+                    {
+                        for (int it = 0; it < n_samples; it++)
+                        {
+                            nu = -r_lim + inu * dnu;
+                            rho = -r_lim + irho * drho;
+                            t = it * dt;
+
+                            p = rho*s0 + nu*s1 + 2*r_lim*(t-0.5)*s2;
+
+                            int idx = it + n_samples*(irho + n_rho*(inu + n_nu*(itheta + n_theta*iphi)));
+
+                            ray_input->domain(idx, 0) = t;
+                            ray_input->domain(idx, 1) = rho;
+                            ray_input->domain(idx, 2) = nu;
+                            ray_input->domain(idx, 3) = theta;
+                            ray_input->domain(idx, 4) = phi;
+
+                            if (!in_domain3d(p))
+                            {
+                                ray_input->domain(idx, 5) = 0;
+                            }
+                            else
+                            {
+                                param = (p-core_mins).cwiseProduct(extentsRecip);
+
+                                // Truncate to [0,1] in the presence of small round-off errors
+                                param(0) = param(0) < 0 ? 0 : param(0);
+                                param(1) = param(1) < 0 ? 0 : param(1);
+                                param(2) = param(2) < 0 ? 0 : param(2);
+                                param(0) = param(0) > 1 ? 1 : param(0);
+                                param(1) = param(1) > 1 ? 1 : param(1);
+                                param(2) = param(2) > 1 ? 1 : param(2);
+
+                                // Todo assemble Param object and then Decode once per angular setup
+                                decoder.FastVolPt(param, outpt, di, mfa->var(0).tmesh.tensor_prods[0]);
+
+                                ray_input->domain.block(idx, ray_dom_dim, 1, pt_dim - dom_dim) = outpt.tail(pt_dim - dom_dim).transpose();
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -397,19 +496,11 @@ struct RayBlock : public Block<T>
         DomainArgs& args,
         const vector<int>& ray_samples,
         const vector<int>& ray_nctrl)
-        // int n_samples,
-        // int n_rho,
-        // int n_alpha,
-        // int v_samples,
-        // int v_rho,
-        // int v_alpha)
     {
-        // const double pi = 3.14159265358979;
-
         // Update dimensionality
-        ray_dom_dim = dom_dim + 1;
+        ray_dom_dim = 2*dom_dim - 1;        // 2d --> 3d, 3d --> 5d
         VectorXi new_mdims = mfa->model_dims();
-        new_mdims[0] += 1;  
+        new_mdims[0] = ray_dom_dim;  
 
         // Sanity checks for input
         if (ray_samples.size() != ray_dom_dim)
@@ -432,6 +523,7 @@ struct RayBlock : public Block<T>
             }
         }
 
+        // Set up domain to sample in rotation space
         VectorXi ndom_pts(ray_dom_dim);
         for (int i = 0; i < ray_dom_dim; i++)
         {
@@ -439,17 +531,11 @@ struct RayBlock : public Block<T>
         }
         ray_input = new mfa::PointSet<T>(ray_dom_dim, new_mdims, ndom_pts.prod(), ndom_pts);
 
+        // Sample the rotation space
         compute_bounds();                               // set r_lim, ray_core, and ray_bounds
-        sample_rotations2d(*ray_input, ray_samples);     // fill ray_input
+        sample_rotations(*ray_input, ray_samples);     // fill ray_input
         ray_input->set_bounds(ray_core_mins, ray_core_maxs);
         ray_input->set_domain_params();
-
-        // ------------ Creation of new MFA ------------- //
-        int verbose = mfa_info.verbose && cp.master()->communicator().rank() == 0; 
-        ray_mfa = new mfa::MFA<T>(ray_dom_dim, verbose);
-
-        // Set up new geometry
-        ray_mfa->AddGeometry(ray_dom_dim);
 
         // Set nctrl_pts, degree for variables
         VectorXi p(ray_dom_dim);
@@ -459,20 +545,17 @@ struct RayBlock : public Block<T>
             nctrl_pts(i) = ray_nctrl[i];
         }
 
+        // Create empty Ray MFA
+        int verbose = mfa_info.verbose && cp.master()->communicator().rank() == 0; 
+        ray_mfa = new mfa::MFA<T>(ray_dom_dim, verbose);
+
+        // Set up geometry and variable models
+        ray_mfa->AddGeometry(ray_dom_dim);
         for (auto i = 0; i< mfa->nvars(); i++)
         {
-            int min_p = mfa->var(i).p.minCoeff();
-            // int max_nctrl = mfa->var(i).tmesh.tensor_prods[0].nctrl_pts.maxCoeff();
-
             // set ray model degree to minimum degree of original model
+            int min_p = mfa->var(i).p.minCoeff();
             p = min_p * VectorXi::Ones(ray_dom_dim);
-
-            // nctrl_pts(0) = v_samples;
-            // nctrl_pts(1) = v_rho;
-            // nctrl_pts(2) = v_alpha;
-            // p(0) = 2;
-            // p(1) = 2;
-            // p(2) = 2;
 
             ray_mfa->AddVariable(p, nctrl_pts, 1);
         }
@@ -484,8 +567,8 @@ struct RayBlock : public Block<T>
         // // --------- Decode and compute errors --------- //
         fmt::print("Computing errors on uniform grid...\n");
         mfa::PointSet<T>* unused = nullptr;
-        // VectorXi grid_size{{n_samples, n_rho, n_alpha}};
         analytical_ray_error_field(cp, ray_mfa, ndom_pts, "sine", args, unused, ray_approx, ray_errs);
+        delete unused;
         fmt::print("done.\n");
     }
 
@@ -494,10 +577,18 @@ struct RayBlock : public Block<T>
     {
         if (r_lim == 0)
         {
-            fmt::print("ERROR: r_lim=0 in RayBlock::radon2cart()\nExiting.\n");
-            exit(1);
+            throw mfa::MFAError("ERROR: r_lim=0 in RayBlock::radon2cart()\nExiting.\n");
         }
 
+        if (radon_coords.size() == 3) return radon2cart2d(radon_coords, cart_coords);
+        else if (radon_coords.size() == 5) return radon2cart3d(radon_coords, cart_coords);
+        else throw mfa::MFAError("Incompatible vector dimension in radon2cart");
+
+        return false;
+    }
+
+    bool radon2cart2d(const VectorX<T>& radon_coords, VectorX<T>& cart_coords)
+    {
         T t = radon_coords(0);
         T rho = radon_coords(1);
         T alpha = radon_coords(2);
@@ -508,29 +599,27 @@ struct RayBlock : public Block<T>
         s0 << cos(alpha), sin(alpha);
         s1 << -1*sin(alpha), cos(alpha);
         cart_coords = rho*s0 + 2*r_lim*(t-0.5)*s1;
-        T x = cart_coords(0);
-        T y = cart_coords(1);
 
-        // T x0, y0, span_x, span_y;
-        // T SA = sin(alpha);
-        // T CA = cos(alpha);
-        // span_x = 2 * r_lim * SA;
-        // span_y = 2 * r_lim * CA;
-        // x0 = rho * CA - r_lim * SA;
-        // y0 = rho * SA + r_lim * CA;
+        return in_domain2d(cart_coords);
+    }
 
-        // T x = x0 + t*span_x;
-        // T y = y0 - t*span_y;
+    bool radon2cart3d(const VectorX<T>& radon_coords, VectorX<T>& cart_coords)
+    {
+        T t = radon_coords(0);
+        T rho = radon_coords(1);
+        T nu = radon_coords(2);
+        T theta = radon_coords(3);
+        T phi = radon_coords(4);
 
-        // cart_coords(0) = x;
-        // cart_coords(1) = y;
+        VectorX<T> s0(3);
+        VectorX<T> s1(3);
+        VectorX<T> s2(3);
+        s0 << cos(theta)*sin(phi), sin(theta)*sin(phi), cos(phi);
+        s1 << -1*sin(theta), cos(theta), 0;
+        s2 << cos(theta)*cos(phi), sin(theta)*cos(phi), -1*sin(phi);
+        cart_coords = rho*s0 + nu*s1 + 2*r_lim*(t-0.5)*s2;
 
-        T xl = core_mins(0);
-        T xh = core_maxs(0);
-        T yl = core_mins(1);
-        T yh = core_maxs(1);
-
-        return (x >= xl) && (x <= xh) && (y >= yl) && (y <= yh);
+        return in_domain3d(cart_coords);
     }
 
     // Compute error field on a regularly spaced grid of points. The size of the grid
@@ -725,20 +814,15 @@ struct RayBlock : public Block<T>
         // TODO: This is for 2d only right now
         if (a.size() != 2 || b.size() != 2)
         {
-            cerr << "ERROR: Incorrect dimension in integrate ray. Exiting." << endl;
-            exit(1);
+            throw mfa::MFAError("Incorrect dimension in integrate ray");
         }
 
         auto [alpha, rho] = dualCoords(a, b);
-        // T alpha = ar_coords.first;
-        // T rho   = ar_coords.second;
 
         T a_x = a(0);
         T a_y = a(1);
         T b_x = b(0);
         T b_y = b(1);
-
-        T x0, x1, y0, y1;   // end points of full line
         T u0 = 0, u1 = 0;
         
         // x = rho*cos(alpha) + 2R(u-0.5)(-sin(alpha))
@@ -754,27 +838,7 @@ struct RayBlock : public Block<T>
             u1 = (b_y - rho*sin(alpha)) / (2*r_lim*cos(alpha)) + 0.5;
         }
         T length = 2*r_lim;
-        // x0 = rho * cos(alpha) - r_lim * sin(alpha);
-        // x1 = rho * cos(alpha) + r_lim * sin(alpha);
-        // y0 = rho * sin(alpha) + r_lim * cos(alpha);
-        // y1 = rho * sin(alpha) - r_lim * cos(alpha);
-
-        // // parameter values along ray for 'start' and 'end'
-        // // compute in terms of Euclidean distance to avoid weird cases
-        // //   when line is nearly horizontal or vertical
-        // T x_sep = abs(x1 - x0);
-        // T y_sep = abs(y1 - y0);
         
-        // if (x_sep > y_sep)  // want to avoid dividing by near-epsilon numbers
-        // {
-        //     u0 = abs(a_x - x0) / x_sep;
-        //     u1 = abs(b_x - x0) / x_sep;
-        // }
-        // else
-        // {
-        //     u0 = abs(a_y - y0) / y_sep;
-        //     u1 = abs(b_y - y0) / y_sep;
-        // }
 
         // Scalar valued path integrals do not have an orientation, so we always
         // want the limits of integration to go from smaller to larger.
