@@ -72,11 +72,14 @@ namespace mfa
 
         void init(mfa::PointSet<T>* input)
         {
+            clear_max_stats();    // set everything to zero in case we are re-initializing
+
             nvars = input->nvars();
             npts = ArrayXi::Zero(nvars);
             sum = ArrayX<T>::Zero(nvars);
             ssq = ArrayX<T>::Zero(nvars);
             mxv = ArrayX<T>::Zero(nvars);
+            data.clear();
             data.resize(nvars);
 
             extent = ArrayX<T>::Zero(nvars);
@@ -202,6 +205,22 @@ namespace mfa
             }
         }
 
+        void clear_max_stats()
+        {
+            l1_max = 0;
+            l2_max = 0;
+            linf_max = 0;
+            l1_rel_max = 0;
+            l2_rel_max = 0;
+            linf_rel_max = 0;
+            l1_max_var = 0;
+            l2_max_var = 0;
+            linf_max_var = 0;
+            l1_rel_max_var = 0;
+            l2_rel_max_var = 0;
+            linf_rel_max_var = 0;
+        }
+
         // find max over all science variables
         void find_max_stats()
         {
@@ -223,6 +242,28 @@ namespace mfa
             fmt::print("Max Error (normalized)    (var {}) = {:.4e}\n", linf_rel_max_var, linf_rel_max);
             fmt::print("RMS Error (normalized)    (var {}) = {:.4e}\n", l2_rel_max_var, l2_rel_max);
             fmt::print("Avg Error (normalized)    (var {}) = {:.4e}\n", l1_rel_max_var, l1_rel_max);        
+        }
+
+        // used for debugging
+        void dump_log_Eigen(int k, VectorX<T>& vec)
+        {
+            if (data.size() != nvars)
+            {
+                throw MFAError("Stats log size does not match number of variables\n");
+            }
+            for (int k = 0; k < nvars; k++)
+            {
+                if (data[k].size() != npts(k))
+                {
+                    throw MFAError(fmt::format("Log error in Stats. Variable {}.\n", k));
+                }
+            }
+
+            vec.resize(npts(k));
+            for (int i = 0; i < npts(k); i++)
+            {
+                vec(i) = data[k][i];
+            }
         }
     };
 
