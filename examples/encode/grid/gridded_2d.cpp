@@ -50,6 +50,7 @@ int main(int argc, char** argv)
     vector<int> vars_nctrl      = {11};     // initial # control points for all science variables (default same for all dims)
     string      input           = "";       // input dataset
     string      infile          = "";       // input file name
+    int         gridsize        = 0;       // custom grid size for decoding
     int         verbose         = 1;        // MFA verbosity (0 = no extra output)
     int         weighted        = 0;        // Use NURBS weights (0/1)
     int         adaptive        = 0;        // do analytical encode (0/1)
@@ -66,6 +67,7 @@ int main(int argc, char** argv)
     ops >> opts::Option('v', "vars_nctrl",  vars_nctrl, " number of control points in each dimension of all science variables");
     ops >> opts::Option('i', "input",       input,      " input dataset");
     ops >> opts::Option('f', "infile",      infile,     " input file name");
+    ops >> opts::Option('u', "gridsize",    gridsize,   " custom grid size for decoding");
     ops >> opts::Option('z', "adaptive",    adaptive,   " do adaptive encode (0/1)");
     ops >> opts::Option('e', "errorbound",  e_threshold," error threshold for adaptive encoding");
     ops >> opts::Option('z', "rounds",      rounds,     " max number of rounds for adaptive encoding");
@@ -153,11 +155,25 @@ int main(int argc, char** argv)
 
     // decode at original point locations and compute pointwise error
     double decode_time = MPI_Wtime();
-    fprintf(stderr, "\nFinal decoding and computing max. error...\n");
-    master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-    { 
-        b->range_error(cp, true);
-    });
+    fprintf(stderr, "\nFinal decoding and computing max. error...");
+    if (gridsize > 0)  // decode onto a grid
+    {
+        cerr << "Decoding onto custom grid of size " << gridsize << endl;
+        vector<int> grid_size(dom_dim, gridsize);
+        master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
+        { 
+            b->decode_block_grid(cp, grid_size);
+        });
+    }
+    else    // compute pointwise error field
+    {
+        cerr << "Decoding and computing error field" << endl;
+        master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
+        { 
+            b->range_error(cp, true);
+        });
+    }
+
     decode_time = MPI_Wtime() - decode_time;
 
     // print results
