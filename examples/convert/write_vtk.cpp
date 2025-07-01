@@ -1172,8 +1172,6 @@ int main(int argc, char ** argv)
     diy::mpi::environment  env(argc, argv);       // equivalent of MPI_Init(argc, argv)/MPI_Finalize()
     diy::mpi::communicator world;                 // equivalent of MPI_COMM_WORLD
 
-    string                      input  = "sine";        // input dataset
-    int                         ntest  = 0;             // number of input test points in each dim for analytical error tests
     string                      infile = "approx.mfa";  // diy input file
     bool                        help;                   // show help
     int                         sci_var = 0;            // science variable to render geometrically for 1d and 2d domains
@@ -1181,8 +1179,6 @@ int main(int argc, char ** argv)
     // get command line arguments
     opts::Options ops;
     ops >> opts::Option('f', "infile",      infile,     " diy input file name");
-    ops >> opts::Option('a', "ntest",       ntest,      " number of test points in each dimension of domain (for analytical error calculation)");
-    ops >> opts::Option('i', "input",       input,      " input dataset");
     ops >> opts::Option('v', "var",         sci_var,    " science variable to render geometrically for 1d and 2d domains");
     ops >> opts::Option('h', "help",        help,       " show help");
 
@@ -1195,9 +1191,7 @@ int main(int argc, char ** argv)
 
     // echo args
     fprintf(stderr, "\n--------- Input arguments ----------\n");
-    cerr << "infile = " << infile << " test_points = "    << ntest <<        endl;
-    if (ntest)
-        cerr << "input = "          << input     << endl;
+    cerr << "infile = " << infile << endl;
 #ifdef MFA_TBB
     cerr << "threading: TBB" << endl;
 #endif
