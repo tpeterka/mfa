@@ -1145,6 +1145,44 @@ namespace mfa
             }
         }
 
+        void shiftModel(MFA_Data<T>& model, const VectorX<T>& shift)
+        {
+            if (shift.size() != model.dim()) throw MFAError("Dimension mismatch in MFA::shiftModel()");
+
+            for (auto t : model.tmesh.tensor_prods)
+            {
+                for (int i = 0; i < model.dim(); i++)
+                {
+                    t.ctrl_pts.col(i).array() += shift(i);
+                }
+            }
+        }
+
+        void shiftGeom(const VectorX<T>& shift)
+        {
+            fmt::print("MFA: Shifting geometry model\n");
+
+            // todo: check geometry is initialized
+            shiftModel(*geometry, shift);
+        }
+
+        void shiftVar(int i, const VectorX<T>& shift)
+        {
+            fmt::print("MFA: Shifting variable model {}\n", i);
+
+            // todo: check variable is initialized
+            if (i < 0 || i >= nvars())
+            {
+                throw MFAError("var index out of range in MFA::shiftVar()");
+            }
+            if (!vars[i])
+            {
+                throw MFAError(fmt::format("Attempted to deference null variable model (index {})", i));
+            }
+
+            shiftModel(*var[i], shift);
+        }
+
         // Helper function that takes a knot span with or without repeated knots and returns
         // the same distribution with properly pinned knots
         vector<T> pinKnots(const vector<T>& knots, int degree)
