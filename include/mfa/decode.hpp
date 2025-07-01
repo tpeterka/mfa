@@ -255,6 +255,7 @@ namespace mfa
     private:
         const MFA_Data<T>&  mfa_data;                   // the mfa data model
         const int           dom_dim;
+        const int           var_dim;
         const int           tot_iters;                  // total iterations in flattened decoding of all dimensions
         MatrixXi            ct;                         // coordinates of first control point of curve for given iteration
                                                         // of decoding loop, relative to start of box of
@@ -276,6 +277,7 @@ namespace mfa
                 int                 verbose_) :             // debug level
             mfa_data(mfa_data_),
             dom_dim(mfa_data_.dom_dim),
+            var_dim(mfa_data.dim()),
             tot_iters((mfa_data.p + VectorXi::Ones(dom_dim)).prod()),
             q0(mfa_data_.p(0)+1),
             verbose(verbose_)
@@ -534,11 +536,12 @@ namespace mfa
             VolIterator cp_it(subvolume, spans - mfa_data.p, tensor.nctrl_pts);
             while (!cp_it.done())
             {
-                VectorXi ctrl_idxs = cp_it.idx_dim();
+                // VectorXi ctrl_idxs = cp_it.idx_dim();
                 T coeff = 1;
                 for (int l = 0; l < dom_dim; l++)
                 {
-                    coeff *= N[l](0, ctrl_idxs(l));
+                    // coeff *= N[l](0, ctrl_idxs(l));
+                    coeff *= N[l](0, cp_it.idx_dim(l));
                 }
 
                 output += coeff * tensor.ctrl_pts.row(cp_it.cur_iter_full());
@@ -883,7 +886,7 @@ namespace mfa
             Kokkos::Profiling::popRegion(); // "DecodeAtRes"
 
 
-#else       // serial version
+#else       // end kokkos version
 
 #ifndef MFA_TMESH   // original version for one tensor product
 
@@ -907,28 +910,12 @@ namespace mfa
             VectorXi    derivs;                             // do not use derivatives yet, pass size 0
             VolIterator vol_it(ndom_pts);
 
-#ifdef  PRINT_DEBUG
-            if (1 == mfa_data.dom_dim)
-            {
-                for (int i=0; i<ndom_pts(0); i++)
-                {
-                    for (int j=0; j<nctrl_pts(0); j++)
-                        printf(" %2.5f", NN[0](i,j));
-                    printf("\n");
-                }
-                printf("Control Points:\n");
-                for (int j=0; j<nctrl_pts(0); j++)
-                {
-                    printf(" %10.7f \n",mfa_data.tmesh.tensor_prods[0].ctrl_pts(j) );
-                }
-
-            }
-#endif              // end debug
-
 #ifdef MFA_SERIAL   // serial version
 
             if (verbose)
                 fmt::print(stderr, " ->DecodeGrid: serial version\n");
+
+            fmt::print(stderr, " ->DecodeGrid: var_dim={}\n", var_dim);
 
             DecodeInfo<T>   decode_info(mfa_data, derivs);  // reusable decode point info for calling VolPt repeatedly
             FastDecodeInfo<T> fdi(*this);                   // reusable buffer space for FastVolPt, FastVolPtGrid, FastGrad
@@ -945,13 +932,17 @@ namespace mfa
                     param(i) = params[i][ijk[i]];
                 }
 
-#ifdef PRINT_DEBUG2
-                printf(" %d (%d, %d) ", j, ijk[0], ijk[1]);
-#endif
-
 #ifndef MFA_TMESH   // original version for one tensor product
 
-                FastVolPtGrid(ijk, param, cpt, fdi, mfa_data.tmesh.tensor_prods[0], NN);
+                if (var_dim == 1)   // todo: try to find a way to remove this if statement eventually 
+                {
+                    // FastVolPtGrid(ijk, param, cpt, fdi, mfa_data.tmesh.tensor_prods[0], NN);
+                    FastVolPt(param, cpt, fdi, mfa_data.tmesh.tensor_prods[0]);
+                }
+                else
+                {
+                    VolPt_saved_basis_grid(ijk, param, cpt, decode_info, mfa_data.tmesh.tensor_prods[0], NN);
+                }
 
 #else               // tmesh version
 
@@ -962,10 +953,6 @@ namespace mfa
                 vol_it.incr_iter();
                 result.block(j, min_dim, 1, max_dim - min_dim + 1) = cpt.transpose();
             }
-
-            // debug
-//             decode_times.print();
-
 #endif      // end serial version
 
 #ifdef MFA_TBB      // TBB version
@@ -1413,78 +1400,85 @@ namespace mfa
 
         }
 
-        // Fast implementation of VolPt for simple MFA models with precomputed basis functions
-        // Requirements:
-        //   * Model does not use weights (must define MFA_NO_WEIGHTS)
-        //   * Science variable must be one-dimensional
-        //   * Cannot compute derivatives
-        //   * Does not support TMesh
-        void FastVolPtGrid
-        (
-            const VectorXi&             ijk,        // ijk index of grid domain point being decoded
-            const VectorX<T>&           param,      // parameter value in each dim. of desired point
-            VectorX<T>&             out_pt,     // (output) point, allocated by caller
-            FastDecodeInfo<T>&      di,         // reusable decode info allocated by caller (more efficient when calling VolPt multiple times)
-            const TensorProduct<T>& tensor,    // tensor product to use for decoding
-            vector<MatrixX<T>>&         NN ) const       // precomputed basis functions at grid
-        {
-            // compute spans and basis functions for the given parameters
-            for (int i = 0; i < dom_dim; i++)
-            {
-                di.span[i] = mfa_data.tmesh.FindSpan(i, param(i));
 
-                for (int l = 0; l < di.N[i].size(); l++)
-                {
-                    di.N[i][l] = NN[i](ijk(i), di.span[i] - mfa_data.p(i));
-                }
-            }
+        //    TODO: This function has a bug somewhere, perhaps an indexing error. It saves at least 10%
+        //          time over FastVolPt when the data is on a grid, maybe more. Still is a good idea of
+        //          a function, but don't have time to debug it now --DL
+        //
+        // // Fast implementation of VolPt for simple MFA models with precomputed basis functions
+        // // Requirements:
+        // //   * Model does not use weights (must define MFA_NO_WEIGHTS)
+        // //   * Science variable must be one-dimensional
+        // //   * Cannot compute derivatives
+        // //   * Does not support TMesh
+        // void FastVolPtGrid
+        // (
+        //     const VectorXi&             ijk,        // ijk index of grid domain point being decoded
+        //     const VectorX<T>&           param,      // parameter value in each dim. of desired point
+        //     VectorX<T>&             out_pt,     // (output) point, allocated by caller
+        //     FastDecodeInfo<T>&      di,         // reusable decode info allocated by caller (more efficient when calling VolPt multiple times)
+        //     const TensorProduct<T>& tensor,    // tensor product to use for decoding
+        //     vector<MatrixX<T>>&         NN ) const       // precomputed basis functions at grid
+        // {
 
-            // ** The rest of this function is identical to FastVolPt
+        //     throw MFAError("FastVolPtGrid has a bug, fix it!");
+        //     // compute spans and basis functions for the given parameters
+        //     for (int i = 0; i < dom_dim; i++)
+        //     {
+        //         di.span[i] = mfa_data.tmesh.FindSpan(i, param(i));
 
-            // compute linear index of first control point
-            int start_ctrl_idx = 0;
-            for (int j = 0; j < mfa_data.dom_dim; j++)
-                start_ctrl_idx += (di.span[j] - mfa_data.p(j)) * cs[j];
+        //         for (int l = 0; l < di.N[i].size(); l++)
+        //         {
+        //             di.N[i][l] = NN[i](ijk(i), di.span[i] - mfa_data.p(i));
+        //         }
+        //     }
 
-            // * The remaining loops perform the sums and products of basis functions across different
-            //   dimensions. This loop looks different from the old VolPt loop in order to remove the
-            //   step to check if a control point is at the "end" of some dimension. Instead, we compute
-            //   a series of temporary sums, which are stored in di.t[i] (i = current dimension).
-            // * We separate out the first dimension because this is the only place where
-            //   control points are accessed. 
-            // * This setup requires more temporary vectors (the largest of which is of size q^{d-1}), but
-            //   the time spent accumulating basis functions is reduced by about 10-20%
+        //     // ** The rest of this function is identical to FastVolPt
 
-            // First domain dimension, we multiply basis functions with control points
-            for (int m = 0, id = 0; m < tot_iters; m += q0, id++)
-            {
-                di.ctrl_idx = start_ctrl_idx + jumps(m);
+        //     // compute linear index of first control point
+        //     int start_ctrl_idx = 0;
+        //     for (int j = 0; j < mfa_data.dom_dim; j++)
+        //         start_ctrl_idx += (di.span[j] - mfa_data.p(j)) * cs[j];
 
-                di.t[0][id] = di.N[0][0] * tensor.ctrl_pts(di.ctrl_idx);
-                for (int a = 1; a < q0; a++)
-                {
-                    di.t[0][id] += di.N[0][a] * tensor.ctrl_pts(di.ctrl_idx + a);
-                }
-            }
+        //     // * The remaining loops perform the sums and products of basis functions across different
+        //     //   dimensions. This loop looks different from the old VolPt loop in order to remove the
+        //     //   step to check if a control point is at the "end" of some dimension. Instead, we compute
+        //     //   a series of temporary sums, which are stored in di.t[i] (i = current dimension).
+        //     // * We separate out the first dimension because this is the only place where
+        //     //   control points are accessed. 
+        //     // * This setup requires more temporary vectors (the largest of which is of size q^{d-1}), but
+        //     //   the time spent accumulating basis functions is reduced by about 10-20%
 
-            // For all subsequent dimensions, we multiply basis functions with temporary sums
-            int qcur = 0, tsz = 0;
-            for (int k = 1; k < mfa_data.dom_dim; k++)
-            {
-                qcur = q[k];
-                tsz = di.t[k-1].size();
-                for (int m = 0, id = 0; m < tsz; m += qcur, id++)
-                {
-                    di.t[k][id] = di.N[k][0] * di.t[k-1][m];
-                    for (int l = 1; l < qcur; l++)
-                    {
-                        di.t[k][id] += di.N[k][l] * di.t[k-1][m + l];
-                    }
-                }
-            }
+        //     // First domain dimension, we multiply basis functions with control points
+        //     for (int m = 0, id = 0; m < tot_iters; m += q0, id++)
+        //     {
+        //         di.ctrl_idx = start_ctrl_idx + jumps(m);
 
-            out_pt(0) = di.t[mfa_data.dom_dim - 1][0];
-        }
+        //         di.t[0][id] = di.N[0][0] * tensor.ctrl_pts(di.ctrl_idx);
+        //         for (int a = 1; a < q0; a++)
+        //         {
+        //             di.t[0][id] += di.N[0][a] * tensor.ctrl_pts(di.ctrl_idx + a);
+        //         }
+        //     }
+
+        //     // For all subsequent dimensions, we multiply basis functions with temporary sums
+        //     int qcur = 0, tsz = 0;
+        //     for (int k = 1; k < mfa_data.dom_dim; k++)
+        //     {
+        //         qcur = q[k];
+        //         tsz = di.t[k-1].size();
+        //         for (int m = 0, id = 0; m < tsz; m += qcur, id++)
+        //         {
+        //             di.t[k][id] = di.N[k][0] * di.t[k-1][m];
+        //             for (int l = 1; l < qcur; l++)
+        //             {
+        //                 di.t[k][id] += di.N[k][l] * di.t[k-1][m + l];
+        //             }
+        //         }
+        //     }
+
+        //     out_pt(0) = di.t[mfa_data.dom_dim - 1][0];
+        // }
 
         // compute a point from a NURBS n-d volume at a given parameter value
         // fastest version for multiple points, reuses computed basis functions
