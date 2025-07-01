@@ -296,7 +296,7 @@ struct RayBlock : public Block<T>
         // Get maximal distance of domain edge from origin
         // WARNING: we are assuming the domain is (rougly) centered at the origin!
         double max_radius = max(bounds_mins.cwiseAbs().maxCoeff(), bounds_maxs.cwiseAbs().maxCoeff());
-        r_lim = max_radius * 1.5;
+        r_lim = max_radius * 1.75; 
 
         // Set extents of rotated model
         ray_bounds_mins.resize(pt_dim + ray_dom_dim-dom_dim);
@@ -564,12 +564,12 @@ struct RayBlock : public Block<T>
         ray_mfa->FixedEncodeGeom(*ray_input, false);
         ray_mfa->RayEncode(0, *ray_input);
 
-        // // --------- Decode and compute errors --------- //
-        fmt::print("Computing errors on uniform grid...\n");
-        mfa::PointSet<T>* unused = nullptr;
-        analytical_ray_error_field(cp, ray_mfa, ndom_pts, "sine", args, unused, ray_approx, ray_errs);
-        delete unused;
-        fmt::print("done.\n");
+        // // // --------- Decode and compute errors --------- //
+        // fmt::print("Computing errors on uniform grid...\n");
+        // mfa::PointSet<T>* unused = nullptr;
+        // analytical_ray_error_field(cp, ray_mfa, ndom_pts, "sine", args, unused, ray_approx, ray_errs);
+        // delete unused;
+        // fmt::print("done.\n");
     }
 
     // Convert (t, rho, theta) to (x, y) and return true if the x,y coords are in the original domain
@@ -723,7 +723,118 @@ struct RayBlock : public Block<T>
         ray_mfa->Decode(*ray_approx);
     }
 
-    pair<T,T> dualCoords(const VectorX<T>& a, const VectorX<T>& b) const
+    void dualCoords3d(const VectorX<T>& a, const VectorX<T>& b, 
+                    T& rho, T& nu, T& theta, T& phi) const
+    {
+        const double pi = 3.14159265358979;
+
+        T hx = b(0) - a(0);
+        T hy = b(1) - a(1);
+        T hz = b(2) - a(2);
+        T recipNorm = 1 / (sqrt(hx*hx + hy*hy + hz*hz));
+
+        hx *= recipNorm;
+        hy *= recipNorm;
+        hz *= recipNorm;
+
+        // phi = stableArcTan(1.0, abs(hz), sqrt(1 - hz*hz));
+        // cerr << "phi1: " << phi << endl;
+        phi = atan2(-hz, sqrt(1 - hz*hz)); // TODO check this  
+        // cerr << "phi2: " << phi << endl; 
+
+        if (phi < 0)
+        {
+            // cerr << "adjusting phi" << endl;
+            phi += pi;
+        }
+
+        // todo: add edge case when phi=pi/2
+        theta = atan2(hy, hx);
+        if (theta < 0)
+        {
+            // cerr << "adjusting theta" << endl;
+            theta += pi;
+            phi = pi - phi;
+        }
+
+        // Compute the projection of a into the plane spanned by s1, s2
+        // (this plane is perpendicular to s3, and s3 || h.)
+        T hDotA = hx*a(0) + hy*a(1) + hz*a(2); // dot product of h with a
+        T px = a(0) - hDotA*hx;
+        T py = a(1) - hDotA*hy;
+        T pz = a(2) - hDotA*hz;
+
+        // cerr << "p: " << px << " " << py << " " << pz << endl;
+        // cerr << "p dot h: " << px*hx + py*hy + pz*hz << endl;
+
+        // The vector p = (px, py, pz) is defined such that
+        // p = rho*s0 + nu*s1 + 0*s2
+        // 
+        // Thus,
+        // (cos(theta)sin(phi)   -sin(theta)    cos(theta)cos(phi)  )     ( rho )     ( px )
+        // (                                                        )     (     )     (    )
+        // (sin(theta)sin(phi)   cos(theta)     sin(theta)cos(phi)  )  x  ( nu  )  =  ( py )   (I)
+        // (                                                        )     (     )     (    )
+        // (cos(phi)                0              -sin(phi)        )     (  0  )     ( pz )
+        // 
+        // which implies
+        // (cos(theta)   -sin(theta)        )     ( rho*sin(phi) )     ( px )
+        // (                                )  x  (              )  =  (    )      (II)
+        // (sin(theta)   cos(theta)         )     (     nu       )     ( py )
+        //
+        // Note: 
+        // if sin(phi) == 0, then the first system is:
+        // 
+        // (    0      -sin(theta)     +/- cos(theta)  )     ( rho )     ( px )
+        // (                                           )     (     )     (    )
+        // (    0       cos(theta)     +/- sin(theta)  )  x  ( nu  )  =  ( py )   (I*)
+        // (                                           )     (     )     (    )
+        // (   +/- 1        0                0         )     (  0  )     ( pz )
+        // 
+        // and thus rho = cos(phi)*pz
+        // and      nu  = -px/sin(theta)  and/or  nu = py/cos(theta)
+        // 
+        // All of these matrices are orthogonal, so A^{-1} = A^T
+        // Thus either system can easily be solved without full matrix inversion. 
+        // To avoid numerical errors, we choose which system to solve based on 
+        // whether sin(phi) or cos(phi) is near zero.
+
+        T CT = cos(theta);
+        T ST = sin(theta);
+        T SP = sin(phi);
+        T CP = cos(phi);
+
+        if (abs(SP) > 1e-12)  // solve system (II) above
+        {
+            // cerr << "system I" << endl;
+            
+            rho = (CT*px + ST*py) / SP;
+            nu = (-ST*px + CT*py);
+         
+            // rho = px * CT / SP - ST * py;
+            // nu  = px * ST / SP + CT * py;
+        }
+        else  // solve system (I*)
+        {
+            rho = CP*pz;
+            if (ST > 1e-6)
+            {
+                nu = -px/ST;
+            }
+            else
+            {
+                nu = py/CT;
+            }
+        }
+        // else            // solve system (II) above
+        // {
+        //     cerr << "system II" << endl;
+        //     rho = -ST*py + CT*pz/CP;
+        //     nu  =  CT*py + ST*pz/CP;
+        // }   
+    }
+
+    pair<T,T> dualCoords2d(const VectorX<T>& a, const VectorX<T>& b) const
     {
         const double pi = 3.14159265358979;
 
@@ -764,31 +875,39 @@ struct RayBlock : public Block<T>
         const   diy::Master::ProxyWithLink& cp,
         const   DomainArgs& d_args,
         const   VectorX<T>& a,
-        const   VectorX<T>& b) const
+        const   VectorX<T>& b,
+                int         nSamples = -1) const
     {
         mfa::Decoder<T> decoder(mfa->var(0), 0);     // nb. turning off verbose output when decoding single points
 
         T result = 0;
-        VectorX<T> au(2);
-        VectorX<T> bu(2);
-        VectorX<T> du(2);
-        VectorX<T> param1(2);
-        VectorX<T> param2(2);
-        VectorX<T> outpt1(2);
-        VectorX<T> outpt2(2);
+        VectorX<T> au(dom_dim);
+        VectorX<T> bu(dom_dim);
+        VectorX<T> du(dom_dim);
+        VectorX<T> param1(dom_dim);
+        VectorX<T> param2(dom_dim);
+        VectorX<T> outpt1(1);
+        VectorX<T> outpt2(1);
+
+        // todo: eventually remove trap_samples from RayBlock. More stable to 
+        //       always specify resolution when calling trapezoid()
+        if (nSamples == -1)
+        {
+            nSamples = trap_samples;
+        }
 
         // Compute parametrization of start and end points
         for (int j = 0; j < dom_dim; j++)
         {
-            au(j) = (a(j) - d_args.min[j]) / (d_args.max[j] - d_args.min[j]);
-            bu(j) = (b(j) - d_args.min[j]) / (d_args.max[j] - d_args.min[j]);
-            du(j) = (bu(j) - au(j)) / (trap_samples-1);
+            au(j) = (a(j) - core_mins(j)) / (core_maxs(j) - core_mins(j));
+            bu(j) = (b(j) - core_mins(j)) / (core_maxs(j) - core_mins(j));
+            du(j) = (bu(j) - au(j)) / (nSamples-1);
         }
 
-        T step = (b-a).norm() / (trap_samples-1);
+        T step = (b-a).norm() / (nSamples-1);
 
         // Sample base MFA and compute trapezoid rule approximation of integral
-        for (int i = 0; i < trap_samples - 1; i++)
+        for (int i = 0; i < nSamples - 1; i++)
         {
             param1 = au + i*du;
             param2 = au + (i+1)*du;
@@ -802,7 +921,204 @@ struct RayBlock : public Block<T>
         return result;
     }
 
+    T stableArcTan(const VectorX<T>& A, const VectorX<T>& B, const VectorX<T>& C) const
+    {
+        return stableArcTan(A.norm(), B.norm(), C.norm());
+    }
+
+    // Computes the arctangent of the angle between vectors A and B in a numerically stable
+    // way.
+    // See: https://scicomp.stackexchange.com/questions/27689/numerically-stable-way-of-computing-angles-between-vectors
+    // and: https://people.eecs.berkeley.edu/~wkahan/Triangle.pdf
+    // 
+    // This will always return a number in [0, pi]. The normal range of atan is [-pi/2, pi/2],
+    // but this function operates only on positive values, so its range is positive. (and also
+    // note the output of atan is doubled)
+    T stableArcTan(T a, T b, T c) const
+    {
+        // T a = A.norm();
+        // T b = B.norm();
+        // T c = C.norm();
+        T t = 0, u = 0;
+
+        // sort a >= b, c
+        // if (a < c)
+        // {
+        //     t = a;
+        //     a = c;
+        //     c = t;
+        // }
+        if (a < b)
+        {
+            t = a;
+            a = b;
+            b = t;
+        }
+
+        // start computing
+        if (c > b)
+        {
+            u = b - (a-c);
+        }
+        else
+        {
+            u = c - (a-b);
+        }
+
+        // T temp1 = sqrt( (((a-b)+c)*u) / ((a+(b+c))*((a-c)+b)) );
+        // T temp2 = atan(temp1);
+        // cerr << "temp1: " << temp1 << endl;
+        // cerr << "temp2: " << temp2 << endl;
+
+        return 2*atan(sqrt( (((a-b)+c)*u) / ((a+(b+c))*((a-c)+b)) ));
+    }
+
     T integrate_ray(
+        const   diy::Master::ProxyWithLink& cp,
+        // mfa::Decoder<T>& integralDecoder,
+        const   VectorX<T>& a,
+        const   VectorX<T>& b) const
+    {
+        if (dom_dim == 2) return integrate_ray_2d(cp, a, b);
+        else if (dom_dim == 3) return integrate_ray_3d(cp, a, b);
+        else throw mfa::MFAError("Incorrect dimension in integrate_ray");
+    
+        return -1;
+    }
+
+    T integrate_ray_3d(
+        const   diy::Master::ProxyWithLink& cp,
+        // mfa::Decoder<T>& integralDecoder,
+        const   VectorX<T>& a,
+        const   VectorX<T>& b) const
+    {
+        // const double pi = 3.14159265358979;
+        const bool verbose = false;
+
+        // TODO: This is for 2d only right now
+        if (a.size() != 3 || b.size() != 3)
+        {
+            throw mfa::MFAError("Incorrect dimension in integrate ray");
+        }
+
+        T rho = 0;
+        T nu = 0;
+        T theta = 0;
+        T phi = 0;
+        dualCoords3d(a, b, rho, nu, theta, phi);
+
+        // cerr << "phi in integrate_ray: " << phi << endl;
+
+        // T a_x = a(0);
+        // T a_y = a(1);
+        // T b_x = b(0);
+        // T b_y = b(1);
+        T u0 = 0, u1 = 0;
+        T length = 2*r_lim;
+
+        // cerr << "-----------------------" << endl;
+        if (phi > 0.001 && phi < 3.14)
+        {
+            u0 = (a(2) - rho*cos(phi)) / (-2*r_lim*sin(phi)) + 0.5;
+            u1 = (b(2) - rho*cos(phi)) / (-2*r_lim*sin(phi)) + 0.5;
+            // cerr << "case1" << endl;
+        }
+        else if (theta > 0.001 && theta < 3.14)
+        {
+            u0 = (a(1) - rho*sin(theta)*sin(phi) - nu*cos(theta)) / (2*r_lim*sin(theta)*cos(phi)) + 0.5;
+            u1 = (b(1) - rho*sin(theta)*sin(phi) - nu*cos(theta)) / (2*r_lim*sin(theta)*cos(phi)) + 0.5;
+            // cerr << "case2" << endl;
+        }
+        else
+        {
+            u0 = (a(0) - rho*cos(theta)*sin(phi) + nu*sin(theta)) / (2*r_lim*cos(theta)*cos(phi)) + 0.5;
+            u1 = (b(0) - rho*cos(theta)*sin(phi) + nu*sin(theta)) / (2*r_lim*cos(theta)*cos(phi)) + 0.5;
+            // cerr << "case3" << endl;
+        }
+
+        // cerr << mfa::print_vec(a) << endl;
+        // cerr << mfa::print_vec(b) << endl;
+        // cerr << "b-a norm: " << mfa::print_vec((b-a).normalized()) << endl;
+        // cerr << "s2:       " << cos(theta)*cos(phi) << " " << sin(theta)*cos(phi) << " " << -1*sin(phi) << endl;
+        // cerr << rho << " " << nu << " " << theta << " " << phi << endl;
+        // cerr << u0 << " " << u1 << endl;
+        // cerr << "-----------------------" << endl;
+        
+        // Scalar valued path integrals do not have an orientation, so we always
+        // want the limits of integration to go from smaller to larger.
+        if (u0 > u1)
+        {
+            T temp  = u1;
+            u1 = u0;
+            u0 = temp;
+        }
+
+        // if (verbose)
+        // {
+        //     cerr << "RAY: " << mfa::print_vec(a) << " ---- " << mfa::print_vec(b) << endl;
+        //     cerr << "|  m: " << ((a_x==b_x) ? "inf" : to_string((b_y-a_y)/(b_x-a_x)).c_str()) << endl;
+        //     cerr << "|  alpha:  " << alpha << ",   rho: " << rho << endl;
+        //     cerr << "|  length: " << length << endl;
+        //     cerr << "|  u0: " << u0 << ",  u1: " << u1 << endl;
+        //     cerr << "+---------------------------------------\n" << endl;
+        // }
+
+        VectorX<T> output(1); // todo: this is hardcoded for the first (scalar) variable only
+        VectorX<T> params(ray_dom_dim);
+        params(0) = 0;  // unused
+        params(1) = (rho+r_lim) / (2*r_lim);
+        params(2) = (nu+r_lim) / (2*r_lim);
+        params(3) = theta / pi;
+        params(4) = phi / pi;
+
+        params(0) = params(0) < 0 ? 0 : params(0);
+        params(1) = params(1) < 0 ? 0 : params(1);
+        params(2) = params(2) < 0 ? 0 : params(2);
+        params(3) = params(3) < 0 ? 0 : params(3);
+        params(4) = params(4) < 0 ? 0 : params(4);
+        params(0) = params(0) > 1 ? 1 : params(0);
+        params(1) = params(1) > 1 ? 1 : params(1);
+        params(2) = params(2) > 1 ? 1 : params(2);
+        params(3) = params(3) > 1 ? 1 : params(3);
+        params(4) = params(4) > 1 ? 1 : params(4); 
+
+        // cerr << "params: " << mfa::print_vec(params) << endl;
+
+        ray_mfa->Integrate1D(0, 0, u0, u1, params, output);
+         
+        // integralDecoder.AxisIntegral(0, u0, u1, params, output);
+
+        output *= length;
+
+        return output(0);
+    }
+
+    void checkParams(const VectorX<T>& params)
+    {
+        for (int i = 0; i < params.size(); i++)
+        {
+            if (params(i) < 0)
+            {
+                if (params(i) < -1e-8)
+                {
+                    cerr << "Out of bounds. Dimension " << i << ". Value = " << params(i) << endl;
+                    throw mfa::MFAError("Out of bounds parameter");
+                }
+                params(i) = 0;
+            }
+            if (params(i) > 1)
+            {
+                if (params(i) > 1 + 1e-8)
+                {
+                    cerr << "Out of bounds. Dimension " << i << ". Value = " << params(i) << endl;
+                    throw mfa::MFAError("Out of bounds parameter");
+                }
+                params(i) = 1;
+            }
+        }
+    }
+
+    T integrate_ray_2d(
         const   diy::Master::ProxyWithLink& cp,
         // mfa::Decoder<T>& integralDecoder,
         const   VectorX<T>& a,
@@ -817,7 +1133,7 @@ struct RayBlock : public Block<T>
             throw mfa::MFAError("Incorrect dimension in integrate ray");
         }
 
-        auto [alpha, rho] = dualCoords(a, b);
+        auto [alpha, rho] = dualCoords2d(a, b);
 
         T a_x = a(0);
         T a_y = a(1);
@@ -875,10 +1191,14 @@ struct RayBlock : public Block<T>
     }
 
     // Compute segment errors in a RayMFA
-    void compute_sinogram(const   diy::Master::ProxyWithLink& cp) const
+    void compute_sinogram(
+        const   diy::Master::ProxyWithLink& cp,
+        const   DomainArgs& d_args, 
+                bool discrete) const
     {
-        // Initialize decoder
-        mfa::Decoder<T> integralDecoder(ray_mfa->var(0), 0);  // no verbose output for single points
+        fmt::print("Computing sinogram\n");
+        // // Initialize decoder
+        // mfa::Decoder<T> integralDecoder(ray_mfa->var(0), 0);  // no verbose output for single points
 
         real_t extent = input->domain.col(dom_dim).maxCoeff() - input->domain.col(dom_dim).minCoeff();
 
@@ -891,8 +1211,10 @@ struct RayBlock : public Block<T>
         sinotruefile.open(sino_true_filename);
         sinoapproxfile.open(sino_approx_filename);
         sinoerrorfile.open(sino_error_filename);
-        int test_n_alpha = 150;
-        int test_n_rho = 150;
+        int test_n_alpha = 450;
+        int test_n_rho = 450;
+
+        const double nanvalue = std::numeric_limits<double>::quiet_NaN();
 
         VectorX<T> start_pt(dom_dim), end_pt(dom_dim);
         for (int i = 0; i < test_n_alpha; i++)
@@ -906,9 +1228,9 @@ struct RayBlock : public Block<T>
                 get_box_intersections(alpha, rho, x0, y0, x1, y1, core_mins, core_maxs);
                 if (x0==0 && y0==0 && x1==0 && y1==0)
                 {   
-                    sinotruefile << alpha << " " << rho << " " << " 0 0" << endl;
-                    sinoapproxfile << alpha << " " << rho << " " << " 0 0" << endl;
-                    sinoerrorfile << alpha << " " << rho << " " << " 0 0" << endl;
+                    sinotruefile << alpha << " " << rho << " " << "0 " << "nan" << endl;
+                    sinoapproxfile << alpha << " " << rho << " " << "0 " << "nan" << endl;
+                    sinoerrorfile << alpha << " " << rho << " " << "0 " << "nan" << endl;
                 }
                 else
                 {
@@ -918,7 +1240,17 @@ struct RayBlock : public Block<T>
                     end_pt(0) = x1;
                     end_pt(1) = y1;
 
-                    T test_result = integrate_ray(cp, start_pt, end_pt) / length;   // normalize by segment length
+                    T test_result = 0;
+                    if (!discrete)  // Use RayModel integration
+                    {
+                        test_result = integrate_ray(cp, start_pt, end_pt) / length;   // normalize by segment length
+                    }
+                    else    // Use trapezoid rule
+                    {
+                        test_result = trapezoid(cp, d_args, start_pt, end_pt) / length; 
+                    }
+
+                    // T test_result = integrate_ray(cp, start_pt, end_pt) / length;   // normalize by segment length
                     T test_actual = sintest(start_pt, end_pt) / length;
 
                     T e_abs = abs(test_result - test_actual);
@@ -936,6 +1268,225 @@ struct RayBlock : public Block<T>
         sinoerrorfile.close();
         
         return;
+    }
+
+    int get_discrete_resolution(
+        const   diy::Master::ProxyWithLink& cp,
+        const   DomainArgs& d_args,
+        int     num_ints,
+        int     seed = 0)
+    {
+        // Error summary
+        VectorX<T> oldStatsVec, newStatsVec, relStatsVec;
+        mfa::Stats<T> oldStats(true), newStats(true);
+        // newStats.init(input);
+
+        // Randomness generation
+        std::random_device dev;
+        if (seed == 0)
+        {
+            seed = dev();
+        }
+
+        fmt::print("Starting loop to converge discrete integration ({} integrals per iteration)\n", num_ints);
+
+        bool converged = false;
+        int itCount = 0;
+        int nSamples = 50;
+        int maxIterations = 100;
+        double scaleFactor = 1.5;
+        for (int k = 0; k < maxIterations; k++, itCount++)
+        {
+            // Update resolution of trapzoid rule
+            nSamples *= scaleFactor;
+
+            fmt::print("Iteration {}: \n", itCount);
+            fmt::print("  nSamples: {}\n", nSamples);
+
+            // Re-initizalize Stats
+            newStats.init(input);
+
+            // Restart random number generation. Important! We should start with the same
+            // see in each iteration of the loop we the lines chosen are the same in 
+            // each iteration
+            // Might be better to compute num_ints endpoints ahead of time, save them, and
+            // then always use the same ones, to avoid mucking around with prng
+            std::mt19937 rng(seed);
+            std::uniform_real_distribution<double> dist(0,1); 
+
+            // // Initialize decoder
+            // mfa::Decoder<T> integralDecoder(ray_mfa->var(0), 0);  // no verbose output for single points
+
+            real_t result = 0, len = 0;
+            VectorX<real_t> start_pt(dom_dim), end_pt(dom_dim);
+            for (int i = 0; i < num_ints; i++)
+            {
+                for (int j = 0; j < dom_dim; j++)
+                {
+                    start_pt(j) = dist(rng) * (core_maxs(j) - core_mins(j)) + core_mins(j);
+                    end_pt(j)   = dist(rng) * (core_maxs(j) - core_mins(j)) + core_mins(j);
+                    // start_pt(j) = dist(rng) * (d_args.max[j]-d_args.min[j]) + d_args.min[j];
+                    // end_pt(j)   = dist(rng) * (d_args.max[j]-d_args.min[j]) + d_args.min[j];
+                }
+                len = (end_pt - start_pt).norm();
+
+                result = trapezoid(cp, d_args, start_pt, end_pt, nSamples) / len; 
+                newStats.update(0, result);
+            }
+
+            if (k > 0)
+            {
+                oldStats.dump_log_Eigen(0, oldStatsVec);
+                newStats.dump_log_Eigen(0, newStatsVec);
+                relStatsVec = (newStatsVec - oldStatsVec).cwiseAbs().array() / oldStatsVec.cwiseAbs().array();
+
+                double stddev = (relStatsVec.array()-relStatsVec.mean()).square().sum() / (num_ints-1);
+                fmt::print("  Min change: {}\n", relStatsVec.minCoeff());
+                fmt::print("  Max change: {}\n", relStatsVec.maxCoeff());
+                fmt::print("  Avg change: {}\n", relStatsVec.mean());
+                fmt::print("  Std dev:    {}\n", stddev);
+                if ((relStatsVec.array() < 0.05).all() && relStatsVec.mean() < 1e-6)
+                {
+                    fmt::print("****Breaking loop\n");
+                    converged = true;
+                }
+            }
+            
+            if (converged) break;
+
+            oldStats = newStats;
+        }   // end resolution loop
+
+        if (!converged) 
+        {
+            fmt::print("WARNING: Discrete integration did not converge after {} iterations\n", maxIterations);
+            return -1;
+        }
+
+        fmt::print("Discrete integration converged with {} samples after {} iterations\n", nSamples, itCount);
+
+        return nSamples;
+    }
+
+    void integral_speed_test(
+        const   diy::Master::ProxyWithLink& cp,
+        const   DomainArgs& d_args,
+        int     num_ints,
+        int     discreteRes,
+        bool    discrete,
+        int     seed)       // require seed for reproducibility
+    {
+        fmt::print("Testing integration speed\n", num_ints);
+        fmt::print("  Number of integrals: {}\n", num_ints);
+        fmt::print("  Computation method: {}\n", discrete ? "discrete" : "spline");
+
+        // Error summary
+        mfa::Stats<T> stats(true);
+        stats.init(input);
+
+        // Randomness generation
+        std::random_device dev;
+        if (seed == 0)
+        {
+            seed = dev();
+        }
+        std::mt19937 rng(seed);
+        std::uniform_real_distribution<double> dist(0,1); 
+
+        real_t result = 0, groundTruth = 0, len = 0, err = 0;
+        VectorX<real_t> start_pt(dom_dim), end_pt(dom_dim);
+
+        auto startTime = std::chrono::steady_clock::now();
+        for (int i = 0; i < num_ints; i++)
+        {
+            for (int j = 0; j < dom_dim; j++)
+            {
+                start_pt(j) = dist(rng) * (core_maxs(j) - core_mins(j)) + core_mins(j);
+                end_pt(j)   = dist(rng) * (core_maxs(j) - core_mins(j)) + core_mins(j);
+            }
+            len = (end_pt - start_pt).norm();
+
+            if (discrete)
+            {
+                result = trapezoid(cp, d_args, start_pt, end_pt) / len; 
+            }
+            else
+            {
+                result = integrate_ray(cp, start_pt, end_pt) / len;   // normalize by segment length
+            }
+
+            stats.update(0, result);
+        }
+        auto endTime = std::chrono::steady_clock::now();
+        fmt::print("  Computation Time: {} ms\n", chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime).count());
+    }
+
+    void integral_error(
+        const   diy::Master::ProxyWithLink& cp,
+        const   DomainArgs& d_args,
+        int     num_ints,
+        int     discreteRes,
+        bool    discrete = false,
+        int     seed = 0)
+    {
+        if (discreteRes == -1)
+        {
+            discreteRes = get_discrete_resolution(cp, d_args, num_ints, seed);
+        }
+
+        fmt::print("Computing errors random line integrals\n", num_ints);
+        fmt::print("  Number of integrals: {}\n", num_ints);
+        fmt::print("  Computation method: {}\n", discrete ? "discrete" : "spline");
+        fmt::print("  Ground Truth Resolution: {}\n", discreteRes);
+
+        // Error summary
+        mfa::Stats<T> stats(true);
+        stats.init(input);
+
+        // Randomness generation
+        std::random_device dev;
+        if (seed == 0)
+        {
+            seed = dev();
+        }
+        std::mt19937 rng(seed);
+        std::uniform_real_distribution<double> dist(0,1); 
+
+        // // Initialize decoder
+        // mfa::Decoder<T> integralDecoder(ray_mfa->var(0), 0);  // no verbose output for single points
+
+        real_t result = 0, groundTruth = 0, len = 0, err = 0;
+        VectorX<real_t> start_pt(dom_dim), end_pt(dom_dim);
+        for (int i = 0; i < num_ints; i++)
+        {
+            for (int j = 0; j < dom_dim; j++)
+            {
+                start_pt(j) = dist(rng) * (core_maxs(j) - core_mins(j)) + core_mins(j);
+                end_pt(j)   = dist(rng) * (core_maxs(j) - core_mins(j)) + core_mins(j);
+                // start_pt(j) = dist(rng) * (d_args.max[j]-d_args.min[j]) + d_args.min[j];
+                // end_pt(j)   = dist(rng) * (d_args.max[j]-d_args.min[j]) + d_args.min[j];
+            }
+            len = (end_pt - start_pt).norm();
+
+            if (discrete)
+            {
+                result = trapezoid(cp, d_args, start_pt, end_pt) / len; 
+            }
+            else
+            {
+                result = integrate_ray(cp, start_pt, end_pt) / len;   // normalize by segment length
+            }
+            groundTruth =  trapezoid(cp, d_args, start_pt, end_pt, discreteRes) / len;
+            
+            // actual = sintest(start_pt, end_pt) / len;                        // normalize by segment length
+            err = abs(result - groundTruth);
+            stats.update(0, err);
+        }
+
+        fmt::print("  Done.\n", num_ints);
+        stats.set_style(mfa::PrintStyle::Side);
+        stats.print_var(0);
+        stats.write_all_vars("li_errors");
     }
 
     void compute_random_ints(
@@ -967,8 +1518,10 @@ struct RayBlock : public Block<T>
         {
             for (int j = 0; j < dom_dim; j++)
             {
-                start_pt(j) = dist(rng) * (d_args.max[j]-d_args.min[j]) + d_args.min[j];
-                end_pt(j)   = dist(rng) * (d_args.max[j]-d_args.min[j]) + d_args.min[j];
+                start_pt(j) = dist(rng) * (core_maxs(j) - core_mins(j)) + core_mins(j);
+                end_pt(j)   = dist(rng) * (core_maxs(j) - core_mins(j)) + core_mins(j);
+                // start_pt(j) = dist(rng) * (d_args.max[j]-d_args.min[j]) + d_args.min[j];
+                // end_pt(j)   = dist(rng) * (d_args.max[j]-d_args.min[j]) + d_args.min[j];
             }
             len = (end_pt - start_pt).norm();
 

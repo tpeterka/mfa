@@ -58,8 +58,15 @@ int main(int argc, char** argv)
     float  regularization = 0;                  // smoothing parameter for models with non-uniform input density (0 == no smoothing)
     int    reg1and2     = 0;                       // flag for regularizer: 0 --> regularize only 2nd derivs. 1 --> regularize 1st and 2nd
     int    seed         = 0;                    // seed for random number generation. seed == 0 --> Choose seed randomly
+    int    discrete_resolution = -1;            // number of samples to use in discrete line integration for "ground truth"
     bool   disc_int     = false;                // Compute integrals using a discrete algorithm (trapezoid rule)
     bool   help         = false;                // show help
+
+    bool time_mode = false;
+    bool error_mode = false;
+    bool sinogram = false;
+
+    int num_ints = 10000;
 
     const int verbose = 1;
     const int scalar = 1;
@@ -82,9 +89,13 @@ int main(int argc, char** argv)
     ops >> opts::Option('k', "reg1and2",    reg1and2,   " regularize both 1st and 2nd derivatives (if =1) or just 2nd (if =0)");
     ops >> opts::Option('c', "disc_int",    disc_int,   " compute integrals using a discrete algorithm (trapezoid rule)");
     ops >> opts::Option('s', "seed",        seed,       " seed for random number generation. seed == 0 --> Choose seed randomly");
-
+    ops >> opts::Option('z', "disc_res",    discrete_resolution, "");
+    ops >> opts::Option('z', "num_ints",    num_ints,   "");
     ops >> opts::Option('z', "rv",           ray_nctrl, "number of control points in each dimension of ray model");
     ops >> opts::Option('z', "rn",          ray_samples, "number of samples in each ray dimension for construction ray model");
+    ops >> opts::Option('z', "time_mode",   time_mode,  "");
+    ops >> opts::Option('z', "error_mode",  error_mode, "");
+    ops >> opts::Option('z', "sinogram",    sinogram,   "");
 
     // int n_alpha = 120;
     // int n_rho = 120;
@@ -92,7 +103,6 @@ int main(int argc, char** argv)
     // int v_alpha = 100;
     // int v_rho = 100;
     // int v_samples = 100;
-    int num_ints = 10000;
     // ops >> opts::Option('z', "n_alpha", n_alpha, " number of rotational samples for line integration");
     // ops >> opts::Option('z', "n_rho", n_rho, " number of samples in offset direction for line integration");
     // ops >> opts::Option('z', "n_samples", n_samples, " number of samples along ray for line integration");
@@ -163,6 +173,13 @@ int main(int argc, char** argv)
             b->generate_analytical_data(cp, input, mfa_info, d_args); 
         });
     }
+    else if (datasets_2d.count(input) == 1)
+    {
+        master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
+        { 
+            b->read_2d_scalar_data(cp, mfa_info, d_args); 
+        });
+    }
     else
     {
         cerr << "Input keyword \'" << input << "\' not recognized. Exiting." << endl;
@@ -173,7 +190,20 @@ int main(int argc, char** argv)
     fprintf(stderr, "\nStarting fixed encoding...\n\n");
     double encode_time = MPI_Wtime();
     master.foreach([&](RayBlock<real_t>* b, const diy::Master::ProxyWithLink& cp)
-            { b->fixed_encode_block(cp, mfa_info); });
+    { 
+        b->fixed_encode_block(cp, mfa_info); 
+
+        if (input == "phantom")
+        {
+            VectorX<real_t> shift(2);
+            shift << -99.5, -99.5;
+            b->mfa->shiftGeom(shift);
+            b->core_mins += shift;
+            b->core_maxs += shift;
+            b->bounds_mins.head(dom_dim) += shift;
+            b->bounds_maxs.head(dom_dim) += shift;
+        }
+    });
     encode_time = MPI_Wtime() - encode_time;
     fprintf(stderr, "\n\nFixed encoding done.\n\n");
 
@@ -181,37 +211,91 @@ int main(int argc, char** argv)
     double ray_decode_time = 0;
     double trap_decode_time = 0;
     double decode_time = MPI_Wtime();
-    if (!disc_int)
-    {
-        master.foreach([&](RayBlock<real_t>* b, const diy::Master::ProxyWithLink& cp)
-        { 
-            // Compute errors for original MFA
-            // b->range_error(cp, true, false);
-            // b->print_block(cp, true);
+    master.foreach([&](RayBlock<real_t>* b, const diy::Master::ProxyWithLink& cp)
+    { 
+        b->trap_samples = ray_samples[0];
 
+        if (!disc_int)
+        {
             ray_encode_time = MPI_Wtime();
             b->create_ray_model(cp, mfa_info, d_args, ray_samples, ray_nctrl);
             ray_encode_time = MPI_Wtime() - ray_encode_time;
+        }
 
-            // ray_decode_time = MPI_Wtime();
-            // b->compute_random_ints(cp, d_args, num_ints, disc_int, seed);
-            // ray_decode_time = MPI_Wtime() - ray_decode_time;
+        if (error_mode)
+        {
+            b->integral_error(cp, d_args, num_ints, discrete_resolution, disc_int, seed);
+        }
 
-            // b->compute_sinogram(cp);
-        });
-    }
-    else
-    {
-        master.foreach([&](RayBlock<real_t>* b, const diy::Master::ProxyWithLink& cp)
-        { 
-            b->trap_samples = ray_samples[0];    // Set number of sample points to be used in trapezoid rule
+        if (time_mode)
+        {
+            b->integral_speed_test(cp, d_args, num_ints, discrete_resolution, disc_int, seed);
+        }
 
-            trap_decode_time = MPI_Wtime();
-            b->compute_random_ints(cp, d_args, num_ints, disc_int, seed);
-            trap_decode_time = MPI_Wtime() - trap_decode_time;
-        });
-    }
+        if (sinogram)
+        {
+            if (dom_dim == 2)
+            {
+                b->compute_sinogram(cp, d_args, disc_int);
+            }
+            else
+            {
+                fmt::print("Bad dimension for sinogram\n");
+                exit(1);
+            }
+        }
+        // ray_decode_time = MPI_Wtime();
+        // // b->compute_random_ints(cp, d_args, num_ints, disc_int, seed);
+        // b->integral_error(cp, d_args, num_ints, discrete_resolution, disc_int, seed);
+        // ray_decode_time = MPI_Wtime() - ray_decode_time;
+
+        // if (dom_dim == 2)
+        // {
+        //     b->compute_sinogram(cp, d_args, disc_int);              
+        // }
+    });
     decode_time = MPI_Wtime() - decode_time;
+    // if (!disc_int)
+    // {
+    //     master.foreach([&](RayBlock<real_t>* b, const diy::Master::ProxyWithLink& cp)
+    //     { 
+    //         // Compute errors for original MFA
+    //         // b->range_error(cp, true, false);
+    //         // b->print_block(cp, true);
+
+    //         ray_encode_time = MPI_Wtime();
+    //         b->create_ray_model(cp, mfa_info, d_args, ray_samples, ray_nctrl);
+    //         ray_encode_time = MPI_Wtime() - ray_encode_time;
+
+    //         ray_decode_time = MPI_Wtime();
+    //         // b->compute_random_ints(cp, d_args, num_ints, disc_int, seed);
+    //         b->integral_error(cp, d_args, num_ints, discrete_resolution, disc_int, seed);
+    //         ray_decode_time = MPI_Wtime() - ray_decode_time;
+
+    //         if (dom_dim == 2)
+    //         {
+    //             b->compute_sinogram(cp, d_args, disc_int);              
+    //         }
+    //     });
+    // }
+    // else
+    // {
+    //     master.foreach([&](RayBlock<real_t>* b, const diy::Master::ProxyWithLink& cp)
+    //     { 
+    //         b->trap_samples = ray_samples[0];    // Set number of sample points to be used in trapezoid rule
+
+    //         trap_decode_time = MPI_Wtime();
+    //         // b->compute_random_ints(cp, d_args, num_ints, disc_int, seed);
+    //         b->integral_error(cp, d_args, num_ints, discrete_resolution, disc_int, seed);
+    //         trap_decode_time = MPI_Wtime() - trap_decode_time;
+
+    //         if (dom_dim == 2)
+    //         {
+    //             b->compute_sinogram(cp, d_args, disc_int);              
+    //         }
+    //     });
+    // }
+    // decode_time = MPI_Wtime() - decode_time;
 
     // print results
     fprintf(stderr, "\n------- Final block results --------\n");
