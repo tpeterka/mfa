@@ -1296,7 +1296,7 @@ struct Block : public BlockBase<T, U>
             core_maxs(i) = bounds_maxs(i);
         }
 
-        input->set_domain_params();
+        input->set_domain_params(core_mins, core_maxs);
 
         // initialize MFA models (geometry, vars, etc)
         this->setup_MFA(cp, mfa_info);

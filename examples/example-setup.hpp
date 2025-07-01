@@ -455,6 +455,12 @@ using namespace std;
             }
         }
 
+        if (input == "phantom")
+        {
+            d_args.full_dom_pts = {200, 200};
+            d_args.ndom_pts = d_args.full_dom_pts;
+        }
+
         // EDelta Wing dataset (unstructured):  edelta/edelta.txt
         if (input == "edelta")
         {
