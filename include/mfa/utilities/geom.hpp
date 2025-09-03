@@ -120,7 +120,7 @@ namespace mfa
 
             for (int i = 0; i < basis.cols(); i++)
             {
-                if (!Eigen::internal::isApprox(basis.col(i).squaredNorm(), 1.0))
+                if (!Eigen::internal::isApprox(basis.col(i).squaredNorm(), (T) 1.0))
                 {
                     basis.col(i).normalize();
                     adjusted = true;
