@@ -134,18 +134,18 @@ struct ModelInfo
     {
         if (p.size() != dom_dim || nctrl_pts.size() != dom_dim)
         {
-            cerr << "ERROR: Incompatible domain dimension in ModelInfo." << endl;
-            cerr << "       dom_dim=" << dom_dim << ", p.size()=" << p.size() << ", nctrl_pts.size()=" << nctrl_pts.size() << endl;
-            cerr << "Aborting." << endl;
+            fmt::print(stderr, "ERROR: Incompatible domain dimension in ModelInfo.\n");
+            fmt::print(stderr, "       dom_dim={}, p.size()={}, nctrl_pts.size()={}\n", dom_dim, p.size(), nctrl_pts.size());
+            fmt::print(stderr, "Aborting.\n");
             exit(1);
         }
         for (int i = 0; i < dom_dim; i++)
         {
             if (nctrl_pts[i] <= p[i])
             {
-                cerr << "ERROR: Too few control points in ModelInfo." << endl;
-                cerr << "       i=" << i << ", p[i]=" << p[i] << ", nctrl_pts[i]=" << nctrl_pts[i] << endl;
-                cerr << "Aborting." << endl;
+                fmt::print(stderr, "ERROR: Too few control points in ModelInfo.\n");
+                fmt::print(stderr, "       i={}, p[i]={}, nctrl_pts[i]={}\n", i, p[i], nctrl_pts[i]);
+                fmt::print(stderr, "Aborting.\n");
                 exit(1);
             }
         }
@@ -209,7 +209,7 @@ struct MFAInfo
 
         if (!valid)
         {
-            cerr << "ERROR: ModelInfos are incompatible with MFAInfo\nAborting." << endl;
+            fmt::print(stderr, "ERROR: ModelInfos are incompatible with MFAInfo\nAborting.\n");
             exit(1);
         }
     }
@@ -266,7 +266,7 @@ struct MFAInfo
         if (gd != 0) return gd;
         else
         {
-            cerr << "ERROR: geom_model_info not set when calling geom_dim()\nAborting." << endl;
+            fmt::print(stderr, "ERROR: geom_model_info not set when calling geom_dim()\nAborting.\n");
             exit(1);
         }
         
@@ -292,7 +292,7 @@ struct MFAInfo
         }
         else
         {
-            cerr << "ERROR: var_dim() index out of range.\nAborting" << endl;
+            fmt::print(stderr, "ERROR: var_dim() index out of range.\nAborting\n");
             exit(1);
         }
 
@@ -323,7 +323,7 @@ struct MFAInfo
         }
         else
         {
-            cerr << "ERROR: Incompatible dom_dim in addGeomInfo\nAborting." << endl;
+            fmt::print(stderr, "ERROR: Incompatible dom_dim in addGeomInfo\nAborting.\n");
             exit(1);
         }
 
@@ -339,7 +339,7 @@ struct MFAInfo
         }
         else
         {
-            cerr << "ERROR: Incompatible dom_dim in addVarInfo\nAborting." << endl;
+            fmt::print(stderr, "ERROR: Incompatible dom_dim in addVarInfo\nAborting.\n");
             exit(1);
         }
 
@@ -422,14 +422,14 @@ namespace mfa
                 if (vars[i])
                     pt_dim += var_dim(i);
                 else
-                    cerr << "WARNING: Encountered null variable model in MFA::recompute_pt_dim()" << endl;
+                    fmt::print(stderr, "WARNING: Encountered null variable model in MFA::recompute_pt_dim()\n");
             }
 
             if (vars.size() > 0)
             {
                 if (pt_dim != vars.back()->max_dim + 1)
                 {
-                    cerr << "WARNING: MFA pt_dim is inconsistent" << endl;
+                    fmt::print(stderr, "WARNING: MFA pt_dim is inconsistent\n");
                 }
             }
 
@@ -471,7 +471,7 @@ namespace mfa
 
             if (mi.pt_dim() != pt_dim)
             {
-                cerr << "ERROR: Incompatible pt_dim in MFA construction\nAborting." << endl;
+                fmt::print(stderr, "ERROR: Incompatible pt_dim in MFA construction\nAborting.\n");
                 exit(1);
             }
         }
@@ -489,13 +489,13 @@ namespace mfa
         {
             // If vars_ is nonempty, then we should always have a geometry model
             if (geom_ == nullptr && vars_.size() > 0)
-                cerr << "WARNING: Constructing MFA with a null geometry model" << endl;
+                fmt::print(stderr, "WARNING: Constructing MFA with a null geometry model\n");
 
             // Each entry of vars should typically be non-null
             for (int i = 0; i < vars_.size(); i++)
             {
                 if (vars_[i] == nullptr)
-                    cerr << "WARNING: null variable model added during MFA construction" << endl;
+                    fmt::print(stderr, "WARNING: null variable model added during MFA construction\n");
             }
 
             // Set geometry model
@@ -544,7 +544,7 @@ namespace mfa
         {
             if (!geometry)
             {
-                cerr << "ERROR: Can't dereference null geometry\nAborting." << endl;
+                fmt::print(stderr, "ERROR: Can't dereference null geometry\nAborting.\n");
                 exit(1);
             }
 
@@ -555,12 +555,12 @@ namespace mfa
         {
             if (i < 0 || i >= nvars())
             {
-                cerr << "ERROR: var index out of range in MFA::var()" << endl;
+                fmt::print(stderr, "ERROR: var index out of range in MFA::var()\n");
                 exit(1);
             }
             if (!vars[i])
             {
-                cerr << "ERROR: Can't dereference null variable (index " << i << ")\nAborting." << endl;
+                fmt::print(stderr, "ERROR: Can't dereference null variable (index {})\nAborting.\n", i);
                 exit(1);
             }
 
@@ -580,21 +580,21 @@ namespace mfa
         void AddGeometry(const VectorXi& degree, const VectorXi& nctrl_pts, int dim)
         {
             if (verbose) 
-                cout << "MFA: Adding geometry model" << endl;
+                fmt::print(stderr, "MFA: Adding geometry model\n");
 
             if (degree.size() != dom_dim || degree.minCoeff() < 0)
             {
-                cerr << "ERROR: AddGeometry failed (degree invalid)" << endl;
+                fmt::print(stderr, "ERROR: AddGeometry failed (degree invalid)\n");
                 exit(1);
             }
             if (nctrl_pts.size() != dom_dim || (nctrl_pts - degree - VectorXi::Ones(dom_dim)).minCoeff() < 0)
             {
-                cerr << "ERROR: AddGeometry failed (nctrl_pts invalid)" << endl;
+                fmt::print(stderr, "ERROR: AddGeometry failed (nctrl_pts invalid)\n");
                 exit(1);
             }
             if (dim < 0)
             {
-                cerr << "ERROR: AddGeometry failed (dim invalid)" << endl;
+                fmt::print(stderr, "ERROR: AddGeometry failed (dim invalid)\n");
                 exit(1);
             }
 
@@ -614,7 +614,7 @@ namespace mfa
         void AddVariable(const VectorXi& degree, const VectorXi& nctrl_pts, int dim)
         {
             if (verbose) 
-                cout << "MFA: Adding variable model " << vars.size() << endl;
+                fmt::print(stderr, "MFA: Adding variable model {}\n", vars.size());
 
             if (!geometry)
             {
@@ -669,7 +669,7 @@ namespace mfa
         void setGeomKnots(const vector<vector<T>>& knots = vector<vector<T>>())
         {
             if (verbose)
-                cout << "MFA: Setting custom knot distribution for geometry model" << endl;
+                fmt::print(stderr, "MFA: Setting custom knot distribution for geometry model\n");
 
             geometry->set_knots(knots);
         }
@@ -680,14 +680,14 @@ namespace mfa
         void setKnots(int i, const vector<vector<T>>& knots = vector<vector<T>>())
         {
             if (verbose)
-                cout << "MFA: Setting custom knot distribution for variable model " << i << endl;
+                fmt::print(stderr, "MFA: Setting custom knot distribution for variable model {}\n", i);
 
             if (i < 0 || i >= nvars())
             {
-                cerr << "ERROR: var index out of range in MFA::setKnots()" << endl;
+                fmt::print(stderr, "ERROR: var index out of range in MFA::setKnots()\n");
                 exit(1);
             }
-           vars[i]->set_knots(knots);
+            vars[i]->set_knots(knots);
         }
 
         // Sets the same knot vector for all variables
@@ -1074,12 +1074,12 @@ namespace mfa
         {
             if (i < 0 || i >= nvars())
             {
-                cerr << "ERROR: var index out of range in MFA::FixedEncodeVar()" << endl;
+                fmt::print(stderr, "ERROR: var index '{}' out of range in MFA::FixedEncodeVar() [size={}]\n", i, nvars());
                 exit(1);
             }
 
             if (verbose)
-                cout << "MFA: Encoding variable model " << i << " (fixed)" << endl;
+                fmt::print(stderr, "MFA: Encoding variable model {} (fixed)\n", i);
 
             FixedEncodeImpl(*(vars[i]), input, regularization, reg1and2, weighted);
         }
