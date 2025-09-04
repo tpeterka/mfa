@@ -544,7 +544,7 @@ namespace mfa
         {
             if (!geometry)
             {
-                fmt::print(stderr, "ERROR: Can't dereference null geometry\nAborting.\n");
+                fmt::print(stderr, "ERROR: Can't dereference null geometry model\nAborting.\n");
                 exit(1);
             }
 
@@ -556,11 +556,12 @@ namespace mfa
             if (i < 0 || i >= nvars())
             {
                 fmt::print(stderr, "ERROR: var index out of range in MFA::var()\n");
+                fmt::print(stderr, "       i={}, nvars()={}\n", i, nvars());
                 exit(1);
             }
             if (!vars[i])
             {
-                fmt::print(stderr, "ERROR: Can't dereference null variable (index {})\nAborting.\n", i);
+                fmt::print(stderr, "ERROR: Can't dereference null variable model (index {})\nAborting.\n", i);
                 exit(1);
             }
 
@@ -585,16 +586,18 @@ namespace mfa
             if (degree.size() != dom_dim || degree.minCoeff() < 0)
             {
                 fmt::print(stderr, "ERROR: AddGeometry failed (degree invalid)\n");
+                fmt::print(stderr, "       dom_dim={}, degree=[{}]\n", dom_dim, fmt::join(degree, ","));
                 exit(1);
             }
             if (nctrl_pts.size() != dom_dim || (nctrl_pts - degree - VectorXi::Ones(dom_dim)).minCoeff() < 0)
             {
                 fmt::print(stderr, "ERROR: AddGeometry failed (nctrl_pts invalid)\n");
+                fmt::print(stderr, "       dom_dim={}, nctrl_pts=[{}]\n", dom_dim, nctrl_pts);
                 exit(1);
             }
-            if (dim < 0)
+            if (dim <= 0)
             {
-                fmt::print(stderr, "ERROR: AddGeometry failed (dim invalid)\n");
+                fmt::print(stderr, "ERROR: AddGeometry failed (dim invalid): dim={}\n", dim);
                 exit(1);
             }
 
@@ -618,22 +621,24 @@ namespace mfa
 
             if (!geometry)
             {
-                cerr << "ERROR: Cannot add variable model before adding geometry model" << endl;
+                fmt::print(stderr, "ERROR: Cannot add variable model before adding geometry model\n");
                 exit(1);
             }
             if (degree.size() != dom_dim || degree.minCoeff() < 0)
             {
-                cerr << "ERROR: AddVariable failed (degree invalid)" << endl;
+                fmt::print(stderr, "ERROR: AddVariable failed (degree invalid)\n");
+                fmt::print(stderr, "       dom_dim={}, degree=[{}]\n", dom_dim, fmt::join(degree, ","));
                 exit(1);
             }
             if (nctrl_pts.size() != dom_dim || (nctrl_pts - degree - VectorXi::Ones(dom_dim)).minCoeff() < 0)
             {
-                cerr << "ERROR: AddVariable failed (nctrl_pts invalid)" << endl;
+                fmt::print(stderr, "ERROR: AddVariable failed (nctrl_pts invalid)\n");
+                fmt::print(stderr, "       dom_dim={}, nctrl_pts=[{}]\n", dom_dim, nctrl_pts);
                 exit(1);
             }
-            if (dim < 0)
+            if (dim <= 0)
             {
-                cerr << "ERROR: AddVariable failed (dim invalid)" << endl;
+                fmt::print(stderr, "ERROR: AddVariable failed (dim invalid): dim={}\n", dim);
                 exit(1);
             }
 
@@ -685,6 +690,7 @@ namespace mfa
             if (i < 0 || i >= nvars())
             {
                 fmt::print(stderr, "ERROR: var index out of range in MFA::setKnots()\n");
+                fmt::print(stderr, "       i={}, nvars()={}\n", i, nvars());
                 exit(1);
             }
             vars[i]->set_knots(knots);
@@ -733,7 +739,7 @@ namespace mfa
                 const PointSet<T>& input)
         {
             if (verbose)
-                cout << "MFA: Starting Ray Encoding" << endl;
+                fmt::print(stderr, "MFA: Starting Ray Encoding for variable {}\n", i);
                 
             vars[i]->set_param_idxs(input);
             RayEncoder<T> encoder(*vars[i], input, true);
@@ -779,7 +785,8 @@ namespace mfa
         {
             if (out_point.size() != geom_dim())
             {
-                cerr << "ERROR: Incorrect output vector dimension in MFA::DecodeGeom()" << endl;
+                fmt::print(stderr, "ERROR: Incorrect output vector dimension in MFA::DecodeGeom()\n");
+                fmt::print(stderr, "       out_point.size()={}, geom_dim()={}\n", out_point.size(), geom_dim());
                 exit(1);
             }
 
@@ -800,7 +807,8 @@ namespace mfa
 
             if (i < 0 || i >= nvars())
             {
-                cerr << "ERROR: var index out of range in MFA::DecodeVar()" << endl;
+                fmt::print(stderr, "ERROR: var index out of range in MFA::DecodeVar()\n");
+                fmt::print(stderr, "       i={}, nvars()={}\n", i, nvars());
                 exit(1);
             }
 
@@ -817,13 +825,15 @@ namespace mfa
         {
             if (i < 0 || i >= nvars())
             {
-                cerr << "ERROR: var index out of range in MFA::DecodeVar()" << endl;
+                fmt::print(stderr, "ERROR: var index out of range in MFA::DecodeVar()\n");
+                fmt::print(stderr, "       i={}, nvars()={}\n", i, nvars());
                 exit(1);
             }
 
             if (out_point.size() != var_dim(i))
             {
-                cerr << "ERROR: Incorrect output vector dimension in MFA::DecodeVar()" << endl;
+                fmt::print(stderr, "ERROR: Incorrect output vector dimension in MFA::DecodeVar()\n");
+                fmt::print(stderr, "       out_point.size()={}, var_dim(i)={}\n", out_point.size(), var_dim(i));
                 exit(1);
             }
 
@@ -863,7 +873,8 @@ namespace mfa
         {
             if (out_point.size() != pt_dim)
             {
-                cerr << "ERROR: Incorrect output vector dimension in MFA::Decode()" << endl;
+                fmt::print(stderr, "ERROR: Incorrect output vector dimension in MFA::Decode()\n");
+                fmt::print(stderr, "       out_point.size()={}, pt_dim()={}\n", out_point.size(), pt_dim);
                 exit(1);
             }
 
@@ -896,6 +907,7 @@ namespace mfa
             if (k < 0 || k >= nvars())
             {
                 fmt::print("ERROR: var index out of range in MFA::Integrate1D()\n");
+                fmt::print("       k={}, nvars()={}\n", k, nvars());
                 exit(1);
             }
 
@@ -912,6 +924,7 @@ namespace mfa
             if (k < 0 || k >= nvars())
             {
                 fmt::print("ERROR: var index out of range in MFA::DefiniteIntegral()\n");
+                fmt::print("       k={}, nvars()={}\n", k, nvars());
                 exit(1);
             }
 
@@ -976,7 +989,7 @@ namespace mfa
         {
             if (!base.is_same_layout(error))
             {
-                cerr << "ERROR: Incompatible PointSets in AbsPointSetError" << endl;
+                fmt::print(stderr, "ERROR: PointSets in AbsPointSetError() have incompatible layouts\n");
                 exit(1);
             }
 
@@ -1062,7 +1075,7 @@ namespace mfa
         void FixedEncodeGeom(const PointSet<T>& input, bool weighted)
         {
             if (verbose)
-                cout << "MFA: Encoding geometry model (fixed)" << endl;
+                fmt::print(stderr, "MFA: Encoding geometry model (fixed)\n");
 
             T regularization = 0;
             FixedEncodeImpl(*geometry, input, regularization, false, weighted);
@@ -1074,7 +1087,8 @@ namespace mfa
         {
             if (i < 0 || i >= nvars())
             {
-                fmt::print(stderr, "ERROR: var index '{}' out of range in MFA::FixedEncodeVar() [size={}]\n", i, nvars());
+                fmt::print(stderr, "ERROR: var index out of range in MFA::FixedEncodeVar()\n");
+                fmt::print(stderr, "       i={}, nvars()={}\n", i, nvars());
                 exit(1);
             }
 
@@ -1104,7 +1118,7 @@ namespace mfa
                                 int                 max_rounds)
         {
             if (verbose)
-                cout << "MFA: Encoding geometry model (adaptive)" << endl;
+                fmt::print(stderr, "MFA: Encoding geometry model (adaptive)\n");
 
             AdaptiveEncodeImpl(*geometry, input, err_limit, weighted, extents, max_rounds);
         }
@@ -1120,12 +1134,13 @@ namespace mfa
         {
             if (i < 0 || i >= nvars())
             {
-                cerr << "ERROR: var index out of range in MFA::AdaptiveEncodeVar()" << endl;
+                fmt::print(stderr, "ERROR: var index out of range in MFA::AdaptiveEncodeVar()\n");
+                fmt::print(stderr, "       i={}, nvars()={}\n", i, nvars());
                 exit(1);
             }
 
             if (verbose)
-                cout << "MFA: Encoding variable model " << i << " (adaptive)" << endl;
+                fmt::print(stderr, "MFA: Encoding variable model {} (adaptive)\n", i);
             
             AdaptiveEncodeImpl(*(vars[i]), input, err_limit, weighted, extents, max_rounds);
         }
