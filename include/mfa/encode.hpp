@@ -98,21 +98,22 @@ namespace mfa
             // check quantities
             if (mfa_data.p.size() != input.ndom_pts().size())
             {
-                fprintf(stderr, "Error: Encode() size of p must equal size of ndom_pts\n");
+                fmt::print(stderr, "ERROR: Encode() size of p must equal size of ndom_pts\n");
+                fmt::print(stderr, "       p.size()={}, ndom_pts.size()={}\n", mfa_data.p.size(), input.ndom_pts().size());
                 exit(1);
             }
             for (size_t i = 0; i < mfa_data.p.size(); i++)
             {
                 if (nctrl_pts(i) <= mfa_data.p(i))
                 {
-                    fprintf(stderr, "Error: Encode() number of control points in dimension %ld "
-                            "must be at least p + 1 for dimension %ld\n", i, i);
+                    fmt::print(stderr, "ERROR: Encode() number of control points must be at least p + 1 for dimension {}\n", i);
+                    fmt::print(stderr, "       nctrl_pts({})={}, p({})={}\n", i, nctrl_pts(i), i, mfa_data.p(i));
                     exit(1);
                 }
                 if (nctrl_pts(i) > input.ndom_pts(i))
                 {
-                    fprintf(stderr, "Warning: Encode() number of control points (%d) in dimension %ld "
-                            "exceeds number of input data points (%d) in dimension %ld.\n", nctrl_pts(i), i, input.ndom_pts(i), i);
+                    fmt::print(stderr, "WARNING: Encode() number of control points exceeds number of input data points in dimension {}.\n", i);
+                    fmt::print(stderr, "         nctrl_pts({})={}, ndom_pts({})={}\n", i, nctrl_pts(i), i, input.ndom_pts(i));
                 }
             }
 
@@ -213,8 +214,8 @@ namespace mfa
                 MatrixX<T> NtN  = N[k].transpose() * N[k];
 
                 // debug
-//                 cerr << "N[k]:\n" << N[k] << endl;
-//                 cerr << "NtN:\n" << NtN << endl;
+//                 fmt::print(stderr, "N[k]:\n{}\n", print_mat(N[k]));
+//                 fmt::print(stderr, "NtN:\n{}\n", print_mat(NtN));
 
 #ifdef MFA_TBB  // TBB version
                 static affinity_partitioner ap;
@@ -254,7 +255,7 @@ namespace mfa
                     if (verbose >= 2)
                     {
                         if (j > 0 && j > 100 && j % (ncurves / 100) == 0)
-                            fprintf(stderr, "\r dimension %ld: %.0f %% encoded (%ld out of %ld curves)",
+                            fmt::print(stderr, "\r dimension {}: {}% encoded ({} out of {} curves)",
                                     k, (T)j / (T)ncurves * 100, j, ncurves);
                     }
 
@@ -270,12 +271,12 @@ namespace mfa
 
                 // print progress
                 if (verbose >= 2)
-                    fprintf(stderr, "\r dimension %ld: 100%% encoded                                       \n", k);
+                    fmt::print(stderr, "\r dimension {}: 100% encoded                                       \n", k);
             }  // domain dimensions
 
             // debug
-//             cerr << "Encode() ctrl_pts:\n" << ctrl_pts << endl;
-//             cerr << "Encode() weights:\n" << weights << endl;
+//             fmt::print(stderr, "Encode() ctrl_pts:\n{}\n", print_mat(ctrl_pts));
+//             fmt::print(stderr, "Encode() weights:\n{}\n", print_vec(weights));
         }
 
         void encodeBSpline( 
@@ -285,21 +286,22 @@ namespace mfa
             // check quantities
             if (mfa_data.p.size() != input.ndom_pts().size())
             {
-                fprintf(stderr, "Error: encodeBSpline() size of p must equal size of ndom_pts\n");
+                fmt::print(stderr, "Error: encodeBSpline() size of p must equal size of ndom_pts\n");
+                fmt::print(stderr, "       p.size()={}, ndom_pts.size()={}\n", mfa_data.p.size(), input.ndom_pts().size());
                 exit(1);
             }
             for (size_t i = 0; i < mfa_data.p.size(); i++)
             {
                 if (nctrl_pts(i) <= mfa_data.p(i))
                 {
-                    fprintf(stderr, "Error: encodeBSpline() number of control points in dimension %ld "
-                            "must be at least p + 1 for dimension %ld\n", i, i);
+                    fmt::print(stderr, "ERROR: encodeBSpline() number of control points must be at least p + 1 for dimension {}\n", i);
+                    fmt::print(stderr, "       nctrl_pts({})={}, p({})={}\n", i, nctrl_pts(i), i, mfa_data.p(i));
                     exit(1);
                 }
                 if (nctrl_pts(i) > input.ndom_pts(i))
                 {
-                    fprintf(stderr, "Warning: Encode() number of control points (%d) in dimension %ld "
-                            "exceeds number of input data points (%d) in dimension %ld.\n", nctrl_pts(i), i, input.ndom_pts(i), i);
+                    fmt::print(stderr, "WARNING: encodeBSpline() number of control points exceeds number of input data points in dimension {}.\n", i);
+                    fmt::print(stderr, "         nctrl_pts({})={}, ndom_pts({})={}\n", i, nctrl_pts(i), i, input.ndom_pts(i));
                 }
             }
 
@@ -415,7 +417,7 @@ namespace mfa
                     {
                         int j = inputSliceIter.cur_iter();
                         if (j > 0 && j > 100 && j % (ncurves / 100) == 0)
-                            fprintf(stderr, "\r dimension %ld: %.0f %% encoded (%ld out of %ld curves)",
+                            fmt::print(stderr, "\r dimension {}: {:.0f}% encoded ({} out of {} curves)",
                                     k, (T)j / (T)ncurves * 100, j, ncurves);
                     }
 
@@ -443,7 +445,7 @@ namespace mfa
 
                 // print progress
                 if (verbose >= 2)
-                    fprintf(stderr, "\r dimension %ld: 100%% encoded                                       \n", k);
+                    fmt::print(stderr, "\r dimension {}: 100% encoded                                       \n", k);
             }        
         }
 
@@ -458,7 +460,7 @@ namespace mfa
         {
             clock_t fill_time = clock();
             if (verbose >= 2)
-                cerr << "Adjusting matrix for regularization..." << endl;
+                fmt::print(stderr, "DEBUG: Adjusting matrix for regularization...\n");
 
             const int num_points = N.rows();
             const int num_ctrl = N.cols();
@@ -467,7 +469,8 @@ namespace mfa
 
             if (Ct.rows() != num_ctrl || Ct.cols() != num_cons)
             {
-                fmt::print("ERROR: Incorrect matrix dimensions of Ct in ConsMatrix()\nExiting.\n");
+                fmt::print(stderr, "ERROR: Incorrect matrix dimensions of Ct in ConsMatrix()\n");
+                fmt::print(stderr, "       Ct is {} x {}, should be {} x {}\n", Ct.rows(), Ct.cols(), num_ctrl, num_cons);
                 exit(1);
             }
 
@@ -583,7 +586,7 @@ namespace mfa
 
             fill_time = clock() - fill_time;
             if (verbose >= 2)
-                cerr << "Regularization Total Time: " << setprecision(3) << ((double)fill_time)/CLOCKS_PER_SEC << "s." << endl;
+                fmt::print(stderr, "DEBUG: Regularization Total Time: {:.3f}s.\n", ((double)fill_time)/CLOCKS_PER_SEC);
         }
 
         void uniform_reg(TensorProduct<T>& t,
@@ -679,7 +682,7 @@ namespace mfa
         {
             if (deriv != 2)
             {
-                cerr << "ERROR: deriv order not equal to 2 in Encoder::vazquez_reg()\nExiting" << endl;
+                fmt::print(stderr, "ERROR: deriv order not equal to 2 in Encoder::vazquez_reg()\nExiting.\n");
                 exit(0);
             }
 
@@ -735,8 +738,8 @@ namespace mfa
 
                     pt_it.incr_iter();
                 }
-                // cerr << "VazSum0: " << sum0 << endl;
-                // cerr << "VazSum1: " << sum1 << endl;
+                // fmt::print(stderr, "TRACE: VazSum0: {}\n", sum0);
+                // fmt::print(stderr, "TRACE: VazSum1: {}\n", sum1);
 
                 str = c_target * max(0.0, max(.11111 - abs(sum0), .11111 - abs(sum1)));
                 reg_strengths(j) = str;
@@ -919,7 +922,7 @@ namespace mfa
 
             fill_time = clock() - fill_time;
             if (verbose >= 2)
-                cerr << "Matrix Construction Time: " << setprecision(3) << ((double)fill_time)/CLOCKS_PER_SEC << "s." << endl;
+                fmt::print(stderr, "DEBUG: Matrix Construction Time: {:.3f}s.\n", ((double)fill_time)/CLOCKS_PER_SEC);
         }
 
 #ifdef MFA_TBB
@@ -983,7 +986,7 @@ namespace mfa
                             // We never want this (slow) reallocation to happen. Always OVER-estimate reserveSizes (input variable)
                             if( inner_nnz[j] >= outer_index[j+1] - outer_index[j] )
                             {
-                                cerr << "Warning: Reallocating memory in threaded matrix product. Did you reserve space properly?" << endl;
+                                fmt::print(stderr, "WARN: Reallocating memory in threaded matrix product. Did you reserve space properly?\n");
                                 VectorXi extra_size = VectorXi::Zero(cols);
                                 extra_size[j] = std::max<int>(2, inner_nnz[j]);
                                 res.reserve(extra_size);  // NB: reserve() always adds to existing buffer
@@ -1020,16 +1023,13 @@ namespace mfa
         {
             if (verbose >= 2)
             {
-                fmt::print("Encoding dimensions all at once\n");
-            }
-            if (verbose >= 3)
-            {
-                fmt::print("  => NOTE: Unified encode only valid for single tensor product!\n");
+                fmt::print(stderr, "DEBUG: Encoding dimensions all at once\n");
+                fmt::print(stderr, "  => NOTE: Unified encode only valid for single tensor product!\n");
             }
             
             if (weighted)  // We want weighted encoding to be default behavior eventually. However, not currently implemented.
             {
-                fmt::print("ERROR: NURBS (nonuniform weights) are not implemented for unified-dimensional encoding!\n");
+                fmt::print(stderr, "ERROR: NURBS (nonuniform weights) are not implemented for unified-dimensional encoding!\n");
                 exit(1);
             }
 
@@ -1062,7 +1062,7 @@ namespace mfa
             if (regularization > 0)
             {
                 if (verbose >= 2)
-                    fmt::print("Applying model regularization with strength r={}\n", regularization);
+                    fmt::print(stderr, "DEBUG: Applying model regularization with strength r={}\n", regularization);
 
                 int num_reg_conds = t.nctrl_pts.prod();
                 SparseMatrixX<T> Ct(Nt.rows(), num_reg_conds * dom_dim);
@@ -1114,21 +1114,21 @@ namespace mfa
 
             solver.compute(Mat);
             if (solver.info() != Eigen::Success) 
-                fmt::print("WARNING: Matrix decomposition failed in EncodeTensor\n");
+                fmt::print(stderr, "WARNING: Matrix decomposition failed in EncodeTensor\n");
             else if (verbose >= 2)
-                fmt::print("Sparse matrix factorization successful\n");
+                fmt::print(stderr, "DEBUG: Sparse matrix factorization successful\n");
 
             t.ctrl_pts = solver.solve(R); 
             if (solver.info() != Eigen::Success)
             {
-                fmt::print("WARNING: Least-squares solve failed in EncodeTensor\n");
-                fmt::print("  error: {} (tolerance = {})\n", solver.error(), solver.tolerance());
-                fmt::print("  # iterations: {} (max iterations = {})\n", solver.iterations(), solver.maxIterations());
+                fmt::print(stderr, "WARNING: Least-squares solve failed in EncodeTensor\n");
+                fmt::print(stderr, "  error: {} (tolerance = {})\n", solver.error(), solver.tolerance());
+                fmt::print(stderr, "  # iterations: {} (max iterations = {})\n", solver.iterations(), solver.maxIterations());
             }
             else if (verbose >= 2)
             {
-                fmt::print("Sparse matrix solve successful\n");
-                fmt::print("  # iterations: {}\n", solver.iterations());
+                fmt::print(stderr, "DEBUG: Sparse matrix solve successful\n");
+                fmt::print(stderr, "       # iterations: {}\n", solver.iterations());
             }
         }
 
@@ -1805,7 +1805,7 @@ namespace mfa
                 {
                     VectorXi ijk(dom_dim);
                     dom_iter.idx_ijk(i, ijk);
-                    cerr << "ijk = " << ijk.transpose() << endl;
+                    fmt::print(stderr, "ijk = [{}]\n", fmt::join(ijk, " "));
                     fmt::print(stderr, "params = [ ");
                     for (auto k = 0; k < dom_dim; k++)
                         fmt::print(stderr, "{} ", input.params->param_grid[k][ijk(k)]);
@@ -1902,14 +1902,14 @@ namespace mfa
 
             if (solver.info() != Eigen::Success)
             {
-                cerr << "EncodeTensorLocalUnified(): Error: Matrix decomposition failed" << endl;
+                fmt::print(stderr, "ERROR: Matrix decomposition failed in EncodeTensorLocalUnified()\n");
                 abort();
             }
 
             t.ctrl_pts = solver.solve(Nfree.transpose() * R);
             if (solver.info() != Eigen::Success)
             {
-                cerr << "EncodeTensorLocalUnified(): Error: Least-squares solve failed" << endl;
+                fmt::print(stderr, "ERROR: Least-squares solve failed in EncodeTensorLocalUnified()\n");
                 abort();
             }
 
@@ -1935,7 +1935,7 @@ namespace mfa
 
             // debug: check relative error of solution
             double relative_error = (Nfree * t.ctrl_pts - R).norm() / R.norm(); // norm() is L2 norm
-            cerr << "EncodeTensorLocalUnified(): The relative error is " << relative_error << endl;
+            fmt::print(stderr, "DEBUG: EncodeTensorLocalUnified(): The relative error is {}\n", relative_error);
         }
 
         // encodes the control points for one tensor product of a tmesh
@@ -2163,12 +2163,12 @@ namespace mfa
                 if (max_rounds > 0 && iter >= max_rounds)               // optional cap on number of rounds
                 {
                     if (verbose >= 2)
-                        fprintf(stderr, "\nDone; max iterations reached.\n\n");
+                        fmt::print(stderr, "\nDone; max iterations reached.\n\n");
                     break;
                 }
 
                 if (verbose >= 2)
-                    fprintf(stderr, "--- Iteration %d ---\n", iter);
+                    fmt::print(stderr, "--- Iteration {} ---\n", iter);
 
                 // low-d w/ splitting spans in the middle
                 bool done = OrigNewKnots_curve(new_knots, err_limit, extents, iter);
@@ -2177,7 +2177,7 @@ namespace mfa
                 if (done)
                 {
                     if (verbose >= 2)
-                        fprintf(stderr, "\nDone; no new knots added.\n\n");
+                        fmt::print(stderr, "\nDone; no new knots added.\n\n");
                     break;
                 }
 
@@ -2193,7 +2193,7 @@ namespace mfa
                 if (done)
                 {
                     if (verbose >= 2)
-                        fprintf(stderr, "\nDone; control points would outnumber input points.\n\n");
+                        fmt::print(stderr, "\nDone; control points would outnumber input points.\n\n");
                     break;
                 }
 
@@ -2203,7 +2203,7 @@ namespace mfa
 
             // final full encoding needed after last knot insertion above
             if (verbose >= 2)
-                fmt::print("Performing final encoding\n");
+                fmt::print(stderr, "DEBUG: Performing final encoding\n");
             TensorProduct<T>&t = mfa_data.tmesh.tensor_prods[0];        // fixed encode assumes the tmesh has only one tensor product
             Encode(t.nctrl_pts, t.ctrl_pts, t.weights, weighted);
         }
@@ -2222,7 +2222,8 @@ namespace mfa
             ErrorStats<T> error_stats;
 
             // debug
-            fmt::print(stderr, "Using OrigAdaptiveEncode() w/ full-d knot splitting\n\n");
+            if (verbose >= 2)
+                fmt::print(stderr, "DEBUG: Using OrigAdaptiveEncode() w/ full-d knot splitting\n\n");
 
             VectorX<T> myextents = extents.size() ? extents : VectorX<T>::Ones(mfa_data.tmesh.tensor_prods[0].ctrl_pts.cols());
 
@@ -2239,13 +2240,13 @@ namespace mfa
 
                 if (max_rounds > 0 && iter >= max_rounds)               // optional cap on number of rounds
                 {
-                    if (verbose)
-                        fprintf(stderr, "\nDone; max iterations reached.\n\n");
+                    if (verbose >= 2)
+                        fmt::print(stderr, "\nDone; max iterations reached.\n\n");
                     break;
                 }
 
-                if (verbose)
-                    fprintf(stderr, "\n--- Iteration %d ---\n", iter);
+                if (verbose >= 2)
+                    fmt::print(stderr, "\n--- Iteration %d ---\n", iter);
 
                 // check all knots spans for error
                 vector<vector<KnotIdx>>     inserted_knot_idxs(dom_dim);   // indices in each dim. of inserted knots in full knot vector after insertion
@@ -2266,8 +2267,8 @@ namespace mfa
                 // no new knots to be added
                 if (done)
                 {
-                    if (verbose)
-                        fprintf(stderr, "\nDone; no new knots added.\n\n");
+                    if (verbose >= 2)
+                        fmt::print(stderr, "\nDone; no new knots added.\n\n");
                     break;
                 }
 
@@ -2331,9 +2332,9 @@ namespace mfa
             fmt::print(stderr, "\nInitial full encode time:   {:.3e} s.\n", MPI_Wtime() - t0);
 
             // debug: print tmesh
-//             fprintf(stderr, "\n----- initial T-mesh -----\n\n");
+//             fmt::print(stderr, "\n----- initial T-mesh -----\n\n");
 //             tmesh.print();
-//             fprintf(stderr, "--------------------------\n\n");
+//             fmt::print(stderr, "--------------------------\n\n");
 
             vector<TensorProduct<T>>    new_tensors;                    // newly refined tensors to be added
 
@@ -2492,13 +2493,13 @@ namespace mfa
             T rms_abs_err = sqrt(error_stats.sum_sq_abs_errs / (input.domain.rows()));
             T rms_norm_err = sqrt(error_stats.sum_sq_norm_errs / (input.domain.rows()));
 
-            fprintf(stderr, "\n----- estimates of current variable of current model -----\n");
-            fprintf(stderr, "estimated max_err               = %e\n",  error_stats.max_abs_err);
-            fprintf(stderr, "estimated normalized max_err    = %e\n",  error_stats.max_norm_err);
-            fprintf(stderr, "estimated RMS error             = %e\n",  rms_abs_err);
-            fprintf(stderr, "estimated normalized RMS error  = %e\n",  rms_norm_err);
-            fprintf(stderr, "estimated compression ratio     = %.2f\n",  compression);
-            fprintf(stderr, "-----------------------------------------------------------\n");
+            fmt::print(stderr, "\n----- estimates of current variable of current model -----\n");
+            fmt::print(stderr, "estimated max_err               = {:.6e}\n", error_stats.max_abs_err);
+            fmt::print(stderr, "estimated normalized max_err    = {:.6e}\n", error_stats.max_norm_err);
+            fmt::print(stderr, "estimated RMS error             = {:.6e}\n", rms_abs_err);
+            fmt::print(stderr, "estimated normalized RMS error  = {:.6e}\n", rms_norm_err);
+            fmt::print(stderr, "estimated compression ratio     = {:.2f}\n", compression);
+            fmt::print(stderr, "-----------------------------------------------------------\n");
         }
 
 #ifndef      MFA_NO_WEIGHTS
@@ -2540,7 +2541,7 @@ namespace mfa
             MatrixX<T> M = NtQ2N - NtQN * NtNi * NtQN;
 
             // debug: output the matrix M
-            //     cerr << M << endl;
+            //     fmt::print(stderr, "M:\n{}\n", print_mat(M));
             //     Eigen::IOFormat OctaveFmt(Eigen::StreamPrecision, 0, ", ", ";\n", "", "", "[", "]");
             //     ofstream M_out;
             //     M_out.open("M.txt");
@@ -2553,7 +2554,7 @@ namespace mfa
             Eigen::SelfAdjointEigenSolver<MatrixX<T>> eigensolver(M);
             if (eigensolver.info() != Eigen::Success)
             {
-                fprintf(stderr, "Error: Encoder::Weights(), computing eigenvalues of M failed, perhaps M is not self-adjoint?\n");
+                fmt::print(stderr, "ERROR: Encoder::Weights(), computing eigenvalues of M failed, perhaps M is not self-adjoint?\n");
                 return false;
             }
 
@@ -2564,8 +2565,8 @@ namespace mfa
             for (auto i = 0; i < evals.size() - 1; i++)
                 if (evals(i) == 0.0 || evals(i) == evals(i + 1))
                 {
-                    fprintf(stderr, "Warning: Weights(): eigenvalues should be positive and distinct.\n");
-                    fprintf(stderr, "Aborting weights calculation\n");
+                    fmt::print(stderr, "WARNING: Weights(): eigenvalues should be positive and distinct.\n");
+                    fmt::print(stderr, "         Aborting weights calculation\n");
                     return false;
                 }
 
@@ -2586,7 +2587,7 @@ namespace mfa
             // if smallest eigenvector is mixed sign, then expand eigen space
             else
             {
-                //         fprintf(stderr, "\nExpanding eigenspace using linear solver\n");
+                //         fmt::print(stderr, "\nExpanding eigenspace using linear solver\n");
                 success      = false;
                 T min_weight = 1.0;
                 T max_weight = 1.0e4;
@@ -2650,8 +2651,8 @@ namespace mfa
                             weights = solved_weights;
                             weights *= (1.0 / weights.maxCoeff());  // scale to max weight = 1
                             success = true;
-                            if (verbose)
-                                fprintf(stderr, "curve %d: successful linear solve from %d eigenvectors\n", curve_id, i);
+                            if (verbose >= 2)
+                                fmt::print(stderr, "DEBUG: curve {}: successful linear solve from {} eigenvectors\n", curve_id, i);
                         }
                     }
 
@@ -2662,8 +2663,8 @@ namespace mfa
                 if (!success)
                 {
                     weights = VectorX<T>::Ones(nweights);
-                    if (verbose)
-                        fprintf(stderr, "curve %d: linear solver could not find positive weights; setting to 1\n", curve_id);
+                    if (verbose >= 2)
+                        fmt::print(stderr, "DEBUG: curve %d: linear solver could not find positive weights; setting to 1\n", curve_id);
                 }
             }                                                   // else need to expand eigenspace
 
@@ -2708,9 +2709,9 @@ namespace mfa
                          Rk.col(j).array()).sum();                              // input points
 #else                                                                           // don't weigh domain coordinate (only range)
             // debug
-//             cerr << "N in RHS:\n" << N << endl;
-//             cerr << "weights in RHS:\n" << weights << endl;
-//             cerr << "denom in RHS:\n" << denom << endl;
+//             fmt::print(stderr, "N in RHS:\n{}\n", print_mat(N));
+//             fmt::print(stderr, "weights in RHS:\n{}\n", print_vec(weights));
+//             fmt::print(stderr, "denom in RHS:\n{}\n", print_vec(denom));
 
             // compute the matrix R (one row for each control point)
             for (int i = 0; i < N.cols(); i++)
@@ -2728,8 +2729,8 @@ namespace mfa
 #endif
 
             // debug
-//             cerr << "Rk:\n" << Rk << endl;
-//             cerr << "R:\n" << R << endl;
+//             fmt::print(stderr, "Rk:\n{}\n", print_mat(Rk));
+//             fmt::print(stderr, "R:\n{}\n", print_mat(R));
         }
 
 
@@ -2782,7 +2783,7 @@ namespace mfa
 #endif
 
             // debug
-            //     cerr << "R:\n" << R << endl;
+            //     fmt::print(stderr, "R:\n{}\n", print_mat(R));
         }
 
         // computes right hand side vector for encoding a tensor product in unified-dimensional form
@@ -2803,9 +2804,17 @@ namespace mfa
             // }
 
             if (R.cols() != mfa_data.dim())
-                cerr << "Error: Incorrect matrix dimensions in RHSUnified (cols)" << endl;
+            {
+                fmt::print(stderr, "ERROR: Incorrect matrix dimensions in RHSUnified (cols)\n");
+                fmt::print(stderr, "       R.cols() = {}, mfa_data.dim() = {}\n", R.cols(), mfa_data.dim());
+                exit(1);
+            }
             if (R.rows() != input.npts)
-                cerr << "Error: Incorrect matrix dimensions in RHSUnified (rows)" << endl;
+            {
+                fmt::print(stderr, "Error: Incorrect matrix dimensions in RHSUnified (rows)\n");
+                fmt::print(stderr, "       R.rows() = {}, input.npts = {}\n", R.rows(), input.npts);
+                exit(1);
+            }   
 
             VectorX<T> pt_coords(mfa_data.dim());
             for (auto input_it = input.begin(); input_it != input.end(); ++input_it)
@@ -2859,8 +2868,8 @@ namespace mfa
                          Rk.col(j).array()).sum();          // input points
 
             // debug
-//             cerr << "Rk:\n" << Rk << endl;
-//             cerr << "\nR:\n" << R << endl;
+//             fmt::print(stderr, "Rk:\n{}\n", print_mat(Rk));
+//             fmt::print(stderr, "R:\n{}\n", print_mat(R));
         }
 
         // Checks quantities needed for approximation
@@ -2871,21 +2880,22 @@ namespace mfa
         {
             if (mfa_data.p.size() != input.ndom_pts().size())
             {
-                fprintf(stderr, "Error: Encode() size of p must equal size of ndom_pts\n");
+                fmt::print(stderr, "ERROR: Encode() size of p must equal size of ndom_pts\n");
+                fmt::print(stderr, "       p.size() = {}, ndom_pts.size() = {}\n", mfa_data.p.size(), input.ndom_pts().size());
                 exit(1);
             }
             for (size_t i = 0; i < mfa_data.p.size(); i++)
             {
                 if (nctrl_pts(i) <= mfa_data.p(i))
                 {
-                    fprintf(stderr, "Error: Encode() number of control points in dimension %ld "
-                            "must be at least p + 1 for dimension %ld\n", i, i);
+                    fmt::print(stderr, "ERROR: Encode() number of control points in dimension {} must be at least p+1\n", i);
+                    fmt::print(stderr, "       nctrl_pts[{}] = {}, p[{}] = {}\n", i, nctrl_pts(i), i, mfa_data.p(i));
                     exit(1);
                 }
                 if (nctrl_pts(i) > input.ndom_pts(i))
                 {
-                    fprintf(stderr, "Warning: Encode() number of control points (%d) in dimension %ld "
-                            "exceeds number of input data points (%d) in dimension %ld.\n", nctrl_pts(i), i, input.ndom_pts(i), i);
+                    fmt::print(stderr, "WARNING: Encode() number of control points exceeds number of input data points in dimension {}.\n", i);
+                    fmt::print(stderr, "         nctrl_pts[{}] = {}, ndom_pts[{}] = {}", i, nctrl_pts(i), i, input.ndom_pts(i));
                 }
             }
 
@@ -4082,12 +4092,12 @@ namespace mfa
 
             if (verbose >= 2)
             {
-                fmt::print(" * Encoder: Dumping collocation matrix to {}\n", filename);
+                fmt::print(stderr, "DEBUG: Dumping collocation matrix to {}\n", filename);
             }
 
             if (input.is_structured())
             {
-                fmt::print("dumpCollocationMatrix is not yet supported for structured input.\n");
+                fmt::print(stderr, "WARNING: dumpCollocationMatrix is not yet supported for structured input.\n");
                 return;
             }
 
