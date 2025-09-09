@@ -716,10 +716,10 @@ namespace mfa
                 bool                reg1and2,
                 bool                weighted)               // solve for and use weights
         {
-            if (weighted && verbose > 0)
+            if (weighted)
             {
-                fmt::print("**MFA Warning: NURBS weights enabled during model encoding. This feature is not actively developed.\n");
-                fmt::print("               Are you sure this is what you want?\n");
+                fmt::print(stderr, "WARNING: NURBS weights enabled during model encoding. This feature is not actively developed.\n");
+                fmt::print(stderr, "         Are you sure this is what you want?\n");
             }
 
             // fixed encode assumes the tmesh has only one tensor product
@@ -771,7 +771,7 @@ namespace mfa
                 const VectorXi&     derivs = VectorXi()) const
         {
             if (verbose)
-                fmt::print("MFA: Decoding geometry\n");
+                fmt::print(stderr, "MFA: Decoding geometry\n");
 
             mfa::Decoder<T> decoder(geom(), verbose);
             decoder.DecodePointSet(output, geometry->min_dim, geometry->max_dim, derivs);
@@ -803,7 +803,7 @@ namespace mfa
                 const VectorXi&     derivs = VectorXi()) const
         {
             if (verbose)
-                fmt::print("MFA: Decoding science variable {}\n", i);
+                fmt::print(stderr, "MFA: Decoding science variable {}\n", i);
 
             if (i < 0 || i >= nvars())
             {
@@ -906,8 +906,8 @@ namespace mfa
         {
             if (k < 0 || k >= nvars())
             {
-                fmt::print("ERROR: var index out of range in MFA::Integrate1D()\n");
-                fmt::print("       k={}, nvars()={}\n", k, nvars());
+                fmt::print(stderr, "ERROR: var index out of range in MFA::Integrate1D()\n");
+                fmt::print(stderr, "       k={}, nvars()={}\n", k, nvars());
                 exit(1);
             }
 
@@ -923,8 +923,8 @@ namespace mfa
         {
             if (k < 0 || k >= nvars())
             {
-                fmt::print("ERROR: var index out of range in MFA::DefiniteIntegral()\n");
-                fmt::print("       k={}, nvars()={}\n", k, nvars());
+                fmt::print(stderr, "ERROR: var index out of range in MFA::DefiniteIntegral()\n");
+                fmt::print(stderr, "       k={}, nvars()={}\n", k, nvars());
                 exit(1);
             }
 
@@ -1191,12 +1191,12 @@ namespace mfa
             // Warn if there are already more pinned knots than we need, but continue
             if (count0 > degree + 1)
             {
-                fmt::print("WARNING: Tried to add pinned knots, but the knot vector already contained more than {} knots at 0", count0);
+                fmt::print(stderr, "WARNING: Tried to add pinned knots, but the knot vector already contained more than {} knots at 0", count0);
                 extra0 = 0;
             }
             if (count1 > degree + 1)
             {
-                fmt::print("WARNING: Tried to add pinned knots, but the knot vector already contained more than {} knots at 1", count1);
+                fmt::print(stderr, "WARNING: Tried to add pinned knots, but the knot vector already contained more than {} knots at 1", count1);
                 extra1 = 0;
             }
 

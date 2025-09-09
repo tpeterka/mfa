@@ -137,7 +137,7 @@ namespace mfa
 
             if (adjusted)
             {
-                fmt::print("MFA (info): Bbox basis adjusted by makeOrthonormal\n");
+                fmt::print(stderr, "DEBUG: Bbox basis adjusted by makeOrthonormal\n");
             }
         }
 
@@ -252,11 +252,11 @@ namespace mfa
             {
                 if (verbose >= 2)
                 {
-                    fmt::print("Bbox::doesContain failed: \n");
-                    fmt::print("  rotated data mins: {}\n", dataMins.transpose());
-                    fmt::print("  rotated box mins:  {}\n", rotatedMins.transpose());
-                    fmt::print("  rotated data maxs: {}\n", dataMaxs.transpose());
-                    fmt::print("  rotated box maxs:  {}\n", rotatedMaxs.transpose());
+                    fmt::print(stderr, "DEBUG: Bbox::doesContain failed: \n");
+                    fmt::print(stderr, "         rotated data mins: {}\n", dataMins.transpose());
+                    fmt::print(stderr, "         rotated box mins:  {}\n", rotatedMins.transpose());
+                    fmt::print(stderr, "         rotated data maxs: {}\n", dataMaxs.transpose());
+                    fmt::print(stderr, "         rotated box maxs:  {}\n", rotatedMaxs.transpose());
                 }
 
                 return false;
@@ -299,10 +299,10 @@ namespace mfa
         // Print basic information
         void print(string title = "box") const
         {
-            fmt::print("{} minimum corner: {}\n", title, print_vec(mins));
-            fmt::print("{} maximum corner: {}\n", title, print_vec(maxs));
-            fmt::print("{} orientation:\n", title);
-            fmt::print("{}\n", print_mat(basis));
+            fmt::print(stderr, "{} minimum corner: {}\n", title, print_vec(mins));
+            fmt::print(stderr, "{} maximum corner: {}\n", title, print_vec(maxs));
+            fmt::print(stderr, "{} orientation:\n", title);
+            fmt::print(stderr, "{}\n", print_mat(basis));
         }
     };
 

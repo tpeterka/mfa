@@ -49,8 +49,8 @@ namespace mfa
             {
                 if (ndom_pts.size() != dom_dim)
                 {
-                    cerr << "ERROR: Dimension mismatch in Param constructor.\nExiting." << endl;
-                    exit(1);
+                    throw MFAError(fmt::format("Param constructor: dom_dim = {}, but ndom_pts has size {}",
+                        dom_dim, ndom_pts.size()));
                 }
                 
                 param_grid.resize(dom_dim);
@@ -117,7 +117,8 @@ namespace mfa
         void make_grid_params(  const VectorX<T>&   param_mins,   // Minimum param in each dimension
                                 const VectorX<T>&   param_maxs)   // Maximum param in each dimension
         {
-            if (!structured) throw MFAError("Tried to set grid parameters to unstructured Param object");
+            if (!structured) 
+                throw MFAError("Tried to set grid parameters to unstructured Param object");
 
             T step = 0;
 
@@ -149,7 +150,8 @@ namespace mfa
         // number of data points (which would be the product)
         void make_curve_params(const MatrixX<T>&   domain)           // input data points (1st dim changes fastest)
         {
-            if (!structured) throw MFAError("Cannot set curve parametrization to unstructured data.");
+            if (!structured) 
+                throw MFAError("Tried to set curve parameters to unstructured Param object");
 
             T          tot_dist;                          // total chord length
             VectorX<T> dists(ndom_pts.maxCoeff() - 1);    // chord lengths of data point spans for any dim
@@ -255,7 +257,11 @@ namespace mfa
         // time and pass that in instead.
         void makeDomainParams(const VectorX<T>& mins, const VectorX<T>& maxs, const MatrixX<T>& domain)
         {
-            if (dom_dim != mins.size()) throw MFAError("Incorrect dimensions in makeDomainParams");
+            if (dom_dim != mins.size())
+            {
+                throw MFAError(fmt::format("makeDomainParams(mins, maxs, domain): dom_dim = {}, but mins has size {}",
+                    dom_dim, mins.size()));
+            }
 
             makeDomainParams(Bbox<T>(mins, maxs), domain);
         }
@@ -386,10 +392,10 @@ namespace mfa
                         }
                         else
                         {
-                            cerr << "ERROR: Construction of Param object contains out-of-bounds entries" << endl;
-                            cerr << "       Bad Value: " << setprecision(9) << scientific << param_list(i,j) << endl;
-                            cerr << "       Out of Tolerance: " << scientific << param_list(i,j) - 1.0 << endl;
-                            cerr << "       Index: " << i << " " << j << endl;
+                            fmt::print(stderr, "ERROR: Construction of Param object contains out-of-bounds entries\n");
+                            fmt::print(stderr, "       Bad Value: {:.9e}\n", param_list(i,j));
+                            fmt::print(stderr, "       Out of Tolerance: {:.9e}\n", param_list(i,j) - 1.0);
+                            fmt::print(stderr, "       Index: {} {}\n", i, j);
                             exit(1);
                         }
                     }
@@ -402,10 +408,10 @@ namespace mfa
                         }
                         else
                         {
-                            cerr << "ERROR: Construction of Param object contains out-of-bounds entries" << endl;
-                            cerr << "       Bad Value: " << setprecision(9) << scientific << param_list(i,j) << endl;
-                            cerr << "       Out of Tolerance: " << scientific << 0.0 - param_list(i,j) << endl;
-                            cerr << "       Index: " << i << " " << j << endl;
+                            fmt::print(stderr, "ERROR: Construction of Param object contains out-of-bounds entries\n");
+                            fmt::print(stderr, "       Bad Value: {:.9e}\n", param_list(i,j));
+                            fmt::print(stderr, "       Out of Tolerance: {:.9e}\n", 0.0 - param_list(i,j));
+                            fmt::print(stderr, "       Index: {} {}\n", i, j);
                             exit(1);
                         }
                     }
@@ -446,7 +452,11 @@ namespace mfa
             }
             else
             {
-                if (param_list.cols() != dom_dim) throw MFAError("Incorrect column number in param_list");
+                if (param_list.cols() != dom_dim) 
+                {
+                    throw MFAError(fmt::format("Param::checkParamBounds(): param_list has {} columns, but dom_dim = {}",
+                        param_list.cols(), dom_dim));
+                }     
 
                 for (int k = 0; k < dom_dim; k++)
                 {
@@ -472,16 +482,16 @@ namespace mfa
             {
                 if (badval == 42)
                 {
-                    cerr << "ERROR: Param object contains invalid param_grid" << endl;
+                    fmt::print(stderr, "ERROR: Param object contains invalid param_grid\n");
                 }
                 else
                 {
-                    cerr << "ERROR: Construction of Param object contains out-of-bounds entries" << endl;
-                    cerr << "       Bad Value: " << setprecision(9) << scientific << badval << endl;
+                    fmt::print(stderr, "ERROR: Construction of Param object contains out-of-bounds entries\n");
+                    fmt::print(stderr, "       Bad Value: {:.9e}\n", badval);
                     if (badval > 1.0)
-                        cerr << "       Out of Tolerance: " << scientific << badval - 1.0 << endl;
+                        fmt::print(stderr, "       Out of Tolerance: {:.9e}\n", badval - 1.0);
                     else if (badval < 0.0)
-                        cerr << "       Out of Tolerance: " << scientific << 0.0 - badval << endl;
+                        fmt::print(stderr, "       Out of Tolerance: {:.9e}\n", 0.0 - badval);
                 }
                 exit(1);
             }
@@ -492,21 +502,21 @@ namespace mfa
         // Print all parameters (for debugging)
         void print()
         {
-            cerr << "----- params -----" << endl;
+            fmt::print(stderr, "----- params -----\n");
             if (structured)
             {
                 for (int i = 0; i < param_grid.size(); i++)
                 {
-                    cerr << "Dimension " << i << ":" << endl;
+                    fmt::print(stderr, "Dimension {}:\n", i);
                     for (int j = 0; j < param_grid[i].size(); j++)
-                        cerr << "params[" << i << "][" << j << "] = " << param_grid[i][j] << endl;
+                        fmt::print(stderr, "  params[{}][{}] = {:.9e}\n", i, j, param_grid[i][j]);
                 }
             }
             else
             {
-                cerr << param_list << endl;
+                fmt::print(stderr, "{}\n", mfa::print_mat(param_list));
             }
-            cerr << "------------------" << endl;
+            fmt::print(stderr, "------------------\n");
         }
     };  // struct Param
 }  // namespace mfa

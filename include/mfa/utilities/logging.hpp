@@ -85,12 +85,12 @@ namespace mfa
     void print_bbox(const VectorX<T>& mins, const VectorX<T>& maxs, string label="Bounding")
     {
         if (mins.size() != maxs.size()) 
-            fmt::print("{} Box: <invalid box>\n", label);
+            fmt::print(stderr, "{} Box: <invalid box>\n", label);
         
-        fmt::print("{} Box:\n", label);
+        fmt::print(stderr, "{} Box:\n", label);
         for (int i = 0; i < mins.size(); i++)
         {
-            fmt::print("  Dim {}: [{:< 5.5g}, {:< 5.5g}]\n", i, mins(i), maxs(i));
+            fmt::print(stderr, "  Dim {}: [{:< 5.5g}, {:< 5.5g}]\n", i, mins(i), maxs(i));
         } 
     }
 }   // namespace mfa

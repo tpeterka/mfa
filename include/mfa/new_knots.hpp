@@ -109,18 +109,18 @@ namespace mfa
                 if (mfa_data.tmesh.tensor_prods.size() == 1 && input.is_structured() &&
                         mfa_data.tmesh.tensor_prods[0].nctrl_pts(k) + inserted_knot_idxs[k].size() > input.ndom_pts(k))
                 {
-                    fmt::print(stderr, "OrigInsertKnots(): Unable to insert {} knots in dimension {} because {} control points would outnumber {} input points.\n",
+                    fmt::print(stderr, "WARNING: OrigInsertKnots(): Unable to insert {} knots in dimension {} because {} control points would outnumber {} input points.\n",
                             inserted_knot_idxs[k].size(), k, mfa_data.tmesh.tensor_prods[0].nctrl_pts(k) + inserted_knot_idxs[k].size(), input.ndom_pts(k));
                     if (mfa_data.tmesh.tensor_prods[0].nctrl_pts(k) > input.ndom_pts(k))
                     {
-                        fmt::print(stderr, "Error: OrigInsertKnots(): control points already outnumber input points in dimension {}. This should not happen.\n", k);
+                        fmt::print(stderr, "ERROR: OrigInsertKnots(): control points already outnumber input points in dimension {}. This should not happen.\n", k);
                         abort();
                     }
                     size_t nknots = input.ndom_pts(k) - mfa_data.tmesh.tensor_prods[0].nctrl_pts(k);
                     inserted_knot_idxs[k].resize(nknots);
                     new_knots[k].resize(nknots);
                     new_levels[k].resize(nknots);
-                    fmt::print(stderr, "Inserting {} knots instead.\n", nknots);
+                    fmt::print(stderr, "WARNING: Inserting {} knots instead.\n", nknots);
                 }
 
                 for (auto i = 0; i < inserted_knot_idxs[k].size(); i++)
@@ -192,18 +192,18 @@ namespace mfa
                 if (mfa_data.tmesh.tensor_prods.size() == 1 && input.is_structured() &&
                         mfa_data.tmesh.tensor_prods[0].nctrl_pts(k) + inserted_knot_idxs[k].size() > input.ndom_pts(k))
                 {
-                    fmt::print(stderr, "InsertKnots(): Unable to insert {} knots in dimension {} because {} control points would outnumber {} input points.\n",
+                    fmt::print(stderr, "WARNING: InsertKnots(): Unable to insert {} knots in dimension {} because {} control points would outnumber {} input points.\n",
                             inserted_knot_idxs[k].size(), k, mfa_data.tmesh.tensor_prods[0].nctrl_pts(k) + inserted_knot_idxs[k].size(), input.dom_pts(k));
                     if (mfa_data.tmesh.tensor_prods[0].nctrl_pts(k) > input.ndom_pts(k))
                     {
-                        fmt::print(stderr, "Error: InsertKnots(): control points already outnumber input points in dimension {}. This should not happen.\n", k);
+                        fmt::print(stderr, "ERROR: InsertKnots(): control points already outnumber input points in dimension {}. This should not happen.\n", k);
                         abort();
                     }
                     size_t nknots = input.ndom_pts(k) - mfa_data.tmesh.tensor_prods[0].nctrl_pts(k);
                     inserted_knot_idxs[k].resize(nknots);
                     new_knots[k].resize(nknots);
                     new_levels[k].resize(nknots);
-                    fmt::print(stderr, "Inserting {} knots instead.\n", nknots);
+                    fmt::print(stderr, "WARNING: Inserting {} knots instead.\n", nknots);
                 }
 
                 // insert the knots into the tmesh
@@ -279,34 +279,35 @@ namespace mfa
 
                     if (all_knots[k][j] > all_knots[k][j + 1])
                     {
-                        fmt::print(stderr, "CheckAllSpans(): Error: knots are out of order (should be monotone nondecreasing)\n");
-                        fmt::print(stderr, "span [{} - {}]\n", all_knots[k][j], all_knots[k][j + 1]);
+                        fmt::print(stderr, "WARNING: CheckAllSpans(): knots are out of order (should be monotone nondecreasing)\n");
+                        fmt::print(stderr, "         span [{} - {}]\n", all_knots[k][j], all_knots[k][j + 1]);
+                        return false;
                     }
                     if (max - min <= 0)
                     {
-                        cerr << "CheckAllSpans(): Error: dim " << k << " span " << j << " does not have an input point" << endl;
-                        fmt::print(stderr, "span [{} - {}] min {} max {} min_param {} max_param {}\n",
+                        fmt::print(stderr, "WARNING: CheckAllSpans(): dim {} span {} does not have an input point\n", k, j);
+                        fmt::print(stderr, "         span [{} - {}] min {} max {} min_param {} max_param {}\n",
                                 all_knots[k][j], all_knots[k][j + 1], min, max, min_param, max_param);
                         return false;
                     }
                     if (min_param < all_knots[k][j])
                     {
-                        cerr << "CheckAllSpans(): Error: dim " << k << " span " << j << " min param < range of knot span. This should not happen.\n" << endl;
-                        fmt::print(stderr, "span [{} - {}] min {} max {} min_param {} max_param {}\n",
+                        fmt::print(stderr, "WARNING: CheckAllSpans(): dim {} span {} min param < range of knot span.\n", k, j);
+                        fmt::print(stderr, "         span [{} - {}] min {} max {} min_param {} max_param {}\n",
                                 all_knots[k][j], all_knots[k][j + 1], min, max, min_param, max_param);
                         return false;
                     }
                     if (min_param >= all_knots[k][j + 1])
                     {
-                        cerr << "CheckAllSpans(): Error: dim " << k << " span " << j << " min param > range of knot span. This should not happen.\n" << endl;
-                        fmt::print(stderr, "span [{} - {}] min {} max {} min_param {} max_param {}\n",
+                        fmt::print(stderr, "WARNING: CheckAllSpans(): dim {} span {} min param >= range of knot span.\n", k, j);
+                        fmt::print(stderr, "         span [{} - {}] min {} max {} min_param {} max_param {}\n",
                                 all_knots[k][j], all_knots[k][j + 1], min, max, min_param, max_param);
                         return false;
                     }
                     if (max < input.params->param_grid[k].size() - 1 && max_param < all_knots[k][j + 1])
                     {
-                        cerr << "CheckAllSpans(): Error: dim " << k << " span " << j << " max param < range of next knot span. This should not happen.\n" << endl;
-                        fmt::print(stderr, "span [{} - {}] min {} max {} min_param {} max_param {}\n",
+                        fmt::print(stderr, "WARNING: CheckAllSpans(): dim {} span {} max param < range of next knot span.\n", k, j);
+                        fmt::print(stderr, "         span [{} - {}] min {} max {} min_param {} max_param {}\n",
                                 all_knots[k][j], all_knots[k][j + 1], min, max, min_param, max_param);
                         return false;
                     }
