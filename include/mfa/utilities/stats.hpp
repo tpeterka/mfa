@@ -145,7 +145,7 @@ namespace mfa
         {
             if (!log)
             {
-                fmt::print("Warning: ErrorStats did not save data and will not write data file \"{}_var{}\"\n", filepattern, k);
+                fmt::print(stderr, "WARNING: ErrorStats did not save data and will not write data file \"{}_var{}\"\n", filepattern, k);
                 return;
             }
 
@@ -177,31 +177,31 @@ namespace mfa
         {
             if (k < 0 || k >= nvars)
             {
-                cerr << "ERROR: Index out of bounds in ErrorStats::print_var()" << endl;
-                cerr << "         index = " << k << ", nvars = " << nvars << "." << endl;
-                cerr << "Exiting." << endl;
+                fmt::print(stderr, "ERROR: Index out of bounds in ErrorStats::print_var()\n");
+                fmt::print(stderr, "       index = {}, nvars = {}.\n", k, nvars);
+                fmt::print(stderr, "Exiting.\n");
                 exit(1);
             }
 
             if (style == PrintStyle::Vert)
             {
-                fmt::print("Range Extent           = {:.4e}\n", extent(k));
-                fmt::print("Max Error              = {:.4e}\n", linf(k));
-                fmt::print("RMS Error              = {:.4e}\n", l2(k));
-                fmt::print("Avg Error              = {:.4e}\n", l1(k));
-                fmt::print("Max Error (normalized) = {:.4e}\n", linf(k) / extent(k));
-                fmt::print("RMS Error (normalized) = {:.4e}\n", l2(k) / extent(k));
-                fmt::print("Avg Error (normalized) = {:.4e}\n", l1(k) / extent(k));
+                fmt::print(stderr, "Range Extent           = {:.4e}\n", extent(k));
+                fmt::print(stderr, "Max Error              = {:.4e}\n", linf(k));
+                fmt::print(stderr, "RMS Error              = {:.4e}\n", l2(k));
+                fmt::print(stderr, "Avg Error              = {:.4e}\n", l1(k));
+                fmt::print(stderr, "Max Error (normalized) = {:.4e}\n", linf(k) / extent(k));
+                fmt::print(stderr, "RMS Error (normalized) = {:.4e}\n", l2(k) / extent(k));
+                fmt::print(stderr, "Avg Error (normalized) = {:.4e}\n", l1(k) / extent(k));
             }
             else if (style == PrintStyle::Side)
             {
-                fmt::print("Max Error: {:.4e}\tMax Error (rel): {:.4e}\n", linf(k), linf(k) / extent(k));
-                fmt::print("RMS Error: {:.4e}\tRMS Error (rel): {:.4e}\n", l2(k), l2(k) / extent(k));
-                fmt::print("Avg Error: {:.4e}\tAvg Error (rel): {:.4e}\n", l1(k), l1(k) / extent(k));
+                fmt::print(stderr, "Max Error: {:.4e}\tMax Error (rel): {:.4e}\n", linf(k), linf(k) / extent(k));
+                fmt::print(stderr, "RMS Error: {:.4e}\tRMS Error (rel): {:.4e}\n", l2(k), l2(k) / extent(k));
+                fmt::print(stderr, "Avg Error: {:.4e}\tAvg Error (rel): {:.4e}\n", l1(k), l1(k) / extent(k));
             }
             else
             {
-                fmt::print("Error: Unrecognized print style in ErrorStats\n");
+                fmt::print(stderr, "ERROR: Unrecognized print style in ErrorStats\n");
             }
         }
 
@@ -235,13 +235,13 @@ namespace mfa
         void print_max()
         {
             find_max_stats();
-            fmt::print("Maximum errors over all science variables:\n");
-            fmt::print("Max Error                 (var {}) = {:.4e}\n", linf_max_var, linf_max);
-            fmt::print("RMS Error                 (var {}) = {:.4e}\n", l2_max_var, l2_max);
-            fmt::print("Avg Error                 (var {}) = {:.4e}\n", l1_max_var, l1_max);
-            fmt::print("Max Error (normalized)    (var {}) = {:.4e}\n", linf_rel_max_var, linf_rel_max);
-            fmt::print("RMS Error (normalized)    (var {}) = {:.4e}\n", l2_rel_max_var, l2_rel_max);
-            fmt::print("Avg Error (normalized)    (var {}) = {:.4e}\n", l1_rel_max_var, l1_rel_max);        
+            fmt::print(stderr, "Maximum errors over all science variables:\n");
+            fmt::print(stderr, "Max Error                 (var {}) = {:.4e}\n", linf_max_var, linf_max);
+            fmt::print(stderr, "RMS Error                 (var {}) = {:.4e}\n", l2_max_var, l2_max);
+            fmt::print(stderr, "Avg Error                 (var {}) = {:.4e}\n", l1_max_var, l1_max);
+            fmt::print(stderr, "Max Error (normalized)    (var {}) = {:.4e}\n", linf_rel_max_var, linf_rel_max);
+            fmt::print(stderr, "RMS Error (normalized)    (var {}) = {:.4e}\n", l2_rel_max_var, l2_rel_max);
+            fmt::print(stderr, "Avg Error (normalized)    (var {}) = {:.4e}\n", l1_rel_max_var, l1_rel_max);        
         }
 
         // used for debugging

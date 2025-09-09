@@ -12,6 +12,7 @@
 #ifndef _MFA_ITER_HPP
 #define _MFA_ITER_HPP
 
+#include <mfa/utilities/logging.hpp>
 #include <mfa/types.hpp>
 
 namespace mfa
@@ -44,20 +45,17 @@ namespace mfa
             // sanity checks
             if (npts_dim_.size() != dom_dim_ || starts_dim_.size() != dom_dim_ || all_npts_dim_.size() != dom_dim_)
             {
-                fprintf(stderr, "Error: VolIterator sizes of sub_npts, sub_starts, all_npts are not equal.\n");
-                abort();
+                throw MFAError("VolIterator sizes of sub_npts, sub_starts, all_npts are not equal.");
             }
             for (auto i = 0; i < dom_dim_; i++)
             {
                 if (starts_dim_(i) < 0)
                 {
-                    fprintf(stderr, "Error: VolIterator sub_starts[%d] < 0.\n", i);
-                    abort();
+                    throw MFAError(fmt::format("VolIterator sub_starts[{}] < 0.", i));
                 }
                 if (starts_dim_(i) + npts_dim_(i) > all_npts_dim_(i))
                 {
-                    fprintf(stderr, "Error: VolIterator sub_starts[%d] + sub_npts[%d] > all_npts[%d].\n", i, i, i);
-                    abort();
+                    throw MFAError(fmt::format("VolIterator sub_starts[{}] + sub_npts[{}] > all_npts[{}].", i, i, i));
                 }
             }
 
@@ -177,7 +175,7 @@ namespace mfa
             // DL: Is it better to just throw an exception here to prohibit this behavior?
             if (idx >= tot_iters_)
             {
-                fmt::print("MFA Warning: Seeking VolIterator past end\n");
+                fmt::print(stderr, "WARNING: Seeking VolIterator past end\n");
                 std::fill(done_dim_.begin(), done_dim_.end(), true);
             }
         }

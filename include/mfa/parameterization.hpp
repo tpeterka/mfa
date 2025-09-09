@@ -28,7 +28,8 @@ namespace mfa {
             box(box_),
             extentsRecip((box_.rotatedMaxs-box_.rotatedMins).cwiseInverse())
         {
-            if (geomDim != domDim) throw MFAError("Incorrect dimensions in BoxMap");
+            if (geomDim != domDim) 
+                throw MFAError(fmt::format("Incorrect dimensions in BoxMap: geomDim={} domDim={}\n", geomDim, domDim));
         }
 
         // Compute the parameterizations for a collection of points.
@@ -77,7 +78,8 @@ namespace mfa {
             boxmap(domDim_ + 1, box_),
             flattenDim(flattenDim_)
         { 
-            if (geomDim != domDim + 1) throw MFAError("Incorrect dimensions in BoxMapProjected");
+            if (geomDim != domDim + 1) 
+                throw MFAError(fmt::format("Incorrect dimensions in BoxMapProjected: geomDim={} domDim={}\n", geomDim, domDim));
 
             // indices[i] describes which dimensions to keep when flattening
             indices.resize(domDim);

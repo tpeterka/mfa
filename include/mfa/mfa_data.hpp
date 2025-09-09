@@ -229,7 +229,7 @@ namespace mfa
                             {
                                 if (tmesh.all_knot_param_idxs[k][knot_idx] == tmesh.all_knot_param_idxs[k][knot_idx-1])
                                 {
-                                    cerr << "WARNING: Missing input point between knots " << knot_idx-1 << " and " << knot_idx << " in dimension " << k << endl;
+                                    fmt::print(stderr, "WARNING: Missing input point between knots {} and {} in dimension {}\n", knot_idx-1, knot_idx, k);
                                 }
                             }
                             knot_idx++;
@@ -242,14 +242,14 @@ namespace mfa
                     // abort the code. Otherwise, the logic will be incorrect.
                     if (knot_idx <= last)
                     {
-                        cerr << "ERROR: all_knot_param_idxs set incorrectly in MFAData::set_knots(). Exiting." << endl;
+                        fmt::print(stderr, "ERROR: all_knot_param_idxs set incorrectly in MFAData::set_knots()\nAborting.\n");
                         exit(1);
                     }
                 }
             }
             else
             {
-                cerr << "ERROR: Cannot set all_knot_params_idxs with unstructured data. Exiting." << endl;
+                fmt::print(stderr, "ERROR: Cannot set all_knot_params_idxs with unstructured data\nAborting.\n");
                 exit(1);
             }
         }
@@ -469,7 +469,7 @@ namespace mfa
                     // knots are pinned.
                     if (b_idx + i < 0 || b_idx + i >= tmesh.all_knots[cur_dim].size())
                     {
-                        // cerr << "ignored basis function, index " << b_idx + i << endl;
+                            // fmt::print(stderr, "DEBUG: Ignored basis function, index {}\n", b_idx + i);
                         ignore = true;
                         continue;
                     }
@@ -777,9 +777,6 @@ namespace mfa
 
                 N(row, span - p(cur_dim) + j) = OneBasisFun(cur_dim, u, loc_knots);
             }
-
-            // debug
-//             cerr << N << "\n---" << endl;
         }
 
         // computes and returns one basis function value for a given parameter value and local knot vector
@@ -1196,7 +1193,7 @@ namespace mfa
             for (int j = 0; j < N.rows(); j++)
                 denom(j) = (N.row(j).cwiseProduct(weights.transpose())).sum();
 
-            //     cerr << "denom:\n" << denom << endl;
+            // fmt::print(stderr, "INFO: denom:\n{}\n", fmt::join(denom, ", "));
 
             // "rationalize" N and Nt
             // ie, convert their basis function coefficients to rational ones with weights
@@ -1231,7 +1228,7 @@ namespace mfa
                               vector<int>&             new_ctrl_pt_idxs) const // (output) inserted position of new ctrl pt in each dim (same position as existing if no change)
         {
             // debug
-//             fmt::print(stderr, "NewKnotInsertion(): ctrl_pts before inserting param [{}]:\n{}\n", param.transpose(), tensor.ctrl_pts);
+            // fmt::print(stderr, "DEBUG: NewKnotInsertion(): ctrl_pts before inserting param [{}]:\n{}\n", param.transpose(), tensor.ctrl_pts);
 
             auto& tensor = tmesh.tensor_prods[tensor_idx];
             new_nctrl_pts = tensor.nctrl_pts;
@@ -1239,7 +1236,7 @@ namespace mfa
                     new_weights, new_nctrl_pts, new_knot_idxs, new_ctrl_pt_idxs);
 
             // debug
-//             fmt::print(stderr, "NewKnotInsertion(): ctrl_pts after inserting param [{}]:\n{}\n", param.transpose(), new_ctrl_pts);
+            // fmt::print(stderr, "DEBUG: NewKnotInsertion(): ctrl_pts after inserting param [{}]:\n{}\n", param.transpose(), new_ctrl_pts);
 
         }
 
@@ -1706,7 +1703,7 @@ namespace mfa
         {
             if (!input.is_structured())
             {
-                cerr << "ERROR: Cannot set curve knots from unstructured input" << endl;
+                fmt::print(stderr, "ERROR: Cannot set curve knots from unstructured input\nAborting.\n");
                 exit(1);
             }
 
@@ -1767,8 +1764,7 @@ namespace mfa
                 {
                     if (knots[k][i] != 0 || knots[k][last - i] != 1)
                     {
-                        cerr << "ERROR: Custom knot distribution does not have pinned knots in dimension " << k << endl;
-                        cerr << "Exiting." << endl;
+                        fmt::print(stderr, "ERROR: Custom knot distribution does not have pinned knots in dimension {}\nExiting.\n", k);
                         exit(1);
                     }
                 }

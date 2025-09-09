@@ -289,7 +289,7 @@ namespace mfa
                 !mfa_data.tmesh.tensor_prods[0].nctrl_pts.size() ||
                 !mfa_data.tmesh.tensor_prods[0].ctrl_pts.size())
             {
-                fprintf(stderr, "Decoder() error: Attempting to decode before encoding.\n");
+                fmt::print(stderr, "ERROR: Decoder attempting to decode before encoding.\n");
                 exit(0);
             }
 
@@ -365,12 +365,12 @@ namespace mfa
 
                     // debug
                     if (pt_it.idx() == 0 && verbose >= 2)
-                        fmt::print(stderr, " ->DecodePointSet: Using VolPt w/ TBB over points\n");
+                        fmt::print(stderr, "DEBUG: DecodePointSet: Using VolPt w/ TBB over points\n");
 
 #else           // tmesh version
 
                     if (pt_it.idx() == 0 && verbose >= 2)
-                        fmt::print(stderr, " ->DecodePointSet: Using VolPt_tmesh w/ TBB over points\n");
+                        fmt::print(stderr, "DEBUG: DecodePointSet: Using VolPt_tmesh w/ TBB over points\n");
                     VolPt_tmesh(param, cpt, false);
 
 #endif          // end tmesh version
@@ -380,7 +380,7 @@ namespace mfa
             }, ap);
             if (verbose >= 2)
             {
-                fmt::print(stderr, "   ->100 % decoded\n");
+                fmt::print(stderr, "DEBUG:   ->100 % decoded\n");
 //                 decode_times.print();
             }
 
@@ -402,7 +402,7 @@ namespace mfa
                 //      This was added because DecodeGrid has a KOKKOS implementation. Need to find another
                 //      place to put this, or simply extend the KOKKOS to arbitrary structured grids
                 if (verbose >= 2)
-                    fmt::print(stderr, " ->DecodePointSet: Using DecodeGrid w/o TBB (serial or kokkos)\n");
+                    fmt::print(stderr, "DEBUG: DecodePointSet: Using DecodeGrid w/o TBB (serial or kokkos)\n");
                 DecodeGrid(ps.domain, min_dim, max_dim, min_params, max_params, ps.g.ndom_pts );
             }
             else
@@ -424,13 +424,13 @@ namespace mfa
 #ifndef MFA_TMESH   // original version for one tensor product
 
                     if (pt_it.idx() == 0 && verbose >= 2)
-                        fmt::print(stderr, " ->DecodePointSet: Using VolPt w/o TBB (serial or kokkos)\n");
+                        fmt::print(stderr, "DEBUG: DecodePointSet: Using VolPt w/o TBB (serial or kokkos)\n");
 
                     VolPt(param, cpt, decode_info, mfa_data.tmesh.tensor_prods[0], derivs);
                     
 #else   // tmesh version
                     if (pt_it.idx() == 0 && verbose >= 2)
-                        fmt::print(stderr, " ->DecodePointSet: Using VolPt_tmesh w/o TBB (serial or kokkos)\n");
+                        fmt::print(stderr, "DEBUG: DecodePointSet: Using VolPt_tmesh w/o TBB (serial or kokkos)\n");
 
                     VolPt_tmesh(param, cpt);
 #endif  // end tmesh
@@ -440,11 +440,11 @@ namespace mfa
                     // print progress
                     if (verbose >= 2)
                         if (pt_it.idx() > 0 && ps.npts >= 100 && pt_it.idx() % (ps.npts / 100) == 0)
-                            fmt::print(stderr, "\r   ->{:.0} % decoded", (T)pt_it.idx() / (T)(ps.npts) * 100);
+                            fmt::print(stderr, "\rDEBUG:   ->{:.0} % decoded", (T)pt_it.idx() / (T)(ps.npts) * 100);
                }
                 if (verbose >= 2)
                 {
-                    fmt::print(stderr, "\r   ->100 % decoded\n");
+                    fmt::print(stderr, "\rDEBUG:   ->100 % decoded\n");
     //                 decode_times.print();
                 }
             }
@@ -652,9 +652,9 @@ namespace mfa
                 ps.domain.block(pt_it.idx(), min_dim, 1, max_dim - min_dim + 1) = cpt.transpose();
 
                 // print progress
-                if (verbose)
+                if (verbose >= 2)
                     if (pt_it.idx() > 0 && ps.npts >= 100 && pt_it.idx() % (ps.npts / 100) == 0)
-                        fprintf(stderr, "\r%.0f %% decoded (integral)", (T)pt_it.idx() / (T)(ps.npts) * 100);
+                        fmt::print(stderr, "\rDEBUG: {:.0f} % decoded (integral)", (T)pt_it.idx() / (T)(ps.npts) * 100);
             }// end loop over decode points
         }
 
@@ -686,7 +686,7 @@ namespace mfa
 
 #ifdef MFA_KOKKOS       // kokkos version
 
-            std::cout << "KOKKOS execution space: " << ExecutionSpace::name() << "\n";
+            fmt::print(stderr, "KOKKOS execution space: {}\n", ExecutionSpace::name());
             // how many control points per direction is not fixed; we will use just one Kokkos View for NN
             int kdom_dim = mfa_data.dom_dim;
             int max_index=-1;
@@ -912,8 +912,8 @@ namespace mfa
 
 #ifdef MFA_SERIAL   // serial version
 
-            if (verbose)
-                fmt::print(stderr, " ->DecodeGrid: serial version\n");
+            if (verbose >= 2)
+                fmt::print(stderr, "DEBUG: DecodeGrid: serial version\n");
 
             fmt::print(stderr, " ->DecodeGrid: var_dim={}\n", var_dim);
 
@@ -1161,7 +1161,7 @@ namespace mfa
             if (B_sum > 0.0)
                 out_pt /= B_sum;
             else
-                fmt::print(stderr, "Warning: VolPt_tmesh(): B_sum = 0 when decoding param: [{}]\n", param.transpose());
+                fmt::print(stderr, "WARNING: VolPt_tmesh(): B_sum = 0 when decoding param: [{}]\n", fmt::join(param, " "));
 
             // debug
             if (timing)
@@ -1209,13 +1209,17 @@ namespace mfa
             {
                 if (derivs.size() != mfa_data.p.size())
                 {
-                    fprintf(stderr, "Error: size of derivatives vector is not the same as the number of domain dimensions\n");
-                    exit(0);
+                    throw MFAError(fmt::format("VolPt: size of derivatives vector ({}) is not the same as the number of domain dimensions ({})",
+                                            derivs.size(), mfa_data.p.size()));
                 }
                 for (auto i = 0; i < mfa_data.p.size(); i++)
+                {
                     if (derivs(i) > mfa_data.p(i))
-                        fprintf(stderr, "Warning: In dimension %d, trying to take derivative %d of an MFA with degree %d will result in 0. This may not be what you want",
+                    {
+                        fmt::print(stderr, "WARNING: In dimension {}, trying to take derivative {} of an MFA with degree {} will result in 0. This may not be what you want\n",
                                 i, derivs(i), mfa_data.p(i));
+                        }
+                }
             }
 
             // init
@@ -1508,16 +1512,13 @@ namespace mfa
                 di.ctrl_idx += (di.span[j] - mfa_data.p(j) + ct(0, j)) * cs[j];
             }
             size_t start_ctrl_idx = di.ctrl_idx;
-#ifdef PRINT_DEBUG2
-            printf(" (%d, %d), %d \n", di.span[0], di.span[1], di.ctrl_idx);
-#endif
 #ifdef PRINT_DEBUG
-                //if ( ijk[0] < 5 && ijk[1] < 5 )
+                // TODO: This should probably be a TRACE (verbose>=3) instead of PRINT_DEBUG
                 {
                     if (mfa_data.dom_dim > 1)
-                        fprintf(stderr, "        span_0->%d  span_1->%d di.ctrl_idx start: %zu \n", di.span[0], di.span[1], start_ctrl_idx );
+                        fmt::print(stderr, "        span_0->{}  span_1->{} di.ctrl_idx start: {} \n", di.span[0], di.span[1], start_ctrl_idx );
                     else
-                        fprintf(stderr, "        span_0->%d  di.ctrl_idx start: %zu \n", di.span[0], start_ctrl_idx );
+                        fmt::print(stderr, "        span_0->{}  di.ctrl_idx start: {} \n", di.span[0], start_ctrl_idx );
                 }
 #endif
             //int counter_patch = 0; // these to understand how we advance in serial
@@ -1530,10 +1531,10 @@ namespace mfa
                 //if ( ijk[0] < 5 && ijk[1] < 5 )
                 {
                     if (mfa_data.dom_dim > 1)
-                        fprintf(stderr, "          di.ctrl_index=%d  vol_it:%zu i0->%d  i1->%d ctrl_pt: %f \n",  di.ctrl_idx,
+                        fmt::print(stderr, "          di.ctrl_index={}  vol_it:{} i0->{}  i1->{} ctrl_pt: {} \n",  di.ctrl_idx,
                             vol_iter.cur_iter(), vol_iter.idx_dim(0), vol_iter.idx_dim(1) ,di.ctrl_pt(last));
                     else
-                        fprintf(stderr, "          di.ctrl_index=%d  vol_it:%zu i0->%d  ctrl_pt: %f NN=%f\n",  di.ctrl_idx,
+                        fmt::print(stderr, "          di.ctrl_index={}  vol_it:{} i0->{}  ctrl_pt: {} NN={}\n",  di.ctrl_idx,
                                                     vol_iter.cur_iter(), vol_iter.idx_dim(0) ,di.ctrl_pt(last),
                                                     NN[0]( ijk(0) , vol_iter.idx_dim(0) + di.span[0] - mfa_data.p(0) )  );
                 }
@@ -1547,9 +1548,7 @@ namespace mfa
 #endif
 
                 di.temp_denom(0) += w * NN[0](ijk(0), vol_iter.idx_dim(0) + di.span[0] - mfa_data.p(0));
-#ifdef PRINT_DEBUG2
-                printf( "    %d %d N: %d %d %d \n", vol_iter.cur_iter(), di.ctrl_idx, 0, ijk(0), vol_iter.idx_dim(0) + di.span[0] - mfa_data.p(0) );
-#endif
+
                 vol_iter.incr_iter();                                           // must call near bottom of loop, but before checking for done span below
 
                 // for all dimensions except last, check if span is finished
@@ -1566,9 +1565,7 @@ namespace mfa
                         // compute point in next higher dimension and reset computation for current dim
                         // use prev_idx_dim because iterator was already incremented above
                         di.temp[k + 1]        += (NN[k + 1])(ijk(k + 1), vol_iter.prev_idx_dim(k + 1) + di.span[k + 1] - mfa_data.p(k + 1)) * di.temp[k];
-#ifdef PRINT_DEBUG2
-                        printf( "     %d next ctrl %d N: %d %d %d \n", vol_iter.cur_iter(), di.ctrl_idx, k + 1, ijk(k + 1), vol_iter.prev_idx_dim(k + 1) + di.span[k + 1] - mfa_data.p(k + 1) );
-#endif
+
                         di.temp_denom(k + 1)  += di.temp_denom(k) * NN[k + 1](ijk(k + 1), vol_iter.prev_idx_dim(k + 1) + di.span[k + 1] - mfa_data.p(k + 1));
                         di.temp_denom(k)       = 0.0;
                         di.temp[k].setZero();
@@ -1603,13 +1600,17 @@ namespace mfa
             {
                 if (derivs.size() != mfa_data.dom_dim)
                 {
-                    fprintf(stderr, "Error: size of derivatives vector is not the same as the number of domain dimensions\n");
-                    exit(0);
+                    throw MFAError(fmt::format("VolPt: size of derivatives vector ({}) is not the same as the number of domain dimensions ({})",
+                                            derivs.size(), mfa_data.dom_dim));
                 }
                 for (auto i = 0; i < mfa_data.dom_dim; i++)
+                {
                     if (derivs(i) > mfa_data.p(i))
-                        fprintf(stderr, "Warning: In dimension %d, trying to take derivative %d of an MFA with degree %d will result in 0. This may not be what you want",
+                    {
+                        fmt::print(stderr, "WARNING: In dimension {}, trying to take derivative {} of an MFA with degree {} will result in 0. This may not be what you want\n",
                                 i, derivs(i), mfa_data.p(i));
+                    }
+                }
             }
 
             di.Reset(mfa_data, derivs);
@@ -1705,11 +1706,11 @@ namespace mfa
             T*                          out_val = nullptr)
         {
 #ifdef MFA_TMESH
-cerr << "ERROR: Cannot use FastGrad with TMesh" << endl;
+fmt::print(stderr, "ERROR: Cannot use FastGrad with TMesh\n");
 exit(1);
 #endif
 #ifndef MFA_NO_WEIGHTS
-cerr << "ERROR: Must define MFA_NO_WEIGHTS to use FastGrad" << endl;
+fmt::print(stderr, "ERROR: Must define MFA_NO_WEIGHTS to use FastGrad\n");
 exit(1);
 #endif      
 
@@ -1846,11 +1847,11 @@ exit(1);
                 const TensorProduct<T>& tensor) const    // tensor product to use for decoding
         {
 #ifdef MFA_TMESH
-cerr << "ERROR: Cannot use FastVolPt with TMesh" << endl;
+fmt::print(stderr, "ERROR: Cannot use FastVolPt with TMesh\n");
 exit(1);
 #endif
 #ifndef MFA_NO_WEIGHTS
-cerr << "ERROR: Must define MFA_NO_WEIGHTS to use FastVolPt" << endl;
+fmt::print(stderr, "ERROR: Must define MFA_NO_WEIGHTS to use FastVolPt\n");
 exit(1);
 #endif
             // compute spans and basis functions for the given parameters
@@ -1953,12 +1954,13 @@ exit(1);
 
             if (verbose >= 2)
             {
-                fmt::print(" * Decoder: Dumping collocation matrix to {}\n", filename);
+                fmt::print(stderr, "DEBUG: Decoder: Dumping collocation matrix to {}\n", filename);
             }
 
             if (ps.is_structured())
             {
-                fmt::print("dumpCollocationMatrix is not yet supported for structured PointSets.\n");
+                fmt::print(stderr, "WARNING: dumpCollocationMatrix is not yet supported for structured PointSets.\n");
+                fmt::print(stderr, "         Skipping dumpCollocationMatrix.\n");
                 return;
             }
 

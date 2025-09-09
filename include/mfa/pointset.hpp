@@ -132,9 +132,9 @@ namespace mfa
         {
             if ( (mins_.size() != geom_dim()) || (mins_.size() != maxs_.size()) )
             {
-                cerr << "ERROR: Invalid bounds passed to PointSet" << endl;
-                cerr << "  mins: " << mins_.transpose() << endl;
-                cerr << "  maxs: " << maxs_.transpose() << endl;
+                fmt::print(stderr, "ERROR: Invalid bounds passed to PointSet\n");
+                fmt::print(stderr, "  mins: [{}]\n", fmt::join(mins_, " "));
+                fmt::print(stderr, "  maxs: [{}]\n", fmt::join(maxs_, " "));
                 exit(1);
             }
 
@@ -195,8 +195,7 @@ namespace mfa
         {
             if (!check_param_domain_agreement(*params_))
             {
-                cerr << "ERROR: Attempted to add mismatched Params to PointSet. Exiting." << endl;
-                exit(1);
+                throw MFAError("Attempted to add mismatched Params to PointSet");
             }
  
             params = params_;
@@ -238,8 +237,7 @@ namespace mfa
         {
             if (!is_structured())
             {
-                cerr << "ERROR: Cannot set grid parametrization to unstructured PointSet. Exiting." << endl;
-                exit(1);
+                throw MFAError("Cannot set grid parametrization to unstructured PointSet");
             }
 
             params->make_grid_params();
@@ -250,8 +248,7 @@ namespace mfa
         {
             if (!is_structured())
             {
-                cerr << "ERROR: Cannot set grid parametrization to unstructured PointSet. Exiting." << endl;
-                exit(1);
+                throw MFAError("Cannot set grid parametrization to unstructured PointSet");
             }
 
             params->make_grid_params(param_mins, param_maxs);
@@ -261,8 +258,7 @@ namespace mfa
         {
             if (!is_structured())
             {
-                cerr << "ERROR: Cannot set curve parametrization to unstructured PointSet. Exiting." << endl;
-                exit(1);
+                throw MFAError("Cannot set curve parametrization to unstructured PointSet");
             }
 
             params->make_curve_params(domain);
@@ -292,9 +288,9 @@ namespace mfa
             {
                 if (npts != ndom_pts_.prod())
                 {
-                    cerr << "ERROR: Invalid grid added to PointSet. Total points do not match." << endl;
-                    cerr << "  npts = " << npts << endl;
-                    cerr << "  ndom_pts = " << ndom_pts_ << endl;
+                    fmt::print(stderr, "ERROR: Invalid grid added to PointSet. Total points do not match.\n");
+                    fmt::print(stderr, "       npts = {}\n", npts);
+                    fmt::print(stderr, "       ndom_pts = [{}]\n", fmt::join(ndom_pts_, " "));
                     exit(1);
                 }
 
@@ -330,32 +326,29 @@ namespace mfa
             if (is_valid) return is_valid;
             else 
             {
-                cerr << "ERROR: PointSet initialized with incompatible data" << endl;
-                cerr << "  structured: " << boolalpha << is_structured() << endl;
-                cerr << "  dom_dim: " << dom_dim << ", geom_dim: " << geom_dim() << ",  pt_dim: " << pt_dim << endl;
-                cerr << "  npts: " << npts << endl;
-                cerr << "  ndom_pts: ";
-                for (size_t k=0; k < ndom_pts().size(); k++) 
-                    cerr << ndom_pts(k) << " ";
-                cerr << endl;
-                cerr << "  domain matrix dims: " << domain.rows() << " x " << domain.cols() << endl;
-
-                cerr << "  nvars: " << nvars() << endl;
-                cerr << "  model_dims:";
-                for (int k = 0; k < nvars() + 1; k++)
-                    cerr << mdims[k] << " ";
-                cerr << endl;
-                cerr << "  dim_mins:";
-                for (int k = 0; k < nvars(); k++)
-                    cerr << dim_mins[k] << " ";
-                cerr << endl;
-                cerr << "  dim_maxs:";
-                for (int k = 0; k < nvars(); k++)
-                    cerr << dim_maxs[k] << " ";
-                cerr << endl;
-                exit(1);
+                string err_message = 
+                    fmt::format("PointSet initialized with incompatible data\n"
+                                "       structured: {}\n"
+                                "       dom_dim: {}, geom_dim: {},  pt_dim: {}\n"
+                                "       npts: {}\n"
+                                "       ndom_pts: [{}]\n"
+                                "       domain matrix dims: {} x {}\n"
+                                "       nvars: {}\n"
+                                "       model_dims: [{}]\n"
+                                "       dim_mins: [{}]\n"
+                                "       dim_maxs: [{}]\n",
+                                is_structured(),
+                                dom_dim, geom_dim(), pt_dim,
+                                npts,
+                                fmt::join(ndom_pts(), " "),
+                                domain.rows(), domain.cols(),
+                                nvars(),
+                                fmt::join(mdims, " "),
+                                fmt::join(dim_mins, " "),
+                                fmt::join(dim_maxs, " "));
+                throw MFAError(err_message);
                 
-                return is_valid;
+                return is_valid;    // never reached since we throw above
             }
         }
 
@@ -372,25 +365,24 @@ namespace mfa
                 is_same = is_same && (ndom_pts() == ps.ndom_pts());
             }
 
-            if (is_same) return is_same;
-            else
+            if (!is_same)
             {
-                if (verbose)
+                if (verbose >= 2)
                 {
-                    cerr << "Pair of PointSets do not have matching layout" << endl;
-                    cerr << "  dom_dim    = " << dom_dim << ",\t" << ps.dom_dim << endl;
-                    cerr << "  pt_dim     = " << pt_dim << ",\t" << ps.pt_dim << endl;
-                    cerr << "  npts       = " << npts << ",\t" << ps.npts << endl;
-                    cerr << "  structured = " << boolalpha << is_structured() << ",\t" << ps.is_structured() << endl;
+                    fmt::print(stderr, "DEBUG: Pair of PointSets do not have matching layout\n");
+                    fmt::print(stderr, "       dom_dim    = {},\t{}\n", dom_dim, ps.dom_dim);
+                    fmt::print(stderr, "       pt_dim     = {},\t{}\n", pt_dim, ps.pt_dim);
+                    fmt::print(stderr, "       npts       = {},\t{}\n", npts, ps.npts);
+                    fmt::print(stderr, "       structured = {},\t{}\n", is_structured(), ps.is_structured());
                     if (is_structured() || ps.is_structured())
                     {
-                        cerr << "  ndom_pts: " << ndom_pts() << ps.ndom_pts() << endl;
+                        fmt::print(stderr, "       ndom_pts: [{}] [{}]\n", fmt::join(ndom_pts(), " "), fmt::join(ps.ndom_pts(), " "));
                     }
-                    cerr << "  model_dims = " << mdims << "\n" << ps.mdims << endl;
+                    fmt::print(stderr, "       model_dims = [{}] [{}]\n", fmt::join(mdims, " "), fmt::join(ps.mdims, " "));
                 }
-
-                return is_same;
             }
+
+            return is_same;
         }
 
         void abs_diff(
@@ -399,8 +391,7 @@ namespace mfa
         {
             if (!this->is_same_layout(other) || !this->is_same_layout(diff))
             {
-                cerr << "ERROR: Incompatible PointSets in PointSet::abs_diff" << endl;
-                exit(1);
+                throw MFAError("Incompatible PointSets in PointSet::abs_diff");
             }
 
 #ifdef MFA_TBB
@@ -519,8 +510,7 @@ namespace mfa
             {
                 if (!structured)
                 {
-                    cerr << "ERROR: No ijk values in PtIterator for unstructured input" << endl;
-                    exit(1);
+                    throw MFAError("No ijk values in PtIterator for unstructured input");
                 }
 
                 ijk_vec = vol_it.idx_dim();
@@ -530,8 +520,7 @@ namespace mfa
             {
                 if (!structured)
                 {
-                    cerr << "ERROR: No ijk values in PtIterator for unstructured input" << endl;
-                    exit(1);
+                    throw MFAError("No ijk values in PtIterator for unstructured input");
                 }
 
                 return vol_it.idx_dim(k);

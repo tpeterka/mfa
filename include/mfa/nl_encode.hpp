@@ -87,7 +87,7 @@ namespace mfa
                     mfa.ctrl_pts = old_ctrl_pts;
 
                     // debug
-                    cerr << "iteration=" << niter << " err=" << max_err / mfa.range_extent << " x=" << x.transpose() << endl;
+                    fmt::print(stderr, "iteration={} err={} x=[{}]\n", niter, max_err / mfa.range_extent, fmt::join(x.transpose(), " "));
 
                     return max_err;
                 }
