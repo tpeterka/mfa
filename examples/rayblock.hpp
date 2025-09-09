@@ -152,9 +152,7 @@ struct RayBlock : public Block<T>
             }
             else
             {
-                cerr << "ERROR: invalid state 1" << endl;
-                // cerr << "ia = " << ia << ", ir = " << ir << endl;
-                exit(1);
+                throw mfa::MFAError("invalid state 1 in get_box_intersections");
             }
         }
         else if (yl_int >= xl && yl_int <= xh)  // enter or exit bottom
@@ -163,7 +161,7 @@ struct RayBlock : public Block<T>
             {
                 if (sin(alpha) == 0)    // vertical line case (should have been handled above)
                 {
-                    cerr << "ERROR: invalid state 6" << endl;
+                    fmt::print(stderr, "WARNING: invalid state 6, this should not happen\n");
                     x0 = yl_int;
                     y0 = yl;
                     x1 = yh_int;
@@ -171,7 +169,7 @@ struct RayBlock : public Block<T>
                 }
                 else if (sin(alpha) == 0 && alpha > 0)     // opposite vertical line case (should have been handled above)
                 {
-                    cerr << "ERROR: invalid state 7" << endl;
+                    fmt::print(stderr, "WARNING: invalid state 7, this should not happen\n");
                     x0 = yh_int;
                     y0 = yh;
                     x1 = yl_int;
@@ -195,9 +193,7 @@ struct RayBlock : public Block<T>
                 }
                 else
                 {
-                    cerr << "ERROR: invalid state 2" << endl;
-                    // cerr << "ia = " << ia << ", ir = " << ir << endl;
-                    exit(1);
+                    throw mfa::MFAError("invalid state 2 in get_box_intersections");
                 }
             }
             else if (xh_int >= yl && xh_int <= yh)  // enter bottom, exit right
@@ -209,9 +205,7 @@ struct RayBlock : public Block<T>
             }
             else
             {
-                cerr << "ERROR: invalid state 3" << endl;
-                // cerr << "ia = " << ia << ", ir = " << ir << endl;
-                exit(1);
+                throw mfa::MFAError("invalid state 3 in get_box_intersections");
             }
         }
         else if (yh_int >= xl && yh_int <= xh)  // enter top (cannot be exit top b/c of cases handled previously)
@@ -225,9 +219,7 @@ struct RayBlock : public Block<T>
             }
             else
             {
-                cerr << "ERROR: invalid state 4" << endl;
-                // cerr << "ia = " << ia << ", ir = " << ir << endl;
-                exit(1);
+                throw mfa::MFAError("invalid state 4 in get_box_intersections");
             }
         }
         else
@@ -236,7 +228,6 @@ struct RayBlock : public Block<T>
             y0 = 0;
             x1 = 0;
             y1 = 0;
-            // cerr << "ia = " << ia << ", ir = " << ir << endl;
         }
     }
 
@@ -505,11 +496,11 @@ struct RayBlock : public Block<T>
         // Sanity checks for input
         if (ray_samples.size() != ray_dom_dim)
         {
-            throw mfa::MFAError(fmt::format("Incorrect dimension for ray_samples"));
+            throw mfa::MFAError(fmt::format("Incorrect dimension for ray_samples, ray_samples.size()={}, ray_dom_dim={}", ray_samples.size(), ray_dom_dim));
         }
         if (ray_nctrl.size() != ray_dom_dim)
         {
-            throw mfa::MFAError(fmt::format("Incorrect dimension for ray_nctrl"));
+            throw mfa::MFAError(fmt::format("Incorrect dimension for ray_nctrl, ray_nctrl.size()={}, ray_dom_dim={}", ray_nctrl.size(), ray_dom_dim));
         }
         for (int i = 0; i < ray_dom_dim; i++)
         {
@@ -565,11 +556,11 @@ struct RayBlock : public Block<T>
         ray_mfa->RayEncode(0, *ray_input);
 
         // // // --------- Decode and compute errors --------- //
-        // fmt::print("Computing errors on uniform grid...\n");
+        // fmt::print(stderr, "Computing errors on uniform grid...\n");
         // mfa::PointSet<T>* unused = nullptr;
         // analytical_ray_error_field(cp, ray_mfa, ndom_pts, "sine", args, unused, ray_approx, ray_errs);
         // delete unused;
-        // fmt::print("done.\n");
+        // fmt::print(stderr, "done.\n");
     }
 
     // Convert (t, rho, theta) to (x, y) and return true if the x,y coords are in the original domain
@@ -577,7 +568,7 @@ struct RayBlock : public Block<T>
     {
         if (r_lim == 0)
         {
-            throw mfa::MFAError("ERROR: r_lim=0 in RayBlock::radon2cart()\nExiting.\n");
+            throw mfa::MFAError("r_lim=0 in RayBlock::radon2cart()");
         }
 
         if (radon_coords.size() == 3) return radon2cart2d(radon_coords, cart_coords);
@@ -640,9 +631,9 @@ struct RayBlock : public Block<T>
         ray_stats.init(ray_input);
 
         // Free any existing memory at PointSet pointers
-        if (exact_pts) cerr << "Warning: Overwriting \'exact_pts\' pointset in analytical_ray_error_field()" << endl;
-        if (approx_pts) cerr << "Warning: Overwriting \'approx_pts\' pointset in analytical_ray_error_field()" << endl;
-        if (error_pts) cerr << "Warning: Overwriting \'error_pts\' pointset in analytical_ray_error_field()" << endl;
+        if (exact_pts) fmt::print(stderr, "WARNING: Overwriting exact_pts pointset in analytical_ray_error_field()\n");
+        if (approx_pts) fmt::print(stderr, "WARNING: Overwriting approx_pts pointset in analytical_ray_error_field()\n");
+        if (error_pts) fmt::print(stderr, "WARNING: Overwriting error_pts pointset in analytical_ray_error_field()\n");
         delete exact_pts;
         delete approx_pts;
         delete error_pts;
@@ -715,7 +706,7 @@ struct RayBlock : public Block<T>
     {
         if (ray_approx)
         {
-            cerr << "WARNING: Overwriting \"ray_approx\" pointset in RayBlock::decode_ray_block" << endl;
+            fmt::print(stderr, "WARNING: Overwriting ray_approx pointset in RayBlock::decode_ray_block()\n");
             delete ray_approx;
         }
         ray_approx = new mfa::PointSet<T>(ray_input->params, ray_input->model_dims());  // Set decode params from ray_input params
@@ -738,13 +729,13 @@ struct RayBlock : public Block<T>
         hz *= recipNorm;
 
         // phi = stableArcTan(1.0, abs(hz), sqrt(1 - hz*hz));
-        // cerr << "phi1: " << phi << endl;
+        // fmt::print(stderr, "phi1: {}\n", phi);
         phi = atan2(-hz, sqrt(1 - hz*hz)); // TODO check this  
-        // cerr << "phi2: " << phi << endl; 
+        // fmt::print(stderr, "phi2: {}\n", phi);
 
         if (phi < 0)
         {
-            // cerr << "adjusting phi" << endl;
+            // fmt::print(stderr, "adjusting phi\n");
             phi += pi;
         }
 
@@ -752,7 +743,7 @@ struct RayBlock : public Block<T>
         theta = atan2(hy, hx);
         if (theta < 0)
         {
-            // cerr << "adjusting theta" << endl;
+            // fmt::print(stderr, "adjusting theta\n");
             theta += pi;
             phi = pi - phi;
         }
@@ -764,8 +755,8 @@ struct RayBlock : public Block<T>
         T py = a(1) - hDotA*hy;
         T pz = a(2) - hDotA*hz;
 
-        // cerr << "p: " << px << " " << py << " " << pz << endl;
-        // cerr << "p dot h: " << px*hx + py*hy + pz*hz << endl;
+        // fmt::print(stderr, "p: {} {} {}\n", px, py, pz);
+        // fmt::print(stderr, "p dot h: {}\n", px*hx + py*hy + pz*hz);
 
         // The vector p = (px, py, pz) is defined such that
         // p = rho*s0 + nu*s1 + 0*s2
@@ -806,8 +797,6 @@ struct RayBlock : public Block<T>
 
         if (abs(SP) > 1e-12)  // solve system (II) above
         {
-            // cerr << "system I" << endl;
-            
             rho = (CT*px + ST*py) / SP;
             nu = (-ST*px + CT*py);
          
@@ -828,7 +817,6 @@ struct RayBlock : public Block<T>
         }
         // else            // solve system (II) above
         // {
-        //     cerr << "system II" << endl;
         //     rho = -ST*py + CT*pz/CP;
         //     nu  =  CT*py + ST*pz/CP;
         // }   
@@ -967,8 +955,8 @@ struct RayBlock : public Block<T>
 
         // T temp1 = sqrt( (((a-b)+c)*u) / ((a+(b+c))*((a-c)+b)) );
         // T temp2 = atan(temp1);
-        // cerr << "temp1: " << temp1 << endl;
-        // cerr << "temp2: " << temp2 << endl;
+        // fmt::print(stderr, "temp1: {}\n", temp1);
+        // fmt::print(stderr, "temp2: {}\n", temp2);
 
         return 2*atan(sqrt( (((a-b)+c)*u) / ((a+(b+c))*((a-c)+b)) ));
     }
@@ -1007,7 +995,7 @@ struct RayBlock : public Block<T>
         T phi = 0;
         dualCoords3d(a, b, rho, nu, theta, phi);
 
-        // cerr << "phi in integrate_ray: " << phi << endl;
+        // fmt::print(stderr, "phi in integrate_ray: {}\n", phi);
 
         // T a_x = a(0);
         // T a_y = a(1);
@@ -1016,33 +1004,32 @@ struct RayBlock : public Block<T>
         T u0 = 0, u1 = 0;
         T length = 2*r_lim;
 
-        // cerr << "-----------------------" << endl;
         if (phi > 0.001 && phi < 3.14)
         {
             u0 = (a(2) - rho*cos(phi)) / (-2*r_lim*sin(phi)) + 0.5;
             u1 = (b(2) - rho*cos(phi)) / (-2*r_lim*sin(phi)) + 0.5;
-            // cerr << "case1" << endl;
+            // fmt::print(stderr, "TRACE: case 1\n");
         }
         else if (theta > 0.001 && theta < 3.14)
         {
             u0 = (a(1) - rho*sin(theta)*sin(phi) - nu*cos(theta)) / (2*r_lim*sin(theta)*cos(phi)) + 0.5;
             u1 = (b(1) - rho*sin(theta)*sin(phi) - nu*cos(theta)) / (2*r_lim*sin(theta)*cos(phi)) + 0.5;
-            // cerr << "case2" << endl;
+            // fmt::print(stderr, "TRACE: case 2\n");
         }
         else
         {
             u0 = (a(0) - rho*cos(theta)*sin(phi) + nu*sin(theta)) / (2*r_lim*cos(theta)*cos(phi)) + 0.5;
             u1 = (b(0) - rho*cos(theta)*sin(phi) + nu*sin(theta)) / (2*r_lim*cos(theta)*cos(phi)) + 0.5;
-            // cerr << "case3" << endl;
+            // fmt::print(stderr, "TRACE: case 3\n");
         }
 
-        // cerr << mfa::print_vec(a) << endl;
-        // cerr << mfa::print_vec(b) << endl;
-        // cerr << "b-a norm: " << mfa::print_vec((b-a).normalized()) << endl;
-        // cerr << "s2:       " << cos(theta)*cos(phi) << " " << sin(theta)*cos(phi) << " " << -1*sin(phi) << endl;
-        // cerr << rho << " " << nu << " " << theta << " " << phi << endl;
-        // cerr << u0 << " " << u1 << endl;
-        // cerr << "-----------------------" << endl;
+        // fmt::print(stderr, "{}", mfa::print_vec(a));
+        // fmt::print(stderr, "{}", mfa::print_vec(b));
+        // fmt::print(stderr, "b-a norm: {}\n", mfa::print_vec((b-a).normalized()));
+        // fmt::print(stderr, "s2:       {} {} {}\n", cos(theta)*cos(phi), sin(theta)*cos(phi), -1*sin(phi));
+        // fmt::print(stderr, "{} {} {} {}\n", rho, nu, theta, phi);
+        // fmt::print(stderr, "{} {}\n", u0, u1);   
+        // fmt::print(stderr, "-----------------------\n");
         
         // Scalar valued path integrals do not have an orientation, so we always
         // want the limits of integration to go from smaller to larger.
@@ -1052,16 +1039,6 @@ struct RayBlock : public Block<T>
             u1 = u0;
             u0 = temp;
         }
-
-        // if (verbose)
-        // {
-        //     cerr << "RAY: " << mfa::print_vec(a) << " ---- " << mfa::print_vec(b) << endl;
-        //     cerr << "|  m: " << ((a_x==b_x) ? "inf" : to_string((b_y-a_y)/(b_x-a_x)).c_str()) << endl;
-        //     cerr << "|  alpha:  " << alpha << ",   rho: " << rho << endl;
-        //     cerr << "|  length: " << length << endl;
-        //     cerr << "|  u0: " << u0 << ",  u1: " << u1 << endl;
-        //     cerr << "+---------------------------------------\n" << endl;
-        // }
 
         VectorX<T> output(1); // todo: this is hardcoded for the first (scalar) variable only
         VectorX<T> params(ray_dom_dim);
@@ -1082,7 +1059,7 @@ struct RayBlock : public Block<T>
         params(3) = params(3) > 1 ? 1 : params(3);
         params(4) = params(4) > 1 ? 1 : params(4); 
 
-        // cerr << "params: " << mfa::print_vec(params) << endl;
+        // fmt::print(stderr, "params: {}\n", mfa::print_vec(params));
 
         ray_mfa->Integrate1D(0, 0, u0, u1, params, output);
          
@@ -1101,8 +1078,7 @@ struct RayBlock : public Block<T>
             {
                 if (params(i) < -1e-8)
                 {
-                    cerr << "Out of bounds. Dimension " << i << ". Value = " << params(i) << endl;
-                    throw mfa::MFAError("Out of bounds parameter");
+                    throw mfa::MFAError(fmt::format("Out of bounds parameter. Dimension {}, Value = {}", i, params(i)));
                 }
                 params(i) = 0;
             }
@@ -1110,8 +1086,7 @@ struct RayBlock : public Block<T>
             {
                 if (params(i) > 1 + 1e-8)
                 {
-                    cerr << "Out of bounds. Dimension " << i << ". Value = " << params(i) << endl;
-                    throw mfa::MFAError("Out of bounds parameter");
+                    throw mfa::MFAError(fmt::format("Out of bounds parameter. Dimension {}, Value = {}", i, params(i)));
                 }
                 params(i) = 1;
             }
@@ -1167,12 +1142,12 @@ struct RayBlock : public Block<T>
 
         if (verbose)
         {
-            cerr << "RAY: " << mfa::print_vec(a) << " ---- " << mfa::print_vec(b) << endl;
-            cerr << "|  m: " << ((a_x==b_x) ? "inf" : to_string((b_y-a_y)/(b_x-a_x)).c_str()) << endl;
-            cerr << "|  alpha:  " << alpha << ",   rho: " << rho << endl;
-            cerr << "|  length: " << length << endl;
-            cerr << "|  u0: " << u0 << ",  u1: " << u1 << endl;
-            cerr << "+---------------------------------------\n" << endl;
+            fmt::print(stderr, "RAY: {} ---- {}\n", mfa::print_vec(a), mfa::print_vec(b));
+            fmt::print(stderr, "|  m: {}\n", (a_x==b_x) ? "inf" : to_string((b_y-a_y)/(b_x-a_x)).c_str());
+            fmt::print(stderr, "|  alpha:  {},   rho: {}\n", alpha, rho);
+            fmt::print(stderr, "|  length: {}\n", length);
+            fmt::print(stderr, "|  u0: {},  u1: {}\n", u0, u1);
+            fmt::print(stderr, "+---------------------------------------\n\n");
         }
 
         VectorX<T> output(1); // todo: this is hardcoded for the first (scalar) variable only
@@ -1196,7 +1171,7 @@ struct RayBlock : public Block<T>
         const   DomainArgs& d_args, 
                 bool discrete) const
     {
-        fmt::print("Computing sinogram\n");
+        fmt::print(stderr, "Computing sinogram\n");
         // // Initialize decoder
         // mfa::Decoder<T> integralDecoder(ray_mfa->var(0), 0);  // no verbose output for single points
 
@@ -1288,7 +1263,7 @@ struct RayBlock : public Block<T>
             seed = dev();
         }
 
-        fmt::print("Starting loop to converge discrete integration ({} integrals per iteration)\n", num_ints);
+        fmt::print(stderr, "Starting loop to converge discrete integration ({} integrals per iteration)\n", num_ints);
 
         bool converged = false;
         int itCount = 0;
@@ -1300,8 +1275,8 @@ struct RayBlock : public Block<T>
             // Update resolution of trapzoid rule
             nSamples *= scaleFactor;
 
-            fmt::print("Iteration {}: \n", itCount);
-            fmt::print("  nSamples: {}\n", nSamples);
+            fmt::print(stderr, "Iteration {}: \n", itCount);
+            fmt::print(stderr, "  nSamples: {}\n", nSamples);
 
             // Re-initizalize Stats
             newStats.init(input);
@@ -1341,13 +1316,13 @@ struct RayBlock : public Block<T>
                 relStatsVec = (newStatsVec - oldStatsVec).cwiseAbs().array() / oldStatsVec.cwiseAbs().array();
 
                 double stddev = (relStatsVec.array()-relStatsVec.mean()).square().sum() / (num_ints-1);
-                fmt::print("  Min change: {}\n", relStatsVec.minCoeff());
-                fmt::print("  Max change: {}\n", relStatsVec.maxCoeff());
-                fmt::print("  Avg change: {}\n", relStatsVec.mean());
-                fmt::print("  Std dev:    {}\n", stddev);
+                fmt::print(stderr, "  Min change: {}\n", relStatsVec.minCoeff());
+                fmt::print(stderr, "  Max change: {}\n", relStatsVec.maxCoeff());
+                fmt::print(stderr, "  Avg change: {}\n", relStatsVec.mean());
+                fmt::print(stderr, "  Std dev:    {}\n", stddev);
                 if ((relStatsVec.array() < 0.05).all() && relStatsVec.mean() < 1e-6)
                 {
-                    fmt::print("****Breaking loop\n");
+                    fmt::print(stderr, "****Breaking loop\n");
                     converged = true;
                 }
             }
@@ -1359,11 +1334,11 @@ struct RayBlock : public Block<T>
 
         if (!converged) 
         {
-            fmt::print("WARNING: Discrete integration did not converge after {} iterations\n", maxIterations);
+            fmt::print(stderr, "WARNING: Discrete integration did not converge after {} iterations\n", maxIterations);
             return -1;
         }
 
-        fmt::print("Discrete integration converged with {} samples after {} iterations\n", nSamples, itCount);
+        fmt::print(stderr, "Discrete integration converged with {} samples after {} iterations\n", nSamples, itCount);
 
         return nSamples;
     }
@@ -1376,9 +1351,9 @@ struct RayBlock : public Block<T>
         bool    discrete,
         int     seed)       // require seed for reproducibility
     {
-        fmt::print("Testing integration speed\n", num_ints);
-        fmt::print("  Number of integrals: {}\n", num_ints);
-        fmt::print("  Computation method: {}\n", discrete ? "discrete" : "spline");
+        fmt::print(stderr, "Testing integration speed\n", num_ints);
+        fmt::print(stderr, "  Number of integrals: {}\n", num_ints);
+        fmt::print(stderr, "  Computation method: {}\n", discrete ? "discrete" : "spline");
 
         // Error summary
         mfa::Stats<T> stats(true);
@@ -1418,7 +1393,7 @@ struct RayBlock : public Block<T>
             stats.update(0, result);
         }
         auto endTime = std::chrono::steady_clock::now();
-        fmt::print("  Computation Time: {} ms\n", chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime).count());
+        fmt::print(stderr, "  Computation Time: {} ms\n", chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime).count());
     }
 
     void integral_error(
@@ -1434,10 +1409,10 @@ struct RayBlock : public Block<T>
             discreteRes = get_discrete_resolution(cp, d_args, num_ints, seed);
         }
 
-        fmt::print("Computing errors random line integrals\n", num_ints);
-        fmt::print("  Number of integrals: {}\n", num_ints);
-        fmt::print("  Computation method: {}\n", discrete ? "discrete" : "spline");
-        fmt::print("  Ground Truth Resolution: {}\n", discreteRes);
+        fmt::print(stderr, "Computing errors random line integrals\n", num_ints);
+        fmt::print(stderr, "  Number of integrals: {}\n", num_ints);
+        fmt::print(stderr, "  Computation method: {}\n", discrete ? "discrete" : "spline");
+        fmt::print(stderr, "  Ground Truth Resolution: {}\n", discreteRes);
 
         // Error summary
         mfa::Stats<T> stats(true);
@@ -1483,7 +1458,7 @@ struct RayBlock : public Block<T>
             stats.update(0, err);
         }
 
-        fmt::print("  Done.\n", num_ints);
+        fmt::print(stderr, "  Done.\n", num_ints);
         stats.set_style(mfa::PrintStyle::Side);
         stats.print_var(0);
         stats.write_all_vars("li_errors");
@@ -1538,7 +1513,7 @@ struct RayBlock : public Block<T>
             stats.update(0, err);
         }
 
-        fmt::print("\nComputed {} random line integrals.\n", num_ints);
+        fmt::print(stderr, "\nComputed {} random line integrals.\n", num_ints);
         stats.set_style(mfa::PrintStyle::Side);
         stats.print_var(0);
         stats.write_all_vars("li_errors");
@@ -1556,53 +1531,53 @@ struct RayBlock : public Block<T>
         }
         // print number of control points per dimension only if there is one tensor
         if (model.ntensors() == 1)
-            cerr << "# output ctrl pts     = [ " << tot_nctrl_pts_dim.transpose() << " ]" << endl;
-        cerr << "tot # output ctrl pts = " << tot_nctrl_pts << endl;
+            fmt::print(stderr, "# output ctrl pts     = [{}]\n", fmt::join(tot_nctrl_pts_dim, " "));
+        fmt::print(stderr, "tot # output ctrl pts = {}\n", tot_nctrl_pts);
 
-        cerr << "# output knots        = [ ";
+        fmt::print(stderr, "# output knots        = [ ");
         for (auto j = 0 ; j < model.tmesh.all_knots.size(); j++)
         {
-            cerr << model.tmesh.all_knots[j].size() << " ";
+            fmt::print(stderr, "{} ", model.tmesh.all_knots[j].size());
         }
-        cerr << "]" << endl;
+        fmt::print(stderr, "]\n");
     }
 
     void print_ray_model(const diy::Master::ProxyWithLink& cp)    // error was computed
     {
         if (!ray_mfa)
         {
-            fmt::print("gid = {}: No Ray MFA found.\n", cp.gid());
+            fmt::print(stderr, "gid = {}: No Ray MFA found.\n", cp.gid());
             return;
         }
 
-        fmt::print("gid = {}\n", cp.gid());
+        fmt::print(stderr, "gid = {}\n", cp.gid());
 
         // geometry
-        fmt::print("---------------- geometry model ----------------\n");
+        fmt::print(stderr, "---------------- geometry model ----------------\n");
         print_knots_ctrl(ray_mfa->geom());
-        fmt::print("------------------------------------------------\n");
+        fmt::print(stderr, "------------------------------------------------\n");
 
         // science variables
-        fmt::print("\n----------- science variable models ------------\n");
+        fmt::print(stderr, "\n----------- science variable models ------------\n");
         for (int i = 0; i < ray_mfa->nvars(); i++)
         {
-            fmt::print("-------------------- var {} --------------------\n", i);
+            fmt::print(stderr, "-------------------- var {} --------------------\n", i);
             print_knots_ctrl(ray_mfa->var(i));
-            fmt::print("------------------------------------------------\n");
+            fmt::print(stderr, "------------------------------------------------\n");
             if (ray_stats.initialized)
             {
                 ray_stats.print_var(i);
-                fmt::print("------------------------------------------------\n");
+                fmt::print(stderr, "------------------------------------------------\n");
             }
         }
         
         if (ray_stats.initialized)
         {
             ray_stats.print_max();
-            fmt::print("------------------------------------------------\n");
+            fmt::print(stderr, "------------------------------------------------\n");
         }
-        fmt::print("# input points        = {}\n", ray_input->npts);
-        fmt::print("compression ratio     = {:.2f}\n", compute_ray_compression());
+        fmt::print(stderr, "# input points        = {}\n", ray_input->npts);
+        fmt::print(stderr, "compression ratio     = {:.2f}\n", compute_ray_compression());
     }
 
     // compute compression ratio

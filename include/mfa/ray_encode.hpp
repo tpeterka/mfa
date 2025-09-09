@@ -64,8 +64,7 @@ namespace mfa
 
             if (mfa_data.tmesh.tensor_prods.size() != 1)
             {
-                cerr << "ERROR: RayEncoder::encode() only implemented for single tensor tmesh" << endl;
-                exit(0);
+                throw MFAError("RayEncoder::encode() only implemented for single tensor tmesh");
             }
 
             // Basic definitions
@@ -114,9 +113,9 @@ namespace mfa
                 int nc = t.nctrl_pts(dim);
                 nout_pts(dim) = nc;
 
-                if (verbose)
+                if (verbose >= 2)
                 {
-                    cerr << "  encoding dimension " << dim << endl;
+                    fmt::print(stderr, "DEBUG: Encoding dimension {}\n", dim);
                 }
 
                 // Initialize matrix of basis functions and differentiated basis functions
