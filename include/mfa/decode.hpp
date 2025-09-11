@@ -305,7 +305,7 @@ namespace mfa
                 if (i > 0)
                 {
                     cs[i] = cs[i - 1] * mfa_data.tmesh.tensor_prods[0].nctrl_pts[i - 1];
-                    ds[i] = ds[i-1] * q[i];
+                    ds[i] = ds[i - 1] * q[i - 1];
                 }
             }
             ct.resize(tot_iters, mfa_data.p.size());
