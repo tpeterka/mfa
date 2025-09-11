@@ -848,7 +848,7 @@ namespace mfa
                 PointSet<T>&        output,
                 const VectorXi&     derivs = VectorXi()) const
         {
-            DecodeGeom(output, derivs);
+            DecodeGeom(output);         // Don't differentiate geometry
             for (int i = 0; i < nvars(); i++)
             {
                 DecodeVar(i, output, derivs);
@@ -882,7 +882,7 @@ namespace mfa
             VectorX<T> temp_out = out_point.head(geom_dim());
 
             // Decode geometry
-            DecodeGeom(param, temp_out, derivs);
+            DecodeGeom(param, temp_out);        // Don't differentiate geometry
             out_point.head(geom_dim()) = temp_out;
 
             // Decode variables
