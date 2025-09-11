@@ -96,9 +96,15 @@ namespace mfa
         }
     };
 
+    // forward declaration
+    template <typename U>
+    class MFA;
+
     template <typename T>                       // float or double
     struct MFA_Data
     {
+        friend class mfa::MFA<T>;
+
         int                       dom_dim;       // number of domain dimensions
         int                       min_dim;       // starting coordinate of this model in full-dimensional data
         int                       max_dim;       // ending coordinate of this model in full-dimensional data
@@ -1819,6 +1825,71 @@ namespace mfa
                 }
             }
         }
+
+        void computeDerivCtrlPts(const MFA_Data<T>& model, int dim, T extent)
+        {
+            MatrixX<T>& ctrl_pts = this->tmesh.tensor_prods[0].ctrl_pts;
+            const MatrixX<T>& other_ctrl_pts = model.tmesh.tensor_prods[0].ctrl_pts;
+            const VectorXi& other_nctrl = model.tmesh.tensor_prods[0].nctrl_pts;
+            const vector<vector<T>>& other_knots = model.tmesh.all_knots;
+            
+            // Shape of control point tensor for differentiated model
+            VectorXi d_nctrl = other_nctrl;
+            d_nctrl(dim) -= 1;
+
+            if (this->tmesh.tensor_prods[0].nctrl_pts != d_nctrl)
+            {
+                throw MFAError(fmt::format("computeDerivCtrlPts(): nctrl_pts mismatch, deriv=[{}] original=[{}]",
+                        fmt::join(this->tmesh.tensor_prods[0].nctrl_pts.transpose(), " "),
+                        fmt::join(d_nctrl.transpose(), " ")));
+            }
+            if (this->p(dim) != model.p(dim)-1)
+            {
+                throw MFAError(fmt::format("computeDerivCtrlPts(): deriv degree should be p-1, deriv={} original={}",
+                        this->p(dim), model.p(dim)-1));
+            }
+            if (this->tmesh.all_knots[dim].size() != model.tmesh.all_knots[dim].size() - 2)
+            {
+                throw MFAError(fmt::format("computeDerivCtrlPts(): knot vector size mismatch, deriv={} original={}",
+                        this->tmesh.all_knots[dim].size(), model.tmesh.all_knots[dim].size()-2));
+            }
+
+            T degree = model.p(dim);
+            T scale1 = degree/extent;
+
+            // Input tensor is the size of the original model
+            // Output tensor is the size of the differentiated model
+            //   The output tensor has one less control point in the differentiation dimension
+            VolIterator vit_in(other_nctrl);
+            VolIterator vit_out(d_nctrl);
+            SliceIterator sit_in(vit_in, dim);
+            SliceIterator sit_out(vit_out, dim);
+
+            // Loop over all 1D arrays of control points in the differentiation dimension
+            for (; !sit_in.done(); sit_in.incr_iter(), sit_out.incr_iter())
+            {
+                CurveIterator cit_in(sit_in);
+                CurveIterator cit_out(sit_out);
+
+                // Loop over all control points in the 1D array
+                for (; !cit_out.done(); cit_in.incr_iter(), cit_out.incr_iter())
+                {
+                    int i = cit_in.cur_iter();          // index along current dim
+                    int idx1 = cit_in.cur_iter_full();  // control point index in full tensor
+                    int idx2 = idx1 + vit_in.ds_[dim];  // next control point along this dim
+                    int idx_out = cit_out.cur_iter_full(); // control point index in output tensor
+
+                    // Compute scale factor for non-uniform knot vectors
+                    T scale2 = other_knots[dim][i + degree + 1] - other_knots[dim][i + 1];
+
+                    // Compute derivative control point
+                    ctrl_pts.row(idx_out) = other_ctrl_pts.row(idx2) - other_ctrl_pts.row(idx1);
+                    ctrl_pts.row(idx_out) *= scale1 / scale2;
+
+                }
+            }
+        }
+
         void printDetails(int verbose_)
         {
             fmt::print(stderr, "    Dimension: {}\n", dim());

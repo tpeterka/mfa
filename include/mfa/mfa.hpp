@@ -1160,6 +1160,77 @@ namespace mfa
             }
         }
 
+        MFA<T>* getDerivativeModel(int dim, T extent) const
+        {
+            if (verbose > 0)
+            {
+                fmt::print(stderr, "MFA: Computing derivative model in direction {}\n", dim);
+            }
+
+            if (dim < 0 || dim >= dom_dim)
+            {
+                throw MFAError("Dimension out of range in MFA::getDerivativeModel()");
+            }
+
+            // Create new MFA
+            MFA<T>* deriv_mfa = new MFA<T>(dom_dim, verbose);
+
+            // Add matching geometry model
+            ModelInfo geom_mi = getModelInfo(*geometry);
+            deriv_mfa->AddGeometry(geom_mi);
+
+            // Copy geometry control points
+            deriv_mfa->geometry->tmesh.tensor_prods[0].ctrl_pts = geometry->tmesh.tensor_prods[0].ctrl_pts;
+
+            // Add variable models
+            for (int i = 0; i < nvars(); i++)
+            {
+                ModelInfo var_mi = getDerivativeModelInfo(var(i), dim);
+                deriv_mfa->AddVariable(var_mi);
+            }
+
+            // Compute derivative control points for variable models
+            for (int i = 0; i < nvars(); i++)
+            {
+                deriv_mfa->vars[i]->computeDerivCtrlPts(var(i), dim, extent);
+            }
+
+            return deriv_mfa;
+        }
+
+        // Create a ModelInfo with the same structure as the given model
+        // Does not work with nontrivial TMeshes
+        ModelInfo getModelInfo(const MFA_Data<T>& mfa_data) const
+        {
+            ModelInfo mi;
+            mi.dom_dim = mfa_data.dom_dim;
+            mi.var_dim = mfa_data.dim();
+            mi.p = mfa_data.p;
+            mi.nctrl_pts = mfa_data.tmesh.tensor_prods[0].nctrl_pts;
+
+            return mi;
+        }
+
+        ModelInfo getDerivativeModelInfo(const MFA_Data<T>& mfa_data, int dim) const
+        {
+            if (dim < 0 || dim >= dom_dim)
+            {
+                throw MFAError("Dimension out of range in MFA::getDerivativeModelInfo()");
+            }
+
+            ModelInfo mi = getModelInfo(mfa_data);
+
+            // Decrease degree and number of control points in direction dim
+            if (mi.p(dim) == 0)
+            {
+                throw MFAError("Cannot take derivative of model with degree 0 in specified direction");
+            }
+            mi.p(dim) -= 1;
+            mi.nctrl_pts(dim) -= 1;
+
+            return mi;
+        }
+
         void shiftModel(MFA_Data<T>& model, const VectorX<T>& shift)
         {
             if (shift.size() != model.dim()) throw MFAError("Dimension mismatch in MFA::shiftModel()");
