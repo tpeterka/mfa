@@ -2990,6 +2990,47 @@ namespace mfa
             }
             return true;
         }
+
+        void printDetails(int verbose_)
+        {
+            if (verbose_ >= 1)
+            {
+                if (tensor_prods.size() == 0)
+                {
+                    fmt::print("    *Empty control mesh*\n");
+                }
+                else if (tensor_prods.size() == 1)
+                {
+                    vector<int> knot_sizes(dom_dim_);
+                    transform(all_knots.begin(), all_knots.end(), knot_sizes.begin(), [](auto k){return k.size();});
+                    fmt::print(stderr, "    Number of control points: [{}]\n", fmt::join(tensor_prods[0].nctrl_pts, ","));
+                    fmt::print(stderr, "    Number of knots: [{}]\n", fmt::join(knot_sizes, " "));
+                }
+                else
+                {
+                    vector<int> knot_sizes(dom_dim_);
+                    transform(all_knots.begin(), all_knots.end(), knot_sizes.begin(), [](auto k){return k.size();});
+                    fmt::print(stderr, "    T-mesh details:\n");
+                    fmt::print(stderr, "      Size of all_knots: [{}]\n", fmt::join(knot_sizes, " "));
+                    fmt::print(stderr, "      Number of tensor products: {}\n", tensor_prods.size());
+                    if (verbose_ >= 2)
+                    {
+                        for (int i = 0; i < tensor_prods.size(); i++)
+                        {
+                            fmt::print(stderr, "      Tensor product {}:\n", i);
+                            fmt::print(stderr, "        Level: {}\n", tensor_prods[i].level);
+                            fmt::print(stderr, "        Number of control points: [{}]\n", fmt::join(tensor_prods[i].nctrl_pts, ","));
+                            if (verbose_ >= 3)
+                            {
+                                fmt::print(stderr, "        Knot mins: [{}]\n", fmt::join(tensor_prods[i].knot_mins, ","));
+                                fmt::print(stderr, "        Knot maxs: [{}]\n", fmt::join(tensor_prods[i].knot_maxs, ","));
+                                fmt::print(stderr, "        Encoding done: {}\n", tensor_prods[i].done);
+                            }
+                        }
+                    }
+                }
+            }
+        }
     };
 }
 

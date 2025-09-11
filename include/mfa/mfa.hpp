@@ -1264,6 +1264,33 @@ namespace mfa
             Decoder<T> decoder(*vars[i], verbose);
             decoder.dumpCollocationMatrix(*ps);
         }
+
+        void printDetails() const
+        {
+            printDetails(this->verbose);
+        }
+
+        void printDetails(int verbose_) const
+        {
+            fmt::print(stderr, "MFA Details:\n");
+            fmt::print(stderr, "  Domain dimension: {}\n", dom_dim);
+            fmt::print(stderr, "  Total point dimension: {}\n", pt_dim);
+            fmt::print(stderr, "  Number of variable models: {}\n", nvars());
+            fmt::print(stderr, "  Geometry model:\n");
+            if (geometry)
+                geometry->printDetails(verbose_);
+            else
+                fmt::print(stderr, "    <null>\n");
+
+            for (int i = 0; i < nvars(); i++)
+            {
+                fmt::print(stderr, "  Variable model {}:\n", i);
+                if (vars[i])
+                    vars[i]->printDetails(verbose_);
+                else
+                    fmt::print(stderr, "    <null>\n");
+            }
+        }
     };      // class MFA
 }       // namespace mfa
 

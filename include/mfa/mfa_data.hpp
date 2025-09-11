@@ -1819,6 +1819,22 @@ namespace mfa
                 }
             }
         }
+        void printDetails(int verbose_)
+        {
+            fmt::print(stderr, "    Dimension: {}\n", dim());
+
+            if (verbose_ > 0)
+            {
+                fmt::print(stderr, "    Degrees: [{}]\n", fmt::join(p.transpose(), " "));
+                tmesh.printDetails(verbose_);
+
+                if (verbose_ > 1)
+                {
+                    fmt::print(stderr, "    min_dim:  {}\n", min_dim);
+                    fmt::print(stderr, "    max_dim:  {}\n", max_dim);
+                }
+            }
+        }
     };
 }
 #endif
