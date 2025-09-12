@@ -43,10 +43,6 @@ void generate_data(mfa::PointSet<real_t>& input, const VectorX<real_t>& mins, co
     {
         throw mfa::MFAError("generate_data() only implemented for 2D domain");
     }
-    if (pt_dim != dom_dim + nvars)
-    {
-        throw mfa::MFAError("generate_data() only implemented for pt_dim = dom_dim + nvars");
-    }
 
     VectorX<real_t> p0 = mins;
     VectorX<real_t> p1 = maxs;
@@ -81,18 +77,68 @@ void generate_data(mfa::PointSet<real_t>& input, const VectorX<real_t>& mins, co
             int dmin = input.var_min(k);
             int vardim = input.var_dim(k);
 
-            val = sinc(dom_pt(0)) * sinc(dom_pt(1));
-            input.domain(j, dmin) = val;
+            for (int i = 0; i < vardim; i++)
+            {
+                val = (10 * (k+1)) * sinc(dom_pt(0)) * sinc(dom_pt(1)) + i;
+                input.domain(j, dmin + i) = val;
+            }
+            
         }  
     }
+}
+
+void testModels(int test_id, const mfa::MFA<real_t>& mfa, const mfa::MFA<real_t>& dmfa, const MatrixX<real_t>& test_pts, const VectorX<real_t>& extents, const VectorXi& derivs)
+{
+    int ntest_pts = test_pts.rows();
+    int dom_dim = mfa.dom_dim;
+    int pt_dim = mfa.pt_dim;
+    VectorX<real_t> test_pt(dom_dim);
+    VectorX<real_t> deriv1(pt_dim);
+    VectorX<real_t> deriv2(pt_dim);
+    VectorX<real_t> scale_vec(dom_dim);
+    for (int i = 0; i < dom_dim; i++)
+    {
+        scale_vec(i) = 1.0 / pow(extents(i), derivs(i));
+    }
+    real_t scale = scale_vec.prod();
+
+    for (int i = 0; i < ntest_pts; i++)
+    {
+        test_pt = test_pts.row(i);
+
+        mfa.Decode(test_pt, deriv1, derivs);                        // differentiate original model
+        deriv1.tail(pt_dim - dom_dim) *= scale;  // account for scaling of derivative
+        dmfa.Decode(test_pt, deriv2);                              // evaluate derivative model    
+
+        if ((deriv1 - deriv2).norm() > 1e-14)
+        {
+            fmt::print(stderr, "ERROR: Derivative model does not match differentiated original model. Test ID: {}\n", test_id);
+            fmt::print(stderr, "       test_pt = [{}]\n", fmt::join(test_pt, " "));
+            fmt::print(stderr, "       original model derivative = [{}]\n", fmt::join(deriv1, " "));
+            fmt::print(stderr, "       derivative model evaluation = [{}]\n", fmt::join(deriv2, " "));
+            fmt::print(stderr, "       difference = [{}]\n", fmt::join(deriv1 - deriv2, " "));
+            exit(1);
+        }
+        // else
+        // {
+        //     fmt::print(stderr, "Test ID: {}\n", test_id);
+        //     fmt::print(stderr, "       test_pt = [{}]\n", fmt::join(test_pt, " "));
+        //     fmt::print(stderr, "       original model derivative = [{}]\n", fmt::join(deriv1, " "));
+        //     fmt::print(stderr, "       derivative model evaluation = [{}]\n", fmt::join(deriv2, " "));
+        //     fmt::print(stderr, "       difference = [{}]\n", fmt::join(deriv1 - deriv2, " "));
+        // }
+    }
+
+    fmt::print(stderr, "Test {} passed\n", test_id);
+
+    return;
 }
 
 int main(int argc, char** argv)
 {
     // Problem setup
     int dom_dim = 2;
-    int pt_dim = 3;
-    int verbose = 1;
+    int verbose = 0;
     int degree = 3;
     VectorXi nctrl_pts(dom_dim);
     nctrl_pts << 20, 30;
@@ -102,27 +148,10 @@ int main(int argc, char** argv)
     VectorX<real_t> domain_mins(dom_dim), domain_maxs(dom_dim), extents(dom_dim);
     npts << 100, 150;
     domain_mins << -4 * M_PI, -4 * M_PI;
-    domain_maxs << 4 * M_PI, 4 * M_PI;
+    domain_maxs << 3 * M_PI, 3 * M_PI;
     extents = domain_maxs - domain_mins;
 
-    // Set up the structure of the MFA
-    mfa::MFA<real_t> mfa(dom_dim, verbose);
-    mfa.AddGeometry(dom_dim);
-    mfa.AddVariable(degree, nctrl_pts, pt_dim - dom_dim);
-
-    // Create the data set for modeling
-    mfa::PointSet<real_t> input(dom_dim, mfa.model_dims(), npts.prod(), npts);
-    generate_data(input, domain_mins, domain_maxs);
-    input.set_domain_params();
-
-    // Encode the data (solve for optimal control points)
-    mfa.FixedEncode(input, 0, false, false);
-
-    // Get the derivative model
-    int deriv_dim = 0;   // differentiate w.r.t. first domain dimension
-    mfa::MFA<real_t>* dmfa = mfa.getDerivativeModel(deriv_dim, extents(deriv_dim));
-
-    // Decode the derivative model and differentiate the original model at the same locations
+    // Define test locations
     int ntest_pts = 6;
     MatrixX<real_t> test_pts(ntest_pts, dom_dim);
     VectorX<real_t> test_pt(dom_dim);
@@ -132,29 +161,129 @@ int main(int argc, char** argv)
                 1, 1,
                 0.7, 0.34,
                 0.5, 0.99;
-    VectorX<real_t> deriv1(pt_dim);
-    VectorX<real_t> deriv2(pt_dim);
+
+    // --------------------------------------------------------
+    // First set of tests: 1 science variable, scalar-valued
+    // --------------------------------------------------------
+    mfa::MFA<real_t>* mfa = new mfa::MFA<real_t>(dom_dim, verbose);
+    mfa->AddGeometry(dom_dim);
+    mfa->AddVariable(degree, nctrl_pts, 1);
+
+    // Generate data and encode
+    mfa::PointSet<real_t>* input = new mfa::PointSet<real_t>(dom_dim, mfa->model_dims(), npts.prod(), npts);
+    generate_data(*input, domain_mins, domain_maxs);
+    input->set_domain_params();
+    mfa->FixedEncode(*input, 0, false, false);
+
+    // Get the derivative model
+    // differentiate w.r.t. first dimension
     VectorXi derivs = VectorXi::Zero(dom_dim);
-    derivs(deriv_dim) = 1;
+    derivs(0) = 1;
+    mfa::MFA<real_t>* dmfa = mfa->getDerivativeModel(0, extents(0));
 
-    for (int i = 0; i < ntest_pts; i++)
-    {
-        test_pt = test_pts.row(i);
-
-        mfa.Decode(test_pt, deriv1, derivs);                        // differentiate original model
-        deriv1.tail(pt_dim - dom_dim) *= 1.0 / extents(deriv_dim);  // account for scaling of derivative
-        dmfa->Decode(test_pt, deriv2);                              // evaluate derivative model    
-
-        if ((deriv1 - deriv2).norm() > 1e-14)
-        {
-            fmt::print(stderr, "ERROR: Derivative model does not match differentiated original model at test point {}\n", i);
-            fmt::print(stderr, "       test_pt = [{}]\n", fmt::join(test_pt, " "));
-            fmt::print(stderr, "       original model derivative = [{}]\n", fmt::join(deriv1, " "));
-            fmt::print(stderr, "       derivative model evaluation = [{}]\n", fmt::join(deriv2, " "));
-            fmt::print(stderr, "       difference = [{}]\n", fmt::join(deriv1 - deriv2, " "));
-            exit(1);
-        }
-    }
-
+    // Test that the two ways of differentiating give the same result
+    testModels(1, *mfa, *dmfa, test_pts, extents, derivs);
     delete dmfa;
+
+    // Differentiate w.r.t. second dimension
+    derivs = VectorXi::Zero(dom_dim);
+    derivs(1) = 1;
+    dmfa = mfa->getDerivativeModel(1, extents(1));
+    testModels(2, *mfa, *dmfa, test_pts, extents, derivs);
+    delete input;
+    delete mfa;
+    delete dmfa;
+
+    // --------------------------------------------------------
+    // Second set of tests: 3 science variables, some of which are vector-valued
+    // --------------------------------------------------------
+    mfa = new mfa::MFA<real_t>(dom_dim, verbose);
+    mfa->AddGeometry(dom_dim);
+    mfa->AddVariable(degree, nctrl_pts, 1);
+    mfa->AddVariable(degree, nctrl_pts, 2);
+    mfa->AddVariable(degree, nctrl_pts, 3);
+
+    input = new mfa::PointSet<real_t>(dom_dim, mfa->model_dims(), npts.prod(), npts); 
+    generate_data(*input, domain_mins, domain_maxs);
+    input->set_domain_params();
+    mfa->FixedEncode(*input, 0, false, false);
+
+    // Differentiate w.r.t. first dimension
+    derivs = VectorXi::Zero(dom_dim);
+    derivs(0) = 1;
+    dmfa = mfa->getDerivativeModel(0, extents(0));
+    testModels(3, *mfa, *dmfa, test_pts, extents, derivs);
+    delete dmfa;
+
+    // Differentiate w.r.t. second dimension
+    derivs = VectorXi::Zero(dom_dim);
+    derivs(1) = 1;
+    dmfa = mfa->getDerivativeModel(1, extents(1));
+    testModels(4, *mfa, *dmfa, test_pts, extents, derivs);
+    delete input;
+    delete mfa;
+    delete dmfa;
+
+    // --------------------------------------------------------
+    // Third set of tests: Differentiating multiple times
+    // --------------------------------------------------------
+    mfa = new mfa::MFA<real_t>(dom_dim, verbose);
+    mfa->AddGeometry(dom_dim);
+    mfa->AddVariable(degree, nctrl_pts, 2);
+
+    input = new mfa::PointSet<real_t>(dom_dim, mfa->model_dims(), npts.prod(), npts);
+    generate_data(*input, domain_mins, domain_maxs);
+    input->set_domain_params();
+    mfa->FixedEncode(*input, 0, false, false);
+
+    // Second-order derivative w.r.t. first dimension
+    derivs = VectorXi::Zero(dom_dim);
+    derivs(0) = 2;
+    mfa::MFA<real_t>* dmfa1 = mfa->getDerivativeModel(0, extents(0));
+    mfa::MFA<real_t>* dmfa2 = dmfa1->getDerivativeModel(0, extents(0));
+    testModels(5, *mfa, *dmfa2, test_pts, extents, derivs);
+    delete dmfa1;
+    delete dmfa2;
+
+    // Second-order derivative w.r.t. second dimension
+    derivs = VectorXi::Zero(dom_dim);
+    derivs(1) = 2;
+    dmfa1 = mfa->getDerivativeModel(1, extents(1));
+    dmfa2 = dmfa1->getDerivativeModel(1, extents(1));
+    testModels(6, *mfa, *dmfa2, test_pts, extents, derivs);
+    delete dmfa1;
+    delete dmfa2;
+
+    // Mixed second-order derivative
+    derivs = VectorXi::Zero(dom_dim);
+    derivs(0) = 1;
+    derivs(1) = 1;
+    dmfa1 = mfa->getDerivativeModel(0, extents(0));
+    dmfa2 = dmfa1->getDerivativeModel(1, extents(1));
+    testModels(7, *mfa, *dmfa2, test_pts, extents, derivs);
+    delete dmfa1;
+    delete dmfa2;
+
+    // Mixed second-order derivative, other order of differentiation
+    derivs = VectorXi::Zero(dom_dim);
+    derivs(0) = 1;
+    derivs(1) = 1;
+    dmfa1 = mfa->getDerivativeModel(1, extents(1));
+    dmfa2 = dmfa1->getDerivativeModel(0, extents(0));
+    testModels(8, *mfa, *dmfa2, test_pts, extents, derivs);
+    delete dmfa1;
+    delete dmfa2;
+
+    // Differentiating up to degree of the model
+    derivs = VectorXi::Zero(dom_dim);
+    derivs(1) = 3;
+    dmfa1 = mfa->getDerivativeModel(1, extents(1));
+    dmfa2 = dmfa1->getDerivativeModel(1, extents(1));
+    mfa::MFA<real_t>* dmfa3 = dmfa2->getDerivativeModel(1, extents(1));
+    testModels(9, *mfa, *dmfa3, test_pts, extents, derivs);
+    delete input;
+    delete mfa;
+    delete dmfa1;
+    delete dmfa2;
+    delete dmfa3;
 }
