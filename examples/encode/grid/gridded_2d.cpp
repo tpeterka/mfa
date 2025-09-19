@@ -47,7 +47,7 @@ int main(int argc, char** argv)
     int         geom_degree     = 1;        // degree for geometry (same for all dims)
     int         vars_degree     = 4;        // degree for science variables (same for all dims)
     int         geom_nctrl      = -1;       // input number of control points for geometry (same for all dims)
-    vector<int> vars_nctrl      = {11};     // initial # control points for all science variables (default same for all dims)
+    vector<int> vars_nctrl      = {-1};     // initial # control points for all science variables (default same for all dims)
     string      input           = "";       // input dataset
     string      infile          = "";       // input file name
     int         gridsize        = 0;       // custom grid size for decoding

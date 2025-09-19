@@ -451,7 +451,11 @@ using namespace std;
 
             if (!adaptive)
             {
-                vars_nctrl = {300, 600};
+                // If vars_nctrl was not set on command line, set to default values here
+                if (vars_nctrl.size() > 0 && vars_nctrl[0] < 0)
+                {
+                    vars_nctrl = {300, 600};
+                }
             }
         }
 
