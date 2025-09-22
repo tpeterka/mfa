@@ -1235,7 +1235,7 @@ namespace mfa
         {
             if (shift.size() != model.dim()) throw MFAError("Dimension mismatch in MFA::shiftModel()");
 
-            for (auto t : model.tmesh.tensor_prods)
+            for (auto& t : model.tmesh.tensor_prods)
             {
                 for (int i = 0; i < model.dim(); i++)
                 {
@@ -1246,7 +1246,10 @@ namespace mfa
 
         void shiftGeom(const VectorX<T>& shift)
         {
-            fmt::print("MFA: Shifting geometry model\n");
+            if (verbose)
+            {
+                fmt::print("MFA: Shifting geometry model\n");
+            }
 
             // todo: check geometry is initialized
             shiftModel(*geometry, shift);
@@ -1254,8 +1257,11 @@ namespace mfa
 
         void shiftVar(int i, const VectorX<T>& shift)
         {
-            fmt::print("MFA: Shifting variable model {}\n", i);
-
+            if (verbose)
+            {
+                fmt::print("MFA: Shifting variable model {}\n", i);
+            }
+           
             // todo: check variable is initialized
             if (i < 0 || i >= nvars())
             {
@@ -1266,7 +1272,7 @@ namespace mfa
                 throw MFAError(fmt::format("Attempted to deference null variable model (index {})", i));
             }
 
-            shiftModel(*var[i], shift);
+            shiftModel(*vars[i], shift);
         }
 
         // Helper function that takes a knot span with or without repeated knots and returns
