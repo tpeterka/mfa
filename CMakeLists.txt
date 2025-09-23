@@ -12,8 +12,9 @@ option                      (KOKKOS_INCLUDE_DIRS    "Path of include directories
 option                      (KOKKOS_LIBRARY "Kokkos library (optional)"                                                             )
 option                      (OPENMP_LIBRARY "OpenMP library if not found automatically (optional)"                                  )
 
-# C++11
-set                         (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++17")
+# C++17
+set                         (CMAKE_CXX_STANDARD 17)
+set                         (CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # Default to Release
 if                          (NOT CMAKE_BUILD_TYPE)
