@@ -1,5 +1,7 @@
-project                     (mfa)
 cmake_minimum_required      (VERSION 3.15)
+cmake_policy                (SET CMP0048 NEW) # Tell old versions of CMake to treat project version "correctly"
+
+project                     (mfa)
 
 option                      (wrapped_mpi    "MPI compiler wrapper requires no further MPI libs, true/false (default false)" OFF     )
 option                      (mfa_thread     "tbb, kokkos, sycl, or serial (default serial)"                                 serial  )
