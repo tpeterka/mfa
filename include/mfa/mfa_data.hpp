@@ -313,7 +313,6 @@ namespace mfa
 
         // Helper function for computing integrals of basis functions
         // Computes sum of all <degree>-basis functions at or past b_idx, evaluated at u
-
         T IntBasisFunsHelper(
                 int         cur_dim,
                 T           u,
@@ -356,6 +355,7 @@ namespace mfa
 
             // Where to start the summation of high-degree basis functions
             // Note that, because we handled special cases above, it must be that:
+            //          s-p <= r <= s
             //   span - degree <= basis_idx <= span
             // Thus, we always have:
             //   1 <= skip <= degree + 1
@@ -783,6 +783,21 @@ namespace mfa
 
                 N(row, span - p(cur_dim) + j) = OneBasisFun(cur_dim, u, loc_knots);
             }
+        }
+
+        // Computes the basis function with index b_idx at parameter value u in dimension cur_dim
+        // The basis function has support on knots [t_{b_idx}, ..., t_{b_idx+p+1}]
+        // (not compatible with tmesh)
+        T OneBasisFun(
+                int                    cur_dim,             // current dimension 
+                T                      u,                   // parameter value
+                int                    b_idx) const         // basis fxn index
+        {
+            vector<T> loc_knots(p(cur_dim) + 2);
+            for (auto i = 0; i < p(cur_dim) + 2; i++)
+                loc_knots[i] = tmesh.all_knots[cur_dim][b_idx + i];
+
+            return OneBasisFun(cur_dim, u, loc_knots);
         }
 
         // computes and returns one basis function value for a given parameter value and local knot vector

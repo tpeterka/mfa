@@ -9,6 +9,7 @@
 #ifndef _DECODE_HPP
 #define _DECODE_HPP
 
+#include    <set>
 #include    <mfa/mfa.hpp>
 #include    <mpi.h>     // for MPI_Wtime() only
 
@@ -554,13 +555,57 @@ namespace mfa
 
         void DefiniteIntegral(  const VectorX<T>&       a,          // start limit of integration (parameter)
                                 const VectorX<T>&       b,          // end limit of integration (parameter)
-                                VectorX<T>&             output)
+                                VectorX<T>&             output,
+                                set<int>                skipDims = set<int>(), // dimensions to skip (treat as subspace integral)
+                                bool                    fullDimensional = false)   // if true, do not auto-detect subspace integral
         {
             const TensorProduct<T>& tensor = mfa_data.tmesh.tensor_prods[0]; // TODO hard-coded
             assert(tensor.ctrl_pts.cols() == mfa_data.dim());
             assert(a.size() == b.size() && a.size() == dom_dim);
             assert(output.size() == mfa_data.dim());
+            assert((a.array() >= 0.0).all());
+            assert((a.array() <= 1.0).all());
+            assert((b.array() >= 0.0).all());
+            assert((b.array() <= 1.0).all());
 
+            // Determine if we are integrating a subspace
+            // DEFAULT: skip a dimension if a(dim) == b(dim)
+            if (fullDimensional)
+            {
+                if (verbose >= 3 && skipDims.size() > 0)
+                {
+                    fmt::print(stderr, "TRACE: DefiniteIntegral clearing non-trivial skipDims set\n");
+                }
+                skipDims.clear();
+            }
+            else  
+            {
+                // If skipDims was not provided, auto-detect which dimensions to skip
+                if (skipDims.size() == 0)
+                {
+                    for (int i = 0; i < dom_dim; i++)
+                    {
+                        if (a(i) == b(i))
+                            skipDims.insert(i);
+                    }
+                }
+            }
+            
+            if (verbose >= 2)
+            {
+                fmt::print(stderr, "DEBUG: DefiniteIntegral skipping dimensions: ");
+                if (skipDims.size() == 0)
+                {
+                    fmt::print(stderr, "NONE");
+                }
+                else
+                {
+                    for (auto d : skipDims)
+                        fmt::print(stderr, "{} ", d);
+                }
+                fmt::print(stderr, "\n");
+            }
+            
             int      local_pt_dim = mfa_data.dim();
             VectorXi spana(dom_dim);
             VectorXi spanb(dom_dim);
@@ -583,7 +628,14 @@ namespace mfa
 
                 for (int l = 0; l < dom_dim; l++)
                 {
-                    coeff *= mfa_data.IntBasisFun(l, ctrl_idxs(l), a(l), b(l), spana(l), spanb(l), bfi);                    
+                    if (skipDims.count(l) == 0)
+                    {
+                        coeff *= mfa_data.IntBasisFun(l, ctrl_idxs(l), a(l), b(l), spana(l), spanb(l), bfi);  
+                    }
+                    else
+                    {
+                        coeff *= mfa_data.OneBasisFun(l, a(l), ctrl_idxs(l));
+                    }
                 }
 
                 output += coeff * tensor.ctrl_pts.row(cp_it.cur_iter_full());

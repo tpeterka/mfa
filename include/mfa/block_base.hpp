@@ -55,8 +55,8 @@ struct BlockBase
     int                 verbose{2};             // block verbosity 
                                                 //   0 = warnings and errors only
                                                 //   1 = basic info
-                                                //   2 = detailed info
-                                                //   3 = debug
+                                                //   2 = debug
+                                                //   3 = trace
 
     // data sets
     mfa::PointSet<T>    *input;                 // input data
@@ -335,7 +335,18 @@ struct BlockBase
             mfa->DefiniteIntegral(k, output, lim_a, lim_b);
         }
 
-        T scale = (core_maxs - core_mins).prod();
+        T scale = 1;
+        for (int i = 0; i < dom_dim; i++)
+        {
+            // Rescale answer for physical space
+            // The scaling factor only depends on the dimensions we integrate over
+            if (lim_a(i) != lim_b(i))
+            {
+                scale *= core_maxs(i) - core_mins(i);
+            }
+        }
+
+        // T scale = (core_maxs - core_mins).prod();
         output *= scale;
     }
 
