@@ -142,7 +142,6 @@ set                         (libraries
                              ${KK_LIB} )
 
 
-
 if                          (mfa_build_examples)
     add_subdirectory        (examples)
 endif                       (mfa_build_examples)

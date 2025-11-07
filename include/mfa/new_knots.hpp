@@ -316,26 +316,6 @@ namespace mfa
             return true;
         }
 
-        // DEPRECATE
-//         // debug: vector of inserted knots sorted by linear index of span
-//         struct InsertedKnot
-//         {
-//             KnotIdx         span_idx;
-//             TensorIdx       parent_idx;
-//             vector<KnotIdx> knot_idx;
-//             vector<T>       knot_val;
-// 
-//             InsertedKnot(int dom_dim_)     { knot_idx.resize(dom_dim_); knot_val.resize(dom_dim_);  }
-//         };
-// 
-//         struct Compare
-//         {
-//             bool operator()(const InsertedKnot& lhs, const InsertedKnot& rhs) const
-//             {
-//                 return lhs.span_idx < rhs.span_idx;
-//             }
-//         };
-
         // computes error in knot spans and finds all new knots (in all dimensions at once) that should be inserted at one level
         // returns true if no change in knots; all tensors at the parent level are done
         bool AllErrorSpans(
@@ -410,9 +390,9 @@ namespace mfa
 
                 VolIterator span_iter(sub_npts, sub_starts, all_npts);
 
-#if 0            // debug: turn off TBB for reproducible results, fast but not reproducible when TBB is on
+// #if 0            // debug: turn off TBB for reproducible results, fast but not reproducible when TBB is on
 
-// #ifdef MFA_TBB      // TBB version
+#ifdef MFA_TBB      // TBB version
 
                 // thread-local objects
                 // ref: https://www.threadingbuildingblocks.org/tutorial-intel-tbb-thread-local-storage
@@ -493,7 +473,7 @@ namespace mfa
                                 decoder.VolPt_saved_basis(param_ijk, param, cpt, decode_info, t);
                             else
                                 decoder.VolPt(param, cpt, decode_info, t);
-#endif
+#endif      // MFA_MESH
 
                             // error between decoded point and input point
                             size_t dom_idx = dom_iter.ijk_idx(param_ijk);
@@ -628,7 +608,7 @@ namespace mfa
                             decoder.VolPt_saved_basis(param_ijk, param, cpt, decode_info, t);
                         else
                             decoder.VolPt(param, cpt, decode_info, t);
-#endif
+#endif      // MFA_TMESH
 
                         // error between decoded point and input point
                         size_t dom_idx = dom_iter.ijk_idx(param_ijk);
@@ -687,9 +667,6 @@ namespace mfa
                 vector<KnotIdx>&        new_knot_idx,   // (output) index of new knot in all dims of all_knots
                 vector<T>&              new_knot_val)   // (output) value of new knot in all dims
         {
-            // debug
-            vector<ParamIdx> param_idxs;
-
             // typing shortcuts
             Tmesh<T>&                   tmesh                   = mfa_data.tmesh;
             vector<vector<T>>&          all_knots               = tmesh.all_knots;
@@ -756,38 +733,6 @@ namespace mfa
                         new_knot_val[k] = all_knots[k][cur_span];
                         return false;
                     }
-
-                    // debug
-                    param_idxs.push_back(param_idx);
-                }
-            }
-
-            // debug
-            // sanity check that there really is an input point inside the newly split knot spans
-            // TODO: remove once code is stable
-            for (auto k = 0; k < dom_dim; k++)
-            {
-                // the new span before the new knot
-                if (input.params->param_grid[k][param_idxs[k] - 1] < all_knots[k][new_knot_idx[k] - 1] ||
-                    input.params->param_grid[k][param_idxs[k] - 1] >= new_knot_val[k])
-                {
-                    fmt::print(stderr, "new_knot_idx [{}] prev knot [{} {}] prev param [{} {}] new_knot_val [{}]\n",
-                            fmt::join(new_knot_idx, ","),
-                            all_knots[0][new_knot_idx[0] - 1], all_knots[1][new_knot_idx[1] - 1],
-                            input.params->param_grid[0][param_idxs[0] - 1], input.params->param_grid[1][param_idxs[1] - 1],
-                            fmt::join(new_knot_val, ","));
-                    throw MFAError(fmt::format("valid_split_span_local_all_dims(): parameter not inside split knot spans in dim {}", k));
-                }
-
-                // the new span after the new knot
-                if (input.params->param_grid[k][param_idxs[k]] < new_knot_val[k] ||
-                    input.params->param_grid[k][param_idxs[k]] >= all_knots[k][new_knot_idx[k]])
-                {
-                    fmt::print(stderr, "new_knot_idx [{}] new_knot_val [{}] param [{} {}] next knot [{} {}]\n",
-                            fmt::join(new_knot_idx, ","), fmt::join(new_knot_val, ","),
-                            input.params->param_grid[0][param_idxs[0]], input.params->param_grid[1][param_idxs[1]],
-                            all_knots[0][new_knot_idx[0]], all_knots[1][new_knot_idx[1]]);
-                    throw MFAError(fmt::format("valid_split_span_local_all_dims(): parameter not inside split knot spans"));
                 }
             }
 

@@ -22,7 +22,7 @@ struct DomainArgs
         {
             tot_ndom_pts *= ndom_pts[i];
         }
-        
+
         min.assign(dom_dim, 0);
         max.assign(dom_dim, 1);
         r = 0;

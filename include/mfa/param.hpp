@@ -52,7 +52,7 @@ namespace mfa
                     throw MFAError(fmt::format("Param constructor: dom_dim = {}, but ndom_pts has size {}",
                         dom_dim, ndom_pts.size()));
                 }
-                
+
                 param_grid.resize(dom_dim);
                 for (int i = 0; i < dom_dim; i++)
                 {

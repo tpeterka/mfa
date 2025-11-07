@@ -246,7 +246,7 @@ namespace mfa
                             knot_idx++;
                         }
                     }
-                    
+
                     // If the largest input parameter is not equal to 1.0, then all_knot_param_idxs will 
                     // not be set up properly. The Tmesh code assumes that every knot (including the last) must 
                     // have at least one input point >= that knot value. If this is not true, then we should 
