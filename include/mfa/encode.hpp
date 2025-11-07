@@ -195,14 +195,10 @@ namespace mfa
                 {
                     int span = mfa_data.tmesh.FindSpan(k, input.params->param_grid[k][i], nctrl_pts(k));
 
-#ifndef MFA_TMESH   // original version for one tensor product
-
-                    mfa_data.OrigBasisFuns(k, input.params->param_grid[k][i], span, N[k], i);
-
-#else               // tmesh version
-
+#if defined(MFA_TMESH) || defined(MFA_OVERLAYS)     // tmesh or overlays version
                     mfa_data.BasisFuns(k, input.params->param_grid[k][i], span, N[k], i);
-
+#else               // original version for one tensor product
+                    mfa_data.OrigBasisFuns(k, input.params->param_grid[k][i], span, N[k], i);
 #endif
                 }
 
@@ -357,11 +353,10 @@ namespace mfa
                 {
                     int span = mfa_data.tmesh.FindSpan(k, input.params->param_grid[k][i], nctrl_pts(k));
 
-#ifndef MFA_TMESH
-                    // original version for one tensor product
-                    mfa_data.OrigBasisFuns(k, input.params->param_grid[k][i], span, N[k], i);
-#else
+#if defined(MFA_TMESH) || defined(MFA_OVERLAYS)     // tmesh or overlays version
                     mfa_data.BasisFuns(k, input.params->param_grid[k][i], span, N[k], i);
+#else               // original version for one tensor product
+                    mfa_data.OrigBasisFuns(k, input.params->param_grid[k][i], span, N[k], i);
 #endif
                 }
 
@@ -1132,7 +1127,7 @@ namespace mfa
             }
         }
 
-#ifdef MFA_TMESH
+#if defined(MFA_TMESH) || defined(MFA_OVERLAYS)
 
         // whether a curve of input points intersects a tensor product
         // only checks dimensions above the current dim
@@ -2125,7 +2120,7 @@ namespace mfa
             fmt::print(stderr, "EncodeTensorLocalSeparable() tidx {} time {:.3e} s.\n", t_idx, MPI_Wtime() - t0);
         }
 
-#endif  // MFA_TMESH
+#endif  // MFA_TMESH or MFA_OVERLAYS
 
 #ifdef MFA_LOW_D
 
@@ -2311,13 +2306,16 @@ namespace mfa
 
 #endif
 
-        // adaptive encoding for T-mesh
-        void AdaptiveEncode(
+        // adaptive encoding for overlays
+        void OverlaysAdaptiveEncode(
                 T                   err_limit,                          // maximum allowable normalized error
                 bool                weighted,                           // solve for and use weights
                 const VectorX<T>&   extents,                            // extents in each dimension, for normalizing error (size 0 means do not normalize)
                 int                 max_rounds = 0)                     // optional maximum number of rounds
         {
+            // debug
+            fmt::print(stderr, "Called OverlaysAdaptiveEncode\n");
+
             auto& tmesh         = mfa_data.tmesh;
             auto& tensor_prods  = tmesh.tensor_prods;
             int parent_level = 0;                                       // parent level currently being refined
@@ -2327,6 +2325,167 @@ namespace mfa
 
             TensorProduct<T>&t = tensor_prods[0];                       // fixed encode assumes the tmesh has only one tensor product
             Encode(t.nctrl_pts, t.ctrl_pts, t.weights, weighted);
+            t.parent_exists = false;
+
+            // timing
+            fmt::print(stderr, "\nInitial full encode time:   {:.3e} s.\n", MPI_Wtime() - t0);
+
+            // debug: print tmesh
+//             fmt::print(stderr, "\n----- initial T-mesh -----\n\n");
+//             tmesh.print();
+//             fmt::print(stderr, "--------------------------\n\n");
+
+            vector<TensorProduct<T>>    new_tensors;                    // newly refined tensors to be added
+
+            // intersection proximity between tensors (assumes same for all dims)
+            VectorXi& p = mfa_data.p;
+
+            // padding for all tensors
+            // following was found empirically to be best: even p: pad = p + 1; odd p: pad = p + 2
+            // only tested p=2 and p=3, however
+            int pad         = p(0) % 2 == 0 ? p(0) + 1 : p(0) + 2;
+//             int pad         = p(0) % 2 == 0 ? p(0) + 0 : p(0) + 1;
+
+            // tightest pad possible, leaving only p control points in a tensor
+            int tightest_pad = (p(0) % 2 == 0 ? p(0) : p(0) - 1);
+
+            // extra padding for tensor at global edge
+            int edge_pad    = (p(0) / 2) + 2;
+
+            // loop until all tensors are done
+            int iter;
+            for (iter = 0; ; iter++)
+            {
+                if (max_rounds > 0 && iter >= max_rounds)               // optional cap on number of rounds
+                    break;
+
+                if (verbose)
+                    fmt::print(stderr, "\n--- Iteration {}, refining level {} ---\n", iter, parent_level);
+
+                // debug
+//                 fmt::print(stderr, "\nTmesh before refinement\n\n");
+//                 tmesh.print(true, true, false, false);
+
+                Refine(parent_level, iter + 1, err_limit, extents, pad, edge_pad, new_tensors);
+
+                // check if number of control points exceeds input points in any dimension (in the case of a single tensor)
+                if (tensor_prods.size() == 1)
+                {
+                    bool done = false;
+                    int k;
+                    for (k = 0; k < mfa_data.dom_dim; k++)
+                    {
+                        if (input.ndom_pts(k) <= tensor_prods[0].nctrl_pts(k))
+                        {
+                            done = true;
+                            break;
+                        }
+                    }
+                    if (done)
+                    {
+                        if (verbose)
+                            fmt::print(stderr, "\nKnot insertion done after {} iterations; Control points in dim. {} is {} which is the max.\n\n",
+                                    iter + 1, k, tensor_prods[0].nctrl_pts(k));
+                        break;
+                    }
+                }
+                // check if all levels are done
+                if (parent_level >= tmesh.max_level)
+                {
+                    if (verbose)
+                        fmt::print(stderr, "\nKnot insertion done after {} iterations; no new knots added.\n\n", iter + 1);
+                    break;
+                }
+                else                                                // one iteration only is done
+                {
+                    CheckNewTensors(new_tensors, pad, edge_pad);
+                    fmt::print(stderr, "Level {} done, adding {} new tensor(s)\n", parent_level, new_tensors.size());
+                    double add_tensors_time = MPI_Wtime();
+                    bool add_success = AddNewTensors(new_tensors, tightest_pad);
+                    add_tensors_time = MPI_Wtime() - add_tensors_time;
+                    fmt::print(stderr, "Solving and adding new tensors time:   {:.3e} s.\n", add_tensors_time);
+                    if (add_success)
+                        parent_level++;
+                    new_tensors.clear();
+                }
+            }   // iterations
+
+            fmt::print(stderr, "{} iterations.\n", iter + 1);
+            fmt::print(stderr, "{} tensor products.\n", tensor_prods.size());
+
+            // debug: print tmesh
+            fmt::print(stderr, "\n----- final T-mesh -----\n\n");
+            tmesh.print(true, true, false, false);
+            fmt::print(stderr, "--------------------------\n\n");
+
+            // debug: check all spans
+            // TODO: comment out after code is debugged
+            mfa::NewKnots<T> nk(mfa_data, input);
+            if (!nk.CheckAllSpans())
+                throw MFAError(fmt::format("AdaptiveEncode(): Error: failed checking all spans for input points\n"));
+
+            // debug: check if all tensors are marked done
+            // TODO: comment out after code is debugged
+            bool all_done = true;
+            for (auto i = 0; i < tensor_prods.size(); i++)
+            {
+                bool first = true;
+                auto& t = tensor_prods[i];
+                if (!t.done)
+                {
+                    if (first)
+                        fmt::print(stderr,"\n");
+                    fmt::print(stderr, "Tensor {} level {} is not marked done.\n", i, t.level);
+                    fmt::print(stderr, "This is normal if the number of rounds is capped; otherwise this should not happen.\n");
+                    all_done    = false;
+                    first       = false;
+                }
+            }
+            if (all_done)
+                fmt::print(stderr, "All tensors are marked as done.\n");
+
+            // debug: confirm that all tensors will have at least p control points
+            // TODO: comment out once the code is debugged
+            for (auto i = 0; i < tensor_prods.size(); i++)
+            {
+                if (!tmesh.check_num_ctrl_degree(i, 0))
+                {
+                    auto& t = tensor_prods[i];
+                    fmt::print(stderr, "Error: Refine(): tensor {} has fewer than p control points. This should not happen\n", i);
+                    fmt::print(stderr, "knot_mins [{}] knot_maxs[{}] level {}\n",
+                            fmt::join(t.knot_mins, ","), fmt::join(t.knot_maxs, ","), t.level);
+                    fmt::print(stderr, "\nAddNewTensors(): T-mesh:\n");
+                    tmesh.print(true, true, false, false);
+                    abort();
+                }
+            }
+
+            // debug: verify that the local knots stored in all tensors correspond to the global knots
+            // TODO: comment out after code is debugged
+            if (!tmesh.check_local_knots())
+                throw MFAError(fmt::format("AdaptiveEncode(): Error: failed checking local knots of tensors\n"));
+        }
+
+// adaptive encoding for T-mesh
+        void TmeshAdaptiveEncode(
+                T                   err_limit,                          // maximum allowable normalized error
+                bool                weighted,                           // solve for and use weights
+                const VectorX<T>&   extents,                            // extents in each dimension, for normalizing error (size 0 means do not normalize)
+                int                 max_rounds = 0)                     // optional maximum number of rounds
+        {
+            // debug
+            fmt::print(stderr, "Called TmeshAdaptiveEncode\n");
+
+            auto& tmesh         = mfa_data.tmesh;
+            auto& tensor_prods  = tmesh.tensor_prods;
+            int parent_level = 0;                                       // parent level currently being refined
+
+            // timing
+            double t0 = MPI_Wtime();
+
+            TensorProduct<T>&t = tensor_prods[0];                       // fixed encode assumes the tmesh has only one tensor product
+            Encode(t.nctrl_pts, t.ctrl_pts, t.weights, weighted);
+            t.parent_exists = false;
 
             // timing
             fmt::print(stderr, "\nInitial full encode time:   {:.3e} s.\n", MPI_Wtime() - t0);
@@ -3238,7 +3397,7 @@ namespace mfa
             return nerr;
         }
 
-#ifdef MFA_TMESH
+#if defined(MFA_TMESH) || defined(MFA_OVERLAYS)
 
         // refines a T-mesh at a given parent level
         // returns true no change in knots; all tensors at the parent level are done
@@ -3563,8 +3722,8 @@ namespace mfa
                     continue;
 
                 // debug
-//                 fmt::print(stderr, "AddNewTensors() 1: pt idx {}: parent mins [{}] maxs [{}] level {} t mins [{}] maxs [{}] t.level {}\n",
-//                         t.parent, fmt::join(tensor_prods[t.parent].knot_mins, ","), fmt::join(tensor_prods[t.parent].knot_maxs, ","), tensor_prods[t.parent].level,
+//                 fmt::print(stderr, "AddNewTensors() 1: parent_exists {} pt idx {}: parent mins [{}] maxs [{}] level {} t mins [{}] maxs [{}] t.level {}\n",
+//                         t.parent_exists, t.parent, fmt::join(tensor_prods[t.parent].knot_mins, ","), fmt::join(tensor_prods[t.parent].knot_maxs, ","), tensor_prods[t.parent].level,
 //                         fmt::join(t.knot_mins, ","), fmt::join(t.knot_maxs,  ","), t.level);
 
                 // check one last time intersection of new tensor t and other existing tensors e in new_tensors would result in too small of a tensor
@@ -3643,16 +3802,15 @@ namespace mfa
                     continue;
 
                 // debug
-//                 fmt::print(stderr, "AddNewTensors() 5: appending t mins [{}] maxs [{}] t.level {}\n",
-//                         fmt::join(t.knot_mins, ","), fmt::join(t.knot_maxs,  ","), t.level);
+                fmt::print(stderr, "AddNewTensors() 5: appending t parent_exists {} parent {} mins [{}] maxs [{}] t.level {}\n",
+                        t.parent_exists, t.parent, fmt::join(t.knot_mins, ","), fmt::join(t.knot_maxs,  ","), t.level);
 
                 // append the tensor
-                int tensor_idx = tmesh.append_tensor(t.knot_mins, t.knot_maxs, t.level);
+                int tensor_idx = tmesh.append_tensor(t.knot_mins, t.knot_maxs, t.level, t.parent_exists, t.parent);
 
                 // debug
-//                 fmt::print(stderr, "\nT-mesh after append\n\n");
-//                 mfa_data.tmesh.print(false, true);
-//                 mfa_data.tmesh.print();
+                fmt::print(stderr, "\nT-mesh after append\n\n");
+                mfa_data.tmesh.print(false, true);
 
                 // debug: check all spans before solving
                 // TODO: comment out once the code is debugged
@@ -3898,7 +4056,7 @@ namespace mfa
             }
         }
 
-#endif      // MFA_TMESH
+#endif      // MFA_TMESH or MFA_OVERLAYS
 
         // 1d encoding and 1d decoding
         // adds knots error spans from all curves in all directions (into a set)
@@ -3957,10 +4115,10 @@ namespace mfa
                     {
                         // TODO: hard-coded for single tensor
                         int span = mfa_data.tmesh.FindSpan(k, input.params->param_grid[k][i], mfa_data.tmesh.tensor_prods[0]);
-#ifndef MFA_TMESH       // original version for one tensor product
-                        mfa_data.OrigBasisFuns(k, input.params->param_grid[k][i], span, N, i);
-#else                   // tmesh version
+#if defined(MFA_TMESH) || defined(MFA_OVERLAYS)     // tmesh or overlays version
                         mfa_data.BasisFuns(k, input.params->param_grid[k][i], span, N, i);
+#else                   // original version for one tensor product
+                        mfa_data.OrigBasisFuns(k, input.params->param_grid[k][i], span, N, i);
 #endif
                     }
 

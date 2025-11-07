@@ -486,7 +486,7 @@ namespace mfa
                                 param(j) = input.params->param_grid[j][param_ijk(j)];
 
                             // decode the point
-#ifdef MFA_TMESH
+#if defined(MFA_TMESH) || defined(MFA_OVERLAYS)
                             decoder.VolPt_tmesh(param, cpt);
 #else
                             if (saved_basis)
@@ -621,7 +621,7 @@ namespace mfa
                             param(j) = input.params->param_grid[j][param_ijk(j)];
 
                         // decode the point
-#ifdef MFA_TMESH
+#if defined(MFA_TMESH) || defined(MFA_OVERLAYS)
                         decoder.VolPt_tmesh(param, cpt);
 #else
                         if (saved_basis)
@@ -675,111 +675,6 @@ namespace mfa
 
             return retval;
         }
-
-//         // DEPRECATE, not used
-//         // checks whether knot span can be split (input point exists in resulting split) in any dimension
-//         // knot span is the span in the local tensor knot_idxs, not the global all_knot_idxs
-//         // return false if there is an empty invalid split in all dims
-//         // returns true if there is a nonempty valid split in one or more dims
-//         // new_knot_idx and new_knot_val allocated by caller, size not checked here
-//         bool valid_split_span_local_any_dim(
-//                 VectorXi&               span,           // indices of knot span in all dims
-//                 TensorProduct<T>&       t,              // current tensor
-//                 const vector<size_t>&   nnew_knots,     // number of new knots inserted so far in each dim.
-//                 vector<KnotIdx>&        new_knot_idx,   // (output) index of new knot in all dims of all_knots
-//                 vector<T>&              new_knot_val)   // (output) value of new knot in all dims
-//         {
-//             bool debug = false;
-// 
-//             // typing shortcuts
-//             Tmesh<T>&                   tmesh                   = mfa_data.tmesh;
-//             vector<vector<T>>&          all_knots               = tmesh.all_knots;
-//             vector<vector<int>>&        all_knot_levels         = tmesh.all_knot_levels;
-//             vector<vector<ParamIdx>>&   all_knot_param_idxs     = tmesh.all_knot_param_idxs;
-//             int&                        dom_dim                 = mfa_data.dom_dim;
-// 
-//             bool retval = false;
-//             for (auto k = 0; k < dom_dim; k++)
-//             {
-//                 KnotIdx cur_span    = t.knot_idxs[k][span(k)];
-//                 KnotIdx next_span   = t.knot_idxs[k][span(k) + 1];
-// 
-// #ifndef MFA_TMESH
-// #ifndef MFA_TBB
-// 
-//                 // not for t-mesh, don't allow more control points than input points
-//                 // only for structured data for now
-//                 // won't work for TBB because nnew_knots needs to be global, not per thread
-//                 if (tmesh.tensor_prods.size() == 1 &&
-//                         t.nctrl_pts(k) + nnew_knots[k] >= input.ndom_pts(k))
-//                 {
-//                     new_knot_idx[k] = cur_span;
-//                     new_knot_val[k] = all_knots[k][cur_span];
-//                     continue;
-//                 }
-// 
-// #endif
-// #endif
-// 
-//                 // current span must contain at least two input points
-//                 size_t low_idx  = all_knot_param_idxs[k][cur_span];
-//                 size_t high_idx = all_knot_param_idxs[k][next_span];
-// 
-//                 if (high_idx - low_idx < 2)
-//                 {
-//                     new_knot_idx[k] = cur_span;
-//                     new_knot_val[k] = all_knots[k][cur_span];
-//                     continue;
-//                 }
-// 
-//                 bool split_span;
-//                 // check if an existing knot already splits the span (at a deeper level of refinement)
-//                 // if so, use it
-//                 if (next_span - cur_span > 1)
-//                 {
-//                     new_knot_idx[k] = (next_span + cur_span) / 2;
-//                     new_knot_val[k] = all_knots[k][new_knot_idx[k]];
-//                     split_span = false;
-//                 }
-// 
-//                 // otherwise insert a new knot
-//                 else
-//                 {
-//                     // new knot value would is the midpoint of the span
-//                     new_knot_val[k] = (all_knots[k][cur_span] + all_knots[k][next_span]) / 2.0;
-//                     // new knot index found by keeping all_knots sorted by knot value
-//                     new_knot_idx[k] = cur_span;
-//                     int i = cur_span;
-//                     while (new_knot_val[k] > all_knots[k][i])
-//                         new_knot_idx[k] = ++i;
-//                     split_span = true;
-//                 }
-// 
-//                 // if the current span were to be split, check whether the resulting spans will have an input point
-//                 if (split_span)
-//                 {
-//                     ParamIdx param_idx  = low_idx;
-//                     while (input.params->param_grid[k][param_idx] < new_knot_val[k])
-//                         param_idx++;
-// 
-//                     // check spans of immediate neighboring knots for input points
-//                     // so that every span at the finest level always has input
-//                     low_idx     = all_knot_param_idxs[k][new_knot_idx[k] - 1];
-//                     high_idx    = all_knot_param_idxs[k][new_knot_idx[k]];
-// 
-//                     if (param_idx - low_idx == 0 || high_idx - param_idx == 0)
-//                     {
-//                         new_knot_idx[k] = cur_span;
-//                         new_knot_val[k] = all_knots[k][cur_span];
-//                         continue;
-//                     }
-//                 }
-// 
-//                 retval |= true;
-//             }
-// 
-//             return retval;
-//         }
 
         // checks whether knot span can be split (input point exists in resulting split) in all dimensions
         // knot span is the span in the local tensor knot_idxs, not the global all_knot_idxs

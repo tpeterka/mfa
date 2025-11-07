@@ -8,7 +8,12 @@
 #ifndef _DATA_MODEL_HPP
 #define _DATA_MODEL_HPP
 
+// adaptive refinement is either overlays or tmesh
+#ifdef MFA_OVERLAYS
+#include    <mfa/overlays.hpp>
+#else
 #include    <mfa/tmesh.hpp>
+#endif
 
 // --- data model ---
 //

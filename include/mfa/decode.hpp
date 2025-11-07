@@ -359,7 +359,13 @@ namespace mfa
 
                     // compute approximated point for this parameter vector
 
-#ifndef MFA_TMESH   // original version for one tensor product
+#if defined(MFA_TMESH) || defined(MFA_OVERLAYS)   // tmesh/overlays version
+
+                    if (pt_it.idx() == 0 && verbose >= 2)
+                        fmt::print(stderr, "DEBUG: DecodePointSet: Using VolPt_tmesh w/ TBB over points\n");
+                    VolPt_tmesh(param, cpt, false);
+
+#else               // original version for one tensor product
 
                     VolPt(param, cpt, thread_decode_info.local(), mfa_data.tmesh.tensor_prods[0], derivs);
 
@@ -367,13 +373,7 @@ namespace mfa
                     if (pt_it.idx() == 0 && verbose >= 2)
                         fmt::print(stderr, "DEBUG: DecodePointSet: Using VolPt w/ TBB over points\n");
 
-#else           // tmesh version
-
-                    if (pt_it.idx() == 0 && verbose >= 2)
-                        fmt::print(stderr, "DEBUG: DecodePointSet: Using VolPt_tmesh w/ TBB over points\n");
-                    VolPt_tmesh(param, cpt, false);
-
-#endif          // end tmesh version
+#endif
 
                     ps.domain.block(pt_it.idx(), min_dim, 1, mfa_data.dim()) = cpt.transpose();
                 }
@@ -421,19 +421,21 @@ namespace mfa
 
                     // compute approximated point for this parameter vector
 
-#ifndef MFA_TMESH   // original version for one tensor product
+#if defined(MFA_TMESH) || defined(MFA_OVERLAYS)    // tmesh/ovelays version
+
+                    if (pt_it.idx() == 0 && verbose >= 2)
+                        fmt::print(stderr, "DEBUG: DecodePointSet: Using VolPt_tmesh w/o TBB (serial or kokkos)\n");
+
+                    VolPt_tmesh(param, cpt);
+
+#else               // original version for one tensor product
 
                     if (pt_it.idx() == 0 && verbose >= 2)
                         fmt::print(stderr, "DEBUG: DecodePointSet: Using VolPt w/o TBB (serial or kokkos)\n");
 
                     VolPt(param, cpt, decode_info, mfa_data.tmesh.tensor_prods[0], derivs);
-                    
-#else   // tmesh version
-                    if (pt_it.idx() == 0 && verbose >= 2)
-                        fmt::print(stderr, "DEBUG: DecodePointSet: Using VolPt_tmesh w/o TBB (serial or kokkos)\n");
 
-                    VolPt_tmesh(param, cpt);
-#endif  // end tmesh
+#endif
 
                     ps.domain.block(pt_it.idx(), min_dim, 1, mfa_data.dim()) = cpt.transpose();
 
@@ -888,7 +890,7 @@ namespace mfa
 
 #else       // end kokkos version
 
-#ifndef MFA_TMESH   // original version for one tensor product
+#if !defined(MFA_TMESH) && !defined(MFA_OVERLAYS)   // original version for one tensor product
 
             // precompute basis functions for points to be decoded
             vector<MatrixX<T>>  NN(mfa_data.dom_dim);
@@ -932,7 +934,11 @@ namespace mfa
                     param(i) = params[i][ijk[i]];
                 }
 
-#ifndef MFA_TMESH   // original version for one tensor product
+#if defined(MFA_TMESH) || defined(MFA_OVERLAYS)    // tmesh/overlays version
+
+                VolPt_tmesh(param, cpt, false);
+
+#else               // original version for one tensor product
 
                 if (var_dim == 1)   // todo: try to find a way to remove this if statement eventually 
                 {
@@ -944,11 +950,7 @@ namespace mfa
                     VolPt_saved_basis_grid(ijk, param, cpt, decode_info, mfa_data.tmesh.tensor_prods[0], NN);
                 }
 
-#else               // tmesh version
-
-                VolPt_tmesh(param, cpt, false);
-
-#endif              // end tmesh version
+#endif
 
                 vol_it.incr_iter();
                 result.block(j, min_dim, 1, max_dim - min_dim + 1) = cpt.transpose();
@@ -970,15 +972,15 @@ namespace mfa
                 for (auto i = 0; i < mfa_data.dom_dim; i++)
                     thread_param.local()(i)    = params[i][thread_ijk.local()[i]];
 
-#ifndef MFA_TMESH   // original version for one tensor product
-
-                VolPt_saved_basis_grid(thread_ijk.local(), thread_param.local(), thread_cpt.local(), thread_decode_info.local(), mfa_data.tmesh.tensor_prods[0], NN);
-
-#else           // tmesh version
+#if defined(MFA_TMESH) || defined(MFA_OVERLAYS)    // tmesh/overlays version
 
                 VolPt_tmesh(thread_param.local(), thread_cpt.local());
 
-#endif          // end tmesh version
+#else               // original version for one tensor product
+
+                VolPt_saved_basis_grid(thread_ijk.local(), thread_param.local(), thread_cpt.local(), thread_decode_info.local(), mfa_data.tmesh.tensor_prods[0], NN);
+
+#endif
 
                 result.block(j, min_dim, 1, max_dim - min_dim + 1) = thread_cpt.local().transpose();
             });
@@ -1242,7 +1244,7 @@ namespace mfa
                 N[i]       = MatrixX<T>::Zero(1, tensor.nctrl_pts(i));
                 if (derivs.size() && derivs(i))
                 {
-#ifndef MFA_TMESH   // original version for one tensor product
+#if !defined(MFA_TMESH) && !defined(MFA_OVERLAYS)   // original version for one tensor product
                     MatrixX<T> Ders = MatrixX<T>::Zero(derivs(i) + 1, tensor.nctrl_pts(i));
                     mfa_data.DerBasisFuns(i, param(i), span[i], derivs(i), Ders);
                     N[i].row(0) = Ders.row(derivs(i));
@@ -1250,10 +1252,10 @@ namespace mfa
                 }
                 else
                 {
-#ifndef MFA_TMESH   // original version for one tensor product
-                    mfa_data.OrigBasisFuns(i, param(i), span[i], N[i], 0);
-#else               // tmesh version
+#if defined(MFA_TMESH) || defined(MFA_OVERLAYS)    // tmesh or overlays version
                     mfa_data.BasisFuns(i, param(i), span[i], N[i], 0);
+#else               // original version for one tensor product
+                    mfa_data.OrigBasisFuns(i, param(i), span[i], N[i], 0);
 #endif
                 }
             }
@@ -1626,17 +1628,17 @@ namespace mfa
 
                 if (derivs.size() && derivs(i))
                 {
-#ifndef MFA_TMESH   // original version for one tensor product
+#if !defined(MFA_TMESH) && !defined(MFA_OVERLAYS)   // original version for one tensor product
                     mfa_data.DerBasisFuns(i, param(i), di.span[i], derivs(i), di.ders[i]);
                     di.N[i].row(0) = di.ders[i].row(derivs(i));
 #endif
                 }
                 else
                 {
-#ifndef MFA_TMESH   // original version for one tensor product
-                    mfa_data.OrigBasisFuns(i, param(i), di.span[i], di.N[i], 0);
-#else               // tmesh version
+#if defined(MFA_TMESH) || defined(MFA_OVERLAYS)    // tmesh or overlays version
                     mfa_data.BasisFuns(i, param(i), di.span[i], di.N[i], 0);
+#else               // original version for one tensor product
+                    mfa_data.OrigBasisFuns(i, param(i), di.span[i], di.N[i], 0);
 #endif
                 }
             }
@@ -1705,14 +1707,14 @@ namespace mfa
             VectorX<T>&                 out_grad,
             T*                          out_val = nullptr)
         {
-#ifdef MFA_TMESH
-fmt::print(stderr, "ERROR: Cannot use FastGrad with TMesh\n");
+#if !defined(MFA_TMESH) && !defined(MFA_OVERLAYS)
+fmt::print(stderr, "ERROR: Cannot use FastGrad with TMesh or Overlays\n");
 exit(1);
 #endif
 #ifndef MFA_NO_WEIGHTS
 fmt::print(stderr, "ERROR: Must define MFA_NO_WEIGHTS to use FastGrad\n");
 exit(1);
-#endif      
+#endif
 
             assert(di.D[0].size() == 2);   // ensures D has been resized to hold 1st derivs
             assert(di.M != nullptr);
@@ -1846,8 +1848,8 @@ exit(1);
                 FastDecodeInfo<T>&      di,         // reusable decode info allocated by caller (more efficient when calling VolPt multiple times)
                 const TensorProduct<T>& tensor) const    // tensor product to use for decoding
         {
-#ifdef MFA_TMESH
-fmt::print(stderr, "ERROR: Cannot use FastVolPt with TMesh\n");
+#if !defined(MFA_TMESH) && !defined(MFA_OVERLAYS)
+fmt::print(stderr, "ERROR: Cannot use FastVolPt with TMesh or Overlays\n");
 exit(1);
 #endif
 #ifndef MFA_NO_WEIGHTS
@@ -1923,13 +1925,13 @@ exit(1);
             int span   = mfa_data.tmesh.FindSpan(cur_dim, param, tensor);
             MatrixX<T> N = MatrixX<T>::Zero(1, temp_ctrl.rows());// basis coefficients
 
-#ifndef MFA_TMESH                                               // original version for one tensor product
-
-            mfa_data.OrigBasisFuns(cur_dim, param, span, N, 0);
-
-#else                                                           // tmesh version
+#if defined(MFA_TMESH) || defined(MFA_OVERLAYS)                 // tmesh version
 
             mfa_data.BasisFuns(cur_dim, param, span, N, 0);
+
+#else                                                           // original version for one tensor product
+
+            mfa_data.OrigBasisFuns(cur_dim, param, span, N, 0);
 
 #endif
             out_pt = VectorX<T>::Zero(temp_ctrl.cols());        // initializes and resizes

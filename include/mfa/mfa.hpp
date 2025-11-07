@@ -33,6 +33,9 @@
 // comment out the following line for original single tensor product version
 // #define MFA_TMESH
 
+// comment out the following line for original single tensor product version
+#define MFA_OVERLAYS
+
 // comment out the following line to encode local with unified dims
 #define MFA_ENCODE_LOCAL_SEPARABLE
 
@@ -740,7 +743,7 @@ namespace mfa
         {
             if (verbose)
                 fmt::print(stderr, "MFA: Starting Ray Encoding for variable {}\n", i);
-                
+
             vars[i]->set_param_idxs(input);
             RayEncoder<T> encoder(*vars[i], input, true);
             encoder.encode();
@@ -756,12 +759,13 @@ namespace mfa
                 int                 max_rounds)             // maximum number of rounds
         {
             mfa_data.set_param_idxs(input);                 // needed for the single tensor tmesh even when MFA_TMESH is not defined
-#ifndef MFA_TMESH
             Encoder<T> encoder(mfa_data, input, verbose);
-            encoder.OrigAdaptiveEncode(err_limit, weighted, extents, max_rounds);
+#if defined(MFA_OVERLAYS)
+            encoder.OverlaysAdaptiveEncode(err_limit, weighted, extents, max_rounds);
+#elif defined(MFA_TMESH)
+            encoder.TmeshAdaptiveEncode(err_limit, weighted, extents, max_rounds);
 #else
-            Encoder<T> encoder(mfa_data, input, verbose);
-            encoder.AdaptiveEncode(err_limit, weighted, extents, max_rounds);
+            encoder.OrigAdaptiveEncode(err_limit, weighted, extents, max_rounds);
 #endif
         }
 
@@ -1141,7 +1145,7 @@ namespace mfa
 
             if (verbose)
                 fmt::print(stderr, "MFA: Encoding variable model {} (adaptive)\n", i);
-            
+
             AdaptiveEncodeImpl(*(vars[i]), input, err_limit, weighted, extents, max_rounds);
         }
 
