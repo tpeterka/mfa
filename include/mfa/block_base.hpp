@@ -62,6 +62,7 @@ struct BlockBase
     mfa::PointSet<T>    *input;                 // input data
     mfa::PointSet<T>    *approx;                // output data
     mfa::PointSet<T>    *errs;                  // error field
+    int                 save_datasets{1};           // flag to save data sets during serialization (1 = yes, 0 = no)
 
     // MFA object
     mfa::MFA<T>         *mfa;
@@ -1274,14 +1275,18 @@ namespace mfa
             diy::save(bb, b->core_mins);
             diy::save(bb, b->core_maxs);
 
-            // TODO: don't save data sets in practice
-            diy::save(bb, b->input);
-            diy::save(bb, b->approx);
-            diy::save(bb, b->errs);
-            diy::save(bb, b->blend);
-
             // save mfa
             diy::save(bb, b->mfa);
+
+            // Optionally save block data sets
+            diy::save(bb, b->save_datasets);
+            if (b->save_datasets)
+            {
+                diy::save(bb, b->input);
+                diy::save(bb, b->approx);
+                diy::save(bb, b->errs);
+                diy::save(bb, b->blend);
+            }            
         }
 
     template<typename B, typename T>                // B = block object, T = float or double
@@ -1301,12 +1306,6 @@ namespace mfa
             diy::load(bb, b->core_mins);
             diy::load(bb, b->core_maxs);
 
-            // TODO: Don't load data sets in practice
-            diy::load(bb, b->input);
-            diy::load(bb, b->approx);
-            diy::load(bb, b->errs);
-            diy::load(bb, b->blend);
-
             // load mfa
             diy::load(bb, b->mfa);
 
@@ -1314,6 +1313,23 @@ namespace mfa
             {
                 if (b->pt_dim != b->mfa->pt_dim)
                     cerr << "WARNING: Block::pt_dim and MFA::pt_dim do not match!" << endl;
+            }
+
+            // Optionally load block data sets
+            diy::load(bb, b->save_datasets);
+            if (b->save_datasets)
+            {
+                diy::load(bb, b->input);
+                diy::load(bb, b->approx);
+                diy::load(bb, b->errs);
+                diy::load(bb, b->blend);
+            }
+            else
+            {
+                b->input = nullptr;
+                b->approx = nullptr;
+                b->errs = nullptr;
+                b->blend = nullptr;
             }
         }
 }                       // namespace

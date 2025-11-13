@@ -53,6 +53,7 @@ int main(int argc, char** argv)
     real_t      regularization  = 0;        // smoothing parameter for models with non-uniform input density (0 == no smoothing)
     int         reg1and2        = 0;        // flag for regularizer: 0 = regularize only 2nd derivs. 1 = regularize 1st and 2nd
     int         verbose         = 1;        // MFA verbosity (0 = no extra output)
+    int         save_datasets   = 1;        // write output MFA and data files (bool 0/1)
     int         strong_sc       = 1;        // strong scaling (bool 0 or 1, 0 = weak scaling)
     int         weighted        = 0;        // Use NURBS weights (0/1)
     real_t      ghost           = 0.1;      // amount of ghost zone overlap as a factor of block size (0.0 - 1.0)
@@ -88,6 +89,7 @@ int main(int argc, char** argv)
     ops >> opts::Option('e', "errorbound",  e_threshold," error threshold for adaptive encoding");
     ops >> opts::Option('z', "rounds",      rounds,     " max number of rounds for adaptive encoding");
     ops >> opts::Option('z', "verbose",     verbose,    " output verbosity (0/1)");
+    ops >> opts::Option('z', "save_datasets",save_datasets," save input, approx, errs datasets to .mfa file (0/1)");
 
     if (!ops.parse(argc, argv) || help)
     {
@@ -149,6 +151,12 @@ int main(int argc, char** argv)
     {
         master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
         { 
+            // Set block flag for saving data sets
+            if (save_datasets)
+                b->save_datasets = 1;
+            else
+                b->save_datasets = 0;
+
             b->generate_analytical_data(cp, input, mfa_info, d_args); 
         });
     }
