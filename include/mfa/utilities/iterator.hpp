@@ -260,6 +260,18 @@ namespace mfa
             return idx;
         }
 
+        size_t ijk_idx(const vector<size_t>& ijk) const
+        {
+            size_t idx          = 0;
+            size_t stride       = 1;
+            for (int i = 0; i < dom_dim_; i++)
+            {
+                idx     += ijk[i] * stride;
+                stride  *= all_npts_dim_(i);
+            }
+            return idx;
+        }
+
         // convert subvolume index into full volume index
         // thread-safe
         size_t sub_full_idx(size_t sub_idx) const

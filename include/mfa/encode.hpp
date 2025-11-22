@@ -1353,7 +1353,11 @@ namespace mfa
                 anchor[dim] = mfa_data.tmesh.ctrl_pt_anchor_dim(dim, t, i);
 
                 // local knot vector in currrent dimension
+#if defined(MFA_TMESH)
                 mfa_data.tmesh.knot_intersections_dim(anchor, t_idx, local_knot_idxs, dim);             // local knot indices in current dim
+#elif defined(MFA_OVERLAYS)
+                mfa_data.tmesh.knot_intersections_dim(anchor, local_knot_idxs, dim);                    // local knot indices in current dim
+#endif
                 for (auto n = 0; n < local_knot_idxs.size(); n++)                                       // local knots in only current dim
                     local_knots[n] = mfa_data.tmesh.all_knots[dim][local_knot_idxs[n]];
 
@@ -1425,7 +1429,11 @@ namespace mfa
                     mfa_data.tmesh.ctrl_pt_anchor(t, thread_free_ijk.local(), thread_anchor.local());   // anchor of control point
 
                     // local knot vector
+#if defined(MFA_TMESH)
                     mfa_data.tmesh.knot_intersections(thread_anchor.local(), t_idx, thread_local_knot_idxs.local());
+#elif defined(MFA_OVERLAYS)
+                    mfa_data.tmesh.knot_intersections(thread_anchor.local(), thread_local_knot_idxs.local());
+#endif
                     for (auto k = 0; k < dom_dim; k++)
                     {
                         for (auto n = 0; n < thread_local_knot_idxs.local()[k].size(); n++)
@@ -1471,7 +1479,11 @@ namespace mfa
                 mfa_data.tmesh.ctrl_pt_anchor(t, ijk, anchor);
 
                 // local knot vector
+#if defined(MFA_TMESH)
                 mfa_data.tmesh.knot_intersections(anchor, t_idx, local_knot_idxs);
+#elif defined(MFA_OVERLAYS)
+                mfa_data.tmesh.knot_intersections(anchor, local_knot_idxs);
+#endif
                 for (auto k = 0; k < dom_dim; k++)
                     for (auto n = 0; n < local_knot_idxs[k].size(); n++)
                         local_knots[k][n] = mfa_data.tmesh.all_knots[k][local_knot_idxs[k][n]];
@@ -1537,7 +1549,11 @@ namespace mfa
                 mfa_data.tmesh.ctrl_pt_anchor(t, ijk, anchor);
 
                 // local knot vector
-                mfa_data.tmesh.knot_intersections(anchor, t_idx, true, local_knot_idxs);
+#if defined(MFA_TMESH)
+                mfa_data.tmesh.knot_intersections(anchor, t_idx, local_knot_idxs);
+#elif defined(MFA_OVERLAYS)
+                mfa_data.tmesh.knot_intersections(anchor, local_knot_idxs);
+#endif
                 for (auto k = 0; k < dom_dim; k++)
                     for (auto n = 0; n < local_knot_idxs[k].size(); n++)
                         local_knots[k][n] = mfa_data.tmesh.all_knots[k][local_knot_idxs[k][n]];
@@ -1612,8 +1628,13 @@ namespace mfa
 
             // range of anchors covering starting and ending input points
             vector<vector<KnotIdx>> start_anchors, end_anchors;                             // anchors for starting input point and ending input point
+#if defined(MFA_TMESH)
             TensorIdx start_found_idx   = tmesh.anchors(start_params, 0, start_anchors);    // 0 is the seed for searching for the correct tensor TODO
             TensorIdx end_found_idx     = tmesh.anchors(end_params, 0, end_anchors);        // 0 is the seed for searching for the correct tensor TODO
+#elif defined(MFA_OVERLAYS)
+            TensorIdx start_found_idx   = tmesh.anchors(start_params, start_anchors);
+            TensorIdx end_found_idx     = tmesh.anchors(end_params, end_anchors);
+#endif
 
             // (global) extents of original anchors expanded for adjacent tensors
             vector<vector<KnotIdx>> start_anchor_extents(dom_dim), end_anchor_extents(dom_dim);
@@ -1670,7 +1691,11 @@ namespace mfa
                         continue;
 
                     // local knot vector
+#if defined(MFA_TMESH)
                     mfa_data.tmesh.knot_intersections(anchors[i], t_idx_anchors[i], thread_local_knot_idxs.local());
+#elif defined(MFA_OVERLAYS)
+                    mfa_data.tmesh.knot_intersections(anchors[i], thread_local_knot_idxs.local());
+#endif
                     for (auto k = 0; k < dom_dim; k++)
                     {
                         for (auto n = 0; n < thread_local_knot_idxs.local()[k].size(); n++)
@@ -1729,7 +1754,11 @@ namespace mfa
 
                 // local knot vector
                 double t0 = MPI_Wtime();                    // debug
+#if defined(MFA_TMESH)
                 mfa_data.tmesh.knot_intersections(anchors[i], t_idx_anchors[i], local_knot_idxs);
+#elif defined(MFA_OVERLAYS)
+                mfa_data.tmesh.knot_intersections(anchors[i], local_knot_idxs);
+#endif
                 for (auto k = 0; k < dom_dim; k++)
                     for (auto n = 0; n < local_knot_idxs[k].size(); n++)
                         local_knots[k][n] = mfa_data.tmesh.all_knots[k][local_knot_idxs[k][n]];
@@ -2185,9 +2214,9 @@ namespace mfa
 #endif      // MFA_NO_CONSTRAINTS
 
                 // debug
-                if (dim == 0)
-                    fmt::print(stderr, "EncodeTensorLocalSeparable(): num_curves in dim 0 = {} nin_pts [{}] in_starts [{}] in_all_pts [{}] ncurve_pts [{}] ncons_ctrl_pts {}\n",
-                            in_slice_iter.tot_iters(), nin_pts.transpose(), in_starts.transpose(), in_all_pts.transpose(), ncurve_pts.transpose(), Pcons.rows());
+//                 if (dim == 0)
+//                     fmt::print(stderr, "EncodeTensorLocalSeparable(): num_curves in dim 0 = {} nin_pts [{}] in_starts [{}] in_all_pts [{}] ncurve_pts [{}] ncons_ctrl_pts {}\n",
+//                             in_slice_iter.tot_iters(), nin_pts.transpose(), in_starts.transpose(), in_all_pts.transpose(), ncurve_pts.transpose(), Pcons.rows());
 
                 // for all curves in the current dimension
                 while (!in_slice_iter.done())                                                       // for all curves
@@ -2495,10 +2524,14 @@ namespace mfa
                     fmt::print(stderr, "\n--- Iteration {}, refining level {} ---\n", iter, parent_level);
 
                 // debug
-//                 fmt::print(stderr, "\nTmesh before refinement\n\n");
-//                 tmesh.print(true, true, false, false);
+                fmt::print(stderr, "\nTmesh before refinement\n\n");
+                tmesh.print(true, true, false, false);
 
                 Refine(parent_level, iter + 1, err_limit, extents, pad, edge_pad, new_tensors);
+
+                // debug
+//                 fmt::print(stderr, "\nTmesh after refinement\n\n");
+//                 tmesh.print(true, true, false, false);
 
                 // check if number of control points exceeds input points in any dimension (in the case of a single tensor)
                 if (tensor_prods.size() == 1)
@@ -2708,9 +2741,9 @@ namespace mfa
             fmt::print(stderr, "{} tensor products.\n", tensor_prods.size());
 
             // debug: print tmesh
-//             fmt::print(stderr, "\n----- final T-mesh -----\n\n");
-//             tmesh.print(true, true, false, false);
-//             fmt::print(stderr, "--------------------------\n\n");
+            fmt::print(stderr, "\n----- final T-mesh -----\n\n");
+            tmesh.print(true, true, false, false);
+            fmt::print(stderr, "--------------------------\n\n");
 
             // debug: check all spans
             // TODO: comment out after code is debugged
@@ -3938,11 +3971,15 @@ namespace mfa
                         t.parent_exists, t.parent, fmt::join(t.knot_mins, ","), fmt::join(t.knot_maxs,  ","), t.level);
 
                 // append the tensor
+#if defined(MFA_OVERLAYS)
                 int tensor_idx = tmesh.append_tensor(t.knot_mins, t.knot_maxs, t.level, t.parent_exists, t.parent);
+#elif defined(MFA_TMESH)
+                int tensor_idx = tmesh.append_tensor(t.knot_mins, t.knot_maxs, t.level);
+#endif
 
                 // debug
-                fmt::print(stderr, "\nT-mesh after append\n\n");
-                mfa_data.tmesh.print(false, true);
+//                 fmt::print(stderr, "\nT-mesh after append\n\n");
+//                 mfa_data.tmesh.print(false, true);
 
                 // debug: check all spans before solving
                 // TODO: comment out once the code is debugged

@@ -1659,6 +1659,10 @@ namespace mfa
                     loc_knots[anchor_pos - j - 1] = cur[dim];           // record the knot
                 else                                                    // no more knots in the tmesh
                     loc_knots[anchor_pos - j - 1] = 0;                  // repeat first index as many times as needed
+
+                // debug
+//                 fmt::print(stderr, "prev_knot_intersections: loc_knots[{}] = {}, all loc_knots = [{}]\n",
+//                         anchor_pos - j -1, loc_knots[anchor_pos - j - 1], fmt::join(loc_knots, ","));
             }       // for j knots
         }
 
@@ -1715,6 +1719,10 @@ namespace mfa
                     loc_knots[start_pos + j + 1] = cur[dim];                    // record the knot
                 else                                                            // no more knots in the tmesh
                     loc_knots[start_pos + j + 1] = all_knots[dim].size() - 1;   // repeat last index as many times as needed
+
+                // debug
+//                 fmt::print(stderr, "next_knot_intersections: loc_knots[{}] = {}, all loc_knots = [{}]\n",
+//                         start_pos + j + 1, loc_knots[start_pos + j + 1], fmt::join(loc_knots, ","));
             }       // for j knots
         }
 
@@ -1858,6 +1866,11 @@ namespace mfa
             // find local knot vector (p + 2) knot intersections
             vector<vector<KnotIdx>> loc_knots(dom_dim_);
             knot_intersections(target, t_idx, loc_knots);
+
+            // debug
+            if (fabs(param(0) - 0.4683) < 0.001 && param(1) == 1)
+                fmt::print(stderr, "anchors(): target [{}] loc_knots[0] [{}] loc_knots[1] [{}]\n",
+                        fmt::join(target, ","), fmt::join(loc_knots[0], ","), fmt::join(loc_knots[1], ","));
 
             // take correct p + 1 anchors out of the p + 2 found above
             for (auto i = 0; i < dom_dim_; i++)
