@@ -10,6 +10,7 @@
 
 #include    <mfa/types.hpp>
 #include    <unordered_map>
+#include    <stack>
 
 using KnotIdx   = size_t;
 using TensorIdx = size_t;
@@ -199,9 +200,6 @@ namespace mfa
                 tensor_prods[new_tensor.parent].children.push_back(tensor_prods.size());
             tensor_prods.push_back(new_tensor);
 
-            // debug
-            fmt::print(stderr, "appending tensor tidx {} in tensor_prods.size() = {}\n", tensor_prods.size() - 1, tensor_prods.size());
-
             // update the knot_tensor hash map for all tensors
             hash_all_tensors();
 
@@ -324,29 +322,52 @@ namespace mfa
                 clamp_to_parent(inout, pad, edge_pad);
         }
 
-        // finds the tensor containing a point in parameter space
-        // if more than one tensor contains the point, finds deepest level tensor
-        // TODO: follow children to accelerate the search
-        TensorIdx find_tensor(const VectorX<T>&     param,          // multidim parameter point
-                              bool&                 found) const    // (output) success
+        // finds the deepest tensor containing a point in parameter space using a depth-first search
+        // assumes that tensors at the same level are disjoint, ie, param cannot be found in a sibling, only a child
+        TensorIdx find_tensor(const VectorX<T>&     param) const    // multidim parameter point
         {
-            int         deepest_level = 0;
-            TensorIdx   tidx          = 0;
-            found                     = false;
-            // all tensors
-            for (auto i = 0; i < tensor_prods.size(); i++)
+            TensorIdx tidx = 0;
+            TensorIdx found_idx = 0;                                // candidate tensor containing param, although not necessarily the deepest one yet
+            bool found = false;                                     // found a candidate tensor containing param, although not necessarily the deepest one yet
+            std::vector<size_t> cidx(tensor_prods.size(), 0);       // index of next child to be traversed, for each tensor product
+            while (1)
             {
-                if (in(param, tensor_prods[i]))
+                // if param is in the tensor, visit children looking for a leaf node
+                if (in(param, tensor_prods[tidx]))
                 {
-                    found = true;
-                    if (i == 0 || tensor_prods[i].level > deepest_level)
-                    {
-                        tidx            = i;
-                        deepest_level   = tensor_prods[i].level;
-                    }
+                    found       = true;
+                    found_idx   = tidx;
+
+                    // leaf node, terminate successfully
+                    if (tensor_prods[tidx].children.size() == 0)
+                        return found_idx;
+
+                    // sanity check on bounds of cidx[tidx]
+                    if (cidx[tidx] >= tensor_prods[tidx].children.size())
+                        throw MFAError(fmt::format("find_tensor(): child index out of bounds while looking for param \n{}", param));
+
+                    // descend to next child
+                    tidx = tensor_prods[tidx].children[cidx[tidx]];
+                    continue;
+                }
+
+                // sanity check, param must be in the root, and if iterating over children, parent must exist
+                if (tidx == 0 || !tensor_prods[tidx].parent_exists)
+                    throw MFAError(fmt::format("find_tensor(): root tensor (tidx 0) does not contain param \n{}\n or parent does not exist while iterating over children", param));
+
+                // backtrack
+                tidx = tensor_prods[tidx].parent;
+                cidx[tidx]++;
+
+
+                if (cidx[tidx] >= tensor_prods[tidx].children.size())
+                {
+                    if (found)
+                        return found_idx;
+                    else
+                        throw MFAError(fmt::format("find_tensor(): ran out of children before finding param \n{}", param));
                 }
             }
-            return tidx;
         }
 
         // make candidate tensor constrained to another tensor (e.g., parent)
@@ -437,7 +458,7 @@ namespace mfa
         // than the tensor, adjusts pt to the tensor level (potentially dangerous side effect)
         // point is given in std::vector format
         bool in(
-                vector<KnotIdx>&        pt,                         // input and output, mayb be adjusted by this routine
+                vector<KnotIdx>&        pt,                         // input and output, maybe be adjusted by this routine
                 const TensorProduct<T>& tensor,                     // tensor product
                 bool                    adjust_pt) const            // adjust point to be at level of tensor
                                                                     // caution: potentially dangerous side effect
@@ -582,7 +603,7 @@ namespace mfa
         // by converting n-d point into 1-d index and looking up value in knot_tensors hash map
         // returns true if the tensor was found
         bool lookup_tensor(const vector<KnotIdx>&   pt,                   // target point in index space
-                           TensorIdx&               t_idx) const          // tensor idx if it was found
+                           TensorIdx&               t_idx) const          // (output) tensor idx if it was found
         {
             // convert multidim point into linear 1-d index
             VectorXi nknots(dom_dim_);
@@ -909,7 +930,7 @@ namespace mfa
         bool knot_idx_ofst(
                 const TensorProduct<T>& t,                          // tensor product
                 KnotIdx                 orig_idx,                   // starting knot idx
-                int                     ofst,                       // affset amount, can be positive or negative
+                int                     ofst,                       // offset amount, can be positive or negative
                 int                     cur_dim,                    // current dimension
                 bool                    edge_check,                 // check for missing control points at global edge
                 KnotIdx&                ofst_idx) const             // (output) offset knot idx, can reuse orig_idx if desired
@@ -1007,6 +1028,40 @@ namespace mfa
         {
             int nctrl_pts = all_knots[cur_dim].size() - p_(cur_dim) - 1;
 
+            if (u == all_knots[cur_dim][nctrl_pts])
+                return nctrl_pts - 1;
+
+            // binary search
+            int low = p_(cur_dim);
+            int high = nctrl_pts;
+            int mid = (low + high) / 2;
+            while (u < all_knots[cur_dim][mid] || u >= all_knots[cur_dim][mid + 1])
+            {
+                if (u < all_knots[cur_dim][mid])
+                    high = mid;
+                else
+                    low = mid;
+                mid = (low + high) / 2;
+            }
+
+            return mid;
+        }
+
+        // binary search to find the span in the knots vector containing a given parameter value
+        // returns span index i s.t. u is in [ knots[i], knots[i + 1] )
+        // NB closed interval at left and open interval at right
+        //
+        // i will be in the range [p, n], where n = number of control points - 1 because there are
+        // p + 1 repeated knots at start and end of knot vector
+        // algorithm 2.1, P&T, p. 68
+        //
+        // CAUTION: can find a span not in the tensor, looks at all knots irrespective of level
+        // use only for a t-mesh with one tensor product, where all knots are used in the tensor
+        int FindSpan(
+                int                     cur_dim,            // current dimension
+                T                       u,                  // parameter value
+                int                     nctrl_pts) const    // number of control points in current dim
+        {
             if (u == all_knots[cur_dim][nctrl_pts])
                 return nctrl_pts - 1;
 
@@ -1154,10 +1209,7 @@ namespace mfa
             anchors.resize(dom_dim_);
 
             // find tensor containing param
-            bool found      = false;
-            TensorIdx t_idx = find_tensor(param, found);
-            if (!found)
-                throw MFAError(fmt::format("anchors(): tensor containing param [{}] not found\n", param.transpose()));
+            TensorIdx t_idx = find_tensor(param);
 
             // convert param to span
             vector<KnotIdx> target(dom_dim_);
@@ -1321,7 +1373,7 @@ namespace mfa
             return anchor;
         }
 
-        // expands anchors originating at a point in some tensor adjusted for all neighboring tensors
+        // expands anchors originating at a point in some tensor adjusted for all intersecting tensors
         // result is the extents (first and last) of the original anchors possibly expanded in all directions to cover neigboring tensors
         // returns whether any changes were made
         bool expand_anchors(
@@ -1331,51 +1383,52 @@ namespace mfa
         {
             bool changed = false;
             auto& t = tensor_prods[t_idx];
-
-            vector<vector<KnotIdx>> temp_anchors(dom_dim_);                 // copy of orig_anchors that can be modified
             anchor_extents.resize(dom_dim_);                                // output extents (front and back) possibly expanded
 
             for (auto i = 0; i < dom_dim_; i++)
             {
-                temp_anchors[i] = orig_anchors[i];
                 anchor_extents[i].resize(2);
                 anchor_extents[i][0] = orig_anchors[i].front();
                 anchor_extents[i][1] = orig_anchors[i].back();
             }
 
-            for (auto k = 0; k < tensor_prods.size(); k++)
+            vector<KnotIdx> anchor(dom_dim_);                               // one multidim anchor
+            for (auto a = 0; a < orig_anchors[0].size(); a++)               // for all multidim original anchors
             {
-                auto& t_k = tensor_prods[k];
-//                 bool adj_tensor = false;                                     // tensor t_k is adjacent to tensor t
-//                 for (auto i = 0; i < dom_dim_; i++)
-//                 {
-//                     if (adjacent(t_k, t, i, true) != 0)
-//                     {
-//                         adj_tensor = true;
-//                         break;
-//                     }
-//                 }
+                for (auto i = 0; i < dom_dim_; i++)
+                    anchor[i] = orig_anchors[i][a];
 
-//                 if (!adj_tensor)
-//                     continue;
+                TensorIdx found_tidx;
 
-                if (!intersect(t, t_k, 0, true, true))
+                if (!lookup_tensor(anchor, found_tidx))
                     continue;
 
-                for (auto i = 0; i < dom_dim_; i++)
+                auto& t_k = tensor_prods[found_tidx];
+                for (auto i = 0; i < dom_dim_; i++)                     // for all dims
                 {
-                    for (auto j = 0; j < orig_anchors[i].size(); j++)
+                    for (auto j = 0; j < orig_anchors[i].size(); j++)   // for original anchors in current dim
                     {
                         if (orig_anchors[i][j] >= t_k.knot_mins[i] && orig_anchors[i][j] < t_k.knot_maxs[i])
                         {
-                            KnotIdx ofst_idx;
-                            while(all_knot_levels[i][temp_anchors[i][j]] > t_k.level && temp_anchors[i][j] >= t_k.knot_mins[i])
+                            KnotIdx ofst_idx, temp_anchor;
+
+                            // t_k is to the max side of t
+                            temp_anchor = orig_anchors[i][j];
+                            while(temp_anchor >= t_k.knot_mins[i] && all_knot_levels[i][temp_anchor] > t_k.level)
                             {
-                                temp_anchors[i][j]--;
-                                // NB, it's not an error if we try to offset more than the tensor boundary, in which case
-                                // knot_idx_ofst clamps the offset to the knot_mins, maxs, which is what we want
+                                temp_anchor--;
+                                // if we try to offset more than the tensor boundary, knot_idx_ofst clamps the offset to the knot_mins, maxs, which is what we want
                                 knot_idx_ofst(t_k, anchor_extents[i][0], -1, i, false, ofst_idx);
                                 anchor_extents[i][0] = ofst_idx;
+                                changed = true;
+                            }
+
+                            // t_k is to the min side of t
+                            temp_anchor = orig_anchors[i][j];
+                            while(temp_anchor <= t_k.knot_maxs[i] && all_knot_levels[i][temp_anchor] > t_k.level)
+                            {
+                                temp_anchor++;
+                                // if we try to offset more than the tensor boundary, knot_idx_ofst clamps the offset to the knot_mins, maxs, which is what we want
                                 knot_idx_ofst(t_k, anchor_extents[i][1], 1, i, false, ofst_idx);
                                 anchor_extents[i][1] = ofst_idx;
                                 changed = true;

@@ -1867,11 +1867,6 @@ namespace mfa
             vector<vector<KnotIdx>> loc_knots(dom_dim_);
             knot_intersections(target, t_idx, loc_knots);
 
-            // debug
-            if (fabs(param(0) - 0.4683) < 0.001 && param(1) == 1)
-                fmt::print(stderr, "anchors(): target [{}] loc_knots[0] [{}] loc_knots[1] [{}]\n",
-                        fmt::join(target, ","), fmt::join(loc_knots[0], ","), fmt::join(loc_knots[1], ","));
-
             // take correct p + 1 anchors out of the p + 2 found above
             for (auto i = 0; i < dom_dim_; i++)
             {
@@ -2585,6 +2580,70 @@ namespace mfa
             }
         }
 
+        // DEPRECATED
+//         // expands anchors originating at a point in some tensor adjusted for all neighboring tensors
+//         // result is the extents (first and last) of the original anchors possibly expanded in all directions to cover neigboring tensors
+//         // returns whether any changes were made
+//         bool expand_anchors(
+//                 const vector<vector<KnotIdx>>&  orig_anchors,               // original original anchors in all dims
+//                 TensorIdx                       t_idx,                      // original tensor product
+//                 vector<vector<KnotIdx>>&        anchor_extents) const       // (output) possibly expanded first and last anchors in all dims
+//         {
+//             bool changed = false;
+//             auto& t = tensor_prods[t_idx];
+// 
+//             vector<vector<KnotIdx>> temp_anchors(dom_dim_);                 // copy of orig_anchors that can be modified
+//             anchor_extents.resize(dom_dim_);                                // output extents (front and back) possibly expanded
+// 
+//             for (auto i = 0; i < dom_dim_; i++)
+//             {
+//                 temp_anchors[i] = orig_anchors[i];
+//                 anchor_extents[i].resize(2);
+//                 anchor_extents[i][0] = orig_anchors[i].front();
+//                 anchor_extents[i][1] = orig_anchors[i].back();
+//             }
+// 
+//             for (auto k = 0; k < tensor_prods.size(); k++)
+//             {
+//                 auto& t_k = tensor_prods[k];
+//                 bool adj_tensor = false;                                     // tensor t_k is adjacent to tensor t
+//                 for (auto i = 0; i < dom_dim_; i++)
+//                 {
+//                     if (adjacent(t_k, t, i, true) != 0)
+//                     {
+//                         adj_tensor = true;
+//                         break;
+//                     }
+//                 }
+// 
+//                 if (!adj_tensor)
+//                     continue;
+// 
+//                 for (auto i = 0; i < dom_dim_; i++)
+//                 {
+//                     for (auto j = 0; j < orig_anchors[i].size(); j++)
+//                     {
+//                         if (orig_anchors[i][j] >= t_k.knot_mins[i] && orig_anchors[i][j] < t_k.knot_maxs[i])
+//                         {
+//                             KnotIdx ofst_idx;
+//                             while(all_knot_levels[i][temp_anchors[i][j]] > t_k.level && temp_anchors[i][j] >= t_k.knot_mins[i])
+//                             {
+//                                 temp_anchors[i][j]--;
+//                                 // NB, it's not an error if we try to offset more than the tensor boundary, in which case
+//                                 // knot_idx_ofst clamps the offset to the knot_mins, maxs, which is what we want
+//                                 knot_idx_ofst(t_k, anchor_extents[i][0], -1, i, false, ofst_idx);
+//                                 anchor_extents[i][0] = ofst_idx;
+//                                 knot_idx_ofst(t_k, anchor_extents[i][1], 1, i, false, ofst_idx);
+//                                 anchor_extents[i][1] = ofst_idx;
+//                                 changed = true;
+//                             }
+//                         }
+//                     }
+//                 }
+//             }
+//             return changed;
+//         }
+
         // expands anchors originating at a point in some tensor adjusted for all neighboring tensors
         // result is the extents (first and last) of the original anchors possibly expanded in all directions to cover neigboring tensors
         // returns whether any changes were made
@@ -2596,12 +2655,10 @@ namespace mfa
             bool changed = false;
             auto& t = tensor_prods[t_idx];
 
-            vector<vector<KnotIdx>> temp_anchors(dom_dim_);                 // copy of orig_anchors that can be modified
             anchor_extents.resize(dom_dim_);                                // output extents (front and back) possibly expanded
 
             for (auto i = 0; i < dom_dim_; i++)
             {
-                temp_anchors[i] = orig_anchors[i];
                 anchor_extents[i].resize(2);
                 anchor_extents[i][0] = orig_anchors[i].front();
                 anchor_extents[i][1] = orig_anchors[i].back();
@@ -2629,14 +2686,25 @@ namespace mfa
                     {
                         if (orig_anchors[i][j] >= t_k.knot_mins[i] && orig_anchors[i][j] < t_k.knot_maxs[i])
                         {
-                            KnotIdx ofst_idx;
-                            while(all_knot_levels[i][temp_anchors[i][j]] > t_k.level && temp_anchors[i][j] >= t_k.knot_mins[i])
+                            KnotIdx ofst_idx, temp_anchor;
+
+                            // t_k is to the max side of t
+                            temp_anchor = orig_anchors[i][j];
+                            while(temp_anchor >= t_k.knot_mins[i] && all_knot_levels[i][temp_anchor] > t_k.level)
                             {
-                                temp_anchors[i][j]--;
-                                // NB, it's not an error if we try to offset more than the tensor boundary, in which case
-                                // knot_idx_ofst clamps the offset to the knot_mins, maxs, which is what we want
+                                temp_anchor--;
+                                // if we try to offset more than the tensor boundary, knot_idx_ofst clamps the offset to the knot_mins, maxs, which is what we want
                                 knot_idx_ofst(t_k, anchor_extents[i][0], -1, i, false, ofst_idx);
                                 anchor_extents[i][0] = ofst_idx;
+                                changed = true;
+                            }
+
+                            // t_k is to the min side of t
+                            temp_anchor = orig_anchors[i][j];
+                            while(temp_anchor <= t_k.knot_maxs[i] && all_knot_levels[i][temp_anchor] > t_k.level)
+                            {
+                                temp_anchor++;
+                                // if we try to offset more than the tensor boundary, knot_idx_ofst clamps the offset to the knot_mins, maxs, which is what we want
                                 knot_idx_ofst(t_k, anchor_extents[i][1], 1, i, false, ofst_idx);
                                 anchor_extents[i][1] = ofst_idx;
                                 changed = true;

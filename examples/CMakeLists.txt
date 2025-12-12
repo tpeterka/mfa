@@ -1,4 +1,4 @@
-# add_subdirectory            (convert)
+add_subdirectory            (convert)
 # add_subdirectory            (eval)
 add_subdirectory            (encode)
 # add_subdirectory            (old)

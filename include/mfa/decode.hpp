@@ -1021,10 +1021,6 @@ namespace mfa
             vector<vector<KnotIdx>> anchors(dom_dim);                               // (global) anchors of local support of param point
             TensorIdx found_idx = tmesh.anchors(param, 0, anchors);                 // 0 is the seed for searching for the correct tensor TODO
 
-            // debug
-            if (fabs(param(0) - 0.4683) < 0.001 && param(1) == 1)
-                fmt::print(stderr, "anchors[0] [{}] anchors[1] [{}]\n", fmt::join(anchors[0], ","), fmt::join(anchors[1], ","));
-
             // (global) extents of original anchors expanded for adjacent tensors
             vector<vector<KnotIdx>> anchor_extents(dom_dim);
             bool changed = tmesh.expand_anchors(anchors, found_idx, anchor_extents);
@@ -1099,11 +1095,6 @@ namespace mfa
                     }
                 }
 
-                // debug
-                if (fabs(param(0) - 0.4683) < 0.001 && param(1) == 1)
-                    fmt::print(stderr, "tidx {} anchor_extents[0] [{}] anchor_extents[1] [{}] min_anchor [{}] max_anchor [{}]\n",
-                            k, fmt::join(anchor_extents[0], ","), fmt::join(anchor_extents[1], ","), fmt::join(min_anchor, ","), fmt::join(max_anchor, ","));
-
                 sub_starts  = tmesh.anchor_ctrl_pt_ijk(t, min_anchor, false);        // local to the tensor
                 sub_ends    = tmesh.anchor_ctrl_pt_ijk(t, max_anchor, false);        // local to the tensor
                 for (auto i = 0; i < dom_dim; i++)
@@ -1140,10 +1131,6 @@ namespace mfa
                         vol_iterator1.incr_iter();
                         continue;
                     }
-
-                    // debug
-                    if (fabs(param(0) - .4683) < 0.001 && param(1) == 1)
-                            fmt::print(stderr, "VolPt_tmesh: tidx {} ctrl_anchor [{}]\n", k, fmt::join(ctrl_anchor, ","));
 
                     // intersect tmesh lines to get local knot indices in all directions
                     tmesh.knot_intersections(ctrl_anchor, k, local_knot_idxs);
@@ -1201,7 +1188,6 @@ namespace mfa
         // TODO: later select a desired level
         // TODO: no derivatives as yet
         // TODO: weighs all dims, whereas other versions of VolPt have a choice of all dims or only last dim
-        // TODO: need a tensor product locating structure to quickly locate the tensor product containing param
         void VolPt_tmesh(const VectorX<T>&      param,      // parameters of point to decode
                          VectorX<T>&            out_pt,     // (output) point, allocated by caller
                          bool                   timing = false) // collect timing data for debugging
@@ -1223,7 +1209,6 @@ namespace mfa
             T w_sum = 0.0;                                                          // sum of control point weights
                                                                                     //
             // compute range of anchors covering decoded point
-            // TODO: need a tensor product locating structure to quickly locate the tensor product containing param
             vector<vector<KnotIdx>> anchors(dom_dim);                               // (global) anchors of local support of param point
             TensorIdx found_idx = tmesh.anchors(param, anchors);
 
@@ -1254,37 +1239,25 @@ namespace mfa
 
                 vector<KnotIdx> min_anchor(dom_dim);                                // in global index space
                 vector<KnotIdx> max_anchor(dom_dim);                                // in global index space
+                vector<KnotIdx> mid_anchor(dom_dim);                                // in global index space
                 VectorXi        sub_starts(dom_dim);
                 VectorXi        sub_ends(dom_dim);
                 VectorXi        sub_sizes(dom_dim);
                 VectorXi        ijk(dom_dim);                                       // multidim index of current control point
 
-                // skip entire tensor if it's not the deepest one containing both anchor extents
-                // TODO confirm that a tensor cannot contain interior anchor points but not the extents
-                // due to the minimum size of a tensor (NB, anchors were expanded)
-                bool skip = false;
-//                 for (auto j = 0; j < dom_dim; j++)
-//                 {
-//                     min_anchor[j] = anchor_extents[j].front();
-//                     max_anchor[j] = anchor_extents[j].back();
-//                 }
-//                 for (auto j = 0; j < dom_dim; j++)
-//                 {
-//                     TensorIdx found_tidx;
-//                     if ((!tmesh.lookup_tensor(min_anchor, found_tidx) || found_tidx != k) &&
-//                         (!tmesh.lookup_tensor(max_anchor, found_tidx) || found_tidx != k))
-//                     {
-//                         skip = true;
-//                         break;
-//                     }
-//                 }
-
-                // skip based on only the anchor, not the anchor extents
-                bool found = false;
-                auto tidx = tmesh.find_tensor(param, found);
-                skip = !found;
-
-                if (skip)
+                // skip entire tensor if it's not the deepest one containing both anchor extents and a middle anchor
+                // NB we're fairly confident that if a tensor doesn't contain the extents and the middle anchor, it doesn't have any of the anchors
+                // due to the minimum size of a tensor, even though the anchors were expanded (but this isn't strictly guaranteed)
+                for (auto j = 0; j < dom_dim; j++)
+                {
+                    min_anchor[j] = anchor_extents[j].front();
+                    max_anchor[j] = anchor_extents[j].back();
+                    mid_anchor[j] = anchors[j][anchors[j].size() / 2];
+                }
+                TensorIdx found_tidx;
+                if ((!tmesh.lookup_tensor(min_anchor, found_tidx) || found_tidx != k) &&
+                    (!tmesh.lookup_tensor(max_anchor, found_tidx) || found_tidx != k) &&
+                    (!tmesh.lookup_tensor(mid_anchor, found_tidx) || found_tidx != k))
                     continue;
 
                 // debug
