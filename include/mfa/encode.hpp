@@ -1592,9 +1592,6 @@ namespace mfa
                            MatrixX<T>&              Ncons,              // (output) matrix of constraint control points basis functions, allocated by caller
                            std::vector<double>&     times)              // timing (for debugging) allocated and initialized by caller
         {
-            // debug
-//             fmt::print(stderr, "ConsCtrlPtMat: ndom_pts [{}] dom_starts [{}]\n", ndom_pts.transpose(), dom_starts.transpose());
-
             // typing shortcuts
             auto& tmesh     = mfa_data.tmesh;
             auto& all_knots = tmesh.all_knots;
@@ -2175,8 +2172,6 @@ namespace mfa
                 MatrixX<T>  Pcons;
                 MatrixX<T>  P(t.nctrl_pts(dim), pt_dim);
 
-                // debug: turn off constraints
-
 #ifdef MFA_NO_CONSTRAINTS
 
                 cons_type = ConsType::MFA_NO_CONSTRAINT;
@@ -2242,6 +2237,9 @@ namespace mfa
 
                     if (CurveIntersectsTensor(t_idx, dim, nin_pts, start_ijk))
                     {
+
+#if !defined(MFA_NO_CONSTRAINTS)
+
                         // fill Ncons
                         if (dim == 0 && Pcons.rows())
                         {
@@ -2250,6 +2248,8 @@ namespace mfa
                             ConsCtrlPtMat(t_idx, ncurve_pts, start_ijk, anchors, t_idx_anchors, Ncons, cons_detail_times);
                             cons_time += (MPI_Wtime() - t1);
                         }
+
+#endif
 
                         ComputeCtrlPtCurve(in_curve_iter, t_idx, dim, R, Q, Q1, Nfree, Ncons, Pcons, P,
                                 cons_type, nin_pts, start_ijk, ncons, free_time, norm_time, solve_time);
@@ -4249,99 +4249,162 @@ namespace mfa
             // parent tensor
             if (!tc.parent_exists)
                 throw MFAError(fmt::format("LocalSolveOverlaysContraints: parent tensor does not exist"));
-            const TensorProduct<T>& t = tmesh.tensor_prods[tc.parent];
+            const TensorProduct<T>* t = &tc;                          // initialize to candidate tensor, will be set to parent later
 
             // mins, maxs of tc padded by degree p
             vector<KnotIdx> tc_pad_mins(dom_dim);
             vector<KnotIdx> tc_pad_maxs(dom_dim);
-            for (auto i = 0; i < dom_dim; i++)
-            {
-                int p = mfa_data.p(i);
-                tmesh.knot_idx_ofst(t, tc.knot_mins[i], -p, i, true, tc_pad_mins[i]);
-                tmesh.knot_idx_ofst(t, tc.knot_maxs[i], p, i, true, tc_pad_maxs[i]);
-            }
 
             // intersection of tc padded by degree p with tensor being visited
             vector<KnotIdx> intersect_mins(dom_dim);
             vector<KnotIdx> intersect_maxs(dom_dim);
-            if (!tmesh.intersects(tc_pad_mins, tc_pad_maxs, t.knot_mins, t.knot_maxs, intersect_mins, intersect_maxs))
-                throw MFAError(fmt::format("LocalSolverOverlaysConstraints: intersection of child and parent is empty"));
 
-            // set up the vol iterator
+            // sizes of the vol iterator
             VectorXi sub_starts(dom_dim);
             VectorXi sub_npts(dom_dim);
             VectorXi all_npts(dom_dim);
 
-            for (auto i = 0; i < dom_dim; i++)
-            {
-                int p = mfa_data.p(i);
-                // compute sub_starts, sub_npts, all_npts
-                sub_starts(i) = tmesh.knot_idx_dist(t, t.knot_mins[i], intersect_mins[i], i, false);
-                if (t.knot_mins[i] == 0)
-                    sub_starts(i) -= (p + 1) / 2;
-                if (mfa_data.p(i) % 2)              // odd degree
-                    sub_npts(i) = tmesh.knot_idx_dist(t, intersect_mins[i], intersect_maxs[i], i, true);
-                else                                // even degree
-                    sub_npts(i) = tmesh.knot_idx_dist(t, intersect_mins[i], intersect_maxs[i], i, false);
-                all_npts(i) = t.nctrl_pts(i);
-            }
 
-            // debug
-            fmt::print(stderr, "LocalSolveOverlaysConstraints: tc mins [{}] maxs [{}] pad mins [{}] maxs [{}] parent tidx {} knot_mins [{}] knot_maxs [{}] intersect mins [{}] maxs [{}]\n",
-                    fmt::join(tc.knot_mins, ","), fmt::join(tc.knot_maxs, ","),
-                    fmt::join(tc_pad_mins, ","), fmt::join(tc_pad_maxs, ","), tc.parent,
-                    fmt::join(t.knot_mins, ","), fmt::join(t.knot_maxs, ","),
-                    fmt::join(intersect_mins, ","), fmt::join(intersect_maxs, ","));
-
-            VolIterator voliter(sub_npts, sub_starts, all_npts);
             VectorXi ijk(dom_dim);
+            vector<KnotIdx> anchor(dom_dim);                    // one anchor
 
-            vector<KnotIdx> anchor(dom_dim);            // one anchor
-            int rows = 0;                               // number of control points actually used
-
-            // the first time through the volume iterator, count required sizes needed
-            while (!voliter.done())
+            // the first time through, count required sizes needed
+            int rows = 0;                                       // number of control points used
+            while (t->parent_exists)                            // trace parents back up to root while intersections exist between the candidate and its ancestors
             {
-                // anchor
-                voliter.idx_ijk(voliter.cur_iter(), ijk);
-                tmesh.ctrl_pt_anchor(t, ijk, anchor);
+                int parent_tidx = t->parent;
+                t = &(tmesh.tensor_prods[parent_tidx]);
 
-                // skip if knot is inside the child and also skip MFA_NAW control points (used in odd degree cases)
-                if (!tmesh.in(anchor, tc, false) && t.weights(voliter.sub_full_idx(voliter.cur_iter())) != MFA_NAW)
-                    rows++;
-                voliter.incr_iter();
-            }
+                // mins, maxs of tc padded by degree p
+                for (auto i = 0; i < dom_dim; i++)
+                {
+                    int p = mfa_data.p(i);
+                    tmesh.knot_idx_ofst(*t, tc.knot_mins[i], -p, i, true, tc_pad_mins[i]);
+                    tmesh.knot_idx_ofst(*t, tc.knot_maxs[i], p, i, true, tc_pad_maxs[i]);
+                }
+
+                if (!tmesh.intersects(tc_pad_mins, tc_pad_maxs, t->knot_mins, t->knot_maxs, intersect_mins, intersect_maxs))
+                    break;
+
+                // set up the vol iterator
+                for (auto i = 0; i < dom_dim; i++)
+                {
+                    int p = mfa_data.p(i);
+                    // compute sub_starts, sub_npts, all_npts
+                    sub_starts(i) = tmesh.knot_idx_dist(*t, t->knot_mins[i], intersect_mins[i], i, false);
+                    if (t->knot_mins[i] == 0)
+                        sub_starts(i) -= (p + 1) / 2;
+                    if (mfa_data.p(i) % 2)                      // odd degree
+                        sub_npts(i) = tmesh.knot_idx_dist(*t, intersect_mins[i], intersect_maxs[i], i, true);
+                    else                                        // even degree
+                        sub_npts(i) = tmesh.knot_idx_dist(*t, intersect_mins[i], intersect_maxs[i], i, false);
+                    all_npts(i) = t->nctrl_pts(i);
+                }
+
+                // debug
+//                 fmt::print(stderr, "LocalSolveOverlaysConstraints: tc mins [{}] maxs [{}] pad mins [{}] maxs [{}] parent tidx {} knot_mins [{}] knot_maxs [{}] intersect mins [{}] maxs [{}]\n",
+//                         fmt::join(tc.knot_mins, ","), fmt::join(tc.knot_maxs, ","),
+//                         fmt::join(tc_pad_mins, ","), fmt::join(tc_pad_maxs, ","), parent_tidx,
+//                         fmt::join(t->knot_mins, ","), fmt::join(t->knot_maxs, ","),
+//                         fmt::join(intersect_mins, ","), fmt::join(intersect_maxs, ","));
+
+                VolIterator voliter(sub_npts, sub_starts, all_npts);
+
+                // traverse the vol iterator
+                while (!voliter.done())
+                {
+                    // anchor
+                    voliter.idx_ijk(voliter.cur_iter(), ijk);
+                    tmesh.ctrl_pt_anchor(*t, ijk, anchor);
+
+                    // skip if knot is inside the child or if it is in a deeper level
+                    TensorIdx lookup_tidx;
+                    bool lookup_success = false;
+                    lookup_success = tmesh.lookup_tensor(anchor, lookup_tidx);
+                    if (!tmesh.in(anchor, tc.knot_mins, tc.knot_maxs) && lookup_success && lookup_tidx == parent_tidx)
+                        rows++;
+                    voliter.incr_iter();
+                }
+            }       // while t->parent_exists
 
             ctrl_pts.resize(rows, cols);
             anchors.resize(rows);
             t_idx_anchors.resize(rows);
 
-            voliter.reset();
+            t = &tc;                                            // initialize to candidate tensor, will be set to parent later
 
-            // the second time through the volume iterator, copy control points and anchors
-            int cur_row = 0;
-            while (!voliter.done())
+            // the second time through, copy anchors
+            int cur_row = 0;                                    // current anchor being written
+            while (t->parent_exists)                            // trace parents back up to root while intersections exist between the candidate and its ancestors
             {
-                // anchor
-                voliter.idx_ijk(voliter.cur_iter(), ijk);
-                tmesh.ctrl_pt_anchor(t, ijk, anchor);
+                int parent_tidx = t->parent;
+                t = &(tmesh.tensor_prods[parent_tidx]);
 
-                // skip if knot is inside the child and also skip MFA_NAW control points (used in odd degree cases)
-                if (!tmesh.in(anchor, tc, false) && t.weights(voliter.sub_full_idx(voliter.cur_iter())) != MFA_NAW)
+                // mins, maxs of tc padded by degree p
+                for (auto i = 0; i < dom_dim; i++)
                 {
-                    // save control point
-                    ctrl_pts.row(cur_row) = t.ctrl_pts.row(voliter.sub_full_idx(voliter.cur_iter()));
-
-                    // save anchor
-                    anchors[cur_row].resize(dom_dim);
-                    for (auto i = 0; i < dom_dim; i++)
-                        anchors[cur_row][i] = anchor[i];
-                    t_idx_anchors[cur_row] = tc.parent;
-
-                    cur_row++;
+                    int p = mfa_data.p(i);
+                    tmesh.knot_idx_ofst(*t, tc.knot_mins[i], -p, i, true, tc_pad_mins[i]);
+                    tmesh.knot_idx_ofst(*t, tc.knot_maxs[i], p, i, true, tc_pad_maxs[i]);
                 }
-                voliter.incr_iter();
-            }
+
+                if (!tmesh.intersects(tc_pad_mins, tc_pad_maxs, t->knot_mins, t->knot_maxs, intersect_mins, intersect_maxs))
+                    break;
+
+                // set up the vol iterator
+                for (auto i = 0; i < dom_dim; i++)
+                {
+                    int p = mfa_data.p(i);
+                    // compute sub_starts, sub_npts, all_npts
+                    sub_starts(i) = tmesh.knot_idx_dist(*t, t->knot_mins[i], intersect_mins[i], i, false);
+                    if (t->knot_mins[i] == 0)
+                        sub_starts(i) -= (p + 1) / 2;
+                    if (mfa_data.p(i) % 2)                      // odd degree
+                        sub_npts(i) = tmesh.knot_idx_dist(*t, intersect_mins[i], intersect_maxs[i], i, true);
+                    else                                        // even degree
+                        sub_npts(i) = tmesh.knot_idx_dist(*t, intersect_mins[i], intersect_maxs[i], i, false);
+                    all_npts(i) = t->nctrl_pts(i);
+                }
+
+                // debug
+//                 fmt::print(stderr, "LocalSolveOverlaysConstraints: tc mins [{}] maxs [{}] pad mins [{}] maxs [{}] parent tidx {} knot_mins [{}] knot_maxs [{}] intersect mins [{}] maxs [{}]\n",
+//                         fmt::join(tc.knot_mins, ","), fmt::join(tc.knot_maxs, ","),
+//                         fmt::join(tc_pad_mins, ","), fmt::join(tc_pad_maxs, ","), parent_tidx,
+//                         fmt::join(t->knot_mins, ","), fmt::join(t->knot_maxs, ","),
+//                         fmt::join(intersect_mins, ","), fmt::join(intersect_maxs, ","));
+
+                VolIterator voliter(sub_npts, sub_starts, all_npts);
+
+                // traverse the vol iterator
+                while (!voliter.done())
+                {
+                    // anchor
+                    voliter.idx_ijk(voliter.cur_iter(), ijk);
+                    tmesh.ctrl_pt_anchor(*t, ijk, anchor);
+
+                    // skip if knot is inside the child or if it is in a deeper level
+                    TensorIdx lookup_tidx;
+                    bool lookup_success = false;
+                    lookup_success = tmesh.lookup_tensor(anchor, lookup_tidx);
+                    if (!tmesh.in(anchor, tc.knot_mins, tc.knot_maxs) && lookup_success && lookup_tidx == parent_tidx)
+                    {
+                        // save control point
+                        ctrl_pts.row(cur_row) = t->ctrl_pts.row(voliter.sub_full_idx(voliter.cur_iter()));
+
+                        // save anchor
+                        anchors[cur_row].resize(dom_dim);
+                        for (auto i = 0; i < dom_dim; i++)
+                            anchors[cur_row][i] = anchor[i];
+                        t_idx_anchors[cur_row] = tc.parent;
+
+                        // debug
+                        fmt::print(stderr, "LocalSolveOverlaysConstraints: saving anchor [{}] from t_idx {}\n", fmt::join(anchor, ","), parent_tidx);
+
+                        cur_row++;
+                    }
+                    voliter.incr_iter();
+                }
+            }       // while t->parent exists
         }
 
 #endif      // MFA_TMESH or MFA_OVERLAYS
