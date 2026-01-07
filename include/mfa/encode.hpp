@@ -1898,7 +1898,7 @@ namespace mfa
 #if defined(MFA_TMESH)
             LocalSolveAllConstraints(t, Pcons, anchors, t_idx_anchors);
 #elif defined(MFA_OVERLAYS)
-            LocalSolveOverlaysConstraints(t, Pcons, anchors, t_idx_anchors);
+            LocalSolveOverlaysConstraints(t_idx, Pcons, anchors, t_idx_anchors);
 #endif
 
 #endif
@@ -2203,7 +2203,7 @@ namespace mfa
 #if defined(MFA_TMESH)
                     LocalSolveAllConstraints(t, Pcons, anchors, t_idx_anchors);
 #elif defined(MFA_OVERLAYS)
-                    LocalSolveOverlaysConstraints(t, Pcons, anchors, t_idx_anchors);
+                    LocalSolveOverlaysConstraints(t_idx, Pcons, anchors, t_idx_anchors);
 #endif
 
                     // number of input points in one curve
@@ -4238,18 +4238,20 @@ namespace mfa
         // constraint control points and corresponding anchors for local solve for overlays
         // helper function for EncodeTensorLocalSeparable and EncodeTensorLocalUnified
         void LocalSolveOverlaysConstraints(
-                const TensorProduct<T>&     tc,                 // current tensor product being solved
+                TensorIdx                   tidx,               // idx of current tensor being solved
                 MatrixX<T>&                 ctrl_pts,           // (output) constraining control points
                 vector<vector<KnotIdx>>&    anchors,            // (output) corresponding anchors
                 vector<TensorIdx>&          t_idx_anchors)      // (output) tensors containing corresponding anchors
         {
             const Tmesh<T>&         tmesh   = mfa_data.tmesh;
-            int                     cols    = tc.ctrl_pts.cols();
 
-            // parent tensor
+            // current and parent tensor
+            auto& tc = tmesh.tensor_prods[tidx];
             if (!tc.parent_exists)
                 throw MFAError(fmt::format("LocalSolveOverlaysContraints: parent tensor does not exist"));
             const TensorProduct<T>* t = &tc;                          // initialize to candidate tensor, will be set to parent later
+
+            int cols    = tc.ctrl_pts.cols();
 
             // mins, maxs of tc padded by degree p
             vector<KnotIdx> tc_pad_mins(dom_dim);
@@ -4301,13 +4303,6 @@ namespace mfa
                     all_npts(i) = t->nctrl_pts(i);
                 }
 
-                // debug
-//                 fmt::print(stderr, "LocalSolveOverlaysConstraints: tc mins [{}] maxs [{}] pad mins [{}] maxs [{}] parent tidx {} knot_mins [{}] knot_maxs [{}] intersect mins [{}] maxs [{}]\n",
-//                         fmt::join(tc.knot_mins, ","), fmt::join(tc.knot_maxs, ","),
-//                         fmt::join(tc_pad_mins, ","), fmt::join(tc_pad_maxs, ","), parent_tidx,
-//                         fmt::join(t->knot_mins, ","), fmt::join(t->knot_maxs, ","),
-//                         fmt::join(intersect_mins, ","), fmt::join(intersect_maxs, ","));
-
                 VolIterator voliter(sub_npts, sub_starts, all_npts);
 
                 // traverse the vol iterator
@@ -4323,9 +4318,13 @@ namespace mfa
                     lookup_success = tmesh.lookup_tensor(anchor, lookup_tidx);
                     if (!tmesh.in(anchor, tc.knot_mins, tc.knot_maxs) && lookup_success && lookup_tidx == parent_tidx)
                         rows++;
+
                     voliter.incr_iter();
                 }
             }       // while t->parent_exists
+
+            // debug
+            fmt::print(stderr, "LocalSolveOverlaysConstraints: rows = {}\n", rows);
 
             ctrl_pts.resize(rows, cols);
             anchors.resize(rows);
@@ -4366,13 +4365,6 @@ namespace mfa
                     all_npts(i) = t->nctrl_pts(i);
                 }
 
-                // debug
-//                 fmt::print(stderr, "LocalSolveOverlaysConstraints: tc mins [{}] maxs [{}] pad mins [{}] maxs [{}] parent tidx {} knot_mins [{}] knot_maxs [{}] intersect mins [{}] maxs [{}]\n",
-//                         fmt::join(tc.knot_mins, ","), fmt::join(tc.knot_maxs, ","),
-//                         fmt::join(tc_pad_mins, ","), fmt::join(tc_pad_maxs, ","), parent_tidx,
-//                         fmt::join(t->knot_mins, ","), fmt::join(t->knot_maxs, ","),
-//                         fmt::join(intersect_mins, ","), fmt::join(intersect_maxs, ","));
-
                 VolIterator voliter(sub_npts, sub_starts, all_npts);
 
                 // traverse the vol iterator
@@ -4395,10 +4387,10 @@ namespace mfa
                         anchors[cur_row].resize(dom_dim);
                         for (auto i = 0; i < dom_dim; i++)
                             anchors[cur_row][i] = anchor[i];
-                        t_idx_anchors[cur_row] = tc.parent;
+                        t_idx_anchors[cur_row] = parent_tidx;
 
                         // debug
-                        fmt::print(stderr, "LocalSolveOverlaysConstraints: saving anchor [{}] from t_idx {}\n", fmt::join(anchor, ","), parent_tidx);
+                        fmt::print(stderr, "LocalSolveOverlaysConstraints: saving anchor [{}] from t_idx {}\n", fmt::join(anchor, ","), lookup_tidx);
 
                         cur_row++;
                     }

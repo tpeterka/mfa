@@ -34,6 +34,8 @@ struct TensorProduct
     vector<vector<TensorIdx>>   prev;                   // prev[dim][index of previous tensor product] (unsorted)
     int                         level;                  // refinement level
     vector<vector<KnotIdx>>     knot_idxs;              // all_knots indices of knots belonging to this tensor [dim][index] (sorted)
+                                                        // assumes closed knot intervals, even at the maximum end for even degree
+                                                        // (ie, not all knots in this tensor have control points in this tensor)
     bool                        done;                   // no more knots need to be added to this tensor
 
     // following is used for candidate tensors during refinement only and otherwise not maintained

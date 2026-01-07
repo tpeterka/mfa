@@ -34,6 +34,8 @@ struct TensorProduct
     VectorX<T>                  weights;                // weights associated with control points
     int                         level;                  // refinement level
     vector<vector<KnotIdx>>     knot_idxs;              // all_knots indices of knots belonging to this tensor [dim][index] (sorted)
+                                                        // assumes closed knot intervals, even at the maximum end for even degree
+                                                        // (ie, not all knots in this tensor have control points in this tensor)
     bool                        done;                   // no more knots need to be added to this tensor
     TensorIdx                   parent;                 // parent from which this tensor was refined, if parent_exists is true
     vector<TensorIdx>           children;               // children tensors of this parent
@@ -213,6 +215,9 @@ namespace mfa
             VectorXi tensor_nknots(dom_dim_), all_nknots(dom_dim_);
             VectorXi tensor_ijk(dom_dim_);                              // local ijk of knot in tensor
             vector<KnotIdx> all_ijk(dom_dim_);                          // global ijk of knot in all_knots
+            vector<KnotIdx> temp_ijk(dom_dim_);                         // temporary knot multidim index
+            TensorIdx unused;
+
             for (auto j = 0; j < tensor_prods.size(); j++)              // for all tensors
             {
 
@@ -227,15 +232,39 @@ namespace mfa
 
                 while (!tensor_knots_iter.done())                            // for all knots in the tensor
                 {
+                    bool skip = false;
+
                     // get the knot indices in the global knot space
                     tensor_knots_iter.idx_ijk(tensor_knots_iter.cur_iter(), tensor_ijk);
                     for (auto i = 0; i < dom_dim_; i++)
+                    {
                         all_ijk[i] = tensor_prods[j].knot_idxs[i][tensor_ijk(i)];
 
-                    // convert the multidim knot indices to a linear 1-d index for hashing
-                    auto idx = all_knots_iter.ijk_idx(all_ijk);
+                        // if even degree, the knot is at the max edge of an interior tensor, and the knot existed in an ancestor, don't overwrite its hash map entry
+                        if (p_(i) % 2 == 0 &&                                                   // even degree
+                            tensor_ijk(i) == tensor_prods[j].knot_idxs[i].size() - 1 &&         // knot is at max edge of tensor
+                            all_ijk[i] < all_knots[i].size() - 1)                               // tensor is interior, tensor max edge is not global max edge
+                        {
+                            for (auto k = 0; k < dom_dim_; k++)
+                                temp_ijk[k] = tensor_prods[j].knot_idxs[k][tensor_ijk(k)];
+                            if (lookup_tensor(temp_ijk, unused))
+                            {
+                                // debug
+//                                 fmt::print(stderr, "for tensor {}, skipping hashing knot [{}] because it is at the max edge and exists in tensor {}\n",
+//                                         j, fmt::join(temp_ijk, ","), unused);
 
-                    knot_tensor[idx] = j;                               // hash the linear knot idx to the tensor
+                                skip = true;
+                                break;
+                            }
+                        }
+                    }
+
+                    // convert the multidim knot indices to a linear 1-d index for hashing
+                    if (!skip)
+                    {
+                        auto idx = all_knots_iter.ijk_idx(all_ijk);
+                        knot_tensor[idx] = j;                               // hash the linear knot idx to the tensor
+                    }
 
                     tensor_knots_iter.incr_iter();
                 }
