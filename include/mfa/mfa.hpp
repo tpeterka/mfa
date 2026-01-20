@@ -1324,7 +1324,7 @@ namespace mfa
             extra1 = degree + 1 - count1;
             vector<T> addKnots0(extra0, 0.0);
             vector<T> addKnots1(extra1, 1.0);
-            
+
             // Concatenate into final vector with pinned knots
             vector<T> pinnedKnots;
             pinnedKnots.insert(pinnedKnots.end(), addKnots0.begin(), addKnots0.end());

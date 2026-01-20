@@ -1025,6 +1025,13 @@ namespace mfa
             vector<vector<KnotIdx>> anchor_extents(dom_dim);
             bool changed = tmesh.expand_anchors(anchors, found_idx, anchor_extents);
 
+            // debug
+//             if (fabs(param(0) - 0.40506) < 0.001 && param(1) == 0)
+//             {
+//                 fmt::print(stderr, "VolPt_tmesh: param [{}, {}], anchor_extents[0] [{}] anchor_extents[1][{}] found_idx {}\n",
+//                         param(0), param(1), fmt::join(anchor_extents[0], ","), fmt::join(anchor_extents[1], ","), found_idx);
+//             }
+
             // check anchor extents for global edges
             for (auto i = 0; i < dom_dim; i++)
             {
@@ -1047,6 +1054,7 @@ namespace mfa
                 const TensorProduct<T>& t = tmesh.tensor_prods[k];
 
                 // skip entire tensor if knot mins, maxs are too far away from decoded point
+                // TODO: change this logic to check entire box of anchors, all sides, not just diagonal corners
                 bool skip = false;
                 for (auto j = 0; j < dom_dim; j++)
                 {
@@ -1095,6 +1103,16 @@ namespace mfa
                     }
                 }
 
+                // debug
+//                 if (k == 2)
+//                 {
+//                     fmt::print(stderr, "VolPt_tmesh: param [{}, {}], min_anchor [{}] max_anchor [{}]\n",
+//                             param(0), param(1), fmt::join(min_anchor, ","), fmt::join(max_anchor, ","));
+//                     fmt::print(stderr, "VolPt_tmesh: param [{}, {}], anchors[0] [{}] anchors[1][{}]\n",
+//                             param(0), param(1), fmt::join(anchors[0], ","), fmt::join(anchors[1], ","));
+//                     fmt::print(stderr, "VolPt_tmesh: param [{}, {}]\n", param(0), param(1));
+//                 }
+
                 sub_starts  = tmesh.anchor_ctrl_pt_ijk(t, min_anchor, false);        // local to the tensor
                 sub_ends    = tmesh.anchor_ctrl_pt_ijk(t, max_anchor, false);        // local to the tensor
                 for (auto i = 0; i < dom_dim; i++)
@@ -1104,15 +1122,6 @@ namespace mfa
                         sub_ends(i) = t.nctrl_pts(i) - 1;
                     sub_sizes(i) = sub_ends(i) - sub_starts(i) + 1;
                 }
-
-                // debug
-//                 if (sub_starts(1) + sub_sizes(1) > t.nctrl_pts(1))
-//                 {
-//                     fmt::print(stderr, "VolPt_tmesh: min_anchor [{}] max_anchor [{}] anchor_extents [{}] x [{}]\n",
-//                             fmt::join(min_anchor, ","), fmt::join(max_anchor, ","), fmt::join(anchor_extents[0], ","), fmt::join(anchor_extents[1], ","));
-//                     fmt::print(stderr, "VolPt_tmesh: sub_sizes [{}] sub_starts [{}] nctrl_pts [{}]\n",
-//                             sub_sizes.transpose(), sub_starts.transpose(), t.nctrl_pts.transpose());
-//                 }
 
                 VolIterator vol_iterator1(sub_sizes, sub_starts, t.nctrl_pts);      // iterator over control points in the current tensor
                 vector<KnotIdx> ctrl_anchor(dom_dim);                               // anchor of control point in (global, ie, over all tensors) index space
@@ -1239,25 +1248,40 @@ namespace mfa
 
                 vector<KnotIdx> min_anchor(dom_dim);                                // in global index space
                 vector<KnotIdx> max_anchor(dom_dim);                                // in global index space
-                vector<KnotIdx> mid_anchor(dom_dim);                                // in global index space
                 VectorXi        sub_starts(dom_dim);
                 VectorXi        sub_ends(dom_dim);
                 VectorXi        sub_sizes(dom_dim);
-                VectorXi        ijk(dom_dim);                                       // multidim index of current control point
+                VectorXi        ijk(dom_dim);                                       // multidim index
 
-                // skip entire tensor if it's not the deepest one containing both anchor extents and a middle anchor
-                // NB we're fairly confident that if a tensor doesn't contain the extents and the middle anchor, it doesn't have any of the anchors
-                // due to the minimum size of a tensor, even though the anchors were expanded (but this isn't strictly guaranteed)
+                // skip entire tensor if it's not the deepest one containing all combinations of min_anchor, max_anchor
+                VectorXi npts(dom_dim);                                            // 2 points in each dim of vol iterator over min_,max_anchor
                 for (auto j = 0; j < dom_dim; j++)
                 {
                     min_anchor[j] = anchor_extents[j].front();
                     max_anchor[j] = anchor_extents[j].back();
-                    mid_anchor[j] = anchors[j][anchors[j].size() / 2];
+                    npts(j)       = 2;
                 }
-                TensorIdx found_tidx;
-                if ((!tmesh.lookup_tensor(min_anchor, found_tidx) || found_tidx != k) &&
-                    (!tmesh.lookup_tensor(max_anchor, found_tidx) || found_tidx != k) &&
-                    (!tmesh.lookup_tensor(mid_anchor, found_tidx) || found_tidx != k))
+                VolIterator     iter(npts);
+                vector<KnotIdx> target(dom_dim);
+                bool            skip = true;
+                while(!iter.done())
+                {
+                    ijk = iter.idx_dim();
+                    for (auto i = 0; i < dom_dim; i++)
+                    {
+                        if (ijk(i) == 0)
+                            target[i] = min_anchor[i];
+                        else
+                            target[i] = max_anchor[i];
+                    }
+                    if (tmesh.lookup_tensor(target, found_idx) && found_idx == k)
+                    {
+                        skip = false;
+                        break;
+                    }
+                    iter.incr_iter();
+                }
+                if (skip)
                     continue;
 
                 // debug
@@ -1288,11 +1312,21 @@ namespace mfa
                 }
 
                 bool found_starts, found_ends;
-                sub_starts  = tmesh.anchor_ctrl_pt_ijk(t, min_anchor, found_starts, false);        // local to the tensor
-                sub_ends    = tmesh.anchor_ctrl_pt_ijk(t, max_anchor, found_ends, false);        // local to the tensor
+                sub_starts  = tmesh.anchor_ctrl_pt_ijk(t, min_anchor, found_starts, false);         // local to the tensor
+                sub_ends    = tmesh.anchor_ctrl_pt_ijk(t, max_anchor, found_ends, false);           // local to the tensor
 
                 if (!found_starts && !found_ends)
                     continue;
+
+                // debug
+//                 if (k == 3)
+//                 {
+//                     fmt::print(stderr, "VolPt_tmesh: param [{}, {}], min_anchor [{}] max_anchor [{}]\n",
+//                             param(0), param(1), fmt::join(min_anchor, ","), fmt::join(max_anchor, ","));
+//                     fmt::print(stderr, "VolPt_tmesh: param [{}, {}], anchors[0] [{}] anchors[1][{}]\n",
+//                             param(0), param(1), fmt::join(anchors[0], ","), fmt::join(anchors[1], ","));
+//                     fmt::print(stderr, "VolPt_tmesh: param [{}, {}]\n", param(0), param(1));
+//                 }
 
                 for (auto i = 0; i < dom_dim; i++)
                 {
@@ -1314,13 +1348,6 @@ namespace mfa
                     vol_iterator1.idx_ijk(vol_iterator1.cur_iter(), ijk);
                     tmesh.ctrl_pt_anchor(t, ijk, ctrl_anchor);
                     size_t idx = vol_iterator1.ijk_idx(ijk);
-
-                    // skip odd degree duplicated control points, indicated by invalid weight
-                    if (t.weights(idx) == MFA_NAW)
-                    {
-                        vol_iterator1.incr_iter();
-                        continue;
-                    }
 
                     // intersect tmesh lines to get local knot indices in all directions
                     tmesh.knot_intersections(ctrl_anchor, local_knot_idxs);

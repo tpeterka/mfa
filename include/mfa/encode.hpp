@@ -2110,9 +2110,15 @@ namespace mfa
             // get input domain points covered by the tensor, including constraints
             vector<size_t> start_idxs(dom_dim);                                                     // start of input points including constraints
             vector<size_t> end_idxs(dom_dim);                                                       // end of input points including constraints
-//             mfa_data.tmesh.domain_pts(t_idx, input.params->param_grid, true, extra_cons, start_idxs, end_idxs); // true: extend to cover constraints
-            mfa_data.tmesh.domain_pts(t_idx, input.params->param_grid, false, extra_cons, start_idxs, end_idxs); // false: do not extend to cover constraints
 
+#if defined(MFA_TMESH)
+                // not clear why tmesh was run without input points covering constraints, but it was
+                // some kind of hack to improve fitting accuracy
+                mfa_data.tmesh.domain_pts(t_idx, input.params->param_grid, false, extra_cons, start_idxs, end_idxs); // false: do not extend to cover constraints
+#elif defined(MFA_OVERLAYS)
+                // overlays covers contstraints with input points, as it should
+                mfa_data.tmesh.domain_pts(t_idx, input.params->param_grid, true, extra_cons, start_idxs, end_idxs); // true: extend to cover constraints
+#endif
             // relevant input domain points covering constraints
             VectorXi ndom_pts(dom_dim);
             VectorXi dom_starts(dom_dim);
@@ -2495,6 +2501,7 @@ namespace mfa
             TensorProduct<T>&t = tensor_prods[0];                       // fixed encode assumes the tmesh has only one tensor product
             Encode(t.nctrl_pts, t.ctrl_pts, t.weights, weighted);
             t.parent_exists = false;
+            tmesh.hash_all_tensors();
 
             // timing
             fmt::print(stderr, "\nInitial full encode time:   {:.3e} s.\n", MPI_Wtime() - t0);
@@ -4029,6 +4036,22 @@ namespace mfa
                 EncodeTensorLocalUnified(tensor_idx);
 
 #endif
+
+                // debug: swap out the encoded control points for control points read from a file
+// #if defined(MFA_TMESH)
+//                 if (tmesh.tensor_prods.size() == 3)
+//                 {
+//                     fmt::print(stderr, "size of tensor_prods = {}, reading control points from a file\n", tmesh.tensor_prods.size());
+//                     tmesh.ReadCtrlPtsFromFile("tmesh_ctrl_pts.txt", tmesh.tensor_prods.back());
+//                 }
+// #elif defined(MFA_OVERLAYS)
+//                 if (tmesh.tensor_prods.size() == 4)
+//                 {
+//                     fmt::print(stderr, "size of tensor_prods = {}, reading control points from a file\n", tmesh.tensor_prods.size());
+//                     tmesh.ReadCtrlPtsFromFile("overlays_ctrl_pts.txt", tmesh.tensor_prods.back());
+//                 }
+// #endif
+
             }   // for all tensors k to append
 
             return retval;
@@ -4324,7 +4347,7 @@ namespace mfa
             }       // while t->parent_exists
 
             // debug
-            fmt::print(stderr, "LocalSolveOverlaysConstraints: rows = {}\n", rows);
+//             fmt::print(stderr, "LocalSolveOverlaysConstraints: rows = {}\n", rows);
 
             ctrl_pts.resize(rows, cols);
             anchors.resize(rows);
@@ -4390,7 +4413,7 @@ namespace mfa
                         t_idx_anchors[cur_row] = parent_tidx;
 
                         // debug
-                        fmt::print(stderr, "LocalSolveOverlaysConstraints: saving anchor [{}] from t_idx {}\n", fmt::join(anchor, ","), lookup_tidx);
+//                         fmt::print(stderr, "LocalSolveOverlaysConstraints: saving anchor [{}] from t_idx {}\n", fmt::join(anchor, ","), lookup_tidx);
 
                         cur_row++;
                     }
