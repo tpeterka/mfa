@@ -52,6 +52,8 @@
 using namespace tbb;
 #endif
 
+#include    <stdexcept>
+
 #include    <mfa/types.hpp>
 #include    <mfa/utilities/util.hpp>
 #include    <mfa/mfa_data.hpp>
@@ -544,8 +546,7 @@ namespace mfa
         {
             if (!geometry)
             {
-                fmt::print(stderr, "ERROR: Can't dereference null geometry model\nAborting.\n");
-                exit(1);
+                throw std::runtime_error("Can't dereference null geometry model");
             }
 
             return *geometry;
@@ -555,14 +556,11 @@ namespace mfa
         {
             if (i < 0 || i >= nvars())
             {
-                fmt::print(stderr, "ERROR: var index out of range in MFA::var()\n");
-                fmt::print(stderr, "       i={}, nvars()={}\n", i, nvars());
-                exit(1);
+                throw std::out_of_range(fmt::format("var index {} out of range [0, {})", i, nvars()));
             }
             if (!vars[i])
             {
-                fmt::print(stderr, "ERROR: Can't dereference null variable model (index {})\nAborting.\n", i);
-                exit(1);
+                throw std::runtime_error(fmt::format("Can't dereference null variable model (index {})", i));
             }
 
             return *(vars[i]);
