@@ -55,8 +55,44 @@ void init_block(py::module& m, std::string name)
         .def("set_domain_params", (void (PointSet<T>::*)()) &PointSet<T>::set_domain_params)
         .def("set_domain_params", (void (PointSet<T>::*)(const Eigen::VectorX<T>&, const Eigen::VectorX<T>&)) &PointSet<T>::set_domain_params)
         .def("set_grid_params", (void (PointSet<T>::*)()) &PointSet<T>::set_grid_params)
+        .def("set_grid_params", (void (PointSet<T>::*)(const VectorX<T>&, const VectorX<T>&)) &PointSet<T>::set_grid_params)
+        .def("set_curve_params", &PointSet<T>::set_curve_params)
         .def("is_structured", &PointSet<T>::is_structured)
+        .def("validate", &PointSet<T>::validate)
+        .def("is_same_layout", &PointSet<T>::is_same_layout, "ps"_a, "verbose"_a = 1)
+        .def("nvars", &PointSet<T>::nvars)
+        .def("geom_dim", &PointSet<T>::geom_dim)
+        .def("var_dim", &PointSet<T>::var_dim, "k"_a)
+        .def("var_min", &PointSet<T>::var_min, "k"_a)
+        .def("var_max", &PointSet<T>::var_max, "k"_a)
+        .def("ndom_pts", (VectorXi (PointSet<T>::*)() const) &PointSet<T>::ndom_pts)
+        .def("ndom_pts", (int (PointSet<T>::*)(int) const) &PointSet<T>::ndom_pts, "i"_a)
         .def("model_dims", &PointSet<T>::model_dims)
+        .def("pt_coords", [](const PointSet<T>& ps, size_t idx)
+            {
+                VectorX<T> coord(ps.pt_dim);
+                ps.pt_coords(idx, coord);
+                return coord;
+            }, "idx"_a)
+        .def("geom_coords", [](const PointSet<T>& ps, size_t idx)
+            {
+                VectorX<T> coord(ps.geom_dim());
+                ps.geom_coords(idx, coord);
+                return coord;
+            }, "idx"_a)
+        .def("var_coords", [](const PointSet<T>& ps, size_t idx, size_t k)
+            {
+                VectorX<T> coord(ps.var_dim(k));
+                ps.var_coords(idx, k, coord);
+                return coord;
+            }, "idx"_a, "k"_a)
+        .def("pt_params", [](const PointSet<T>& ps, size_t idx)
+            {
+                VectorX<T> param(ps.dom_dim);
+                ps.pt_params(idx, param);
+                return param;
+            }, "idx"_a)
+        .def("abs_diff", &PointSet<T>::abs_diff, "other"_a, "diff"_a)
         .def_readwrite("dom_dim",   &PointSet<T>::dom_dim)
         .def_readwrite("pt_dim",    &PointSet<T>::pt_dim)
         .def_readwrite("npts",      &PointSet<T>::npts)
@@ -109,6 +145,13 @@ void init_block(py::module& m, std::string name)
     py::class_<MFAInfo> (m, "MFAInfo")
         .def(py::init<int, int, ModelInfo, ModelInfo>())        
         .def(py::init<int, int>()) 
+        .def("nvars", &MFAInfo::nvars)
+        .def("geom_dim", &MFAInfo::geom_dim)
+        .def("pt_dim", &MFAInfo::pt_dim)
+        .def("var_dim", &MFAInfo::var_dim, "k"_a)
+        .def("model_dims", &MFAInfo::model_dims)
+        .def("splitStrongScaling", &MFAInfo::splitStrongScaling, "divs"_a)
+        .def("reset", &MFAInfo::reset)
         .def_readwrite("dom_dim",           &MFAInfo::dom_dim)
         .def_readwrite("verbose",           &MFAInfo::verbose)
         .def_readwrite("geom_model_info",   &MFAInfo::geom_model_info)
@@ -119,26 +162,68 @@ void init_block(py::module& m, std::string name)
         .def_readwrite("regularization",    &MFAInfo::regularization)
         .def("addGeomInfo",                 &MFAInfo::addGeomInfo, "gmi"_a)
         .def("addVarInfo",                  (void (mfa::MFAInfo::*)(mfa::ModelInfo)) &MFAInfo::addVarInfo, "vmi"_a)
+        .def("addVarInfo",                  (void (mfa::MFAInfo::*)(std::vector<mfa::ModelInfo>)) &MFAInfo::addVarInfo, "vmis"_a)
     ;
 
     py::class_<mfa::MFA<T>>(m, "MFA")
         .def(py::init<int, int>())
         .def(py::init<const MFAInfo>())
+        .def("nvars",                   &mfa::MFA<T>::nvars)
+        .def("geom_dim",                &mfa::MFA<T>::geom_dim)
+        .def("var_dim",                 &mfa::MFA<T>::var_dim, "i"_a)
+        .def("model_dims",              &mfa::MFA<T>::model_dims)
         .def_readwrite("dom_dim",       &mfa::MFA<T>::dom_dim)
         .def_readwrite("pt_dim",        &mfa::MFA<T>::pt_dim)
         .def("geom",                    &mfa::MFA<T>::geom, py::return_value_policy::reference)// empty, returns mfa::MFA_DATA)
         .def("var",                     &mfa::MFA<T>::var, py::return_value_policy::reference)    
-        .def("FixedEncode",             &mfa::MFA<T>::FixedEncode, "input"_a, "regularization"_a, "regland2"_a, "weighted"_a) //pointset, regularization, bool, bool (reference output)
+        .def("FixedEncode",             &mfa::MFA<T>::FixedEncode, "input"_a, "regularization"_a, "reg1and2"_a, "weighted"_a) //pointset, regularization, bool, bool (reference output)
+        .def("FixedEncodeGeom",         &mfa::MFA<T>::FixedEncodeGeom, "input"_a, "weighted"_a)
+        .def("FixedEncodeVar",          &mfa::MFA<T>::FixedEncodeVar, "i"_a, "input"_a, "regularization"_a, "reg1and2"_a, "weighted"_a)
+        .def("AdaptiveEncode",          &mfa::MFA<T>::AdaptiveEncode, "input"_a, "err_limit"_a, "weighted"_a, "extents"_a, "max_rounds"_a)
+        .def("AdaptiveEncodeGeom",      &mfa::MFA<T>::AdaptiveEncodeGeom, "input"_a, "err_limit"_a, "weighted"_a, "extents"_a, "max_rounds"_a)
+        .def("AdaptiveEncodeVar",       &mfa::MFA<T>::AdaptiveEncodeVar, "i"_a, "input"_a, "err_limit"_a, "weighted"_a, "extents"_a, "max_rounds"_a)
+        .def("RayEncode",               &mfa::MFA<T>::RayEncode, "i"_a, "input"_a)
         .def("Decode", (void (mfa::MFA<T>::*)(PointSet<T>&, const Eigen::VectorXi&) const) &mfa::MFA<T>::Decode, "output"_a, "derivs"_a=Eigen::VectorXi())
+        .def("DecodeGeom", (void (mfa::MFA<T>::*)(PointSet<T>&, const Eigen::VectorXi&) const) &mfa::MFA<T>::DecodeGeom, "output"_a, "derivs"_a=Eigen::VectorXi())
+        .def("DecodeVar", (void (mfa::MFA<T>::*)(int, PointSet<T>&, const Eigen::VectorXi&) const) &mfa::MFA<T>::DecodeVar, "i"_a, "output"_a, "derivs"_a=Eigen::VectorXi())
+        .def("Integrate1D", [](const mfa::MFA<T>& model,
+                                int k,
+                                int dim,
+                                T u0,
+                                T u1,
+                                const VectorX<T>& params)
+            {
+                VectorX<T> output(model.var_dim(k));
+                model.Integrate1D(k, dim, u0, u1, params, output);
+                return output;
+            }, "k"_a, "dim"_a, "u0"_a, "u1"_a, "params"_a)
+        .def("DefiniteIntegral", [](const mfa::MFA<T>& model,
+                                     int k,
+                                     const VectorX<T>& a,
+                                     const VectorX<T>& b)
+            {
+                VectorX<T> output(model.var_dim(k));
+                model.DefiniteIntegral(k, output, a, b);
+                return output;
+            }, "k"_a, "a"_a, "b"_a)
+        .def("IntegratePointSet", &mfa::MFA<T>::IntegratePointSet, "mfa_data"_a, "output"_a, "int_dim"_a)
+        .def("DecodeAtGrid", &mfa::MFA<T>::DecodeAtGrid, "mfa_data"_a, "par_min"_a, "par_max"_a, "ndom_pts"_a, "result"_a)
+        .def("AbsPointSetError", &mfa::MFA<T>::AbsPointSetError, "base"_a, "error"_a)
         .def("AddGeometry", (void (mfa::MFA<T>::*)(int)) &mfa::MFA<T>::AddGeometry)
+        .def("AddGeometry", (void (mfa::MFA<T>::*)(const ModelInfo&)) &mfa::MFA<T>::AddGeometry, "mi"_a)
         .def("AddVariable", (void (mfa::MFA<T>::*)(const Eigen::VectorXi&, const Eigen::VectorXi&, int)) &mfa::MFA<T>::AddVariable)
         .def("AddVariable", (void (mfa::MFA<T>::*)(int, const Eigen::VectorXi&, int)) &mfa::MFA<T>::AddVariable)
+        .def("AddVariable", (void (mfa::MFA<T>::*)(const ModelInfo&)) &mfa::MFA<T>::AddVariable, "mi"_a)
+        .def("setGeomKnots", &mfa::MFA<T>::setGeomKnots, "knots"_a=std::vector<std::vector<T>>())
+        .def("setKnots", (void (mfa::MFA<T>::*)(int, const std::vector<std::vector<T>>&)) &mfa::MFA<T>::setKnots, "i"_a, "knots"_a=std::vector<std::vector<T>>())
+        .def("setKnots", (void (mfa::MFA<T>::*)(const std::vector<std::vector<T>>&)) &mfa::MFA<T>::setKnots, "knots"_a=std::vector<std::vector<T>>())
+        .def("shiftGeom", &mfa::MFA<T>::shiftGeom, "shift"_a)
+        .def("shiftVar", &mfa::MFA<T>::shiftVar, "i"_a, "shift"_a)
+        .def("printDetails", (void (mfa::MFA<T>::*)() const) &mfa::MFA<T>::printDetails)
+        .def("printDetails", (void (mfa::MFA<T>::*)(int) const) &mfa::MFA<T>::printDetails, "verbose"_a)
+        .def("dumpCollocationMatrixEncode", &mfa::MFA<T>::dumpCollocationMatrixEncode, "i"_a, "ps"_a)
+        .def("dumpCollocationMatrixDecode", &mfa::MFA<T>::dumpCollocationMatrixDecode, "i"_a, "ps"_a)
     ;
-     
-     // todo overload problems .def("AddGeometry",             &mfa::MFA<T>::AddGeometry, "mi"_a) // ModelInfo, return Void (inplace)
-        // todo I think this is a duplicate //.def("AddGeometry",             &mfa::MFA<T>::AddGeometry, "degree"_a, "nctrl_pts"_a, "dim"_a) // VectorXi, VectorXi, int, return void 
-        // .def("AddVariable",             &mfa::MFA<T>::AddVariable, "mi"_a) // same
-        // .def("AddVariable",             &mfa::MFA<T>::AddVariable, "degree"_a, "nctrl_pts"_a, "dim"_a) // same
 
     py::class_<Tmesh<T>>(m, "Tmesh")
         .def(py::init<int, const Eigen::VectorXi, int, int, size_t>())
@@ -167,8 +252,8 @@ void init_block(py::module& m, std::string name)
     ;
 
     py::class_<DomainArgs>(m, "DomainArgs")
-    //todo vector of ints for intializer 
         .def(py::init<int, std::vector<int>>())
+        .def("updateModelDims",    &DomainArgs::updateModelDims, "mdims"_a)
         .def_readwrite("starts",        &DomainArgs::starts)
         .def_readwrite("ndom_pts",      &DomainArgs::ndom_pts)
         .def_readwrite("full_dom_pts",  &DomainArgs::full_dom_pts)
@@ -181,8 +266,10 @@ void init_block(py::module& m, std::string name)
         .def_readwrite("t",             &DomainArgs::t)
         .def_readwrite("n",             &DomainArgs::n)
         .def_readwrite("infile",        &DomainArgs::infile)
+        .def_readwrite("infile2",       &DomainArgs::infile2)
         .def_readwrite("multiblock",    &DomainArgs::multiblock)
         .def_readwrite("structured",    &DomainArgs::structured)
+        .def_readwrite("rand_seed",     &DomainArgs::rand_seed)
     ;
 
     using namespace py::literals;
