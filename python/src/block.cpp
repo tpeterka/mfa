@@ -45,8 +45,25 @@ void init_block(py::module& m, std::string name)
     using namespace mfa;
 
     py::class_<PointSet<T>>(m, "PointSet")
-        .def(py::init<int, const Eigen::VectorXi, int, const Eigen::VectorXi>(), 
-            "dom_dim"_a, "mdims"_a, "npts"_a, "ndom_pts"_a=Eigen::VectorXi())
+        .def(py::init([](int dom_dim,
+                         const std::vector<int>& mdims,
+                         int npts,
+                         const std::vector<int>& ndom_pts)
+            {
+                if (dom_dim < 0 || npts < 0)
+                    throw py::value_error("dom_dim and npts must be non-negative");
+
+                VectorXi mdims_vec(mdims.size());
+                for (size_t i = 0; i < mdims.size(); i++)
+                    mdims_vec(i) = mdims[i];
+
+                VectorXi ndom_pts_vec(ndom_pts.size());
+                for (size_t i = 0; i < ndom_pts.size(); i++)
+                    ndom_pts_vec(i) = ndom_pts[i];
+
+                return new PointSet<T>(dom_dim, mdims_vec, npts, ndom_pts_vec);
+            }),
+            "dom_dim"_a, "mdims"_a, "npts"_a, "ndom_pts"_a = std::vector<int>())
         .def("set_bounds",      &PointSet<T>::set_bounds)
         .def("mins", (Eigen::VectorX<T> (PointSet<T>::*)() const) &PointSet<T>::mins)
         .def("mins", (T (PointSet<T>::*)(int) const) &PointSet<T>::mins)
