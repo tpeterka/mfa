@@ -132,10 +132,9 @@ namespace mfa
         {
             if ( (mins_.size() != geom_dim()) || (mins_.size() != maxs_.size()) )
             {
-                fmt::print(stderr, "ERROR: Invalid bounds passed to PointSet\n");
-                fmt::print(stderr, "  mins: [{}]\n", fmt::join(mins_, " "));
-                fmt::print(stderr, "  maxs: [{}]\n", fmt::join(maxs_, " "));
-                exit(1);
+                throw MFAError(fmt::format(
+                    "Invalid bounds passed to PointSet: mins.size()={}, maxs.size()={}, geom_dim()={}",
+                    mins_.size(), maxs_.size(), geom_dim()));
             }
 
             dom_mins = mins_;
@@ -288,10 +287,9 @@ namespace mfa
             {
                 if (npts != ndom_pts_.prod())
                 {
-                    fmt::print(stderr, "ERROR: Invalid grid added to PointSet. Total points do not match.\n");
-                    fmt::print(stderr, "       npts = {}\n", npts);
-                    fmt::print(stderr, "       ndom_pts = [{}]\n", fmt::join(ndom_pts_, " "));
-                    exit(1);
+                    throw MFAError(fmt::format(
+                        "Invalid grid added to PointSet: total points do not match (npts={}, ndom_pts.size()={}, product={})",
+                        npts, ndom_pts_.size(), ndom_pts_.prod()));
                 }
 
                 g.init(dom_dim, ndom_pts_);

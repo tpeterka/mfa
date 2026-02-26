@@ -135,11 +135,9 @@ struct BlockBase
         }
         if (map_dir.size() != dom_dim)
         {
-            if (gid == 0)
-            {
-                cerr << "ERROR: Number of nontrivial dimensions does not match dom_dim. Exiting." << endl;
-            }
-            exit(1);
+            throw mfa::MFAError(fmt::format(
+                "Number of nontrivial dimensions ({}) does not match dom_dim ({}) in BlockBase::init_block()",
+                map_dir.size(), dom_dim));
         }
 
         // Set core/bounds and overlaps (overlaps can be inferred from
@@ -246,8 +244,7 @@ struct BlockBase
         {
             // Can't use adaptive encoding until support for unstructured data is
             // added to NewKnots and tmesh.all_knot_param_idxs
-            cerr << "ERROR: Adaptive encoding not currently supported for unstructured data" << endl;
-            exit(1);
+            throw mfa::MFAError("Adaptive encoding not currently supported for unstructured data");
         }
 
         VectorX<T> extents = bounds_maxs - bounds_mins;
@@ -436,8 +433,7 @@ struct BlockBase
     {
         if (input == nullptr)
         {
-            cerr << "ERROR: Cannot compute range_error; no valid input data" << endl;
-            exit(1);
+            throw mfa::MFAError("Cannot compute range_error; no valid input data");
         }
         if (errs != nullptr)
         {
@@ -899,8 +895,7 @@ struct BlockBase
                     // Writing this to fail loudly just in case
                     if (bounds_mins[di] == core_mins[di])
                     {
-                        fmt::print("ERROR: Unexpected bounds in compute_neighbor_overlaps\n\n");
-                        exit(1);
+                        throw mfa::MFAError("Unexpected bounds in compute_neighbor_overlaps (negative direction)");
                     }
                 }
                 else if (dirc[gdir] > 0) // neighbor is in the positive direction of this dimension
@@ -915,8 +910,7 @@ struct BlockBase
                     // Writing this to fail loudly just in case
                     if (bounds_maxs[di] == core_maxs[di])
                     {
-                        fmt::print("WARNING: Unexpected bounds in compute_neighbor_overlaps\n\n");
-                        exit(1);
+                        throw mfa::MFAError("Unexpected bounds in compute_neighbor_overlaps (positive direction)");
                     }                    
                 }
                 else // this dimension is not parallel to the link direction
