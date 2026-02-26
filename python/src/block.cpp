@@ -64,7 +64,18 @@ void init_block(py::module& m, std::string name)
                 return new PointSet<T>(dom_dim, mdims_vec, npts, ndom_pts_vec);
             }),
             "dom_dim"_a, "mdims"_a, "npts"_a, "ndom_pts"_a = std::vector<int>())
-        .def("set_bounds",      &PointSet<T>::set_bounds)
+        .def("set_bounds",      [](PointSet<T>& ps, const std::vector<T>& mins, const std::vector<T>& maxs)
+            {
+                VectorX<T> mins_vec(mins.size());
+                for (size_t i = 0; i < mins.size(); i++)
+                    mins_vec(i) = mins[i];
+
+                VectorX<T> maxs_vec(maxs.size());
+                for (size_t i = 0; i < maxs.size(); i++)
+                    maxs_vec(i) = maxs[i];
+
+                ps.set_bounds(mins_vec, maxs_vec);
+            }, "mins"_a, "maxs"_a)
         .def("mins", (Eigen::VectorX<T> (PointSet<T>::*)() const) &PointSet<T>::mins)
         .def("mins", (T (PointSet<T>::*)(int) const) &PointSet<T>::mins)
         .def("maxs", (Eigen::VectorX<T> (PointSet<T>::*)() const) &PointSet<T>::maxs)
@@ -287,6 +298,7 @@ void init_block(py::module& m, std::string name)
         .def_readwrite("multiblock",    &DomainArgs::multiblock)
         .def_readwrite("structured",    &DomainArgs::structured)
         .def_readwrite("rand_seed",     &DomainArgs::rand_seed)
+        .def_readwrite("model_dims",    &DomainArgs::model_dims)
     ;
 
     using namespace py::literals;
@@ -295,7 +307,7 @@ void init_block(py::module& m, std::string name)
         .def(py::init<>())
         .def("generate_analytical_data",&Block<T>::generate_analytical_data)
         .def("print_block",             &Block<T>::print_block)
-        .def("add",                     [](
+        .def_static("add",                     [](
                                         int                 gid,
                                         const Bounds&       core,
                                         const Bounds&       bounds,
@@ -310,7 +322,7 @@ void init_block(py::module& m, std::string name)
                 RCLink*         l   = new RCLink(link);
                 master.add(gid, new py::object(py::cast(b)), l);
                 b->init_block(gid, core, domain, dom_dim, pt_dim);
-            }, "core"_a, "bounds"_a, "domain"_a, "link"_a, "master"_a, "dom_dim"_a, "pt_dim"_a,
+            }, "gid"_a, "core"_a, "bounds"_a, "domain"_a, "link"_a, "master"_a, "dom_dim"_a, "pt_dim"_a,
             "ghost_factor"_a = 0.0)
         .def("fixed_encode_block",                  &Block<T>::fixed_encode_block)
         .def("adaptive_encode_block",               &Block<T>::adaptive_encode_block)
@@ -333,6 +345,7 @@ void init_block(py::module& m, std::string name)
 //                 fmt::print(stderr, "data[{}] = {}\n", i, pyarray.data[i]);
 
             Block<T>* b = py_b->cast<Block<T>*>();
+            if (!b) throw std::runtime_error("input_data: failed to cast block");
             b->input_1d_data(cp, pyarray.data, mfa_info, d_args);
         })
         ;
@@ -359,6 +372,7 @@ void init_block(py::module& m, std::string name)
 
     m.def("save_block", [](const py::object* b, diy::BinaryBuffer* bb)
         {
+            if (!b) throw std::runtime_error("save_block: null block object");
             mfa::save<Block<T>, T>(b->cast<Block<T>*>(), *bb);
         });
 
