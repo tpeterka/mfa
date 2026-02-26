@@ -96,30 +96,15 @@ void init_block(py::module& m, std::string name)
         .def("ndom_pts", (VectorXi (PointSet<T>::*)() const) &PointSet<T>::ndom_pts)
         .def("ndom_pts", (int (PointSet<T>::*)(int) const) &PointSet<T>::ndom_pts, "i"_a)
         .def("model_dims", &PointSet<T>::model_dims)
-        .def("pt_coords", [](const PointSet<T>& ps, size_t idx)
-            {
-                VectorX<T> coord(ps.pt_dim);
-                ps.pt_coords(idx, coord);
-                return coord;
-            }, "idx"_a)
-        .def("geom_coords", [](const PointSet<T>& ps, size_t idx)
-            {
-                VectorX<T> coord(ps.geom_dim());
-                ps.geom_coords(idx, coord);
-                return coord;
-            }, "idx"_a)
-        .def("var_coords", [](const PointSet<T>& ps, size_t idx, size_t k)
-            {
-                VectorX<T> coord(ps.var_dim(k));
-                ps.var_coords(idx, k, coord);
-                return coord;
-            }, "idx"_a, "k"_a)
-        .def("pt_params", [](const PointSet<T>& ps, size_t idx)
-            {
-                VectorX<T> param(ps.dom_dim);
-                ps.pt_params(idx, param);
-                return param;
-            }, "idx"_a)
+        // We deliberately do not expose the following functions since they cannot be used in a pythonic way
+        // without copies. However, these functions are typically called in tight loops where copies would be
+        // too expensive. Therefore, we explicitly disallow this behavior. To get similar functionality in
+        // python, users should access the domain matrix directly and use numpy slicing to get views into the data.
+        // Deliberately unbound functions:
+        //      pt_coords
+        //      geom_coords
+        //      var_coords
+        //      pt_params
         .def("abs_diff", &PointSet<T>::abs_diff, "other"_a, "diff"_a)
         .def_readwrite("dom_dim",   &PointSet<T>::dom_dim)
         .def_readwrite("pt_dim",    &PointSet<T>::pt_dim)
