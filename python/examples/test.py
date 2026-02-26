@@ -63,7 +63,7 @@ m.foreach(lambda b, cp: b.fixed_encode_block(cp, mfa_info))
 
 # debug: compute error field
 if error:
-    m.foreach(lambda b, cp: b.range_error(cp, True, True))
+    m.foreach(lambda b, cp: b.range_error(cp, True))
 
 # print results
 m.foreach(lambda b, cp: b.print_block(cp, True))
