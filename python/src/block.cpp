@@ -34,6 +34,49 @@ struct PyArray
     PyArray(PyArray&&) = default;
 };
 
+namespace
+{
+    template <typename T>
+    Eigen::Matrix<T, Eigen::Dynamic, 1>
+    to_eigen_vector(const std::vector<T>& values)
+    {
+        Eigen::Matrix<T, Eigen::Dynamic, 1> out(static_cast<Eigen::Index>(values.size()));
+        for (size_t i = 0; i < values.size(); ++i)
+            out(static_cast<Eigen::Index>(i)) = values[i];
+        return out;
+    }
+
+    inline Eigen::VectorXi
+    to_eigen_vectori(const std::vector<int>& values)
+    {
+        Eigen::VectorXi out(static_cast<Eigen::Index>(values.size()));
+        for (size_t i = 0; i < values.size(); ++i)
+            out(static_cast<Eigen::Index>(i)) = values[i];
+        return out;
+    }
+
+    template <typename T>
+    Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic>
+    to_eigen_matrix2d(const py::array_t<T, py::array::c_style | py::array::forcecast>& arr)
+    {
+        py::buffer_info info = arr.request();
+        if (info.ndim != 2)
+            throw py::value_error("Expected a 2D array");
+
+        const auto rows = static_cast<Eigen::Index>(info.shape[0]);
+        const auto cols = static_cast<Eigen::Index>(info.shape[1]);
+        const T* data = static_cast<const T*>(info.ptr);
+
+        Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic> out(rows, cols);
+        for (Eigen::Index i = 0; i < rows; ++i)
+        {
+            for (Eigen::Index j = 0; j < cols; ++j)
+                out(i, j) = data[i * cols + j];
+        }
+        return out;
+    }
+}
+
 template <typename T>
 void init_block(py::module& m, std::string name)
 {
@@ -53,27 +96,16 @@ void init_block(py::module& m, std::string name)
                 if (dom_dim < 0 || npts < 0)
                     throw py::value_error("dom_dim and npts must be non-negative");
 
-                VectorXi mdims_vec(mdims.size());
-                for (size_t i = 0; i < mdims.size(); i++)
-                    mdims_vec(i) = mdims[i];
-
-                VectorXi ndom_pts_vec(ndom_pts.size());
-                for (size_t i = 0; i < ndom_pts.size(); i++)
-                    ndom_pts_vec(i) = ndom_pts[i];
+                VectorXi mdims_vec = to_eigen_vectori(mdims);
+                VectorXi ndom_pts_vec = to_eigen_vectori(ndom_pts);
 
                 return new PointSet<T>(dom_dim, mdims_vec, npts, ndom_pts_vec);
             }),
             "dom_dim"_a, "mdims"_a, "npts"_a, "ndom_pts"_a = std::vector<int>())
         .def("set_bounds",      [](PointSet<T>& ps, const std::vector<T>& mins, const std::vector<T>& maxs)
             {
-                VectorX<T> mins_vec(mins.size());
-                for (size_t i = 0; i < mins.size(); i++)
-                    mins_vec(i) = mins[i];
-
-                VectorX<T> maxs_vec(maxs.size());
-                for (size_t i = 0; i < maxs.size(); i++)
-                    maxs_vec(i) = maxs[i];
-
+                VectorX<T> mins_vec = to_eigen_vector(mins);
+                VectorX<T> maxs_vec = to_eigen_vector(maxs);
                 ps.set_bounds(mins_vec, maxs_vec);
             }, "mins"_a, "maxs"_a)
         .def("mins", (Eigen::VectorX<T> (PointSet<T>::*)() const) &PointSet<T>::mins)
@@ -81,9 +113,19 @@ void init_block(py::module& m, std::string name)
         .def("maxs", (Eigen::VectorX<T> (PointSet<T>::*)() const) &PointSet<T>::maxs)
         .def("maxs", (T (PointSet<T>::*)(int) const) &PointSet<T>::maxs)
         .def("set_domain_params", (void (PointSet<T>::*)()) &PointSet<T>::set_domain_params)
-        .def("set_domain_params", (void (PointSet<T>::*)(const Eigen::VectorX<T>&, const Eigen::VectorX<T>&)) &PointSet<T>::set_domain_params)
+        .def("set_domain_params", [](PointSet<T>& ps, const std::vector<T>& domain_mins, const std::vector<T>& domain_maxs)
+            {
+                VectorX<T> domain_mins_vec = to_eigen_vector(domain_mins);
+                VectorX<T> domain_maxs_vec = to_eigen_vector(domain_maxs);
+                ps.set_domain_params(domain_mins_vec, domain_maxs_vec);
+            }, "domain_mins"_a, "domain_maxs"_a)
         .def("set_grid_params", (void (PointSet<T>::*)()) &PointSet<T>::set_grid_params)
-        .def("set_grid_params", (void (PointSet<T>::*)(const VectorX<T>&, const VectorX<T>&)) &PointSet<T>::set_grid_params)
+        .def("set_grid_params", [](PointSet<T>& ps, const std::vector<T>& param_mins, const std::vector<T>& param_maxs)
+            {
+                VectorX<T> param_mins_vec = to_eigen_vector(param_mins);
+                VectorX<T> param_maxs_vec = to_eigen_vector(param_maxs);
+                ps.set_grid_params(param_mins_vec, param_maxs_vec);
+            }, "param_mins"_a, "param_maxs"_a)
         .def("set_curve_params", &PointSet<T>::set_curve_params)
         .def("is_structured", &PointSet<T>::is_structured)
         .def("validate", &PointSet<T>::validate)
@@ -110,9 +152,9 @@ void init_block(py::module& m, std::string name)
         .def_readwrite("pt_dim",    &PointSet<T>::pt_dim)
         .def_readwrite("npts",      &PointSet<T>::npts)
         .def_readwrite("domain",    &PointSet<T>::domain)
-        .def("set_domain", [](PointSet<T>& ps, MatrixX<T> domain_)
+        .def("set_domain", [](PointSet<T>& ps, const py::array_t<T, py::array::c_style | py::array::forcecast>& domain)
             {
-                ps.domain = domain_;
+                ps.domain = to_eigen_matrix2d<T>(domain);
             }
         )
         .def("set_from_params", [](PointSet<T>& ps, const PointSet<T>& other)
@@ -187,8 +229,8 @@ void init_block(py::module& m, std::string name)
         .def("model_dims",              &mfa::MFA<T>::model_dims)
         .def_readwrite("dom_dim",       &mfa::MFA<T>::dom_dim)
         .def_readwrite("pt_dim",        &mfa::MFA<T>::pt_dim)
-        .def("geom",                    &mfa::MFA<T>::geom, py::return_value_policy::reference)// empty, returns mfa::MFA_DATA)
-        .def("var",                     &mfa::MFA<T>::var, py::return_value_policy::reference)    
+        .def("geom",                    &mfa::MFA<T>::geom, py::return_value_policy::reference_internal)
+        .def("var",                     &mfa::MFA<T>::var, "i"_a, py::return_value_policy::reference_internal)
         .def("FixedEncode",             &mfa::MFA<T>::FixedEncode, "input"_a, "regularization"_a, "reg1and2"_a, "weighted"_a) //pointset, regularization, bool, bool (reference output)
         .def("FixedEncodeGeom",         &mfa::MFA<T>::FixedEncodeGeom, "input"_a, "weighted"_a)
         .def("FixedEncodeVar",          &mfa::MFA<T>::FixedEncodeVar, "i"_a, "input"_a, "regularization"_a, "reg1and2"_a, "weighted"_a)
@@ -196,42 +238,85 @@ void init_block(py::module& m, std::string name)
         .def("AdaptiveEncodeGeom",      &mfa::MFA<T>::AdaptiveEncodeGeom, "input"_a, "err_limit"_a, "weighted"_a, "extents"_a, "max_rounds"_a)
         .def("AdaptiveEncodeVar",       &mfa::MFA<T>::AdaptiveEncodeVar, "i"_a, "input"_a, "err_limit"_a, "weighted"_a, "extents"_a, "max_rounds"_a)
         .def("RayEncode",               &mfa::MFA<T>::RayEncode, "i"_a, "input"_a)
-        .def("Decode", (void (mfa::MFA<T>::*)(PointSet<T>&, const Eigen::VectorXi&) const) &mfa::MFA<T>::Decode, "output"_a, "derivs"_a=Eigen::VectorXi())
-        .def("DecodeGeom", (void (mfa::MFA<T>::*)(PointSet<T>&, const Eigen::VectorXi&) const) &mfa::MFA<T>::DecodeGeom, "output"_a, "derivs"_a=Eigen::VectorXi())
-        .def("DecodeVar", (void (mfa::MFA<T>::*)(int, PointSet<T>&, const Eigen::VectorXi&) const) &mfa::MFA<T>::DecodeVar, "i"_a, "output"_a, "derivs"_a=Eigen::VectorXi())
+        .def("Decode", [](const mfa::MFA<T>& model, PointSet<T>& output, const std::vector<int>& derivs)
+            {
+                model.Decode(output, to_eigen_vectori(derivs));
+            }, "output"_a, "derivs"_a = std::vector<int>())
+        .def("DecodeGeom", [](const mfa::MFA<T>& model, PointSet<T>& output, const std::vector<int>& derivs)
+            {
+                model.DecodeGeom(output, to_eigen_vectori(derivs));
+            }, "output"_a, "derivs"_a = std::vector<int>())
+        .def("DecodeVar", [](const mfa::MFA<T>& model, int i, PointSet<T>& output, const std::vector<int>& derivs)
+            {
+                model.DecodeVar(i, output, to_eigen_vectori(derivs));
+            }, "i"_a, "output"_a, "derivs"_a = std::vector<int>())
         .def("Integrate1D", [](const mfa::MFA<T>& model,
                                 int k,
                                 int dim,
                                 T u0,
                                 T u1,
-                                const VectorX<T>& params)
+                                const std::vector<T>& params)
             {
                 VectorX<T> output(model.var_dim(k));
-                model.Integrate1D(k, dim, u0, u1, params, output);
+                model.Integrate1D(k, dim, u0, u1, to_eigen_vector(params), output);
                 return output;
             }, "k"_a, "dim"_a, "u0"_a, "u1"_a, "params"_a)
         .def("DefiniteIntegral", [](const mfa::MFA<T>& model,
                                      int k,
-                                     const VectorX<T>& a,
-                                     const VectorX<T>& b)
+                                     const std::vector<T>& a,
+                                     const std::vector<T>& b)
             {
                 VectorX<T> output(model.var_dim(k));
-                model.DefiniteIntegral(k, output, a, b);
+                model.DefiniteIntegral(k, output, to_eigen_vector(a), to_eigen_vector(b));
                 return output;
             }, "k"_a, "a"_a, "b"_a)
         .def("IntegratePointSet", &mfa::MFA<T>::IntegratePointSet, "mfa_data"_a, "output"_a, "int_dim"_a)
-        .def("DecodeAtGrid", &mfa::MFA<T>::DecodeAtGrid, "mfa_data"_a, "par_min"_a, "par_max"_a, "ndom_pts"_a, "result"_a)
+        .def("DecodeAtGrid", [](mfa::MFA<T>& model,
+                                 const mfa::MFA_Data<T>& mfa_data,
+                                 const std::vector<T>& par_min,
+                                 const std::vector<T>& par_max,
+                                 const std::vector<int>& ndom_pts)
+            {
+                VectorX<T> par_min_vec = to_eigen_vector(par_min);
+                VectorX<T> par_max_vec = to_eigen_vector(par_max);
+                VectorXi ndom_pts_vec = to_eigen_vectori(ndom_pts);
+
+                MatrixX<T> result(static_cast<Eigen::Index>(ndom_pts_vec.prod()),
+                                  static_cast<Eigen::Index>(mfa_data.dim()));
+                model.DecodeAtGrid(mfa_data, par_min_vec, par_max_vec, ndom_pts_vec, result);
+                return result;
+            }, "mfa_data"_a, "par_min"_a, "par_max"_a, "ndom_pts"_a)
         .def("AbsPointSetError", &mfa::MFA<T>::AbsPointSetError, "base"_a, "error"_a)
         .def("AddGeometry", (void (mfa::MFA<T>::*)(int)) &mfa::MFA<T>::AddGeometry)
         .def("AddGeometry", (void (mfa::MFA<T>::*)(const ModelInfo&)) &mfa::MFA<T>::AddGeometry, "mi"_a)
-        .def("AddVariable", (void (mfa::MFA<T>::*)(const Eigen::VectorXi&, const Eigen::VectorXi&, int)) &mfa::MFA<T>::AddVariable)
-        .def("AddVariable", (void (mfa::MFA<T>::*)(int, const Eigen::VectorXi&, int)) &mfa::MFA<T>::AddVariable)
+        .def("AddVariable", [](mfa::MFA<T>& model, const std::vector<int>& degree, const std::vector<int>& nctrl_pts, int dim)
+            {
+                model.AddVariable(
+                    to_eigen_vectori(degree), 
+                    to_eigen_vectori(nctrl_pts), 
+                    dim
+                );
+            }, "degree"_a, "nctrl_pts"_a, "dim"_a)
+        .def("AddVariable", [](mfa::MFA<T>& model, int degree, const std::vector<int>& nctrl_pts, int dim)
+            {
+                model.AddVariable(
+                    degree, 
+                    to_eigen_vectori(nctrl_pts), 
+                    dim
+                );
+            }, "degree"_a, "nctrl_pts"_a, "dim"_a)
         .def("AddVariable", (void (mfa::MFA<T>::*)(const ModelInfo&)) &mfa::MFA<T>::AddVariable, "mi"_a)
         .def("setGeomKnots", &mfa::MFA<T>::setGeomKnots, "knots"_a=std::vector<std::vector<T>>())
         .def("setKnots", (void (mfa::MFA<T>::*)(int, const std::vector<std::vector<T>>&)) &mfa::MFA<T>::setKnots, "i"_a, "knots"_a=std::vector<std::vector<T>>())
         .def("setKnots", (void (mfa::MFA<T>::*)(const std::vector<std::vector<T>>&)) &mfa::MFA<T>::setKnots, "knots"_a=std::vector<std::vector<T>>())
-        .def("shiftGeom", &mfa::MFA<T>::shiftGeom, "shift"_a)
-        .def("shiftVar", &mfa::MFA<T>::shiftVar, "i"_a, "shift"_a)
+        .def("shiftGeom", [](mfa::MFA<T>& model, const std::vector<T>& shift)
+            {
+                model.shiftGeom(to_eigen_vector(shift));
+            }, "shift"_a)
+        .def("shiftVar", [](mfa::MFA<T>& model, int i, const std::vector<T>& shift)
+            {
+                model.shiftVar(i, to_eigen_vector(shift));
+            }, "i"_a, "shift"_a)
         .def("printDetails", (void (mfa::MFA<T>::*)() const) &mfa::MFA<T>::printDetails)
         .def("printDetails", (void (mfa::MFA<T>::*)(int) const) &mfa::MFA<T>::printDetails, "verbose"_a)
         .def("dumpCollocationMatrixEncode", &mfa::MFA<T>::dumpCollocationMatrixEncode, "i"_a, "ps"_a)
@@ -239,12 +324,29 @@ void init_block(py::module& m, std::string name)
     ;
 
     py::class_<Tmesh<T>>(m, "Tmesh")
-        .def(py::init<int, const Eigen::VectorXi, int, int, size_t>())
+        .def(py::init([](int dom_dim, const std::vector<int>& p, int min_dim, int max_dim, size_t ntensor_prods)
+            {
+                return Tmesh<T>(
+                    dom_dim, 
+                    to_eigen_vectori(p), 
+                    min_dim, 
+                    max_dim, 
+                    ntensor_prods
+                );
+            }), "dom_dim"_a, "p"_a, "min_dim"_a, "max_dim"_a, "ntensor_prods"_a = 0)
         .def_readwrite("tensor_prods",  &Tmesh<T>::tensor_prods)
     ;
 
     py::class_<mfa::MFA_Data<T>>(m, "MFA_Data")
-        .def(py::init<const Eigen::VectorXi, Eigen::VectorXi, int, int>())
+        .def(py::init([](const std::vector<int>& p, const std::vector<int>& nctrl_pts, int min_dim, int max_dim)
+            {
+                return mfa::MFA_Data<T>(
+                    to_eigen_vectori(p), 
+                    to_eigen_vectori(nctrl_pts), 
+                    min_dim, 
+                    max_dim
+                );
+            }), "p"_a, "nctrl_pts"_a, "min_dim"_a, "max_dim"_a)
         .def_readwrite("dom_dim",       &MFA_Data<T>::dom_dim)
         .def_readwrite("min_dim",       &MFA_Data<T>::min_dim)
         .def_readwrite("max_dim",       &MFA_Data<T>::max_dim)
@@ -311,7 +413,17 @@ void init_block(py::module& m, std::string name)
             "ghost_factor"_a = 0.0)
         .def("fixed_encode_block",                  &Block<T>::fixed_encode_block)
         .def("adaptive_encode_block",               &Block<T>::adaptive_encode_block)
-        .def("decode_point",                        &Block<T>::decode_point)
+        .def("decode_point", [](Block<T>& b,
+                                 const diy::Master::ProxyWithLink& cp,
+                                 const std::vector<T>& param)
+            {
+                if (param.size() != static_cast<size_t>(b.dom_dim))
+                    throw py::value_error("decode_point: param length does not match dom_dim");
+
+                VectorX<T> cpt(b.pt_dim);
+                b.decode_point(cp, to_eigen_vector(param), cpt);
+                return cpt;
+            }, "cp"_a, "param"_a)
         .def("range_error",                         &Block<T>::range_error)
         .def_static("save",                         &Block<T>::save)
         .def_static("load",                         &Block<T>::load)
