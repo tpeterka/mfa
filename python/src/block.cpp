@@ -154,6 +154,16 @@ void init_block(py::module& m, std::string name)
         .def_readwrite("domain",    &PointSet<T>::domain)
         .def("set_domain", [](PointSet<T>& ps, const py::array_t<T, py::array::c_style | py::array::forcecast>& domain)
             {
+                py::buffer_info info = domain.request();
+                if (info.ndim != 2)
+                {
+                    throw py::value_error("Expected a 2D array");
+                }
+                if (info.shape[0] != static_cast<py::ssize_t>(ps.npts) ||
+                    info.shape[1] != static_cast<py::ssize_t>(ps.pt_dim))
+                {
+                    throw py::value_error("set_domain: domain shape must match PointSet dimensions (npts x pt_dim)");
+                }
                 ps.domain = to_eigen_matrix2d<T>(domain);
             }
         )
