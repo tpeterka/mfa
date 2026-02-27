@@ -428,7 +428,7 @@ void init_block(py::module& m, std::string name)
         ;
 }
 
-void init_block(py::module& m)
+PYBIND11_MODULE(_mfa, m)
 {
     // NB: real_t is defined in examples/block.hpp
     init_block<real_t>(m, "Block_double");
