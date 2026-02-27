@@ -16,7 +16,7 @@ add_custom_target           (pymfa ALL ${CMAKE_COMMAND} -E copy_directory
 
 # Build mfa/_mfa.so
 set                         (MFA_SOURCES
-                                src/block.cpp)
+                                src/mfa.cpp)
 
 pybind11_add_module         (_mfa ${MFA_SOURCES})
 target_link_libraries       (_mfa PRIVATE ${libraries})
