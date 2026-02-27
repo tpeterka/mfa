@@ -13,27 +13,6 @@ namespace py = pybind11;
 
 #include "mpi-capsule.h"
 
-// C++ object representing a python or numpy array
-// array can be 1-d (vector) or 2-d (matrix)
-// ref: https://github.com/pybind/pybind11/issues/3126
-template<typename T>
-struct PyArray
-{
-    py::buffer_info info;
-    T *data;
-    size_t size;
-
-    PyArray(py::array_t<T> arr) :
-        info { arr.request() },
-        data { static_cast<T*>(info.ptr) },
-        size { static_cast<size_t>(info.shape[0]) * (info.ndim > 1 ? static_cast<size_t>(info.shape[1]) : 1)}
-    {}
-
-    PyArray(const PyArray &) = delete;
-    PyArray &operator=(const PyArray &) = delete;
-    PyArray(PyArray&&) = default;
-};
-
 namespace
 {
     template <typename T>
@@ -437,24 +416,6 @@ void init_block(py::module& m, std::string name)
         .def("range_error",                         &Block<T>::range_error)
         .def_static("save",                         &Block<T>::save)
         .def_static("load",                         &Block<T>::load)
-        .def("input_data",              [](
-                                        const py::object*                   py_b,
-                                        const diy::Master::ProxyWithLink&   cp,
-                                        const py::array_t<T>&               arr,    // input data
-                                        MFAInfo&                            mfa_info,
-                                        DomainArgs&                         d_args)
-        {
-            PyArray<T> pyarray(arr);
-
-            // debug
-//             fmt::print(stderr, "PyArray size {}\n", pyarray.size);
-//             for (auto i = 0; i < pyarray.size; i++)
-//                 fmt::print(stderr, "data[{}] = {}\n", i, pyarray.data[i]);
-
-            Block<T>* b = py_b->cast<Block<T>*>();
-            if (!b) throw std::runtime_error("input_data: failed to cast block");
-            b->input_1d_data(cp, pyarray.data, mfa_info, d_args);
-        })
         ;
 
     m.def("add_block", [](
