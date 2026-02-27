@@ -59,9 +59,20 @@ namespace mfa
                 temp[i]    = VectorX<T>::Zero(mfa_data.tmesh.tensor_prods[0].ctrl_pts.cols());
                 // TODO: hard-coded for one tensor product
                 N[i]       = MatrixX<T>::Zero(1, mfa_data.tmesh.tensor_prods[0].nctrl_pts(i));
-                if (derivs.size() && derivs(i))
-                    // TODO: hard-coded for one tensor product
-                    ders[i] = MatrixX<T>::Zero(derivs(i) + 1, mfa_data.tmesh.tensor_prods[0].nctrl_pts(i));
+                if (derivs.size())
+                {
+                    if (derivs(i) < 0)
+                    {
+                        throw MFAError(fmt::format(
+                            "DecodeInfo: derivative order in dimension {} is negative ({})",
+                            i, derivs(i)));
+                    }
+                    if (derivs(i) > 0)
+                    {
+                        // TODO: hard-coded for one tensor product
+                        ders[i] = MatrixX<T>::Zero(derivs(i) + 1, mfa_data.tmesh.tensor_prods[0].nctrl_pts(i));
+                    }
+                }
             }
         }
 
@@ -77,8 +88,17 @@ namespace mfa
                 temp[i].setZero();
                 iter[i] = 0;
                 N[i].setZero();
-                if (derivs.size() && derivs(i))
-                    ders[i].setZero();
+                if (derivs.size())
+                {
+                    if (derivs(i) < 0)
+                    {
+                        throw MFAError(fmt::format(
+                            "DecodeInfo::Reset: derivative order in dimension {} is negative ({})",
+                            i, derivs(i)));
+                    }
+                    if (derivs(i) > 0)
+                        ders[i].setZero();
+                }
             }
         }
 
@@ -1266,6 +1286,12 @@ namespace mfa
                 }
                 for (auto i = 0; i < mfa_data.p.size(); i++)
                 {
+                    if (derivs(i) < 0)
+                    {
+                        throw MFAError(fmt::format(
+                            "VolPt: derivative order in dimension {} is negative ({})",
+                            i, derivs(i)));
+                    }
                     if (derivs(i) > mfa_data.p(i))
                     {
                         fmt::print(stderr, "WARNING: In dimension {}, trying to take derivative {} of an MFA with degree {} will result in 0. This may not be what you want\n",
@@ -1292,7 +1318,7 @@ namespace mfa
                 temp[i]    = VectorX<T>::Zero(last + 1);
                 span[i]    = mfa_data.tmesh.FindSpan(i, param(i), tensor);
                 N[i]       = MatrixX<T>::Zero(1, tensor.nctrl_pts(i));
-                if (derivs.size() && derivs(i))
+                if (derivs.size() && derivs(i) > 0)
                 {
 #ifndef MFA_TMESH   // original version for one tensor product
                     MatrixX<T> Ders = MatrixX<T>::Zero(derivs(i) + 1, tensor.nctrl_pts(i));
@@ -1657,6 +1683,12 @@ namespace mfa
                 }
                 for (auto i = 0; i < mfa_data.dom_dim; i++)
                 {
+                    if (derivs(i) < 0)
+                    {
+                        throw MFAError(fmt::format(
+                            "VolPt: derivative order in dimension {} is negative ({})",
+                            i, derivs(i)));
+                    }
                     if (derivs(i) > mfa_data.p(i))
                     {
                         fmt::print(stderr, "WARNING: In dimension {}, trying to take derivative {} of an MFA with degree {} will result in 0. This may not be what you want\n",
@@ -1676,7 +1708,7 @@ namespace mfa
             {
                 di.span[i]    = mfa_data.tmesh.FindSpan(i, param(i), tensor);
 
-                if (derivs.size() && derivs(i))
+                if (derivs.size() && derivs(i) > 0)
                 {
 #ifndef MFA_TMESH   // original version for one tensor product
                     mfa_data.DerBasisFuns(i, param(i), di.span[i], derivs(i), di.ders[i]);

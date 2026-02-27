@@ -34,7 +34,7 @@ namespace mfa
 
         // Convenience constructor that accepts a STL vector
         Param(int dom_dim_, vector<int>& ndom_pts_) :
-            Param(dom_dim_, Eigen::Map<VectorXi>(&ndom_pts_[0], ndom_pts_.size()))
+            Param(dom_dim_, Eigen::Map<VectorXi>(ndom_pts_.data(), static_cast<Eigen::Index>(ndom_pts_.size())))
         { }
 
         // General constructor for creating unspecified  params with an optional grid structure
@@ -56,6 +56,12 @@ namespace mfa
                 param_grid.resize(dom_dim);
                 for (int i = 0; i < dom_dim; i++)
                 {
+                    if (ndom_pts(i) <= 0)
+                    {
+                        throw MFAError(fmt::format(
+                            "Param constructor: ndom_pts[{}] must be > 0, got {}",
+                            i, ndom_pts(i)));
+                    }
                     param_grid[i].resize(ndom_pts(i));
                 }
             }
@@ -119,6 +125,20 @@ namespace mfa
         {
             if (!structured) 
                 throw MFAError("Tried to set grid parameters to unstructured Param object");
+
+            if (param_mins.size() != dom_dim)
+            {
+                throw MFAError(fmt::format(
+                    "make_grid_params(param_mins, param_maxs): dom_dim = {}, but param_mins has size {}",
+                    dom_dim, param_mins.size()));
+            }
+
+            if (param_maxs.size() != dom_dim)
+            {
+                throw MFAError(fmt::format(
+                    "make_grid_params(param_mins, param_maxs): dom_dim = {}, but param_maxs has size {}",
+                    dom_dim, param_maxs.size()));
+            }
 
             T step = 0;
 
