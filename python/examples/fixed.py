@@ -69,4 +69,4 @@ m.foreach(lambda b, cp: b.print_block(cp, True))
 
 # save the results
 print("\n\nSaving blocks\n")
-diy.write_blocks("approx.mfa", m, save=mfa.save_block)
+diy.write_blocks("approx.mfa", m, save=mfa.Block.save)

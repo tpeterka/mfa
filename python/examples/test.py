@@ -43,9 +43,6 @@ variable_model_info = mfa.ModelInfo(dom_dim, var_dim, vars_degree, vars_nctrl_pt
 mfa_info.addGeomInfo(geom_model_info)
 mfa_info.addVarInfo(variable_model_info)
 
-# def add_block(gid, core, bounds, domain_, link):
-#     print(">>", core.min.dimension())
-#     mfa.add_block(gid, core, bounds, domain_, link, m, dom_dim, pt_dim, ghost_factor)
 
 print("Pre domain decomposition")
 # decompose domain using double precision bounds
@@ -72,5 +69,5 @@ m.foreach(lambda b, cp: b.print_block(cp, True))
 
 # save the results
 print("\n\nSaving blocks\n")
-diy.write_blocks("approx.mfa", m, save = mfa.save_block)
+diy.write_blocks("approx.mfa", m, save=mfa.Block.save)
 # convert to vtk and view in paraview

@@ -414,42 +414,18 @@ void init_block(py::module& m, std::string name)
                 return cpt;
             }, "cp"_a, "param"_a)
         .def("range_error",                         &Block<T>::range_error)
-        .def_static("save",                         &Block<T>::save)
-        .def_static("load",                         &Block<T>::load)
+        .def_static("save", [](const py::object* b, diy::BinaryBuffer* bb)
+            {
+                if (!b) throw std::runtime_error("Block.save: null block object");
+                mfa::save<Block<T>, T>(b->cast<Block<T>*>(), *bb);
+            })
+        .def_static("load", [](diy::BinaryBuffer* bb)
+            {
+                std::unique_ptr<Block<T>> b { new Block<T> };
+                mfa::load<Block<T>, T>(b.get(), *bb);
+                return b;
+            })
         ;
-
-    m.def("add_block", [](
-                                        int                 gid,
-                                        const Bounds&       core,
-                                        const Bounds&       bounds,
-                                        const Bounds&       domain,
-                                        const RCLink&       link,
-                                        Master&             master,
-                                        int                 dom_dim,
-                                        int                 pt_dim,
-                                        T                   ghost_factor)
-        {
-            // std::cerr << core.min << std::endl;
-            std::cerr << "received gid " << gid << std::endl;
-            std::cerr << ">> " << core.min.dimension() << std::endl;
-            Block<T>*       b   = new Block<T>;
-            RCLink*         l   = new RCLink(link);
-            master.add(gid, new py::object(py::cast(b)), l);
-            b->init_block(gid, core, domain, dom_dim, pt_dim);
-        });
-
-    m.def("save_block", [](const py::object* b, diy::BinaryBuffer* bb)
-        {
-            if (!b) throw std::runtime_error("save_block: null block object");
-            mfa::save<Block<T>, T>(b->cast<Block<T>*>(), *bb);
-        });
-
-    m.def("load_block", [](diy::BinaryBuffer* bb)
-        {
-            std::unique_ptr<Block<T>> b { new Block<T> };
-            mfa::load<Block<T>, T>(b.get(), *bb);
-            return b;
-        });
 }
 
 void init_block(py::module& m)
