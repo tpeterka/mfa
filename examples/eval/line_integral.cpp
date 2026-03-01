@@ -215,6 +215,11 @@ int main(int argc, char** argv)
     { 
         b->trap_samples = ray_samples[0];
 
+        if (disc_int && sinogram)
+        {
+            b->compute_bounds();
+        }
+
         if (!disc_int)
         {
             ray_encode_time = MPI_Wtime();

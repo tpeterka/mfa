@@ -86,6 +86,7 @@ struct RayBlock : public Block<T>
 
     int trap_samples{0};        // number of samples used in trapezoid rule (used for testing)
 
+#if 0
     void get_box_intersections(
         T alpha,
         T rho,
@@ -106,46 +107,43 @@ struct RayBlock : public Block<T>
         T xh_int = (rho - xh * cos(alpha)) / sin(alpha);
         T xl_int = (rho - xl * cos(alpha)) / sin(alpha);
 
-        // "box intersection" setup
-        // start/end coordinates of the ray formed by intersecting 
-        // the line with bounding box of the data
-        if (alpha == 0)    // vertical lines (top to bottom)
+        if (alpha == 0)
         {
             x0 = rho;
             y0 = yh;
             x1 = rho;
             y1 = yl;
         }
-        else if (sin(alpha) == 0 && alpha > 0) // vertical lines (bottom to top)
+        else if (sin(alpha) == 0 && alpha > 0)
         {
             x0 = rho;
             y0 = yl;
             x1 = rho;
             y1 = yh;
         }
-        else if (cos(alpha)==0) // horizontal lines
+        else if (cos(alpha)==0)
         {
             x0 = xl;
             y0 = rho;
             x1 = xh;
             y1 = rho;
         }
-        else if (xl_int >= yl && xl_int <= yh)  // enter left
+        else if (xl_int >= yl && xl_int <= yh)
         {
             x0 = xl;
             y0 = xl_int;
 
-            if (yl_int >= xl && yl_int <= xh)   // enter left, exit bottom
+            if (yl_int >= xl && yl_int <= xh)
             {
                 y1 = yl;
                 x1 = yl_int;
             }
-            else if (yh_int >= xl && yh_int <= xh)  // enter left, exit top
+            else if (yh_int >= xl && yh_int <= xh)
             {
                 y1 = yh;
                 x1 = yh_int;
             }
-            else if (xh_int >= yl && xh_int <= yh)  // enter left, exit right
+            else if (xh_int >= yl && xh_int <= yh)
             {
                 x1 = xh;
                 y1 = xh_int;
@@ -155,11 +153,11 @@ struct RayBlock : public Block<T>
                 throw mfa::MFAError("invalid state 1 in get_box_intersections");
             }
         }
-        else if (yl_int >= xl && yl_int <= xh)  // enter or exit bottom
+        else if (yl_int >= xl && yl_int <= xh)
         {
-            if (yh_int >= xl && yh_int <= xh)   // enter/exit top & bottom
+            if (yh_int >= xl && yh_int <= xh)
             {
-                if (sin(alpha) == 0)    // vertical line case (should have been handled above)
+                if (sin(alpha) == 0)
                 {
                     fmt::print(stderr, "WARNING: invalid state 6, this should not happen\n");
                     x0 = yl_int;
@@ -167,7 +165,7 @@ struct RayBlock : public Block<T>
                     x1 = yh_int;
                     y1 = yh;
                 }
-                else if (sin(alpha) == 0 && alpha > 0)     // opposite vertical line case (should have been handled above)
+                else if (sin(alpha) == 0 && alpha > 0)
                 {
                     fmt::print(stderr, "WARNING: invalid state 7, this should not happen\n");
                     x0 = yh_int;
@@ -175,15 +173,13 @@ struct RayBlock : public Block<T>
                     x1 = yl_int;
                     y1 = yl;
                 }
-                // else if (yl_int < yh_int)   // enter bottom, exit top
                 else if (alpha > 3.14159265358979/2)
-                { 
+                {
                     x0 = yl_int;
                     y0 = yl;
                     x1 = yh_int;
                     y1 = yh;
                 }
-                // else if (yl_int > yh_int)   // enter top, exit bottom
                 else if (alpha < 3.14159265358979/2)
                 {
                     x0 = yh_int;
@@ -196,7 +192,7 @@ struct RayBlock : public Block<T>
                     throw mfa::MFAError("invalid state 2 in get_box_intersections");
                 }
             }
-            else if (xh_int >= yl && xh_int <= yh)  // enter bottom, exit right
+            else if (xh_int >= yl && xh_int <= yh)
             {
                 x0 = yl_int;
                 y0 = yl;
@@ -208,9 +204,9 @@ struct RayBlock : public Block<T>
                 throw mfa::MFAError("invalid state 3 in get_box_intersections");
             }
         }
-        else if (yh_int >= xl && yh_int <= xh)  // enter top (cannot be exit top b/c of cases handled previously)
+        else if (yh_int >= xl && yh_int <= xh)
         {
-            if (xh_int >= yl && xh_int <= yh)   // enter top, exit right
+            if (xh_int >= yl && xh_int <= yh)
             {
                 x0 = yh_int;
                 y0 = yh;
@@ -229,6 +225,82 @@ struct RayBlock : public Block<T>
             x1 = 0;
             y1 = 0;
         }
+    }
+#endif
+
+    void get_box_intersections(
+        T alpha,
+        T rho,
+        T& x0,
+        T& y0,
+        T& x1,
+        T& y1,
+        const VectorX<T>& mins,
+        const VectorX<T>& maxs) const
+    {
+        T xl = mins(0);
+        T xh = maxs(0);
+        T yl = mins(1);
+        T yh = maxs(1);
+
+        T ca = cos(alpha);
+        T sa = sin(alpha);
+        T px = rho * ca;
+        T py = rho * sa;
+        T dx = -sa;
+        T dy = ca;
+
+        T eps = static_cast<T>(64) * std::numeric_limits<T>::epsilon();
+        T tmin = -std::numeric_limits<T>::infinity();
+        T tmax = std::numeric_limits<T>::infinity();
+
+        auto clip_axis = [&](T p, T d, T min_v, T max_v)
+        {
+            if (abs(d) <= eps)
+            {
+                return (p >= min_v - eps && p <= max_v + eps);
+            }
+
+            T t0 = (min_v - p) / d;
+            T t1 = (max_v - p) / d;
+            if (t0 > t1)
+            {
+                T temp = t0;
+                t0 = t1;
+                t1 = temp;
+            }
+
+            if (t0 > tmin)
+                tmin = t0;
+            if (t1 < tmax)
+                tmax = t1;
+
+            return tmax >= tmin;
+        };
+
+        bool intersects = clip_axis(px, dx, xl, xh) && clip_axis(py, dy, yl, yh);
+        if (!intersects || tmax <= tmin + eps)
+        {
+            x0 = 0;
+            y0 = 0;
+            x1 = 0;
+            y1 = 0;
+            return;
+        }
+
+        auto clamp_axis = [&](T value, T lo, T hi)
+        {
+            if (value < lo)
+                return lo;
+            if (value > hi)
+                return hi;
+            return value;
+        };
+
+        x0 = clamp_axis(px + tmin * dx, xl, xh);
+        y0 = clamp_axis(py + tmin * dy, yl, yh);
+        x1 = clamp_axis(px + tmax * dx, xl, xh);
+        y1 = clamp_axis(py + tmax * dy, yl, yh);
     }
 
     // Check if a point p is in the original domain of the data
@@ -899,6 +971,15 @@ struct RayBlock : public Block<T>
         {
             param1 = au + i*du;
             param2 = au + (i+1)*du;
+
+            for (int j = 0; j < dom_dim; j++)
+            {
+                if (param1(j) < 0) param1(j) = 0;
+                else if (param1(j) > 1) param1(j) = 1;
+
+                if (param2(j) < 0) param2(j) = 0;
+                else if (param2(j) > 1) param2(j) = 1;
+            }
 
             decoder.VolPt(param1, outpt1, mfa->var(0).tmesh.tensor_prods[0]);
             decoder.VolPt(param2, outpt2, mfa->var(0).tmesh.tensor_prods[0]);
