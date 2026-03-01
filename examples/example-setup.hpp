@@ -461,7 +461,7 @@ using namespace std;
 
         if (input == "phantom")
         {
-            d_args.full_dom_pts = {200, 200};
+            d_args.full_dom_pts = vector<int>(dom_dim, ndomp);
             d_args.ndom_pts = d_args.full_dom_pts;
         }
 
