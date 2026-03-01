@@ -195,8 +195,11 @@ int main(int argc, char** argv)
 
         if (input == "phantom")
         {
-            VectorX<real_t> shift(2);
-            shift << -99.5, -99.5;
+            VectorX<real_t> shift(dom_dim);
+            for (int i = 0; i < dom_dim; i++)
+            {
+                shift(i) = -(static_cast<real_t>(d_args.full_dom_pts[i]) - 1.0) / 2.0;
+            }
             b->mfa->shiftGeom(shift);
             b->core_mins += shift;
             b->core_maxs += shift;
