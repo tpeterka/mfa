@@ -314,6 +314,7 @@ def run_line_integral(
     raw_slice_path: Path,
     run_dir: Path,
     ndomp: int,
+    vars_degree: int,
     vars_nctrl: int,
     ray_nctrl: list[int],
     ray_samples: list[int],
@@ -341,6 +342,8 @@ def run_line_integral(
         "--sinogram",
         "--vars_nctrl",
         str(vars_nctrl),
+        "--vars_degree",
+        str(vars_degree),
         "--seed",
         str(seed),
     ]
@@ -539,6 +542,7 @@ def run_dataset_pipeline(
         raw_slice_path=prepared.raw_path,
         run_dir=mfa_dir,
         ndomp=ndomp,
+        vars_degree=args.vars_degree,
         vars_nctrl=args.vars_nctrl,
         ray_nctrl=args.ray_nctrl,
         ray_samples=args.ray_samples,
@@ -552,6 +556,7 @@ def run_dataset_pipeline(
         raw_slice_path=prepared.raw_path,
         run_dir=trap_dir,
         ndomp=ndomp,
+        vars_degree=args.vars_degree,
         vars_nctrl=args.vars_nctrl,
         ray_nctrl=args.ray_nctrl,
         ray_samples=args.ray_samples,
@@ -640,6 +645,7 @@ def parse_args() -> argparse.Namespace:
         help="Only prepare slices, do not run MFA/reconstruction.",
     )
     parser.add_argument("--line-integral-binary", type=Path, default=None)
+    parser.add_argument("--vars-degree", type=int, default=4)
     parser.add_argument("--vars-nctrl", type=int, default=11)
     parser.add_argument("--ray-nctrl", type=int, nargs=3, default=[20, 20, 20])
     parser.add_argument("--ray-samples", type=int, nargs=3, default=[50, 50, 50])
