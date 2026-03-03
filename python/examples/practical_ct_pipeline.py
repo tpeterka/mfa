@@ -433,6 +433,39 @@ def reconstruct_from_sinogram(
     return outputs
 
 
+def compute_skimage_sinogram(
+    image: np.ndarray,
+    n_angles: int = 450,
+) -> tuple[SinogramGrid, dict[str, np.ndarray]]:
+    """Compute forward projection and FBP reconstruction using scikit-image radon/iradon.
+
+    This serves as a reference baseline: scikit-image's own radon transform
+    produces the ideal sinogram for its iradon reconstructor, so the round-trip
+    quality represents the best FBP can achieve at this angular sampling.
+    """
+    transform = import_required("skimage.transform", "scikit-image")
+
+    theta_deg = np.linspace(0.0, 180.0, n_angles, endpoint=False)
+    sinogram = transform.radon(image, theta=theta_deg, circle=False)
+
+    # Build a SinogramGrid so downstream code can display it uniformly
+    alpha_rad = np.deg2rad(theta_deg)
+    n_det = sinogram.shape[0]
+    rho = np.arange(n_det, dtype=np.float64) - n_det // 2
+    grid = SinogramGrid(alpha_rad=alpha_rad, rho=rho, values=sinogram.astype(np.float64))
+
+    print(f"pre-prep sinogram: ntheta={grid.alpha_rad.shape}, nrho={grid.rho.shape}")
+    print(f"output_size={image.shape[0]}")
+
+    output_size = image.shape[0]
+    fbp = transform.iradon(
+        sinogram, theta=theta_deg, output_size=output_size,
+        circle=False, filter_name="ramp",
+    ).astype(np.float32)
+
+    return grid, {"fbp": fbp}
+
+
 def compute_metrics(
     reference: np.ndarray, reconstruction: np.ndarray
 ) -> dict[str, float]:
@@ -468,38 +501,51 @@ def save_comparison_figure(
     reference: np.ndarray,
     mfa_grid: SinogramGrid,
     trap_grid: SinogramGrid,
+    skimage_grid: SinogramGrid,
     mfa_recon: np.ndarray,
     trap_recon: np.ndarray,
+    skimage_recon: np.ndarray,
     mfa_metrics: dict[str, float],
     trap_metrics: dict[str, float],
+    skimage_metrics: dict[str, float],
 ) -> None:
     plt = import_required("matplotlib.pyplot", "matplotlib")
 
     path.parent.mkdir(parents=True, exist_ok=True)
-    fig, axes = plt.subplots(2, 3, figsize=(13, 8), dpi=160)
+    fig, axes = plt.subplots(2, 4, figsize=(17, 8), dpi=160)
 
+    # Top row: reference + sinograms
     axes[0, 0].imshow(reference, cmap="gray", origin="lower")
     axes[0, 0].set_title(f"{dataset.upper()} reference slice")
 
     axes[0, 1].imshow(mfa_grid.values, cmap="gray", origin="lower", aspect="auto")
-    axes[0, 1].set_title("MFA sinogram")
+    axes[0, 1].set_title("MFA-lineint sinogram")
 
     axes[0, 2].imshow(trap_grid.values, cmap="gray", origin="lower", aspect="auto")
-    axes[0, 2].set_title("Trapezoid sinogram")
+    axes[0, 2].set_title("MFA-discrete sinogram")
 
+    axes[0, 3].imshow(skimage_grid.values, cmap="gray", origin="lower", aspect="auto")
+    axes[0, 3].set_title("scikit-image sinogram")
+
+    # Bottom row: reconstructions
     axes[1, 0].imshow(mfa_recon, cmap="gray", origin="lower")
     axes[1, 0].set_title(
-        f"MFA FBP\nRMSE={mfa_metrics['rmse']:.4f}, SSIM={mfa_metrics['ssim']:.4f}"
+        f"MFA-lineint FBP\nRMSE={mfa_metrics['rmse']:.4f}, SSIM={mfa_metrics['ssim']:.4f}"
     )
 
     axes[1, 1].imshow(trap_recon, cmap="gray", origin="lower")
     axes[1, 1].set_title(
-        f"Trapezoid FBP\nRMSE={trap_metrics['rmse']:.4f}, SSIM={trap_metrics['ssim']:.4f}"
+        f"MFA-discrete FBP\nRMSE={trap_metrics['rmse']:.4f}, SSIM={trap_metrics['ssim']:.4f}"
+    )
+
+    axes[1, 2].imshow(skimage_recon, cmap="gray", origin="lower")
+    axes[1, 2].set_title(
+        f"scikit-image FBP\nRMSE={skimage_metrics['rmse']:.4f}, SSIM={skimage_metrics['ssim']:.4f}"
     )
 
     diff = np.abs(robust_normalize(mfa_recon) - robust_normalize(trap_recon))
-    axes[1, 2].imshow(diff, cmap="magma", origin="lower")
-    axes[1, 2].set_title("|MFA recon - trapezoid recon|")
+    axes[1, 3].imshow(diff, cmap="magma", origin="lower")
+    axes[1, 3].set_title("|MFA-lineint - MFA-discrete|")
 
     for ax in axes.flat:
         ax.set_xticks([])
@@ -582,6 +628,11 @@ def run_dataset_pipeline(
     mfa_grid = parse_sinogram(mfa_sino_path)
     trap_grid = parse_sinogram(trap_sino_path)
 
+    print("Computing scikit-image radon reference sinogram...")
+    skimage_grid, skimage_recons = compute_skimage_sinogram(
+        prepared.image, n_angles=mfa_grid.alpha_rad.size
+    )
+
     mfa_recons = reconstruct_from_sinogram(
         mfa_grid, args.image_size, run_sart=args.with_sart
     )
@@ -591,6 +642,7 @@ def run_dataset_pipeline(
 
     mfa_metrics = compute_metrics(prepared.image, mfa_recons["fbp"])
     trap_metrics = compute_metrics(prepared.image, trap_recons["fbp"])
+    skimage_metrics = compute_metrics(prepared.image, skimage_recons["fbp"])
 
     figure_path = dataset_root / f"{dataset}_comparison.png"
     save_comparison_figure(
@@ -599,10 +651,13 @@ def run_dataset_pipeline(
         reference=prepared.image,
         mfa_grid=mfa_grid,
         trap_grid=trap_grid,
+        skimage_grid=skimage_grid,
         mfa_recon=mfa_recons["fbp"],
         trap_recon=trap_recons["fbp"],
+        skimage_recon=skimage_recons["fbp"],
         mfa_metrics=mfa_metrics,
         trap_metrics=trap_metrics,
+        skimage_metrics=skimage_metrics,
     )
 
     summary.update(
@@ -612,6 +667,7 @@ def run_dataset_pipeline(
             "trapezoid_sinogram": str(trap_sino_path),
             "mfa_fbp_metrics": mfa_metrics,
             "trapezoid_fbp_metrics": trap_metrics,
+            "skimage_fbp_metrics": skimage_metrics,
             "figure": str(figure_path),
         }
     )
