@@ -495,10 +495,78 @@ def find_sinogram_file(run_dir: Path, stem: str) -> Path:
     return matches[0]
 
 
+def mfa_encode_decode_image(
+    image: np.ndarray,
+    vars_degree: int,
+    vars_nctrl: int,
+) -> np.ndarray:
+    """Encode a 2D image into an MFA model and decode it back to a grid.
+
+    This replicates the MFA fitting step that the C++ ``line_integral`` binary
+    performs before computing line integrals.  The decoded image shows how the
+    spline model represents the original data.
+
+    Requires the ``mfa`` Python bindings (built with ``-Dmfa_python=ON``).
+    """
+    try:
+        from mfa._mfa import MFA, MFAInfo, ModelInfo, PointSet
+    except ImportError as exc:
+        raise RuntimeError(
+            "MFA Python bindings not found. Build with -Dmfa_python=ON "
+            "and ensure the build/python directory is on PYTHONPATH."
+        ) from exc
+
+    if image.ndim != 2 :
+        raise ValueError(f"Expected 2D image, got shape {image.shape}")
+
+    N, M = image.shape
+    npts = N * M
+    dom_dim = 2
+
+    # Mirror the C++ ModelInfo setup used by line_integral.cpp:
+    #   geometry: dom_dim dims, degree 1, nctrl = ndomp (identity map)
+    #   variable: 1 scalar dim, user-specified degree and nctrl
+    geom_info = ModelInfo(dom_dim)
+    var_info = ModelInfo(dom_dim, 1, vars_degree, vars_nctrl)
+
+    mfa_info = MFAInfo(dom_dim, 0)
+    mfa_info.addGeomInfo(geom_info)
+    mfa_info.addVarInfo(var_info)
+
+    # Build the input PointSet: (x, y, value) on a structured grid.
+    # The loop order (i fastest) matches Block::read_2d_scalar_data in block.hpp.
+    mdims = list(mfa_info.model_dims())
+    ps = PointSet(dom_dim, mdims, npts, [N, M])
+
+    domain = np.empty((npts, 3), dtype=np.float64)
+    idx = 0
+    for j in range(M):
+        for i in range(N):
+            domain[idx, 0] = float(i)
+            domain[idx, 1] = float(j)
+            domain[idx, 2] = float(image[j, i])
+            idx += 1
+
+    ps.set_domain(domain)
+    ps.set_domain_params()
+
+    # Encode
+    model = MFA(mfa_info)
+    model.FixedEncode(ps, 0.0, False, False)
+
+    # Decode at the same grid locations
+    output = PointSet(dom_dim, mdims, npts, [N, M])
+    output.set_from_params(ps)
+    model.Decode(output)
+
+    decoded_values = np.asarray(output.domain)[:, 2]
+    return decoded_values.reshape(N, M).astype(np.float32)
+
 def save_comparison_figure(
     path: Path,
     dataset: str,
     reference: np.ndarray,
+    mfa_sampled: Optional[np.ndarray],
     mfa_grid: SinogramGrid,
     trap_grid: SinogramGrid,
     skimage_grid: SinogramGrid,
@@ -512,40 +580,49 @@ def save_comparison_figure(
     plt = import_required("matplotlib.pyplot", "matplotlib")
 
     path.parent.mkdir(parents=True, exist_ok=True)
-    fig, axes = plt.subplots(2, 4, figsize=(17, 8), dpi=160)
+    fig, axes = plt.subplots(3, 3, figsize=(13, 12), dpi=160)
 
-    # Top row: reference + sinograms
+    # Row 1: original prepared image, MFA-sampled image, residual
     axes[0, 0].imshow(reference, cmap="gray", origin="lower")
-    axes[0, 0].set_title(f"{dataset.upper()} reference slice")
+    axes[0, 0].set_title(f"{dataset.upper()} prepared slice")
 
-    axes[0, 1].imshow(mfa_grid.values, cmap="gray", origin="lower", aspect="auto")
-    axes[0, 1].set_title("MFA-lineint sinogram")
+    if mfa_sampled is not None:
+        axes[0, 1].imshow(mfa_sampled, cmap="gray", origin="lower")
+        axes[0, 1].set_title("MFA model (decoded)")
 
-    axes[0, 2].imshow(trap_grid.values, cmap="gray", origin="lower", aspect="auto")
-    axes[0, 2].set_title("MFA-discrete sinogram")
+        residual = np.abs(robust_normalize(reference) - robust_normalize(mfa_sampled))
+        im = axes[0, 2].imshow(residual, cmap="magma", origin="lower")
+        axes[0, 2].set_title("|original \u2212 MFA model|")
+        fig.colorbar(im, ax=axes[0, 2], fraction=0.046, pad=0.04)
+    else:
+        axes[0, 1].set_visible(False)
+        axes[0, 2].set_visible(False)
 
-    axes[0, 3].imshow(skimage_grid.values, cmap="gray", origin="lower", aspect="auto")
-    axes[0, 3].set_title("scikit-image sinogram")
+    # Row 2: sinograms (MFA-lineint, MFA-discrete, scikit-image)
+    axes[1, 0].imshow(mfa_grid.values, cmap="gray", origin="lower", aspect="auto")
+    axes[1, 0].set_title("MFA-lineint sinogram")
 
-    # Bottom row: reconstructions
-    axes[1, 0].imshow(mfa_recon, cmap="gray", origin="lower")
-    axes[1, 0].set_title(
+    axes[1, 1].imshow(trap_grid.values, cmap="gray", origin="lower", aspect="auto")
+    axes[1, 1].set_title("MFA-discrete sinogram")
+
+    axes[1, 2].imshow(skimage_grid.values, cmap="gray", origin="lower", aspect="auto")
+    axes[1, 2].set_title("scikit-image sinogram")
+
+    # Row 3: reconstructions
+    axes[2, 0].imshow(mfa_recon, cmap="gray", origin="lower")
+    axes[2, 0].set_title(
         f"MFA-lineint FBP\nRMSE={mfa_metrics['rmse']:.4f}, SSIM={mfa_metrics['ssim']:.4f}"
     )
 
-    axes[1, 1].imshow(trap_recon, cmap="gray", origin="lower")
-    axes[1, 1].set_title(
+    axes[2, 1].imshow(trap_recon, cmap="gray", origin="lower")
+    axes[2, 1].set_title(
         f"MFA-discrete FBP\nRMSE={trap_metrics['rmse']:.4f}, SSIM={trap_metrics['ssim']:.4f}"
     )
 
-    axes[1, 2].imshow(skimage_recon, cmap="gray", origin="lower")
-    axes[1, 2].set_title(
+    axes[2, 2].imshow(skimage_recon, cmap="gray", origin="lower")
+    axes[2, 2].set_title(
         f"scikit-image FBP\nRMSE={skimage_metrics['rmse']:.4f}, SSIM={skimage_metrics['ssim']:.4f}"
     )
-
-    diff = np.abs(robust_normalize(mfa_recon) - robust_normalize(trap_recon))
-    axes[1, 3].imshow(diff, cmap="magma", origin="lower")
-    axes[1, 3].set_title("|MFA-lineint - MFA-discrete|")
 
     for ax in axes.flat:
         ax.set_xticks([])
@@ -640,6 +717,20 @@ def run_dataset_pipeline(
         trap_grid, args.image_size, run_sart=args.with_sart
     )
 
+    # Encode/decode MFA model to visualize the spline fit
+    mfa_sampled: Optional[np.ndarray] = None
+    try:
+        print("Encoding MFA model and decoding to grid (Python bindings)...")
+        mfa_sampled = mfa_encode_decode_image(
+            prepared.image,
+            vars_degree=args.vars_degree,
+            vars_nctrl=args.vars_nctrl,
+        )
+        print(f"MFA model decoded: range [{mfa_sampled.min():.4f}, {mfa_sampled.max():.4f}]")
+    except Exception as exc:
+        print(f"Warning: MFA model decode skipped: {exc}")
+
+
     mfa_metrics = compute_metrics(prepared.image, mfa_recons["fbp"])
     trap_metrics = compute_metrics(prepared.image, trap_recons["fbp"])
     skimage_metrics = compute_metrics(prepared.image, skimage_recons["fbp"])
@@ -649,6 +740,7 @@ def run_dataset_pipeline(
         path=figure_path,
         dataset=dataset,
         reference=prepared.image,
+        mfa_sampled=mfa_sampled,
         mfa_grid=mfa_grid,
         trap_grid=trap_grid,
         skimage_grid=skimage_grid,

@@ -178,6 +178,8 @@ void init_block(py::module& m, std::string name)
     ;
 
     py::class_<ModelInfo>(m,"ModelInfo")
+        .def(py::init<int>())
+        .def(py::init<int, int>())
         .def(py::init<int, int, int, int>())
         .def(py::init<int, int, std::vector<int>, std::vector<int>>()) 
         .def_readwrite("dom_dim",       &ModelInfo::dom_dim)
