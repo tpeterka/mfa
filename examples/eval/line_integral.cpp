@@ -65,6 +65,7 @@ int main(int argc, char** argv)
     bool time_mode = false;
     bool error_mode = false;
     bool sinogram = false;
+    int sinogram_angles = 180;
 
     int num_ints = 10000;
 
@@ -96,6 +97,7 @@ int main(int argc, char** argv)
     ops >> opts::Option('z', "time_mode",   time_mode,  "");
     ops >> opts::Option('z', "error_mode",  error_mode, "");
     ops >> opts::Option('z', "sinogram",    sinogram,   "");
+    ops >> opts::Option('z', "sinogram-angles", sinogram_angles, "");
 
     // int n_alpha = 120;
     // int n_rho = 120;
@@ -244,7 +246,7 @@ int main(int argc, char** argv)
         {
             if (dom_dim == 2)
             {
-                b->compute_sinogram(cp, d_args, disc_int);
+                b->compute_sinogram(cp, d_args, sinogram_angles, disc_int);
             }
             else
             {

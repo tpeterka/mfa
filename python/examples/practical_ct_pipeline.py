@@ -318,6 +318,7 @@ def run_line_integral(
     vars_nctrl: int,
     ray_nctrl: list[int],
     ray_samples: list[int],
+    sinogram_angles: int,
     seed: int,
     discrete: bool,
 ) -> None:
@@ -340,6 +341,8 @@ def run_line_integral(
         "--infile",
         str(input_path),
         "--sinogram",
+        "--sinogram-angles",
+        str(sinogram_angles),
         "--vars_nctrl",
         str(vars_nctrl),
         "--vars_degree",
@@ -392,6 +395,14 @@ def prepare_iradon_inputs(grid: SinogramGrid) -> tuple[np.ndarray, np.ndarray]:
     if theta_deg.size > 1 and np.isclose(theta_deg[-1], 180.0, atol=1e-9):
         theta_deg = theta_deg[:-1]
         sinogram = sinogram[:, :-1]
+
+    # Negate theta to correct for the C++ coordinate convention.
+    # The C++ code maps (row, col) -> (x, y) with x = row - center, so the
+    # first array axis is x.  scikit-image iradon expects (col, row) -> (x, y)
+    # with y = center - row, so the first array axis is y (increasing upward).
+    # Negating theta during back-projection compensates for this axis swap and
+    # produces a correctly oriented reconstruction.
+    theta_deg = -theta_deg
 
     return sinogram, theta_deg
 
@@ -546,6 +557,7 @@ def run_dataset_pipeline(
         vars_nctrl=args.vars_nctrl,
         ray_nctrl=args.ray_nctrl,
         ray_samples=args.ray_samples,
+        sinogram_angles=args.sinogram_angles,
         seed=args.seed,
         discrete=False,
     )
@@ -560,6 +572,7 @@ def run_dataset_pipeline(
         vars_nctrl=args.vars_nctrl,
         ray_nctrl=args.ray_nctrl,
         ray_samples=args.ray_samples,
+        sinogram_angles=args.sinogram_angles,
         seed=args.seed,
         discrete=True,
     )
@@ -649,6 +662,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--vars-nctrl", type=int, default=11)
     parser.add_argument("--ray-nctrl", type=int, nargs=3, default=[20, 20, 20])
     parser.add_argument("--ray-samples", type=int, nargs=3, default=[50, 50, 50])
+    parser.add_argument("--sinogram-angles", type=int, default=180, help="Number of forward projections to use in sinogram")
     parser.add_argument("--seed", type=int, default=2026)
     parser.add_argument(
         "--with-sart", action="store_true", help="Also compute one SART reconstruction."

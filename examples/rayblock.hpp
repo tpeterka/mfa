@@ -1250,6 +1250,7 @@ struct RayBlock : public Block<T>
     void compute_sinogram(
         const   diy::Master::ProxyWithLink& cp,
         const   DomainArgs& d_args, 
+                int  n_angles,
                 bool discrete) const
     {
         fmt::print(stderr, "Computing sinogram\n");
@@ -1267,8 +1268,47 @@ struct RayBlock : public Block<T>
         sinotruefile.open(sino_true_filename);
         sinoapproxfile.open(sino_approx_filename);
         sinoerrorfile.open(sino_error_filename);
-        int test_n_alpha = 450;
-        int test_n_rho = 450;
+
+        // this padding logic loosely follows that of scikit-image radon/iradon 
+        // for compatibility with that library (i.e. reconstruction with skimage.transform.iradon)
+        // see: https://github.com/scikit-image/scikit-image/blob/v0.26.0/src/skimage/transform/radon_transform.py
+        // at the moment, this differs from the padding imposed by r_lim. r_lim is 
+        // slightly larger than necessary since too little padding in the RayModel encoding
+        // could lead to oscillations near the edges (untested, just conjecture)
+        VectorX<T> input_extents = (input->maxs() - input->mins()).array() + 1;
+        VectorXi input_extents_i = input_extents.template cast<int>();
+
+        // TODO this assumes input_extents==2d_data.size!
+        double diagonal = sqrt(2) * input_extents.maxCoeff();
+        VectorXi pad = (VectorX<T>::Constant(2, diagonal) - input_extents).array().ceil().template cast<int>();
+        VectorXi new_center = (input_extents_i + pad) / 2; // integer division
+        VectorXi old_center = input_extents_i / 2; // integer division
+        VectorXi pad_before = new_center - old_center;
+        VectorX<T> pad_before_f = pad_before.cast<T>();
+        VectorX<T> pad_after_f = (pad - pad_before).template cast<T>();
+
+        // Custom offset accounts for the fact that the original data coordinates are
+        // [0, NPTS-1], but the model is encoded on [-(NPTS-1)/2, NPTS-1/2]
+        VectorX<T> offset = (input->maxs() - input->mins()) / 2;
+        VectorX<T> padded_mins = input->mins() - offset - pad_before_f;
+        VectorX<T> padded_maxs = input->maxs() - offset + pad_after_f;
+
+        // Check that padded domain is nearly square
+        if (std::abs((padded_maxs - padded_mins)(0) - (padded_maxs - padded_mins)(1)) > 1)
+            throw mfa::MFAError(fmt::format("Padded input in compute_sinogram should be square, got shape {}, {}",
+                (padded_maxs - padded_mins)(0),
+                (padded_maxs - padded_mins)(1)
+            ));
+
+        // Number of rho samples should match the side length of the padded square domain
+        // (Assumes original data extents match integer number of points per dim)
+        T rho_min = padded_mins(0);
+        T rho_max = padded_maxs(0);
+        int test_n_rho = (int) round(rho_max - rho_min) + 1;
+        T rho_delta = (rho_max - rho_min) / (test_n_rho - 1);
+
+        int test_n_alpha = n_angles;
+        // int test_n_rho = rho_width;
 
         const double nanvalue = std::numeric_limits<double>::quiet_NaN();
 
@@ -1278,7 +1318,8 @@ struct RayBlock : public Block<T>
             for (int j = 0; j < test_n_rho; j++)
             {
                 T alpha = 3.14159265 / (test_n_alpha-1) * i;
-                T rho = r_lim*2 / (test_n_rho-1) * j - r_lim;
+                // T rho = r_lim*2 / (test_n_rho-1) * j - r_lim;
+                T rho = rho_min + j * rho_delta;
                 T x0, x1, y0, y1;   // end points of full line
 
                 get_box_intersections(alpha, rho, x0, y0, x1, y1, core_mins, core_maxs);
@@ -1299,15 +1340,15 @@ struct RayBlock : public Block<T>
                     T test_result = 0;
                     if (!discrete)  // Use RayModel integration
                     {
-                        test_result = integrate_ray(cp, start_pt, end_pt) / length;   // normalize by segment length
+                        test_result = integrate_ray(cp, start_pt, end_pt);   // line integral (no normalization by length)
                     }
                     else    // Use trapezoid rule
                     {
-                        test_result = trapezoid(cp, d_args, start_pt, end_pt) / length; 
+                        test_result = trapezoid(cp, d_args, start_pt, end_pt);
                     }
 
-                    // T test_result = integrate_ray(cp, start_pt, end_pt) / length;   // normalize by segment length
-                    T test_actual = sintest(start_pt, end_pt) / length;
+                    // T test_result = integrate_ray(cp, start_pt, end_pt);   // line integral (no normalization by length)
+                    T test_actual = sintest(start_pt, end_pt);
 
                     T e_abs = abs(test_result - test_actual);
                     T e_rel = e_abs/extent;
