@@ -499,12 +499,25 @@ def mfa_encode_decode_image(
     image: np.ndarray,
     vars_degree: int,
     vars_nctrl: int,
+    resample_res: Optional[list[int]] = None,
 ) -> np.ndarray:
     """Encode a 2D image into an MFA model and decode it back to a grid.
 
     This replicates the MFA fitting step that the C++ ``line_integral`` binary
     performs before computing line integrals.  The decoded image shows how the
     spline model represents the original data.
+
+    Parameters
+    ----------
+    image : np.ndarray
+        2D input image to encode.
+    vars_degree : int
+        Polynomial degree for the variable model.
+    vars_nctrl : int
+        Number of control points for the variable model.
+    resample_res : list[int], optional
+        Resolution of the decoded output grid as ``[rows, cols]``.  When
+        ``None`` (the default), the output has the same shape as *image*.
 
     Requires the ``mfa`` Python bindings (built with ``-Dmfa_python=ON``).
     """
@@ -529,7 +542,7 @@ def mfa_encode_decode_image(
     geom_info = ModelInfo(dom_dim)
     var_info = ModelInfo(dom_dim, 1, vars_degree, vars_nctrl)
 
-    mfa_info = MFAInfo(dom_dim, 0)
+    mfa_info = MFAInfo(dom_dim, 3)
     mfa_info.addGeomInfo(geom_info)
     mfa_info.addVarInfo(var_info)
 
@@ -554,19 +567,35 @@ def mfa_encode_decode_image(
     model = MFA(mfa_info)
     model.FixedEncode(ps, 0.0, False, False)
 
-    # Decode at the same grid locations
-    output = PointSet(dom_dim, mdims, npts, [N, M])
-    output.set_from_params(ps)
+    # Determine output resolution
+    if resample_res is not None:
+        if len(resample_res) != dom_dim:
+            raise ValueError(
+                f"resample_res must have {dom_dim} elements, got {len(resample_res)}"
+            )
+        out_N, out_M = resample_res[0], resample_res[1]
+    else:
+        out_N, out_M = N, M
+
+    out_npts = out_N * out_M
+    output = PointSet(dom_dim, mdims, out_npts, [out_N, out_M])
+
+    if resample_res is not None:
+        # Build a uniform parameter grid spanning the input domain
+        output.set_grid_params()
+    else:
+        output.set_from_params(ps)
+
     model.Decode(output)
 
     decoded_values = np.asarray(output.domain)[:, 2]
-    return decoded_values.reshape(N, M).astype(np.float32)
+    return decoded_values.reshape(out_N, out_M).astype(np.float32)
 
 def save_comparison_figure(
     path: Path,
     dataset: str,
     reference: np.ndarray,
-    mfa_sampled: Optional[np.ndarray],
+    mfa_sampled: np.ndarray,
     mfa_grid: SinogramGrid,
     trap_grid: SinogramGrid,
     skimage_grid: SinogramGrid,
@@ -585,17 +614,15 @@ def save_comparison_figure(
     # Row 1: original prepared image, MFA-sampled image, residual
     axes[0, 0].imshow(reference, cmap="gray", origin="lower")
     axes[0, 0].set_title(f"{dataset.upper()} prepared slice")
+    axes[0, 1].imshow(mfa_sampled, cmap="gray", origin="lower")
+    axes[0, 1].set_title("MFA model (decoded)")
 
-    if mfa_sampled is not None:
-        axes[0, 1].imshow(mfa_sampled, cmap="gray", origin="lower")
-        axes[0, 1].set_title("MFA model (decoded)")
-
+    if mfa_sampled.size == reference.size:
         residual = np.abs(robust_normalize(reference) - robust_normalize(mfa_sampled))
         im = axes[0, 2].imshow(residual, cmap="magma", origin="lower")
         axes[0, 2].set_title("|original \u2212 MFA model|")
         fig.colorbar(im, ax=axes[0, 2], fraction=0.046, pad=0.04)
     else:
-        axes[0, 1].set_visible(False)
         axes[0, 2].set_visible(False)
 
     # Row 2: sinograms (MFA-lineint, MFA-discrete, scikit-image)
@@ -718,17 +745,15 @@ def run_dataset_pipeline(
     )
 
     # Encode/decode MFA model to visualize the spline fit
-    mfa_sampled: Optional[np.ndarray] = None
-    try:
-        print("Encoding MFA model and decoding to grid (Python bindings)...")
-        mfa_sampled = mfa_encode_decode_image(
-            prepared.image,
-            vars_degree=args.vars_degree,
-            vars_nctrl=args.vars_nctrl,
-        )
-        print(f"MFA model decoded: range [{mfa_sampled.min():.4f}, {mfa_sampled.max():.4f}]")
-    except Exception as exc:
-        print(f"Warning: MFA model decode skipped: {exc}")
+    
+    print("Encoding MFA model and decoding to grid (Python bindings)...")
+    mfa_sampled = mfa_encode_decode_image(
+        prepared.image,
+        vars_degree=args.vars_degree,
+        vars_nctrl=args.vars_nctrl,
+        resample_res=args.resample_res,
+    )
+    print(f"MFA model decoded: range [{mfa_sampled.min():.4f}, {mfa_sampled.max():.4f}]")
 
 
     mfa_metrics = compute_metrics(prepared.image, mfa_recons["fbp"])
@@ -814,6 +839,16 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--seed", type=int, default=2026)
     parser.add_argument(
         "--with-sart", action="store_true", help="Also compute one SART reconstruction."
+    )
+    parser.add_argument(
+        "--resample-res",
+        type=int,
+        nargs="+",
+        default=None,
+        help=(
+            "Resolution for MFA decode resampling, one int per dimension "
+            "(e.g. --resample-res 400 400). Defaults to the input image size."
+        ),
     )
 
     return parser.parse_args()
