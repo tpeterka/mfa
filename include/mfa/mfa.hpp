@@ -43,6 +43,7 @@
 // #define MFA_DENSE
 
 // for debugging, can turn off constraints in local solve
+// only for tmesh, not overlays
 // #define MFA_NO_CONSTRAINTS
 
 #ifdef MFA_KOKKOS
