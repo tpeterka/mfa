@@ -76,19 +76,20 @@ namespace mfa
         vector<vector<T>>                   all_knots;          // all_knots[dimension][index] (sorted)
         vector<vector<int>>                 all_knot_levels;    // refinement levels of all_knots[dimension][index]
         vector<vector<ParamIdx>>            all_knot_param_idxs;// index of first input point whose parameter is >= knot value in all_knots[dimension][idx] (same layout as all_knots)
-                                                                // knot value <= params[dim][idx] < next knot value
         vector<TensorProduct<T>>            tensor_prods;       // all tensor products
-        unordered_map<KnotIdx, TensorIdx>   knot_tensor;        // n-d knot in index space linearized to 1-d and mapped to deepest-level tensor containing the location
-
-        // 1-d knots in each dimension in index space mapped to vector of tensors in increasing depth containing the knot
-        // [dims]knot -> [increasing-depth tensors containing the knot]
-        vector<unordered_map<KnotIdx, vector<TensorIdx>>>   knot_dim_tensors;
-
         int                                 dom_dim_;           // domain dimensionality
         VectorXi                            p_;                 // degree in each dimension
         int                                 min_dim_;           // starting coordinate of this model in full-dimensional data
         int                                 max_dim_;           // ending coordinate of this model in full-dimensional data
         int                                 max_level;          // deepest level of refinement
+
+        // n-d knots in index space mapped to vector of tensors in increasing depth containing the knot
+        // knot -> [increasing-depth tensors containing the knot]
+        unordered_map<KnotIdx, vector<TensorIdx>>           knot_tensors;
+
+        // 1-d knots in each dimension in index space mapped to vector of tensors in increasing depth containing the knot
+        // knot[dim] -> [increasing-depth tensors containing the knot]
+        vector<unordered_map<KnotIdx, vector<TensorIdx>>>   knot_dim_tensors;
 
 #ifdef MFA_DEBUG_KNOT_INSERTION
 
@@ -201,9 +202,8 @@ namespace mfa
             return tensor_prods.size() - 1;
         }
 
-        // update 1-d knot_tensor hash maps for all tensors
-        // the same knot can appear in multiple tensors, but the hash map stores the deepest tensor for a knot
-        // the depth of the tensor increases as we iterate over tensors, so deeper tensors overwrite shallower ones for the same knot
+        // update 1-d knot->tensors hash maps for all tensors
+        // the same knot can appear in multiple tensors stored in a vector in increasing depth order
         void hash_all_tensors_dim()
         {
             vector<TensorIdx> unused;
@@ -228,23 +228,22 @@ namespace mfa
                         if (knot_dim_tensors[i].find(k_idx) != knot_dim_tensors[i].end())
                             t_idxs = knot_dim_tensors[i].at(k_idx);
                         t_idxs.push_back(j);
-                        knot_dim_tensors[i][tensor_prods[j].knot_idxs[i][k]] = t_idxs;          // hash the knot to the tensor
+                        knot_dim_tensors[i][k_idx] = t_idxs;                                    // hash the knot to the tensor
                     }
                 }
             }
         }
 
-        // update knot_tensor hash map for all tensors
-        // the same knot can appear in multiple tensors, but the hash map stores the deepest tensor for a knot
-        // the depth of the tensor increases as we iterate over tensors, so deeper tensors overwrite shallower ones for the same knot
+        // update n-d knot->tensors hash map for all tensors
+        // the same knot can appear in multiple tensors stored in a vector in increasing depth order
         void hash_all_tensors()
         {
-            knot_tensor.clear();
+            knot_tensors.clear();
             VectorXi tensor_nknots(dom_dim_), all_nknots(dom_dim_);
             VectorXi tensor_ijk(dom_dim_);                              // local ijk of knot in tensor
             vector<KnotIdx> all_ijk(dom_dim_);                          // global ijk of knot in all_knots
             vector<KnotIdx> temp_ijk(dom_dim_);                         // temporary knot multidim index
-            TensorIdx unused;
+            vector<TensorIdx> unused;
 
             for (auto j = 0; j < tensor_prods.size(); j++)              // for all tensors
             {
@@ -277,10 +276,6 @@ namespace mfa
                                 temp_ijk[k] = tensor_prods[j].knot_idxs[k][tensor_ijk(k)];
                             if (lookup_tensor(temp_ijk, unused))
                             {
-                                // debug
-//                                 fmt::print(stderr, "for tensor {}, skipping hashing knot [{}] because it is at the max edge and exists in tensor {}\n",
-//                                         j, fmt::join(temp_ijk, ","), unused);
-
                                 skip = true;
                                 break;
                             }
@@ -291,7 +286,11 @@ namespace mfa
                     if (!skip)
                     {
                         auto idx = all_knots_iter.ijk_idx(all_ijk);
-                        knot_tensor[idx] = j;                               // hash the linear knot idx to the tensor
+                        vector<KnotIdx> t_idxs;
+                        if (knot_tensors.find(idx) != knot_tensors.end())
+                            t_idxs = knot_tensors.at(idx);
+                        t_idxs.push_back(j);
+                        knot_tensors[idx] = t_idxs;          // hash the knot to the tensor
                     }
 
                     tensor_knots_iter.incr_iter();
@@ -554,11 +553,6 @@ namespace mfa
             try
             {
                 t_idxs = knot_dim_tensors[dim].at(k_idx);
-
-                // TODO: sanity check, remove once stable
-                if (t_idxs.size() == 0)
-                    throw MFAError(fmt::format("lookup_tensor_dim(): empty vector of tensors. This should not happen"));
-
                 return true;
             } catch (const std::out_of_range& e)
             {
@@ -566,11 +560,11 @@ namespace mfa
             }
         }
 
-        // gets index of deepest level tensor containing n-d knot in index space
+        // fills vector of tensors in increasing depth containing n-d knot in index space
         // by converting n-d knot into 1-d index and looking up value in knot_tensors hash map
-        // returns true if the tensor was found
-        bool lookup_tensor(const vector<KnotIdx>&   pt,                   // target knot in index space
-                           TensorIdx&               t_idx) const          // (output) tensor idx if it was found
+        // returns true if at least one tensor was found
+        bool lookup_tensor(const vector<KnotIdx>&   pt,                     // target knot in index space
+                           vector<TensorIdx>&       t_idxs) const           // (output) tensor idxs if some were found
         {
             // convert multidim point into linear 1-d index
             VectorXi nknots(dom_dim_);
@@ -582,7 +576,7 @@ namespace mfa
             try
             {
                 auto idx = vol_iter.ijk_idx(pt);
-                t_idx = knot_tensor.at(idx);
+                t_idxs = knot_tensors.at(idx);
                 return true;
             } catch (const std::out_of_range& e)
             {
@@ -880,35 +874,6 @@ namespace mfa
 
             return false;
         }
-
-        // DEPRECATE: used n-d target, which was incorrect (remove)
-        // iterates to the next intersection of knot index
-        // returns whether the offset target could be found
-//         bool next_inter(int                      cur_dim,            // current dimension
-//                         int                      dir,                // direction iterate +/-1
-//                         vector<KnotIdx>&         target) const       // (input / output) target knot indices, offset by this function
-//         {
-//             KnotIdx         temp_target_dim;
-// 
-//             if (dir != 1 && dir != -1)
-//                 throw MFAError(fmt::format("next_inter(): dir must be +/- 1\n"));
-// 
-//             // offset the target until a tensor is found or we run out of index space
-//             vector<KnotIdx> temp_target = target;
-//             temp_target[cur_dim] += dir;
-//             TensorIdx found_tidx;
-//             while (temp_target[cur_dim] >= 0 && temp_target[cur_dim] < all_knots[cur_dim].size())
-//             {
-//                 if (lookup_tensor(temp_target, found_tidx))
-//                 {
-//                     target[cur_dim] = temp_target[cur_dim];
-//                     return true;
-//                 }
-//                 temp_target[cur_dim] += dir;
-//             }
-// 
-//             return false;
-//         }
 
         // offsets a knot index by some amount within a tensor, skipping over any knots at a deeper level
         // returns whether the full offset was achieved (true) or whether ran out of tensor bounds (false)
@@ -1384,49 +1349,30 @@ namespace mfa
                 for (auto i = 0; i < dom_dim_; i++)
                     anchor[i] = orig_anchors[i][a];
 
-                TensorIdx found_tidx;
+                vector<TensorIdx> found_tidxs;
 
-                if (!lookup_tensor(anchor, found_tidx))
-                    continue;
-
-                auto& t_k = tensor_prods[found_tidx];
-                for (auto i = 0; i < dom_dim_; i++)                     // for all dims
+                // if the anchor doesn't exist in any tensor, this is the indicator to expand the anchors
+                if (!lookup_tensor(anchor, found_tidxs))
                 {
-                    for (auto j = 0; j < orig_anchors[i].size(); j++)   // for original anchors in current dim
+                    // debug
+//                     fmt::print(stderr, "expand_anchors() 0: anchor [{}] not found, anchor_extents[0] [{}] anchor_extents [1] [{}]\n",
+//                             fmt::join(anchor, ","), fmt::join(anchor_extents[0], ","), fmt::join(anchor_extents[1], ","));
+
+                    // TODO: should expand symmetrically only the dimension where the knot is missing, but
+                    // since we don't know which dimension is the problem, expand symmetrically in all dims
+                    for (auto i = 0; i < dom_dim_; i++)
                     {
-                        if (orig_anchors[i][j] >= t_k.knot_mins[i] && orig_anchors[i][j] < t_k.knot_maxs[i])
-                        {
-                            KnotIdx ofst_idx, temp_anchor;
-
-                            // t_k is to the max side of t
-                            temp_anchor = orig_anchors[i][j];
-                            while(temp_anchor >= t_k.knot_mins[i] && all_knot_levels[i][temp_anchor] > t_k.level)
-                            {
-                                temp_anchor--;
-                                // if we try to offset more than the tensor boundary, knot_idx_ofst clamps the offset to the knot_mins, maxs, which is what we want
-                                knot_idx_ofst(t_k, anchor_extents[i][0], -1, i, false, ofst_idx);
-                                anchor_extents[i][0] = ofst_idx;
-                                changed = true;
-                            }
-
-                            // t_k is to the min side of t
-                            temp_anchor = orig_anchors[i][j];
-                            while(temp_anchor <= t_k.knot_maxs[i] && all_knot_levels[i][temp_anchor] > t_k.level)
-                            {
-                                temp_anchor++;
-                                // if we try to offset more than the tensor boundary, knot_idx_ofst clamps the offset to the knot_mins, maxs, which is what we want
-                                knot_idx_ofst(t_k, anchor_extents[i][1], 1, i, false, ofst_idx);
-                                anchor_extents[i][1] = ofst_idx;
-                                changed = true;
-                            }
-                        }
+                        if (anchor_extents[i][0] > 0)
+                            anchor_extents[i][0]--;
+                        if (anchor_extents[i][1] < all_knots[i].size() - 1)
+                            anchor_extents[i][1]++;
                     }
+
+                    // debug
+//                     fmt::print(stderr, "expand_anchors() 1: anchor [{}] not found, anchor_extents[0] [{}] anchor_extents [1] [{}]\n",
+//                             fmt::join(anchor, ","), fmt::join(anchor_extents[0], ","), fmt::join(anchor_extents[1], ","));
                 }
             }
-
-            // debug
-//             if (changed)
-//                 fmt::print(stderr, "expand_tensors: changed = true\n");
 
             return changed;
         }

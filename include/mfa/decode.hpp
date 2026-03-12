@@ -1221,6 +1221,11 @@ namespace mfa
             vector<vector<KnotIdx>> anchors(dom_dim);                               // (global) anchors of local support of param point
             TensorIdx found_idx = tmesh.anchors(param, anchors);
 
+            // debug
+//             if (fabs(param(0) - 0.316456) < 0.001 && fabs(param(1) - 0.189873) < 0.001)
+//                 fmt::print(stderr, "VolPt_tmesh(): param [{}] anchors[0] [{}] anchors[1] [{}]\n",
+//                         param.transpose(), fmt::join(anchors[0], ","), fmt::join(anchors[1], ","));
+
             // (global) extents of original anchors expanded for adjacent tensors
             vector<vector<KnotIdx>> anchor_extents(dom_dim);
             bool changed = tmesh.expand_anchors(anchors, found_idx, anchor_extents);
@@ -1262,8 +1267,10 @@ namespace mfa
                     npts(j)       = 2;
                 }
                 VolIterator     iter(npts);
-                vector<KnotIdx> target(dom_dim);
+                vector<KnotIdx> target(dom_dim);                                    // multidim target in index space
+                VectorX<T>      target_param(dom_dim);                              // multidim target in parameter space
                 bool            skip = true;
+                vector<TensorIdx>   found_idxs;
                 while(!iter.done())
                 {
                     ijk = iter.idx_dim();
@@ -1273,8 +1280,9 @@ namespace mfa
                             target[i] = min_anchor[i];
                         else
                             target[i] = max_anchor[i];
+                        target_param(i) = all_knots[i][target[i]];
                     }
-                    if (tmesh.lookup_tensor(target, found_idx) && found_idx == k)
+                    if (tmesh.find_tensor(target_param) == k)
                     {
                         skip = false;
                         break;

@@ -1793,6 +1793,10 @@ namespace mfa
                         continue;
                     }
 
+                    // debug
+//                     fmt::print(stderr, "ConsCtrlPtMat: dom_starts [{}] anchors[{}] [{}] local_knot_idxs[0] [{}] local_knot_idxs[1] [{}]\n",
+//                             dom_starts.transpose(), i, fmt::join(anchors[i], ","), fmt::join(local_knot_idxs[0], ","), fmt::join(local_knot_idxs[1], ","));
+
                     // compute basis function
                     for (auto k = 0; k < dom_dim; k++)                                          // for all dims
                     {
@@ -4542,10 +4546,16 @@ namespace mfa
                     tmesh.ctrl_pt_anchor(*t, ijk, anchor);
 
                     // skip if knot is inside the child or if it is in a deeper level
-                    TensorIdx lookup_tidx;
+                    vector<TensorIdx> lookup_tidxs;
                     bool lookup_success = false;
-                    lookup_success = tmesh.lookup_tensor(anchor, lookup_tidx);
-                    if (!tmesh.in(anchor, tc.knot_mins, tc.knot_maxs) && lookup_success && lookup_tidx == parent_tidx)
+                    lookup_success = tmesh.lookup_tensor(anchor, lookup_tidxs);
+
+                    // debug
+                    // TODO: unsure whether this should be fatal, or if it can happen
+                    if (!lookup_success)
+                        throw MFAError(fmt::format("LocalSolveOverlaysConstraints: anchor [{}] not found in any tensor\n", fmt::join(anchor, ",")));
+
+                    if (!tmesh.in(anchor, tc.knot_mins, tc.knot_maxs) && lookup_success && lookup_tidxs.back() == parent_tidx)
                         rows++;
 
                     voliter.incr_iter();
@@ -4604,10 +4614,16 @@ namespace mfa
                     tmesh.ctrl_pt_anchor(*t, ijk, anchor);
 
                     // skip if anchor is inside the child or not in the parent
-                    TensorIdx lookup_tidx;
+                    vector<TensorIdx> lookup_tidxs;
                     bool lookup_success = false;
-                    lookup_success = tmesh.lookup_tensor(anchor, lookup_tidx);
-                    if (!tmesh.in(anchor, tc.knot_mins, tc.knot_maxs) && lookup_success && lookup_tidx == parent_tidx)
+                    lookup_success = tmesh.lookup_tensor(anchor, lookup_tidxs);
+
+                    // debug
+                    // TODO: unsure whether this should be fatal, or if it can happen
+                    if (!lookup_success)
+                        throw MFAError(fmt::format("LocalSolveOverlaysConstraints: anchor [{}] not found in any tensor\n", fmt::join(anchor, ",")));
+
+                    if (!tmesh.in(anchor, tc.knot_mins, tc.knot_maxs) && lookup_success && lookup_tidxs.back() == parent_tidx)
                     {
                         // save control point
                         ctrl_pts.row(cur_row) = t->ctrl_pts.row(voliter.sub_full_idx(voliter.cur_iter()));
