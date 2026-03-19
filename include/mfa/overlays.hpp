@@ -489,6 +489,7 @@ namespace mfa
 
         // determine starting and ending indices of domain input points covered by one tensor product
         // coverage extends to edge of basis functions corresponding to control points in the tensor product
+        // extends selectively depending on even/odd degree
         void domain_pts(TensorIdx               t_idx,              // index of current tensor product
                         vector<vector<T>>&      params,             // params of input points
                         vector<size_t>&         start_idxs,         // (output) starting idxs of input points
@@ -496,32 +497,36 @@ namespace mfa
         {
             start_idxs.resize(dom_dim_);
             end_idxs.resize(dom_dim_);
-            vector<KnotIdx> min_anchor(dom_dim_);                   // anchor for the min. edge basis functions of the new tensor
-            vector<KnotIdx> max_anchor(dom_dim_);                   // anchor for the max. edge basis functions of the new tensor
             vector<vector<KnotIdx>> local_knot_idxs;                // local knot vector for an anchor
 
             const TensorProduct<T>& tc = tensor_prods[t_idx];
 
             // left edge
-            vector<KnotIdx> start_knot_idxs(dom_dim_);
-            for (auto k = 0; k < dom_dim_; k++)
-                min_anchor[k] = tc.knot_mins[k];
+            vector<KnotIdx> start_knot_idxs = tc.knot_mins;
 
-            // extend by p/2 knots from the min corner in all dimensions
-            knot_intersections(min_anchor, local_knot_idxs, 0);
+            // don't extend dimensions with even degree
+            // extend by p/2 knots from the min corner in dimensions with odd degree
+            // found empirically to work the best; no good theoretical basis
+            knot_intersections(tc.knot_mins, local_knot_idxs, 0);
             for (auto k = 0; k < dom_dim_; k++)
-                start_knot_idxs[k] = local_knot_idxs[k][0];
+            {
+                if (p_(k) % 2 == 1)
+                    start_knot_idxs[k] = local_knot_idxs[k][0];
+            }
 
             // right edge
-            vector<KnotIdx> end_knot_idxs(dom_dim_);
-            local_knot_idxs.clear();
-            for (auto k = 0; k < dom_dim_; k++)
-                    max_anchor[k] = tc.knot_maxs[k];
+            vector<KnotIdx> end_knot_idxs = tc.knot_maxs;
 
-            // extend by p/2 knots from the max corner in all dimensions
-            knot_intersections(max_anchor, local_knot_idxs, 0);
+            // don't extend dimensions with even degree
+            // extend by p/2 knots from the max corner in dimensions with odd degree
+            // found empirically to work the best; no good theoretical basis
+            local_knot_idxs.clear();
+            knot_intersections(tc.knot_maxs, local_knot_idxs, 0);
             for (auto k = 0; k < dom_dim_; k++)
+            {
+                if (p_(k) % 2 == 1)
                     end_knot_idxs[k] = local_knot_idxs[k][local_knot_idxs[k].size() - 2];
+            }
 
             // input points corresponding to start and end knot values
             for (auto k = 0; k < dom_dim_; k++)
