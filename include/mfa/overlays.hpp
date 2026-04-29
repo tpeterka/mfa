@@ -172,11 +172,11 @@ namespace mfa
                     size_t nanchors = 0;
                     for (auto i = knot_mins[j]; i <= knot_maxs[j]; i++)
                         nknots++;
-                    if (p_(j) % 2 == 0)         // even degree: anchors are between knot lines
+                    if (p_(j) % 2 == 0)                                 // even degree: anchors are between knot lines
                         nanchors = nknots - 1;
-                    else                            // odd degree: anchors are on knot lines
+                    else                                                // odd degree: anchors are on knot lines
                         nanchors = nknots;
-                    if (knot_mins[j] < (p_(j) + 1) / 2)                       // skip up to (p+1)/2 anchors at start of global knots
+                    if (knot_mins[j] < (p_(j) + 1) / 2)                 // skip up to (p+1)/2 anchors at start of global knots
                         nanchors -= ((p_(j) + 1) / 2 - knot_mins[j]);
                     if (knot_maxs[j] > all_knots[j].size() - (p_(j) + 1) / 2 - 1)     // skip up to p-1 anchors at end of global knots
                         nanchors -= (knot_maxs[j] + (p_(j) + 1) / 2 + 1 - all_knots[j].size());
