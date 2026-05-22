@@ -126,6 +126,36 @@ namespace mfa {
         }
     };
 
+    // TODO rename the old AffMap object to something else and move it to Geom
+    // The base transform does not have the concept of bounds, which is necessary to produce a [0,1] parameterization
+    // Note: This map is not invertible if the bounding space dimension is less than the geometric dimension
+    template <typename T>
+    struct AffineMap
+    {
+        BoundingSpace<T> space;
+
+        AffineMap(const BoundingSpace<T>& space_) :
+            space(space_)
+        { }
+
+        template <typename Derived, typename OtherDerived>
+        void transform(const Eigen::MatrixBase<Derived>& x, const Eigen::MatrixBase<OtherDerived>& u_, bool transpose = false) const
+        {
+            Eigen::MatrixBase<OtherDerived>& u = const_cast<Eigen::MatrixBase<OtherDerived>&>(u_);
+
+            if (transpose)
+            {
+                space.toRefSpace(x.transpose(), u.transpose());
+                u.transpose() = (u.transpose().colwise() - space.refMins).array().colwise() * (space.refMaxs - space.refMins).cwiseInverse().array();
+            }
+            else
+            {
+                space.toRefSpace(x, u);
+                u = (u.colwise() - space.refMins).array().colwise() * (space.refMaxs - space.refMins).cwiseInverse().array();
+            }
+        }
+    };
+
     // Parametrization function representing a general affine transformation
     template <typename T>
     struct AffMap
@@ -140,6 +170,8 @@ namespace mfa {
         bool                    init{false};// flag that transformation has been initialized
 
         Eigen::ColPivHouseholderQR<MatrixX<T>> qr;
+
+        AffMap() : domDim(0), geomDim(0) { }
 
         AffMap(int domDim_, int geomDim_, const MatrixX<T>& domain, const VectorXi& ndom_pts) :
             domDim(domDim_),
@@ -183,20 +215,50 @@ namespace mfa {
             init = true;
         }
 
+        // Convenience constructor for mat_ passed as an initializer list
+        AffMap(int domDim_, int geomDim_, const VectorX<T>& vec_, std::initializer_list<VectorX<T>> mat_) :
+            domDim(domDim_),
+            geomDim(geomDim_),
+            vec(vec_)
+        {
+            if (mat_.size() != domDim) 
+            {
+                throw MFAError("AffMap constructor: number of cols in mat_ does not match domDim");
+            }
+            mat.resize(geomDim, domDim);
+
+            int i = 0;
+            for (auto vec : mat_)
+            {
+                if (vec.size() != geomDim) 
+                {
+                    throw MFAError("AffMap constructor: number of rows in mat_ does not match geomDim");
+                }
+                mat.col(i) = vec.transpose();
+                i++;
+            }
+
+            qr = mat.colPivHouseholderQr();
+            init = true;
+        }
+
         // Computes the parameter u corresponding to point x
         // 
         // Note: In cases where the physical space has higher dimension than paramter space
         //       (e.g., a 2D surface embedded in 3D space), we should only attempt to 
         //       compute parameter values for points that lie on the affine surface.
         //       However, this method ALWAYS produces an answer, even for points not on
-        //       the surface. For efficiency, we only check if our answer is valid with
-        //       an assert (that is, in a Debug build). So, this method assumes that the 
-        //       user is passing in a valid value for x.
+        //       the surface. 
         void transform(const VectorX<T>& x, VectorX<T>& u) const
         {
             assert(init);
             u = qr.solve(x-vec);
-            assert(x.isApprox(mat*u + vec));
+        }
+
+        void inverse(const VectorX<T>& u, VectorX<T>& x) const
+        {
+            assert(init);
+            x = mat*u + vec;
         }
 
         // We want to create a whole new function here (not overload the transform function)
@@ -206,19 +268,25 @@ namespace mfa {
         // If we had a function overload with Matrix inputs, Eigen could interpret that 
         // row vector as a 1xN matrix, which would cause undefined behavior as we expect
         // x to have 'geomDim' rows.
-        void transformSet(const MatrixX<T>& x, MatrixX<T>& u) const
+        template <typename Derived, typename OtherDerived>
+        void transformSet(const Eigen::MatrixBase<Derived>& x,
+                          const Eigen::MatrixBase<OtherDerived>& u_) const
         {
             assert(init);
+            Eigen::MatrixBase<OtherDerived>& u = const_cast<Eigen::MatrixBase<OtherDerived>&>(u_);
+            u.derived().resize(domDim, x.cols());
+            u = qr.solve(x.derived().colwise() - vec);
+        }
 
-            // Subtract vec from every row of x
-            MatrixX<T> y = x;
-            for (int i = 0; i < y.cols(); i++)
-            {
-                y.col(i) = x.col(i) - vec;
-            }
-
-            u = qr.solve(y);
-            assert(y.isApprox(mat*u));            
+        template <typename Derived, typename OtherDerived>
+        void inverseSet(const Eigen::MatrixBase<Derived>& u,
+                        const Eigen::MatrixBase<OtherDerived>& x_) const
+        {
+            assert(init);
+            Eigen::MatrixBase<OtherDerived>& x = const_cast<Eigen::MatrixBase<OtherDerived>&>(x_);
+            x.derived().resize(geomDim, u.cols());
+            x = mat * u.derived();
+            x.colwise() += vec;
         }
 
         // Convenience function to transpose matrices before computing parameters
@@ -242,7 +310,22 @@ namespace mfa {
             }
 
             uT = qr.solve(yT);
-            assert(yT.isApprox(mat*uT));
+        }
+
+        // Use this if u is (N x domDim) instead of (domDim x N).
+        void inverseTransposeSet(const MatrixX<T>& u, MatrixX<T>& x) const
+        {
+            assert(init);
+
+            // create transpose views for solving
+            Eigen::Transpose<const MatrixX<T>> uT = u.transpose();
+            Eigen::Transpose<MatrixX<T>> xT = x.transpose();
+
+            xT = (mat*uT).transpose();
+            for (int i = 0; i < xT.cols(); i++)
+            {
+                xT.col(i) = xT.col(i) + vec;
+            }
         }
     };
 } // namespace mfa

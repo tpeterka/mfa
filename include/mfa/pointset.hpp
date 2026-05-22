@@ -232,6 +232,25 @@ namespace mfa
             params->makeDomainParams(box, domain);
         }
 
+        // Define a domain parametrization directly from a custom Map object. 
+        // This is the most general way to define a domain parametrization.
+        template <typename P>
+        void set_domain_params(const P& map)
+        {
+            params->makeDomainParams(map, domain);
+        }
+
+        void set_custom_params_structured(const vector<VectorX<T>>& custom_params, double prec = 1e-10)
+        {
+            params->makeCustomParamsStructured(custom_params, prec);
+        }
+
+        void set_custom_params_unstructured(const MatrixX<T>& custom_params, double prec = 1e-10)
+        {
+            params->makeCustomParamsUnstructured(custom_params, prec);
+        }
+
+
         // Create Param object that is equispaced over all parameter space
         void set_grid_params()
         {

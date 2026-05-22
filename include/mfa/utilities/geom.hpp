@@ -17,6 +17,190 @@ namespace mfa
     template <typename T>
     struct PointSet;
 
+    template <typename T>
+    struct AffMap;
+
+    template <typename T>
+    struct BoundingSpace
+    {
+        int spaceDim;         // dimensionality of the space
+        int geomDim;        // dimensionality of the ambient space
+        VectorX<T> mins;    // Minimum corner of bounding box in physical space
+        VectorX<T> maxs;    // Maximum corner of bounding box in physical space
+        AffMap<T>  spaceTransform;  // Mapping from physical space to reference space
+        VectorX<T> refMins;    // Minimum corner of bounding box in reference space
+        VectorX<T> refMaxs;    // Maximum corner of bounding box in reference space
+
+        BoundingSpace() :
+            spaceDim(0),
+            geomDim(0)
+        { }
+
+        // Constructor from an existing affine map and set of points.
+        BoundingSpace(const AffMap<T>& spaceTransform_, const MatrixX<T>& points) :
+            spaceDim(spaceTransform_.domDim),
+            geomDim(spaceTransform_.geomDim),
+            spaceTransform(spaceTransform_)
+        {
+            if (geomDim != points.cols()) throw MFAError("PointSet dimension mismatch in BoundingSet constructor");
+
+            MatrixX<T> refPoints(points.rows(), spaceDim);
+            spaceTransform.transformTransposeSet(points, refPoints);
+            refMins = refPoints.colwise().minCoeff();
+            refMaxs = refPoints.colwise().maxCoeff();
+
+            spaceTransform.inverse(refMins, mins);
+            spaceTransform.inverse(refMaxs, maxs);
+        }
+
+        // Constructor from a predefined basis and offset and a set of points.
+        BoundingSpace(const VectorX<T>& offset_, const MatrixX<T>& basis_, const MatrixX<T>& points) :
+            spaceDim(basis_.cols()),
+            geomDim(basis_.rows()),
+            spaceTransform(spaceDim, geomDim, offset_, basis_)
+        {
+            if (geomDim != points.cols()) throw MFAError("PointSet dimension mismatch in BoundingSet constructor");
+
+            MatrixX<T> refPoints(points.rows(), spaceDim);
+            spaceTransform.transformTransposeSet(points, refPoints);
+            refMins = refPoints.colwise().minCoeff();
+            refMaxs = refPoints.colwise().maxCoeff();
+
+            spaceTransform.inverse(refMins, mins);
+            spaceTransform.inverse(refMaxs, maxs);
+        }
+
+        // Constructor with min/max corners in physical space and a predefined basis and offset.
+        BoundingSpace(const VectorX<T>& offset_, const MatrixX<T>& basis_, const VectorX<T>& mins_, const VectorX<T>& maxs_) :
+            spaceDim(basis_.cols()),
+            geomDim(basis_.rows()),
+            spaceTransform(spaceDim, geomDim, offset_, basis_),
+            mins(mins_),
+            maxs(maxs_)
+        {
+            if (geomDim != mins.size()) throw MFAError("BoundingSpace constructor: size of mins does not match geomDim");
+            if (geomDim != maxs.size()) throw MFAError("BoundingSpace constructor: size of maxs does not match geomDim");
+
+            spaceTransform.transform(mins, refMins);
+            spaceTransform.transform(maxs, refMaxs);
+
+            if ((refMins.array() > refMaxs.array()).any())
+            {
+                throw MFAError("BoundingSpace constructor: mins must be less than maxs in all dimensions");
+            }
+        }
+
+        template <typename Derived, typename OtherDerived>
+        void toRefSpace(const Eigen::MatrixBase<Derived>& x, const Eigen::MatrixBase<OtherDerived>& u_) const
+        {
+            if (x.rows() != geomDim) throw MFAError("Incompatible matrix dimensions in BoundingSpace::toRefSpace");
+
+            // Remove const-ness and resize (we explicityly resize u because it is a MatrixBase<> object,
+            // which does not get automatically resized during assignment)
+            Eigen::MatrixBase<OtherDerived>& u = const_cast<Eigen::MatrixBase<OtherDerived>&>(u_);
+            u.derived().resize(spaceDim, x.cols());
+            
+            spaceTransform.transformSet(x, u);
+        }
+
+        template <typename Derived, typename OtherDerived>
+        void toPhysicalSpace(const Eigen::MatrixBase<Derived>& u, const Eigen::MatrixBase<OtherDerived>& x_) const
+        {
+            if (u.rows() != spaceDim) throw MFAError("Incompatible matrix dimensions in BoundingSpace::toPhysicalSpace");
+
+            // Remove const-ness and resize (we explicityly resize x because it is a MatrixBase<> object,
+            // which does not get automatically resized during assignment)
+            Eigen::MatrixBase<OtherDerived>& x = const_cast<Eigen::MatrixBase<OtherDerived>&>(x_);
+            x.derived().resize(geomDim, u.cols());
+            
+            spaceTransform.inverseSet(u, x);
+        }
+
+        // Expand the bounding space by a certain amount in all directions. This is done by padding in the reference space, 
+        // and then recomputing the Cartesian mins/maxs from the new reference mins/maxs.
+        void pad(T padding)
+        {
+            refMins.array() -= padding;
+            refMaxs.array() += padding;
+            toPhysicalSpace(refMins, mins);
+            toPhysicalSpace(refMaxs, maxs);
+        }
+
+        // Tests if the bounding space contains every point in a PointSet
+        bool doesContain(const PointSet<T>& ps, int verbose = 0, T prec = 1e-12) const
+        {
+            VectorX<T> dataMins, dataMaxs;
+
+            MatrixX<T> refCoords;
+            toRefSpace(ps.domain.leftCols(geomDim).transpose(), refCoords);
+
+            dataMins = refCoords.rowwise().minCoeff();
+            dataMaxs = refCoords.rowwise().maxCoeff();
+            
+            // Component wise comparison between dataMins/Maxs and box mins/maxs
+            // If any component test fails, there is some point not contained in the box
+            if ((dataMins.array() < refMins.array() - prec).any() || 
+                    (dataMaxs.array() > refMaxs.array() + prec).any())
+            {
+                if (verbose >= 2)
+                {
+                    fmt::print(stderr, "DEBUG: BoundingSpace::doesContain failed: \n");
+                    fmt::print(stderr, "         reference data mins: {}\n", dataMins.transpose());
+                    fmt::print(stderr, "         reference box mins:  {}\n", refMins.transpose());
+                    fmt::print(stderr, "         reference data maxs: {}\n", dataMaxs.transpose());
+                    fmt::print(stderr, "         reference box maxs:  {}\n", refMaxs.transpose());
+                }
+
+                return false;
+            }
+
+            return true;
+        }
+
+        // Given another BoundingSpace with the same orientation and offset, returns the smallest bounding space
+        // with the same orientation that contains both boxes.
+        BoundingSpace<T> merge(const BoundingSpace<T>& other) const
+        {
+            if (!spaceTransform.mat.isApprox(other.spaceTransform.mat))
+            {
+                throw MFAError("BoundingSpace transforms have different orientations in merge()");
+            }
+            if (!spaceTransform.vec.isApprox(other.spaceTransform.vec))
+            {
+                throw MFAError("BoundingSpace transforms have different offsets in merge()");
+            }
+
+            // Always you this's mapping for consistency.
+            VectorX<T> otherRefMins, otherRefMaxs;
+            toRefSpace(other.mins, otherRefMins);
+            toRefSpace(other.maxs, otherRefMaxs);
+
+            // Next, compute the superset in reference space
+            VectorX<T> mergeRefMins = refMins.cwiseMin(otherRefMins);
+            VectorX<T> mergeRefMaxs = refMaxs.cwiseMax(otherRefMaxs);
+
+            // Finally, transform these new points back into Cartesian coords
+            // taking care to use *this's mapping, like before
+            VectorX<T> mergeMins, mergeMaxs;
+            toPhysicalSpace(mergeRefMins, mergeMins);
+            toPhysicalSpace(mergeRefMaxs, mergeMaxs);
+
+            // Construct the new bounding box
+            return BoundingSpace<T>(spaceTransform.vec, spaceTransform.mat, mergeMins, mergeMaxs);
+        }
+
+        // Print basic information
+        void print(string title = "bounding space") const
+        {
+            fmt::print(stderr, "{} space dimension: {}\n", title, spaceDim);
+            fmt::print(stderr, "{} minimum corner: {}\n", title, print_vec(mins));
+            fmt::print(stderr, "{} maximum corner: {}\n", title, print_vec(maxs));
+            fmt::print(stderr, "{} offset: {}\n", title, print_vec(spaceTransform.vec));
+            fmt::print(stderr, "{} orientation:\n", title);
+            fmt::print(stderr, "{}\n", print_mat(spaceTransform.mat));
+        }
+    };
+
     // Object representing a bounding box that may be rotated and translated in space.
     // This object can apply the rotation transformation to a given set of points
     // (it can also apply the inverse transformation). When there is no rotation of the
@@ -111,6 +295,16 @@ namespace mfa
             setBounds(points);                      // compute min/max corners from data
         }
 
+        // Expand the box by a certain amount in all directions. This is done by padding the box in the rotated space, 
+        // and then recomputing the Cartesian mins/maxs from the new rotated mins/maxs.
+        void pad(T padding)
+        {
+            rotatedMins.array() -= padding;
+            rotatedMaxs.array() += padding;
+            toCartesian(rotatedMins, mins);
+            toCartesian(rotatedMaxs, maxs);
+        }
+        
         // Rescales a set of basis vectors to be orthonormal
         // If rescaling takes place, an info message is printed
         // If vectors are not orthogonal to begin with, a runtime error is raised
@@ -335,9 +529,9 @@ namespace mfa
             id0 = dist(rng);
             id1 = dist(rng);
             id2 = dist(rng);
-            p0 = pts.row(id0);
-            p1 = pts.row(id1);
-            p2 = pts.row(id2);
+            p0 = pts.row(id0).transpose();
+            p1 = pts.row(id1).transpose();
+            p2 = pts.row(id2).transpose();
             v1 = p1 - p0;
             v2 = p2 - p0;
 

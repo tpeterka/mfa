@@ -108,6 +108,57 @@ namespace mfa
             }
         }
 
+        void makeCustomParamsStructured(const vector<VectorX<T>>& custom_params, double prec = 1e-10)
+        {
+            if (!structured)
+            {
+                throw MFAError("Tried to set custom structured parameters to unstructured Param object");
+            }
+            if (custom_params.size() != dom_dim)
+            {
+                throw MFAError(fmt::format("set_custom_params_structured: custom_params has size {}, but dom_dim = {}",
+                    custom_params.size(), dom_dim));
+            }
+            for (int i = 0; i < dom_dim; i++)
+            {
+                if (custom_params[i].size() != ndom_pts(i))
+                {
+                    throw MFAError(fmt::format("set_custom_params_structured: custom_params[{}] has size {}, but ndom_pts({}) = {}",
+                        i, custom_params[i].size(), i, ndom_pts(i)));
+                }
+            }
+
+            // Copy over from Eigen structures to STL structures
+             for (int i = 0; i < dom_dim; i++)
+            {
+                for (int j = 0; j < ndom_pts(i); j++)
+                {
+                    param_grid[i][j] = custom_params[i](j);
+                }
+            }
+
+            truncateRoundoff(prec);
+            checkParamBounds();
+        }
+
+        void makeCustomParamsUnstructured(const MatrixX<T>& custom_params, double prec = 1e-10)
+        {
+            if (structured)
+            {
+                throw MFAError("Tried to set custom unstructured parameters to structured Param object");
+            }
+            if (custom_params.cols() != dom_dim)
+            {
+                throw MFAError(fmt::format("set_custom_params_unstructured: custom_params has {} cols, but dom_dim = {}",
+                    custom_params.cols(), dom_dim));
+            }
+
+            param_list = custom_params;
+
+            truncateRoundoff(prec);
+            checkParamBounds();
+        }
+
         void make_grid_params()
         {
             make_grid_params(VectorX<T>::Zero(dom_dim), VectorX<T>::Ones(dom_dim));
@@ -233,7 +284,8 @@ namespace mfa
             checkParamBounds();
         }
 
-        // Make domain parameterization, where the domain is given by `box`
+        // Make domain parameterization, where the domain is given by `box`. This method
+        // automatically constructs a BoxMap transform from the box.
         void makeDomainParams(const Bbox<T>& box, const MatrixX<T>& domain)
         {
             if (structured)
@@ -245,6 +297,22 @@ namespace mfa
                 makeDomainParamsUnstructured(box, domain);
             }
 
+            truncateRoundoff();
+            checkParamBounds();
+        }
+
+        // Make domain parameterization directly from custom Map object
+        template <typename P>
+        void makeDomainParams(const P& map, const MatrixX<T>& domain)
+        {    
+            if (structured)
+            {
+                makeDomainParamsStructuredImpl(map, domain);
+            }
+            else
+            {
+                makeDomainParamsUnstructuredImpl(map, domain);
+            }
             truncateRoundoff();
             checkParamBounds();
         }
