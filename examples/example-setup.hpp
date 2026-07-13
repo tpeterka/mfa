@@ -353,6 +353,13 @@ using namespace std;
             d_args.max = { 0.95,  0.95,  0.95,  0.95};
         }
 
+        // 2-d slice of S3D dataset:  flame/6_small.xyz
+        if (input == "s3d_2d_slice")
+        {
+            d_args.full_dom_pts = {704, 540};  // Hard-coded to full data set size
+            d_args.ndom_pts = d_args.full_dom_pts;
+        }
+
         // S3D dataset:  flame/6_small.xyz
         if (input == "s3d")
         {

@@ -8,8 +8,8 @@
 // Define list of example keywords
 set<string> analytical_signals = {"sine", "cosine", "sinc", "psinc1", "psinc2", "psinc3", "psinc4", "ml", "f16", "f17", "f18"};
 set<string> datasets_4d = {"tornado4d"};
-set<string> datasets_3d = {"s3d", "nek", "rti", "miranda", "tornado"};
-set<string> datasets_2d = {"cesm", "phantom"};
+set<string> datasets_3d = {"s3d", "s3d_3d_subset", "nek", "rti", "miranda", "tornado"};
+set<string> datasets_2d = {"cesm", "phantom", "s3d_2d_slice"};
 set<string> datasets_unstructured = {"edelta", "climate", "nuclear", "nasa"};
 
 // REMOVE:

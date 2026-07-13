@@ -260,6 +260,18 @@ namespace mfa
             return idx;
         }
 
+        size_t ijk_idx(const vector<size_t>& ijk) const
+        {
+            size_t idx          = 0;
+            size_t stride       = 1;
+            for (int i = 0; i < dom_dim_; i++)
+            {
+                idx     += ijk[i] * stride;
+                stride  *= all_npts_dim_(i);
+            }
+            return idx;
+        }
+
         // convert subvolume index into full volume index
         // thread-safe
         size_t sub_full_idx(size_t sub_idx) const
@@ -445,7 +457,7 @@ namespace mfa
 
 
         SliceIterator*          slice_iter_;        // the slice iterator containing the start of this curve
-        
+
         private:
         size_t                  dom_dim_;           // number of domain dimensions in original volume
         size_t                  cur_iter_;          // current flattened iteration number

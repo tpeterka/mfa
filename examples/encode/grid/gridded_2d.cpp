@@ -102,7 +102,7 @@ int main(int argc, char** argv)
     // set global domain bounds and decompose
     Bounds<real_t> dom_bounds(dom_dim);
     set_dom_bounds(dom_bounds, input);
-    
+
     Decomposer<real_t> decomposer(dom_dim, dom_bounds, tot_blocks);
     decomposer.decompose(world.rank(),
                          assigner,
@@ -129,10 +129,23 @@ int main(int argc, char** argv)
     // Create data set for modeling. Input keywords are defined in example_signals.hpp
     if (datasets_2d.count(input) == 1)
     {
-        master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-        { 
-            b->read_2d_scalar_data(cp, mfa_info, d_args); 
-        });
+        if (input == "s3d_2d_slice")
+        {
+            // a little workaround so that the slice comes out of a 3d, not a 2d, original domain
+            d_args.ndom_pts.resize(3);
+            d_args.ndom_pts[2] = 550;
+            master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
+            {
+                b->read_2d_slice_3d_vector_data(cp, mfa_info, d_args);
+            });
+        }
+        else
+        {
+            master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
+            {
+                b->read_2d_scalar_data(cp, mfa_info, d_args);
+            });
+        }
     }
     else
     {
@@ -144,7 +157,7 @@ int main(int argc, char** argv)
     fprintf(stderr, "\nStarting encoding...\n");
     double encode_time = MPI_Wtime();
     master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-    { 
+    {
         if (!adaptive)
             b->fixed_encode_block(cp, mfa_info);
         else

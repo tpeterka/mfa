@@ -100,7 +100,7 @@ int main(int argc, char** argv)
     // set global domain bounds and decompose
     Bounds<real_t> dom_bounds(dom_dim);
     set_dom_bounds(dom_bounds, input);
-    
+
     Decomposer<real_t> decomposer(dom_dim, dom_bounds, tot_blocks);
     decomposer.decompose(world.rank(),
                          assigner,
@@ -127,10 +127,30 @@ int main(int argc, char** argv)
     // Create data set for modeling. Input keywords are defined in example_signals.hpp
     if (datasets_3d.count(input) == 1)
     {
-        master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-        { 
-            b->read_3d_vector_data(cp, mfa_info, d_args);
-        });
+        if (input == "s3d_3d_subset")
+        {
+            // a little workaround for a 200^3 subset to reproduce the LDAV'23 paper
+            d_args.starts[0]        = 252;
+            d_args.starts[1]        = 170;
+            d_args.starts[2]        = 175;
+            d_args.full_dom_pts[0]  = 704;
+            d_args.full_dom_pts[1]  = 540;
+            d_args.full_dom_pts[2]  = 550;
+            d_args.ndom_pts[0]      = 200;
+            d_args.ndom_pts[1]      = 200;
+            d_args.ndom_pts[2]      = 200;
+            master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
+            {
+                b->read_3d_subset_3d_vector_data(cp, mfa_info, d_args);
+            });
+        }
+        else
+        {
+            master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
+            {
+                b->read_3d_vector_data(cp, mfa_info, d_args);
+            });
+        }
     }
     else
     {
