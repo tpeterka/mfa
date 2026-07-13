@@ -211,7 +211,6 @@ void init_block(py::module& m, std::string name)
         .def("fixed_encode_block",                  &Block<T>::fixed_encode_block)
         .def("adaptive_encode_block",               &Block<T>::adaptive_encode_block)
         .def("decode_point",                        &Block<T>::decode_point)
-//         .def("decode_point",                        &Block<T>::my_decode_point)
         .def("range_error",                         &Block<T>::range_error)
         .def_static("save",                         &Block<T>::save)
         .def_static("load",                         &Block<T>::load)
@@ -232,6 +231,10 @@ void init_block(py::module& m, std::string name)
             Block<T>* b = py_b->cast<Block<T>*>();
             b->input_1d_data(cp, pyarray.data, mfa_info, d_args);
         })
+        .def("mfa_model",               [](Block<T>&b) -> mfa::MFA<T>&
+        {
+            return *b.mfa;
+        }, py::return_value_policy::reference)
         ;
 
     m.def("add_block", [](
