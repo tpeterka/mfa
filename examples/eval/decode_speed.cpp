@@ -125,12 +125,13 @@ int main(int argc, char** argv)
     cerr << "Starting original decode..." << endl;
     double decode_time_og = MPI_Wtime();
     master.foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-            { 
+            {
                 for (int l = 0; l < num_iters; l++)
                 {
-                    b->decode_point(cp, params.row(l), out_pt_full); 
-                    outpts_full.row(l) = out_pt_full;  
-                } 
+                    VectorX<real_t> param = params.row(l).transpose();
+                    b->decode_point(cp, param, out_pt_full);
+                    outpts_full.row(l) = out_pt_full;
+                }
             });
     decode_time_og = MPI_Wtime() - decode_time_og;
     cerr << "   done." << endl;

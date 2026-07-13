@@ -287,24 +287,24 @@ struct BlockBase
     }
 
     // decode one point
+    // passing Eigen objects using Eigen::Ref instead of C++ reference so that pybind11 can pass by reference
     void decode_point(
             const   diy::Master::ProxyWithLink& cp,
-            const VectorX<T>&                   param,          // parameters of point to decode
+            Eigen::Ref<const VectorX<T>>        param,          // parameters of point to decode
             Eigen::Ref<VectorX<T>>              cpt)            // (output) decoded point
-                                                                // using Eigen::Ref instead of C++ reference so that pybind11 can pass by reference
     {
         mfa->Decode(param, cpt);
     }
 
     // differentiate one point
+    // passing Eigen objects using Eigen::Ref instead of C++ reference so that pybind11 can pass by reference
     void differentiate_point(
             const diy::Master::ProxyWithLink&   cp,
-            const VectorX<T>&                   param,      // parameters of point to decode
+            Eigen::Ref<const VectorX<T>>        param,      // parameters of point to decode
             int                                 deriv,      // which derivative to take (1 = 1st, 2 = 2nd, ...) in each domain dim.
             int                                 partial,    // limit to partial derivative in just this dimension (-1 = no limit)
             int                                 var,        // differentiate only this one science variable (0 to nvars -1, -1 = all vars)
             Eigen::Ref<VectorX<T>>              cpt)        // (output) decoded point
-                                                            // using Eigen::Ref instead of C++ reference so that pybind11 can pass by reference
     {
         VectorXi derivs(dom_dim);                           // degree of derivative in each domain dimension
 

@@ -10,9 +10,10 @@ class Mfa(CMakePackage):
 
     homepage = "https://github.com/tpeterka/mfa"
     url      = "https://github.com/tpeterka/mfa"
-    git      = "https://github.com/tpeterka/mfa.git"
+    git      = "file:///home/tpeterka/software/mfa"
 
     version('master', branch='master')
+    version("local", git="file:///home/tpeterka/software/mfa", branch="master")
 
     variant('build_type', default='Release', description='CMake build type', values=('Debug', 'Release', 'RelWithDebInfo', 'MinSizeRel'))
     variant('thread', values=str, default='serial', description='Threading model: serial, tbb, sycl, kokkos (default = serial).')
