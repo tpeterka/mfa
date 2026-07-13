@@ -822,7 +822,11 @@ struct RayBlock : public Block<T>
         // }   
     }
 
-    pair<T,T> dualCoords2d(const VectorX<T>& a, const VectorX<T>& b) const
+    void dualCoords2d(
+        const VectorX<T>& a,
+        const VectorX<T>& b,
+        T& alpha,
+        T& rho) const
     {
         const double pi = 3.14159265358979;
 
@@ -835,8 +839,8 @@ struct RayBlock : public Block<T>
         T delta_x = b_x - a_x;
         T delta_y = b_y - a_y;
 
-        T alpha = -1;
-        T rho = 0;
+        alpha = -1;
+        rho = 0;
 
         if (a_x == b_x)
         {
@@ -855,8 +859,6 @@ struct RayBlock : public Block<T>
             // y_int = a_y - m*a_x.
             rho = (a_y - m*a_x)/(sqrt(1+m*m));  // cos(atan(m)) = 1/sqrt(1+m*m), sin(pi/2-x) = cos(x)
         }
-
-        return make_pair(alpha, rho);
     }
 
     T trapezoid(
@@ -1108,14 +1110,15 @@ struct RayBlock : public Block<T>
             throw mfa::MFAError("Incorrect dimension in integrate ray");
         }
 
-        auto [alpha, rho] = dualCoords2d(a, b);
+        T alpha, rho;
+        dualCoords2d(a, b, alpha, rho);
 
         T a_x = a(0);
         T a_y = a(1);
         T b_x = b(0);
         T b_y = b(1);
         T u0 = 0, u1 = 0;
-        
+
         // x = rho*cos(alpha) + 2R(u-0.5)(-sin(alpha))
         // y = rho*sin(alpha) + 2R(u-0.5)(cos(alpha))
         if (alpha > 0.1 && alpha < 3.0)
@@ -1129,7 +1132,7 @@ struct RayBlock : public Block<T>
             u1 = (b_y - rho*sin(alpha)) / (2*r_lim*cos(alpha)) + 0.5;
         }
         T length = 2*r_lim;
-        
+
 
         // Scalar valued path integrals do not have an orientation, so we always
         // want the limits of integration to go from smaller to larger.
@@ -1157,7 +1160,7 @@ struct RayBlock : public Block<T>
         params(2) = (alpha - ray_bounds_mins(2)) / (ray_bounds_maxs(2) - ray_bounds_mins(2));
 
         ray_mfa->Integrate1D(0, 0, u0, u1, params, output);
-         
+
         // integralDecoder.AxisIntegral(0, u0, u1, params, output);
 
         output *= length;
