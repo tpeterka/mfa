@@ -1,3 +1,3 @@
 add_subdirectory(analytical)
-# add_subdirectory(grid)
+add_subdirectory(grid)
 # add_subdirectory(timeseries)
