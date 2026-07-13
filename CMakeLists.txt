@@ -24,6 +24,11 @@ if                          (NOT CMAKE_BUILD_TYPE)
     set_property            (CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS "Debug" "Release" "MinSizeRel" "RelWithDebInfo")
 endif                       (NOT CMAKE_BUILD_TYPE)
 
+# suppress null pointer warnings in GNU
+if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+    add_compile_options     (-Wno-nonnull)
+endif()
+
 # MPI
 if                          (NOT wrapped_mpi)
     find_package            (MPI REQUIRED)
