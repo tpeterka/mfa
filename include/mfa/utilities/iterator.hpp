@@ -364,7 +364,7 @@ namespace mfa
 
         private:
 
-        const VolIterator*  vol_iter_;          // the original full-dim vol iterator from which this slice derives
+        VolIterator        vol_iter_;           // copy of the full-dim volume iterator from which this slice derives
         int                 missing_dim_;       // the dimension missing in the slice
         size_t              dom_dim_;           // number of domain dimensions in original volume
         size_t              cur_iter_;          // current flattened iteration number
@@ -375,20 +375,20 @@ namespace mfa
         public:
 
         SliceIterator(const VolIterator& vol_iter, int missing_dim) :
-            vol_iter_(&vol_iter),
+            vol_iter_(vol_iter),
             missing_dim_(missing_dim),
             cur_iter_(0),
-            dom_dim_(vol_iter_->dom_dim_)
+            dom_dim_(vol_iter_.dom_dim_)
         {
             if (missing_dim_ < 0 || static_cast<size_t>(missing_dim_) >= dom_dim_)
             {
                 throw MFAError("SliceIterator missing dimension is out of range.");
             }
 
-            VectorXi sub_npts       = vol_iter_->npts_dim_;
+            VectorXi sub_npts       = vol_iter_.npts_dim_;
             sub_npts(missing_dim_)  = 1;
-            sub_vol_iter_           = VolIterator(sub_npts, vol_iter_->starts_dim_, vol_iter_->all_npts_dim_);
-            idx_dim_                = vol_iter_->starts_dim_;
+            sub_vol_iter_           = VolIterator(sub_npts, vol_iter_.starts_dim_, vol_iter_.all_npts_dim_);
+            idx_dim_                = vol_iter_.starts_dim_;
             tot_iters_              = sub_vol_iter_.tot_iters();
         }
 
@@ -439,11 +439,10 @@ namespace mfa
         // reset the iterator
         void reset()
         {
-            // vol_iter_->reset();      D.L.: I don't think we ever want to reset the parent volIter,
-            // since it may be incrementing independently after SliceIterator is constructed
+            // The copied volume iterator remains at the slice's original start.
             cur_iter_ = 0;
             sub_vol_iter_.reset();
-            idx_dim_ = vol_iter_->starts_dim_;
+            idx_dim_ = vol_iter_.starts_dim_;
         }
 
         // return whether all iterations in slice (not original volume) are done
@@ -488,7 +487,7 @@ namespace mfa
     {
 
 
-        SliceIterator*          slice_iter_;        // the slice iterator containing the start of this curve
+        SliceIterator           slice_iter_;         // copy of the slice iterator containing the start of this curve
 
         private:
         size_t                  dom_dim_;           // number of domain dimensions in original volume
@@ -499,13 +498,13 @@ namespace mfa
 
         public:
 
-        CurveIterator(SliceIterator& slice_iter) :
-            slice_iter_(&slice_iter),
+        CurveIterator(const SliceIterator& slice_iter) :
+            slice_iter_(slice_iter),
             cur_iter_(0),
-            curve_dim_(slice_iter_->missing_dim_),
-            dom_dim_(slice_iter_->vol_iter_->dom_dim_)
+            curve_dim_(slice_iter_.missing_dim_),
+            dom_dim_(slice_iter_.vol_iter_.dom_dim_)
         {
-            tot_iters_  = slice_iter_->vol_iter_->npts_dim_(curve_dim_);
+            tot_iters_  = slice_iter_.vol_iter_.npts_dim_(curve_dim_);
             idx_dim_    = VectorXi::Zero(dom_dim_);
         }
 
@@ -555,13 +554,13 @@ namespace mfa
         // return ijk of current iterator location w.r.t. full volume
         VectorXi cur_ijk() const
         {
-            return slice_iter_->idx_dim_ + idx_dim_;
+            return slice_iter_.idx_dim_ + idx_dim_;
         }
 
         // return one dimension of ijk of current iterator location w.r.t. full volume
         int cur_ijk(int dim) const
         {
-            return slice_iter_->idx_dim_(dim) + idx_dim_(dim);
+            return slice_iter_.idx_dim_(dim) + idx_dim_(dim);
         }
 
         // convert (i,j,k,...) multidimensional index into linear index into domain
@@ -569,7 +568,7 @@ namespace mfa
         // thread-safe
         size_t ijk_idx(const VectorXi& ijk) const       // i,j,k,... indices to all dimensions
         {
-            return slice_iter_->vol_iter_->ijk_idx(ijk);
+            return slice_iter_.vol_iter_.ijk_idx(ijk);
         }
 
         int cur_iter_full()
@@ -581,7 +580,7 @@ namespace mfa
         void incr_iter()
         {
             cur_iter_++;
-            if (idx_dim_[curve_dim_] < slice_iter_->vol_iter_->npts_dim_[curve_dim_] - 1)
+            if (idx_dim_[curve_dim_] < slice_iter_.vol_iter_.npts_dim_[curve_dim_] - 1)
                 idx_dim_[curve_dim_]++;
             else
                 idx_dim_[curve_dim_] = 0;
