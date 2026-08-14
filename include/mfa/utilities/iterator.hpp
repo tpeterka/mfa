@@ -175,13 +175,18 @@ namespace mfa
         // Move the iterator to the given linear index within the subvolume
         void seek(int idx)
         {
+            if (idx < 0)
+            {
+                throw MFAError("VolIterator::seek() index must be non-negative.");
+            }
+
             // Set linear index
-            cur_iter_ = idx;
+            cur_iter_ = static_cast<size_t>(idx);
 
             // Set vol indices
             idx_dim_.setZero();
             prev_idx_dim_.setZero();
-            idx_ijk(idx, idx_dim_);
+            idx_ijk(static_cast<size_t>(idx), idx_dim_);
             prev_idx_dim_ = idx_dim_;
 
             // Set done_dim_ for dims which have been traversed up to this point
