@@ -1296,44 +1296,34 @@ namespace mfa
                 return pinnedKnots;
             }
 
-            int idx = 0;
-            int count0 = 0;
-            int count1 = 0;
-            int extra0 = 0; // number of repeated knots at 0 to add
-            int extra1 = 0; // number of repeated knots at 1 to add
-            int last = knots.size() - 1; // index of final entry
+            const size_t required_count = static_cast<size_t>(degree) + 1;
 
-            // Count number of knots previously pinned at 0
-            idx = 0;
-            while (idx < knots.size() && knots[idx] == 0)
+            // Count number of knots previously pinned at 0.
+            size_t count0 = 0;
+            while (count0 < knots.size() && knots[count0] == 0)
             {
-                count0++;
+                ++count0;
             }
 
-            // Count number of knots previously pinned at 1
-            idx = 0;
-            while (idx < knots.size() && knots[last - idx] == 1)
+            // Count number of knots previously pinned at 1.
+            size_t count1 = 0;
+            while (count1 < knots.size() && knots[knots.size() - 1 - count1] == 1)
             {
-                count1++;
+                ++count1;
             }
 
-            // Warn if there are already more pinned knots than we need, but continue
-            if (count0 > degree + 1)
+            if (count0 > required_count)
             {
-                fmt::print(stderr, "WARNING: Tried to add pinned knots, but the knot vector already contained more than {} knots at 0", count0);
-                extra0 = 0;
+                throw MFAError("Knot vector contains too many knots at 0 to pin");
             }
-            if (count1 > degree + 1)
+            if (count1 > required_count)
             {
-                fmt::print(stderr, "WARNING: Tried to add pinned knots, but the knot vector already contained more than {} knots at 1", count1);
-                extra1 = 0;
+                throw MFAError("Knot vector contains too many knots at 1 to pin");
             }
 
-            // Create lists of extra knots to add
-            extra0 = degree + 1 - count0;
-            extra1 = degree + 1 - count1;
-            vector<T> addKnots0(extra0, 0.0);
-            vector<T> addKnots1(extra1, 1.0);
+            // Create lists of extra knots to add.
+            vector<T> addKnots0(required_count - count0, 0.0);
+            vector<T> addKnots1(required_count - count1, 1.0);
 
             // Concatenate into final vector with pinned knots
             vector<T> pinnedKnots;
