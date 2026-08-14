@@ -161,7 +161,18 @@ namespace mfa
             string filename_abs = fmt::format("{}_var{}_abs.txt", filepattern, k);
             string filename_rel = fmt::format("{}_var{}_rel.txt", filepattern, k);
             FILE* absfile = fopen(filename_abs.c_str(), "w");
+            if (!absfile)
+            {
+                throw MFAError(fmt::format("Unable to open {} for writing.", filename_abs));
+            }
+
             FILE* relfile = fopen(filename_rel.c_str(), "w");
+            if (!relfile)
+            {
+                fclose(absfile);
+                throw MFAError(fmt::format("Unable to open {} for writing.", filename_rel));
+            }
+
             for (int i = 0; i < data[k].size(); i++)
             {
                 fmt::print(absfile, "{}\n", data[k][i]);
