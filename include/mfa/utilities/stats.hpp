@@ -12,6 +12,8 @@
 #ifndef _MFA_STATS_HPP
 #define _MFA_STATS_HPP
 
+#include <limits>
+
 #include <mfa/types.hpp>
 #include <mfa/pointset.hpp>
 
@@ -95,9 +97,16 @@ namespace mfa
             initialized = true;
         }
 
-        T l1(int k) const { return sum[k] / npts[k]; }
-        T l2(int k) const { return sqrt(ssq[k] / npts[k]); }
+        T l1(int k) const { return npts[k] == 0 ? T(0) : sum[k] / npts[k]; }
+        T l2(int k) const { return npts[k] == 0 ? T(0) : sqrt(ssq[k] / npts[k]); }
         T linf(int k) const { return mxv[k]; }
+
+        T relative_error(T error, int k) const
+        {
+            if (extent(k) != T(0))
+                return error / extent(k);
+            return error == T(0) ? T(0) : numeric_limits<T>::max();
+        }
 
         ArrayX<T> l1() const
         {
@@ -156,7 +165,7 @@ namespace mfa
             for (int i = 0; i < data[k].size(); i++)
             {
                 fmt::print(absfile, "{}\n", data[k][i]);
-                fmt::print(relfile, "{}\n", data[k][i] / extent(k));
+                fmt::print(relfile, "{}\n", relative_error(data[k][i], k));
             }
 
             fclose(absfile);
@@ -189,15 +198,15 @@ namespace mfa
                 fmt::print(stderr, "Max Error              = {:.4e}\n", linf(k));
                 fmt::print(stderr, "RMS Error              = {:.4e}\n", l2(k));
                 fmt::print(stderr, "Avg Error              = {:.4e}\n", l1(k));
-                fmt::print(stderr, "Max Error (normalized) = {:.4e}\n", linf(k) / extent(k));
-                fmt::print(stderr, "RMS Error (normalized) = {:.4e}\n", l2(k) / extent(k));
-                fmt::print(stderr, "Avg Error (normalized) = {:.4e}\n", l1(k) / extent(k));
+                fmt::print(stderr, "Max Error (normalized) = {:.4e}\n", relative_error(linf(k), k));
+                fmt::print(stderr, "RMS Error (normalized) = {:.4e}\n", relative_error(l2(k), k));
+                fmt::print(stderr, "Avg Error (normalized) = {:.4e}\n", relative_error(l1(k), k));
             }
             else if (style == PrintStyle::Side)
             {
-                fmt::print(stderr, "Max Error: {:.4e}\tMax Error (rel): {:.4e}\n", linf(k), linf(k) / extent(k));
-                fmt::print(stderr, "RMS Error: {:.4e}\tRMS Error (rel): {:.4e}\n", l2(k), l2(k) / extent(k));
-                fmt::print(stderr, "Avg Error: {:.4e}\tAvg Error (rel): {:.4e}\n", l1(k), l1(k) / extent(k));
+                fmt::print(stderr, "Max Error: {:.4e}\tMax Error (rel): {:.4e}\n", linf(k), relative_error(linf(k), k));
+                fmt::print(stderr, "RMS Error: {:.4e}\tRMS Error (rel): {:.4e}\n", l2(k), relative_error(l2(k), k));
+                fmt::print(stderr, "Avg Error: {:.4e}\tAvg Error (rel): {:.4e}\n", l1(k), relative_error(l1(k), k));
             }
             else
             {
@@ -227,9 +236,18 @@ namespace mfa
             l1_max = l1().maxCoeff(&l1_max_var);
             l2_max = l2().maxCoeff(&l2_max_var);
             linf_max = linf().maxCoeff(&linf_max_var);
-            l1_rel_max = (l1() / extent).maxCoeff(&l1_rel_max_var);
-            l2_rel_max = (l2() / extent).maxCoeff(&l2_rel_max_var);
-            linf_rel_max = (linf() / extent).maxCoeff(&linf_rel_max_var);
+            ArrayX<T> l1_rel = ArrayX<T>::Zero(nvars);
+            ArrayX<T> l2_rel = ArrayX<T>::Zero(nvars);
+            ArrayX<T> linf_rel = ArrayX<T>::Zero(nvars);
+            for (int k = 0; k < nvars; k++)
+            {
+                l1_rel(k) = relative_error(l1(k), k);
+                l2_rel(k) = relative_error(l2(k), k);
+                linf_rel(k) = relative_error(linf(k), k);
+            }
+            l1_rel_max = l1_rel.maxCoeff(&l1_rel_max_var);
+            l2_rel_max = l2_rel.maxCoeff(&l2_rel_max_var);
+            linf_rel_max = linf_rel.maxCoeff(&linf_rel_max_var);
         }
 
         void print_max()
