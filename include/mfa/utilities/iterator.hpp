@@ -43,6 +43,10 @@ namespace mfa
         void init(size_t idx = 0)
         {
             // sanity checks
+            if (dom_dim_ == 0)
+            {
+                throw MFAError("VolIterator requires at least one domain dimension.");
+            }
             if (npts_dim_.size() != dom_dim_ || starts_dim_.size() != dom_dim_ || all_npts_dim_.size() != dom_dim_)
             {
                 throw MFAError("VolIterator sizes of sub_npts, sub_starts, all_npts are not equal.");
