@@ -1285,7 +1285,16 @@ namespace mfa
         vector<T> pinKnots(const vector<T>& knots, int degree)
         {
             assert(degree >= 0);
-            assert(knots.size() > 0);
+
+            // Gracefully handle empty knot vectors, which is the case for Bezier curves
+            // (minimal control points and no internal knots)
+            if (knots.empty())
+            {
+                vector<T> pinnedKnots;
+                pinnedKnots.insert(pinnedKnots.end(), degree + 1, 0.0);
+                pinnedKnots.insert(pinnedKnots.end(), degree + 1, 1.0);
+                return pinnedKnots;
+            }
 
             int idx = 0;
             int count0 = 0;
