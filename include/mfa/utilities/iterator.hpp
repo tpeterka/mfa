@@ -380,6 +380,11 @@ namespace mfa
             cur_iter_(0),
             dom_dim_(vol_iter_->dom_dim_)
         {
+            if (missing_dim_ < 0 || static_cast<size_t>(missing_dim_) >= dom_dim_)
+            {
+                throw MFAError("SliceIterator missing dimension is out of range.");
+            }
+
             VectorXi sub_npts       = vol_iter_->npts_dim_;
             sub_npts(missing_dim_)  = 1;
             sub_vol_iter_           = VolIterator(sub_npts, vol_iter_->starts_dim_, vol_iter_->all_npts_dim_);
