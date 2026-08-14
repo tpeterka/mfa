@@ -86,9 +86,12 @@ namespace mfa
     template<typename T>
     void print_bbox(const VectorX<T>& mins, const VectorX<T>& maxs, string label="Bounding")
     {
-        if (mins.size() != maxs.size()) 
+        if (mins.size() != maxs.size())
+        {
             fmt::print(stderr, "{} Box: <invalid box>\n", label);
-        
+            return;
+        }
+
         fmt::print(stderr, "{} Box:\n", label);
         for (int i = 0; i < mins.size(); i++)
         {
