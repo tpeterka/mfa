@@ -244,6 +244,11 @@ namespace mfa
         // find max over all science variables
         void find_max_stats()
         {
+            if (nvars == 0)
+            {
+                throw MFAError("Cannot find maximum statistics with no variables.");
+            }
+
             l1_max = l1().maxCoeff(&l1_max_var);
             l2_max = l2().maxCoeff(&l2_max_var);
             linf_max = linf().maxCoeff(&linf_max_var);
