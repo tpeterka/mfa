@@ -12,6 +12,8 @@
 #ifndef _MFA_ITER_HPP
 #define _MFA_ITER_HPP
 
+#include <limits>
+
 #include <mfa/utilities/logging.hpp>
 #include <mfa/types.hpp>
 
@@ -51,21 +53,37 @@ namespace mfa
             {
                 throw MFAError("VolIterator sizes of sub_npts, sub_starts, all_npts are not equal.");
             }
-            for (auto i = 0; i < dom_dim_; i++)
+            tot_iters_ = 1;
+            ds_ = VectorXi::Ones(dom_dim_);
+            for (size_t i = 0; i < dom_dim_; i++)
             {
+                if (npts_dim_(i) <= 0 || all_npts_dim_(i) <= 0)
+                {
+                    throw MFAError(fmt::format("VolIterator point counts in dimension {} must be positive.", i));
+                }
                 if (starts_dim_(i) < 0)
                 {
                     throw MFAError(fmt::format("VolIterator sub_starts[{}] < 0.", i));
                 }
-                if (starts_dim_(i) + npts_dim_(i) > all_npts_dim_(i))
+                if (starts_dim_(i) > all_npts_dim_(i) - npts_dim_(i))
                 {
                     throw MFAError(fmt::format("VolIterator sub_starts[{}] + sub_npts[{}] > all_npts[{}].", i, i, i));
                 }
-            }
+                if (tot_iters_ > numeric_limits<size_t>::max() / static_cast<size_t>(npts_dim_(i)))
+                {
+                    throw MFAError("VolIterator iteration count exceeds size_t range.");
+                }
+                tot_iters_ *= static_cast<size_t>(npts_dim_(i));
 
-            ds_ = VectorXi::Ones(dom_dim_);
-            for (size_t i = 1; i < dom_dim_; i++)
-                ds_(i) = ds_(i - 1) * npts_dim_(i - 1);
+                if (i > 0)
+                {
+                    if (ds_(i - 1) > numeric_limits<int>::max() / npts_dim_(i - 1))
+                    {
+                        throw MFAError("VolIterator stride exceeds int range.");
+                    }
+                    ds_(i) = ds_(i - 1) * npts_dim_(i - 1);
+                }
+            }
 
             cur_iter_   = idx;
             idx_dim_.setZero();
@@ -99,7 +117,7 @@ namespace mfa
                     npts_dim_(sub_npts),
                     starts_dim_(sub_starts),
                     all_npts_dim_(all_npts),
-                    tot_iters_(npts_dim_.prod()),
+                    tot_iters_(0),
                     idx_dim_(sub_npts.size()),
                     prev_idx_dim_(sub_npts.size()),
                     cur_iter_(idx),
@@ -112,7 +130,7 @@ namespace mfa
                     npts_dim_(npts),
                     starts_dim_(VectorXi::Zero(npts.size())),
                     all_npts_dim_(npts),
-                    tot_iters_(npts_dim_.prod()),
+                    tot_iters_(0),
                     idx_dim_(npts.size()),
                     prev_idx_dim_(npts.size()),
                     cur_iter_(idx),
