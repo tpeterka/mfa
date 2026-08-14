@@ -27,11 +27,13 @@ namespace mfa
     {   
         stringstream ss;
         ss << "{";
-        for (int i = 0; i < vec.size() - 1; i++)
+        for (size_t i = 0; i < vec.size(); i++)
         {
-            ss << vec[i] << " ";
+            if (i > 0)
+                ss << " ";
+            ss << vec[i];
         }
-        ss << vec[vec.size()-1] << "}";
+        ss << "}";
 
         return ss.str();
     }
