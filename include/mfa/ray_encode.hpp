@@ -378,7 +378,7 @@ namespace mfa
                 }
                 else
                 {
-                    if (same_pattern == false || in_curve_iter.slice_iter_->cur_iter() == 0)
+                    if (same_pattern == false || in_curve_iter.slice_iter_.cur_iter() == 0)
                     {
                         compute_curve_mat(dim, curve_in_domain, npts, nctrl, Nt);
                         NtN_llt.factorize(Nt * Nt.transpose());
