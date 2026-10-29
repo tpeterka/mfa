@@ -128,9 +128,8 @@ namespace mfa
                 N[i].resize(decoder.q[i], 0);
             }
 
-            // t and td are multi-dim arrays containing intermediate sums formed by k-mode vector products
+            // Value contractions only need t; gradient storage is allocated by ResizeDers.
             t.resize(dom_dim);
-            td.resize(dom_dim+1);            
             for (int i = 0; i < dom_dim - 1; i++)
             {
                 t[i].resize(decoder.tot_iters / decoder.ds[i+1]);
@@ -138,16 +137,13 @@ namespace mfa
             }
             t[dom_dim-1].resize(1);
 
-            for (int d = 0; d < dom_dim + 1; d++)
-            {
-                td[d].resize(dom_dim);
-                for (int i = 0; i < dom_dim - 1; i++)
-                {
-                    td[d][i].resize(decoder.tot_iters / decoder.ds[i+1]);
-                }
-                td[d][dom_dim-1].resize(1);
-            }
         }
+
+        // M owns pointer arrays aliasing D; copying would leave aliases into another workspace.
+        FastDecodeInfo(const FastDecodeInfo&) = delete;
+        FastDecodeInfo& operator=(const FastDecodeInfo&) = delete;
+        FastDecodeInfo(FastDecodeInfo&&) = delete;
+        FastDecodeInfo& operator=(FastDecodeInfo&&) = delete;
 
         ~FastDecodeInfo()
         {
@@ -190,6 +186,15 @@ namespace mfa
         // M is a collection of pointers which aliases D; we do not want to move any actual basis function values into M
         void ResizeDers(int nders)
         {
+            td.resize(dom_dim + 1);
+            for (int d = 0; d < dom_dim + 1; d++)
+            {
+                td[d].resize(dom_dim);
+                for (int i = 0; i < dom_dim - 1; i++)
+                    td[d][i].resize(decoder.tot_iters / decoder.ds[i+1]);
+                td[d][dom_dim - 1].resize(1);
+            }
+
             D.resize(dom_dim);
             for (int k = 0; k < dom_dim; k++)
             {
@@ -341,10 +346,121 @@ namespace mfa
                 const   VectorXi&       derivs = VectorXi())    // derivative to take in each domain dim. (0 = value, 1 = 1st deriv, 2 = 2nd deriv, ...)
                                                                 // pass size-0 vector if unused
         {
-#ifdef MFA_TBB                                          // TBB version, faster (~3X) than serial
+            if (ps.dom_dim != dom_dim || !ps.params || ps.params->dom_dim != dom_dim ||
+                ps.domain.rows() != ps.npts || min_dim < 0 || max_dim >= ps.domain.cols() ||
+                max_dim - min_dim + 1 != mfa_data.dim())
+                throw MFAError("DecodePointSet(): incompatible point-set or output dimensions");
+            if (derivs.size() && (derivs.size() != dom_dim || (derivs.array() < 0).any()))
+                throw MFAError("DecodePointSet(): expected one nonnegative derivative order per domain dimension");
+            if (ps.npts == 0)
+                return;
+            if (!ps.is_structured() && (ps.params->param_list.rows() != ps.npts ||
+                                       ps.params->param_list.cols() != dom_dim))
+                throw MFAError("DecodePointSet(): incompatible unstructured parameters");
+
+            if (can_decode_values_fast(ps, derivs))
+            {
+                decode_point_set_values(ps, min_dim);
+                return;
+            }
+
+#ifdef MFA_TBB
+            decode_point_set_tbb(ps, min_dim, derivs);
+#endif
+
+#if defined(MFA_SERIAL) || defined(MFA_KOKKOS)
+            if (ps.is_structured() && derivs.size() == 0)
+                decode_point_set_via_uniform_grid(ps, min_dim, max_dim);
+            else
+                decode_point_set_serial(ps, min_dim, derivs);
+#endif
+        }
+
+    private:
+        bool can_decode_values_fast(const PointSet<T>& ps, const VectorXi& derivs) const
+        {
+#if defined(MFA_NO_WEIGHTS) && !defined(MFA_TMESH) && !defined(MFA_OVERLAYS)
+            if (ps.is_structured() || ps.params->structured || mfa_data.tmesh.tensor_prods.size() != 1 ||
+                (derivs.size() && derivs.any()))
+                return false;
+
+            const auto& tensor = mfa_data.tmesh.tensor_prods[0];
+            // MFA_NO_WEIGHTS disables fitting weights, but externally loaded models can still carry them.
+            return tensor.weights.size() == tensor.ctrl_pts.rows() &&
+                   (tensor.weights.array() == T(1)).all();
+#else
+            return false;
+#endif
+        }
+
+        struct ValueDecodeWorkspace
+        {
+            FastDecodeInfo<T> info;
+            VectorX<T>       param;
+
+            explicit ValueDecodeWorkspace(const Decoder<T>& decoder) :
+                info(decoder), param(decoder.dom_dim)
+            {}
+        };
+
+        // Shared traversal for serial and TBB; all scratch belongs to the worker, not the point.
+        void decode_value_range(
+                const MatrixX<T>&        params,
+                const vector<const T*>&  controls,
+                const vector<T*>&        output,
+                size_t                   begin,
+                size_t                   end,
+                ValueDecodeWorkspace&    workspace) const
+        {
+            for (size_t i = begin; i < end; i++)
+            {
+                for (int d = 0; d < dom_dim; d++)
+                    workspace.param(d) = params(i, d);
+                const int start_ctrl_idx = prepare_fast_point(workspace.param, workspace.info);
+                for (size_t c = 0; c < controls.size(); c++)
+                    output[c][i] = contract_fast_component(controls[c], start_ctrl_idx, workspace.info);
+            }
+        }
+
+        void decode_point_set_values(PointSet<T>& ps, int min_dim) const
+        {
+            const auto& tensor = mfa_data.tmesh.tensor_prods[0];
+            vector<const T*> controls(mfa_data.dim());
+            vector<T*> output(mfa_data.dim());
+            for (int c = 0; c < mfa_data.dim(); c++)
+            {
+                controls[c] = tensor.ctrl_pts.col(c).data();
+                output[c] = ps.domain.col(min_dim + c).data();
+            }
+            if (verbose >= 2)
+                fmt::print(stderr, "DEBUG: DecodePointSet: Using fast value decoding\n");
+#ifdef MFA_TBB
+            // A factory stores references rather than copying MFA_Data into TBB's constructor argument pack.
+            enumerable_thread_specific<std::unique_ptr<ValueDecodeWorkspace>> workspaces(
+                [&] { return std::make_unique<ValueDecodeWorkspace>(*this); });
+            parallel_for(blocked_range<size_t>(0, ps.npts, 4096), [&](const blocked_range<size_t>& r)
+            {
+                decode_value_range(ps.params->param_list, controls, output, r.begin(), r.end(), *workspaces.local());
+            });
+#else
+            ValueDecodeWorkspace workspace(*this);
+            decode_value_range(ps.params->param_list, controls, output, 0, ps.npts, workspace);
+#endif
+            if (verbose >= 2)
+                fmt::print(stderr, "DEBUG:   ->100 % decoded\n");
+        }
+
+#ifdef MFA_TBB
+        // Evaluate the supplied PointSet parameters in parallel, with thread-local scratch storage.
+        void decode_point_set_tbb(
+                PointSet<T>&    ps,
+                int             min_dim,
+                const VectorXi& derivs)
+        {
             // thread-local DecodeInfo
             // ref: https://www.threadingbuildingblocks.org/tutorial-intel-tbb-thread-local-storage
-            enumerable_thread_specific<DecodeInfo<T>> thread_decode_info(mfa_data, derivs);
+            enumerable_thread_specific<DecodeInfo<T>> thread_decode_info(
+                [&] { return DecodeInfo<T>(mfa_data, derivs); });
 
             static affinity_partitioner ap;
             parallel_for (blocked_range<size_t>(0, ps.npts), [&](blocked_range<size_t>& r)
@@ -353,7 +469,6 @@ namespace mfa
                 auto pt_end = ps.iterator(r.end());
                 VectorX<T>  cpt(mfa_data.dim());              // evaluated point
                 VectorX<T>  param(dom_dim);    // vector of param values
-                VectorXi    ijk(dom_dim);      // vector of param indices (structured grid only)
                 for (; pt_it != pt_end; ++pt_it)            // for all points
                 {
                     pt_it.params(param);
@@ -384,76 +499,83 @@ namespace mfa
                 fmt::print(stderr, "DEBUG:   ->100 % decoded\n");
 //                 decode_times.print();
             }
-
+        }
 #endif              // end TBB version
 
-#if defined(MFA_SERIAL) || defined (MFA_KOKKOS)
-            // use DecodeGrid for structured case that already has KOKKOS
-            if (ps.is_structured() && 0 == derivs.size() )
-            {
-                auto pt_min = ps.begin();
-                auto pt_max = ps.last();
-                VectorX<T>   min_params(dom_dim), max_params(dom_dim);
-                pt_min.params(min_params);
-                pt_max.params(max_params);
-                // TODO: This is incorrect. Using DecodeGrid here will always decode on an equispaced
-                //       grid.  However, ps may be structured and not equispaced. This method should
-                //       decode on EXACTLY the parameters of ps.
-                //
-                //      This was added because DecodeGrid has a KOKKOS implementation. Need to find another
-                //      place to put this, or simply extend the KOKKOS to arbitrary structured grids
-                if (verbose >= 2)
-                    fmt::print(stderr, "DEBUG: DecodePointSet: Using DecodeGrid w/o TBB (serial or kokkos)\n");
-                DecodeGrid(ps.domain, min_dim, max_dim, min_params, max_params, ps.g.ndom_pts );
-            }
-            else
-            {
-                DecodeInfo<T> decode_info(mfa_data, derivs);    // reusable decode point info for calling VolPt repeatedly
-                VectorX<T> cpt(mfa_data.dim());                       // evaluated point
-                VectorX<T> param(dom_dim);            // parameters for one point
-                VectorXi   ijk(dom_dim);      // vector of param indices (structured grid only)
+#if defined(MFA_SERIAL) || defined(MFA_KOKKOS)
+        // Preserve the structured, value-only shortcut through DecodeGrid, including Kokkos support.
+        void decode_point_set_via_uniform_grid(
+                PointSet<T>& ps,
+                int          min_dim,
+                int          max_dim)
+        {
+            auto pt_min = ps.begin();
+            auto pt_max = ps.last();
+            VectorX<T>   min_params(dom_dim), max_params(dom_dim);
+            pt_min.params(min_params);
+            pt_max.params(max_params);
+            // TODO: This is incorrect. Using DecodeGrid here will always decode on an equispaced
+            //       grid.  However, ps may be structured and not equispaced. This method should
+            //       decode on EXACTLY the parameters of ps.
+            //
+            //      This was added because DecodeGrid has a KOKKOS implementation. Need to find another
+            //      place to put this, or simply extend the KOKKOS to arbitrary structured grids
+            if (verbose >= 2)
+                fmt::print(stderr, "DEBUG: DecodePointSet: Using DecodeGrid w/o TBB (serial or kokkos)\n");
+            DecodeGrid(ps.domain, min_dim, max_dim, min_params, max_params, ps.g.ndom_pts );
+        }
 
-                auto pt_it  = ps.begin();
-                auto pt_end = ps.end();
-                for (; pt_it != pt_end; ++pt_it)
-                {
-                    // Get parameter values and indices at current point
-                    pt_it.params(param);
+        // Evaluate the supplied PointSet parameters sequentially, also used as the Kokkos fallback.
+        void decode_point_set_serial(
+                PointSet<T>&    ps,
+                int             min_dim,
+                const VectorXi& derivs)
+        {
+            DecodeInfo<T> decode_info(mfa_data, derivs);    // reusable decode point info for calling VolPt repeatedly
+            VectorX<T> cpt(mfa_data.dim());                       // evaluated point
+            VectorX<T> param(dom_dim);            // parameters for one point
 
-                    // compute approximated point for this parameter vector
+            auto pt_it  = ps.begin();
+            auto pt_end = ps.end();
+            for (; pt_it != pt_end; ++pt_it)
+            {
+                // Get parameter values and indices at current point
+                pt_it.params(param);
+
+                // compute approximated point for this parameter vector
 
 #if defined(MFA_TMESH) || defined(MFA_OVERLAYS)    // tmesh/ovelays version
 
-                    if (pt_it.idx() == 0 && verbose >= 2)
-                        fmt::print(stderr, "DEBUG: DecodePointSet: Using VolPt_tmesh w/o TBB (serial or kokkos)\n");
+                if (pt_it.idx() == 0 && verbose >= 2)
+                    fmt::print(stderr, "DEBUG: DecodePointSet: Using VolPt_tmesh w/o TBB (serial or kokkos)\n");
 
-                    VolPt_tmesh(param, cpt);
+                VolPt_tmesh(param, cpt);
 
 #else               // original version for one tensor product
 
-                    if (pt_it.idx() == 0 && verbose >= 2)
-                        fmt::print(stderr, "DEBUG: DecodePointSet: Using VolPt w/o TBB (serial or kokkos)\n");
+                if (pt_it.idx() == 0 && verbose >= 2)
+                    fmt::print(stderr, "DEBUG: DecodePointSet: Using VolPt w/o TBB (serial or kokkos)\n");
 
-                    VolPt(param, cpt, decode_info, mfa_data.tmesh.tensor_prods[0], derivs);
+                VolPt(param, cpt, decode_info, mfa_data.tmesh.tensor_prods[0], derivs);
 
 #endif
 
-                    ps.domain.block(pt_it.idx(), min_dim, 1, mfa_data.dim()) = cpt.transpose();
+                ps.domain.block(pt_it.idx(), min_dim, 1, mfa_data.dim()) = cpt.transpose();
 
-                    // print progress
-                    if (verbose >= 2)
-                        if (pt_it.idx() > 0 && ps.npts >= 100 && pt_it.idx() % (ps.npts / 100) == 0)
-                            fmt::print(stderr, "\rDEBUG:   ->{:.0} % decoded", (T)pt_it.idx() / (T)(ps.npts) * 100);
-               }
+                // print progress
                 if (verbose >= 2)
-                {
-                    fmt::print(stderr, "\rDEBUG:   ->100 % decoded\n");
-    //                 decode_times.print();
-                }
+                    if (pt_it.idx() > 0 && ps.npts >= 100 && pt_it.idx() % (ps.npts / 100) == 0)
+                        fmt::print(stderr, "\rDEBUG:   ->{:.0} % decoded", (T)pt_it.idx() / (T)(ps.npts) * 100);
             }
-#endif  // end serial/kokkos version
+            if (verbose >= 2)
+            {
+                fmt::print(stderr, "\rDEBUG:   ->100 % decoded\n");
+//                 decode_times.print();
+            }
         }
+#endif  // end serial/kokkos version
 
+    public:
         void AxisIntegral(  int                     dim,
                             T                       u0,
                             T                       u1,
@@ -1989,13 +2111,13 @@ namespace mfa
             VectorX<T>&                 out_grad,
             T*                          out_val = nullptr)
         {
-#if !defined(MFA_TMESH) && !defined(MFA_OVERLAYS)
-fmt::print(stderr, "ERROR: Cannot use FastGrad with TMesh or Overlays\n");
-exit(1);
+#if defined(MFA_TMESH) || defined(MFA_OVERLAYS)
+            fmt::print(stderr, "ERROR: Cannot use FastGrad with TMesh or Overlays\n");
+            exit(1);
 #endif
 #ifndef MFA_NO_WEIGHTS
-fmt::print(stderr, "ERROR: Must define MFA_NO_WEIGHTS to use FastGrad\n");
-exit(1);
+            fmt::print(stderr, "ERROR: Must define MFA_NO_WEIGHTS to use FastGrad\n");
+            exit(1);
 #endif
 
             assert(di.D[0].size() == 2);   // ensures D has been resized to hold 1st derivs
@@ -2130,14 +2252,22 @@ exit(1);
                 FastDecodeInfo<T>&      di,         // reusable decode info allocated by caller (more efficient when calling VolPt multiple times)
                 const TensorProduct<T>& tensor) const    // tensor product to use for decoding
         {
-#if !defined(MFA_TMESH) && !defined(MFA_OVERLAYS)
-fmt::print(stderr, "ERROR: Cannot use FastVolPt with TMesh or Overlays\n");
-exit(1);
+#if defined(MFA_TMESH) || defined(MFA_OVERLAYS)
+            fmt::print(stderr, "ERROR: Cannot use FastVolPt with TMesh or Overlays\n");
+            exit(1);
 #endif
 #ifndef MFA_NO_WEIGHTS
-fmt::print(stderr, "ERROR: Must define MFA_NO_WEIGHTS to use FastVolPt\n");
-exit(1);
+            fmt::print(stderr, "ERROR: Must define MFA_NO_WEIGHTS to use FastVolPt\n");
+            exit(1);
 #endif
+            const int start_ctrl_idx = prepare_fast_point(param, di);
+            out_pt(0) = contract_fast_component(tensor.ctrl_pts.data(), start_ctrl_idx, di);
+        }
+
+    private:
+        // Prepare local support once, shared by every component at this parameter.
+        int prepare_fast_point(const VectorX<T>& param, FastDecodeInfo<T>& di) const
+        {
             // compute spans and basis functions for the given parameters
             for (int i = 0; i < dom_dim; i++)
             {
@@ -2150,8 +2280,12 @@ exit(1);
             int start_ctrl_idx = 0;
             for (int j = 0; j < mfa_data.dom_dim; j++)
                 start_ctrl_idx += (di.span[j] - mfa_data.p(j)) * cs[j];
+            return start_ctrl_idx;
+        }
 
-
+        // Existing scalar contraction, applied to a borrowed column of the control lattice.
+        T contract_fast_component(const T* controls, int start_ctrl_idx, FastDecodeInfo<T>& di) const
+        {
             // * The remaining loops perform the sums and products of basis functions across different
             //   dimensions. This loop looks different from the old VolPt loop in order to remove the
             //   step to check if a control point is at the "end" of some dimension. Instead, we compute
@@ -2166,10 +2300,10 @@ exit(1);
             {
                 di.ctrl_idx = start_ctrl_idx + jumps(m);
 
-                di.t[0][id] = di.N[0][0] * tensor.ctrl_pts(di.ctrl_idx);
+                di.t[0][id] = di.N[0][0] * controls[di.ctrl_idx];
                 for (int a = 1; a < q0; a++)
                 {
-                    di.t[0][id] += di.N[0][a] * tensor.ctrl_pts(di.ctrl_idx + a);
+                    di.t[0][id] += di.N[0][a] * controls[di.ctrl_idx + a];
                 }
             }
 
@@ -2189,9 +2323,10 @@ exit(1);
                 }
             }
 
-            out_pt(0) = di.t[mfa_data.dom_dim - 1][0];
+            return di.t[mfa_data.dom_dim - 1][0];
         }
 
+    public:
         // compute a point from a NURBS curve at a given parameter value
         // this version takes a temporary set of control points for one curve only rather than
         // reading full n-d set of control points from the mfa

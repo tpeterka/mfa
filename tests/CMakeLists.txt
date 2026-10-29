@@ -7,6 +7,10 @@ target_link_libraries       (fixed-test                             ${libraries}
 add_executable              (decode-grid-test                       decode_grid.cpp)
 target_link_libraries       (decode-grid-test                       ${libraries})
 
+add_executable              (decode-pointset-test                   decode_pointset.cpp)
+target_link_libraries       (decode-pointset-test                   ${libraries})
+add_test                    (NAME decode-pointset-test COMMAND decode-pointset-test)
+
 add_executable              (fixed-multiblock-test                  fixed_multiblock.cpp)
 target_link_libraries       (fixed-multiblock-test                  ${libraries})
 

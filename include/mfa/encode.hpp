@@ -2893,6 +2893,7 @@ namespace mfa
 
 #endif
 
+#ifdef MFA_OVERLAYS
         // adaptive encoding for overlays
         void OverlaysAdaptiveEncode(
                 T                   err_limit,                          // maximum allowable normalized error
@@ -3053,6 +3054,9 @@ namespace mfa
                 throw MFAError(fmt::format("AdaptiveEncode(): Error: failed checking local knots of tensors\n"));
         }
 
+#endif  // MFA_OVERLAYS
+
+#ifdef MFA_TMESH
         // adaptive encoding for T-mesh
         void TmeshAdaptiveEncode(
                 T                   err_limit,                          // maximum allowable normalized error
@@ -3219,6 +3223,8 @@ namespace mfa
 //             tmesh.print(false, true, false, false);
 //             fmt::print(stderr, "--------------------------\n\n");
         }
+
+#endif  // MFA_TMESH
 
     private:
 
@@ -4837,6 +4843,7 @@ namespace mfa
 
 #endif
 
+#ifdef MFA_TMESH
         // updates and encodes existing tensors if they match any in a vector of new tensor products
         void UpdateExistingTensors(vector<TensorProduct<T>>& new_tensors)
         {
@@ -4903,6 +4910,9 @@ namespace mfa
             }
         }
 
+#endif  // MFA_TMESH
+
+#ifdef MFA_TMESH
         // constraint control points and corresponding anchors for local solve for tmesh
         // helper function for EncodeTensorLocalSeparable and EncodeTensorLocalUnified
         // this version checks all tensors, slower than looking at prev/next, but reliably finds all constraints
@@ -5038,6 +5048,8 @@ namespace mfa
             }
         }
 
+#endif  // MFA_TMESH
+
         struct Constraint
         {
             VectorX<T>      ctrl_pt;                            // control point for a constraint
@@ -5053,6 +5065,7 @@ namespace mfa
             }
         };
 
+#ifdef MFA_OVERLAYS
         // constraint control points and corresponding anchors for local solve for overlays
         // helper function for EncodeTensorLocalSeparable and EncodeTensorLocalUnified
         void LocalSolveOverlaysConstraints(
@@ -5172,6 +5185,8 @@ namespace mfa
 //                             ijk.transpose(), fmt::join(anchors[i], ","), ctrl_pts.row(i), t_idx_anchors[i]);
             }
         }
+
+#endif  // MFA_OVERLAYS
 
         // 1d encoding and 1d decoding
         // adds knots error spans from all curves in all directions (into a set)
