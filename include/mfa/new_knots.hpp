@@ -445,15 +445,23 @@ namespace mfa
                         {
                             KnotIdx min_knot_idx    = t.knot_idxs[j][span_ijk(j)];                      // knot idx at start of span
                             KnotIdx max_knot_idx    = t.knot_idxs[j][span_ijk(j) + 1];                  // knot idx at end of span
-                            ParamIdx min_param_idx  = all_knot_param_idxs[j][min_knot_idx];             // first parameter index of the knot span
-                            ParamIdx max_param_idx  = all_knot_param_idxs[j][max_knot_idx] - 1;         // last parameter index of the knot span
-                            if (max_param_idx == input.params->param_grid[j].size() - 1)                // include last parameter in last knot span
-                                max_param_idx++;
+                            ParamIdx min_param_idx  = all_knot_param_idxs[j][min_knot_idx];             // first point in span
+                            ParamIdx end_param_idx  = all_knot_param_idxs[j][max_knot_idx];             // one past last point in span
+                            if (end_param_idx == input.params->param_grid[j].size() - 1)                // last span includes param 1.0
+                                end_param_idx++;
 
-                            sub_npts(j)      = max_param_idx - min_param_idx;
-                            all_npts(j)      = max_param_idx;
+                            sub_npts(j)      = end_param_idx - min_param_idx;
                             sub_starts(j)    = min_param_idx;
+                            all_npts(j)      = input.params->param_grid[j].size();
+                            if (sub_npts(j) <= 0)
+                            {
+                                skip_span = true;
+                                break;
+                            }
                         }
+                        if (skip_span)
+                            continue;
+
                         VolIterator param_iter(sub_npts, sub_starts, all_npts);
 
                         // iterate over input domain points
@@ -580,15 +588,26 @@ namespace mfa
                     {
                         KnotIdx min_knot_idx    = t.knot_idxs[j][span_ijk(j)];                      // knot idx at start of span
                         KnotIdx max_knot_idx    = t.knot_idxs[j][span_ijk(j) + 1];                  // knot idx at end of span
-                        ParamIdx min_param_idx  = all_knot_param_idxs[j][min_knot_idx];             // first parameter index of the knot span
-                        ParamIdx max_param_idx  = all_knot_param_idxs[j][max_knot_idx] - 1;         // last parameter index of the knot span
-                        if (max_param_idx == input.params->param_grid[j].size() - 1)                // include last parameter in last knot span
-                            max_param_idx++;
+                        ParamIdx min_param_idx  = all_knot_param_idxs[j][min_knot_idx];             // first point in span
+                        ParamIdx end_param_idx  = all_knot_param_idxs[j][max_knot_idx];             // one past last point in span
+                        if (end_param_idx == input.params->param_grid[j].size() - 1)                // last span includes param 1.0
+                            end_param_idx++;
 
-                        sub_npts(j)     = max_param_idx - min_param_idx;
-                        all_npts(j)     = max_param_idx;
+                        sub_npts(j)     = end_param_idx - min_param_idx;
                         sub_starts(j)   = min_param_idx;
+                        all_npts(j)     = input.params->param_grid[j].size();
+                        if (sub_npts(j) <= 0)
+                        {
+                            skip_span = true;
+                            break;
+                        }
                     }
+                    if (skip_span)
+                    {
+                        span_iter.incr_iter();
+                        continue;
+                    }
+
                     VolIterator param_iter(sub_npts, sub_starts, all_npts);
 
                     // iterate over input domain points
