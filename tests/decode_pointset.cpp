@@ -4,23 +4,42 @@
 //--------------------------------------------------------------
 
 #undef NDEBUG                       // Keep Eigen's allocation assertions active in Release test builds.
-#define CATCH_CONFIG_MAIN
 #define EIGEN_RUNTIME_NO_MALLOC
-#include "catch.hpp"
 
 #include <mfa/mfa.hpp>
 
+#include <cmath>
+#include <exception>
 #include <future>
+#include <iostream>
 #include <limits>
 
+bool fail_check(const char* condition, int line)
+{
+    std::cerr << "ERROR: decode-pointset-test check failed at line " << line << ": " << condition << '\n';
+    return false;
+}
+
+#define CHECK(condition) \
+    do { if (!(condition)) return fail_check(#condition, __LINE__); } while (false)
+
+#define CHECK_MFA_ERROR(expression) \
+    do \
+    { \
+        bool threw_mfa_error = false; \
+        try { expression; } \
+        catch (const mfa::MFAError&) { threw_mfa_error = true; } \
+        catch (...) {} \
+        CHECK(threw_mfa_error); \
+    } while (false)
+
 template <typename T>
-void check_pointsets()
+bool check_pointsets()
 {
     for (int dom_dim = 1; dom_dim <= 3; dom_dim++)
     for (int components : {1, 2, 4})
     for (int degree = 0; degree <= 3; degree++)
     {
-        INFO("domain=" << dom_dim << ", components=" << components << ", degree=" << degree);
         VectorXi p(dom_dim), nctrl(dom_dim), dims(3);
         for (int d = 0; d < dom_dim; d++)
         {
@@ -83,16 +102,16 @@ void check_pointsets()
                     reference.row(i) = out.transpose();
                 }
                 decoder.DecodePointSet(points, dom_dim, dom_dim + components - 1, derivs);
-                REQUIRE((reference - points.domain.middleCols(dom_dim, components)).cwiseAbs().maxCoeff() < tolerance);
-                REQUIRE((points.domain.leftCols(dom_dim).array() == T(-7)).all());
-                REQUIRE((points.domain.rightCols(1).array() == T(-7)).all());
-                REQUIRE((points.params->param_list.array() == original_params.array()).all());
+                CHECK((reference - points.domain.middleCols(dom_dim, components)).cwiseAbs().maxCoeff() < tolerance);
+                CHECK((points.domain.leftCols(dom_dim).array() == T(-7)).all());
+                CHECK((points.domain.rightCols(1).array() == T(-7)).all());
+                CHECK((points.params->param_list.array() == original_params.array()).all());
             }
         }
 
 #if defined(MFA_NO_WEIGHTS) && !defined(MFA_TMESH) && !defined(MFA_OVERLAYS)
         mfa::FastDecodeInfo<T> fast_info(decoder);
-        REQUIRE(fast_info.td.empty());
+        CHECK(fast_info.td.empty());
         // The existing public scalar wrapper must remain allocation-free after scratch setup.
         TensorProduct<T> scalar;
         scalar.ctrl_pts = tensor.ctrl_pts.col(0);
@@ -101,16 +120,16 @@ void check_pointsets()
         Eigen::internal::set_is_malloc_allowed(false);
         decoder.FastVolPt(param, out, fast_info, scalar);
         Eigen::internal::set_is_malloc_allowed(true);
-        REQUIRE(std::isfinite(out(0)));
+        CHECK(std::isfinite(out(0)));
         fast_info.ResizeDers(1);
-        REQUIRE(fast_info.td.size() == size_t(dom_dim + 1));
+        CHECK(fast_info.td.size() == size_t(dom_dim + 1));
         // FastGrad's existing derivative kernel requires positive degree in every axis.
         if (p.minCoeff() > 0)
         {
             VectorX<T> gradient(dom_dim);
             T value;
             decoder.FastGrad(param, fast_info, scalar, gradient, &value);
-            REQUIRE(std::abs(value - out(0)) < tolerance);
+            CHECK(std::abs(value - out(0)) < tolerance);
             // Unit weights recover the polynomial derivative reference for the scalar column.
             tensor.weights.setOnes();
             for (int d = 0; d < dom_dim; d++)
@@ -120,20 +139,21 @@ void check_pointsets()
                 VectorX<T> expected(components);
                 mfa::DecodeInfo<T> info(model, derivs);
                 decoder.VolPt(param, expected, info, tensor, derivs);
-                REQUIRE(std::abs(gradient(d) - expected(0)) < tolerance);
+                CHECK(std::abs(gradient(d) - expected(0)) < tolerance);
             }
         }
 #endif
     }
+
+    return true;
 }
 
-TEST_CASE("point-set decoding agrees with the generic evaluator for float and double")
+bool test_pointset_decoding()
 {
-    check_pointsets<float>();
-    check_pointsets<double>();
+    return check_pointsets<float>() && check_pointsets<double>();
 }
 
-TEST_CASE("high-level vector decoding preserves affine values and destination columns")
+bool test_high_level_vector_decoding()
 {
     VectorXi p = VectorXi::Ones(2), nctrl = VectorXi::Constant(2, 2), dims(3);
     auto* science = new mfa::MFA_Data<double>(p, nctrl, 2, 3);
@@ -157,21 +177,22 @@ TEST_CASE("high-level vector decoding preserves affine values and destination co
         for (int i = 0; i < points.npts; i++)
         {
             double x = points.params->param_list(i, 0), y = points.params->param_list(i, 1);
-            REQUIRE(points.domain(i, 2) == Approx(x + 2 * y).margin(1e-14));
-            REQUIRE(points.domain(i, 3) == Approx(2 * x - y).margin(1e-14));
+            CHECK(std::abs(points.domain(i, 2) - (x + 2 * y)) < 1e-14);
+            CHECK(std::abs(points.domain(i, 3) - (2 * x - y)) < 1e-14);
         }
-        REQUIRE((points.domain.leftCols(2).array() == -7).all());
-        REQUIRE((points.domain.rightCols(1).array() == -7).all());
+        CHECK((points.domain.leftCols(2).array() == -7).all());
+        CHECK((points.domain.rightCols(1).array() == -7).all());
     }
     mfa::PointSet<double> other(points.params, dims);
     other.domain.setConstant(-7);
     auto concurrent = std::async(std::launch::async, [&] { model.DecodeVar(0, points); });
     model.DecodeVar(0, other);
     concurrent.get();
-    REQUIRE((points.domain.array() == other.domain.array()).all());
+    CHECK((points.domain.array() == other.domain.array()).all());
+    return true;
 }
 
-TEST_CASE("point-set decoding handles empty input and rejects invalid requests")
+bool test_invalid_pointset_requests()
 {
     VectorXi p = VectorXi::Ones(1), nctrl = VectorXi::Constant(1, 2), dims(2);
     dims << 1, 1;
@@ -181,12 +202,41 @@ TEST_CASE("point-set decoding handles empty input and rejects invalid requests")
     tensor.weights = VectorX<double>::Ones(2);
     mfa::Decoder<double> decoder(model, 0);
     mfa::PointSet<double> empty(1, dims, 0), point(1, dims, 1);
-    REQUIRE_NOTHROW(decoder.DecodePointSet(empty, 1, 1));
+    try
+    {
+        decoder.DecodePointSet(empty, 1, 1);
+    }
+    catch (...)
+    {
+        return fail_check("decoder.DecodePointSet(empty, 1, 1) does not throw", __LINE__);
+    }
     point.params->param_list = MatrixX<double>::Constant(1, 1, .5);
-    REQUIRE_THROWS_AS(decoder.DecodePointSet(point, -1, -1), mfa::MFAError);
-    REQUIRE_THROWS_AS(decoder.DecodePointSet(point, 1, 2), mfa::MFAError);
-    REQUIRE_THROWS_AS(decoder.DecodePointSet(point, 1, 1, VectorXi::Zero(2)), mfa::MFAError);
-    REQUIRE_THROWS_AS(decoder.DecodePointSet(point, 1, 1, VectorXi::Constant(1, -1)), mfa::MFAError);
+    CHECK_MFA_ERROR(decoder.DecodePointSet(point, -1, -1));
+    CHECK_MFA_ERROR(decoder.DecodePointSet(point, 1, 2));
+    CHECK_MFA_ERROR(decoder.DecodePointSet(point, 1, 1, VectorXi::Zero(2)));
+    CHECK_MFA_ERROR(decoder.DecodePointSet(point, 1, 1, VectorXi::Constant(1, -1)));
     point.params->param_list.resize(0, 1);
-    REQUIRE_THROWS_AS(decoder.DecodePointSet(point, 1, 1), mfa::MFAError);
+    CHECK_MFA_ERROR(decoder.DecodePointSet(point, 1, 1));
+    return true;
+}
+
+int main()
+{
+    try
+    {
+        if (!test_pointset_decoding() || !test_high_level_vector_decoding() || !test_invalid_pointset_requests())
+            return 1;
+    }
+    catch (const std::exception& error)
+    {
+        std::cerr << "ERROR: decode-pointset-test threw an exception: " << error.what() << '\n';
+        return 1;
+    }
+    catch (...)
+    {
+        std::cerr << "ERROR: decode-pointset-test threw an unknown exception\n";
+        return 1;
+    }
+
+    return 0;
 }

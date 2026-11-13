@@ -172,7 +172,7 @@ Every source file should have the standard header block with author information 
 - Document reference algorithms and papers
 
 ### Testing
-- Use Catch2 framework included in tests/
+- Use CTest to register and run standalone test executables.
 - Test names follow descriptive pattern: `component-scenario-test`
 - Include both positive and negative test cases
 - Test with different input sizes and data types
@@ -192,7 +192,7 @@ Every source file should have the standard header block with author information 
 ## Dependencies
 - **Required**: Eigen3, MPI, DIY, fmt
 - **Optional**: TBB, Kokkos, OpenMP, CLP (for weights)
-- **Testing**: Catch2 (header-only, included)
+- **Testing**: CTest
 - **Python**: pybind11 (optional)
 
 This codebase is research-oriented with emphasis on mathematical correctness and performance. Follow existing patterns and maintain compatibility with multiple threading backends.
