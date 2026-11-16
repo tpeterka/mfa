@@ -489,7 +489,6 @@ namespace mfa
 
         // determine starting and ending indices of domain input points covered by one tensor product
         // coverage extends to edge of basis functions corresponding to control points in the tensor product
-        // extends selectively depending on even/odd degree
         void domain_pts(TensorIdx               t_idx,              // index of current tensor product
                         vector<vector<T>>&      params,             // params of input points
                         vector<size_t>&         start_idxs,         // (output) starting idxs of input points
@@ -501,13 +500,13 @@ namespace mfa
 
             const TensorProduct<T>& tc = tensor_prods[t_idx];
 
-            // extend dimensions symmetrically by p/2 knot spans per side
+            // extend to the support of the boundary basis functions: p/2 spans per side for even p, (p+1)/2 for odd p
 
             // low side
             vector<KnotIdx> start_knot_idxs(dom_dim_);
             knot_intersections(tc.knot_mins, local_knot_idxs, 0);
             for (auto k = 0; k < dom_dim_; k++)
-                    start_knot_idxs[k] = local_knot_idxs[k][0];
+                start_knot_idxs[k] = local_knot_idxs[k][0];
 
             // high side
             vector<KnotIdx> end_knot_idxs(dom_dim_);
