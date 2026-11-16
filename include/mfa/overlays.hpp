@@ -501,31 +501,24 @@ namespace mfa
 
             const TensorProduct<T>& tc = tensor_prods[t_idx];
 
-            // left edge
-            vector<KnotIdx> start_knot_idxs = tc.knot_mins;
+            // extend dimensions symmetrically by p/2 knot spans per side
 
-            // don't extend dimensions with even degree
-            // extend by p/2 knots from the min corner in dimensions with odd degree
-            // found empirically to work the best; no good theoretical basis
+            // low side
+            vector<KnotIdx> start_knot_idxs(dom_dim_);
             knot_intersections(tc.knot_mins, local_knot_idxs, 0);
             for (auto k = 0; k < dom_dim_; k++)
-            {
-                if (p_(k) % 2 == 1)
                     start_knot_idxs[k] = local_knot_idxs[k][0];
-            }
 
-            // right edge
-            vector<KnotIdx> end_knot_idxs = tc.knot_maxs;
-
-            // don't extend dimensions with even degree
-            // extend by p/2 knots from the max corner in dimensions with odd degree
-            // found empirically to work the best; no good theoretical basis
+            // high side
+            vector<KnotIdx> end_knot_idxs(dom_dim_);
             local_knot_idxs.clear();
             knot_intersections(tc.knot_maxs, local_knot_idxs, 0);
             for (auto k = 0; k < dom_dim_; k++)
             {
-                if (p_(k) % 2 == 1)
+                if (p_(k) % 2 == 1)     // odd degree
                     end_knot_idxs[k] = local_knot_idxs[k][local_knot_idxs[k].size() - 2];
+                else                    // even degree, still p/2 extension, but anchor is in center of span, so knot is one back
+                    end_knot_idxs[k] = local_knot_idxs[k][local_knot_idxs[k].size() - 3];
             }
 
             // input points corresponding to start and end knot values
