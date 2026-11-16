@@ -1338,6 +1338,25 @@ namespace mfa
             // in the current dim, the anchor coordinate will be replaced below by the control point anchor
             for (auto i = dim + 1; i < dom_dim; i++)
             {
+                // the curve may lie in the margin of input points outside the tensor in a higher dim
+                // the anchor must be inside the tensor, so for a margin curve use the param of the nearest input point inside the tensor
+                // this gives the same local knot vector in the current dim as the curve at the edge of the tensor
+                T min_param = mfa_data.tmesh.all_knots[i][t.knot_mins[i]];
+                T max_param = mfa_data.tmesh.all_knots[i][t.knot_maxs[i]];
+                if (param(i) < min_param)
+                {
+                    // first input point with param >= min_param
+                    param(i) = input.params->param_grid[i][mfa_data.tmesh.all_knot_param_idxs[i][t.knot_mins[i]]];
+                }
+                else if (param(i) > max_param)
+                {
+                    // last input point with param <= max_param
+                    size_t idx = mfa_data.tmesh.all_knot_param_idxs[i][t.knot_maxs[i]];
+                    if (input.params->param_grid[i][idx] > max_param)
+                        idx--;
+                    param(i) = input.params->param_grid[i][idx];
+                }
+
                 // if param == 0, FindSpan finds the last 0-value knot span, but we want the first control point anchor, which is an earlier span
                 if (param(i) == 0.0)
                     anchor[i] = (mfa_data.p(i) + 1) / 2;
@@ -2548,7 +2567,7 @@ namespace mfa
             vector<size_t> start_idxs(dom_dim);                                                     // start of input points including constraints
             vector<size_t> end_idxs(dom_dim);                                                       // end of input points including constraints
 
-            // overlays covers contstraints with input points, as it should
+            // overlays covers constraints with input points, as it should
             mfa_data.tmesh.domain_pts(t_idx, input.params->param_grid, start_idxs, end_idxs);
 
             // relevant input domain points covering constraints
@@ -2655,21 +2674,22 @@ namespace mfa
                             start_ijk(j) += dom_starts(j);
                     }
 
-                    if (CurveIntersectsTensor(t_idx, dim, nin_pts, start_ijk))
+                    // solve every curve, including curves in the margin of input points outside the tensor in higher dims
+                    // the margin curves are needed as input points in subsequent dims, so they must be solved, not skipped
+                    // (FreeCtrlPtCurve clamps the anchor in higher dims to the tensor for margin curves)
+
+                    // fill Ncons
+                    if (dim == 0 && Pcons.rows())
                     {
-                        // fill Ncons
-                        if (dim == 0 && Pcons.rows())
-                        {
-                            double t1 = MPI_Wtime();
-                            Ncons = MatrixX<T>::Constant(ncurve_pts[0], Pcons.rows(), -1);                    // basis functions, -1 means unassigned so far
+                        double t1 = MPI_Wtime();
+                        Ncons = MatrixX<T>::Constant(ncurve_pts[0], Pcons.rows(), -1);                    // basis functions, -1 means unassigned so far
 
-                            ConsCtrlPtMat(t_idx, ncurve_pts, start_ijk, anchors, Ncons, cons_detail_times);
-                            cons_time += (MPI_Wtime() - t1);
-                        }
-
-                        ComputeCtrlPtCurve(in_curve_iter, t_idx, dim, R, Q, Q1, Nfree, Ncons, Pcons, P,
-                                cons_type, nin_pts, start_ijk, ncons, free_time, norm_time, solve_time);
+                        ConsCtrlPtMat(t_idx, ncurve_pts, start_ijk, anchors, Ncons, cons_detail_times);
+                        cons_time += (MPI_Wtime() - t1);
                     }
+
+                    ComputeCtrlPtCurve(in_curve_iter, t_idx, dim, R, Q, Q1, Nfree, Ncons, Pcons, P,
+                            cons_type, nin_pts, start_ijk, ncons, free_time, norm_time, solve_time);
 
                     // copy solution to one curve of output points
                     CurveIterator   out_curve_iter(out_slice_iter);                                 // one curve of the output points in the current dim

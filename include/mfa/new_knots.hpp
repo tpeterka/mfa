@@ -481,7 +481,7 @@ namespace mfa
                                 decoder.VolPt_saved_basis(param_ijk, param, cpt, decode_info, t);
                             else
                                 decoder.VolPt(param, cpt, decode_info, t);
-#endif      // MFA_MESH
+#endif      // MFA_TMESH || MFA_OVERLAYS
 
                             // error between decoded point and input point
                             size_t dom_idx = dom_iter.ijk_idx(param_ijk);
@@ -627,7 +627,7 @@ namespace mfa
                             decoder.VolPt_saved_basis(param_ijk, param, cpt, decode_info, t);
                         else
                             decoder.VolPt(param, cpt, decode_info, t);
-#endif      // MFA_TMESH
+#endif      // MFA_TMESH || MFA_OVERLAYS
 
                         // error between decoded point and input point
                         size_t dom_idx = dom_iter.ijk_idx(param_ijk);
