@@ -2098,7 +2098,11 @@ namespace mfa
             // get input domain points covered by the tensor and the constraints
             vector<size_t> start_idxs(mfa_data.dom_dim);
             vector<size_t> end_idxs(mfa_data.dom_dim);
+#if defined(MFA_TMESH)
             mfa_data.tmesh.domain_pts(t_idx, input.params->param_grid, true, extra_cons, start_idxs, end_idxs);
+#elif defined(MFA_OVERLAYS)
+            mfa_data.tmesh.domain_pts(t_idx, input.params->param_grid, start_idxs, end_idxs);
+#endif
 
             // Q matrix of relevant input domain points
             VectorXi ndom_pts(dom_dim);
@@ -2158,7 +2162,14 @@ namespace mfa
 
             MatrixX<T> Ncons = MatrixX<T>::Constant(Q.rows(), Pcons.rows(), -1);                    // basis functions, -1 means unassigned so far
             if (Pcons.rows())
+            {
+#if defined(MFA_TMESH)
                 ConsCtrlPtMat(t_idx, ndom_pts, dom_starts, anchors, t_idx_anchors, Ncons);
+#elif defined(MFA_OVERLAYS)
+                std::vector<double> cons_detail_times(5, 0);                                        // timing (debug), required by ConsCtrlPtMat
+                ConsCtrlPtMat(t_idx, ndom_pts, dom_starts, anchors, Ncons, cons_detail_times);
+#endif
+            }
 
             // timing
             cons_time           = MPI_Wtime() - cons_time;
